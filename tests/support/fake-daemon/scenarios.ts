@@ -319,21 +319,6 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                 ],
             };
         }
-        case "show unsupported image": {
-            const content = { type: "image" as const, mimeType: "image/png", data: "", uri: "unsupported.svg" };
-            return {
-                outcome: "complete",
-                output: [
-                    {
-                        kind: "activity",
-                        activityType: "tool",
-                        content: [{ type: "content", content }],
-                        title: "Unsupported image",
-                        output: "",
-                    },
-                ],
-            };
-        }
         case "generate an image":
             return {
                 outcome: "complete",

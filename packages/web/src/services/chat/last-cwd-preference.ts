@@ -1,12 +1,10 @@
+import { isDirectoryIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@moxt-ai/mobius-sdk/protocol";
 import {
     centralLocalStorage,
     lastCwdEntry,
     type RecentCwdPreference,
     recentCwdEntry,
 } from "@/services/local-storage/central-local-storage";
-
-const MAXIMUM_DIRECTORY_IDENTIFIER_LENGTH = 1_000;
-const MAXIMUM_DIRECTORY_LABEL_LENGTH = 4_000;
 
 export type { RecentCwdPreference };
 
@@ -20,10 +18,9 @@ export function saveRecentCwdPreference(
     existing: readonly RecentCwdPreference[],
 ): readonly RecentCwdPreference[] {
     if (
-        directory.directoryId.length === 0 ||
-        directory.directoryId.length > MAXIMUM_DIRECTORY_IDENTIFIER_LENGTH ||
+        !isDirectoryIdentifier(directory.directoryId) ||
         directory.directoryLabel.length === 0 ||
-        directory.directoryLabel.length > MAXIMUM_DIRECTORY_LABEL_LENGTH
+        directory.directoryLabel.length > MAX_WORKSPACE_PATH_LENGTH
     ) {
         return existing;
     }
@@ -50,7 +47,7 @@ export function readLastCwdPreference(botId: string, runtimeId: string, agentRef
 }
 
 export function saveLastCwdPreference(botId: string, runtimeId: string, agentRef: string, directoryId: string): void {
-    if (directoryId.length === 0 || directoryId.length > MAXIMUM_DIRECTORY_IDENTIFIER_LENGTH) {
+    if (!isDirectoryIdentifier(directoryId)) {
         return;
     }
     centralLocalStorage.write(lastCwdEntry(botId, runtimeId, agentRef), directoryId);

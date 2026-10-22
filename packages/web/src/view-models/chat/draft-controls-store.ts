@@ -17,6 +17,7 @@ import {
     saveRecentCwdPreference,
 } from "@/services/chat/last-cwd-preference";
 import { readLastHarnessPreference, saveLastHarnessPreference } from "@/services/chat/last-harness-preference";
+import { pathDirectoryId } from "@/services/chat/workspace-directory-reference";
 import { formatError } from "../format-error.ts";
 
 type DraftSettingsState =
@@ -88,15 +89,6 @@ export interface DraftControlsStore {
 }
 
 const CWD_PREVIEW_DEBOUNCE_MILLISECONDS = 1_000;
-
-function pathDirectoryId(path: string): string {
-    const bytes = new TextEncoder().encode(path);
-    let binary = "";
-    for (const byte of bytes) {
-        binary += String.fromCharCode(byte);
-    }
-    return `path-${btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "")}`;
-}
 
 function failureMessage(cause: unknown): string {
     return formatError(cause, "The working directory is unavailable.");

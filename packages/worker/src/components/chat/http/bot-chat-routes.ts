@@ -1,4 +1,8 @@
-import { encodeSessionCloseNoticeEvent, encodeSessionStatusChangedEvent } from "@moxt-ai/mobius-sdk/protocol";
+import {
+    encodeSessionCloseNoticeEvent,
+    encodeSessionStatusChangedEvent,
+    isDirectoryIdentifier,
+} from "@moxt-ai/mobius-sdk/protocol";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { createMiddleware } from "hono/factory";
@@ -15,7 +19,7 @@ const setupInput = v.strictObject({
     runtimeId: platformIdentifier,
     agentRef: platformIdentifier,
 });
-const nativeDirectoryId = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,2047}$/u));
+const nativeDirectoryId = v.custom<string>(isDirectoryIdentifier);
 const nativeIdentity = {
     runtimeId: platformIdentifier,
     agentId: platformIdentifier,

@@ -863,15 +863,39 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         url.searchParams.set("harness", options.harness);
         url.searchParams.set("sessionId", options.sessionId);
+        url.searchParams.set("workspace", workingDirectory);
         const handoffUrl = url.toString();
-        const qrPath = await createQrCode(handoffUrl);
+        // QR is an auxiliary representation: its capacity and decoding limits must
+        // not prevent delivery of an otherwise valid handoff link.
+        const qr = await (async (): Promise<
+            | { readonly kind: "available"; readonly path: string }
+            | { readonly kind: "unavailable"; readonly cause: ErrorCause }
+        > => {
+            try {
+                return { kind: "available", path: await createQrCode(handoffUrl) };
+            } catch (cause) {
+                signal.throwIfAborted();
+                return { kind: "unavailable", cause: serializeErrorCause(cause) };
+            }
+        })();
+        signal.throwIfAborted();
+        if (qr.kind === "unavailable") {
+            emit({
+                status: "qr_unavailable",
+                error: { code: "QR_UNAVAILABLE", cause: qr.cause },
+                message: "The QR image is unavailable. Use the handoff link instead.",
+            });
+        }
         emit({
             status: "ready",
             botId,
             url: handoffUrl,
             workspace: workingDirectory,
-            qrPath,
-            message: "Open the link or scan the QR code to chat. Keep the Runtime online.",
+            qrPath: qr.kind === "available" ? qr.path : null,
+            message:
+                qr.kind === "available"
+                    ? "Open the link or scan the QR code to chat. Keep the Runtime online."
+                    : "Open the link to chat. Keep the Runtime online.",
         });
     }
 

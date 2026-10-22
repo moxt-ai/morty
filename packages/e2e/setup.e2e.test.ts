@@ -1,5 +1,7 @@
+import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
+import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
 test("Given a saved setup handoff, When its Runtime reconnects, Then setup returns a concise QR image reference", async ({
@@ -111,4 +113,31 @@ test("Given a successful native session handoff, When the browser opens the reta
     await expect(page.getByRole("main", { name: "Chat" })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
     await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+test("Given setup was previously paired in another directory, When a new project handoff opens, Then new sessions use the reported project directory", async ({
+    runtime,
+}, testInfo) => {
+    const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const workspace = join(
+        original.workspace,
+        "project with spaces \u00e9",
+        ...Array.from({ length: 4 }, () => "\u00e9".repeat(90)),
+    );
+    await mkdir(workspace, { recursive: true });
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session", 5000, workspace);
+    expect(connected.workspace).toBe(workspace);
+    await runtime.page.goto(connected.url);
+    await expect(runtime.page.getByRole("textbox", { name: "Message" })).toBeEnabled();
+    await runtime.page.reload();
+    await runtime.page.getByRole("button", { name: "New Session", exact: true }).click();
+    await expect(runtime.page.getByTestId(dataTestId.workingDirectory)).toContainText("\u00e9".repeat(90));
+    await runtime.page.getByRole("textbox", { name: "Message" }).fill("Verify the setup project directory");
+    await runtime.page.getByRole("button", { name: "Send message" }).click();
+    await expect(runtime.page.getByRole("article", { name: "Agent response" })).toContainText(
+        "Verify the setup project directory",
+    );
+    await runtime.page.getByRole("button", { name: "Show execution details" }).click();
+    await expect(runtime.page.getByTestId(dataTestId.executionDirectory)).toHaveText(workspace);
+    await runtime.page.screenshot({ path: testInfo.outputPath("long-workspace-handoff.png"), fullPage: true });
 });

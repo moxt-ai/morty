@@ -1,4 +1,4 @@
-import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
+import { isDirectoryIdentifier, isIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
 import { identityScopeSchema } from "../identity/identity-scope-url.ts";
 
@@ -150,8 +150,8 @@ export const lastHarnessEntry = (botId: string): LocalStorageEntry<string> =>
 // Working-directory preferences
 // ---------------------------------------------------------------------------
 
-const directoryIdSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(1_000));
-const directoryLabelSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(4_000));
+const directoryIdSchema = v.custom<string>(isDirectoryIdentifier, "Invalid directory identifier");
+const directoryLabelSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_WORKSPACE_PATH_LENGTH));
 
 export const lastCwdEntry = (botId: string, runtimeId: string, agentRef: string): LocalStorageEntry<string> =>
     stringLocalStorageEntry({

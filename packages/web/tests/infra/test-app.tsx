@@ -57,6 +57,7 @@ export async function createTestApp(
                   readonly kind: "continue";
                   readonly harness: string;
                   readonly sessionId: string;
+                  readonly workspace?: string;
                   /** Replaces the created transfer code, for example with one that cannot be redeemed. */
                   readonly code?: (application: Application) => string;
               }
@@ -83,6 +84,9 @@ export async function createTestApp(
         if (page.kind === "continue") {
             transfer.searchParams.set("harness", page.harness);
             transfer.searchParams.set("sessionId", page.sessionId);
+            if (page.workspace !== undefined) {
+                transfer.searchParams.set("workspace", page.workspace);
+            }
         }
         if (page.code !== undefined) {
             transfer.hash = `code=${page.code(current)}`;
