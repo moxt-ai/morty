@@ -17,6 +17,7 @@ import {
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import { type BotChatApi, connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
+import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import {
     centralIndexedDB,
     type SessionLastSentMessage,
@@ -57,6 +58,7 @@ import {
     type SessionEventHistory,
     type SessionProjectionEffect,
     type SessionProjectionInput,
+    sessionProjectionExecutionOwner,
     sessionProjectionMessages,
     sessionProjectionPagination,
     transitionSessionProjection,
@@ -430,6 +432,10 @@ export function createSessionPaneModel(options: {
     const { session, botId, requests, clock } = options;
     const composerAttachments = createComposerAttachmentStore(options.initialMessage?.attachments);
     const sessionId = session.result.ready.sessionId;
+    // Working in a conversation makes it the reference for the next draft: its
+    // harness and the settings it runs with carry into New Session.
+    saveLastHarnessPreference(botId, session.agentRef);
+    saveLastAgentSettings(botId, session.agentRef, session.result.ready.configOptions);
     const initialActiveTurn: SessionActiveTurn =
         session.result.action === "conversation" && session.result.activeTurn.kind === "running"
             ? {
@@ -448,6 +454,7 @@ export function createSessionPaneModel(options: {
     let loadingOlderHistory = false;
     let command = openedActiveTurn.kind === "idle" ? "" : openedActiveTurn.commandId;
     let initialCommandId = options.initialMessage?.commandId ?? null;
+    let draftRevision = 0;
     // The queued first message stays the pane's recovery responsibility until
     // the service accepts it or the user discards it, not just until the send
     // starts.
@@ -641,6 +648,25 @@ export function createSessionPaneModel(options: {
             }
             return result.effects;
         };
+        /**
+         * Re-reads the authoritative settings from the daemon. A daemon
+         * restart rebuilds the event log without config updates, so an
+         * established projection without a config event must fetch instead of
+         * keeping a stale view.
+         */
+        const recoverProjectionState = async (connected: MobiusClient, parentSignal: AbortSignal): Promise<void> => {
+            const signal = AbortSignal.any([parentSignal, AbortSignal.timeout(45_000)]);
+            const configurationResult = await connected.sessions.readConfiguration(sessionId, signal);
+            parentSignal.throwIfAborted();
+            sessionConfigurations = configurationResult.configOptions.map((candidate) => ({
+                booleanValue: candidate.type === "boolean" ? candidate.booleanValue : false,
+                configId: candidate.id,
+                value: candidate.type === "select" ? candidate.currentValue : "",
+                valueType: candidate.type,
+            }));
+            saveLastAgentSettings(botId, session.agentRef, configurationResult.configOptions);
+            set({ options: configurationResult.configOptions });
+        };
         const loadProjectionHistory = async (
             effect: Extract<SessionProjectionEffect, { readonly kind: "load-history" }>,
             connected: MobiusClient,
@@ -683,10 +709,20 @@ export function createSessionPaneModel(options: {
             signal: AbortSignal,
         ): Promise<void> => {
             const effects = commitProjection(input);
+            let historyReloaded = false;
             for (const effect of effects) {
                 if (effect.kind === "load-history") {
                     await loadProjectionHistory(effect, connected, signal);
+                    historyReloaded = true;
                 }
+            }
+            // A reloaded log without any config event is the post-restart
+            // shape: the rebuilt generation cannot speak for agent settings,
+            // so read them from the daemon instead of trusting a stale view.
+            // Until that read lands the pane keeps its current settings, so a
+            // failed or cancelled read cannot clobber what was configured.
+            if (historyReloaded && projection.kind === "established" && projection.config === null) {
+                await recoverProjectionState(connected, signal);
             }
         };
         return {
@@ -840,6 +876,11 @@ export function createSessionPaneModel(options: {
                         if (payload.kind === "prompt.started") {
                             delivery.getState().reconcile([payload.commandId]);
                             const queued = messageQueue.getState().takeStarted(payload.commandId);
+                            const owner = sessionProjectionExecutionOwner(projection, payload.commandId);
+                            if (owner !== null && owner !== payload.commandId) {
+                                // Steering starts a command, not a new execution to stop.
+                                return true;
+                            }
                             if (command !== "" && command !== payload.commandId) {
                                 tasks.getState().finish(command);
                                 activeTurn.turnCleared(command);
@@ -942,21 +983,20 @@ export function createSessionPaneModel(options: {
                                     });
                                     break;
                             }
-                            const executionPromise = connected.sessions.readSessionExecution(
+                            await dispatchProjection({ kind: "reconcile" }, connected, signal);
+                            signal.throwIfAborted();
+                            // Confirm execution after history is adopted. An earlier idle snapshot
+                            // cannot settle work that started while those pages were loading.
+                            const execution = await connected.sessions.readSessionExecution(
                                 sessionId,
                                 sessionIdentity,
                                 signal,
                             );
-                            // Reconciliation may abandon this speculative read when the
-                            // subscription tears down; keep its aborted rejection awaited.
-                            void executionPromise.then(
-                                () => undefined,
-                                () => undefined,
-                            );
-                            await dispatchProjection({ kind: "reconcile" }, connected, signal);
                             signal.throwIfAborted();
-                            const execution = await executionPromise;
                             const running = execution.turn;
+                            if (running === null) {
+                                commitProjection({ kind: "execution-idle" });
+                            }
                             messageQueue.getState().replace(execution.queued);
                             if (running !== null) {
                                 command = running.commandId;
@@ -1147,6 +1187,8 @@ export function createSessionPaneModel(options: {
                 countdownInterrupt?.abort(new Error("Retried now"));
             },
             setDraft: (draft) => {
+                draftRevision += 1;
+                delivery.getState().dismissFailure();
                 tasks.getState().dismissFailure();
                 messageQueue.getState().dismissFailure();
                 if (draft === "") {
@@ -1186,16 +1228,19 @@ export function createSessionPaneModel(options: {
                 const images = attachments.flatMap((attachment) =>
                     attachment.kind === "image" ? [attachment.image] : [],
                 );
+                const submittedDraftRevision = draftRevision;
+                // The submission owns this snapshot until it is accepted, journaled,
+                // or returned to the composer by an authoritative rejection.
                 centralSessionStorage.remove(draftEntry);
                 composerAttachments.getState().clear();
                 const activity = startSessionWork({ commandId, startedAt: lastSentMessage.sentAt });
                 const pending = deriveTimeline();
                 set({
                     activity,
-                    draft: "",
                     followRevision: get().followRevision + 1,
                     operation: { kind: "sending", commandId },
                     messages: pending.messages,
+                    draft: "",
                 });
                 try {
                     activeTurn.submissionStarted(commandId);
@@ -1207,40 +1252,53 @@ export function createSessionPaneModel(options: {
                             attachment.kind === "resource" ? [attachment.resource] : [],
                         ),
                     };
-                    const accepted = await delivery.getState().submit(commandId, displayPrompt, submission, signal);
+                    const outcome = await delivery.getState().submit(commandId, displayPrompt, submission, signal);
                     signal.throwIfAborted();
-                    // Report delivery as soon as the service accepts the turn,
-                    // independently of `command`: a live event may clear it
-                    // while the submission is in flight. An uncertain
-                    // (delivery-unknown) or rejected submission marks the
-                    // queued first message as unconfirmed, which keeps its
-                    // content and command id for an explicit retry but never
-                    // auto-sends it from a remount.
-                    if (accepted !== null) {
+                    switch (outcome.kind) {
+                        case "accepted":
+                        case "delivery-unknown":
+                            break;
+                        case "rejected":
+                            if (draftRevision === submittedDraftRevision) {
+                                set({ draft: current.draft });
+                                composerAttachments.getState().restore(attachments);
+                                centralSessionStorage.write(draftEntry, current.draft);
+                            }
+                            if (isQueuedInitialMessage(commandId)) {
+                                // This rejected message is editable again. Retire
+                                // the auto-send/retry copy owned by the home store.
+                                options.onInitialMessageRecoveryCleared?.(commandId);
+                            }
+                            break;
+                        default:
+                            return outcome satisfies never;
+                    }
+                    if (outcome.kind === "accepted") {
                         if (isQueuedInitialMessage(commandId)) {
                             options.onInitialMessageDelivered?.();
                         }
-                    } else if (isQueuedInitialMessage(commandId)) {
+                    } else if (outcome.kind === "delivery-unknown" && isQueuedInitialMessage(commandId)) {
                         options.onInitialMessageUnconfirmed?.({ commandId, displayPrompt, request: submission });
                     }
-                    if (accepted !== null) {
+                    if (outcome.kind === "accepted") {
                         // A terminal live event may precede the acceptance response.
                         // Its result already owns the activity; do not overwrite it.
                         if (command === commandId) {
-                            tasks.getState().start(commandId, accepted.turnId);
-                            activeTurn.submissionAccepted(commandId, accepted.turnId);
+                            tasks.getState().start(commandId, outcome.turn.turnId);
+                            activeTurn.submissionAccepted(commandId, outcome.turn.turnId);
                         }
                         set({ operation: finishPromptOperation(get().operation, commandId) });
                         return;
                     }
                     activeTurn.turnCleared(commandId);
-                    command = "";
-                    const idle = { kind: "idle" } as const;
+                    if (command === commandId) {
+                        command = "";
+                    }
                     const restored = deriveTimeline();
                     set({
-                        activity: idle,
+                        activity: transitionSessionActivity(get().activity, { commandId, kind: "work-completed" }),
                         messages: restored.messages,
-                        operation: { kind: "idle" },
+                        operation: finishPromptOperation(get().operation, commandId),
                     });
                     announceActivity();
                 } catch (cause) {
@@ -1293,21 +1351,49 @@ export function createSessionPaneModel(options: {
                 const retried = deriveTimeline();
                 set({ activity: retrying, messages: retried.messages });
                 announceActivity();
-                const accepted = await delivery.getState().retry(signal);
+                const outcome = await delivery.getState().retry(signal);
                 signal.throwIfAborted();
-                if (accepted !== null) {
-                    // A successful retry also delivers the queued first
-                    // message, so the home store must stop treating it as
-                    // pending recovery.
-                    if (isQueuedInitialMessage(pending.commandId)) {
-                        options.onInitialMessageDelivered?.();
+                switch (outcome?.kind) {
+                    case "accepted":
+                        if (isQueuedInitialMessage(pending.commandId)) {
+                            options.onInitialMessageDelivered?.();
+                        }
+                        if (command === pending.commandId) {
+                            tasks.getState().start(pending.commandId, outcome.turn.turnId);
+                            activeTurn.submissionAccepted(pending.commandId, outcome.turn.turnId);
+                        }
+                        return;
+                    case "rejected": {
+                        const restoredAttachments = [
+                            ...pending.request.images.map((image) => ({ kind: "image" as const, image })),
+                            ...pending.request.resources.map((resource) => ({ kind: "resource" as const, resource })),
+                        ];
+                        composerAttachments.getState().restore(restoredAttachments);
+                        centralSessionStorage.write(draftEntry, pending.request.content);
+                        set({ draft: pending.request.content });
+                        if (isQueuedInitialMessage(pending.commandId)) {
+                            options.onInitialMessageRecoveryCleared?.(pending.commandId);
+                        }
+                        break;
                     }
-                    tasks.getState().start(pending.commandId, accepted.turnId);
-                    activeTurn.submissionAccepted(pending.commandId, accepted.turnId);
-                } else {
-                    activeTurn.turnCleared(pending.commandId);
+                    case "delivery-unknown":
+                        break;
+                    case undefined:
+                        return;
+                    default:
+                        return outcome satisfies never;
+                }
+                activeTurn.turnCleared(pending.commandId);
+                if (command === pending.commandId) {
                     command = "";
                 }
+                set({
+                    activity: transitionSessionActivity(get().activity, {
+                        commandId: pending.commandId,
+                        kind: "work-completed",
+                    }),
+                });
+                announceActivity();
             },
             queueDraft: async (signal) => {
                 const current = get();
@@ -1328,6 +1414,7 @@ export function createSessionPaneModel(options: {
                             attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
                         )
                         .join(", ");
+                delivery.getState().dismissFailure();
                 const queued = await messageQueue.getState().enqueue(
                     controls.operation.active.commandId,
                     summary,

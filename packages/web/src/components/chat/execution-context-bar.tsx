@@ -17,6 +17,10 @@ function ExecutionDetails({ context }: { readonly context: ExecutionContext }) {
                 <dt className="text-muted-foreground">Machine</dt>
                 <dd className="text-foreground [overflow-wrap:anywhere]">{context.machine}</dd>
             </div>
+            <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-4">
+                <dt className="text-muted-foreground">Session</dt>
+                <dd className="text-foreground">{context.connection}</dd>
+            </div>
             <div className="grid gap-2.5">
                 <dt className="text-muted-foreground">Working directory</dt>
                 <dd
@@ -39,7 +43,7 @@ export function ExecutionContextBar({ context }: { readonly context: ExecutionCo
             type="button"
             aria-label="Show execution details"
             aria-describedby={summaryId}
-            className="group grid min-h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-lg px-2 py-1.5 text-left outline-none transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none lg:grid-cols-[minmax(0,auto)_minmax(6rem,1fr)_auto] lg:gap-x-6 lg:py-1"
+            className="group grid min-h-11 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-lg px-2 py-1.5 text-left outline-none transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none lg:py-1"
         >
             <span id={summaryId} className="contents">
                 <span className="col-start-1 row-start-1 flex min-w-0 items-center gap-2 text-[13px] leading-5">
@@ -56,25 +60,17 @@ export function ExecutionContextBar({ context }: { readonly context: ExecutionCo
                         <span className="truncate lg:max-w-48">{context.directoryName}</span>
                     </span>
                 </span>
-                <span className="col-span-2 col-start-1 row-start-2 flex min-w-0 items-center gap-4 text-xs leading-5 text-muted-foreground lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:justify-end">
-                    <span className="min-w-0 flex-1 truncate lg:flex-initial">
-                        <span className="sr-only">Machine: </span>
-                        {context.machine}
-                    </span>
+                {context.connection !== "Connected" && (
                     <span
-                        className={`flex shrink-0 items-center gap-1.5 ${context.connection === "Disconnected" || context.connection === "Unavailable" ? "text-destructive" : ""}`}
+                        className={`col-span-2 col-start-1 row-start-2 text-xs leading-5 ${context.connection === "Disconnected" || context.connection === "Unavailable" ? "text-destructive" : "text-muted-foreground"}`}
                     >
-                        <span
-                            aria-hidden="true"
-                            className={`size-1.5 rounded-full ${context.connection === "Connected" ? "bg-primary" : "bg-current"}`}
-                        />
-                        {context.connection}
+                        Session: {context.connection}
                     </span>
-                </span>
+                )}
             </span>
             <ChevronDown
                 aria-hidden="true"
-                className="col-start-2 row-start-1 size-3.5 text-muted-foreground/70 transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none lg:col-start-3"
+                className="col-start-2 row-start-1 size-3.5 text-muted-foreground/70 transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none"
             />
         </button>
     );

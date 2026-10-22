@@ -1,13 +1,13 @@
 import { createStore } from "zustand/vanilla";
 import type { ApiTransport } from "../services/api/api-transport.ts";
 import { BotChatApi } from "../services/chat/bot-chat-api.ts";
-import type { AnonymousIdentity } from "../services/identity/anonymous-identity-api.ts";
 import { type Clock, systemClock } from "../services/time/clock.ts";
-import { createAnonymousSessionStore } from "./authentication/anonymous-session-store.ts";
+import { type ActiveAnonymousSession, createAnonymousSessionStore } from "./authentication/anonymous-session-store.ts";
 import { createContinueStore } from "./authentication/continue-store.ts";
 import { createIdentityAccess, type IdentityAccess } from "./authentication/identity-access.ts";
 import { createBugReportDialogStore } from "./bug-report-dialog-store.ts";
 import { type ChatWorkspace, createChatWorkspace } from "./chat/chat-workspace.ts";
+import { createComputerSwitcher } from "./chat/computer-switcher-store.ts";
 
 /**
  * The scope fields that identify the Bot a chat workspace talks to. The token
@@ -44,6 +44,7 @@ export interface MortyApplication {
     readonly sessionWorkspace: SessionWorkspaceStoreApi;
     readonly identityAccess: (identity: ChatIdentity, onAccessEnded: () => void) => IdentityAccess;
     readonly transport: ApiTransport;
+    readonly reloadIdentity: () => void;
     readonly dispose: () => void;
 }
 
@@ -69,17 +70,22 @@ export function createMortyApplication(options: {
     const lifetime = new AbortController();
     const transport = options.transport;
     transport.open();
-    const anonymousSession = createAnonymousSessionStore(transport.fetch, options.origin, (identity) => {
-        // Announced from the session's explicit transitions: the workspace
-        // follows the identity without the application subscribing to the
-        // session store.
-        releaseWorkspace();
-        if (identity === null) {
-            sessionWorkspace.setState({ workspace: null });
-            return;
-        }
-        activateWorkspace(identity);
-    });
+    const anonymousSession = createAnonymousSessionStore(
+        transport.fetch,
+        options.origin,
+        (session) => {
+            // Announced from the session's explicit transitions: the workspace
+            // follows the identity without the application subscribing to the
+            // session store.
+            releaseWorkspace();
+            if (session === null) {
+                sessionWorkspace.setState({ workspace: null });
+                return;
+            }
+            activateWorkspace(session);
+        },
+        options.clock ?? systemClock,
+    );
     const bugReportDialog = createBugReportDialogStore(() => (disposed ? null : transport));
     const sessionWorkspace = createSessionWorkspaceStore();
     const continuation = createContinueStore(transport.fetch);
@@ -94,7 +100,8 @@ export function createMortyApplication(options: {
         workspace = null;
         workspaceRequests = null;
     };
-    const activateWorkspace = (identity: AnonymousIdentity): void => {
+    const activateWorkspace = (session: ActiveAnonymousSession): void => {
+        const identity = session.identity;
         const scope: ChatIdentity = {
             botId: identity.botId,
             projectId: identity.projectId,
@@ -119,6 +126,26 @@ export function createMortyApplication(options: {
         });
         workspace = createChatWorkspace({
             clock: options.clock ?? systemClock,
+            rememberedIdentity: identity,
+            accessNotice: session.notice,
+            computers: createComputerSwitcher({
+                active: identity,
+                origin: options.origin,
+                fetchRequest: transport.fetch,
+                requests: (saved) =>
+                    new BotChatApi({
+                        fetchRequest: transport.fetch,
+                        getToken: async (signal) => {
+                            signal.throwIfAborted();
+                            return saved.token;
+                        },
+                        origin: options.origin,
+                        projectId: saved.projectId,
+                        subscribe: transport.subscribe,
+                        waitForChange: transport.waitForChange,
+                    }),
+            }),
+            entry: session.entry,
             botId: identity.botId,
             bugReportDialog,
             projectId: identity.projectId,
@@ -136,7 +163,18 @@ export function createMortyApplication(options: {
         workspace.start();
         sessionWorkspace.setState({ workspace });
     };
-    void anonymousSession.getState().load(lifetime.signal);
+    let identityAttempt: AbortController | null = null;
+    const reloadIdentity = () => {
+        if (disposed) {
+            return;
+        }
+        identityAttempt?.abort(new DOMException("Identity reload replaced", "AbortError"));
+        identityAttempt = new AbortController();
+        void anonymousSession.getState().load(AbortSignal.any([lifetime.signal, identityAttempt.signal]));
+    };
+    if (!window.location.pathname.startsWith("/continue")) {
+        reloadIdentity();
+    }
     return {
         clock: options.clock ?? systemClock,
         anonymousSession,
@@ -151,6 +189,7 @@ export function createMortyApplication(options: {
                 onAccessEnded,
             }),
         transport,
+        reloadIdentity,
         dispose: () => {
             if (disposed) {
                 return;

@@ -6,15 +6,10 @@ import {
     type SessionStatusChangedEvent,
 } from "@moxt-ai/mobius-sdk/protocol";
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
-import type { OperationTiming } from "../../../infra/operation-timing.ts";
 import { PlatformProjectError } from "../../management/entity/platform-project.ts";
 import type { IdentityStorage } from "../../management/storage/identity-storage.ts";
 import type { ManagedBotStorage } from "../../management/storage/managed-bot-storage.ts";
 import type { ManagedSessionStorage } from "../storage/managed-session-storage.ts";
-
-interface AuditLogger {
-    readonly info: (value: Readonly<Record<string, unknown>>, message: string) => void;
-}
 
 const STATUS_LIVENESS_MILLISECONDS = 120_000;
 
@@ -83,7 +78,6 @@ export class ChatService {
     readonly #identities: IdentityStorage;
     readonly #managedBots: ManagedBotStorage;
     readonly #platform: PlatformProjectGateway;
-    readonly #logger: AuditLogger;
 
     constructor(cx: {
         readonly gateways: { readonly platformProjects: PlatformProjectGateway };
@@ -92,13 +86,11 @@ export class ChatService {
             readonly identities: IdentityStorage;
             readonly managedBots: ManagedBotStorage;
         };
-        readonly logger: AuditLogger;
     }) {
         this.#chatSessions = cx.storages.chatSessions;
         this.#identities = cx.storages.identities;
         this.#managedBots = cx.storages.managedBots;
         this.#platform = cx.gateways.platformProjects;
-        this.#logger = cx.logger;
     }
 
     readonly authorize = async (
@@ -106,17 +98,11 @@ export class ChatService {
         projectId: string,
         botId: string,
         signal: AbortSignal,
-        timing: OperationTiming,
     ): Promise<ChatScope> => {
-        const [ownsProject, ownsBot] = await timing.measure(
-            "ownership",
-            "Verify Project and Machine ownership",
-            async () =>
-                Promise.all([
-                    this.#identities.ownsProject(userId, projectId, signal),
-                    this.#managedBots.ownsBot(userId, botId, signal),
-                ]),
-        );
+        const [ownsProject, ownsBot] = await Promise.all([
+            this.#identities.ownsProject(userId, projectId, signal),
+            this.#managedBots.ownsBot(userId, botId, signal),
+        ]);
         if (!ownsProject) {
             throw new PlatformProjectError("NOT_FOUND", "Your Morty data was not found.", 404);
         }
@@ -169,15 +155,6 @@ export class ChatService {
             bot.configuration.runtimeId,
             directoryId,
             scope.signal,
-        );
-        this.#logger.info(
-            {
-                event: "chat-directory-listed",
-                userId: scope.userId,
-                projectId: scope.projectId,
-                botId: scope.botId,
-            },
-            "Chat audit event",
         );
         return listing;
     };
@@ -339,19 +316,10 @@ export class ChatService {
             { runtimeId: bot.configuration.runtimeId, agentRef, workspaceRef: "default" },
             scope.signal,
         );
-        this.#logger.info(
-            {
-                event: "chat-agent-settings-discovered",
-                userId: scope.userId,
-                projectId: scope.projectId,
-                botId: scope.botId,
-            },
-            "Chat audit event",
-        );
         return { settings: discovered };
     };
 
-    readonly openChat = async (scope: ChatScope, input: OpenChatInput, timing: OperationTiming) => {
+    readonly openChat = async (scope: ChatScope, input: OpenChatInput) => {
         const bot = await this.#bot(scope);
         if (bot?.configuration === null || bot === null) {
             throw new PlatformProjectError("AGENT_REQUIRED", "Connect your local agent to start chatting.", 409);
@@ -363,65 +331,51 @@ export class ChatService {
         if ("conversationKey" in input) {
             await this.#requireRuntimeAgent(scope, runtime.runtimeId, input.agentRef);
         }
-        const access = await timing.measure("session", "Open Chat Session", async () =>
-            this.#platform.openChatSession(
-                scope.projectId,
-                "conversationKey" in input
-                    ? {
-                          ...input,
-                          kind: "new",
-                          bindingId: `binding_${crypto.randomUUID()}`,
-                          runtimeId: runtime.runtimeId,
-                          conversationKey: await chatSessionId(scope.botId, input.conversationKey),
+        const access = await this.#platform.openChatSession(
+            scope.projectId,
+            "conversationKey" in input
+                ? {
+                      ...input,
+                      kind: "new",
+                      bindingId: `binding_${crypto.randomUUID()}`,
+                      runtimeId: runtime.runtimeId,
+                      conversationKey: await chatSessionId(scope.botId, input.conversationKey),
+                  }
+                : await (async () => {
+                      const metadata = (
+                          await this.#platform.queryChatSessions(
+                              scope.projectId,
+                              runtime.runtimeId,
+                              [input.conversationId],
+                              scope.signal,
+                          )
+                      ).find((session) => session.sessionId === input.conversationId);
+                      if (metadata === undefined) {
+                          throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
                       }
-                    : await (async () => {
-                          const metadata = (
-                              await this.#platform.queryChatSessions(
-                                  scope.projectId,
-                                  runtime.runtimeId,
-                                  [input.conversationId],
-                                  scope.signal,
-                              )
-                          ).find((session) => session.sessionId === input.conversationId);
-                          if (metadata === undefined) {
-                              throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
-                          }
-                          return {
-                              kind: "existing" as const,
-                              conversationId: input.conversationId,
-                              runtimeId: runtime.runtimeId,
-                              agentRef: metadata.agentId,
-                              workspaceRef: metadata.directoryId,
-                              additionalDirectoryIds: metadata.additionalDirectories.map(
-                                  (directory) => directory.directoryId,
-                              ),
-                          };
-                      })(),
-                input.title ?? "New chat",
-                scope.signal,
-            ),
+                      return {
+                          kind: "existing" as const,
+                          conversationId: input.conversationId,
+                          runtimeId: runtime.runtimeId,
+                          agentRef: metadata.agentId,
+                          workspaceRef: metadata.directoryId,
+                          additionalDirectoryIds: metadata.additionalDirectories.map(
+                              (directory) => directory.directoryId,
+                          ),
+                      };
+                  })(),
+            input.title ?? "New chat",
+            scope.signal,
         );
         if ("conversationKey" in input) {
-            await timing.measure("session-save", "Save managed Chat session", async () =>
-                this.#chatSessions.save(
-                    scope.projectId,
-                    scope.userId,
-                    scope.botId,
-                    { id: access.conversationId },
-                    scope.signal,
-                ),
+            await this.#chatSessions.save(
+                scope.projectId,
+                scope.userId,
+                scope.botId,
+                { id: access.conversationId },
+                scope.signal,
             );
         }
-        this.#logger.info(
-            {
-                event: "bot-chat-access-issued",
-                userId: scope.userId,
-                projectId: scope.projectId,
-                botId: scope.botId,
-                conversationId: access.conversationId,
-            },
-            "Chat audit event",
-        );
         return { ...access, instructions: bot.instructions };
     };
 
@@ -432,16 +386,6 @@ export class ChatService {
             runtime.runtimeId,
             sessionId,
             scope.signal,
-        );
-        this.#logger.info(
-            {
-                event: "session-access-issued",
-                userId: scope.userId,
-                projectId: scope.projectId,
-                botId: scope.botId,
-                sessionId,
-            },
-            "Chat audit event",
         );
         return access;
     };
@@ -469,31 +413,10 @@ export class ChatService {
         const runtime = await this.localRuntime(scope);
         try {
             await this.#platform.closeChatSession(scope.projectId, runtime.runtimeId, sessionId, scope.signal);
-        } catch (cause) {
+        } catch {
             scope.signal.throwIfAborted();
-            this.#logger.info(
-                {
-                    event: "chat-managed-session-close-failed",
-                    userId: scope.userId,
-                    projectId: scope.projectId,
-                    botId: scope.botId,
-                    sessionId,
-                    failureCode: cause instanceof PlatformProjectError ? cause.code : "unexpected_failure",
-                },
-                "Chat audit event",
-            );
         }
         await this.#chatSessions.archive(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
-        this.#logger.info(
-            {
-                event: "chat-managed-session-archived",
-                userId: scope.userId,
-                projectId: scope.projectId,
-                botId: scope.botId,
-                sessionId,
-            },
-            "Chat audit event",
-        );
         return {};
     };
 
@@ -506,16 +429,6 @@ export class ChatService {
                 502,
             );
         }
-        this.#logger.info(
-            {
-                event: "native-session-listed",
-                projectId: scope.projectId,
-                userId: scope.userId,
-                botId: scope.botId,
-                runtimeId,
-            },
-            "Chat audit event",
-        );
         return result;
     };
 
@@ -576,27 +489,10 @@ export class ChatService {
             { id: result.ready.sessionId },
             scope.signal,
         );
-        this.#logger.info(
-            {
-                event:
-                    action === "fork" ? "native-session-forked-from-handoff" : "native-session-imported-from-handoff",
-                userId: scope.userId,
-                projectId: scope.projectId,
-                botId: scope.botId,
-                runtimeId: runtime.runtimeId,
-                harness,
-            },
-            "Chat audit event",
-        );
         return stored;
     };
 
-    readonly previewNativeSession = async (
-        scope: ChatScope,
-        runtimeId: string,
-        entryId: string,
-        input: NativePreviewInput,
-    ) => {
+    readonly previewNativeSession = async (scope: ChatScope, runtimeId: string, input: NativePreviewInput) => {
         const events = await this.#platform.previewRuntimeNativeEvents(
             scope.projectId,
             runtimeId,
@@ -608,17 +504,6 @@ export class ChatService {
             },
             { cursor: null, eventLimit: 200 },
             scope.signal,
-        );
-        this.#logger.info(
-            {
-                event: "native-session-previewed",
-                projectId: scope.projectId,
-                userId: scope.userId,
-                botId: scope.botId,
-                runtimeId,
-                entryId,
-            },
-            "Chat audit event",
         );
         return events;
     };
@@ -664,17 +549,6 @@ export class ChatService {
             { id: result.ready.sessionId },
             scope.signal,
         );
-        this.#logger.info(
-            {
-                event: action === "fork" ? "native-session-forked" : "native-session-imported",
-                userId: scope.userId,
-                projectId: scope.projectId,
-                botId: scope.botId,
-                runtimeId,
-                entryId,
-            },
-            "Chat audit event",
-        );
         return result;
     };
 
@@ -710,10 +584,6 @@ export class ChatService {
             }
             throw new PlatformProjectError("NOT_FOUND", "Your Machine was not found.", 404);
         }
-        this.#logger.info(
-            { event: "bot-setup-requested", userId: scope.userId, projectId: scope.projectId, botId: scope.botId },
-            "Bot audit event",
-        );
         return { status: "active" };
     };
 }

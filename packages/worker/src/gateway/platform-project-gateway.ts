@@ -88,10 +88,6 @@ export class PlatformProjectGateway {
         this.#bindings = bindings;
     }
 
-    readonly #observeMobiusResponse = ({ serverTiming }: { readonly serverTiming: string | null }): void => {
-        this.#bindings.requestAccessMetrics?.recordMobiusServerTiming(serverTiming);
-    };
-
     readonly configuration = () => {
         try {
             const bindings = v.parse(platformEndpointBindingsSchema, this.#bindings);
@@ -158,7 +154,6 @@ export class PlatformProjectGateway {
                 },
                 signal,
             });
-            this.#bindings.requestAccessMetrics?.recordMobiusServerTiming(response.headers.get("server-timing"));
             signal.throwIfAborted();
             if (!response.ok) {
                 await response.body?.cancel();
@@ -236,7 +231,6 @@ export class PlatformProjectGateway {
                 },
                 signal,
             });
-            this.#observeMobiusResponse({ serverTiming: response.headers.get("server-timing") });
             signal.throwIfAborted();
             if (!response.ok) {
                 await response.body?.cancel();
@@ -276,7 +270,6 @@ export class PlatformProjectGateway {
                 },
                 signal,
             });
-            this.#observeMobiusResponse({ serverTiming: response.headers.get("server-timing") });
             signal.throwIfAborted();
             if (!response.ok) {
                 await response.body?.cancel();
@@ -659,7 +652,6 @@ export class PlatformProjectGateway {
             credentialProvider: new MobiusAppCredentialProvider(
                 v.parse(platformCredentialBindingsSchema, this.#bindings).MOBIUS_APP_SECRET,
             ),
-            observeResponse: this.#observeMobiusResponse,
             operationTimeoutMilliseconds,
         });
         try {
@@ -703,7 +695,6 @@ export class PlatformProjectGateway {
                     redirect: "manual",
                 },
             );
-            this.#bindings.requestAccessMetrics?.recordMobiusServerTiming(response.headers.get("server-timing"));
             signal.throwIfAborted();
             if (!response.ok) {
                 await response.body?.cancel();
@@ -761,7 +752,6 @@ export class PlatformProjectGateway {
             credentialProvider: new MobiusAppCredentialProvider(
                 v.parse(platformCredentialBindingsSchema, this.#bindings).MOBIUS_APP_SECRET,
             ),
-            observeResponse: this.#observeMobiusResponse,
             operationTimeoutMilliseconds: 15000,
         });
         try {

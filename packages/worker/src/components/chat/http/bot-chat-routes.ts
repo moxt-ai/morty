@@ -89,7 +89,7 @@ async function authorizeChat(context: Context<AuthorizedChatEnvironment>, timeou
     const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(timeout)]);
     const projectId = v.parse(platformIdentifier, context.req.param("projectId"));
     const botId = v.parse(platformIdentifier, context.req.param("botId"));
-    return await context.env.services.chat.authorize(userId, projectId, botId, signal, context.get("operationTiming"));
+    return await context.env.services.chat.authorize(userId, projectId, botId, signal);
 }
 
 function authorizedChat(timeout = 45000) {
@@ -197,11 +197,7 @@ export function createBotChatRoutes() {
             bodyParser<AuthorizedChatEnvironment, typeof accessInput>(accessInput),
             async (context) => {
                 return privateJson(
-                    await context.env.services.chat.openChat(
-                        context.get("chatScope"),
-                        context.req.valid("json"),
-                        context.get("operationTiming"),
-                    ),
+                    await context.env.services.chat.openChat(context.get("chatScope"), context.req.valid("json")),
                 );
             },
         )
@@ -276,15 +272,11 @@ export function createBotChatRoutes() {
             authorizedChat(120000),
             bodyParser<AuthorizedChatEnvironment, typeof nativePreviewInput>(nativePreviewInput),
             async (context) => {
-                const entryId = v.parse(platformIdentifier, context.req.param("id"));
+                // The preview is addressed by the request body; validate the path identifier for the route contract.
+                v.parse(platformIdentifier, context.req.param("id"));
                 const { runtimeId, ...input } = context.req.valid("json");
                 return privateJson(
-                    await context.env.services.chat.previewNativeSession(
-                        context.get("chatScope"),
-                        runtimeId,
-                        entryId,
-                        input,
-                    ),
+                    await context.env.services.chat.previewNativeSession(context.get("chatScope"), runtimeId, input),
                 );
             },
         )

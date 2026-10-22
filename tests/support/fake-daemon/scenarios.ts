@@ -102,6 +102,16 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     { kind: "text", text: "```mermaid\nflowchart LR\n    Browser --> Worker\n    Worker --> Agent\n" },
                 ],
             };
+        case "draw a wide deployment diagram":
+            return {
+                outcome: "hold",
+                output: [
+                    {
+                        kind: "text",
+                        text: "```mermaid\nflowchart LR\n    A[Browser<br/>Morty chat UI] --> B[Morty<br/>manager / runtime hub]\n    B --> C[Pi<br/>coding agent harness]\n    C --> D[DeepSeek<br/>model backend]\n    D --> C\n    C --> B\n    B --> A\n",
+                    },
+                ],
+            };
         case "draw a sequence diagram":
             return {
                 outcome: "hold",

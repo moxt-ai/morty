@@ -12,13 +12,21 @@ import {
 
 export function ContinuePageContent({
     enterMorty,
+    continueHref = null,
     retry,
     state,
 }: {
     readonly enterMorty: () => void;
+    readonly continueHref?: string | null;
     readonly retry: () => void;
     readonly state: ContinueState;
 }) {
+    const fallback =
+        continueHref === null ? null : (
+            <Button asChild variant="outline" className={`${setupPrimaryButtonClassName} mt-5 text-center`}>
+                <a href={continueHref}>Continue on your last computer</a>
+            </Button>
+        );
     switch (state.kind) {
         case "session-opening":
         case "session-resuming":
@@ -56,7 +64,21 @@ export function ContinuePageContent({
                         <Button className={setupPrimaryButtonClassName} onClick={retry}>
                             Try again
                         </Button>
+                        {fallback}
                     </SetupCardSection>
+                </SetupCardShell>
+            );
+        case "link-unavailable":
+            return (
+                <SetupCardShell titleId="continue-title">
+                    <SetupCardTitle id="continue-title">This link is no longer available</SetupCardTitle>
+                    <SetupCardAlert>{state.message}</SetupCardAlert>
+                    <SetupCardDescription>
+                        {state.recovery === "setup"
+                            ? "Run setup again on that computer to get a new link."
+                            : "Ask for a new link."}
+                    </SetupCardDescription>
+                    {fallback}
                 </SetupCardShell>
             );
         case "identity-redeeming":
@@ -74,6 +96,12 @@ export function ContinuePageContent({
                 <SetupCardShell titleId="continue-title">
                     <SetupCardTitle id="continue-title">Continue in Morty</SetupCardTitle>
                     <SetupCardAlert>{state.message}</SetupCardAlert>
+                    <SetupCardSection>
+                        <Button className={setupPrimaryButtonClassName} onClick={retry}>
+                            Try again
+                        </Button>
+                        {fallback}
+                    </SetupCardSection>
                 </SetupCardShell>
             );
         case "invalid":
@@ -81,6 +109,7 @@ export function ContinuePageContent({
                 <SetupCardShell titleId="continue-title">
                     <SetupCardTitle id="continue-title">Continue in Morty</SetupCardTitle>
                     <SetupCardAlert>This transfer link is invalid.</SetupCardAlert>
+                    {fallback}
                 </SetupCardShell>
             );
     }

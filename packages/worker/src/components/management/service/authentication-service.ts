@@ -9,15 +9,10 @@ type SessionResult =
     | { readonly kind: "unauthenticated" }
     | { readonly kind: "unavailable" };
 
-interface AuditLogger {
-    readonly info: (value: Readonly<Record<string, unknown>>, message: string) => void;
-}
-
 export class AuthenticationService {
     private readonly configuration: ConfigurationStorage;
     private readonly clerk: ClerkGateway;
     private readonly identities: IdentityStorage;
-    private readonly logger: AuditLogger;
     private readonly projectId: string | undefined;
 
     constructor(cx: {
@@ -26,13 +21,11 @@ export class AuthenticationService {
             readonly identities: IdentityStorage;
         };
         readonly gateways: { readonly clerk: ClerkGateway };
-        readonly logger: AuditLogger;
         readonly config: { readonly bindings: { readonly CHAT_PROJECT_ID?: string } };
     }) {
         this.configuration = cx.storages.configuration;
         this.clerk = cx.gateways.clerk;
         this.identities = cx.storages.identities;
-        this.logger = cx.logger;
         this.projectId = cx.config.bindings.CHAT_PROJECT_ID;
     }
 
@@ -79,7 +72,6 @@ export class AuthenticationService {
         signal: AbortSignal,
     ): Promise<AnonymousIdentity> => {
         const identity = await this.identities.createAnonymous(userId, projectId, Date.now(), signal);
-        this.logger.info({ event: "anonymous-user-created", userId: identity.userId }, "Identity audit event");
         return identity;
     };
 
@@ -95,7 +87,6 @@ export class AuthenticationService {
             return null;
         }
         const transfer = await this.identities.createTransfer(userId, Date.now(), signal);
-        this.logger.info({ event: "identity-transfer-created", userId }, "Identity audit event");
         return transfer;
     };
 
@@ -108,20 +99,11 @@ export class AuthenticationService {
             return null;
         }
         const recoveryToken = await this.identities.createRecoveryToken(userId, Date.now(), signal);
-        this.logger.info({ event: "identity-recovery-token-created", userId }, "Identity audit event");
         return recoveryToken;
     };
 
     readonly redeemTransfer = async (code: string, signal: AbortSignal): Promise<AnonymousIdentity | null> => {
         const identity = await this.identities.redeemTransfer(code, Date.now(), signal);
-        this.logger.info(
-            {
-                event: "identity-transfer-redeemed",
-                outcome: identity === null ? "rejected" : "accepted",
-                userId: identity?.userId,
-            },
-            "Identity audit event",
-        );
         return identity;
     };
 
@@ -130,16 +112,6 @@ export class AuthenticationService {
             return { kind: "unauthenticated" } as const;
         }
         const result = await this.identities.endRemoteAccess(token, Date.now(), signal);
-        this.logger.info(
-            {
-                event: "remote-access-ended",
-                outcome: result.kind,
-                userId: result.kind === "unauthenticated" ? undefined : result.userId,
-                transferId: result.kind === "ended-transfer" ? result.transferId : undefined,
-                credentialId: result.kind === "ended-credential" ? result.credentialId : undefined,
-            },
-            "Identity audit event",
-        );
         return result;
     };
 
@@ -170,10 +142,6 @@ export class AuthenticationService {
             return { kind: "invalid-local-user" };
         }
         const result = await this.identities.bindClerk(clerk.userId, localUserId, action, Date.now(), signal);
-        this.logger.info(
-            { action, clerkUserId: clerk.userId, event: "clerk-binding-resolved", localUserId, outcome: result.kind },
-            "Identity audit event",
-        );
         return result;
     };
 

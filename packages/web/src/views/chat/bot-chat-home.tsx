@@ -24,6 +24,7 @@ import {
 } from "../../view-models/chat/conversation-creation-machine.ts";
 import { selectedConversationId } from "../../view-models/chat/conversation-selection-machine.ts";
 import { pendingExecutionContext } from "../../view-models/chat/execution-context.ts";
+import { OnlineComputerAlternative } from "./computer-switcher.tsx";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { MobiusSessionPane, MobiusSessionPaneLoading, SessionMessageListSkeleton } from "./mobius-session-pane.tsx";
@@ -96,6 +97,9 @@ export function BotChatHome({
             data-chat-state={model.selection.kind === "ready" ? "connected" : "disconnected"}
             className="fixed inset-0 flex min-h-0 overflow-hidden bg-card/90 text-foreground max-sm:flex-col sm:flex-row sm:bg-sidebar"
             ref={workspace.onAttach}
+            onPointerDownCapture={workspace.recordUserActivity}
+            onKeyDownCapture={workspace.recordUserActivity}
+            onInputCapture={workspace.recordUserActivity}
         >
             {active !== null && (
                 <ConversationSidebar
@@ -109,6 +113,14 @@ export function BotChatHome({
                     onOpen={(session) => openManaged(session.isExternal, session.id)}
                     onNewConversation={newConversation}
                 />
+            )}
+            {workspace.accessNotice !== null && (
+                <div
+                    role="status"
+                    className="fixed bottom-24 left-4 z-[100] rounded-lg border border-border bg-background px-4 py-3 text-sm shadow-lg"
+                >
+                    {workspace.accessNotice}
+                </div>
             )}
             {model.selection.kind === "ready" && active !== null ? (
                 <MobiusSessionPane key={model.selection.session.result.ready.sessionId} workspace={workspace} />
@@ -278,7 +290,7 @@ export function BotChatHome({
             {disconnectionNotice.kind === "visible" && !model.disconnectedNoticeDismissed && (
                 <div
                     aria-live="polite"
-                    className="fixed top-4 right-4 z-[100] grid w-[calc(100%-2rem)] max-w-sm grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground shadow-lg sm:top-6 sm:right-6"
+                    className="fixed top-28 right-4 z-[100] grid w-[calc(100%-2rem)] max-w-sm grid-cols-[minmax(0,1fr)_auto] gap-3 rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground shadow-lg sm:top-6 sm:right-6"
                     role="status"
                 >
                     <div className="min-w-0">
@@ -286,6 +298,7 @@ export function BotChatHome({
                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
                             {disconnectionNotice.description}
                         </p>
+                        {workspace.computers !== null && <OnlineComputerAlternative model={workspace.computers} />}
                     </div>
                     <button
                         aria-label="Dismiss disconnected agent notification"

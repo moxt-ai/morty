@@ -51,7 +51,7 @@ test("Given the report dialog is open, When a user pastes and selects images and
                     createMortyApplication({ origin: window.location.origin, transport: noopTransport() })
                         .bugReportDialog
                 }
-                state={{ kind: "failed" }}
+                state={{ kind: "failed", retry: () => window.location.reload() }}
             />,
         );
         const user = userEvent.setup();
@@ -102,7 +102,7 @@ test.each([
                         createMortyApplication({ origin: window.location.origin, transport: noopTransport() })
                             .bugReportDialog
                     }
-                    state={{ kind: "failed" }}
+                    state={{ kind: "failed", retry: () => window.location.reload() }}
                 />,
             );
             const user = userEvent.setup();
@@ -137,7 +137,7 @@ test("Given a file claims to be a PNG, When its contents do not match and the us
                     createMortyApplication({ origin: window.location.origin, transport: noopTransport() })
                         .bugReportDialog
                 }
-                state={{ kind: "failed" }}
+                state={{ kind: "failed", retry: () => window.location.reload() }}
             />,
         );
         const user = userEvent.setup();
@@ -233,7 +233,7 @@ test("Given Morty cannot load and no daemon is connected, When a user reports a 
                     createMortyApplication({ origin: window.location.origin, transport: noopTransport() })
                         .bugReportDialog
                 }
-                state={{ kind: "failed" }}
+                state={{ kind: "failed", retry: () => window.location.reload() }}
             />,
         );
         const user = userEvent.setup();
@@ -278,7 +278,7 @@ test("Given Sentry rejects a report, When the user retries after it recovers, Th
                     createMortyApplication({ origin: window.location.origin, transport: noopTransport() })
                         .bugReportDialog
                 }
-                state={{ kind: "failed" }}
+                state={{ kind: "failed", retry: () => window.location.reload() }}
             />,
         );
         const user = userEvent.setup();
@@ -349,7 +349,7 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
                     createMortyApplication({ origin: window.location.origin, transport: noopTransport() })
                         .bugReportDialog
                 }
-                state={{ kind: "failed" }}
+                state={{ kind: "failed", retry: () => window.location.reload() }}
             />,
         );
         const user = userEvent.setup();

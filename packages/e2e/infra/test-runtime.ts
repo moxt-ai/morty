@@ -30,6 +30,9 @@ export async function createTestRuntime(
         },
         machineName,
     );
+    const additionalRuntimes: ControlledSetupRuntime[] = [];
+    const additionalFailure = Promise.withResolvers<never>();
+    void additionalFailure.promise.catch(() => undefined);
     const application = await stack.startPlatform();
     await stack.startChat(application);
     const browser = await { chromium, firefox, webkit }[browserName].launch({ headless: true });
@@ -56,7 +59,11 @@ export async function createTestRuntime(
             await page.addInitScript(
                 ({ key, raw }) => {
                     if (window === window.top) {
-                        window.localStorage.setItem(key, raw);
+                        const stored = window.localStorage.getItem(key);
+                        window.localStorage.setItem(
+                            key,
+                            JSON.stringify({ ...(stored === null ? {} : JSON.parse(stored)), ...JSON.parse(raw) }),
+                        );
                     }
                 },
                 {
@@ -71,17 +78,33 @@ export async function createTestRuntime(
 
         return {
             close: async () => {
-                await runtime.disconnect();
+                await Promise.all([runtime, ...additionalRuntimes].map((computer) => computer.disconnect()));
             },
-            failure: runtime.failure,
+            failure: Promise.race([runtime.failure, additionalFailure.promise]),
             continueReply: runtime.continueReply,
             writeFiles: runtime.writeFiles,
             page,
             openChat,
-            openPairedChat: async () => {
+            openPairedChat: async (computerName?: string) => {
+                const computer =
+                    computerName === undefined
+                        ? runtime
+                        : new ControlledSetupRuntime(
+                              {
+                                  agentId,
+                                  agentName,
+                                  files: mortyFiles,
+                                  reply: mortyReply,
+                              },
+                              computerName,
+                          );
+                if (computer !== runtime) {
+                    additionalRuntimes.push(computer);
+                    void computer.failure.catch(additionalFailure.reject);
+                }
                 await openChat();
                 const pairing = await chat.createPairing();
-                await runtime.run(
+                await computer.run(
                     harness.workDirectory,
                     [
                         "pair",
