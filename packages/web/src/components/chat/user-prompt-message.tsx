@@ -1,9 +1,9 @@
 import type { PromptImage, PromptResource } from "@moxt-ai/mobius-sdk";
 import { cn } from "@/lib/utils";
+import { MessageBubble } from "../../components/chat/message-bubble.tsx";
+import { UserMessageShell } from "../../components/chat/user-message-shell.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
-import { MessageBubble } from "./message-bubble.tsx";
-import { UserMessageShell } from "./user-message-shell.tsx";
 
 const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
 

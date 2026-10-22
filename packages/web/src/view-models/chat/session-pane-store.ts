@@ -10,9 +10,14 @@ import {
 } from "@moxt-ai/mobius-sdk";
 import { decodeIdentifier, type SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
+import {
+    type ComposerAttachmentStore,
+    createComposerAttachmentStore,
+} from "../../components/chat/composer-attachment-store.ts";
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import { type BotChatApi, connectedChatRuntimeAgents } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
+import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import {
     centralIndexedDB,
     type SessionLastSentMessage,
@@ -22,7 +27,6 @@ import { centralSessionStorage, sessionDraftEntry } from "../../services/session
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError, isRetryableRuntimeConnectionFailure } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
-import { type ComposerAttachmentStore, createComposerAttachmentStore } from "./composer-attachment-store.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
@@ -54,11 +58,14 @@ import {
     type SessionEventHistory,
     type SessionProjectionEffect,
     type SessionProjectionInput,
+    sessionProjectionExecutionOwner,
     sessionProjectionMessages,
     sessionProjectionPagination,
     transitionSessionProjection,
 } from "./session-projection.ts";
 import { createSessionTaskControlsStore, type SessionTaskControlsStore } from "./session-task-controls.ts";
+
+export type SessionPaneModel = ReturnType<typeof createSessionPaneModel>;
 
 type Operation =
     | { readonly kind: "idle" }
@@ -190,6 +197,17 @@ export interface SessionPaneStore {
     readonly options: readonly SessionConfigOption[];
     readonly draft: string;
     readonly interactions: readonly LocalInteraction[];
+    /**
+     * Bumped after a user-submitted action that appends content (send, queue,
+     * steer) so the message surface re-arms following the latest message.
+     */
+    readonly followRevision: number;
+    /** In-flight response for the interaction cards; a submitted interaction stays answered. */
+    readonly interactionOperation:
+        | { readonly kind: "idle" }
+        | { readonly kind: "submitting"; readonly interactionId: string }
+        | { readonly kind: "submitted"; readonly interactionId: string }
+        | { readonly kind: "failed"; readonly interactionId: string; readonly message: string };
     readonly operation: Operation;
     readonly activity: SessionActivityState;
     /** Display-only harness list; loading failures leave the current harness. */
@@ -217,6 +235,12 @@ export interface SessionPaneStore {
     readonly refreshSettings: (signal: AbortSignal) => Promise<void>;
     readonly respondToPermission: (response: PermissionInteractionResponse, signal: AbortSignal) => Promise<void>;
     readonly respondToElicitation: (response: ElicitationInteractionResponse, signal: AbortSignal) => Promise<void>;
+    /** Submits an interaction response, tracking busy/answered/failed state for the cards. */
+    readonly respondToInteraction: (
+        interactionId: string,
+        response: () => Promise<void>,
+        signal: AbortSignal,
+    ) => Promise<void>;
     readonly stop: (signal: AbortSignal) => Promise<void>;
 }
 
@@ -408,6 +432,10 @@ export function createSessionPaneModel(options: {
     const { session, botId, requests, clock } = options;
     const composerAttachments = createComposerAttachmentStore(options.initialMessage?.attachments);
     const sessionId = session.result.ready.sessionId;
+    // Working in a conversation makes it the reference for the next draft: its
+    // harness and the settings it runs with carry into New Session.
+    saveLastHarnessPreference(botId, session.agentRef);
+    saveLastAgentSettings(botId, session.agentRef, session.result.ready.configOptions);
     const initialActiveTurn: SessionActiveTurn =
         session.result.action === "conversation" && session.result.activeTurn.kind === "running"
             ? {
@@ -426,6 +454,7 @@ export function createSessionPaneModel(options: {
     let loadingOlderHistory = false;
     let command = openedActiveTurn.kind === "idle" ? "" : openedActiveTurn.commandId;
     let initialCommandId = options.initialMessage?.commandId ?? null;
+    let draftRevision = 0;
     // The queued first message stays the pane's recovery responsibility until
     // the service accepts it or the user discards it, not just until the send
     // starts.
@@ -550,7 +579,43 @@ export function createSessionPaneModel(options: {
     const draftEntry = sessionDraftEntry(sessionId);
     const initialTimeline = deriveTimeline();
 
+    // Activity transitions are reported to the owner through this latch at
+    // the explicit sites that change activity; connection waiters are woken
+    // where the connection settles. No wrapped set, no subscriptions.
+    let reportedStatus: SessionActivityState | null = null;
+    const connectionWaiters = new Set<() => void>();
     const store = createStore<SessionPaneStore>()((set, get) => {
+        const settleConnectionWaiters = (): void => {
+            const connection = get().connection;
+            const settled =
+                connection.kind === "ready" ||
+                connection.kind === "failed" ||
+                (connection.kind === "disconnected" && connection.retry.kind === "exhausted");
+            if (settled) {
+                for (const wake of connectionWaiters) {
+                    wake();
+                }
+                connectionWaiters.clear();
+            }
+        };
+        const setAndSettle = (
+            partial:
+                | SessionPaneStore
+                | Partial<SessionPaneStore>
+                | ((state: SessionPaneStore) => SessionPaneStore | Partial<SessionPaneStore>),
+        ): void => {
+            set(partial);
+            settleConnectionWaiters();
+        };
+        // Reports an activity transition to the owner through the latch; the
+        // explicit sites that change activity call this right after their set.
+        const announceActivity = (): void => {
+            const activity = get().activity;
+            if (activity !== reportedStatus) {
+                reportedStatus = activity;
+                options.onStatusChange?.(activity);
+            }
+        };
         let historyLoadController: AbortController | null = null;
         const commitProjection = (input: SessionProjectionInput): readonly SessionProjectionEffect[] => {
             const result = transitionSessionProjection(projection, input);
@@ -643,6 +708,8 @@ export function createSessionPaneModel(options: {
             draft: options.initialMessage?.content ?? centralSessionStorage.read(draftEntry) ?? "",
             harnesses: [{ agentRef: session.agentRef, label: session.agentRef, value: session.agentRef }],
             interactions: [],
+            followRevision: 0,
+            interactionOperation: { kind: "idle" },
             operation: { kind: "idle" },
             activity: initialActivity,
             loadOlderMessages: async (signal) => {
@@ -680,6 +747,12 @@ export function createSessionPaneModel(options: {
                 }
             },
             connect: async (signal) => {
+                // Each connect starts from an empty projection: the history
+                // reload re-reads persisted events (reasoning text omitted
+                // server-side), so a re-attached view never renders stale
+                // in-memory content the service no longer returns.
+                projection = createSessionProjection();
+                set({ messages: sessionProjectionMessages(projection) });
                 const readStoredLastSentMessage = (): void => {
                     const revision = lastSentMessageRevision;
                     void centralIndexedDB.get(lastSentMessageEntry, signal).then((stored) => {
@@ -695,6 +768,7 @@ export function createSessionPaneModel(options: {
                                     startedAt: stored.sentAt,
                                 }),
                             });
+                            announceActivity();
                         }
                     });
                 };
@@ -773,6 +847,11 @@ export function createSessionPaneModel(options: {
                         if (payload.kind === "prompt.started") {
                             delivery.getState().reconcile([payload.commandId]);
                             const queued = messageQueue.getState().takeStarted(payload.commandId);
+                            const owner = sessionProjectionExecutionOwner(projection, payload.commandId);
+                            if (owner !== null && owner !== payload.commandId) {
+                                // Steering starts a command, not a new execution to stop.
+                                return true;
+                            }
                             if (command !== "" && command !== payload.commandId) {
                                 tasks.getState().finish(command);
                                 activeTurn.turnCleared(command);
@@ -794,6 +873,7 @@ export function createSessionPaneModel(options: {
                                       ? lastSentMessage.sentAt
                                       : Date.now();
                             set({ activity: startSessionWork({ commandId: payload.commandId, startedAt }) });
+                            announceActivity();
                             return true;
                         }
                         if (
@@ -826,6 +906,7 @@ export function createSessionPaneModel(options: {
                                         messages: timeline.messages,
                                         operation: finishPromptOperation(get().operation, payload.commandId),
                                     });
+                                    announceActivity();
                                     return true;
                                 }
                             }
@@ -845,6 +926,7 @@ export function createSessionPaneModel(options: {
                                 messages: completed.messages,
                                 operation: finishPromptOperation(get().operation, payload.commandId),
                             });
+                            announceActivity();
                             tasks.getState().finish(payload.commandId);
                             activeTurn.turnCleared(payload.commandId);
                             if (command === payload.commandId) {
@@ -864,7 +946,7 @@ export function createSessionPaneModel(options: {
                                 case "initial-subscription":
                                     break;
                                 case "reconnecting":
-                                    set({
+                                    setAndSettle({
                                         connection: {
                                             kind: "reconnecting",
                                             message: connectionFailure(get().connection),
@@ -872,21 +954,20 @@ export function createSessionPaneModel(options: {
                                     });
                                     break;
                             }
-                            const executionPromise = connected.sessions.readSessionExecution(
+                            await dispatchProjection({ kind: "reconcile" }, connected, signal);
+                            signal.throwIfAborted();
+                            // Confirm execution after history is adopted. An earlier idle snapshot
+                            // cannot settle work that started while those pages were loading.
+                            const execution = await connected.sessions.readSessionExecution(
                                 sessionId,
                                 sessionIdentity,
                                 signal,
                             );
-                            // Reconciliation may abandon this speculative read when the
-                            // subscription tears down; keep its aborted rejection awaited.
-                            void executionPromise.then(
-                                () => undefined,
-                                () => undefined,
-                            );
-                            await dispatchProjection({ kind: "reconcile" }, connected, signal);
                             signal.throwIfAborted();
-                            const execution = await executionPromise;
                             const running = execution.turn;
+                            if (running === null) {
+                                commitProjection({ kind: "execution-idle" });
+                            }
                             messageQueue.getState().replace(execution.queued);
                             if (running !== null) {
                                 command = running.commandId;
@@ -948,11 +1029,12 @@ export function createSessionPaneModel(options: {
                                 interactions,
                                 activity: restoredActivity,
                             });
+                            announceActivity();
                             switch (reconciliation.kind) {
                                 case "initial-subscription":
                                     break;
                                 case "reconnecting":
-                                    set({ connection: { client: connected, kind: "ready" } });
+                                    setAndSettle({ connection: { client: connected, kind: "ready" } });
                                     break;
                             }
                         },
@@ -978,7 +1060,7 @@ export function createSessionPaneModel(options: {
                     const subscription = await connected.events.subscribeLive(sessionId, observer, signal);
                     signal.throwIfAborted();
                     consecutiveFailures = 0;
-                    set({ connection: { kind: "ready", client: connected } });
+                    setAndSettle({ connection: { kind: "ready", client: connected } });
                     if (initialCommandId !== null) {
                         // Send reports delivery itself, so an uncertain or
                         // rejected submission leaves the queued message and its
@@ -998,7 +1080,9 @@ export function createSessionPaneModel(options: {
                 readStoredLastSentMessage();
                 for (;;) {
                     if (consecutiveFailures > 0) {
-                        set({ connection: { kind: "reconnecting", message: connectionFailure(get().connection) } });
+                        setAndSettle({
+                            connection: { kind: "reconnecting", message: connectionFailure(get().connection) },
+                        });
                     }
                     try {
                         await observeSession();
@@ -1010,7 +1094,7 @@ export function createSessionPaneModel(options: {
                         }
                         if (!isRetryableRuntimeConnectionFailure(cause)) {
                             const message = formatError(cause, "The Session could not be opened.");
-                            set({
+                            setAndSettle({
                                 connection: { kind: "failed", message },
                             });
                             return;
@@ -1023,7 +1107,7 @@ export function createSessionPaneModel(options: {
                         consecutiveFailures += 1;
                         const message = formatError(cause, "The Session could not be opened.");
                         const remainingSeconds = Math.ceil(delay / 1000);
-                        set({
+                        setAndSettle({
                             connection: {
                                 kind: "disconnected",
                                 message,
@@ -1038,7 +1122,7 @@ export function createSessionPaneModel(options: {
                                 while (clock.now() < retryAt) {
                                     await clock.sleep(Math.min(1000, retryAt - clock.now()), retrySignal);
                                     retrySignal.throwIfAborted();
-                                    set({
+                                    setAndSettle({
                                         connection: {
                                             kind: "disconnected",
                                             message,
@@ -1074,6 +1158,8 @@ export function createSessionPaneModel(options: {
                 countdownInterrupt?.abort(new Error("Retried now"));
             },
             setDraft: (draft) => {
+                draftRevision += 1;
+                delivery.getState().dismissFailure();
                 tasks.getState().dismissFailure();
                 messageQueue.getState().dismissFailure();
                 if (draft === "") {
@@ -1113,15 +1199,19 @@ export function createSessionPaneModel(options: {
                 const images = attachments.flatMap((attachment) =>
                     attachment.kind === "image" ? [attachment.image] : [],
                 );
+                const submittedDraftRevision = draftRevision;
+                // The submission owns this snapshot until it is accepted, journaled,
+                // or returned to the composer by an authoritative rejection.
                 centralSessionStorage.remove(draftEntry);
                 composerAttachments.getState().clear();
                 const activity = startSessionWork({ commandId, startedAt: lastSentMessage.sentAt });
                 const pending = deriveTimeline();
                 set({
                     activity,
-                    draft: "",
+                    followRevision: get().followRevision + 1,
                     operation: { kind: "sending", commandId },
                     messages: pending.messages,
+                    draft: "",
                 });
                 try {
                     activeTurn.submissionStarted(commandId);
@@ -1133,41 +1223,55 @@ export function createSessionPaneModel(options: {
                             attachment.kind === "resource" ? [attachment.resource] : [],
                         ),
                     };
-                    const accepted = await delivery.getState().submit(commandId, displayPrompt, submission, signal);
+                    const outcome = await delivery.getState().submit(commandId, displayPrompt, submission, signal);
                     signal.throwIfAborted();
-                    // Report delivery as soon as the service accepts the turn,
-                    // independently of `command`: a live event may clear it
-                    // while the submission is in flight. An uncertain
-                    // (delivery-unknown) or rejected submission marks the
-                    // queued first message as unconfirmed, which keeps its
-                    // content and command id for an explicit retry but never
-                    // auto-sends it from a remount.
-                    if (accepted !== null) {
+                    switch (outcome.kind) {
+                        case "accepted":
+                        case "delivery-unknown":
+                            break;
+                        case "rejected":
+                            if (draftRevision === submittedDraftRevision) {
+                                set({ draft: current.draft });
+                                composerAttachments.getState().restore(attachments);
+                                centralSessionStorage.write(draftEntry, current.draft);
+                            }
+                            if (isQueuedInitialMessage(commandId)) {
+                                // This rejected message is editable again. Retire
+                                // the auto-send/retry copy owned by the home store.
+                                options.onInitialMessageRecoveryCleared?.(commandId);
+                            }
+                            break;
+                        default:
+                            return outcome satisfies never;
+                    }
+                    if (outcome.kind === "accepted") {
                         if (isQueuedInitialMessage(commandId)) {
                             options.onInitialMessageDelivered?.();
                         }
-                    } else if (isQueuedInitialMessage(commandId)) {
+                    } else if (outcome.kind === "delivery-unknown" && isQueuedInitialMessage(commandId)) {
                         options.onInitialMessageUnconfirmed?.({ commandId, displayPrompt, request: submission });
                     }
-                    if (accepted !== null) {
+                    if (outcome.kind === "accepted") {
                         // A terminal live event may precede the acceptance response.
                         // Its result already owns the activity; do not overwrite it.
                         if (command === commandId) {
-                            tasks.getState().start(commandId, accepted.turnId);
-                            activeTurn.submissionAccepted(commandId, accepted.turnId);
+                            tasks.getState().start(commandId, outcome.turn.turnId);
+                            activeTurn.submissionAccepted(commandId, outcome.turn.turnId);
                         }
                         set({ operation: finishPromptOperation(get().operation, commandId) });
                         return;
                     }
                     activeTurn.turnCleared(commandId);
-                    command = "";
-                    const idle = { kind: "idle" } as const;
+                    if (command === commandId) {
+                        command = "";
+                    }
                     const restored = deriveTimeline();
                     set({
-                        activity: idle,
+                        activity: transitionSessionActivity(get().activity, { commandId, kind: "work-completed" }),
                         messages: restored.messages,
-                        operation: { kind: "idle" },
+                        operation: finishPromptOperation(get().operation, commandId),
                     });
+                    announceActivity();
                 } catch (cause) {
                     signal.throwIfAborted();
                     set((current) => ({
@@ -1181,6 +1285,7 @@ export function createSessionPaneModel(options: {
                             message: formatError(cause, "The agent could not complete the message."),
                         },
                     }));
+                    announceActivity();
                 }
             },
             removeUnknownDelivery: () => {
@@ -1201,6 +1306,7 @@ export function createSessionPaneModel(options: {
                 const activity = transitionSessionActivity(get().activity, { commandId, kind: "work-completed" });
                 const restored = deriveTimeline();
                 set({ activity, messages: restored.messages });
+                announceActivity();
             },
             retryUnknownDelivery: async (signal) => {
                 const state = delivery.getState().state;
@@ -1215,21 +1321,50 @@ export function createSessionPaneModel(options: {
                 });
                 const retried = deriveTimeline();
                 set({ activity: retrying, messages: retried.messages });
-                const accepted = await delivery.getState().retry(signal);
+                announceActivity();
+                const outcome = await delivery.getState().retry(signal);
                 signal.throwIfAborted();
-                if (accepted !== null) {
-                    // A successful retry also delivers the queued first
-                    // message, so the home store must stop treating it as
-                    // pending recovery.
-                    if (isQueuedInitialMessage(pending.commandId)) {
-                        options.onInitialMessageDelivered?.();
+                switch (outcome?.kind) {
+                    case "accepted":
+                        if (isQueuedInitialMessage(pending.commandId)) {
+                            options.onInitialMessageDelivered?.();
+                        }
+                        if (command === pending.commandId) {
+                            tasks.getState().start(pending.commandId, outcome.turn.turnId);
+                            activeTurn.submissionAccepted(pending.commandId, outcome.turn.turnId);
+                        }
+                        return;
+                    case "rejected": {
+                        const restoredAttachments = [
+                            ...pending.request.images.map((image) => ({ kind: "image" as const, image })),
+                            ...pending.request.resources.map((resource) => ({ kind: "resource" as const, resource })),
+                        ];
+                        composerAttachments.getState().restore(restoredAttachments);
+                        centralSessionStorage.write(draftEntry, pending.request.content);
+                        set({ draft: pending.request.content });
+                        if (isQueuedInitialMessage(pending.commandId)) {
+                            options.onInitialMessageRecoveryCleared?.(pending.commandId);
+                        }
+                        break;
                     }
-                    tasks.getState().start(pending.commandId, accepted.turnId);
-                    activeTurn.submissionAccepted(pending.commandId, accepted.turnId);
-                } else {
-                    activeTurn.turnCleared(pending.commandId);
+                    case "delivery-unknown":
+                        break;
+                    case undefined:
+                        return;
+                    default:
+                        return outcome satisfies never;
+                }
+                activeTurn.turnCleared(pending.commandId);
+                if (command === pending.commandId) {
                     command = "";
                 }
+                set({
+                    activity: transitionSessionActivity(get().activity, {
+                        commandId: pending.commandId,
+                        kind: "work-completed",
+                    }),
+                });
+                announceActivity();
             },
             queueDraft: async (signal) => {
                 const current = get();
@@ -1250,6 +1385,7 @@ export function createSessionPaneModel(options: {
                             attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
                         )
                         .join(", ");
+                delivery.getState().dismissFailure();
                 const queued = await messageQueue.getState().enqueue(
                     controls.operation.active.commandId,
                     summary,
@@ -1272,7 +1408,7 @@ export function createSessionPaneModel(options: {
                     void centralIndexedDB.set(lastSentMessageEntry, lastSentMessage, signal);
                     centralSessionStorage.remove(draftEntry);
                     composerAttachments.getState().clear();
-                    set({ draft: "" });
+                    set({ draft: "", followRevision: get().followRevision + 1 });
                 }
             },
             steerQueued: async (commandId, signal) => {
@@ -1280,7 +1416,7 @@ export function createSessionPaneModel(options: {
                 signal.throwIfAborted();
                 if (steered !== null) {
                     const timeline = deriveTimeline();
-                    set({ messages: timeline.messages });
+                    set({ messages: timeline.messages, followRevision: get().followRevision + 1 });
                 }
             },
             deleteQueued: async (commandId, signal) => {
@@ -1426,6 +1562,31 @@ export function createSessionPaneModel(options: {
                     throw cause;
                 }
             },
+            respondToInteraction: async (interactionId, response, signal) => {
+                const current = get().interactionOperation;
+                if (
+                    current.kind === "submitting" ||
+                    (current.kind === "submitted" && current.interactionId === interactionId)
+                ) {
+                    return;
+                }
+                set({ interactionOperation: { kind: "submitting", interactionId } });
+                try {
+                    await response();
+                    if (!signal.aborted) {
+                        set({ interactionOperation: { kind: "submitted", interactionId } });
+                    }
+                } catch (cause) {
+                    signal.throwIfAborted();
+                    set({
+                        interactionOperation: {
+                            kind: "failed",
+                            interactionId,
+                            message: formatError(cause, "The response could not be submitted."),
+                        },
+                    });
+                }
+            },
             stop: async (signal) => await tasks.getState().stop(signal),
         };
     });
@@ -1433,72 +1594,71 @@ export function createSessionPaneModel(options: {
         permission: (response, signal) => store.getState().respondToPermission(response, signal),
         elicitation: (response, signal) => store.getState().respondToElicitation(response, signal),
     });
-    // Report activity transitions to the owner without a component effect;
-    // the subscription lives exactly as long as this pane model.
-    let reportedStatus: SessionActivityState | null = null;
-    store.subscribe((state) => {
-        if (state.activity !== reportedStatus) {
-            reportedStatus = state.activity;
-            options.onStatusChange?.(state.activity);
-        }
-    });
     // The pane's connection lifetime: attach starts connecting with its own
     // signal, detach aborts it. The view drives this through a ref callback,
     // so no component effect owns the session connection and nothing starts
     // during render.
     const attachedViews = new WeakSet<HTMLElement>();
-    const connection = new AbortController();
+    // The pane's connection lifetime follows attach/detach: each attach gets a
+    // fresh controller (a detach aborts the previous one), so a re-attached
+    // pane reconnects instead of reusing an aborted signal.
+    let connection = new AbortController();
     // The harness list is display-only in an existing conversation: every
     // entry is disabled, so a failed load just leaves the current harness.
-    const harnessController = new AbortController();
-    requests
-        .runtimeConfiguration(botId, harnessController.signal)
-        .then((configuration) => {
-            store.setState({
-                harnesses: connectedChatRuntimeAgents(configuration.runtime).map((agent) => ({
-                    agentRef: agent.agentRef,
-                    label: agent.label,
-                    value: `${agent.runtimeId}:${agent.agentRef}`,
-                })),
-            });
-        })
-        .catch((cause: unknown) => {
-            if (!harnessController.signal.aborted) {
-                reportApplicationError(cause, "session-pane-harnesses");
-            }
-        });
-    const waitForConnectionReady = (signal: AbortSignal): Promise<void> =>
-        new Promise((resolve, reject) => {
-            let unsubscribe = () => {};
-            const cleanup = (): void => {
-                unsubscribe();
-                signal.removeEventListener("abort", abort);
-            };
-            const abort = (): void => {
-                cleanup();
-                reject(signal.reason);
-            };
-            const check = (): void => {
-                const current = store.getState().connection;
-                if (current.kind === "ready") {
-                    cleanup();
-                    resolve();
-                } else if (
-                    current.kind === "failed" ||
-                    (current.kind === "disconnected" && current.retry.kind === "exhausted")
-                ) {
-                    cleanup();
-                    reject(new MobiusError("session_not_connected", current.message));
+    // The controller is re-armed on each attach so a re-attached pane can
+    // refresh the list again.
+    let harnessController = new AbortController();
+    const loadHarnesses = (): void => {
+        harnessController = new AbortController();
+        const signal = harnessController.signal;
+        requests
+            .runtimeConfiguration(botId, signal)
+            .then((configuration) => {
+                if (signal.aborted) {
+                    return;
                 }
-            };
-            if (signal.aborted) {
-                abort();
+                store.setState({
+                    harnesses: connectedChatRuntimeAgents(configuration.runtime).map((agent) => ({
+                        agentRef: agent.agentRef,
+                        label: agent.label,
+                        value: `${agent.runtimeId}:${agent.agentRef}`,
+                    })),
+                });
+            })
+            .catch((cause: unknown) => {
+                if (!signal.aborted) {
+                    reportApplicationError(cause, "session-pane-harnesses");
+                }
+            });
+    };
+    const waitForConnectionReady = async (signal: AbortSignal): Promise<void> => {
+        while (true) {
+            signal.throwIfAborted();
+            const current = store.getState().connection;
+            if (current.kind === "ready") {
                 return;
             }
-            signal.addEventListener("abort", abort, { once: true });
-            unsubscribe = store.subscribe(check);
-            check();
-        });
+            if (current.kind === "failed" || (current.kind === "disconnected" && current.retry.kind === "exhausted")) {
+                throw new MobiusError("session_not_connected", current.message);
+            }
+            await new Promise<void>((resolve, reject) => {
+                const wake = (): void => {
+                    cleanup();
+                    resolve();
+                };
+                const abort = (): void => {
+                    cleanup();
+                    reject(signal.reason);
+                };
+                const cleanup = (): void => {
+                    connectionWaiters.delete(wake);
+                    signal.removeEventListener("abort", abort);
+                };
+                connectionWaiters.add(wake);
+                signal.addEventListener("abort", abort, { once: true });
+            });
+        }
+    };
     const readFile = async (path: string, signal: AbortSignal) => {
         signal.throwIfAborted();
         const current = store.getState().connection;
@@ -1520,6 +1680,16 @@ export function createSessionPaneModel(options: {
     };
     const filePreview = createBrowserFilePreviewStore(readFile);
     /**
+     * Stops the pane's connection-scoped resources. Idempotent: an owning
+     * workspace may stop a pane that is still attached, and the attached
+     * element's own cleanup then re-runs it as a no-op.
+     */
+    const stop = (): void => {
+        filePreview.getState().close();
+        harnessController.abort(new Error("The session pane stopped."));
+        connection.abort(new Error("The session pane stopped."));
+    };
+    /**
      * Announced with the pane's attached root element, following React's
      * ref-cleanup protocol: the view hands it straight to its root element's
      * ref. Attach starts the session connection; the returned function stops
@@ -1535,11 +1705,16 @@ export function createSessionPaneModel(options: {
             sessionId,
             blocks: () => sessionDebugBlocks(store.getState()),
         });
+        // A previous cleanup aborted the old controllers; arm fresh ones so
+        // this attach reconnects with a live signal.
+        connection = new AbortController();
+        loadHarnesses();
+        const signal = connection.signal;
         void store
             .getState()
-            .connect(connection.signal)
+            .connect(signal)
             .catch((cause: unknown) => {
-                if (!connection.signal.aborted) {
+                if (!signal.aborted) {
                     reportApplicationError(cause, "session-pane-connect");
                 }
             });
@@ -1547,9 +1722,7 @@ export function createSessionPaneModel(options: {
             attachedViews.delete(node);
             unregisterDebug();
             composerAttachments.getState().clear();
-            filePreview.getState().close();
-            harnessController.abort(new Error("The session pane detached."));
-            connection.abort(new Error("The session pane detached."));
+            stop();
         };
     };
     return {
@@ -1560,7 +1733,14 @@ export function createSessionPaneModel(options: {
         filePreview,
         messageQueue,
         tasks,
+        /** The Bot this pane talks to; scopes failure approvals. */
+        botId,
+        /** The agent the session runs on; the harness lock offers it. */
+        agentRef: session.agentRef,
+        /** The opened session record; scopes the execution context. */
+        session,
         onAttach,
+        stop,
         /** The signal for view-triggered operations while the pane is attached. */
         operationsSignal: () => connection.signal,
         readResource,

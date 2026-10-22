@@ -1,11 +1,11 @@
 import type { StoreApi } from "zustand";
-import { useStore } from "zustand";
 import { dataTestId } from "../../data-testid.ts";
 import type { IdentitySharingStore } from "../../view-models/chat/identity-sharing-store.ts";
+import { useExternalStore } from "../../view-models/external-store.ts";
 
 /** Renders the sharing dialog's transfer, whose store is created when the dialog opens. */
 export function IdentitySharing({ store }: { readonly store: StoreApi<IdentitySharingStore> }) {
-    const state = useStore(store, (state) => state.state);
+    const state = useExternalStore(store, (state) => state.state);
     if (state.kind === "loading") {
         return <p role="status">Creating secure QR code…</p>;
     }

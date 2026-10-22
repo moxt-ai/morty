@@ -102,6 +102,16 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     { kind: "text", text: "```mermaid\nflowchart LR\n    Browser --> Worker\n    Worker --> Agent\n" },
                 ],
             };
+        case "draw a wide deployment diagram":
+            return {
+                outcome: "hold",
+                output: [
+                    {
+                        kind: "text",
+                        text: "```mermaid\nflowchart LR\n    A[Browser<br/>Morty chat UI] --> B[Morty<br/>manager / runtime hub]\n    B --> C[Pi<br/>coding agent harness]\n    C --> D[DeepSeek<br/>model backend]\n    D --> C\n    C --> B\n    B --> A\n",
+                    },
+                ],
+            };
         case "draw a sequence diagram":
             return {
                 outcome: "hold",
@@ -290,6 +300,25 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                 outcome: "complete",
                 output: [{ kind: "text", text: "![Generated picture](file:///workspace/generated-picture.png)" }],
             };
+        case "show external content": {
+            const content = {
+                type: "image" as const,
+                mimeType: "image/png",
+                data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV4kAAAAASUVORK5CYII=",
+            };
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        content: [{ type: "content", content }],
+                        title: "External content",
+                        output: "",
+                    },
+                ],
+            };
+        }
         case "show unsupported image": {
             const content = { type: "image" as const, mimeType: "image/png", data: "", uri: "unsupported.svg" };
             return {

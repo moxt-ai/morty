@@ -11,7 +11,7 @@ test("Given Chat is ready, When the user views recent sessions and opens a local
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     expect(getByRole(document.body, "heading", { name: "Recent sessions" })).toBeDefined();
     expect(getByRole(document.body, "button", { name: "New Session" })).toBeDefined();
@@ -49,7 +49,7 @@ test("Given native sessions are available, When the user selects a session from 
     });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Connected") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
     const menu = await app.waitForView(() =>

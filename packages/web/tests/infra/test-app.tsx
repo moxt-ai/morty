@@ -3,18 +3,15 @@ import { act, render } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { flushSync } from "react-dom";
 import { afterAll, afterEach } from "vitest";
-import { ToastProvider } from "../../src/components/ui/toast.tsx";
-import { ApiTransportProvider } from "../../src/services/api/api-transport-context.tsx";
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../../src/services/identity/identity-scope-url.ts";
+import {
+    anonymousCredentialsEntry,
+    centralLocalStorage,
+} from "../../src/services/local-storage/central-local-storage.ts";
 import type { Clock } from "../../src/services/time/clock.ts";
-import { createMortyApplication } from "../../src/view-models/morty-application.ts";
-import { App } from "../../src/views/application/app.tsx";
-import { MortyApplicationProvider } from "../../src/views/application/application-context.tsx";
-import { Bootstrap } from "../../src/views/application/bootstrap.tsx";
-import { router as authenticationRouter } from "../../src/views/authentication/router.tsx";
-import { SignedInApplication } from "../../src/views/authentication/session-application.tsx";
+import { assembleMorty } from "../../src/views/bootstrap.tsx";
 import { createChatWorkerEnvironment } from "../support/chat-worker.ts";
 
 declare global {
@@ -52,6 +49,7 @@ export async function createTestApp(
         readonly connectAgent?: boolean;
         readonly clock?: Clock;
         readonly agent?: { readonly id: string; readonly label: string };
+        readonly agents?: readonly { readonly id: string; readonly label: string }[];
         readonly nativeSessionIds?: ReadonlySet<string>;
         readonly page?:
             | {
@@ -61,6 +59,7 @@ export async function createTestApp(
                   /** Replaces the created transfer code, for example with one that cannot be redeemed. */
                   readonly code?: (application: Application) => string;
               }
+            | { readonly kind: "share"; readonly code?: (application: Application) => string }
             | { readonly kind: "bootstrap"; readonly identity?: boolean }
             | { readonly kind: "reload" }
             | { readonly kind: "managed-session"; readonly sessionId: string }
@@ -71,18 +70,23 @@ export async function createTestApp(
     const current = options.application ?? (await (await environment).createApplication());
     await options.prepare?.(current);
     const daemon =
-        options.connectAgent === true ? await current.connectAgent(options.agent, options.nativeSessionIds) : null;
+        options.connectAgent === true
+            ? options.agents === undefined
+                ? await current.connectAgent(options.agent, options.nativeSessionIds)
+                : await current.connectAgents(options.agents, options.nativeSessionIds)
+            : null;
     const agentFailure = daemon?.failure ?? null;
     const page = options.page ?? { kind: "morty" };
-    if (page.kind === "continue") {
+    if (page.kind === "continue" || page.kind === "share") {
         const transfer = new URL(await current.createTransferUrl());
-        transfer.searchParams.set("harness", page.harness);
-        transfer.searchParams.set("sessionId", page.sessionId);
+        if (page.kind === "continue") {
+            transfer.searchParams.set("harness", page.harness);
+            transfer.searchParams.set("sessionId", page.sessionId);
+        }
         if (page.code !== undefined) {
             transfer.hash = `code=${page.code(current)}`;
         }
         window.location.href = transfer.href;
-        authenticationRouter.history.replace(`${transfer.pathname}${transfer.search}${transfer.hash}`);
     } else if (page.kind === "bootstrap") {
         const destination = new URL("/", current.origin);
         if (page.identity === true) {
@@ -97,6 +101,7 @@ export async function createTestApp(
             window.localStorage.setItem(
                 ANONYMOUS_CREDENTIAL_KEY_NAME,
                 JSON.stringify({
+                    ...(centralLocalStorage.read(anonymousCredentialsEntry) ?? {}),
                     [current.userId]: await current.identity.getToken(new AbortController().signal),
                 }),
             );
@@ -107,41 +112,43 @@ export async function createTestApp(
         if (page.kind === "managed-session") {
             destination.searchParams.set("sessionId", page.sessionId);
         }
+        // Sign in through the production flow: the URL carries the identity
+        // scope and storage carries its token, exactly what a shared-access
+        // link persists, so the anonymous session restores it on load.
+        destination.searchParams.set(
+            "identity",
+            encodeIdentityScope({
+                botId: current.botId,
+                projectId: current.identity.projectId,
+                userId: current.userId,
+            }),
+        );
+        window.localStorage.setItem(
+            ANONYMOUS_CREDENTIAL_KEY_NAME,
+            JSON.stringify({
+                ...(centralLocalStorage.read(anonymousCredentialsEntry) ?? {}),
+                [current.userId]: await current.identity.getToken(new AbortController().signal),
+            }),
+        );
         window.location.href = destination.href;
     }
     let container = document.createElement("div");
-    // The application factory owns the anonymous identity workflow for the
-    // whole test app, so a remount re-renders the same application instead of
-    // restarting the workflow, exactly like a production page reload remount.
-    const application = createMortyApplication({
+    // The same assembly production uses: one application, the continuation
+    // router, toast host, and error boundary. Assembled once so a remount
+    // re-renders the same application, exactly like a production page reload
+    // remount.
+    const assembled = assembleMorty({
         origin: current.origin,
         transport: current.transport,
         ...(options.clock === undefined ? {} : { clock: options.clock }),
     });
+    let rendered: { readonly unmount: () => void } = { unmount: () => {} };
     const mount = () => {
         container.setAttribute("data-test-app-root", "");
         document.body.appendChild(container);
-        return render(
-            <ApiTransportProvider transport={current.transport}>
-                <ToastProvider>
-                    {page.kind === "bootstrap" || page.kind === "reload" ? (
-                        <Bootstrap application={application} />
-                    ) : page.kind === "continue" ? (
-                        <App state={{ kind: "authentication", router: authenticationRouter }} />
-                    ) : (
-                        <MortyApplicationProvider application={application}>
-                            <SignedInApplication
-                                activeIdentity={current.identity}
-                                authorize={async (signal) => signal.throwIfAborted()}
-                            />
-                        </MortyApplicationProvider>
-                    )}
-                </ToastProvider>
-            </ApiTransportProvider>,
-            { container },
-        );
+        rendered = render(assembled.element, { container });
     };
-    let rendered = mount();
+    mount();
     let closed = false;
     const lifetime = new AbortController();
     // Use RTL's async boundary to settle external updates and pending microtasks.
@@ -230,7 +237,7 @@ export async function createTestApp(
             lifetime.abort(new DOMException("The test document reloaded", "AbortError"));
             rendered.unmount();
             container.remove();
-            application.dispose();
+            assembled.application.dispose();
             activeApps.delete(app);
             // A real reload gets a fresh page with its own Chat API
             // transport; the reloaded document keeps the live server and
@@ -259,11 +266,11 @@ export async function createTestApp(
             closed = true;
             lifetime.abort(new DOMException("The test application closed", "AbortError"));
             rendered.unmount();
-            // The factory owns the identity lifetime, the chat API, and the
+            // The assembly owns the identity lifetime, the chat API, and the
             // transport; disposing it also closes the shared transport, which
             // is fine here because current.close() closes it anyway and
             // viewers own their own transports.
-            application?.dispose();
+            assembled.application.dispose();
             await current.close();
             container.remove();
             activeApps.delete(app);
@@ -276,7 +283,7 @@ export async function createTestApp(
             rendered.unmount();
             container.remove();
             container = document.createElement("div");
-            rendered = mount();
+            mount();
         },
         queryElementByTestId: async (testId, accept = () => true) =>
             await waitForView(() => {

@@ -1,8 +1,8 @@
 import * as v from "valibot";
+import { HighlightedCode } from "../highlighted-code.tsx";
+import { isOversizedToolText, ToolTextPreview } from "../tool-text-preview.tsx";
 import { EditToolPresentation } from "./edit-tool-presentation.tsx";
-import { HighlightedCode } from "./highlighted-code.tsx";
 import type { ToolRendererProps } from "./tool-renderer.ts";
-import { isOversizedToolText, ToolTextPreview } from "./tool-text-preview.tsx";
 
 const textContentSchema = v.pipe(
     v.object({

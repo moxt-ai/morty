@@ -6,6 +6,7 @@ import {
     prependSessionMessageEvents,
     type SessionMessage,
     type SessionMessageReduction,
+    sessionReductionExecutionOwner,
     sessionReductionMessages,
 } from "./session-presentation.ts";
 
@@ -41,6 +42,7 @@ export type SessionProjection =
 export type SessionProjectionInput =
     | { readonly event: SessionEvent; readonly kind: "live-event" }
     | { readonly kind: "reconcile" }
+    | { readonly kind: "execution-idle" }
     | { readonly history: SessionEventHistory; readonly kind: "history-loaded"; readonly revision: number }
     | { readonly kind: "older-page"; readonly page: SessionEventHistory; readonly revision: number };
 
@@ -192,6 +194,16 @@ export function transitionSessionProjection(
     input: SessionProjectionInput,
 ): SessionProjectionResult {
     switch (input.kind) {
+        case "execution-idle":
+            // Native replay can retain unfinished tools without Mobius lifecycle metadata.
+            // A confirmed idle snapshot settles only history already observed at this boundary.
+            return {
+                effects: [],
+                state:
+                    state.kind === "established"
+                        ? { ...state, reduction: { entries: [...state.reduction.entries, { kind: "execution-idle" }] } }
+                        : state,
+            };
         case "live-event": {
             const { event } = input;
             if (state.kind === "pristine" || event.sessionGenerationId !== state.generation) {
@@ -272,6 +284,10 @@ export function transitionSessionProjection(
         default:
             return input satisfies never;
     }
+}
+
+export function sessionProjectionExecutionOwner(state: SessionProjection, commandId: string): string | null {
+    return state.kind === "established" ? sessionReductionExecutionOwner(state.reduction, commandId) : null;
 }
 
 export function sessionProjectionMessages(state: SessionProjection): readonly SessionMessage[] {

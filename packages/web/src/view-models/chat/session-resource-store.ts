@@ -1,28 +1,24 @@
 import { createStore } from "zustand/vanilla";
+import type {
+    SessionResourceReader,
+    SessionResourceRequest,
+    SessionResourceStore,
+} from "../../components/agents/resource-reader.ts";
 import { createFilePreviewImage } from "../../services/chat/file-preview-surface.ts";
 import { isDisplayableImageType, isRasterImageType } from "../../services/chat/image-media-type.ts";
 
-export type SessionResourceReader = (
-    path: string,
-    signal: AbortSignal,
-) => Promise<{ readonly bytes: Uint8Array; readonly mediaType: string }>;
+export type {
+    SessionResourceReader,
+    SessionResourceRequest,
+    SessionResourceStore,
+} from "../../components/agents/resource-reader.ts";
 
-export interface SessionResourceRequest {
-    readonly path: string;
-    readonly kind: "image" | "raster-image" | "text" | "binary";
-}
-
-export type SessionResourceState =
-    | { readonly kind: "loading" }
-    | { readonly kind: "failed" }
-    | { readonly kind: "text"; readonly text: string }
-    | { readonly kind: "media"; readonly source: string };
-
-interface SessionResourceStore {
-    readonly state: SessionResourceState;
-    readonly onAttach: (node: HTMLElement | null) => (() => void) | undefined;
-}
-
+/**
+ * Owns a session-scoped resource load — reading through the injected reader,
+ * bounding it with a timeout, mapping failures, and managing the preview
+ * object URL's lifetime — following the ref-cleanup protocol so components
+ * only subscribe and render.
+ */
 export function createSessionResourceStore(request: SessionResourceRequest, read: SessionResourceReader | undefined) {
     return createStore<SessionResourceStore>()((set) => ({
         state: { kind: "loading" },

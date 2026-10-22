@@ -1,6 +1,6 @@
 import * as v from "valibot";
+import { HighlightedCode } from "../highlighted-code.tsx";
 import { EditToolPresentation } from "./edit-tool-presentation.tsx";
-import { HighlightedCode } from "./highlighted-code.tsx";
 import type { ToolRendererProps } from "./tool-renderer.ts";
 
 const inputSchema = v.pipe(

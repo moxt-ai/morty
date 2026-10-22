@@ -1,8 +1,8 @@
 import { Search } from "lucide-react";
+import { ToolTextPreview } from "../tool-text-preview.tsx";
 import { ToolCallDisclosure } from "./tool-call-status.tsx";
 import { toolTextContent } from "./tool-display-content.ts";
 import type { ToolRendererProps } from "./tool-renderer.ts";
-import { ToolTextPreview } from "./tool-text-preview.tsx";
 
 export function SearchToolPresentation({ autoOpen, entry, path }: ToolRendererProps & { readonly path: string }) {
     const result = toolTextContent(entry.content) ?? entry.output;

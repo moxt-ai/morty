@@ -5,6 +5,10 @@ import { formatError } from "../format-error.ts";
 
 type SubmitRequest = Parameters<MobiusClient["turns"]["submit"]>[1];
 export type AcceptedTurn = { readonly turnId: string };
+type SubmissionOutcome =
+    | { readonly kind: "accepted"; readonly turn: AcceptedTurn }
+    | { readonly kind: "rejected" }
+    | { readonly kind: "delivery-unknown" };
 export type Journal = {
     readonly commandId: string;
     readonly displayPrompt: string;
@@ -22,14 +26,15 @@ type DeliveryState =
 export interface SessionDeliveryStore {
     readonly state: DeliveryState;
     readonly discardUnknown: () => string | null;
+    readonly dismissFailure: () => void;
     readonly reconcile: (commandIds: readonly string[]) => void;
     readonly submit: (
         commandId: string,
         displayPrompt: string,
         request: Omit<SubmitRequest, "idempotencyKey">,
         signal: AbortSignal,
-    ) => Promise<AcceptedTurn | null>;
-    readonly retry: (signal: AbortSignal) => Promise<AcceptedTurn | null>;
+    ) => Promise<SubmissionOutcome>;
+    readonly retry: (signal: AbortSignal) => Promise<SubmissionOutcome | null>;
 }
 
 function isAuthoritativeFailure(cause: unknown): boolean {
@@ -52,7 +57,7 @@ export const createSessionDeliveryStore = (options: {
         journal: Journal,
         signal: AbortSignal,
         set: (state: Pick<SessionDeliveryStore, "state">) => void,
-    ): Promise<AcceptedTurn | null> => {
+    ): Promise<SubmissionOutcome> => {
         set({ state: { kind: "submitting", journal } });
         try {
             const accepted = await options.submit(
@@ -71,7 +76,7 @@ export const createSessionDeliveryStore = (options: {
             );
             signal.throwIfAborted();
             set({ state: { kind: "idle" } });
-            return accepted;
+            return { kind: "accepted", turn: accepted };
         } catch (cause) {
             if (signal.aborted || cause instanceof MobiusCancellationError) {
                 throw cause;
@@ -83,10 +88,10 @@ export const createSessionDeliveryStore = (options: {
                         message: formatError(cause, "The message was rejected."),
                     },
                 });
-                return null;
+                return { kind: "rejected" };
             }
             set({ state: { kind: "delivery-unknown", journal } });
-            return null;
+            return { kind: "delivery-unknown" };
         }
     };
     return createStore<SessionDeliveryStore>()((set, get) => ({
@@ -102,12 +107,16 @@ export const createSessionDeliveryStore = (options: {
             set({ state: { kind: "idle" } });
             return state.journal.commandId;
         },
+        dismissFailure: () => {
+            if (get().state.kind === "failed") {
+                set({ state: { kind: "idle" } });
+            }
+        },
         reconcile: (commandIds) => {
             const state = get().state;
-            if (
-                (state.kind === "delivery-unknown" || state.kind === "submitting") &&
-                commandIds.includes(state.journal.commandId)
-            ) {
+            // An in-flight request owns the disabled composer until it settles;
+            // a live event must not expose the submitted draft to another send.
+            if (state.kind === "delivery-unknown" && commandIds.includes(state.journal.commandId)) {
                 set({ state: { kind: "idle" } });
             }
         },

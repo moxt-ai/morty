@@ -1,14 +1,35 @@
 import { createStore } from "zustand/vanilla";
 import { type AnonymousIdentity, AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
+import { hasIdentityScope } from "../../services/identity/identity-scope-url.ts";
 import {
+    computerAddress,
+    rememberComputerVisit,
+    rememberedComputers,
+} from "../../services/identity/remembered-computers.ts";
+import { anonymousCredentialsEntry, centralLocalStorage } from "../../services/local-storage/central-local-storage.ts";
+import {
+    accessEndedComputerEntry,
     accessEndedNoticeEntry,
     centralSessionStorage,
 } from "../../services/session-storage/central-session-storage.ts";
+import { type Clock, systemClock } from "../../services/time/clock.ts";
+
+export type ActiveAnonymousSession = {
+    readonly kind: "active";
+    readonly identity: AnonymousIdentity;
+    readonly entry: "address" | "restore";
+    readonly notice: string | null;
+};
 
 type AnonymousSessionState =
     | { readonly kind: "loading" }
-    | { readonly kind: "setup"; readonly notice: "access-ended" | "none" }
-    | { readonly kind: "active"; readonly identity: AnonymousIdentity }
+    | {
+          readonly kind: "setup";
+          readonly notice: "access-ended" | "legacy" | "none";
+          readonly returnHref: string | null;
+      }
+    | ActiveAnonymousSession
+    | { readonly kind: "invalid-link"; readonly continueHref: string | null }
     | { readonly kind: "failed" };
 
 export interface AnonymousSessionStore {
@@ -17,9 +38,23 @@ export interface AnonymousSessionStore {
     readonly load: (signal: AbortSignal) => Promise<void>;
 }
 
-export const createAnonymousSessionStore = (fetchRequest: (request: Request) => Promise<Response>, origin: string) =>
+/** The application owns and releases the workspace at these explicit transitions. */
+export type AnnounceIdentity = (session: ActiveAnonymousSession | null) => void;
+
+export const createAnonymousSessionStore = (
+    fetchRequest: (request: Request) => Promise<Response>,
+    origin: string,
+    onIdentityChanged: AnnounceIdentity,
+    clock: Clock = systemClock,
+) =>
     createStore<AnonymousSessionStore>()((set, get) => {
         const api = new AnonymousIdentityApi({ fetchRequest, origin });
+        const activate = (identity: AnonymousIdentity, entry: "address" | "restore", notice: string | null) => {
+            rememberComputerVisit(identity, clock.now());
+            const state: ActiveAnonymousSession = { kind: "active", identity, entry, notice };
+            set({ state });
+            onIdentityChanged(state);
+        };
         return {
             state: { kind: "loading" },
             authorize: async (signal) => {
@@ -27,25 +62,74 @@ export const createAnonymousSessionStore = (fetchRequest: (request: Request) => 
                 if (state.kind !== "active") {
                     throw new Error("Anonymous identity is unavailable.");
                 }
-                const current = await api.loadOrCreate(signal);
-                if (current.userId !== state.identity.userId) {
+                const current = await api.loadExisting(signal);
+                if (current?.userId !== state.identity.userId) {
                     throw new Error("Anonymous identity changed.");
                 }
             },
             load: async (signal) => {
                 set({ state: { kind: "loading" } });
+                onIdentityChanged(null);
                 try {
-                    const existing = await api.loadExisting(signal);
-                    signal.throwIfAborted();
-                    const notice = centralSessionStorage.read(accessEndedNoticeEntry);
-                    centralSessionStorage.remove(accessEndedNoticeEntry);
-                    if (existing === null) {
-                        set({ state: { kind: "setup", notice: notice === "ended" ? "access-ended" : "none" } });
+                    if (window.location.pathname === "/setup" && !hasIdentityScope()) {
+                        set({
+                            state: {
+                                kind: "setup",
+                                notice: "none",
+                                returnHref: rememberedComputers().length > 0 ? "/" : null,
+                            },
+                        });
                         return;
                     }
-                    const identity = existing;
-                    signal.throwIfAborted();
-                    set({ state: { identity, kind: "active" } });
+                    if (hasIdentityScope()) {
+                        const identity = await api.loadExisting(signal);
+                        signal.throwIfAborted();
+                        if (identity === null) {
+                            set({
+                                state: {
+                                    kind: "invalid-link",
+                                    continueHref: rememberedComputers().length > 0 ? "/" : null,
+                                },
+                            });
+                            return;
+                        }
+                        activate(identity, "address", null);
+                        return;
+                    }
+                    const ended = centralSessionStorage.read(accessEndedNoticeEntry) === "ended";
+                    const endedName = centralSessionStorage.read(accessEndedComputerEntry) ?? "the previous computer";
+                    // Only the requested computer gates entry. An unrelated slow
+                    // computer must not block a valid recent one.
+                    for (const computer of rememberedComputers()) {
+                        const identity = await api.loadScope(computer.scope, signal);
+                        signal.throwIfAborted();
+                        if (identity === null) {
+                            continue;
+                        }
+                        const address = new URL(computerAddress(identity, computer.destination), origin);
+                        window.history.replaceState(window.history.state, "", address);
+                        centralSessionStorage.remove(accessEndedNoticeEntry);
+                        centralSessionStorage.remove(accessEndedComputerEntry);
+                        activate(
+                            identity,
+                            "restore",
+                            ended
+                                ? `Access to ${endedName} ended. You are now on ${computer.name || "your next computer"}.`
+                                : null,
+                        );
+                        return;
+                    }
+                    centralSessionStorage.remove(accessEndedNoticeEntry);
+                    centralSessionStorage.remove(accessEndedComputerEntry);
+                    const hasLegacyAccess =
+                        Object.keys(centralLocalStorage.read(anonymousCredentialsEntry) ?? {}).length > 0;
+                    set({
+                        state: {
+                            kind: "setup",
+                            notice: ended ? "access-ended" : hasLegacyAccess ? "legacy" : "none",
+                            returnHref: null,
+                        },
+                    });
                 } catch {
                     if (!signal.aborted) {
                         set({ state: { kind: "failed" } });

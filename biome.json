@@ -54,7 +54,43 @@
     },
     "overrides": [
         {
-            "includes": ["**", "!!packages/web/src/components/utils/**"],
+            "includes": [
+                "**",
+                "!!packages/web/src/components/**",
+                "!!packages/web/tests/**",
+                "!!**/*.test.ts",
+                "!!**/*.test.tsx",
+                "!!**/tests/**"
+            ],
+            "linter": {
+                "rules": {
+                    "style": {
+                        "noRestrictedImports": {
+                            "level": "error",
+                            "options": {
+                                "paths": {
+                                    "react": {
+                                        "message": "React hooks are only allowed in packages/web/src/components (useLayoutEffect further only in components/utils); views must subscribe to view-model stores and let components own DOM-ephemeral state.",
+                                        "importNames": [
+                                            "useState",
+                                            "useEffect",
+                                            "useRef",
+                                            "useReducer",
+                                            "useMemo",
+                                            "useCallback",
+                                            "useLayoutEffect",
+                                            "useInsertionEffect"
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "includes": ["packages/web/src/components/**", "!!packages/web/src/components/utils/**"],
             "linter": {
                 "rules": {
                     "style": {
