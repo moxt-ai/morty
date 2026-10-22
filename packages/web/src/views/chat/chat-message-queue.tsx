@@ -1,8 +1,8 @@
 import { CornerUpLeft, LoaderCircle, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
+import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { ChatQueuedMessage } from "../../view-models/chat/session-message-queue-store.ts";
-import { ScrollEdgeFade } from "../utils/scroll-edge-fade.tsx";
 
 function QueueAction({
     label,
