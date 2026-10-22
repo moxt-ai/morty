@@ -170,8 +170,10 @@ function serializeErrorCause(cause: unknown, seen = new WeakSet<object>()): Erro
     };
 }
 
-// Leaves most of the 300 second setup budget for pairing and the handoff.
-const RUNTIME_UPGRADE_BUDGET_MILLISECONDS = 120_000;
+// A real upgrade (npm install plus the release switch) took about 100 seconds on
+// a typical machine; the rest of setup takes well under the remaining 120 seconds
+// of its 300 second budget.
+const RUNTIME_UPGRADE_BUDGET_MILLISECONDS = 180_000;
 
 export async function runSetup(args: readonly string[], host: SetupHost): Promise<number> {
     const signal = AbortSignal.any([host.signal, AbortSignal.timeout(300000)]);
