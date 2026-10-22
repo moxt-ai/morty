@@ -5,7 +5,7 @@ import type { createTestRuntime } from "./infra/test-runtime.ts";
 type E2EPage = Awaited<ReturnType<typeof createTestRuntime>>["page"];
 
 async function clickContinueOnAnotherDevice(page: E2EPage) {
-    await page.getByTestId(dataTestId.shareIdentity).click();
+    await page.getByRole("button", { name: "Continue on another device", exact: true }).click();
 }
 
 async function clickEndCurrentAccess(page: E2EPage, viewportName: string) {
@@ -32,12 +32,13 @@ for (const viewport of [
         await expect(
             page.getByRole("article", { name: "Agent response" }).filter({ hasText: "Partial reply" }),
         ).toBeVisible();
-        await expect(page.getByTestId(dataTestId.shareIdentity)).toBeVisible();
         if (viewport.name === "mobile") {
+            await page.getByRole("button", { name: "Open navigation", exact: true }).click();
             const share = page.getByRole("button", { name: "Continue on another device" });
             await expect(share).toHaveText("Continue on another device");
             await expect(page.getByRole("button", { name: "End current access" })).toBeVisible();
         } else {
+            await expect(page.getByTestId(dataTestId.shareIdentity)).toBeVisible();
             await page.getByTestId(dataTestId.userMenu).click();
             await expect(page.getByRole("menuitem", { name: "End current access" })).toBeVisible();
             await page.keyboard.press("Escape");
@@ -82,6 +83,7 @@ for (const viewport of [
             if (viewport.name === "desktop") {
                 await expect(receiver.getByTestId(dataTestId.userMenu)).toBeVisible();
             } else {
+                await receiver.getByRole("button", { name: "Open navigation", exact: true }).click();
                 await expect(receiver.getByRole("button", { name: "End current access" })).toBeVisible();
             }
             await clickEndCurrentAccess(receiver, viewport.name);
@@ -158,18 +160,12 @@ test("Given a recent session on mobile, When the user expands the session list, 
         path: testInfo.outputPath("mobile-expanded-sessions.png"),
         fullPage: true,
     });
-    const sessionBox = await session.boundingBox();
-    const sharingBox = await page
-        .getByRole("button", { name: "Continue on another device", exact: true })
-        .boundingBox();
-    if (sessionBox === null || sharingBox === null) {
-        throw new Error("The session and sharing action must have visible layout boxes.");
-    }
-    expect(sharingBox.y).toBeGreaterThanOrEqual(sessionBox.y + sessionBox.height);
+    await expect(page.getByRole("dialog", { name: "Recent sessions", exact: true })).toBeVisible();
     await session.click();
     await expect(page).toHaveURL(sessionUrl);
     await expect(response).toBeVisible();
     await expect(recentSessions).toHaveAttribute("aria-expanded", "false");
+    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
     await expect(page.getByRole("button", { name: "End current access", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Continue on another device", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "Continue on another device", exact: true })).toBeVisible();
