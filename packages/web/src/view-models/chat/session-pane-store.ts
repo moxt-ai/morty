@@ -43,12 +43,12 @@ import {
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import { createSessionDeliveryStore, type Journal, type SessionDeliveryStore } from "./session-delivery-store.ts";
 import { createSessionInteractionStore } from "./session-interaction-store.ts";
+import { requestedInteraction, type SessionLifecycleFact, sessionLifecycleFact } from "./session-lifecycle.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
 import type {
-    ElicitationInteraction,
     ElicitationInteractionResponse,
-    PermissionInteraction,
     PermissionInteractionResponse,
+    SessionInteraction,
 } from "./session-pane-types.ts";
 import {
     createSessionMessageReduction,
@@ -125,36 +125,33 @@ function connectionFailure(connection: Connection): string | null {
 }
 
 export type SessionConnection = Connection;
-type LocalInteraction =
-    | { readonly kind: "permission"; readonly permission: PermissionInteraction }
-    | { readonly kind: "elicitation"; readonly elicitation: ElicitationInteraction };
 
 const SESSION_EVENT_PAGE_LIMIT = 30;
 const HISTORY_MESSAGE_TARGET = 20;
 const SESSION_RECONNECT_DELAYS_MS = [5_000, 10_000, 20_000] as const;
 const SESSION_RECONNECT_DELAY_CAP_MS = 30_000;
 const SESSION_AUTO_RECONNECT_ATTEMPTS = 7;
-function interactionId(interaction: LocalInteraction): string {
+function interactionId(interaction: SessionInteraction): string {
     return interaction.kind === "permission"
         ? interaction.permission.interactionId
         : interaction.elicitation.interactionId;
 }
 
 function replaceInteraction(
-    current: readonly LocalInteraction[],
+    current: readonly SessionInteraction[],
     id: string,
-    replacement: LocalInteraction | null,
-): readonly LocalInteraction[] {
+    replacement: SessionInteraction | null,
+): readonly SessionInteraction[] {
     const remaining = current.filter((interaction) => interactionId(interaction) !== id);
     return replacement === null ? remaining : [...remaining, replacement];
 }
 
 function resolveElicitation(
-    current: readonly LocalInteraction[],
+    current: readonly SessionInteraction[],
     id: string,
     action: "accept" | "cancel" | "complete" | "decline",
-): readonly LocalInteraction[] {
-    return current.map((interaction): LocalInteraction => {
+): readonly SessionInteraction[] {
+    return current.map((interaction): SessionInteraction => {
         if (
             interaction.kind !== "elicitation" ||
             interaction.elicitation.interactionId !== id ||
@@ -178,12 +175,12 @@ function resolveElicitation(
 }
 
 function resolvePermission(
-    current: readonly LocalInteraction[],
+    current: readonly SessionInteraction[],
     id: string,
     outcome: PermissionInteractionResponse["outcome"],
     optionId: string,
-): readonly LocalInteraction[] {
-    return current.map((interaction): LocalInteraction => {
+): readonly SessionInteraction[] {
+    return current.map((interaction): SessionInteraction => {
         if (
             interaction.kind !== "permission" ||
             interaction.permission.interactionId !== id ||
@@ -211,7 +208,7 @@ export interface SessionPaneStore {
     readonly hasOlderHistory: boolean;
     readonly options: readonly SessionConfigOption[];
     readonly draft: string;
-    readonly interactions: readonly LocalInteraction[];
+    readonly interactions: readonly SessionInteraction[];
     /**
      * Bumped after a user-submitted action that appends content (send, queue,
      * steer) so the message surface re-arms following the latest message.
@@ -927,159 +924,134 @@ export function createSessionPaneModel(options: {
                         session.result.action === "conversation" ? session.result.access : undefined,
                     );
                     const connected = client;
-                    const receiveLifecycle = async (
-                        payload: Extract<SessionEvent, { readonly type: "lifecycle-metadata" }>["payload"],
-                    ): Promise<boolean> => {
-                        if ("event" in payload) {
-                            const event = payload.event;
-                            if (event.kind === "session.permission.requested") {
+                    const receiveLifecycle = async (fact: SessionLifecycleFact): Promise<void> => {
+                        switch (fact.kind) {
+                            case "interaction-requested":
                                 set((current) => ({
-                                    interactions: replaceInteraction(current.interactions, event.interactionId, {
-                                        kind: "permission",
-                                        permission: { ...event, state: { kind: "pending" } },
-                                    }),
+                                    interactions: replaceInteraction(
+                                        current.interactions,
+                                        interactionId(fact.interaction),
+                                        fact.interaction,
+                                    ),
                                 }));
-                                return true;
-                            }
-                            if (event.kind === "session.permission.resolved") {
+                                return;
+                            case "permission-resolved":
                                 set((current) => ({
                                     interactions: resolvePermission(
                                         current.interactions,
-                                        event.interactionId,
-                                        event.outcome,
-                                        event.optionId,
+                                        fact.interactionId,
+                                        fact.outcome,
+                                        fact.optionId,
                                     ),
                                 }));
-                                return true;
-                            }
-                            if (event.kind === "session.elicitation.requested") {
-                                const { accepted, ...elicitation } = event;
-                                set((current) => ({
-                                    interactions: replaceInteraction(current.interactions, event.interactionId, {
-                                        kind: "elicitation",
-                                        elicitation: {
-                                            ...elicitation,
-                                            state: accepted
-                                                ? { action: "accept", content: "", kind: "submitted" }
-                                                : { kind: "pending" },
-                                        },
-                                    }),
-                                }));
-                                return true;
-                            }
-                            if (event.kind === "session.elicitation.resolved") {
+                                return;
+                            case "elicitation-resolved":
                                 set((current) => ({
                                     interactions: resolveElicitation(
                                         current.interactions,
-                                        event.interactionId,
-                                        event.action,
+                                        fact.interactionId,
+                                        fact.action,
                                     ),
                                 }));
-                                return true;
-                            }
-
-                            return true;
-                        }
-                        if (payload.kind === "session.queue.changed") {
-                            const execution = await connected.sessions.readSessionExecution(
-                                sessionId,
-                                sessionIdentity,
-                                signal,
-                            );
-                            signal.throwIfAborted();
-                            messageQueue.getState().replace(execution.queued);
-                            return true;
-                        }
-                        if (payload.kind === "prompt.started") {
-                            delivery.getState().reconcile([payload.commandId]);
-                            const queued = messageQueue.getState().takeStarted(payload.commandId);
-                            const owner = sessionProjectionExecutionOwner(projection, payload.commandId);
-                            if (owner !== null && owner !== payload.commandId) {
-                                // Steering starts a command, not a new execution to stop.
-                                return true;
-                            }
-                            if (command !== "" && command !== payload.commandId) {
-                                tasks.getState().finish(command);
-                                activeTurn.turnCleared(command);
-                            }
-                            command = payload.commandId;
-                            const accepted = activeTurn.current();
-                            const turnId =
-                                queued?.turnId ??
-                                (accepted.kind === "accepted" && accepted.commandId === payload.commandId
-                                    ? accepted.turnId
-                                    : payload.commandId);
-                            tasks.getState().start(payload.commandId, turnId);
-                            activeTurn.submissionAccepted(payload.commandId, turnId);
-                            const currentActivity = get().activity;
-                            const startedAt =
-                                currentActivity.kind === "working" && currentActivity.commandId === payload.commandId
-                                    ? currentActivity.startedAt
-                                    : lastSentMessage?.commandId === payload.commandId
-                                      ? lastSentMessage.sentAt
-                                      : Date.now();
-                            set({ activity: startSessionWork({ commandId: payload.commandId, startedAt }) });
-                            announceActivity();
-                            return true;
-                        }
-                        if (
-                            payload.kind === "prompt.completed" ||
-                            payload.kind === "prompt.failed" ||
-                            payload.kind === "prompt.failed-before-start"
-                        ) {
-                            delivery.getState().reconcile([payload.commandId]);
-                            if (payload.kind === "prompt.completed" && payload.stopReason === "steered") {
+                                return;
+                            case "queue-changed": {
                                 const execution = await connected.sessions.readSessionExecution(
                                     sessionId,
                                     sessionIdentity,
                                     signal,
                                 );
                                 signal.throwIfAborted();
-                                const running = execution.turn;
-                                if (running !== null) {
-                                    command = running.commandId;
-                                    tasks.getState().start(running.commandId, running.commandId);
-                                    activeTurn.submissionAccepted(running.commandId, running.commandId);
-                                    const timeline = deriveTimeline();
-                                    set({
-                                        activity: startSessionWork({
-                                            commandId: running.commandId,
-                                            startedAt:
-                                                lastSentMessage?.commandId === running.commandId
-                                                    ? lastSentMessage.sentAt
-                                                    : Date.now(),
-                                        }),
-                                        messages: timeline.messages,
-                                        operation: finishPromptOperation(get().operation, payload.commandId),
-                                    });
-                                    announceActivity();
-                                    return true;
+                                messageQueue.getState().replace(execution.queued);
+                                return;
+                            }
+                            case "turn-started": {
+                                delivery.getState().reconcile([fact.commandId]);
+                                const queued = messageQueue.getState().takeStarted(fact.commandId);
+                                const owner = sessionProjectionExecutionOwner(projection, fact.commandId);
+                                if (owner !== null && owner !== fact.commandId) {
+                                    // Steering starts a command, not a new execution to stop.
+                                    return;
                                 }
+                                if (command !== "" && command !== fact.commandId) {
+                                    tasks.getState().finish(command);
+                                    activeTurn.turnCleared(command);
+                                }
+                                command = fact.commandId;
+                                const accepted = activeTurn.current();
+                                const turnId =
+                                    queued?.turnId ??
+                                    (accepted.kind === "accepted" && accepted.commandId === fact.commandId
+                                        ? accepted.turnId
+                                        : fact.commandId);
+                                tasks.getState().start(fact.commandId, turnId);
+                                activeTurn.submissionAccepted(fact.commandId, turnId);
+                                const currentActivity = get().activity;
+                                const startedAt =
+                                    currentActivity.kind === "working" && currentActivity.commandId === fact.commandId
+                                        ? currentActivity.startedAt
+                                        : lastSentMessage?.commandId === fact.commandId
+                                          ? lastSentMessage.sentAt
+                                          : Date.now();
+                                set({ activity: startSessionWork({ commandId: fact.commandId, startedAt }) });
+                                announceActivity();
+                                return;
                             }
-                            const activity = transitionSessionActivity(
-                                get().activity,
-                                payload.kind === "prompt.failed" || payload.kind === "prompt.failed-before-start"
-                                    ? {
-                                          commandId: payload.commandId,
-                                          kind: "work-failed",
-                                          message: payload.message,
-                                      }
-                                    : { commandId: payload.commandId, kind: "work-completed" },
-                            );
-                            const completed = deriveTimeline();
-                            set({
-                                activity,
-                                messages: completed.messages,
-                                operation: finishPromptOperation(get().operation, payload.commandId),
-                            });
-                            announceActivity();
-                            tasks.getState().finish(payload.commandId);
-                            activeTurn.turnCleared(payload.commandId);
-                            if (command === payload.commandId) {
-                                command = "";
+                            case "turn-completed":
+                            case "turn-failed": {
+                                delivery.getState().reconcile([fact.commandId]);
+                                if (fact.kind === "turn-completed" && fact.steered) {
+                                    const execution = await connected.sessions.readSessionExecution(
+                                        sessionId,
+                                        sessionIdentity,
+                                        signal,
+                                    );
+                                    signal.throwIfAborted();
+                                    const running = execution.turn;
+                                    if (running !== null) {
+                                        command = running.commandId;
+                                        tasks.getState().start(running.commandId, running.commandId);
+                                        activeTurn.submissionAccepted(running.commandId, running.commandId);
+                                        const timeline = deriveTimeline();
+                                        set({
+                                            activity: startSessionWork({
+                                                commandId: running.commandId,
+                                                startedAt:
+                                                    lastSentMessage?.commandId === running.commandId
+                                                        ? lastSentMessage.sentAt
+                                                        : Date.now(),
+                                            }),
+                                            messages: timeline.messages,
+                                            operation: finishPromptOperation(get().operation, fact.commandId),
+                                        });
+                                        announceActivity();
+                                        return;
+                                    }
+                                }
+                                const activity = transitionSessionActivity(
+                                    get().activity,
+                                    fact.kind === "turn-failed"
+                                        ? { commandId: fact.commandId, kind: "work-failed", message: fact.message }
+                                        : { commandId: fact.commandId, kind: "work-completed" },
+                                );
+                                const completed = deriveTimeline();
+                                set({
+                                    activity,
+                                    messages: completed.messages,
+                                    operation: finishPromptOperation(get().operation, fact.commandId),
+                                });
+                                announceActivity();
+                                tasks.getState().finish(fact.commandId);
+                                activeTurn.turnCleared(fact.commandId);
+                                if (command === fact.commandId) {
+                                    command = "";
+                                }
+                                return;
                             }
+                            case "none":
+                                return;
+                            default:
+                                return fact satisfies never;
                         }
-                        return true;
                     };
                     const observer: MobiusSessionEventObserver = {
                         reconcile: async (connection) => {
@@ -1145,32 +1117,11 @@ export function createSessionPaneModel(options: {
                                 });
                             }
                             signal.throwIfAborted();
-                            const interactions: readonly LocalInteraction[] = (() => {
-                                const interaction = execution.turn?.interaction;
-                                if (interaction === undefined || interaction === null) {
-                                    return [];
-                                }
-                                if (interaction.kind === "session.permission.requested") {
-                                    return [
-                                        {
-                                            kind: "permission",
-                                            permission: { ...interaction, state: { kind: "pending" } },
-                                        },
-                                    ];
-                                }
-                                const { accepted, ...elicitation } = interaction;
-                                return [
-                                    {
-                                        kind: "elicitation",
-                                        elicitation: {
-                                            ...elicitation,
-                                            state: accepted
-                                                ? { action: "accept", content: "", kind: "submitted" }
-                                                : { kind: "pending" },
-                                        },
-                                    },
-                                ];
-                            })();
+                            const interaction = execution.turn?.interaction;
+                            const interactions: readonly SessionInteraction[] =
+                                interaction === undefined || interaction === null
+                                    ? []
+                                    : [requestedInteraction(interaction)];
                             set({
                                 interactions,
                                 activity: restoredActivity,
@@ -1194,7 +1145,7 @@ export function createSessionPaneModel(options: {
                                     }
                                 }
                                 if (event.type !== "acp") {
-                                    await receiveLifecycle(event.payload);
+                                    await receiveLifecycle(sessionLifecycleFact(event.payload));
                                 }
                                 await new Promise<void>((resolve) => queueMicrotask(resolve));
                                 signal.throwIfAborted();

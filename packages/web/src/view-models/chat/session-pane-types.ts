@@ -45,6 +45,11 @@ export type ElicitationInteraction = ElicitationInteractionDetails & {
     readonly state: ElicitationInteractionState;
 };
 
+/** An Agent request the user answers in the Session pane. */
+export type SessionInteraction =
+    | { readonly kind: "permission"; readonly permission: PermissionInteraction }
+    | { readonly kind: "elicitation"; readonly elicitation: ElicitationInteraction };
+
 export interface PermissionInteractionResponse {
     readonly interactionId: string;
     readonly optionId: string;

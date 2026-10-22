@@ -1,10 +1,10 @@
 import { createStore } from "zustand/vanilla";
 import { formatError } from "../format-error.ts";
 import type {
-    ElicitationInteraction,
     ElicitationInteractionResponse,
     PermissionInteraction,
     PermissionInteractionResponse,
+    SessionInteraction,
 } from "./session-pane-types.ts";
 
 type InteractionOperation =
@@ -61,10 +61,7 @@ export function createSessionInteractionStore(ports: {
 }
 
 export function sessionInteractionPresentation(
-    interactions: readonly (
-        | { readonly kind: "permission"; readonly permission: PermissionInteraction }
-        | { readonly kind: "elicitation"; readonly elicitation: ElicitationInteraction }
-    )[],
+    interactions: readonly SessionInteraction[],
     model: SessionInteractionStore,
 ) {
     const permissions = interactions.flatMap((interaction) =>
