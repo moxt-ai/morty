@@ -41,6 +41,57 @@ test("Given a conversation created from a queued first message, When the Chat ap
     });
 });
 
+test("Given a configuration request is in flight, When the chat view detaches and re-attaches, Then the reconnected composer accepts and sends a new prompt", {
+    timeout: 30_000,
+}, async () => {
+    const prompt = "Configuration cancelled by detach";
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.textContent?.includes("Connected") === true,
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, prompt);
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes(`Codex turn 1: ${prompt}`)),
+        ).toBe(true),
+    );
+    // Start a configuration request and detach while it is in flight: the
+    // detach aborts the request, and the pane it belonged to must not lock
+    // the re-attached view out of the composer.
+    await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
+    const setting = await app.queryElementByTestId(dataTestId.agentSetting("model"));
+    await app.user.click(setting);
+    const value = await app.queryElementByTestId(dataTestId.sessionConfigValue("test-large"));
+    await app.user.click(value);
+    app.remount();
+    const restored = await app.waitForView(() => {
+        const element = app.elementByTestId(dataTestId.messageComposer);
+        if (!(element instanceof HTMLTextAreaElement)) {
+            throw new Error("Expected the message composer after re-attach");
+        }
+        if (element.disabled) {
+            throw new Error("The re-attached composer is still disabled by the cancelled configuration");
+        }
+        return element;
+    });
+    const followUp = "Usable again after the cancelled configuration";
+    await sendPrompt(app, restored, followUp);
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes(`Codex turn 2: ${followUp}`)),
+        ).toBe(true),
+    );
+});
+
 test("Given an open conversation, When the chat view detaches and re-attaches, Then the pane re-reads the session and restores its history", {
     timeout: 30_000,
 }, async () => {

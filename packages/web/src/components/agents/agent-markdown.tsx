@@ -11,13 +11,13 @@ import "streamdown/styles.css";
 import { type ComponentProps, type SVGProps, useEffect, useMemo, useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
-import type { SessionResourceReader as MarkdownImageReader } from "../../view-models/chat/session-resource-store.ts";
-import { boundedCodeHighlighter } from "./bounded-code-highlighter.ts";
-import { MermaidCodeBlock } from "./mermaid-code-block.tsx";
-import { remarkMermaidCompletion } from "./remark-mermaid-completion.ts";
+import { boundedCodeHighlighter } from "../../components/agents/bounded-code-highlighter.ts";
+import { MermaidCodeBlock } from "../../components/agents/mermaid-code-block.tsx";
+import { remarkMermaidCompletion } from "../../components/agents/remark-mermaid-completion.ts";
+import type { SessionResourceReader as MarkdownImageReader, SessionResourceStoreFactory } from "./resource-reader.ts";
 import { SessionResource } from "./session-resource.tsx";
 
-export type { SessionResourceReader as MarkdownImageReader } from "../../view-models/chat/session-resource-store.ts";
+export type { SessionResourceReader as MarkdownImageReader } from "./resource-reader.ts";
 
 const STREAMDOWN_CONTROLS = Object.freeze({
     code: Object.freeze({ copy: true, download: false }),
@@ -231,10 +231,12 @@ function directImageSource(value: string): string {
 function AgentMarkdownImage({
     alt,
     className,
+    createResourceStore,
     readImage,
     src,
     title,
 }: ComponentProps<"img"> & {
+    readonly createResourceStore?: SessionResourceStoreFactory | undefined;
     readonly readImage?: MarkdownImageReader | undefined;
 }) {
     const directSource = typeof src === "string" ? directImageSource(src) : "";
@@ -242,8 +244,16 @@ function AgentMarkdownImage({
     if (directSource.length > 0) {
         return <img alt={alt ?? ""} className={className} loading="lazy" src={directSource} title={title} />;
     }
+    if (createResourceStore === undefined || readImage === undefined) {
+        return <span className="text-xs text-muted-foreground">Image not available</span>;
+    }
     return (
-        <SessionResource inline request={{ kind: "image", path: requestedSource }} read={readImage}>
+        <SessionResource
+            inline
+            createStore={createResourceStore}
+            request={{ kind: "image", path: requestedSource }}
+            read={readImage}
+        >
             {(state) => {
                 if (state.kind === "loading") {
                     return <span className="text-xs text-muted-foreground">Loading image…</span>;
@@ -259,6 +269,8 @@ function AgentMarkdownImage({
 
 export interface AgentMarkdownProps {
     readonly className?: string;
+    /** The view-model resource store factory; without it remote images render as unavailable. */
+    readonly createResourceStore?: SessionResourceStoreFactory | undefined;
     readonly markdown: string;
     readonly openLocalFile?: ((path: string) => void) | undefined;
     readonly readImage?: MarkdownImageReader | undefined;
@@ -272,6 +284,7 @@ interface AgentMarkdownContentProps extends AgentMarkdownProps {
 
 export function AgentMarkdownContent({
     className,
+    createResourceStore,
     markdown,
     mathPlugin,
     openLocalFile,
@@ -290,9 +303,11 @@ export function AgentMarkdownContent({
     const components = useMemo(
         () => ({
             a: (properties: ComponentProps<"a">) => <AgentMarkdownLink {...properties} openLocalFile={openLocalFile} />,
-            img: (properties: ComponentProps<"img">) => <AgentMarkdownImage {...properties} readImage={readImage} />,
+            img: (properties: ComponentProps<"img">) => (
+                <AgentMarkdownImage {...properties} createResourceStore={createResourceStore} readImage={readImage} />
+            ),
         }),
-        [openLocalFile, readImage],
+        [openLocalFile, readImage, createResourceStore],
     );
     const plugins = useMemo(
         () => (mathPlugin === undefined ? STREAMDOWN_PLUGINS : { ...STREAMDOWN_PLUGINS, math: mathPlugin }),

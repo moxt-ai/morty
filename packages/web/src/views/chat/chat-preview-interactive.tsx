@@ -15,13 +15,13 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { AgentThinking } from "../../components/chat/agent-thinking.tsx";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
+import { createComposerAttachmentStore } from "../../components/chat/composer-attachment-store.ts";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
-import { createComposerAttachmentStore } from "../../view-models/chat/composer-attachment-store.ts";
 import { SetupCardLogo } from "../setup/setup-card-shell.tsx";
 import {
     CHAT_PREVIEW_DRAFT_ID,

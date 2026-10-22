@@ -1,6 +1,6 @@
 import { FileDiff } from "lucide-react";
 import type { ReactNode } from "react";
-import { HighlightedCode, languageForPath } from "./highlighted-code.tsx";
+import { HighlightedCode, languageForPath } from "../highlighted-code.tsx";
 import { ToolCallDisclosure } from "./tool-call-status.tsx";
 import type { ToolRendererProps } from "./tool-renderer.ts";
 
