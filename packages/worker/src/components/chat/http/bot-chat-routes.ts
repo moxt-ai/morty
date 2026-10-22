@@ -1,4 +1,4 @@
-import { encodeSessionStatusChangedEvent } from "@moxt-ai/mobius-sdk/protocol";
+import { encodeSessionCloseNoticeEvent, encodeSessionStatusChangedEvent } from "@moxt-ai/mobius-sdk/protocol";
 import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { createMiddleware } from "hono/factory";
@@ -8,7 +8,7 @@ import { bodyParser } from "../../../middleware/body-parser.ts";
 import type { Session } from "../../management/entity/authentication/session.ts";
 import { PlatformProjectError, platformIdentifier } from "../../management/entity/platform-project.ts";
 import { authenticatedSession } from "../../management/http/authenticated-session.ts";
-import type { ChatScope } from "../service/chat-service.ts";
+import type { ChatScope, ManagedSessionEvent } from "../service/chat-service.ts";
 import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
 
 const setupInput = v.strictObject({
@@ -105,6 +105,15 @@ function privateJson(value: unknown) {
     return response;
 }
 
+function encodeManagedSessionEvent(event: ManagedSessionEvent): string {
+    switch (event.kind) {
+        case "session.status.changed":
+            return encodeSessionStatusChangedEvent(event);
+        case "session.close.notice":
+            return encodeSessionCloseNoticeEvent(event);
+    }
+}
+
 function sessionStatusStream(context: Context<AuthorizedChatEnvironment>): Response {
     const lifetime = new AbortController();
     const abort = (): void => lifetime.abort(context.req.raw.signal.reason);
@@ -115,7 +124,7 @@ function sessionStatusStream(context: Context<AuthorizedChatEnvironment>): Respo
             void context.env.services.chat
                 .subscribeManagedSessionStatuses(
                     context.get("chatScope"),
-                    (event) => controller.enqueue(encoder.encode(`${encodeSessionStatusChangedEvent(event)}\n`)),
+                    (event) => controller.enqueue(encoder.encode(`${encodeManagedSessionEvent(event)}\n`)),
                     lifetime.signal,
                 )
                 .then(

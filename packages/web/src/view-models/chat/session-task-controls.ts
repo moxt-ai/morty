@@ -89,6 +89,11 @@ export const createSessionTaskControlsStore = (options: {
                 if (parent.aborted) {
                     throw cause;
                 }
+                // The turn can end while the request is in flight; its failure then has nothing left to restore.
+                const operation = get().operation;
+                if (operation.kind !== "steering" || operation.active.commandId !== active.commandId) {
+                    return null;
+                }
                 set({
                     feedback: { kind: "failed", message: formatError(cause, "The active task could not be steered.") },
                     operation: { active, kind: "running" },
@@ -109,6 +114,11 @@ export const createSessionTaskControlsStore = (options: {
             } catch (cause) {
                 if (signal.aborted && parent.aborted) {
                     throw cause;
+                }
+                // The turn can end while the request is in flight; its failure then has nothing left to restore.
+                const operation = get().operation;
+                if (operation.kind !== "stopping" || operation.active.commandId !== active.commandId) {
+                    return;
                 }
                 set({
                     feedback: {

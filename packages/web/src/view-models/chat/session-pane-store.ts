@@ -6,6 +6,7 @@ import {
     MobiusPermissionResponseRequest,
     type MobiusSessionEventObserver,
     type PromptResource,
+    SESSION_CLOSED_ERROR_CODE,
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
 import { decodeIdentifier, type SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
@@ -25,7 +26,7 @@ import {
 } from "../../services/indexed-db/central-indexed-db.ts";
 import { centralSessionStorage, sessionDraftEntry } from "../../services/session-storage/central-session-storage.ts";
 import type { Clock } from "../../services/time/clock.ts";
-import { formatError, isRetryableRuntimeConnectionFailure } from "../format-error.ts";
+import { formatError, isRetryableRuntimeConnectionFailure, isSessionClosedFailure } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
@@ -95,6 +96,16 @@ type Connection =
               | { readonly kind: "scheduled"; readonly remainingSeconds: number }
               | { readonly kind: "exhausted" };
       }
+    | {
+          /** The Runtime closed the Session. Reopening it, which only the user chooses to do, resumes the connection. */
+          readonly kind: "closed";
+          /** The Runtime's explanation, or null when this page learned of the closing from a failed operation. */
+          readonly reason: string | null;
+          readonly reopen:
+              | { readonly kind: "available" }
+              | { readonly kind: "reopening" }
+              | { readonly kind: "failed"; readonly message: string };
+      }
     | { readonly kind: "failed"; readonly message: string };
 
 function connectionFailure(connection: Connection): string | null {
@@ -103,6 +114,8 @@ function connectionFailure(connection: Connection): string | null {
         case "failed":
         case "reconnecting":
             return connection.message;
+        case "closed":
+            return connection.reopen.kind === "failed" ? connection.reopen.message : null;
         case "loading":
         case "ready":
             return null;
@@ -214,6 +227,13 @@ export interface SessionPaneStore {
     readonly harnesses: readonly { readonly agentRef?: string; readonly label: string; readonly value: string }[];
     readonly connect: (signal: AbortSignal) => Promise<void>;
     readonly retryNow: () => void;
+    /**
+     * Records that the Runtime closed the Session and stops the connection until it is reopened. `reason` is the
+     * Runtime's explanation, or null when a failed operation was the only sign of the closing.
+     */
+    readonly sessionClosed: (reason: string | null) => void;
+    /** Reopens a closed Session on the user's request, then connects to it again. */
+    readonly reopen: (signal: AbortSignal) => Promise<void>;
     readonly loadOlderMessages: (signal: AbortSignal) => Promise<void>;
     readonly setDraft: (draft: string) => void;
     readonly send: (signal: AbortSignal) => Promise<void>;
@@ -318,12 +338,14 @@ export function sessionPanePresentation(
         busy,
         composerDisabled,
         composerInputDisabled,
+        // Operations that failed because the Session closed say nothing the closed notice does not already say.
         composerError:
             connectionFailure(model.connection) ??
-            [model.activity, model.operation, delivery.state, tasks.feedback, queue.feedback].find(
-                (state) => state.kind === "failed",
-            )?.message ??
-            "",
+            (model.connection.kind === "closed"
+                ? ""
+                : ([model.activity, model.operation, delivery.state, tasks.feedback, queue.feedback].find(
+                      (state) => state.kind === "failed",
+                  )?.message ?? "")),
         controlRunning,
         deliveryUnknownUserMessageId,
         hasOlderHistory: model.hasOlderHistory,
@@ -411,7 +433,7 @@ export function createSessionPaneModel(options: {
     readonly clock: Clock;
     readonly session: OpenMobiusSession;
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "connectSession" | "runtimeConfiguration">;
+    readonly requests: Pick<BotChatApi, "connectSession" | "managedSession" | "runtimeConfiguration">;
     readonly initialMessage?: QueuedDraftMessage | undefined;
     /**
      * A previous pane's unconfirmed first-message submission. Adopted as the
@@ -449,6 +471,32 @@ export function createSessionPaneModel(options: {
     const fallbackStartedAt = Date.now();
     let client: MobiusClient | null = null;
     let countdownInterrupt: AbortController | null = null;
+    // The Runtime closed the Session. The connect loop turns this into the closed connection state.
+    let closure: { readonly reason: string | null } | null = null;
+    // The running connection attempt, which a closing of the Session interrupts.
+    let attempt: AbortController | null = null;
+    // Lets the connect loop go on once the user has reopened the closed Session.
+    let resumeAfterReopen: (() => void) | null = null;
+    // Counts the times the user reopened the Session. A `session_closed` failure from an operation that began
+    // before a reopening describes the Session as it was, so it must not close the reopened Session again.
+    let reopenings = 0;
+    /** Whether a failure says the Session is closed now, not just as it was when the operation began. */
+    const closedNow = (cause: unknown, reopeningsAtStart: number): boolean =>
+        isSessionClosedFailure(cause) && reopeningsAtStart === reopenings;
+    /** Wraps an operation on the Session so that failing because the Session closed also closes this pane. */
+    const noticingClosure =
+        <Arguments extends readonly unknown[], Result>(operation: (...args: Arguments) => Promise<Result>) =>
+        async (...args: Arguments): Promise<Result> => {
+            const reopeningsAtStart = reopenings;
+            try {
+                return await operation(...args);
+            } catch (cause) {
+                if (closedNow(cause, reopeningsAtStart)) {
+                    store.getState().sessionClosed(null);
+                }
+                throw cause;
+            }
+        };
     let projection = createSessionProjection();
     let sessionTitle = session.entry.title;
     let loadingOlderHistory = false;
@@ -485,7 +533,7 @@ export function createSessionPaneModel(options: {
         ],
     });
     const delivery = createSessionDeliveryStore({
-        submit: async (request, signal) => {
+        submit: noticingClosure(async (request, signal) => {
             if (client === null) {
                 throw new Error("The Session is not connected.");
             }
@@ -499,7 +547,7 @@ export function createSessionPaneModel(options: {
                 }),
                 signal,
             );
-        },
+        }),
         initialUnknown: options.unconfirmedMessage,
     });
     const lastSentMessageEntry = sessionLastSentMessageEntry(sessionId);
@@ -513,13 +561,13 @@ export function createSessionPaneModel(options: {
     const tasks = createSessionTaskControlsStore({
         steeringSupported: session.result.ready.capabilities.steering,
         port: {
-            cancel: async (turnId, idempotencyKey, signal) => {
+            cancel: noticingClosure(async (turnId, idempotencyKey, signal) => {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }
                 return await client.turns.cancel(sessionId, turnId, { idempotencyKey }, signal);
-            },
-            submit: async (request, signal) => {
+            }),
+            submit: noticingClosure(async (request, signal) => {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }
@@ -532,7 +580,7 @@ export function createSessionPaneModel(options: {
                     }),
                     signal,
                 );
-            },
+            }),
         },
     });
     if (openedActiveTurn.kind === "accepted") {
@@ -540,19 +588,19 @@ export function createSessionPaneModel(options: {
     }
     const messageQueue = createSessionMessageQueueStore({
         port: {
-            cancel: async (turnId, idempotencyKey, signal) => {
+            cancel: noticingClosure(async (turnId, idempotencyKey, signal) => {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }
                 return await client.turns.cancel(sessionId, turnId, { idempotencyKey }, signal);
-            },
-            steer: async (turnId, signal) => {
+            }),
+            steer: noticingClosure(async (turnId, signal) => {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }
                 await client.turns.steer(sessionId, turnId, signal);
-            },
-            submit: async (request, signal) => {
+            }),
+            submit: noticingClosure(async (request, signal) => {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }
@@ -565,7 +613,7 @@ export function createSessionPaneModel(options: {
                     }),
                     signal,
                 );
-            },
+            }),
         },
     });
     const request = {
@@ -590,6 +638,7 @@ export function createSessionPaneModel(options: {
             const settled =
                 connection.kind === "ready" ||
                 connection.kind === "failed" ||
+                connection.kind === "closed" ||
                 (connection.kind === "disconnected" && connection.retry.kind === "exhausted");
             if (settled) {
                 for (const wake of connectionWaiters) {
@@ -725,6 +774,42 @@ export function createSessionPaneModel(options: {
                 await recoverProjectionState(connected, signal);
             }
         };
+        // A closed Session runs nothing. Settles the turn, queue and interactions it was holding, the way a
+        // reconnect finds them when the Session reports no running turn.
+        const settleClosedExecution = (): void => {
+            commitProjection({ kind: "execution-idle" });
+            messageQueue.getState().replace([]);
+            const controlled = tasks.getState().operation;
+            if (controlled.kind !== "idle") {
+                tasks.getState().finish(controlled.active.commandId);
+            }
+            const turn = activeTurn.current();
+            if (turn.kind !== "idle") {
+                activeTurn.turnCleared(turn.commandId);
+            }
+            command = "";
+            const activity = get().activity;
+            set({ activity: activity.kind === "failed" ? activity : { kind: "idle" }, interactions: [] });
+            announceActivity();
+        };
+        // Holds the connect loop on a closed Session until the user reopens it, then lets the loop connect again.
+        const untilReopened = async (reason: string | null, signal: AbortSignal): Promise<void> => {
+            await new Promise<void>((resolve) => {
+                if (signal.aborted) {
+                    resolve();
+                    return;
+                }
+                const finish = (): void => {
+                    resumeAfterReopen = null;
+                    signal.removeEventListener("abort", finish);
+                    resolve();
+                };
+                resumeAfterReopen = finish;
+                signal.addEventListener("abort", finish, { once: true });
+                settleClosedExecution();
+                setAndSettle({ connection: { kind: "closed", reason, reopen: { kind: "available" } } });
+            });
+        };
         return {
             connection: { kind: "loading" },
             title: sessionTitle,
@@ -748,6 +833,7 @@ export function createSessionPaneModel(options: {
                 }
                 loadingOlderHistory = true;
                 set({ historyLoading: true });
+                const reopeningsAtStart = reopenings;
                 try {
                     const page = await readSessionHistory(
                         client,
@@ -761,6 +847,10 @@ export function createSessionPaneModel(options: {
                     commitProjection({ kind: "older-page", page, revision: pagination.revision });
                 } catch (cause) {
                     signal.throwIfAborted();
+                    if (closedNow(cause, reopeningsAtStart)) {
+                        get().sessionClosed(null);
+                        return;
+                    }
                     set({
                         operation: {
                             kind: "failed",
@@ -802,7 +892,9 @@ export function createSessionPaneModel(options: {
                     });
                 };
                 let consecutiveFailures = 0;
-                const observeSession = async (): Promise<void> => {
+                const paneSignal = signal;
+                // The signal is this attempt's own: the pane's lifetime, and also the closing of the Session.
+                const observeSession = async (signal: AbortSignal): Promise<void> => {
                     client = await requests.connectSession(
                         botId,
                         sessionId,
@@ -1095,7 +1187,9 @@ export function createSessionPaneModel(options: {
                         // rejected submission leaves the queued message and its
                         // idempotent command id in the home store for a remount
                         // to recover.
-                        await get().send(signal);
+                        // The send belongs to the pane, not to this attempt: a closing of the Session must not
+                        // abandon a submission that is already on its way.
+                        await get().send(paneSignal);
                         signal.throwIfAborted();
                     }
                     // A detach between submit and the delivery report can still
@@ -1108,18 +1202,37 @@ export function createSessionPaneModel(options: {
                 };
                 readStoredLastSentMessage();
                 for (;;) {
+                    if (closure !== null) {
+                        const closed = closure;
+                        closure = null;
+                        await untilReopened(closed.reason, signal);
+                        if (signal.aborted) {
+                            return;
+                        }
+                        consecutiveFailures = 0;
+                        setAndSettle({ connection: { kind: "reconnecting", message: null } });
+                    }
                     if (consecutiveFailures > 0) {
                         setAndSettle({
                             connection: { kind: "reconnecting", message: connectionFailure(get().connection) },
                         });
                     }
+                    const running = new AbortController();
+                    attempt = running;
                     try {
-                        await observeSession();
+                        await observeSession(AbortSignal.any([signal, running.signal]));
                     } catch (cause) {
+                        attempt = null;
                         client?.close();
                         client = null;
                         if (signal.aborted) {
                             return;
+                        }
+                        if (closure === null && isSessionClosedFailure(cause)) {
+                            closure = { reason: null };
+                        }
+                        if (closure !== null) {
+                            continue;
                         }
                         if (!isRetryableRuntimeConnectionFailure(cause)) {
                             const message = formatError(cause, "The Session could not be opened.");
@@ -1185,6 +1298,53 @@ export function createSessionPaneModel(options: {
             },
             retryNow: () => {
                 countdownInterrupt?.abort(new Error("Retried now"));
+            },
+            sessionClosed: (reason) => {
+                const current = get().connection;
+                // A failed operation and the Runtime's notice can both report one closing; the notice has the reason.
+                if (current.kind === "closed") {
+                    if (current.reason === null && reason !== null) {
+                        set({ connection: { ...current, reason } });
+                    }
+                    return;
+                }
+                if (closure !== null) {
+                    if (closure.reason === null && reason !== null) {
+                        closure = { reason };
+                    }
+                    return;
+                }
+                closure = { reason };
+                // The connect loop takes over: it stops the running attempt or retry countdown and shows the closing.
+                attempt?.abort(new Error("The Session closed."));
+                countdownInterrupt?.abort(new Error("The Session closed."));
+            },
+            reopen: async (signal) => {
+                const current = get().connection;
+                if (current.kind !== "closed" || current.reopen.kind === "reopening" || resumeAfterReopen === null) {
+                    return;
+                }
+                const setReopen = (reopen: Extract<Connection, { readonly kind: "closed" }>["reopen"]): void => {
+                    const connection = get().connection;
+                    if (connection.kind === "closed") {
+                        set({ connection: { ...connection, reopen } });
+                    }
+                };
+                setReopen({ kind: "reopening" });
+                try {
+                    await requests.managedSession(botId, sessionId, signal);
+                    signal.throwIfAborted();
+                } catch (cause) {
+                    signal.throwIfAborted();
+                    setReopen({ kind: "failed", message: formatError(cause, "The Session could not be reopened.") });
+                    return;
+                }
+                // Failures the closing caused say nothing about the reopened Session.
+                delivery.getState().dismissFailure();
+                tasks.getState().dismissFailure();
+                messageQueue.getState().dismissFailure();
+                reopenings += 1;
+                resumeAfterReopen?.();
             },
             setDraft: (draft) => {
                 draftRevision += 1;
@@ -1456,6 +1616,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 set({ operation: { kind: "configuring" } });
+                const reopeningsAtStart = reopenings;
                 try {
                     const result = await client.sessions.updateConfiguration(
                         sessionId,
@@ -1483,6 +1644,11 @@ export function createSessionPaneModel(options: {
                     set({ options: result.configOptions, operation: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();
+                    if (closedNow(cause, reopeningsAtStart)) {
+                        set({ operation: { kind: "idle" } });
+                        get().sessionClosed(null);
+                        return;
+                    }
                     set({
                         operation: {
                             kind: "failed",
@@ -1518,6 +1684,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 set({ titleEdit: { draft: trimmed, kind: "saving" } });
+                const reopeningsAtStart = reopenings;
                 try {
                     const result = await client.sessions.rename(
                         sessionId,
@@ -1530,6 +1697,11 @@ export function createSessionPaneModel(options: {
                     options.onTitleChange(sessionId, sessionTitle);
                 } catch (cause) {
                     signal.throwIfAborted();
+                    if (closedNow(cause, reopeningsAtStart)) {
+                        set({ titleEdit: { kind: "closed" } });
+                        get().sessionClosed(null);
+                        return;
+                    }
                     set({
                         titleEdit: { kind: "closed" },
                         operation: {
@@ -1544,6 +1716,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 set({ operation: { kind: "configuring" } });
+                const reopeningsAtStart = reopenings;
                 try {
                     const connected = client;
                     await dispatchProjection({ kind: "reconcile" }, connected, signal);
@@ -1551,6 +1724,11 @@ export function createSessionPaneModel(options: {
                     set({ operation: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();
+                    if (closedNow(cause, reopeningsAtStart)) {
+                        set({ operation: { kind: "idle" } });
+                        get().sessionClosed(null);
+                        return;
+                    }
                     set({
                         operation: {
                             kind: "failed",
@@ -1563,6 +1741,7 @@ export function createSessionPaneModel(options: {
                 if (client === null || get().connection.kind !== "ready") {
                     throw new Error("The Session is not connected.");
                 }
+                const reopeningsAtStart = reopenings;
                 try {
                     await client.interactions.respond(
                         sessionId,
@@ -1572,6 +1751,9 @@ export function createSessionPaneModel(options: {
                     );
                 } catch (cause) {
                     signal.throwIfAborted();
+                    if (closedNow(cause, reopeningsAtStart)) {
+                        get().sessionClosed(null);
+                    }
                     throw cause;
                 }
             },
@@ -1579,6 +1761,7 @@ export function createSessionPaneModel(options: {
                 if (client === null || get().connection.kind !== "ready") {
                     throw new Error("The Session is not connected.");
                 }
+                const reopeningsAtStart = reopenings;
                 try {
                     await client.interactions.respond(
                         sessionId,
@@ -1588,6 +1771,9 @@ export function createSessionPaneModel(options: {
                     );
                 } catch (cause) {
                     signal.throwIfAborted();
+                    if (closedNow(cause, reopeningsAtStart)) {
+                        get().sessionClosed(null);
+                    }
                     throw cause;
                 }
             },
@@ -1669,6 +1855,9 @@ export function createSessionPaneModel(options: {
             }
             if (current.kind === "failed" || (current.kind === "disconnected" && current.retry.kind === "exhausted")) {
                 throw new MobiusError("session_not_connected", current.message);
+            }
+            if (current.kind === "closed") {
+                throw new MobiusError(SESSION_CLOSED_ERROR_CODE, "The session is closed.");
             }
             await new Promise<void>((resolve, reject) => {
                 const wake = (): void => {

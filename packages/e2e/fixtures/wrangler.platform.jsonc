@@ -13,8 +13,9 @@
     "migrations": [
         {
             "tag": "platform-initial",
-            "new_sqlite_classes": ["RuntimeRelay", "ProjectDO"]
-        }
+            "new_sqlite_classes": ["RuntimeRelay", "ProjectRelay"]
+        },
+        { "tag": "platform-rename-project-do", "renamed_classes": [{ "from": "ProjectRelay", "to": "ProjectDO" }] }
     ],
     "d1_databases": [
         {
