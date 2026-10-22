@@ -12,6 +12,7 @@ import {
 import * as v from "valibot";
 import { createInteractionAgent } from "./interaction-agent.ts";
 import { createSettingsAgent } from "./settings-agent.ts";
+import { createToolLifecycleAgent } from "./tool-lifecycle-agent.ts";
 
 type TestServerApp = { readonly request: (request: Request) => Response | Promise<Response> };
 
@@ -78,6 +79,9 @@ export function createMortyFakeDaemon(behavior: ControlledAgentBehavior, workspa
     const harness = createFakeDaemon(
         workspace === undefined ? behavior : { ...behavior, reply: workspaceReply(behavior, workspace) },
     );
+    if (behavior.agentId === "tool-lifecycle-test") {
+        return { ...harness, agents: [createToolLifecycleAgent()] };
+    }
     if (behavior.agentId === "interaction-test") {
         return { ...harness, agents: [createInteractionAgent()] };
     }

@@ -5,7 +5,6 @@ import { useExternalStore } from "../../view-models/external-store.ts";
 import type { MortyApplication } from "../../view-models/morty-application.ts";
 import { App } from "../application/app.tsx";
 import { MobiusManagement } from "../applications/mobius-management.tsx";
-import { chatPreviewRouter } from "../chat/chat-preview-router.tsx";
 import { router as continuationRouter } from "./router.tsx";
 
 export function createSignedInRouter(application: MortyApplication) {
@@ -27,15 +26,6 @@ export function SessionApplication({
 }) {
     const { state } = useExternalStore(application.anonymousSession);
     const continuationPath = window.location.pathname.startsWith("/continue");
-    const chatPreviewPath = window.location.pathname.startsWith("/chat/preview");
-    if (chatPreviewPath) {
-        return (
-            <App
-                bugReportDialog={application.bugReportDialog}
-                state={{ kind: "authentication", router: chatPreviewRouter }}
-            />
-        );
-    }
     if (continuationPath) {
         return (
             <App

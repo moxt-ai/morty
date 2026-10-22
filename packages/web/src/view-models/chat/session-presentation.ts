@@ -7,8 +7,6 @@ import {
     type SessionToolPresentation,
 } from "../../components/chat/tools/tool-contract.ts";
 
-export type { SessionToolPresentation };
-
 type ToolCallUpdate = Extract<AcpSessionUpdate, { readonly sessionUpdate: "tool_call" | "tool_call_update" }>;
 const BOT_INSTRUCTIONS_URI = "morty://bot/instructions";
 
@@ -70,7 +68,7 @@ export interface SessionTimeline {
 }
 
 function exhaustive(value: never): never {
-    throw new Error(`Unsupported Session Event Log V2 payload: ${JSON.stringify(value)}`);
+    throw new Error(`Unsupported Session Event Log payload: ${JSON.stringify(value)}`);
 }
 
 function encodedJson(value: unknown): string {
@@ -382,6 +380,13 @@ function messageFromAcpUpdate(event: SessionEvent, update: AcpSessionUpdate): Se
 
 type SessionEventResult =
     | { readonly kind: "consumed"; readonly index: number; readonly message: SessionMessage }
+    | { readonly kind: "turn-started"; readonly commandId: string }
+    | {
+          readonly kind: "turn-requested";
+          readonly commandId: string;
+          readonly executionCommandId: string;
+          readonly message: SessionMessage | null;
+      }
     | {
           readonly kind: "constructed";
           readonly firstEvent: FirstEventProvenance;
@@ -438,36 +443,70 @@ function mergeAdjacentText(previous: SessionMessage | undefined, incoming: Sessi
 type FirstEventProvenance = "known" | "possibly-before-page" | "possibly-before-page-visible";
 
 interface ReducedSessionMessage {
+    readonly kind: "message";
     readonly message: SessionMessage;
     readonly provenance: FirstEventProvenance;
     readonly unresolvedEvents: readonly SessionEvent[];
 }
 
+type ReducedSessionEntry =
+    | ReducedSessionMessage
+    | { readonly kind: "turn-started"; readonly commandId: string }
+    | { readonly kind: "execution-idle" }
+    | { readonly kind: "execution-owner"; readonly commandId: string; readonly executionCommandId: string };
+
 export interface SessionMessageReduction {
-    readonly entries: readonly ReducedSessionMessage[];
+    readonly entries: readonly ReducedSessionEntry[];
 }
 
 function consumeSessionEvent(
-    entries: readonly ReducedSessionMessage[],
+    entries: readonly ReducedSessionEntry[],
     event: SessionEvent,
     leadingEvent: "known" | "possibly-before-page",
 ): SessionEventResult {
     if (event.type === "lifecycle-metadata") {
         const lifecycle = event.payload;
+        if (lifecycle.kind === "prompt.started") {
+            return { kind: "turn-started", commandId: lifecycle.commandId };
+        }
+        if (
+            lifecycle.kind === "prompt.completed" ||
+            lifecycle.kind === "prompt.failed" ||
+            lifecycle.kind === "prompt.failed-before-start"
+        ) {
+            return {
+                kind: "constructed",
+                firstEvent: "known",
+                message: {
+                    role: "assistant",
+                    commandId: lifecycle.commandId,
+                    firstEvent: event,
+                    presentation:
+                        lifecycle.kind === "prompt.completed"
+                            ? { kind: "completed", stopReason: lifecycle.stopReason }
+                            : { kind: "failure", code: lifecycle.code, message: lifecycle.message },
+                },
+            };
+        }
         if (lifecycle.kind === "prompt.requested") {
             const contents = lifecycle.content.filter((content) => !isBotInstructions(content)).map(userDisplayContent);
-            return contents.length === 0
-                ? { kind: "skipped" }
-                : {
-                      firstEvent: "known",
-                      kind: "constructed",
-                      message: {
-                          commandId: lifecycle.commandId,
-                          contents,
-                          firstEvent: event,
-                          role: "user",
-                      },
-                  };
+            return {
+                kind: "turn-requested",
+                commandId: lifecycle.commandId,
+                executionCommandId:
+                    lifecycle.disposition === "steer"
+                        ? (lifecycle.targetCommandId ?? lifecycle.commandId)
+                        : lifecycle.commandId,
+                message:
+                    contents.length === 0
+                        ? null
+                        : {
+                              commandId: lifecycle.commandId,
+                              contents,
+                              firstEvent: event,
+                              role: "user",
+                          },
+            };
         }
         return { kind: "skipped" };
     }
@@ -475,11 +514,13 @@ function consumeSessionEvent(
     if (update.sessionUpdate === "compaction_update" || update.sessionUpdate === "compaction_summary_chunk") {
         const existingIndex = entries.findIndex(
             (entry) =>
+                entry.kind === "message" &&
                 entry.message.role === "assistant" &&
                 entry.message.presentation.kind === "compaction" &&
                 entry.message.presentation.compactionId === update.compactionId,
         );
-        const existing = existingIndex === -1 ? undefined : entries[existingIndex]?.message;
+        const existingEntry = entries[existingIndex];
+        const existing = existingEntry?.kind === "message" ? existingEntry.message : undefined;
         const previous =
             existing?.role === "assistant" && existing.presentation.kind === "compaction"
                 ? existing.presentation
@@ -515,7 +556,8 @@ function consumeSessionEvent(
             return { kind: "skipped" };
         }
         const previousIndex = entries.length - 1;
-        const merged = mergeAdjacentText(entries[previousIndex]?.message, message);
+        const previous = entries[previousIndex];
+        const merged = mergeAdjacentText(previous?.kind === "message" ? previous.message : undefined, message);
         return merged === null
             ? {
                   firstEvent: entries.length === 0 ? leadingEvent : "known",
@@ -526,11 +568,13 @@ function consumeSessionEvent(
     }
     const existingIndex = entries.findIndex(
         (entry) =>
+            entry.kind === "message" &&
             entry.message.role === "assistant" &&
             entry.message.presentation.kind === "tool" &&
             entry.message.presentation.entry.id === update.toolCallId,
     );
-    const existing = existingIndex === -1 ? undefined : entries[existingIndex]?.message;
+    const existingEntry = entries[existingIndex];
+    const existing = existingEntry?.kind === "message" ? existingEntry.message : undefined;
     const previous =
         existing?.role === "assistant" && existing.presentation.kind === "tool" ? existing.presentation.entry : null;
     const message: SessionMessage = {
@@ -549,18 +593,38 @@ function consumeSessionEvent(
 }
 
 function applySessionEvent(
-    entries: readonly ReducedSessionMessage[],
+    entries: readonly ReducedSessionEntry[],
     event: SessionEvent,
     result: SessionEventResult,
-): readonly ReducedSessionMessage[] {
+): readonly ReducedSessionEntry[] {
     switch (result.kind) {
+        case "turn-requested": {
+            const withOwner: readonly ReducedSessionEntry[] = [
+                ...entries,
+                {
+                    kind: "execution-owner",
+                    commandId: result.commandId,
+                    executionCommandId: result.executionCommandId,
+                },
+            ];
+            return result.message === null
+                ? withOwner
+                : applySessionEvent(withOwner, event, {
+                      kind: "constructed",
+                      firstEvent: "known",
+                      message: result.message,
+                  });
+        }
+        case "turn-started":
+            return [...entries, result];
         case "consumed": {
             const previous = entries[result.index];
-            if (previous === undefined) {
+            if (previous?.kind !== "message") {
                 return entries;
             }
             const next = [...entries];
             next[result.index] = {
+                kind: "message",
                 message: result.message,
                 provenance: previous.provenance,
                 unresolvedEvents: previous.provenance === "known" ? [] : [...previous.unresolvedEvents, event],
@@ -571,6 +635,7 @@ function applySessionEvent(
             return [
                 ...entries,
                 {
+                    kind: "message",
                     message: result.message,
                     provenance: result.firstEvent,
                     unresolvedEvents: result.firstEvent === "known" ? [] : [event],
@@ -587,7 +652,7 @@ function reduceSessionEvents(
     events: readonly SessionEvent[],
     leadingEvent: "known" | "possibly-before-page",
 ): SessionMessageReduction {
-    let entries: readonly ReducedSessionMessage[] = [];
+    let entries: readonly ReducedSessionEntry[] = [];
     for (const event of events) {
         entries = applySessionEvent(entries, event, consumeSessionEvent(entries, event, leadingEvent));
     }
@@ -625,7 +690,9 @@ export function prependSessionMessageEvents(
     reduction: SessionMessageReduction,
     history: { readonly events: readonly SessionEvent[]; readonly nextCursor: string | null },
 ): SessionMessageReduction {
-    const unresolvedEvents = reduction.entries.flatMap((entry) => entry.unresolvedEvents);
+    const unresolvedEvents = reduction.entries.flatMap((entry) =>
+        entry.kind === "message" ? entry.unresolvedEvents : [],
+    );
     const older = createSessionMessageReduction({
         events: mergeSessionEventSequences(history.events, unresolvedEvents),
         nextCursor: history.nextCursor,
@@ -635,16 +702,111 @@ export function prependSessionMessageEvents(
     // they are superseded and dropped here. "known" entries have nothing to
     // merge and are kept as-is.
     return {
-        entries: [...older.entries, ...reduction.entries.filter((entry) => entry.provenance === "known")],
+        entries: [
+            ...older.entries,
+            ...reduction.entries.filter((entry) => entry.kind !== "message" || entry.provenance === "known"),
+        ],
     };
 }
 
+export function sessionReductionExecutionOwner(reduction: SessionMessageReduction, commandId: string): string | null {
+    const owner = reduction.entries.find((entry) => entry.kind === "execution-owner" && entry.commandId === commandId);
+    return owner?.kind === "execution-owner" ? owner.executionCommandId : null;
+}
+
 export function sessionReductionMessages(reduction: SessionMessageReduction): readonly SessionMessage[] {
-    // "possibly-before-page-visible" renders while its merge is outstanding;
-    // "possibly-before-page" cannot render without its unseen start.
-    return reduction.entries.flatMap((entry) =>
-        entry.provenance === "known" || entry.provenance === "possibly-before-page-visible" ? [entry.message] : [],
-    );
+    const messages: SessionMessage[] = [];
+    const unfinished = new Map<string | null, number[]>();
+    const executionOwners = new Map<string, string>();
+    let turn: { readonly kind: "unknown" } | { readonly kind: "active" | "terminal"; readonly commandId: string } = {
+        kind: "unknown",
+    };
+    const interrupt = (indexes: readonly number[]) => {
+        for (const index of indexes) {
+            const pending = messages[index];
+            if (pending?.role === "assistant" && pending.presentation.kind === "tool") {
+                messages[index] = {
+                    ...pending,
+                    presentation: {
+                        ...pending.presentation,
+                        entry: { ...pending.presentation.entry, state: { kind: "interrupted" } },
+                    },
+                };
+            }
+        }
+    };
+    for (const entry of reduction.entries) {
+        if (entry.kind === "execution-owner") {
+            executionOwners.set(entry.commandId, entry.executionCommandId);
+            continue;
+        }
+        if (entry.kind === "execution-idle") {
+            for (const indexes of unfinished.values()) {
+                interrupt(indexes);
+            }
+            unfinished.clear();
+            turn = { kind: "unknown" };
+            continue;
+        }
+        if (entry.kind === "turn-started") {
+            // A started event alone does not identify its execution: the request may be
+            // on an older page and could describe steering of another command.
+            const owner = executionOwners.get(entry.commandId);
+            turn = owner === undefined ? { kind: "unknown" } : { kind: "active", commandId: owner };
+            continue;
+        }
+        // A bare tool tail cannot render until the older page containing its start arrives.
+        if (entry.provenance === "possibly-before-page") {
+            continue;
+        }
+        let message = entry.message;
+        if (message.role === "user" && message.firstEvent.type === "acp" && turn.kind === "terminal") {
+            turn = { kind: "unknown" };
+        }
+        if (
+            message.role === "assistant" &&
+            message.presentation.kind === "tool" &&
+            message.presentation.entry.state.kind === "running"
+        ) {
+            const commandId = message.commandId ?? (turn.kind === "unknown" ? null : turn.commandId);
+            if (turn.kind === "terminal" && commandId === turn.commandId) {
+                // An ACP notification already in flight can arrive after the turn fails.
+                message = {
+                    ...message,
+                    presentation: {
+                        ...message.presentation,
+                        entry: { ...message.presentation.entry, state: { kind: "interrupted" } },
+                    },
+                };
+            } else {
+                const indexes = unfinished.get(commandId) ?? [];
+                indexes.push(messages.length);
+                unfinished.set(commandId, indexes);
+            }
+        }
+        messages.push(message);
+        const event = message.firstEvent;
+        if (event.type !== "lifecycle-metadata") {
+            continue;
+        }
+        const terminal = event.payload;
+        if (
+            terminal.kind !== "prompt.failed" &&
+            (terminal.kind !== "prompt.completed" || terminal.stopReason === "steered")
+        ) {
+            continue;
+        }
+        // Unknown ownership occurs when a page starts midway through a turn. Its terminal
+        // event settles those tools too; prepending history recalculates ownership in order.
+        for (const owner of [terminal.commandId, null]) {
+            interrupt(unfinished.get(owner) ?? []);
+            unfinished.delete(owner);
+        }
+        if (turn.kind === "unknown" || turn.commandId === terminal.commandId) {
+            turn = { kind: "terminal", commandId: terminal.commandId };
+        }
+    }
+    return messages;
 }
 
 export function sessionEventLogPresentation(events: readonly SessionEvent[]): SessionTimeline {
@@ -672,4 +834,22 @@ export function sessionEventCommandIds(events: readonly SessionEvent[]): readonl
         commandIds.push(update.messageId);
     }
     return commandIds;
+}
+
+export function completedTurnNotice(stopReason: string): string | null {
+    switch (stopReason) {
+        case "end_turn":
+        case "steered":
+            return null;
+        case "cancelled":
+            return "Turn stopped.";
+        case "max_tokens":
+            return "The response reached its length limit.";
+        case "max_turn_requests":
+            return "The agent reached its request limit for this turn.";
+        case "refusal":
+            return "The agent declined this request.";
+        default:
+            return "The response stopped before completing.";
+    }
 }

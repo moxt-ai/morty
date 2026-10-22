@@ -16,7 +16,7 @@ const setupContentStackClassName = "mt-6 space-y-3";
 
 export const setupPrimaryButtonClassName = "w-full min-h-11 !rounded-xl text-16";
 
-export function SetupCardLogo() {
+function SetupCardLogo() {
     return (
         <div className="mb-6 flex size-14 items-center justify-center rounded-[16px] bg-primary text-xl font-bold text-primary-foreground">
             M
