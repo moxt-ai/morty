@@ -302,6 +302,16 @@ async function readSessionHistory(
     return { events, nextCursor, sessionGenerationId };
 }
 
+/** The settings a turn submission carries, read from the options the pane shows. */
+function sessionConfigurations(configOptions: readonly SessionConfigOption[]) {
+    return configOptions.map((option) => ({
+        booleanValue: option.type === "boolean" ? option.booleanValue : false,
+        configId: option.id,
+        value: option.type === "select" ? option.currentValue : "",
+        valueType: option.type,
+    }));
+}
+
 function mergeSessionEvents(
     current: readonly SessionEvent[],
     incoming: readonly SessionEvent[],
@@ -384,7 +394,6 @@ export function createSessionPaneModel(options: {
             }
         };
     let projection = createSessionProjection();
-    let sessionTitle = session.entry.title;
     let loadingOlderHistory = false;
     let draftRevision = 0;
     // The queued first message stays the pane's recovery responsibility until
@@ -392,12 +401,6 @@ export function createSessionPaneModel(options: {
     // starts.
     const queuedInitialCommandId = options.initialMessage?.commandId ?? options.unconfirmedMessage?.commandId ?? null;
     const isQueuedInitialMessage = (commandId: string): boolean => commandId === queuedInitialCommandId;
-    let sessionConfigurations = session.result.ready.configOptions.map((option) => ({
-        booleanValue: option.type === "boolean" ? option.booleanValue : false,
-        configId: option.id,
-        value: option.type === "select" ? option.currentValue : "",
-        valueType: option.type,
-    }));
     // Counts adopted settings so a slower read cannot replace settings observed after it started.
     let settingsRevision = 0;
     let settingsRead: AbortController | null = null;
@@ -430,7 +433,7 @@ export function createSessionPaneModel(options: {
                     ...request,
                     agentId: session.agentRef,
                     directoryId: session.result.ready.directoryId,
-                    sessionConfigurations,
+                    sessionConfigurations: sessionConfigurations(store.getState().options),
                 }),
                 signal,
             );
@@ -598,12 +601,6 @@ export function createSessionPaneModel(options: {
         let historyLoadController: AbortController | null = null;
         const adoptSettings = (configOptions: readonly SessionConfigOption[]): void => {
             settingsRevision += 1;
-            sessionConfigurations = configOptions.map((candidate) => ({
-                booleanValue: candidate.type === "boolean" ? candidate.booleanValue : false,
-                configId: candidate.id,
-                value: candidate.type === "select" ? candidate.currentValue : "",
-                valueType: candidate.type,
-            }));
             saveLastAgentSettings(botId, session.agentRef, configOptions);
             set({ options: configOptions });
         };
@@ -624,9 +621,8 @@ export function createSessionPaneModel(options: {
                     adoptSettings(effect.config);
                 }
                 if (effect.title !== undefined) {
-                    sessionTitle = effect.title;
-                    set({ title: sessionTitle });
-                    options.onTitleChange(sessionId, sessionTitle);
+                    set({ title: effect.title });
+                    options.onTitleChange(sessionId, effect.title);
                 }
             }
             return result.effects;
@@ -754,7 +750,7 @@ export function createSessionPaneModel(options: {
         };
         return {
             connection: { kind: "loading" },
-            title: sessionTitle,
+            title: session.entry.title,
             titleEdit: { kind: "closed" },
             messages: initialTimeline.messages,
             historyLoading: false,
@@ -1505,7 +1501,7 @@ export function createSessionPaneModel(options: {
                 const trimmed = edit.draft.trim();
                 if (
                     trimmed.length === 0 ||
-                    trimmed === sessionTitle ||
+                    trimmed === get().title ||
                     client === null ||
                     get().connection.kind !== "ready"
                 ) {
@@ -1521,9 +1517,8 @@ export function createSessionPaneModel(options: {
                         AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
                     );
                     signal.throwIfAborted();
-                    sessionTitle = result.title;
-                    set({ title: sessionTitle, titleEdit: { kind: "closed" } });
-                    options.onTitleChange(sessionId, sessionTitle);
+                    set({ title: result.title, titleEdit: { kind: "closed" } });
+                    options.onTitleChange(sessionId, result.title);
                 } catch (cause) {
                     signal.throwIfAborted();
                     if (closedNow(cause, reopeningsAtStart)) {
