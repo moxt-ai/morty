@@ -43,8 +43,6 @@ export interface CloudBindings {
     readonly APP_ORIGIN?: unknown;
     readonly ASSETS?: unknown;
     readonly AUTHENTICATION_BASE_URL?: unknown;
-    readonly CLERK_JWT_KEY?: unknown;
-    readonly CLERK_PUBLISHABLE_KEY?: unknown;
     readonly DATABASE?: unknown;
     readonly CHAT_PROJECT_ID?: string;
     readonly MOBIUS_BASE_URL?: unknown;

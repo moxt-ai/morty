@@ -1,8 +1,7 @@
 import * as v from "valibot";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import worker from "../src/application.ts";
-import { APP_ORIGIN } from "./support/clerk.ts";
-import { createIdentityFixture } from "./support/identity-fixture.ts";
+import { APP_ORIGIN, createIdentityFixture } from "./support/identity-fixture.ts";
 
 const replacementSchema = v.object({
     bot: v.object({ botId: v.string(), displayName: v.string() }),

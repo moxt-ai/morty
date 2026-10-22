@@ -1,4 +1,3 @@
-import { generateKeyPairSync } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
@@ -141,12 +140,9 @@ export class LocalStack {
     }
 
     async startChat(application: { readonly appId: string; readonly appSecret: string }) {
-        const { publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
         const variables = {
             APP_ORIGIN: this.chatOrigin,
             AUTHENTICATION_BASE_URL: this.chatOrigin,
-            CLERK_JWT_KEY: publicKey.export({ format: "pem", type: "spki" }).toString(),
-            CLERK_PUBLISHABLE_KEY: "pk_test_c21hc2hpbmctc3BpZGVyLTg1NzQuY2xlcmsuYWNjb3VudHMuZGV2JA",
             MOBIUS_APP_ID: application.appId,
             MOBIUS_APP_SECRET: application.appSecret,
             MOBIUS_BASE_URL: this.platformOrigin,

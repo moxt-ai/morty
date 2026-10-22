@@ -304,17 +304,6 @@ function writeStack(stack) {
     });
 }
 
-function clerkPublishableKey() {
-    const configured = process.env.CHAT_LOCAL_CLERK_PUBLISHABLE_KEY;
-    if (configured === undefined || configured.length === 0) {
-        throw new Error("CHAT_LOCAL_CLERK_PUBLISHABLE_KEY is required");
-    }
-    if (!/^pk_(test|live)_[A-Za-z0-9_-]+$/u.test(configured)) {
-        throw new Error("CHAT_LOCAL_CLERK_PUBLISHABLE_KEY must be a valid Clerk publishable key");
-    }
-    return configured;
-}
-
 async function prepareWeb(options) {
     const chatPort = options.chatPort ?? (await availablePort());
     const stateDir = options.stateDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "chat-local-web-dev-"));
@@ -364,7 +353,6 @@ async function prepare(options) {
             `Unknown mode ${options.mode}; use web, web-server, web-server-mobius, or web-server-mobius-cli`,
         );
     }
-    const clerkKey = clerkPublishableKey();
     if (options.mode === "web") {
         return prepareWeb(options);
     }
@@ -503,12 +491,9 @@ async function prepare(options) {
             CHAT_CONFIG,
         ]);
 
-        const { publicKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2_048 });
         const variables = {
             APP_ORIGIN: chatOrigin,
             AUTHENTICATION_BASE_URL: chatOrigin,
-            CLERK_JWT_KEY: publicKey.export({ format: "pem", type: "spki" }).toString(),
-            CLERK_PUBLISHABLE_KEY: clerkKey,
             MOBIUS_APP_ID: appId,
             MOBIUS_APP_SECRET: appSecret,
             MOBIUS_BASE_URL: platformOrigin,
