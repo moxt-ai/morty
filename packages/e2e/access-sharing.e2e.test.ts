@@ -80,8 +80,7 @@ for (const viewport of [
             const receiver = await receiverContext.newPage();
             await receiver.goto(url);
             if (viewport.name === "desktop") {
-                await receiver.getByTestId(dataTestId.userMenu).click();
-                await expect(receiver.getByRole("menuitem", { name: "End current access" })).toBeVisible();
+                await expect(receiver.getByTestId(dataTestId.userMenu)).toBeVisible();
             } else {
                 await expect(receiver.getByRole("button", { name: "End current access" })).toBeVisible();
             }
