@@ -309,7 +309,7 @@ if (process.argv[2] === 'upgrade') {
 else {
     const attempts = Number(readFileSync('attempts.txt', 'utf8')) + 1;
     writeFileSync('attempts.txt', String(attempts));
-    ${failure === "signal" ? "process.kill(process.pid, 'SIGTERM');" : failure === "recover" ? "process.exit(attempts === 1 ? 42 : 0);" : "process.exit(42);"}
+    ${failure === "signal" ? "process.kill(process.pid, 'SIGTERM');" : failure === "recover" ? "process.exit(attempts === 1 ? 42 : 0);" : failure === "cancel-upgrade" ? "process.exit(0);" : "process.exit(42);"}
 }
 `,
                     { mode: 0o700 },
@@ -353,8 +353,9 @@ process.exitCode = await runSetup(process.argv.slice(2), {
                 let recovery: Promise<void> | undefined;
                 child.stdout.on("data", (chunk) => {
                     output += chunk.toString();
+                    // The started daemon comes online, so setup proceeds to the upgrade or the handoff.
                     if (
-                        failure === "recover" &&
+                        (failure === "recover" || failure === "cancel-upgrade") &&
                         recovery === undefined &&
                         output.includes('"status":"runtime_started"')
                     ) {

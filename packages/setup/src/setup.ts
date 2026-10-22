@@ -7,7 +7,7 @@ import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { validateLocalPath } from "@moxt-ai/mobius/filesystem";
-import { executableLaunch, findExecutableOnPath } from "@moxt-ai/mobius/process";
+import { executableLaunch, findExecutableOnPath, stopProcessTree } from "@moxt-ai/mobius/process";
 import { decodeIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
@@ -474,7 +474,19 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         };
     }
 
-    async function runMobius(context: Context, args: readonly string[], cwd: string, operation = signal) {
+    /**
+     * `stop` says how to end a command that is still running when its operation ends.
+     * "command" stops only the CLI: start and pair commands launch the daemon, which
+     * outlives them and must keep running. "process-tree" also stops the processes the
+     * command started, such as npm, for commands that never launch the daemon.
+     */
+    async function runMobius(
+        context: Context,
+        args: readonly string[],
+        cwd: string,
+        operation = signal,
+        stop: "command" | "process-tree" = "command",
+    ) {
         operation.throwIfAborted();
         if (host.runtime !== undefined) {
             return await host.runtime.run(context.directory, args, cwd, operation);
@@ -515,15 +527,22 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return { pid: child.pid, logPath };
         } catch (cause) {
             // Only terminate the child this invocation still owns; an exited PID may be reused.
-            // Ask it to stop first so it can stop the processes it started, such as npm.
-            for (const termination of ["SIGTERM", "SIGKILL"] as const) {
-                if (child?.pid === undefined || child.exitCode !== null || child.signalCode !== null) {
-                    break;
-                }
-                const exited = once(child, "exit", { signal: AbortSignal.timeout(10000) });
-                child.kill(termination);
+            if (child?.pid !== undefined && child.exitCode === null && child.signalCode === null) {
                 try {
-                    await exited;
+                    if (stop === "process-tree") {
+                        // Stops the command and its descendants gracefully, then forcibly, on every platform.
+                        await stopProcessTree(child);
+                    } else {
+                        // Ask the CLI to stop first so it can stop what it started, then force it.
+                        for (const termination of ["SIGTERM", "SIGKILL"] as const) {
+                            if (child.exitCode !== null || child.signalCode !== null) {
+                                break;
+                            }
+                            const exited = once(child, "exit", { signal: AbortSignal.timeout(10000) });
+                            child.kill(termination);
+                            await exited;
+                        }
+                    }
                 } catch {
                     // Cleanup must not replace the launch failure or prevent its diagnostic from being written.
                 }
@@ -657,17 +676,20 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     /**
      * A daemon keeps running the release that started it after the CLI updates,
      * and a release whose own upgrade check fails stays on that release. The
-     * installed CLI owns the upgrade path, so bring the running daemon to the
-     * newest release before setup reuses or pairs it. The upgrade only refines
+     * installed CLI owns the upgrade path, so once the Runtime is online, bring
+     * its daemon to the newest release before setup binds it. The upgrade only refines
      * the Runtime: when it is unavailable, setup continues with the running
      * daemon and reports why.
      */
-    async function upgradeRuntime(context: Context, cwd: string): Promise<void> {
+    async function upgradeRuntime(context: Context, cwd: string): Promise<boolean> {
         // The upgrade has its own budget so a slow download leaves setup time to reuse the running daemon.
         const budget = deadline(RUNTIME_UPGRADE_BUDGET_MILLISECONDS);
         try {
-            await runMobius(context, ["upgrade"], cwd, AbortSignal.any([signal, budget]));
+            // The daemon is already running here, so the upgrade command never launches it and
+            // stopping the command's process tree cannot stop the daemon.
+            await runMobius(context, ["upgrade"], cwd, AbortSignal.any([signal, budget]), "process-tree");
             emit({ status: "runtime_upgrade_checked" });
+            return true;
         } catch (cause) {
             signal.throwIfAborted();
             emit({
@@ -678,6 +700,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 },
                 message: "Continuing with the running Mobius daemon. Run mobius upgrade to update it.",
             });
+            return false;
         }
     }
 
@@ -687,7 +710,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         cwd: string,
         harness: string,
     ): Promise<Context> {
-        await upgradeRuntime(context, cwd);
         const reuseOnline = async () => {
             if (runtime.kind !== "existing" || !(await runtimeIsOnline(context, runtime, harness))) {
                 return false;
@@ -952,6 +974,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         context = prepared.context;
         context = await startRuntime(context, prepared.runtime, cwd, options.harness);
         await waitForRuntime(context, prepared.runtime, options.harness);
+        if (await upgradeRuntime(context, cwd)) {
+            // Switching releases reconnects the Runtime.
+            await waitForRuntime(context, prepared.runtime, options.harness);
+        }
         context = await bindAgent(context, prepared.runtime, options.harness);
         await finishSetup(context, prepared.runtime, options);
     }
