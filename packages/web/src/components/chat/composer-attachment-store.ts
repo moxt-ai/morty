@@ -1,5 +1,5 @@
 import { createStore } from "zustand/vanilla";
-import { AttachmentReadError, ReadPromptImage, readPromptAttachment } from "../../services/chat/attachment-reader.ts";
+import { AttachmentReadError, ReadPromptImage, readPromptAttachment } from "./attachment-reader.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 
 type AttachmentReadState =

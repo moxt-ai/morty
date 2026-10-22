@@ -14,16 +14,7 @@ const setupCardClassName =
 /** Vertical rhythm below title or description (24px top, 12px between children). */
 const setupContentStackClassName = "mt-6 space-y-3";
 
-export const setupMonoFieldClassName =
-    "w-full resize-none overflow-hidden rounded-lg border-[0.5px] border-border/50 bg-morty-fill-opacity-2 px-4 py-3 font-mono text-14 leading-[22px] text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring";
-
 export const setupPrimaryButtonClassName = "w-full min-h-11 !rounded-xl text-16";
-
-export const setupDialogContentClassName = `max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-[560px] ${setupCardClassName} fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 overflow-y-auto outline-none motion-safe:animate-cloud-enter`;
-
-export const setupDialogTitleClassName = "text-32 font-semibold tracking-[-0.035em]";
-
-export const setupDialogDescriptionClassName = "mt-2 text-16 leading-[26px] text-muted-foreground";
 
 export function SetupCardLogo() {
     return (

@@ -1,5 +1,5 @@
+import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import type { ChatAccess } from "../../services/chat/bot-chat-api.ts";
-import type { ComposerAttachment } from "./composer-attachment.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import type { UnconfirmedSubmission } from "./session-delivery-store.ts";
 

@@ -1,13 +1,12 @@
 import { createPortal } from "react-dom";
-import { useStore } from "zustand";
+import type { StoreApi } from "zustand/vanilla";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
 import { dataTestId } from "../../data-testid.ts";
-import type { createNativeSessionStore } from "../../view-models/chat/native-session-store.ts";
+import type { NativeSessionStore } from "../../view-models/chat/native-session-store.ts";
+import { useExternalStore } from "../../view-models/external-store.ts";
 import { MobiusSessionMessage } from "./mobius-session-message.tsx";
-
-export type { OpenMobiusSession } from "../../view-models/chat/open-session.ts";
 
 const loadMoreNativeSessions = "load-more-native-sessions";
 
@@ -59,10 +58,10 @@ export function NativeSessionDialog({
     onClose,
 }: {
     /** Created by the owner when the dialog opens; it starts discovery itself. */
-    readonly store: ReturnType<typeof createNativeSessionStore>;
+    readonly store: StoreApi<NativeSessionStore>;
     readonly onClose: () => void;
 }) {
-    const model = useStore(store);
+    const model = useExternalStore(store);
     const withSignal = (action: (signal: AbortSignal) => Promise<void>) => {
         void action(store.getState().lifetimeSignal());
     };

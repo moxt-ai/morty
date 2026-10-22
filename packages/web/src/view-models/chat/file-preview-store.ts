@@ -1,5 +1,6 @@
 import { MobiusError } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
+import { isDisplayableImageType } from "../../components/agents/displayable-image-type.ts";
 import {
     attachFilePreviewPanel,
     createFilePreviewImage,
@@ -12,7 +13,6 @@ import {
     type HtmlPreviewDocument,
     type HtmlPreviewFailure,
 } from "../../services/chat/html-preview-document.ts";
-import { isDisplayableImageType } from "../../services/chat/image-media-type.ts";
 import { downloadLocalFile, type LocalFileDownload } from "../../services/chat/local-file-download.ts";
 
 const TEXT_MIME = /^(?:text\/|application\/(?:json|xml|javascript|x-httpd-php|x-sh|x-yaml))(?:;|$)/u;
@@ -194,6 +194,9 @@ function createFilePreviewStore(
         releaseImage?.();
         releaseImage = null;
     };
+    // Panel layout followers, notified at the explicit sites that change the
+    // layout: the attached panel reacts without a store subscription.
+    const layoutFollowers = new Set<(layout: FilePreviewStore["layout"]) => void>();
     const store = createStore<FilePreviewStore>()((set, get) => ({
         state: { kind: "closed" },
         layout: previewLayout(port.allowsSidePanel(), "side-panel"),
@@ -203,23 +206,31 @@ function createFilePreviewStore(
             releaseContent();
             releasePanel?.();
             set({ state: { kind: "closed" }, layout: previewLayout(get().layout.kind === "desktop", "side-panel") });
+            for (const follow of layoutFollowers) {
+                follow(get().layout);
+            }
         },
         toggleExpanded: () => {
             const { state, layout } = get();
             if (state.kind !== "closed" && layout.kind === "desktop") {
                 set({ layout: { kind: "desktop", size: layout.size === "expanded" ? "side-panel" : "expanded" } });
+                for (const follow of layoutFollowers) {
+                    follow(get().layout);
+                }
             }
         },
         onPanelAttach: (node) => {
             releasePanel?.();
             const panel = port.attachPanel(node);
-            const unsubscribe = store.subscribe((next, previous) => {
-                if (next.layout !== previous.layout) {
-                    panel.show(panelMode(next.layout));
-                }
-            });
+            const followLayout = (layout: FilePreviewStore["layout"]): void => {
+                panel.show(panelMode(layout));
+            };
+            layoutFollowers.add(followLayout);
             const stopLayout = port.observeLayout((sidePanel) => {
                 set({ layout: previewLayout(sidePanel, desktopSize(get().layout)) });
+                for (const follow of layoutFollowers) {
+                    follow(get().layout);
+                }
             });
             panel.show(panelMode(get().layout));
             const release = () => {
@@ -227,7 +238,7 @@ function createFilePreviewStore(
                     return;
                 }
                 releasePanel = null;
-                unsubscribe();
+                layoutFollowers.delete(followLayout);
                 stopLayout();
                 panel.dispose();
             };

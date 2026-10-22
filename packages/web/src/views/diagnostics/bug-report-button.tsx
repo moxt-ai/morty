@@ -1,14 +1,17 @@
-import { Bug, Paperclip, X } from "lucide-react";
+import { Bug, X } from "lucide-react";
 import { Tooltip } from "radix-ui";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useStore } from "zustand";
+import { AttachCancelBoundary, HiddenFileInput } from "../../components/diagnostics/attach-controls.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
-import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.tsx";
-import { useOptionalApiTransport } from "../../services/api/api-transport-context.tsx";
+import { ObjectUrlImage } from "../../components/ui/object-url-image.tsx";
 import type { DaemonDiagnosticsSource } from "../../services/diagnostics/browser-diagnostics.ts";
-import { sentryBugReportSink } from "../../services/diagnostics/bug-report.ts";
-import { type BugReportImage, bugReportImageAccept, createBugReportStore } from "../../view-models/bug-report-store.ts";
+import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-store.ts";
+import {
+    type BugReportImage,
+    type BugReportStoreApi,
+    bugReportImageAccept,
+} from "../../view-models/bug-report-store.ts";
+import { useExternalStore } from "../../view-models/external-store.ts";
 
 const appearances = {
     floating: "fixed bottom-2 right-2 z-40 bg-background/90 text-xs",
@@ -19,18 +22,20 @@ const appearances = {
 export function BugReportButton({
     appearance = "labelled",
     daemonSource = null,
+    dialog,
 }: {
     readonly appearance?: keyof typeof appearances | "option";
     readonly daemonSource?: DaemonDiagnosticsSource | null;
+    readonly dialog: BugReportDialogStore;
 }) {
-    const [open, setOpen] = useState(false);
+    const showBugReport = dialog.getState().show;
     const trigger =
         appearance === "option" ? (
             <button
                 type="button"
                 aria-label="Report a bug"
                 className="flex w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transition-none"
-                onClick={() => setOpen(true)}
+                onClick={() => showBugReport(daemonSource)}
             >
                 <Bug aria-hidden="true" className="size-4 shrink-0" />
                 Report a bug
@@ -39,32 +44,43 @@ export function BugReportButton({
             <Button
                 aria-label="Report a bug"
                 className={appearances[appearance]}
-                onClick={() => setOpen(true)}
+                onClick={() => showBugReport(daemonSource)}
                 variant="ghost"
             >
                 {appearance === "icon" ? <Bug aria-hidden="true" className="size-4" /> : "Report a bug"}
             </Button>
         );
-    return (
-        <>
-            {appearance === "icon" ? (
-                <Tooltip.Provider delayDuration={150} disableHoverableContent>
-                    <Tooltip.Root>
-                        <Tooltip.Trigger asChild>{trigger}</Tooltip.Trigger>
-                        <Tooltip.Portal>
-                            <MortyTooltipContent side="top" sideOffset={6}>
-                                Report a bug
-                                <Tooltip.Arrow className="fill-foreground" />
-                            </MortyTooltipContent>
-                        </Tooltip.Portal>
-                    </Tooltip.Root>
-                </Tooltip.Provider>
-            ) : (
-                trigger
-            )}
-            {open && <BugReportDialog daemonSource={daemonSource} onClose={() => setOpen(false)} />}
-        </>
+    return appearance === "icon" ? (
+        <Tooltip.Provider delayDuration={150} disableHoverableContent>
+            <Tooltip.Root>
+                <Tooltip.Trigger asChild>{trigger}</Tooltip.Trigger>
+                <Tooltip.Portal>
+                    <Tooltip.Content
+                        className="z-[70] rounded-lg bg-foreground px-2.5 py-1.5 text-xs text-background shadow-lg"
+                        side="top"
+                        sideOffset={6}
+                    >
+                        Report a bug
+                        <Tooltip.Arrow className="fill-foreground" />
+                    </Tooltip.Content>
+                </Tooltip.Portal>
+            </Tooltip.Root>
+        </Tooltip.Provider>
+    ) : (
+        trigger
     );
+}
+
+/**
+ * Renders the shared bug-report dialog for the whole application. Entry-point
+ * buttons only trigger `show`; the dialog itself must outlive any single
+ * button mount, for example the floating trigger on the loading page that
+ * unmounts when loading completes.
+ */
+export function BugReportDialogHost({ dialog }: { readonly dialog: BugReportDialogStore }) {
+    const open = useExternalStore(dialog, (state) => state.open);
+    const report = useExternalStore(dialog, (state) => state.report);
+    return open && report !== null ? <BugReportDialog dialog={dialog} key="bug-report-dialog" report={report} /> : null;
 }
 
 function ReportImage({
@@ -76,15 +92,9 @@ function ReportImage({
     readonly disabled: boolean;
     readonly onRemove: () => void;
 }) {
-    const [source, setSource] = useState("");
-    useEffect(() => {
-        const url = URL.createObjectURL(image.file);
-        setSource(url);
-        return () => URL.revokeObjectURL(url);
-    }, [image.file]);
     return (
         <li className="relative flex h-[60px] max-w-52 items-center gap-2 rounded-xl border border-border bg-surface-subtle p-2 pr-8 text-xs text-copy-secondary">
-            {source && <img alt={image.file.name} src={source} className="size-11 rounded-lg object-cover" />}
+            <ObjectUrlImage alt={image.file.name} className="size-11 rounded-lg object-cover" file={image.file} />
             <span className="min-w-0 truncate" title={image.file.name}>
                 {image.file.name}
             </span>
@@ -102,40 +112,32 @@ function ReportImage({
 }
 
 function BugReportDialog({
-    onClose,
-    daemonSource,
+    dialog,
+    report,
 }: {
-    readonly onClose: () => void;
-    readonly daemonSource: DaemonDiagnosticsSource | null;
+    readonly dialog: BugReportDialogStore;
+    readonly report: BugReportStoreApi;
 }) {
-    const transport = useOptionalApiTransport();
-    const [store] = useState(() => createBugReportStore(sentryBugReportSink, transport, daemonSource));
-    const { state, description, images, addImages, removeImage, describe, send, close } = useStore(store);
-    const fileInput = useRef<HTMLInputElement>(null);
-    // Stable for the dialog's lifetime so re-renders never re-run the
-    // cleanup; the owner unmounting (for example when application loading
-    // completes) cancels the in-flight send through the same close path.
-    const cancelOnUnmount = useCallback(
-        (node: HTMLElement | null): (() => void) | undefined => {
-            if (node === null) {
-                return undefined;
-            }
-            return () => {
-                store.getState().close();
-            };
-        },
-        [store],
-    );
+    const hideBugReport = dialog.getState().hide;
+    const { state, description, images, addImages, removeImage, describe, send, close } = useExternalStore(report);
     return (
         <Dialog
             title="Report a bug"
             description="Send a description, optional images and recent technical and network diagnostics to the Morty team. Session text, other files and credentials are not collected automatically."
             onClose={() => {
                 close();
-                onClose();
+                hideBugReport();
             }}
         >
-            <div ref={cancelOnUnmount}>
+            <AttachCancelBoundary
+                cancel={() => {
+                    // Unmounting (for example when application loading
+                    // completes) only cancels the in-flight send; whether the
+                    // dialog stays open belongs to its owner, not the mount
+                    // that happened to render it.
+                    report.getState().close();
+                }}
+            >
                 {state.kind === "sent" ? (
                     <div role="status" className="break-all">
                         <p>Report sent. Reference: {state.id}</p>
@@ -184,28 +186,13 @@ function BugReportDialog({
                             </ul>
                         )}
                         <div className="space-y-1.5">
-                            <input
-                                ref={fileInput}
-                                type="file"
-                                aria-label="Attach images"
+                            <HiddenFileInput
                                 accept={bugReportImageAccept}
-                                multiple
-                                hidden
+                                ariaLabel="Attach images"
                                 disabled={state.kind === "sending"}
-                                onChange={(event) => {
-                                    addImages(Array.from(event.target.files ?? []));
-                                    event.target.value = "";
-                                }}
+                                multiple
+                                onFiles={addImages}
                             />
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                disabled={state.kind === "sending" || images.length >= 3}
-                                onClick={() => fileInput.current?.click()}
-                            >
-                                <Paperclip aria-hidden="true" className="size-4" />
-                                Attach images
-                            </Button>
                             <p className="text-xs text-muted-foreground">
                                 Paste an image here or choose a file. Up to 3 images, 2.5 MB each. PNG, JPEG, GIF or
                                 WebP.
@@ -222,7 +209,7 @@ function BugReportDialog({
                         </Button>
                     </form>
                 )}
-            </div>
+            </AttachCancelBoundary>
         </Dialog>
     );
 }

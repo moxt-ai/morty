@@ -26,6 +26,8 @@ export interface ConversationDirectoryStore {
 export const createConversationDirectoryStore = (
     botId: string,
     requests: Pick<BotChatApi, "archiveManagedSession" | "managedSessions">,
+    /** Announced when a load publishes a ready directory, so the owner re-scopes status watching without subscribing. */
+    onLoaded: (sessions: readonly ManagedChatSession[]) => void,
 ) =>
     createStore<ConversationDirectoryStore>()((set, get) => ({
         state: { kind: "loading" },
@@ -92,6 +94,7 @@ export const createConversationDirectoryStore = (
                 const sessions = await requests.managedSessions(botId, signal);
                 signal.throwIfAborted();
                 set({ state: { kind: "ready", sessions } });
+                onLoaded(sessions);
             } catch (cause) {
                 if (!signal.aborted) {
                     if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {
