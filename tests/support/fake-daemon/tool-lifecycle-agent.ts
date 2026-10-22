@@ -87,20 +87,6 @@ export function createToolLifecycleAgent() {
                     if (prompt === "complete unfinished tools") {
                         return { stopReason: "end_turn" };
                     }
-                    if (prompt === "hold tools across history pages") {
-                        for (let index = 0; index < 250; index += 1) {
-                            const event: acp.SessionNotification = {
-                                sessionId,
-                                update: {
-                                    sessionUpdate: "agent_message_chunk",
-                                    messageId: crypto.randomUUID(),
-                                    content: { type: "text", text: `Progress item ${index}` },
-                                },
-                            };
-                            history.push(event);
-                            await context.client.notify(acp.methods.client.session.update, event);
-                        }
-                    }
                     const finished = Promise.withResolvers<acp.PromptResponse>();
                     const abort = () => finished.resolve({ stopReason: "cancelled" });
                     signal.addEventListener("abort", abort, { once: true });
