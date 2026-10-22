@@ -512,7 +512,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             if (child?.pid !== undefined && child.exitCode === null && child.signalCode === null) {
                 const exited = once(child, "exit", { signal: AbortSignal.timeout(10000) });
                 child.kill("SIGKILL");
-                await exited;
+                try {
+                    await exited;
+                } catch {
+                    // Cleanup must not replace the launch failure or prevent its diagnostic from being written.
+                }
             }
             signal.throwIfAborted();
             if (errorCode(cause) === "RUNTIME_NOT_INSTALLED") {
