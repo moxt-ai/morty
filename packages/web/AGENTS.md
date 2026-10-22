@@ -22,9 +22,20 @@ These rules apply to `packages/web`. Repository-wide rules in the root `AGENTS.m
 
 ## Components and views
 
-- Components and views consume readonly view-model state and invoke store actions. Keep them focused on rendering and interaction wiring.
-- Components may own ephemeral DOM-only state such as focus targets, element measurements, disclosure/popover visibility, and uncontrolled input refs.
-- Keep API calls, domain validation, retries, polling, error translation, and business-state transitions out of `.tsx` files.
+### Components
+
+- `src/components` holds files that are pure UI or render read-only data. Components render what they receive and stay focused on rendering and interaction wiring.
+- React hooks are allowed in components so developers can implement complex animation, visual effects, and better UI/UX.
+- Components must not import `src/views`, and must not reference business lifecycle or resource management. Keep API calls, domain validation, retries, polling, error translation, and business-state transitions out of components.
+- Components may own ephemeral DOM-only state such as focus targets, element measurements, disclosure/popover visibility, uncontrolled input refs, and effects that bind and release browser or DOM resources such as listeners, timers, observers, and object URLs.
+
+### Views
+
+- `src/views` holds heavy business components and business logic. Views consume readonly view-model state and invoke store actions.
+- React hooks such as `useRef`, `useMemo`, `useState`, `useEffect`, and the rest are forbidden in views.
+- View state is managed by the view-model layer (Zustand stores) and must have an explicit business lifecycle.
+- Data flows into views from route loaders, DOM callbacks such as user interactions and network requests, and DOM attach/detach through the `onAttach(element)` pattern.
+- DOM attach/detach is a workaround to reconsider later; prefer explicit state and callback flow when a view can be expressed without it.
 - Routing remains in views, but route loading and route-level business state belong in view-model stores. Pass navigation as a callback when a completed workflow needs it.
 
 ## Testing
