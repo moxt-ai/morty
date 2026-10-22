@@ -7,6 +7,7 @@ import { Button } from "../ui/cloud-button.tsx";
 import { Dialog } from "../ui/dialog.tsx";
 import { MortyTooltipContent } from "../ui/morty-tooltip-content.tsx";
 import { Popover } from "../ui/popover.tsx";
+import { ScrollEdgeFade } from "../utils/scroll-edge-fade.tsx";
 
 // Clips the start of the path so its leaf stays visible, fading the cut edge out
 // gradually; the owning button's title tooltip carries the full path on hover.
@@ -84,7 +85,7 @@ export function CwdSelector({
                         side="top"
                         sideOffset={10}
                     >
-                        <div className="max-h-80 overflow-y-auto">
+                        <ScrollEdgeFade fadeFromClassName="from-white" className="max-h-80 overflow-y-auto">
                             {viewModel.recentCwds.map((recent) => (
                                 <div className="flex items-center gap-0.5" key={recent.directoryId}>
                                     <button
@@ -117,7 +118,7 @@ export function CwdSelector({
                                     </button>
                                 </div>
                             ))}
-                        </div>
+                        </ScrollEdgeFade>
                         <div className="mt-1 border-t border-border pt-1">
                             <button
                                 className="flex h-10 w-full items-center gap-2 rounded-xl px-2.5 text-left text-[13px] font-medium hover:bg-accent"
@@ -179,9 +180,12 @@ export function CwdSelector({
                                         </p>
                                     )}
                                     {directory !== null && (
-                                        <ul
+                                        <ScrollEdgeFade
+                                            scrollElement="ul"
                                             aria-label={`Folders in ${directory.directoryLabel}`}
-                                            className={`max-h-64 overflow-y-auto p-2 ${directoryNavigationDisabled ? "opacity-50" : ""}`}
+                                            fadeFromClassName="from-surface-subtle"
+                                            frameClassName={directoryNavigationDisabled ? "opacity-50" : ""}
+                                            className="max-h-64 overflow-y-auto p-2"
                                         >
                                             {directory.parentDirectoryId.length > 0 && (
                                                 <li>
@@ -219,7 +223,7 @@ export function CwdSelector({
                                                     </button>
                                                 </li>
                                             ))}
-                                        </ul>
+                                        </ScrollEdgeFade>
                                     )}
                                 </>
                             )}

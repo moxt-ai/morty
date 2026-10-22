@@ -21,6 +21,7 @@ import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { MortyAlert } from "../../components/ui/morty-alert.tsx";
 import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.tsx";
+import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { useDesktopChatLayout } from "../../components/utils/use-desktop-chat-layout.ts";
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
@@ -580,15 +581,18 @@ export function ConversationSidebar({
                                         </Button>
                                     </SidebarActionTooltip>
                                 </div>
-                                <div
+                                <ScrollEdgeFade
                                     id="chat-conversations"
+                                    fadeFromClassName="from-sidebar"
+                                    topFadeClassName="top-6 h-6"
+                                    frameClassName="col-span-2 -ml-3 -mr-3 box-border flex min-h-0 min-w-0 w-[calc(100%+24px)] max-w-none flex-1 flex-col max-sm:row-start-2"
                                     className={cn(
-                                        "col-span-2 -ml-3 -mr-3 box-border block min-h-0 min-w-0 w-[calc(100%+24px)] max-w-none flex-1 space-y-0 overflow-y-auto px-3 max-sm:row-start-2 max-sm:max-h-none sm:max-h-none",
+                                        "min-h-0 flex-1 space-y-0 overflow-y-auto px-3",
                                         mortyThinScrollbarClassName,
                                     )}
                                 >
                                     <ManagedSessionDirectoryList {...sessionListProps} />
-                                </div>
+                                </ScrollEdgeFade>
                             </Tooltip.Provider>
                         </div>
                     )}
@@ -944,15 +948,18 @@ export function ConversationSidebar({
                                       </Button>
                                   </div>
                               </header>
-                              <div
+                              <ScrollEdgeFade
                                   id="chat-conversations-mobile"
+                                  fadeFromClassName="from-card"
+                                  topFadeClassName="top-6 h-6"
+                                  frameClassName="flex min-h-0 flex-1 flex-col"
                                   className={cn(
                                       "min-h-0 flex-1 space-y-0 overflow-y-auto overscroll-contain px-2 pb-2",
                                       mortyThinScrollbarClassName,
                                   )}
                               >
                                   <ManagedSessionDirectoryList {...sessionListProps} />
-                              </div>
+                              </ScrollEdgeFade>
                           </div>
                       </>,
                       document.body,

@@ -26,6 +26,7 @@ import { WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { LinkButton } from "../../components/ui/link-button.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
+import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { useDesktopChatLayout } from "../../components/utils/use-desktop-chat-layout.ts";
 import { cn } from "../../lib/utils.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
@@ -650,8 +651,10 @@ function MobiusSessionPaneBody({
                     }
                 />
                 {(interactions.elicitations.length > 0 || interactions.permissions.length > 0) && (
-                    <div
-                        className={`${chatSessionColumnClassName} mt-4 max-h-[50vh] shrink-0 overflow-y-auto [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin] sm:mt-5`}
+                    <ScrollEdgeFade
+                        fadeFromClassName="from-card"
+                        frameClassName={`${chatSessionColumnClassName} mt-4 shrink-0 sm:mt-5`}
+                        className="max-h-[50vh] overflow-y-auto [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]"
                     >
                         <SessionInteractionCards
                             elicitations={interactions.elicitations}
@@ -662,7 +665,7 @@ function MobiusSessionPaneBody({
                             onPermissionResponse={respondToPermission}
                             onStop={() => run(pane.store.getState().stop)}
                         />
-                    </div>
+                    </ScrollEdgeFade>
                 )}
                 <BotChatComposer
                     attachmentModel={attachmentModel}

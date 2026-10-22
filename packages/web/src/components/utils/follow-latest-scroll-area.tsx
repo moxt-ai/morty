@@ -45,7 +45,7 @@ export function FollowLatestScrollArea({
     followThreshold = 1,
     followRevision = null,
     showTopFade = false,
-    topFadeClassName = "from-card/90",
+    topFadeClassName = "from-card",
     className,
     onScroll,
     ...props

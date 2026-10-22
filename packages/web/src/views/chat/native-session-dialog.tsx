@@ -3,6 +3,7 @@ import type { StoreApi } from "zustand/vanilla";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
+import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { NativeSessionStore } from "../../view-models/chat/native-session-store.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
@@ -139,7 +140,11 @@ export function NativeSessionDialog({
                         </div>
                     )}
                     {model.directory.kind === "ready" && model.directory.entries.length > 0 && (
-                        <div className="hidden min-h-0 flex-1 space-y-1 overflow-y-auto sm:block">
+                        <ScrollEdgeFade
+                            fadeFromClassName="from-card"
+                            frameClassName="hidden min-h-0 flex-1 sm:flex sm:flex-col"
+                            className="min-h-0 flex-1 space-y-1 overflow-y-auto"
+                        >
                             {model.directory.entries.map((entry) => (
                                 <button
                                     type="button"
@@ -163,7 +168,7 @@ export function NativeSessionDialog({
                                     </span>
                                 </button>
                             ))}
-                        </div>
+                        </ScrollEdgeFade>
                     )}
                     {model.directory.kind === "ready" && model.directory.nextCursor !== null && (
                         <div className="hidden sm:block">
@@ -179,37 +184,45 @@ export function NativeSessionDialog({
                 </section>
                 <section
                     aria-label="Selected session preview"
-                    className={`min-w-0 overflow-y-auto p-4 sm:p-6 ${model.preview.kind === "empty" ? "flex items-center justify-center" : ""}`}
+                    className="flex min-h-0 min-w-0 flex-col overflow-hidden"
                 >
-                    {model.preview.kind === "empty" && (
-                        <p className="text-center text-muted-foreground">Select a session to preview its history.</p>
-                    )}
-                    {model.preview.kind === "loading" && <NativeSessionPreviewSkeleton />}
-                    {model.preview.kind === "failed" && (
-                        <p role="alert" className="text-destructive">
-                            {model.preview.message}
-                        </p>
-                    )}
-                    {model.preview.kind === "ready" && (
-                        <div className="space-y-4">
-                            <h2 className="font-semibold">{model.preview.entry.title || "Untitled session"}</h2>
-                            {model.preview.content.messages.length === 0 && <p>No events in this session.</p>}
-                            {model.preview.content.messages.map((message) => (
-                                <MobiusSessionMessage
-                                    deliveryUnknownUserMessageId={null}
-                                    failureApproval={{ kind: "unavailable" }}
-                                    key={message.firstEvent.eventId}
-                                    message={message}
-                                    onRemoveUnknownDelivery={() => undefined}
-                                    onRetryUnknownDelivery={() => undefined}
-                                    openLocalFile={() => undefined}
-                                />
-                            ))}
-                            {model.preview.content.truncated && (
-                                <p className="text-muted-foreground">Showing a partial event preview.</p>
-                            )}
-                        </div>
-                    )}
+                    <ScrollEdgeFade
+                        fadeFromClassName="from-card"
+                        frameClassName="min-h-0 flex-1"
+                        className={`min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 ${model.preview.kind === "empty" ? "flex items-center justify-center" : ""}`}
+                    >
+                        {model.preview.kind === "empty" && (
+                            <p className="text-center text-muted-foreground">
+                                Select a session to preview its history.
+                            </p>
+                        )}
+                        {model.preview.kind === "loading" && <NativeSessionPreviewSkeleton />}
+                        {model.preview.kind === "failed" && (
+                            <p role="alert" className="text-destructive">
+                                {model.preview.message}
+                            </p>
+                        )}
+                        {model.preview.kind === "ready" && (
+                            <div className="space-y-4">
+                                <h2 className="font-semibold">{model.preview.entry.title || "Untitled session"}</h2>
+                                {model.preview.content.messages.length === 0 && <p>No events in this session.</p>}
+                                {model.preview.content.messages.map((message) => (
+                                    <MobiusSessionMessage
+                                        deliveryUnknownUserMessageId={null}
+                                        failureApproval={{ kind: "unavailable" }}
+                                        key={message.firstEvent.eventId}
+                                        message={message}
+                                        onRemoveUnknownDelivery={() => undefined}
+                                        onRetryUnknownDelivery={() => undefined}
+                                        openLocalFile={() => undefined}
+                                    />
+                                ))}
+                                {model.preview.content.truncated && (
+                                    <p className="text-muted-foreground">Showing a partial event preview.</p>
+                                )}
+                            </div>
+                        )}
+                    </ScrollEdgeFade>
                 </section>
             </div>
             <footer className="mt-5 flex justify-end gap-2">

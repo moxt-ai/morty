@@ -2,6 +2,7 @@ import { CornerUpLeft, LoaderCircle, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import type { ChatQueuedMessage } from "../../view-models/chat/session-message-queue-store.ts";
+import { ScrollEdgeFade } from "../utils/scroll-edge-fade.tsx";
 
 function QueueAction({
     label,
@@ -55,7 +56,11 @@ export function ChatMessageQueue({
                     </span>
                     <span className="text-xs tabular-nums text-copy-tertiary">{messages.length.toString()}</span>
                 </div>
-                <ol className="max-h-36 overflow-y-auto p-2">
+                <ScrollEdgeFade
+                    scrollElement="ol"
+                    fadeFromClassName="from-white"
+                    className="max-h-36 overflow-y-auto p-2"
+                >
                     {messages.map((message) => {
                         const pending = message.kind !== "queued";
                         return (
@@ -101,7 +106,7 @@ export function ChatMessageQueue({
                             </li>
                         );
                     })}
-                </ol>
+                </ScrollEdgeFade>
             </div>
         </section>
     );
