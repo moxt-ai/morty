@@ -245,6 +245,7 @@ export class BotChatApi {
     readonly #sessionTransports = new Map<string, BrowserSessionTransport>();
     readonly #subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
     readonly #waitForChange: (request: Request) => Promise<void>;
+    readonly #waitForBridge: (signal: AbortSignal) => Promise<void>;
     readonly readBot: ManagementApi["readBot"];
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
@@ -253,6 +254,7 @@ export class BotChatApi {
         readonly getToken: (signal: AbortSignal) => Promise<string | null>;
         readonly subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
         readonly waitForChange: (request: Request) => Promise<void>;
+        readonly waitForBridge: (signal: AbortSignal) => Promise<void>;
     }) {
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
         this.#projectId = v.parse(identifier, options.projectId);
@@ -260,9 +262,12 @@ export class BotChatApi {
         this.#getToken = options.getToken;
         this.#subscribe = options.subscribe;
         this.#waitForChange = options.waitForChange;
+        this.#waitForBridge = options.waitForBridge;
         const management = new ManagementApi(options);
         this.readBot = management.readBot;
     }
+    /** Resolves once the Chat WebSocket bridge is connected again. */
+    readonly waitForBridge = async (signal: AbortSignal): Promise<void> => await this.#waitForBridge(signal);
     readonly close = (): void => {
         for (const transport of this.#sessionTransports.values()) {
             transport.close();

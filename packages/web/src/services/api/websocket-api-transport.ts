@@ -97,6 +97,11 @@ interface PendingDiagnostic {
     readonly startedAt: number;
 }
 
+interface PendingBridgeWaiter {
+    readonly reject: (cause: unknown) => void;
+    readonly resolve: () => void;
+}
+
 interface PendingEventStream extends PendingWatch {
     /** The subscription frame replayed after the bridge reconnects. */
     readonly frame: string;
@@ -110,6 +115,7 @@ export class WebSocketApiTransport {
     readonly #eventStreams = new Map<string, PendingEventStream>();
     readonly #diagnostics = new Map<string, PendingDiagnostic>();
     readonly #watches = new Map<string, PendingWatch>();
+    readonly #bridgeWaiters = new Set<PendingBridgeWaiter>();
     readonly #lifetime = new AbortController();
     #state: BridgeState = { kind: "disconnected" };
     #desired = false;
@@ -134,6 +140,39 @@ export class WebSocketApiTransport {
         // immediately instead of failing fast while a timer is pending.
         this.#cancelReconnect();
         this.#reconnectAttempt = 0;
+    };
+
+    /**
+     * Resolves once the bridge is connected, so a workflow whose background
+     * watch was dropped with the socket can re-arm it. It never re-issues the
+     * caller's request: the caller decides what is safe to repeat.
+     */
+    readonly waitForBridge = async (signal: AbortSignal): Promise<void> => {
+        signal.throwIfAborted();
+        if (this.#disposed) {
+            throw bridgeClosed();
+        }
+        if (this.#state.kind === "connected" && this.#state.socket.readyState === WebSocket.OPEN) {
+            return;
+        }
+        await new Promise<void>((resolve, reject) => {
+            const waiter: PendingBridgeWaiter = {
+                resolve: () => {
+                    signal.removeEventListener("abort", abort);
+                    resolve();
+                },
+                reject: (cause) => {
+                    signal.removeEventListener("abort", abort);
+                    reject(cause);
+                },
+            };
+            const abort = () => {
+                this.#bridgeWaiters.delete(waiter);
+                waiter.reject(signal.reason);
+            };
+            this.#bridgeWaiters.add(waiter);
+            signal.addEventListener("abort", abort, { once: true });
+        });
     };
 
     readonly fetch = async (request: Request): Promise<Response> => {
@@ -387,6 +426,10 @@ export class WebSocketApiTransport {
         for (const subscriptionId of [...this.#eventStreams.keys()]) {
             this.#settleEventStream(subscriptionId)?.reject(cause);
         }
+        for (const waiter of [...this.#bridgeWaiters]) {
+            this.#bridgeWaiters.delete(waiter);
+            waiter.reject(cause);
+        }
     };
 
     readonly #closeSocket = (reason: string): void => {
@@ -500,6 +543,13 @@ export class WebSocketApiTransport {
         const timer = this.#reconnectTimer;
         this.#reconnectTimer = null;
         timer?.cancel();
+    };
+
+    readonly #notifyConnected = (): void => {
+        for (const waiter of [...this.#bridgeWaiters]) {
+            this.#bridgeWaiters.delete(waiter);
+            waiter.resolve();
+        }
     };
 
     /** Re-registers live subscriptions so a reconnect never surfaces to subscribers. */
@@ -622,6 +672,7 @@ export class WebSocketApiTransport {
                 // while the attempt was in flight.
                 this.#cancelReconnect();
                 this.#reconnectAttempt = 0;
+                this.#notifyConnected();
                 this.#replaySubscriptions(socket);
                 resolve(socket);
             };

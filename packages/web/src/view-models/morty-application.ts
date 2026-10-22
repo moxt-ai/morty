@@ -122,6 +122,7 @@ export function createMortyApplication(options: {
             origin: options.origin,
             projectId: identity.projectId,
             subscribe: transport.subscribe,
+            waitForBridge: transport.waitForBridge,
             waitForChange: transport.waitForChange,
         });
         workspace = createChatWorkspace({
@@ -135,6 +136,7 @@ export function createMortyApplication(options: {
                 requests: (saved) =>
                     new BotChatApi({
                         fetchRequest: transport.fetch,
+                        waitForBridge: transport.waitForBridge,
                         getToken: async (signal) => {
                             signal.throwIfAborted();
                             return saved.token;

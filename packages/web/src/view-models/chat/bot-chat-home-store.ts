@@ -186,6 +186,7 @@ export const createBotChatHomeStore = (
         | "waitForRuntimeConfigurationChange"
         | "runtimeConfiguration"
         | "directory"
+        | "waitForBridge"
     >,
     options: {
         readonly botId: string;
@@ -288,6 +289,40 @@ export const createBotChatHomeStore = (
                         );
                     }
                 };
+                /**
+                 * A dropped socket takes every watch with it. Wait for the
+                 * bridge to return, then re-arm the safe watches: this re-reads
+                 * runtime configuration and pairing, and never re-issues a
+                 * fork/import load that the user did not ask to repeat.
+                 */
+                const resumeAfterBridge = async (bridgeSignal: AbortSignal): Promise<void> => {
+                    await requests.waitForBridge(bridgeSignal);
+                    bridgeSignal.throwIfAborted();
+                    const configuration = await requests.runtimeConfiguration(botId, bridgeSignal);
+                    bridgeSignal.throwIfAborted();
+                    options.onRuntimeConfiguration?.(configuration);
+                    const reason = setupReason(configuration);
+                    set((current) => ({
+                        runtimeConfiguration: configuration,
+                        connectionStatus: runtimeConnectionStatus(configuration),
+                        ...(current.selection.kind === "draft" && reason !== null
+                            ? { view: { kind: "setup" as const, botId, reason } }
+                            : {}),
+                    }));
+                    if (get().view.kind === "setup") {
+                        await requests.waitForSetupChange(botId, bridgeSignal);
+                        bridgeSignal.throwIfAborted();
+                        set((current) => ({
+                            selection: transitionConversationSelection(current.selection, {
+                                kind: "retry-requested",
+                            }),
+                            revision: current.revision + 1,
+                        }));
+                        onRestart();
+                        return;
+                    }
+                    await watchRuntimeConfigurationChanges();
+                };
                 try {
                     const current = get();
                     if (
@@ -295,8 +330,8 @@ export const createBotChatHomeStore = (
                         current.selection.kind === "loading" &&
                         current.selection.target.kind === "session"
                     ) {
-                        const target = current.selection.target;
                         opened = true;
+                        const target = current.selection.target;
                         const session = await requests.managedSession(botId, target.sessionId, signal);
                         signal.throwIfAborted();
                         set((state) => ({
@@ -460,11 +495,33 @@ export const createBotChatHomeStore = (
                         return;
                     }
                     if (isChatBridgeError(cause)) {
-                        // A dropped bridge leaves the view alone: Chat keeps
-                        // whatever it showed. The next user action retries
-                        // through the normal call path and reports its own
-                        // failure, exactly like any other failed request.
+                        // A dropped bridge is an ordinary failed call. An opened
+                        // conversation keeps whatever it showed, and the next
+                        // user action reports its own failure; a request the user
+                        // is still waiting on must not strand the page in
+                        // loading, so it becomes an operable failure state.
                         console.error("The Chat WebSocket bridge failed to complete a request.", cause);
+                        const message = formatError(cause, "Chat is unavailable.");
+                        const bridgeTarget = get().selection;
+                        if (!opened && bridgeTarget.kind === "loading") {
+                            set({
+                                selection: transitionConversationSelection(bridgeTarget, {
+                                    kind: "session-load-failed",
+                                    message,
+                                    target: bridgeTarget.target,
+                                }),
+                                view: { kind: "failed", message },
+                            });
+                            return;
+                        }
+                        if (!opened) {
+                            set({ view: { kind: "failed", message } });
+                            return;
+                        }
+                        // The watches below were dropped with the socket. Resume
+                        // them once the bridge is back so agent and runtime
+                        // changes still reach this page.
+                        await resumeAfterBridge(signal);
                         return;
                     }
                     if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {

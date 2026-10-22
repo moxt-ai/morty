@@ -62,3 +62,41 @@ test("Given an open conversation, When the Chat WebSocket bridge drops, Then no 
     await app.waitForView(() => expect(agentAnswered(app, "Codex turn 2: After the bridge returned")).toBe(true));
     expect(connectionDialog()).toBeNull();
 });
+
+test("Given a dropped bridge that reconnected, When the Runtime changes, Then the page still follows it", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const failure = app.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.getAttribute("data-connection-status") === "connected",
+    );
+    const draft = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    await sendPrompt(app, draft, "Before the dropped watch");
+    await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: Before the dropped watch")).toBe(true));
+
+    // The drop takes every watch with it; the reconnect must re-arm them.
+    app.transport.disconnect();
+    await act(async () => {
+        clock.advanceBy(1_000);
+    });
+    await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+
+    // A Runtime change after the reconnect must still reach this page. Before
+    // the watch was re-armed, this never refreshed and the page stayed
+    // "connected" forever.
+    await app.daemon?.disconnect();
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.getAttribute("data-connection-status") === "disconnected",
+    );
+    void failure;
+});
