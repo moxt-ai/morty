@@ -312,6 +312,7 @@ function SessionConversationTitleBar({
                 <HarnessMark
                     agentRef={agentRef || agentLabel}
                     appearance="line"
+                    className="text-copy-secondary"
                     label={agentLabel}
                     testId={dataTestId.sessionTitleHarnessMark}
                 />
@@ -338,6 +339,7 @@ function SessionConversationTitleBar({
             <HarnessMark
                 agentRef={agentRef || agentLabel}
                 appearance="line"
+                className="text-copy-secondary"
                 label={agentLabel}
                 testId={dataTestId.sessionTitleHarnessMark}
             />

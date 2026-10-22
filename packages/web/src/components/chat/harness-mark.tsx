@@ -60,11 +60,13 @@ function identifyHarnessProduct(agentRef: string, label: string): HarnessProduct
 export function HarnessMark({
     agentRef,
     appearance = "badge",
+    className,
     label,
     testId,
 }: {
     readonly agentRef: string;
     readonly appearance?: "badge" | "line";
+    readonly className?: string;
     readonly label: string;
     readonly testId: string;
 }) {
@@ -73,7 +75,7 @@ export function HarnessMark({
         return (
             <svg
                 aria-hidden="true"
-                className="size-[17px] shrink-0"
+                className={cn("size-[17px] shrink-0", className)}
                 data-harness-product={product}
                 data-testid={testId}
                 fill="none"
@@ -91,7 +93,7 @@ export function HarnessMark({
         return (
             <svg
                 aria-hidden="true"
-                className="size-4 shrink-0"
+                className={cn("size-4 shrink-0", className)}
                 data-harness-product={product}
                 data-testid={testId}
                 fill="none"
@@ -108,6 +110,7 @@ export function HarnessMark({
             className={cn(
                 "inline-flex size-5 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground",
                 MARK_BACKGROUNDS[product],
+                className,
             )}
             data-harness-product={product}
             data-testid={testId}
