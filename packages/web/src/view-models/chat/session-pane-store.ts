@@ -19,7 +19,6 @@ import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
-import { recordBrowserError } from "../../services/diagnostics/browser-diagnostics.ts";
 import { centralIndexedDB, sessionLastSentMessageEntry } from "../../services/indexed-db/central-indexed-db.ts";
 import { centralSessionStorage, sessionDraftEntry } from "../../services/session-storage/central-session-storage.ts";
 import type { Clock } from "../../services/time/clock.ts";
@@ -65,6 +64,7 @@ import {
     sessionProjectionPagination,
     transitionSessionProjection,
 } from "./session-projection.ts";
+import { createSessionSettingsStore } from "./session-settings-store.ts";
 import { createSessionTaskControlsStore, type SessionTaskControlsStore } from "./session-task-controls.ts";
 import { createSessionTurnLedger, type SessionActiveTurn } from "./session-turn-ledger.ts";
 
@@ -100,7 +100,6 @@ export interface SessionPaneStore {
     readonly historyLoading: boolean;
     readonly historyRevision: number;
     readonly hasOlderHistory: boolean;
-    readonly options: readonly SessionConfigOption[];
     readonly draft: string;
     /**
      * Bumped after a user-submitted action that appends content (send, queue,
@@ -352,6 +351,11 @@ export function createSessionPaneModel(options: {
     // harness and the settings it runs with carry into New Session.
     saveLastHarnessPreference(botId, session.agentRef);
     saveLastAgentSettings(botId, session.agentRef, session.result.ready.configOptions);
+    const settings = createSessionSettingsStore({
+        botId,
+        agentRef: session.agentRef,
+        initial: session.result.ready.configOptions,
+    });
     const openedActiveTurn: SessionActiveTurn =
         session.result.action === "conversation" && session.result.activeTurn.kind === "running"
             ? {
@@ -401,9 +405,6 @@ export function createSessionPaneModel(options: {
     // starts.
     const queuedInitialCommandId = options.initialMessage?.commandId ?? options.unconfirmedMessage?.commandId ?? null;
     const isQueuedInitialMessage = (commandId: string): boolean => commandId === queuedInitialCommandId;
-    // Counts adopted settings so a slower read cannot replace settings observed after it started.
-    let settingsRevision = 0;
-    let settingsRead: AbortController | null = null;
     const instructionUri = "morty://bot/instructions";
     const withInstructions = <T extends { readonly resources: readonly PromptResource[] }>(request: T): T => ({
         ...request,
@@ -433,7 +434,7 @@ export function createSessionPaneModel(options: {
                     ...request,
                     agentId: session.agentRef,
                     directoryId: session.result.ready.directoryId,
-                    sessionConfigurations: sessionConfigurations(store.getState().options),
+                    sessionConfigurations: sessionConfigurations(settings.getState().options),
                 }),
                 signal,
             );
@@ -599,11 +600,6 @@ export function createSessionPaneModel(options: {
             }
         };
         let historyLoadController: AbortController | null = null;
-        const adoptSettings = (configOptions: readonly SessionConfigOption[]): void => {
-            settingsRevision += 1;
-            saveLastAgentSettings(botId, session.agentRef, configOptions);
-            set({ options: configOptions });
-        };
         const commitProjection = (input: SessionProjectionInput): readonly SessionProjectionEffect[] => {
             const result = transitionSessionProjection(projection, input);
             projection = result.state;
@@ -618,7 +614,7 @@ export function createSessionPaneModel(options: {
                     continue;
                 }
                 if (effect.config !== undefined) {
-                    adoptSettings(effect.config);
+                    settings.getState().adopt(effect.config);
                 }
                 if (effect.title !== undefined) {
                     set({ title: effect.title });
@@ -626,40 +622,6 @@ export function createSessionPaneModel(options: {
                 }
             }
             return result.effects;
-        };
-        /**
-         * Reads the authoritative settings from the daemon. A daemon restart
-         * rebuilds the event log without config updates, so the log alone
-         * cannot speak for them. The read only refines what the pane shows:
-         * the conversation stays usable while it runs, a Runtime that cannot
-         * answer (such as a release from before settings reads) keeps the
-         * current settings, and settings adopted after it started win.
-         */
-        const readSettingsInBackground = (connected: MobiusClient, parentSignal: AbortSignal): void => {
-            settingsRead?.abort(new DOMException("A newer settings read replaced this one", "AbortError"));
-            const controller = new AbortController();
-            settingsRead = controller;
-            const revision = settingsRevision;
-            const signal = AbortSignal.any([parentSignal, controller.signal, AbortSignal.timeout(45_000)]);
-            void connected.sessions
-                .readConfiguration(sessionId, signal)
-                .then(
-                    (result) => {
-                        if (!parentSignal.aborted && !controller.signal.aborted && settingsRevision === revision) {
-                            adoptSettings(result.configOptions);
-                        }
-                    },
-                    (cause: unknown) => {
-                        if (!parentSignal.aborted && !controller.signal.aborted) {
-                            recordBrowserError("read-session-settings", cause);
-                        }
-                    },
-                )
-                .finally(() => {
-                    if (settingsRead === controller) {
-                        settingsRead = null;
-                    }
-                });
         };
         const loadProjectionHistory = async (
             effect: Extract<SessionProjectionEffect, { readonly kind: "load-history" }>,
@@ -712,7 +674,12 @@ export function createSessionPaneModel(options: {
             }
             // A reloaded log without any config event is the post-restart shape.
             if (historyReloaded && projection.kind === "established" && projection.config === null) {
-                readSettingsInBackground(connected, signal);
+                settings
+                    .getState()
+                    .readInBackground(
+                        (readSignal) => connected.sessions.readConfiguration(sessionId, readSignal),
+                        signal,
+                    );
             }
         };
         // A closed Session runs nothing. Settles the turn, queue and interactions it was holding, the way a
@@ -756,7 +723,6 @@ export function createSessionPaneModel(options: {
             historyLoading: false,
             historyRevision: 0,
             hasOlderHistory: false,
-            options: session.result.ready.configOptions,
             draft: options.initialMessage?.content ?? centralSessionStorage.read(draftEntry) ?? "",
             harnesses: [{ agentRef: session.agentRef, label: session.agentRef, value: session.agentRef }],
             followRevision: 0,
@@ -1465,7 +1431,7 @@ export function createSessionPaneModel(options: {
                         AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
                     );
                     signal.throwIfAborted();
-                    adoptSettings(result.configOptions);
+                    settings.getState().adopt(result.configOptions);
                     set({ operation: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();
@@ -1702,6 +1668,7 @@ export function createSessionPaneModel(options: {
     return {
         composerAttachments,
         interactions,
+        settings,
         store,
         delivery,
         filePreview,

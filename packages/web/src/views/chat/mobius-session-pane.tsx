@@ -615,6 +615,7 @@ function MobiusSessionPaneBody({
     const model = useStore(pane.store);
     const attachmentModel = useStore(pane.composerAttachments);
     const interactionModel = useStore(pane.interactions);
+    const settingsModel = useStore(pane.settings);
     const interactions = sessionInteractionPresentation(interactionModel);
     const preview = useStore(pane.filePreview);
     const delivery = useStore(pane.delivery);
@@ -892,7 +893,7 @@ function MobiusSessionPaneBody({
                                     harnesses.find((harness) => harness.value.split(":").at(-1) === pane.agentRef)
                                         ?.value ?? pane.agentRef,
                             },
-                            ...model.options.map((option) =>
+                            ...settingsModel.options.map((option) =>
                                 option.type === "boolean"
                                     ? {
                                           checked: option.booleanValue,

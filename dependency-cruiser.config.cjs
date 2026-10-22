@@ -39,7 +39,7 @@ module.exports = {
             comment:
                 "The Session pane composes its contracts; a contract importing the pane would make the pane a dependency of its own parts.",
             from: {
-                path: "^packages/web/src/view-models/chat/session-(connection|interaction-store|lifecycle|turn-ledger)\\.ts$",
+                path: "^packages/web/src/view-models/chat/session-(connection|interaction-store|lifecycle|settings-store|turn-ledger)\\.ts$",
             },
             to: { path: "^packages/web/src/view-models/chat/session-pane-store\\.ts$" },
         },
@@ -47,12 +47,12 @@ module.exports = {
             name: "session-pane-contracts-are-independent",
             severity: "error",
             comment:
-                "Connection, interactions and the turn ledger each own one part of the Session's state; the pane coordinates them.",
+                "Connection, interactions, settings and the turn ledger each own one part of the Session's state; the pane coordinates them.",
             from: {
-                path: "^packages/web/src/view-models/chat/session-(connection|interaction-store|turn-ledger)\\.ts$",
+                path: "^packages/web/src/view-models/chat/session-(connection|interaction-store|settings-store|turn-ledger)\\.ts$",
             },
             to: {
-                path: "^packages/web/src/view-models/chat/session-(connection|interaction-store|turn-ledger)\\.ts$",
+                path: "^packages/web/src/view-models/chat/session-(connection|interaction-store|settings-store|turn-ledger)\\.ts$",
             },
         },
         {
