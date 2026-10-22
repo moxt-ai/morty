@@ -64,6 +64,9 @@ export function SessionApplication({ application }: { readonly application: Mort
                         </li>
                     ))}
                 </ul>
+                <a className="mt-6 inline-block text-sm text-primary underline" href="/setup">
+                    Set up another computer
+                </a>
             </SetupCardShell>
         );
     }
@@ -86,6 +89,11 @@ function SetupApplication({ accessEnded }: { readonly accessEnded: boolean }) {
                     <p className="font-medium">Current access ended</p>
                     <p className="mt-1 text-muted-foreground">Your local agent and tasks keep running.</p>
                 </div>
+            )}
+            {window.location.pathname === "/setup" && (
+                <a className="mb-5 inline-block text-sm text-primary underline" href="/">
+                    Continue with saved access
+                </a>
             )}
             <p className="text-sm font-medium text-primary">Morty</p>
             <SetupCardTitle id="setup-title">Continue your coding session from your phone.</SetupCardTitle>

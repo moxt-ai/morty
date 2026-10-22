@@ -37,6 +37,10 @@ export const createAnonymousSessionStore = (fetchRequest: (request: Request) => 
             load: async (signal) => {
                 set({ state: { kind: "loading" } });
                 try {
+                    if (window.location.pathname === "/setup" && !hasIdentityScope()) {
+                        set({ state: { kind: "setup", notice: "none" } });
+                        return;
+                    }
                     const notice = centralSessionStorage.read(accessEndedNoticeEntry);
                     centralSessionStorage.remove(accessEndedNoticeEntry);
                     if (notice === "ended" && !hasIdentityScope()) {

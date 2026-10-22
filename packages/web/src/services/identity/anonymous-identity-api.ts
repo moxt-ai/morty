@@ -101,7 +101,7 @@ export class AnonymousIdentityApi {
 
     readonly loadSaved = async (signal: AbortSignal): Promise<readonly SavedAnonymousAccess[]> => {
         const saved: SavedAnonymousAccess[] = [];
-        for (const scope of centralLocalStorage.read(anonymousScopesEntry) ?? []) {
+        for (const scope of (centralLocalStorage.read(anonymousScopesEntry) ?? []).toReversed()) {
             const identity = await this.#restoreScope(scope, signal);
             signal.throwIfAborted();
             if (identity === null) {

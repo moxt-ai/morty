@@ -25,6 +25,20 @@ for (const width of [1440, 390]) {
             await page.reload();
             await expect(page.getByRole("article", { name: "Agent response" })).toContainText(message);
         }
+        if (width >= 640) {
+            await page.getByRole("button", { name: "User menu" }).click();
+            await page.getByRole("menuitem", { name: "Set up another computer" }).click();
+        } else {
+            await page.getByRole("button", { name: "Open navigation" }).click();
+            await page.getByRole("link", { name: "Set up another computer" }).click();
+        }
+        await expect(page.getByRole("textbox", { name: "Agent setup instruction" })).toBeVisible();
+        await page.screenshot({ path: testInfo.outputPath(`setup-another-computer-${width}.png`), fullPage: true });
+        await page.reload();
+        await expect(page.getByRole("textbox", { name: "Agent setup instruction" })).toBeVisible();
+        await page.getByRole("link", { name: "Continue with saved access" }).click();
+        await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
+        await expect(page).toHaveURL((url) => url.searchParams.get("identity") === scope);
         await page.screenshot({ path: testInfo.outputPath(`saved-access-${width}.png`), fullPage: true });
     });
 }

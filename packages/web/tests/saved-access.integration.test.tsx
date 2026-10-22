@@ -57,6 +57,16 @@ test("Given two saved identities, When I reopen Morty, Then I can explicitly con
     await home.waitForView(() => getByRole(document.body, "heading", { name: "Continue with saved access" }));
     const choices = getAllByRole(document.body, "link", { name: /Continue to/u });
     expect(choices).toHaveLength(2);
+    expect(new URL(choices[0]?.getAttribute("href") ?? "", window.location.origin).searchParams.get("identity")).toBe(
+        secondScope,
+    );
+    const setupLink = getByRole(document.body, "link", { name: "Set up another computer" });
+    await home.user.click(setupLink);
+    const setup = await home.reload();
+    await setup.waitForView(() => getByRole(document.body, "textbox", { name: "Agent setup instruction" }));
+    await setup.user.click(getByRole(document.body, "link", { name: "Continue with saved access" }));
+    const returned = await setup.reload();
+    await returned.waitForView(() => getByRole(document.body, "heading", { name: "Continue with saved access" }));
     const chosen = choices.find(
         (choice) =>
             new URL(choice.getAttribute("href") ?? "", window.location.origin).searchParams.get("identity") ===
@@ -65,8 +75,14 @@ test("Given two saved identities, When I reopen Morty, Then I can explicitly con
     if (chosen === undefined) {
         throw new Error("Expected the second saved identity to be offered.");
     }
-    await home.user.click(chosen);
-    const continued = await home.reload();
+    const currentChoice = getAllByRole(document.body, "link", { name: /Continue to/u }).find(
+        (choice) => choice.getAttribute("href") === chosen.getAttribute("href"),
+    );
+    if (currentChoice === undefined) {
+        throw new Error("Expected access to remain available after setup.");
+    }
+    await returned.user.click(currentChoice);
+    const continued = await returned.reload();
     await continued.queryElementByTestId(dataTestId.chatLanding);
     expect(new URL(window.location.href).searchParams.get("identity")).toBe(secondScope);
 });
@@ -137,4 +153,20 @@ test("Given two saved identities and one deleted Bot, When I reopen Morty, Then 
     window.history.replaceState(null, "", "/chat");
     const nextVisit = await home.reload();
     await nextVisit.queryElementByTestId(dataTestId.chatLanding);
+});
+
+test("Given a connected saved chat, When I choose to set up another computer, Then I can read the instruction and return to the same access", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ page: { kind: "bootstrap", identity: true }, connectAgent: true });
+    await app.queryElementByTestId(dataTestId.chatLanding);
+    const scope = new URL(window.location.href).searchParams.get("identity");
+    await app.user.click(getByRole(document.body, "button", { name: "User menu" }));
+    await app.user.click(getByRole(document.body, "menuitem", { name: "Set up another computer" }));
+    const setup = await app.reload();
+    await setup.waitForView(() => getByRole(document.body, "textbox", { name: "Agent setup instruction" }));
+    await setup.user.click(getByRole(document.body, "link", { name: "Continue with saved access" }));
+    const returned = await setup.reload();
+    await returned.queryElementByTestId(dataTestId.chatLanding);
+    expect(new URL(window.location.href).searchParams.get("identity")).toBe(scope);
 });

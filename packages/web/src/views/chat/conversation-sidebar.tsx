@@ -699,6 +699,13 @@ export function ConversationSidebar({
                                         label="Continue on another device"
                                         onClick={dialogs.openSharing}
                                     />
+                                    <a
+                                        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-muted"
+                                        href="/setup"
+                                    >
+                                        <Laptop aria-hidden="true" className="size-4" />
+                                        Set up another computer
+                                    </a>
                                     <BugReportButton appearance="option" daemonSource={sessionDiagnostics} />
                                     {access.state.kind !== "ended" ? (
                                         <>
@@ -751,6 +758,15 @@ export function ConversationSidebar({
                                             side="top"
                                             sideOffset={6}
                                         >
+                                            <DropdownMenu.Item asChild>
+                                                <a
+                                                    className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
+                                                    href="/setup"
+                                                >
+                                                    <Laptop aria-hidden="true" className="size-4" />
+                                                    Set up another computer
+                                                </a>
+                                            </DropdownMenu.Item>
                                             <DropdownMenu.Item
                                                 className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
                                                 onSelect={measureNetwork}
