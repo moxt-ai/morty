@@ -55,7 +55,7 @@ export function continuePreviewState(id: ContinuePreviewStateId): ContinueState 
         case "identity-redeeming":
             return { code: PREVIEW_CODE, kind: "identity-redeeming" };
         case "failed":
-            return { kind: "failed", message: "This transfer link is unavailable." };
+            return { kind: "failed", code: "preview", message: "This transfer link is unavailable." };
         case "invalid":
             return { kind: "invalid" };
     }

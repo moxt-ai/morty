@@ -5,7 +5,6 @@ import { useExternalStore } from "../../view-models/external-store.ts";
 import type { MortyApplication } from "../../view-models/morty-application.ts";
 import { App } from "../application/app.tsx";
 import { MobiusManagement } from "../applications/mobius-management.tsx";
-import { router as continuationRouter } from "./router.tsx";
 
 export function createSignedInRouter(application: MortyApplication) {
     const authorize = (signal: AbortSignal) => application.anonymousSession.getState().authorize(signal);
@@ -20,9 +19,11 @@ export function createSignedInRouter(application: MortyApplication) {
 export function SessionApplication({
     application,
     signedInRouter,
+    continuationRouter,
 }: {
     readonly application: MortyApplication;
     readonly signedInRouter: AnyRouter;
+    readonly continuationRouter: AnyRouter;
 }) {
     const { state } = useExternalStore(application.anonymousSession);
     const continuationPath = window.location.pathname.startsWith("/continue");
@@ -38,7 +39,15 @@ export function SessionApplication({
         return <App bugReportDialog={application.bugReportDialog} state={{ kind: "loading" }} />;
     }
     if (state.kind === "failed") {
-        return <App bugReportDialog={application.bugReportDialog} state={{ kind: "failed" }} />;
+        return (
+            <App
+                bugReportDialog={application.bugReportDialog}
+                state={{ kind: "failed", retry: application.reloadIdentity }}
+            />
+        );
+    }
+    if (state.kind === "invalid-link") {
+        return <App bugReportDialog={application.bugReportDialog} state={state} />;
     }
     // Every branch renders the same App component, so the tree — and the bug
     // report dialog host inside it — survives the loading → setup/active
@@ -47,7 +56,7 @@ export function SessionApplication({
         return (
             <App
                 bugReportDialog={application.bugReportDialog}
-                state={{ kind: "setup", accessEnded: state.notice === "access-ended" }}
+                state={{ kind: "setup", notice: state.notice, returnHref: state.returnHref }}
             />
         );
     }

@@ -12,13 +12,21 @@ import {
 
 export function ContinuePageContent({
     enterMorty,
+    continueHref = null,
     retry,
     state,
 }: {
     readonly enterMorty: () => void;
+    readonly continueHref?: string | null;
     readonly retry: () => void;
     readonly state: ContinueState;
 }) {
+    const fallback =
+        continueHref === null ? null : (
+            <a className="mt-5 inline-flex text-sm text-primary underline" href={continueHref}>
+                Continue on your last computer
+            </a>
+        );
     switch (state.kind) {
         case "session-opening":
         case "session-resuming":
@@ -56,6 +64,7 @@ export function ContinuePageContent({
                         <Button className={setupPrimaryButtonClassName} onClick={retry}>
                             Try again
                         </Button>
+                        {fallback}
                     </SetupCardSection>
                 </SetupCardShell>
             );
@@ -74,6 +83,12 @@ export function ContinuePageContent({
                 <SetupCardShell titleId="continue-title">
                     <SetupCardTitle id="continue-title">Continue in Morty</SetupCardTitle>
                     <SetupCardAlert>{state.message}</SetupCardAlert>
+                    <SetupCardSection>
+                        <Button className={setupPrimaryButtonClassName} onClick={retry}>
+                            Try again
+                        </Button>
+                        {fallback}
+                    </SetupCardSection>
                 </SetupCardShell>
             );
         case "invalid":
@@ -81,6 +96,7 @@ export function ContinuePageContent({
                 <SetupCardShell titleId="continue-title">
                     <SetupCardTitle id="continue-title">Continue in Morty</SetupCardTitle>
                     <SetupCardAlert>This transfer link is invalid.</SetupCardAlert>
+                    {fallback}
                 </SetupCardShell>
             );
     }

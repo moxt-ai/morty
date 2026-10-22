@@ -31,6 +31,7 @@ import type { ConversationDirectoryStore } from "../../view-models/chat/conversa
 import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
 import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
+import { ComputerSwitcher } from "./computer-switcher.tsx";
 import { IdentitySharing } from "./identity-sharing.tsx";
 import { NativeSessionDialog } from "./native-session-dialog.tsx";
 
@@ -350,6 +351,7 @@ export function ConversationSidebar({
     // The workspace owns the sidebar's dialog, remote-access, and diagnostic
     // stores outside React; the view only subscribes.
     const dialogs = workspace.sidebar.dialogs;
+    const computerName = useStore(workspace.home, (state) => state.runtimeConfiguration?.runtime.machineName ?? "");
     const directory = useStore(workspace.directory, (state) => state.state);
     const archive = useStore(workspace.directory, (state) => state.archive);
 
@@ -499,13 +501,18 @@ export function ConversationSidebar({
                                 </div>
                             )}
                         </Tooltip.Provider>
-                        <ConnectionStatus
-                            className="max-sm:hidden pr-[10px]"
-                            status={connectionStatus}
-                            testId={dataTestId.botConnectionStatus}
-                        />
+                        {workspace.computers === null && (
+                            <ConnectionStatus
+                                className="max-sm:hidden pr-[10px]"
+                                status={connectionStatus}
+                                testId={dataTestId.botConnectionStatus}
+                            />
+                        )}
                     </div>
                 </header>
+                {workspace.computers !== null && (
+                    <ComputerSwitcher model={workspace.computers} name={computerName} status={connectionStatus} />
+                )}
                 <div
                     id="conversation-sidebar-mobile-drawer"
                     className={cn(

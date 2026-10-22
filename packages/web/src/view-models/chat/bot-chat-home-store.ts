@@ -192,6 +192,8 @@ export const createBotChatHomeStore = (
     >,
     options: {
         readonly botId: string;
+        readonly entry?: "address" | "restore";
+        readonly onRuntimeConfiguration?: (configuration: BotRuntimeConfiguration) => void;
         readonly url: string;
         readonly createId: () => string;
         readonly navigation: BotChatNavigation;
@@ -211,6 +213,10 @@ export const createBotChatHomeStore = (
     const composerAttachments = createComposerAttachmentStore();
     const conversations = createConversationSessionStore(requests);
     const selection = initialSelection(options.url, options.createId);
+    let restoredSessionId =
+        options.entry === "restore" && selection.kind === "loading" && selection.target.kind === "session"
+            ? selection.target.sessionId
+            : null;
     const { onRestart, onDirectoryRefreshed, onDraftSelected, onSelectionTargeted, onSelectionReady } = options;
     return createStore<BotChatHomeStore>()((set, get) => {
         // Announced from the explicit transition sites: a ready selection
@@ -264,6 +270,7 @@ export const createBotChatHomeStore = (
                         signal.throwIfAborted();
                         const changedConfiguration = await requests.runtimeConfiguration(botId, signal);
                         signal.throwIfAborted();
+                        options.onRuntimeConfiguration?.(changedConfiguration);
                         const changedReason = setupReason(changedConfiguration);
                         set((current) =>
                             current.selection.kind === "draft"
@@ -348,6 +355,7 @@ export const createBotChatHomeStore = (
                         runtimeConfiguration: configuration,
                         connectionStatus: runtimeConnectionStatus(configuration),
                     });
+                    options.onRuntimeConfiguration?.(configuration);
                     const currentSelection = get().selection;
                     const currentTarget = currentSelection.kind === "draft" ? null : currentSelection.target;
                     if (currentTarget?.kind === "continue") {
@@ -432,6 +440,19 @@ export const createBotChatHomeStore = (
                     await watchRuntimeConfigurationChanges();
                 } catch (cause) {
                     if (signal.aborted) {
+                        return;
+                    }
+                    const failedTarget = get().selection;
+                    if (
+                        restoredSessionId !== null &&
+                        failedTarget.kind === "loading" &&
+                        failedTarget.target.kind === "session" &&
+                        failedTarget.target.sessionId === restoredSessionId &&
+                        cause instanceof CloudApiError &&
+                        ["NOT_FOUND", "session_not_found"].includes(cause.code)
+                    ) {
+                        restoredSessionId = null;
+                        get().newConversation();
                         return;
                     }
                     if (cause instanceof DOMException && cause.name === "TimeoutError") {
@@ -529,6 +550,7 @@ export const createBotChatHomeStore = (
                 }
             },
             newConversation: () => {
+                restoredSessionId = null;
                 composerAttachments.getState().clear();
                 const current = get();
                 if (current.view.kind !== "loading" && current.view.kind !== "failed") {
@@ -553,6 +575,7 @@ export const createBotChatHomeStore = (
                 }
             },
             openManaged: (isExternal, id) => {
+                restoredSessionId = null;
                 composerAttachments.getState().clear();
                 options.navigation.showManaged(isExternal, id);
                 set((current) => ({
