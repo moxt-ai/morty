@@ -660,6 +660,7 @@ function MobiusSessionPaneBody({
                             error={interactions.error}
                             onElicitationResponse={respondToElicitation}
                             onPermissionResponse={respondToPermission}
+                            onStop={() => run(pane.store.getState().stop)}
                         />
                     </div>
                 )}

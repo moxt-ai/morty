@@ -37,6 +37,34 @@ export function createInteractionAgent() {
                 const cancellation = new AbortController();
                 turns.set(sessionId, cancellation);
                 const signal = AbortSignal.any([lifetime.signal, context.signal, cancellation.signal]);
+                const longPermission = context.params.prompt.some(
+                    (content) => content.type === "text" && content.text === "request long permission",
+                );
+                const longPath = `/workspace/${"long-directory-".repeat(12)}/src/index.ts`;
+                const planMode = context.params.prompt.some(
+                    (content) => content.type === "text" && content.text === "request plan mode",
+                );
+                const sessionScope = context.params.prompt.some(
+                    (content) => content.type === "text" && content.text === "request session permission",
+                );
+                const options: acp.PermissionOption[] = sessionScope
+                    ? [
+                          { optionId: "allow-session", kind: "allow_always", name: "Allow for this session" },
+                          { optionId: "deny-session", kind: "reject_always", name: "Deny for this session" },
+                      ]
+                    : planMode
+                      ? [
+                            { optionId: "allow-once", kind: "allow_once", name: "Yes, enter plan mode" },
+                            { optionId: "reject", kind: "reject_once", name: "No, start implementing now" },
+                        ]
+                      : [
+                            {
+                                optionId: "allow-once",
+                                kind: "allow_once",
+                                name: longPermission ? `Allow reading ${longPath} for this session` : "Yes",
+                            },
+                            { optionId: "reject", kind: "reject_once", name: "No" },
+                        ];
                 try {
                     const permission = await context.client.request(
                         acp.methods.client.session.requestPermission,
@@ -44,21 +72,34 @@ export function createInteractionAgent() {
                             sessionId,
                             toolCall: {
                                 toolCallId: crypto.randomUUID(),
-                                kind: "execute",
+                                kind: planMode ? "switch_mode" : "execute",
                                 status: "pending",
-                                title: "Run verification",
+                                title: planMode
+                                    ? "Enter plan mode"
+                                    : longPermission
+                                      ? `Read ${longPath}`
+                                      : "Run verification",
+                                rawInput: planMode
+                                    ? { mode: "plan" }
+                                    : context.params.prompt.some(
+                                            (content) =>
+                                                content.type === "text" &&
+                                                content.text === "request without tool input",
+                                        )
+                                      ? undefined
+                                      : { command: "pnpm test -- --reporter=verbose", target: "src/<entry>.ts" },
+                                locations: planMode ? [] : [{ path: "src/<entry>.ts", line: 12 }],
                             },
-                            options: [
-                                { optionId: "allow-once", kind: "allow_once", name: "Allow once" },
-                                { optionId: "reject", kind: "reject_once", name: "Reject" },
-                            ],
+                            options,
                         },
                         { cancellationSignal: signal },
                     );
                     let text = "Permission cancelled";
                     if (permission.outcome.outcome === "selected") {
-                        if (permission.outcome.optionId === "reject") {
-                            text = "Permission rejected";
+                        if (sessionScope) {
+                            text = `Selected decision: ${permission.outcome.optionId}`;
+                        } else if (permission.outcome.optionId === "reject") {
+                            text = planMode ? "Selected decision: No, start implementing now" : "Permission rejected";
                         } else {
                             const input = await context.client.request(
                                 acp.methods.client.elicitation.create,
