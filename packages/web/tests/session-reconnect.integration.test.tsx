@@ -39,7 +39,7 @@ test("Given an offline Runtime, When the retry deadline elapses, Then the countd
     expect(reconnectStatusText(app)).toBe("Retrying in 1 s Retry now");
     await act(async () => clock.advanceBy(1));
     await app.waitForView(() => expect(reconnectStatusText(app)).toBe("Retrying in 10 s Retry now"));
-    expect(queryByRole(form, "alert")?.textContent).toContain("could not recover");
+    expect(queryByRole(form, "alert")?.textContent).toBe("The Runtime is offline");
     await act(async () => clock.advanceBy(10000));
     await app.waitForView(() => expect(reconnectStatusText(app)).toBe("Retrying in 20 s Retry now"));
 });
