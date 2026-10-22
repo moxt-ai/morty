@@ -58,8 +58,6 @@
                 "**",
                 "!!packages/web/src/components/**",
                 "!!packages/web/tests/**",
-                "!!packages/web/src/views/chat/chat-preview-interactive.tsx",
-                "!!packages/web/src/views/chat/chat-preview-page.tsx",
                 "!!**/*.test.ts",
                 "!!**/*.test.tsx",
                 "!!**/tests/**"

@@ -7,8 +7,6 @@ import {
     type SessionToolPresentation,
 } from "../../components/chat/tools/tool-contract.ts";
 
-export type { SessionToolPresentation };
-
 type ToolCallUpdate = Extract<AcpSessionUpdate, { readonly sessionUpdate: "tool_call" | "tool_call_update" }>;
 const BOT_INSTRUCTIONS_URI = "morty://bot/instructions";
 
