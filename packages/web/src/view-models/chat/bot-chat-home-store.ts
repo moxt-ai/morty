@@ -186,7 +186,6 @@ export const createBotChatHomeStore = (
         | "waitForRuntimeConfigurationChange"
         | "runtimeConfiguration"
         | "directory"
-        | "waitForBridge"
     >,
     options: {
         readonly botId: string;
@@ -461,50 +460,11 @@ export const createBotChatHomeStore = (
                         return;
                     }
                     if (isChatBridgeError(cause)) {
-                        // A dropped bridge is an ordinary failed call: report it
-                        // for diagnostics instead of blocking the page with a
-                        // dialog.
+                        // A dropped bridge leaves the view alone: Chat keeps
+                        // whatever it showed. The next user action retries
+                        // through the normal call path and reports its own
+                        // failure, exactly like any other failed request.
                         console.error("The Chat WebSocket bridge failed to complete a request.", cause);
-                        const failBridge = (message: string): void => {
-                            const failed = get().selection;
-                            set({
-                                ...(failed.kind === "loading"
-                                    ? {
-                                          selection: transitionConversationSelection(failed, {
-                                              kind: "session-load-failed",
-                                              message,
-                                              target: failed.target,
-                                          }),
-                                      }
-                                    : {}),
-                                view: { kind: "failed", message },
-                            });
-                        };
-                        const selection = get().selection;
-                        if (selection.kind === "loading" && selection.target.kind === "continue") {
-                            // Continuing, importing, or forking a native session
-                            // may already have happened server-side, so the same
-                            // load must not be replayed without the user asking.
-                            failBridge(formatError(cause, "Chat is unavailable."));
-                            return;
-                        }
-                        try {
-                            await requests.waitForBridge(signal);
-                        } catch (bridgeCause) {
-                            if (signal.aborted) {
-                                return;
-                            }
-                            // The bridge gave up reconnecting: hand the page an
-                            // explicit retry instead of leaving it loading.
-                            console.error("The Chat WebSocket bridge did not reconnect.", bridgeCause);
-                            failBridge(formatError(bridgeCause, "Chat is unavailable."));
-                            return;
-                        }
-                        if (signal.aborted) {
-                            return;
-                        }
-                        set((current) => ({ revision: current.revision + 1 }));
-                        onRestart();
                         return;
                     }
                     if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {

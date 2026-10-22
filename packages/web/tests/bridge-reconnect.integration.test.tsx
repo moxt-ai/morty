@@ -43,7 +43,6 @@ test("Given an open conversation, When the Chat WebSocket bridge drops, Then no 
 
     // The first backoff attempt really dials: the bridge carries a request
     // again without waiting for the rest of the retry budget.
-    await app.transport.waitForBridge(AbortSignal.timeout(10_000));
     const token = await app.identity.getToken(new AbortController().signal);
     const workspace = await app.transport.fetch(
         new Request(`${app.origin}/morty/api/chat/projects/${app.identity.projectId}/bots/${app.botId}/workspace`, {

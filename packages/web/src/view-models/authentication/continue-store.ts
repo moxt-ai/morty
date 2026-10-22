@@ -165,9 +165,6 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 waitForChange: async () => {
                     throw new Error("Runtime updates are unavailable while continuing this session.");
                 },
-                waitForBridge: async () => {
-                    throw new Error("Bridge updates are unavailable while continuing this session.");
-                },
             });
             set({
                 diagnostics: {

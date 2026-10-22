@@ -123,7 +123,6 @@ export function createMortyApplication(options: {
             projectId: identity.projectId,
             subscribe: transport.subscribe,
             waitForChange: transport.waitForChange,
-            waitForBridge: transport.waitForBridge,
         });
         workspace = createChatWorkspace({
             clock: options.clock ?? systemClock,
@@ -144,7 +143,6 @@ export function createMortyApplication(options: {
                         projectId: saved.projectId,
                         subscribe: transport.subscribe,
                         waitForChange: transport.waitForChange,
-                        waitForBridge: transport.waitForBridge,
                     }),
             }),
             entry: session.entry,

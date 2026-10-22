@@ -103,11 +103,6 @@ interface PendingEventStream extends PendingWatch {
     readonly receive: (data: string) => void;
 }
 
-interface PendingBridgeWaiter {
-    readonly reject: (cause: unknown) => void;
-    readonly resolve: () => void;
-}
-
 export class WebSocketApiTransport {
     readonly #clock: Clock;
     readonly #origin: string;
@@ -115,13 +110,11 @@ export class WebSocketApiTransport {
     readonly #eventStreams = new Map<string, PendingEventStream>();
     readonly #diagnostics = new Map<string, PendingDiagnostic>();
     readonly #watches = new Map<string, PendingWatch>();
-    readonly #bridgeWaiters = new Set<PendingBridgeWaiter>();
     readonly #lifetime = new AbortController();
     #state: BridgeState = { kind: "disconnected" };
     #desired = false;
     #disposed = false;
     #reconnectAttempt = 0;
-    #reconnectExhausted = false;
     #reconnectTimer: { readonly cancel: () => void } | null = null;
 
     constructor(origin: string, clock: Clock = systemClock) {
@@ -141,39 +134,6 @@ export class WebSocketApiTransport {
         // immediately instead of failing fast while a timer is pending.
         this.#cancelReconnect();
         this.#reconnectAttempt = 0;
-        this.#reconnectExhausted = false;
-    };
-
-    /**
-     * Waits for the bridge to be connected. Callers that lost a request to a
-     * bridge failure use this to resume once the transport reconnects.
-     */
-    readonly waitForBridge = async (signal: AbortSignal): Promise<void> => {
-        signal.throwIfAborted();
-        if (this.#disposed || this.#reconnectExhausted) {
-            throw bridgeUnavailable();
-        }
-        if (this.#state.kind === "connected" && this.#state.socket.readyState === WebSocket.OPEN) {
-            return;
-        }
-        await new Promise<void>((resolve, reject) => {
-            const waiter: PendingBridgeWaiter = {
-                resolve: () => {
-                    signal.removeEventListener("abort", abort);
-                    resolve();
-                },
-                reject: (cause) => {
-                    signal.removeEventListener("abort", abort);
-                    reject(cause);
-                },
-            };
-            const abort = () => {
-                this.#bridgeWaiters.delete(waiter);
-                waiter.reject(signal.reason);
-            };
-            this.#bridgeWaiters.add(waiter);
-            signal.addEventListener("abort", abort, { once: true });
-        });
     };
 
     readonly fetch = async (request: Request): Promise<Response> => {
@@ -427,10 +387,6 @@ export class WebSocketApiTransport {
         for (const subscriptionId of [...this.#eventStreams.keys()]) {
             this.#settleEventStream(subscriptionId)?.reject(cause);
         }
-        for (const waiter of [...this.#bridgeWaiters]) {
-            this.#bridgeWaiters.delete(waiter);
-            waiter.reject(cause);
-        }
     };
 
     readonly #closeSocket = (reason: string): void => {
@@ -493,7 +449,6 @@ export class WebSocketApiTransport {
             return;
         }
         if (this.#reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
-            this.#exhaustReconnect();
             return;
         }
         const delay =
@@ -513,7 +468,6 @@ export class WebSocketApiTransport {
                 this.#reconnectTimer = null;
                 if (this.#state.kind === "connected") {
                     this.#reconnectAttempt = 0;
-                    this.#reconnectExhausted = false;
                     return;
                 }
                 void this.#dial();
@@ -534,40 +488,18 @@ export class WebSocketApiTransport {
         if (!this.#desired || this.#disposed) {
             return;
         }
+        // The budget is spent: stop background retries. The next user action
+        // dials again through the normal call path.
         if (this.#reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
-            this.#exhaustReconnect();
             return;
         }
         this.#scheduleReconnect();
-    };
-
-    /**
-     * Stops reconnecting and tells callers waiting for the bridge, so a stalled
-     * page can offer an explicit retry instead of waiting forever.
-     */
-    readonly #exhaustReconnect = (): void => {
-        if (this.#reconnectExhausted) {
-            return;
-        }
-        this.#reconnectExhausted = true;
-        const cause = bridgeUnavailable();
-        for (const waiter of [...this.#bridgeWaiters]) {
-            this.#bridgeWaiters.delete(waiter);
-            waiter.reject(cause);
-        }
     };
 
     readonly #cancelReconnect = (): void => {
         const timer = this.#reconnectTimer;
         this.#reconnectTimer = null;
         timer?.cancel();
-    };
-
-    readonly #notifyConnected = (): void => {
-        for (const waiter of [...this.#bridgeWaiters]) {
-            this.#bridgeWaiters.delete(waiter);
-            waiter.resolve();
-        }
     };
 
     /** Re-registers live subscriptions so a reconnect never surfaces to subscribers. */
@@ -690,9 +622,7 @@ export class WebSocketApiTransport {
                 // while the attempt was in flight.
                 this.#cancelReconnect();
                 this.#reconnectAttempt = 0;
-                this.#reconnectExhausted = false;
                 this.#replaySubscriptions(socket);
-                this.#notifyConnected();
                 resolve(socket);
             };
             const failed = () => {
