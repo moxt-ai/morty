@@ -640,7 +640,7 @@ async function setup(options) {
         `#!/usr/bin/env node
 const { spawnSync } = require("node:child_process");
 const args = process.argv.slice(2);
-const result = spawnSync(process.execPath, [${JSON.stringify(path.join(MOBIUS_ROOT, "packages/cli/src/entrypoint/cli.ts"))}, ...args], {
+const result = spawnSync(process.execPath, [${JSON.stringify(path.join(MOBIUS_ROOT, "packages/cli/src/cli/entrypoint.ts"))}, ...args], {
     stdio: "inherit",
 });
 process.exit(result.status ?? 1);
@@ -731,7 +731,7 @@ process.exit(result.status ?? 1);
             await run(
                 process.execPath,
                 [
-                    path.join(MOBIUS_ROOT, "packages/cli/src/entrypoint/cli.ts"),
+                    path.join(MOBIUS_ROOT, "packages/cli/src/cli/entrypoint.ts"),
                     "pair",
                     "list",
                     `--output-json=${pairList}`,
@@ -897,7 +897,7 @@ async function stopRecorded(stack) {
                 await run(
                     process.execPath,
                     [
-                        path.join(MOBIUS_ROOT, "packages/cli/src/entrypoint/cli.ts"),
+                        path.join(MOBIUS_ROOT, "packages/cli/src/cli/entrypoint.ts"),
                         "pair",
                         "stop",
                         "--connection",
@@ -915,7 +915,7 @@ async function stopRecorded(stack) {
     if (fs.existsSync(mobiusStateDirectory)) {
         log(`stopping the Mobius manager at ${mobiusStateDirectory}`);
         try {
-            await run(process.execPath, [path.join(MOBIUS_ROOT, "packages/cli/src/entrypoint/cli.ts"), "quit"], {
+            await run(process.execPath, [path.join(MOBIUS_ROOT, "packages/cli/src/cli/entrypoint.ts"), "quit"], {
                 env: { MOBIUS_STATE_DIRECTORY: mobiusStateDirectory },
             });
         } catch (cause) {
