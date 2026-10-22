@@ -68,7 +68,7 @@ export interface SessionTimeline {
 }
 
 function exhaustive(value: never): never {
-    throw new Error(`Unsupported Session Event Log V2 payload: ${JSON.stringify(value)}`);
+    throw new Error(`Unsupported Session Event Log payload: ${JSON.stringify(value)}`);
 }
 
 function encodedJson(value: unknown): string {
