@@ -57,7 +57,7 @@ function ExecutionDetails({ context }: { readonly context: ExecutionContext }) {
     );
 }
 
-export function ExecutionConnectionStatus({
+function ExecutionConnectionStatus({
     connection,
     className,
 }: {

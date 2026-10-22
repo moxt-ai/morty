@@ -40,7 +40,7 @@ function SetupCardLogo() {
     return <MortyLogoMark layout="card" />;
 }
 
-export function SetupPageHeader() {
+function SetupPageHeader() {
     return (
         <header className="w-full shrink-0">
             <div className="mx-auto flex min-h-16 max-w-6xl items-center px-4 py-3 sm:px-6">

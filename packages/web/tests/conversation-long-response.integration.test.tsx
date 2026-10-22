@@ -1,4 +1,4 @@
-import { getByRole, queryByRole } from "@testing-library/dom";
+import { queryAllByRole, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -28,8 +28,12 @@ async function startLongResponse(text: string) {
 }
 
 async function loadEntireResponse(app: Awaited<ReturnType<typeof createTestApp>>) {
-    while (queryByRole(document.body, "button", { name: "Load more text" }) !== null) {
-        await app.user.click(getByRole(document.body, "button", { name: "Load more text" }));
+    while (true) {
+        const button = queryAllByRole(document.body, "button", { name: "Load more text" })[0];
+        if (button === undefined) {
+            return;
+        }
+        await app.user.click(button);
     }
 }
 
@@ -41,7 +45,7 @@ test("Given a Markdown response over 32 KiB, When output grows and I load more, 
         `\n\n## Configuration\n\n> Quoted configuration\n>\n> \`\`\`typescript\n${lines}\n> \`\`\`\n\n## Finished\n\nLATEST_OUTPUT`,
     );
     await app.waitForView(() => {
-        expect(getByRole(document.body, "button", { name: "Load more text" })).toBeDefined();
+        expect(queryAllByRole(document.body, "button", { name: "Load more text" }).length).toBeGreaterThan(0);
         expect(queryByRole(document.body, "heading", { name: "Configuration" })).toBeNull();
         expect(document.body.textContent).toContain("## Configuration");
         expect(document.body.textContent).toContain("```typescript");
