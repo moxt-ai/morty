@@ -14,7 +14,6 @@ import {
     chatSessionMessageColumnClassName,
     chatSessionMessageItemClassName,
     chatSessionMessageScrollClassName,
-    chatSessionPaneSectionClassName,
 } from "../../components/chat/chat-session-layout.ts";
 import { ReadonlyWorkingDirectory } from "../../components/chat/cwd-selector.tsx";
 import { SessionExecutionHeaderEnd } from "../../components/chat/execution-context-bar.tsx";
@@ -395,7 +394,7 @@ function MobiusSessionPaneShell({
     readonly footer?: ReactNode;
 }) {
     return (
-        <section className={chatSessionPaneSectionClassName}>
+        <>
             <header
                 className={cn(chatSessionExecutionHeaderClassName, mobileTitlePortaled ? "hidden sm:flex" : "flex")}
             >
@@ -410,7 +409,7 @@ function MobiusSessionPaneShell({
             </header>
             {children}
             {footer}
-        </section>
+        </>
     );
 }
 
@@ -599,7 +598,7 @@ export function MobiusSessionPane({ workspace }: { readonly workspace: ChatWorks
     // hooks.
     const pane = workspace.sessionPane();
     if (pane === null) {
-        return <section className={chatSessionPaneSectionClassName} />;
+        return null;
     }
     return <MobiusSessionPaneBody pane={pane} workspace={workspace} />;
 }
@@ -656,6 +655,7 @@ function MobiusSessionPaneBody({
     const renderGroups = sessionRenderGroups(renderItems);
     const lastRenderItemIndex = renderItems.length - 1;
     const sessionMessagesLoading = model.connection.kind === "loading";
+    const initialMessage = model.pendingInitialMessage;
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
     const openLocalFile = (path: string) => {
@@ -681,7 +681,7 @@ function MobiusSessionPaneBody({
 
     return (
         <>
-            <section className={chatSessionPaneSectionClassName} ref={pane.onAttach}>
+            <section className="contents" ref={pane.onAttach}>
                 {desktop ? (
                     <header className={chatSessionExecutionHeaderClassName}>
                         <div className="min-w-0 flex-1">
@@ -725,6 +725,7 @@ function MobiusSessionPaneBody({
                         </div>
                     )}
                     {!sessionMessagesLoading &&
+                        initialMessage === null &&
                         model.messages.length === 0 &&
                         model.connection.kind === "ready" &&
                         model.activity.kind === "idle" &&
@@ -738,6 +739,19 @@ function MobiusSessionPaneBody({
                     {!sessionMessagesLoading && model.historyLoading && <OlderHistorySkeleton />}
                     {!sessionMessagesLoading && (
                         <div className={chatSessionMessageColumnClassName}>
+                            {initialMessage !== null && (
+                                <div className={chatSessionMessageItemClassName}>
+                                    <UserPromptMessage
+                                        text={initialMessage.content}
+                                        images={initialMessage.attachments.flatMap((attachment) =>
+                                            attachment.kind === "image" ? [attachment.image] : [],
+                                        )}
+                                        resources={initialMessage.attachments.flatMap((attachment) =>
+                                            attachment.kind === "resource" ? [attachment.resource] : [],
+                                        )}
+                                    />
+                                </div>
+                            )}
                             {(() => {
                                 let flatIndex = 0;
                                 return renderGroups.map((group) => {
@@ -842,7 +856,7 @@ function MobiusSessionPaneBody({
                     attachmentModel={attachmentModel}
                     attachmentSignal={pane.operationsSignal()}
                     disabled={presentation.composerInputDisabled}
-                    draft={model.draft}
+                    draft={model.connection.kind === "session-loading-after-create" ? "" : model.draft}
                     error={presentation.composerError}
                     errorStatus={
                         model.connection.kind === "disconnected" || model.connection.kind === "reconnecting" ? (

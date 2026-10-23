@@ -5,6 +5,61 @@ import { dataTestId } from "../src/data-testid.ts";
 import { openAgentModelPicker, sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
+test("Given a new conversation, When I send its first prompt, Then it stays visible without a history skeleton until the Agent streams a reply", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    const conversationPanel = getByRole(document.body, "region", { name: "Conversation" });
+    const loadingMessages: Element[] = [];
+    let promptWasVisible = false;
+    let promptDisappeared = false;
+    const observer = new MutationObserver((records) => {
+        const promptVisible = app
+            .elementsByTestId(dataTestId.userMessage)
+            .some((element) => element.textContent === "hold after first delta");
+        if (promptWasVisible && !promptVisible) {
+            promptDisappeared = true;
+        }
+        promptWasVisible ||= promptVisible;
+        for (const record of records) {
+            for (const node of record.addedNodes) {
+                if (node instanceof Element) {
+                    if (node.matches('[role="status"][aria-label="Loading messages"]')) {
+                        loadingMessages.push(node);
+                    }
+                    loadingMessages.push(...node.querySelectorAll('[role="status"][aria-label="Loading messages"]'));
+                }
+            }
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    onTestFinished(() => observer.disconnect());
+
+    await sendPrompt(app, composer, "hold after first delta");
+
+    await app.waitForView(() => {
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes("Partial reply")),
+        ).toBe(true);
+        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+            "hold after first delta",
+        ]);
+    });
+    expect(loadingMessages).toHaveLength(0);
+    expect(promptDisappeared).toBe(false);
+    expect(getByRole(document.body, "region", { name: "Conversation" })).toBe(conversationPanel);
+    observer.disconnect();
+    await app.user.click(
+        await app.queryElementByTestId(
+            dataTestId.sendMessage,
+            (element) => element.getAttribute("aria-label") === "Stop agent output",
+        ),
+    );
+});
+
 test("Given a conversation created from a queued first message, When the Chat application remounts, Then the prompt is delivered exactly once", {
     timeout: 30_000,
 }, async () => {
