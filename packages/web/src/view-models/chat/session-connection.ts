@@ -7,6 +7,7 @@ import { type MobiusClient, MobiusError } from "@moxt-ai/mobius-sdk";
 
 export type SessionConnection =
     | { readonly kind: "loading" }
+    | { readonly kind: "session-loading-after-create" }
     | { readonly kind: "ready"; readonly client: MobiusClient }
     | { readonly kind: "reconnecting"; readonly message: string | null }
     | {
@@ -54,6 +55,7 @@ export function connectionFailure(connection: SessionConnection): string | null 
         case "closed":
             return connection.reopen.kind === "failed" ? connection.reopen.message : null;
         case "loading":
+        case "session-loading-after-create":
         case "ready":
             return null;
     }
@@ -69,6 +71,7 @@ export function isConnectionSettled(connection: SessionConnection): boolean {
         case "disconnected":
             return connection.retry.kind === "exhausted";
         case "loading":
+        case "session-loading-after-create":
         case "reconnecting":
             return false;
     }
