@@ -49,6 +49,7 @@ export async function createTestApp(
         readonly application?: Application;
         readonly connectAgent?: boolean;
         readonly clock?: Clock;
+        readonly interruptibleChat?: boolean;
         readonly agent?: ControlledAgent;
         readonly agents?: readonly ControlledAgent[];
         readonly nativeSessionIds?: ReadonlySet<string>;
@@ -70,7 +71,7 @@ export async function createTestApp(
         readonly prepare?: (application: Application) => void | Promise<void>;
     } = {},
 ): Promise<TestApp> {
-    const current = options.application ?? (await (await environment).createApplication());
+    const current = options.application ?? (await (await environment).createApplication(options));
     await options.prepare?.(current);
     const daemon =
         options.connectAgent === true
@@ -254,7 +255,14 @@ export async function createTestApp(
             const transport = new WebSocketApiTransport(current.origin);
             transport.open();
             return await createTestApp({
-                application: { ...current, transport, close: () => transport.close() },
+                application: {
+                    ...current,
+                    transport,
+                    close: async () => {
+                        transport.close();
+                        await current.close();
+                    },
+                },
                 page: { kind: "reload" },
                 ...(options.clock === undefined ? {} : { clock: options.clock }),
             });
@@ -263,7 +271,7 @@ export async function createTestApp(
             const transport = new WebSocketApiTransport(current.origin);
             transport.open();
             return await createTestApp({
-                application: { ...current, transport, close: () => transport.close() },
+                application: { ...current, transport, close: async () => transport.close() },
                 ...(options.clock === undefined ? {} : { clock: options.clock }),
             });
         },

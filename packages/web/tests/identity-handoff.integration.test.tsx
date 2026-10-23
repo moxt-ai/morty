@@ -346,10 +346,7 @@ test("Given the end confirmation, When the real API transport closes, Then an un
         return button;
     });
     app.transport.close();
-    const connectionNotice = await app.waitForView(() =>
-        getByRole(document.body, "dialog", { name: "Runtime connection unavailable" }),
-    );
-    await app.user.click(getByRole(connectionNotice, "button", { name: "Close dialog" }));
+    await app.waitForView(() => getByRole(document.body, "status", { name: "Chat connection", hidden: true }));
     await app.user.click(confirm);
 
     await app.waitForView(() =>
@@ -397,10 +394,7 @@ test("Given an unavailable connection, When current access cannot be prepared, T
     const app = await createTestApp({ page: { kind: "bootstrap", identity: true }, connectAgent: true });
     await app.waitForView(() => getByRole(document.body, "button", { name: "User menu" }));
     app.transport.close();
-    const connectionNotice = await app.waitForView(() =>
-        getByRole(document.body, "dialog", { name: "Runtime connection unavailable" }),
-    );
-    await app.user.click(getByRole(connectionNotice, "button", { name: "Close dialog" }));
+    await app.waitForView(() => getByRole(document.body, "status", { name: "Chat connection", hidden: true }));
     await clickDesktopEndRemoteAccess(app);
     const dialog = await app.queryElementByTestId(dataTestId.endRemoteAccessDialog);
     await app.waitForView(() =>

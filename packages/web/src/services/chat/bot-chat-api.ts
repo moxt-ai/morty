@@ -244,7 +244,7 @@ export class BotChatApi {
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly #sessionTransports = new Map<string, BrowserSessionTransport>();
     readonly #subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
-    readonly #waitForChange: (request: Request) => Promise<void>;
+    readonly #waitForChange: (request: Request, onReady?: () => void) => Promise<void>;
     readonly readBot: ManagementApi["readBot"];
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
@@ -252,7 +252,7 @@ export class BotChatApi {
         readonly projectId: string;
         readonly getToken: (signal: AbortSignal) => Promise<string | null>;
         readonly subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
-        readonly waitForChange: (request: Request) => Promise<void>;
+        readonly waitForChange: (request: Request, onReady?: () => void) => Promise<void>;
     }) {
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
         this.#projectId = v.parse(identifier, options.projectId);
@@ -459,6 +459,7 @@ export class BotChatApi {
         botId: string,
         resource: "setup/runtimes" | "workspace",
         parent: AbortSignal,
+        onReady?: () => void,
     ) => {
         const signal = AbortSignal.any([parent, AbortSignal.timeout(10 * 60 * 1000)]);
         const token = await this.#getToken(signal);
@@ -473,12 +474,16 @@ export class BotChatApi {
                 ),
                 { method: "POST", headers: { authorization: `Bearer ${token}` }, signal },
             ),
+            onReady,
         );
     };
     readonly waitForSetupChange = async (botId: string, parent: AbortSignal): Promise<void> =>
         await this.#waitForBotChange(botId, "setup/runtimes", parent);
-    readonly waitForRuntimeConfigurationChange = async (botId: string, parent: AbortSignal): Promise<void> =>
-        await this.#waitForBotChange(botId, "workspace", parent);
+    readonly waitForRuntimeConfigurationChange = async (
+        botId: string,
+        parent: AbortSignal,
+        onReady?: () => void,
+    ): Promise<void> => await this.#waitForBotChange(botId, "workspace", parent, onReady);
     readonly nativeSessions = async (
         botId: string,
         runtimeId: string,

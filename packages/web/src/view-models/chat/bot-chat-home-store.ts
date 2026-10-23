@@ -1,6 +1,7 @@
 import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
 import { createComposerAttachmentStore } from "../../components/chat/composer-attachment-store.ts";
+import { ChatConnectionError } from "../../services/api/chat-connection-error.ts";
 import type {
     BotChatApi,
     BotRuntimeConfiguration,
@@ -12,6 +13,7 @@ import {
     centralSessionStorage,
     newConversationDraftEntry,
 } from "../../services/session-storage/central-session-storage.ts";
+import type { Clock } from "../../services/time/clock.ts";
 import { formatError } from "../format-error.ts";
 import { type ConversationCreationState, transitionConversationCreation } from "./conversation-creation-machine.ts";
 import {
@@ -36,6 +38,7 @@ export type BotChatHomeView =
     | { readonly kind: "loading" }
     | ({ readonly kind: "connecting" } & BotView)
     | ({ readonly kind: "active" } & BotView)
+    | ({ readonly kind: "reconnecting"; readonly attempt: number } & BotView)
     | ({ readonly kind: "setup"; readonly reason: SetupReason } & BotView)
     | ({ readonly kind: "runtime-disconnected"; readonly message: string } & BotView)
     | ({ readonly kind: "connection-failed"; readonly message: string } & BotView)
@@ -75,6 +78,7 @@ export function disconnectedBotNotice(
                       title: "Your agent is disconnected",
                       description: "Start your local agent to reconnect it and use its sessions.",
                   };
+        case "reconnecting":
         case "loading":
         case "connecting":
         case "failed":
@@ -102,7 +106,6 @@ export interface BotChatNavigation {
 type ChatEntryNotice = { readonly kind: "hidden" } | { readonly kind: "visible" };
 
 interface ChatEntryNotices {
-    readonly connectionFailed: ChatEntryNotice;
     readonly pairing: ChatEntryNotice;
 }
 
@@ -125,7 +128,7 @@ export interface BotChatHomeStore {
     readonly disconnectedNoticeDismissed: boolean;
     /** Entry notices that surface a dialog once when the workflow resolves. */
     readonly notices: ChatEntryNotices;
-    readonly dismissNotice: (notice: "connection-failed" | "pairing") => void;
+    readonly dismissNotice: (notice: "pairing") => void;
     readonly load: (signal: AbortSignal) => Promise<void>;
     readonly newConversation: () => void;
     readonly openManaged: (isExternal: boolean, id: string) => void;
@@ -191,6 +194,7 @@ export const createBotChatHomeStore = (
     >,
     options: {
         readonly botId: string;
+        readonly clock: Clock;
         readonly entry?: "address" | "restore";
         readonly onRuntimeConfiguration?: (configuration: BotRuntimeConfiguration) => void;
         readonly url: string;
@@ -253,51 +257,105 @@ export const createBotChatHomeStore = (
             scrollFollowRevision: 0,
             pairingDialogOpen: false,
             disconnectedNoticeDismissed: false,
-            notices: { connectionFailed: { kind: "hidden" }, pairing: { kind: "hidden" } },
-            dismissNotice: (notice) =>
-                set((current) => ({
-                    notices:
-                        notice === "connection-failed"
-                            ? { ...current.notices, connectionFailed: { kind: "hidden" } }
-                            : { ...current.notices, pairing: { kind: "hidden" } },
-                })),
+            notices: { pairing: { kind: "hidden" } },
+            dismissNotice: () => set({ notices: { pairing: { kind: "hidden" } } }),
             load: async (signal) => {
                 set((current) => ({ view: "botId" in current.view ? current.view : { kind: "loading" } }));
                 let opened = false;
                 const watchRuntimeConfigurationChanges = async (): Promise<void> => {
                     while (true) {
+                        const attempt = new AbortController();
+                        const attemptSignal = AbortSignal.any([signal, attempt.signal]);
+                        const deadline = new AbortController();
                         try {
-                            await requests.waitForRuntimeConfigurationChange(botId, signal);
-                        } catch (cause) {
-                            if (cause instanceof DOMException && cause.name === "TimeoutError") {
+                            const view = get().view;
+                            if (view.kind === "reconnecting" && view.attempt > 0) {
+                                await options.clock.sleep(1000 * 2 ** (view.attempt - 1), signal);
+                            }
+                            signal.throwIfAborted();
+                            void options.clock.sleep(10_000, AbortSignal.any([signal, deadline.signal])).then(
+                                () => attempt.abort(new ChatConnectionError("CHAT_CONNECTION_TIMEOUT")),
+                                () => undefined,
+                            );
+                            const ready = Promise.withResolvers<void>();
+                            const watching = requests.waitForRuntimeConfigurationChange(
+                                botId,
+                                attemptSignal,
+                                ready.resolve,
+                            );
+                            // Observe failures immediately, including while the snapshot is loading.
+                            void watching.catch(ready.reject);
+                            await ready.promise;
+                            const configuration = await requests.runtimeConfiguration(botId, attemptSignal);
+                            attemptSignal.throwIfAborted();
+                            // A changed or failed watch cannot establish recovery, even if the read succeeded.
+                            if ((await Promise.race([watching, Promise.resolve("watching")])) === undefined) {
                                 continue;
                             }
-                            throw cause;
+                            deadline.abort();
+                            const recovered = get().view.kind === "reconnecting";
+                            const reason = setupReason(configuration);
+                            options.onRuntimeConfiguration?.(configuration);
+                            set((current) => ({
+                                runtimeConfiguration: configuration,
+                                connectionStatus: runtimeConnectionStatus(configuration),
+                                view:
+                                    current.selection.kind === "draft" && reason !== null
+                                        ? { kind: "setup", botId, reason }
+                                        : { kind: "active", botId },
+                            }));
+                            if (recovered) {
+                                onDirectoryRefreshed();
+                                if (get().selection.kind === "draft") {
+                                    onDraftSelected();
+                                }
+                            }
+                            try {
+                                await watching;
+                            } catch (cause) {
+                                if (cause instanceof DOMException && cause.name === "TimeoutError") {
+                                    continue;
+                                }
+                                throw cause;
+                            }
+                        } catch (cause) {
+                            signal.throwIfAborted();
+                            if (
+                                !(cause instanceof ChatConnectionError) &&
+                                !(cause instanceof DOMException && cause.name === "TimeoutError")
+                            ) {
+                                throw cause;
+                            }
+                            const view = get().view;
+                            const nextAttempt = (view.kind === "reconnecting" ? view.attempt : 0) + 1;
+                            if (nextAttempt > 3) {
+                                set({
+                                    view: {
+                                        kind: "connection-failed",
+                                        botId,
+                                        message: "Could not reconnect to Chat. Your agent may still be running.",
+                                    },
+                                });
+                                return;
+                            }
+                            set({ view: { kind: "reconnecting", botId, attempt: nextAttempt } });
+                        } finally {
+                            deadline.abort();
+                            attempt.abort();
                         }
-                        signal.throwIfAborted();
-                        const changedConfiguration = await requests.runtimeConfiguration(botId, signal);
-                        signal.throwIfAborted();
-                        options.onRuntimeConfiguration?.(changedConfiguration);
-                        const changedReason = setupReason(changedConfiguration);
-                        set((current) =>
-                            current.selection.kind === "draft"
-                                ? {
-                                      runtimeConfiguration: changedConfiguration,
-                                      connectionStatus: runtimeConnectionStatus(changedConfiguration),
-                                      view:
-                                          changedReason === null
-                                              ? { kind: "active", botId }
-                                              : { kind: "setup", botId, reason: changedReason },
-                                  }
-                                : {
-                                      runtimeConfiguration: changedConfiguration,
-                                      connectionStatus: runtimeConnectionStatus(changedConfiguration),
-                                  },
-                        );
                     }
                 };
                 try {
                     const current = get();
+                    if (
+                        current.view.kind === "reconnecting" &&
+                        current.runtimeConfiguration !== null &&
+                        (current.selection.kind === "draft" || current.selection.kind === "ready")
+                    ) {
+                        opened = true;
+                        await watchRuntimeConfigurationChanges();
+                        return;
+                    }
                     if (
                         current.view.kind === "active" &&
                         current.selection.kind === "loading" &&
@@ -550,9 +608,6 @@ export const createBotChatHomeStore = (
                                 ? { kind: "disconnected", label: "Disconnected" }
                                 : current.connectionStatus,
                         view: opened ? { kind: "connection-failed", botId, message } : { kind: "failed", message },
-                        ...(opened && current.notices.connectionFailed.kind === "hidden"
-                            ? { notices: { ...current.notices, connectionFailed: { kind: "visible" as const } } }
-                            : {}),
                     }));
                 }
             },
@@ -600,6 +655,10 @@ export const createBotChatHomeStore = (
             },
             retry: () => {
                 set((current) => ({
+                    view:
+                        current.view.kind === "connection-failed" || current.view.kind === "reconnecting"
+                            ? { kind: "reconnecting", botId, attempt: 0 }
+                            : current.view,
                     selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
                     revision: current.revision + 1,
                 }));

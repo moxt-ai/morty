@@ -76,11 +76,11 @@ export function BotChatHome({
     const draft = model.draft;
     const setupView = model.view.kind === "setup" ? model.view : null;
     const pairingNotice = model.notices.pairing.kind === "visible" || model.pairingDialogOpen;
-    const failureNotice = model.notices.connectionFailed.kind === "visible";
 
     const active =
         model.view.kind === "connecting" ||
         model.view.kind === "active" ||
+        model.view.kind === "reconnecting" ||
         model.view.kind === "setup" ||
         model.view.kind === "runtime-disconnected" ||
         model.view.kind === "connection-failed"
@@ -228,7 +228,7 @@ export function BotChatHome({
                             )}
                         </div>
                     </FollowLatestScrollArea>
-                    {model.view.kind === "active" && model.selection.kind === "draft" && (
+                    {model.runtimeConfiguration !== null && model.selection.kind === "draft" && (
                         <BotChatComposer
                             attachmentModel={attachmentModel}
                             attachmentSignal={workspace.operationsSignal()}
@@ -242,6 +242,7 @@ export function BotChatHome({
                             }}
                             outputState="idle"
                             submitDisabled={
+                                model.view.kind !== "active" ||
                                 creationBusy ||
                                 (draft.trim().length === 0 && attachmentModel.attachments.length === 0) ||
                                 model.draftSettings === null
@@ -250,7 +251,7 @@ export function BotChatHome({
                             <DraftChatControls
                                 key={model.selection.key}
                                 workspace={workspace}
-                                disabled={composerLocked}
+                                disabled={composerLocked || model.view.kind !== "active"}
                             />
                         </BotChatComposer>
                     )}
@@ -269,24 +270,21 @@ export function BotChatHome({
                     <PairingInstruction />
                 </Dialog>
             )}
-            {failureNotice && model.view.kind === "connection-failed" && (
-                <Dialog
-                    title="Runtime connection unavailable"
-                    description={model.view.message}
-                    onClose={() => {
-                        store.getState().dismissNotice("connection-failed");
-                    }}
-                    testId={dataTestId.runtimeSetupFailure}
+            {(model.view.kind === "reconnecting" || model.view.kind === "connection-failed") && (
+                <div
+                    role="status"
+                    aria-label="Chat connection"
+                    className="fixed top-4 left-1/2 z-50 flex max-w-[calc(100%-2rem)] -translate-x-1/2 items-center gap-3 rounded-lg border border-border bg-background p-3 text-sm shadow-lg"
                 >
-                    <Button
-                        onClick={() => {
-                            store.getState().dismissNotice("connection-failed");
-                            store.getState().retry();
-                        }}
-                    >
-                        Reconnect
-                    </Button>
-                </Dialog>
+                    <span>
+                        {model.view.kind === "reconnecting"
+                            ? model.view.attempt === 0
+                                ? "Reconnecting to Chat…"
+                                : `Reconnecting to Chat… Attempt ${model.view.attempt} of 3.`
+                            : model.view.message}
+                    </span>
+                    <Button onClick={store.getState().retry}>Reconnect</Button>
+                </div>
             )}
             {disconnectionNotice.kind === "visible" && !model.disconnectedNoticeDismissed && (
                 <div

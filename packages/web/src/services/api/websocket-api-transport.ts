@@ -1,5 +1,6 @@
 import * as v from "valibot";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
+import { ChatConnectionError } from "./chat-connection-error.ts";
 
 const responseFrame = v.strictObject({
     kind: v.literal("response"),
@@ -16,6 +17,7 @@ const errorFrame = v.strictObject({
 });
 const pongFrame = v.strictObject({ kind: v.literal("pong") });
 const diagnosticPongFrame = v.strictObject({ kind: v.literal("diagnostic.pong"), requestId: v.string() });
+const watchReadyFrame = v.strictObject({ kind: v.literal("watch.ready"), subscriptionId: v.string() });
 const notificationFrame = v.strictObject({ kind: v.literal("notification"), subscriptionId: v.string() });
 const eventFrame = v.strictObject({ kind: v.literal("event"), subscriptionId: v.string(), data: v.string() });
 const subscriptionEndFrame = v.strictObject({ kind: v.literal("subscription.end"), subscriptionId: v.string() });
@@ -26,6 +28,7 @@ const serverFrame = v.variant("kind", [
     pongFrame,
     diagnosticPongFrame,
     notificationFrame,
+    watchReadyFrame,
     eventFrame,
     subscriptionEndFrame,
 ]);
@@ -35,7 +38,7 @@ const KEEPALIVE_MILLISECONDS = 25_000;
 type BridgeState =
     | { readonly kind: "closed" }
     | { readonly kind: "disconnected" }
-    | { readonly kind: "connecting"; readonly connection: Promise<WebSocket> }
+    | { readonly kind: "connecting"; readonly connection: Promise<WebSocket>; readonly socket: WebSocket }
     | { readonly kind: "connected"; readonly socket: WebSocket };
 
 interface PendingRequest {
@@ -45,6 +48,7 @@ interface PendingRequest {
 }
 
 interface PendingWatch {
+    readonly ready?: () => void;
     readonly reject: (cause: unknown) => void;
     readonly resolve: () => void;
     readonly release: () => void;
@@ -126,7 +130,9 @@ export class WebSocketApiTransport {
         request.signal.throwIfAborted();
         return await new Promise<Response>((resolve, reject) => {
             const abort = () => {
-                socket.send(JSON.stringify({ kind: "cancel", requestId }));
+                if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ kind: "cancel", requestId }));
+                }
                 this.#settle(requestId)?.reject(request.signal.reason);
             };
             request.signal.addEventListener("abort", abort, { once: true });
@@ -205,7 +211,7 @@ export class WebSocketApiTransport {
         return Math.max(0, Math.round(performance.now() - startedAt));
     };
 
-    readonly waitForChange = async (request: Request): Promise<void> => {
+    readonly waitForChange = async (request: Request, onReady?: () => void): Promise<void> => {
         request.signal.throwIfAborted();
         const url = new URL(request.url);
         if (
@@ -225,14 +231,18 @@ export class WebSocketApiTransport {
         const body = requestBody === "" ? null : requestBody;
         request.signal.throwIfAborted();
         const socket = await this.#connect(request.signal);
+        request.signal.throwIfAborted();
         const subscriptionId = crypto.randomUUID();
         return await new Promise<void>((resolve, reject) => {
             const abort = () => {
-                socket.send(JSON.stringify({ kind: "unwatch", subscriptionId }));
+                if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ kind: "unwatch", subscriptionId }));
+                }
                 this.#settleWatch(subscriptionId)?.reject(request.signal.reason);
             };
             request.signal.addEventListener("abort", abort, { once: true });
             this.#watches.set(subscriptionId, {
+                ...(onReady === undefined ? {} : { ready: onReady }),
                 reject,
                 resolve,
                 release: () => request.signal.removeEventListener("abort", abort),
@@ -271,10 +281,13 @@ export class WebSocketApiTransport {
             }
         }
         const socket = await this.#connect(request.signal);
+        request.signal.throwIfAborted();
         const subscriptionId = crypto.randomUUID();
         return await new Promise<void>((resolve, reject) => {
             const abort = () => {
-                socket.send(JSON.stringify({ kind: "unwatch", subscriptionId }));
+                if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ kind: "unwatch", subscriptionId }));
+                }
                 this.#settleEventStream(subscriptionId)?.reject(request.signal.reason);
             };
             request.signal.addEventListener("abort", abort, { once: true });
@@ -304,13 +317,8 @@ export class WebSocketApiTransport {
     readonly close = (): void => {
         const state = this.#state;
         this.#state = { kind: "closed" };
-        if (state.kind === "connected") {
+        if (state.kind === "connected" || state.kind === "connecting") {
             state.socket.close(1000, "Chat API transport closed");
-        } else if (state.kind === "connecting") {
-            void state.connection.then(
-                (socket) => socket.close(1000, "Chat API transport closed"),
-                () => undefined,
-            );
         }
         for (const requestId of [...this.#pending.keys()]) {
             this.#settle(requestId)?.reject(new Error("The Chat API transport closed."));
@@ -330,8 +338,11 @@ export class WebSocketApiTransport {
         if (this.#state.kind === "closed") {
             throw new Error("The Chat API transport is closed.");
         }
-        if (this.#state.kind === "connected" && this.#state.socket.readyState === WebSocket.OPEN) {
-            return this.#state.socket;
+        if (this.#state.kind === "connected") {
+            if (this.#state.socket.readyState === WebSocket.OPEN) {
+                return this.#state.socket;
+            }
+            this.#disconnected(this.#state.socket);
         }
         if (this.#state.kind === "connecting") {
             return await this.#waitForConnection(this.#state.connection, signal);
@@ -341,20 +352,26 @@ export class WebSocketApiTransport {
         const startedAt = performance.now();
         const socket = new WebSocket(endpoint);
         const connection = new Promise<WebSocket>((resolve, reject) => {
+            const deadline = setTimeout(
+                () => rejectConnection(new ChatConnectionError("CHAT_CONNECTION_TIMEOUT")),
+                10_000,
+            );
             const closedWhileConnecting = () => {
+                clearTimeout(deadline);
                 socket.removeEventListener("open", opened);
                 socket.removeEventListener("error", failed);
-                if (this.#state.kind !== "closed") {
+                if (this.#state.kind === "connecting" && this.#state.socket === socket) {
                     this.#state = { kind: "disconnected" };
                 }
-                reject(new Error("The Chat WebSocket bridge closed while connecting."));
+                reject(new ChatConnectionError());
             };
             const opened = () => {
+                clearTimeout(deadline);
                 socket.removeEventListener("error", failed);
                 socket.removeEventListener("close", closedWhileConnecting);
-                if (this.#state.kind === "closed") {
+                if (this.#state.kind !== "connecting" || this.#state.socket !== socket) {
                     socket.close(1000, "Chat API transport closed");
-                    reject(new Error("The Chat API transport is closed."));
+                    reject(new Error("The Chat API connection is no longer active."));
                     return;
                 }
                 recordBrowserDiagnostic({
@@ -374,7 +391,9 @@ export class WebSocketApiTransport {
                 socket.addEventListener("close", () => clearInterval(keepalive), { once: true });
                 resolve(socket);
             };
-            const failed = () => {
+            const failed = () => rejectConnection(new ChatConnectionError());
+            const rejectConnection = (cause: ChatConnectionError) => {
+                clearTimeout(deadline);
                 recordBrowserDiagnostic({
                     at: new Date().toISOString(),
                     component: "worker",
@@ -384,16 +403,22 @@ export class WebSocketApiTransport {
                     elapsedMs: Math.round(performance.now() - startedAt),
                 });
                 socket.removeEventListener("open", opened);
+                socket.removeEventListener("error", failed);
                 socket.removeEventListener("close", closedWhileConnecting);
-                if (this.#state.kind !== "closed") {
+                if (this.#state.kind === "connecting" && this.#state.socket === socket) {
                     this.#state = { kind: "disconnected" };
                 }
-                reject(new Error("The Chat WebSocket bridge could not connect."));
+                socket.close();
+                reject(cause);
             };
             socket.addEventListener("open", opened, { once: true });
             socket.addEventListener("error", failed, { once: true });
             socket.addEventListener("close", closedWhileConnecting, { once: true });
-            socket.addEventListener("message", this.#receive);
+            socket.addEventListener("message", (event) => {
+                if (this.#state.kind === "connected" && this.#state.socket === socket) {
+                    this.#receive(event);
+                }
+            });
             socket.addEventListener(
                 "close",
                 (event) => {
@@ -406,29 +431,32 @@ export class WebSocketApiTransport {
                         requestId: "",
                         elapsedMs: 0,
                     });
-                    if (this.#state.kind === "connected" && this.#state.socket === socket) {
-                        this.#state = { kind: "disconnected" };
-                    }
-                    for (const requestId of [...this.#pending.keys()]) {
-                        this.#settle(requestId)?.reject(new Error("The Chat WebSocket bridge disconnected."));
-                    }
-                    for (const subscriptionId of [...this.#watches.keys()]) {
-                        this.#settleWatch(subscriptionId)?.reject(new Error("The Chat WebSocket bridge disconnected."));
-                    }
-                    for (const subscriptionId of [...this.#eventStreams.keys()]) {
-                        this.#settleEventStream(subscriptionId)?.reject(
-                            new Error("The Chat WebSocket bridge disconnected."),
-                        );
-                    }
-                    for (const requestId of [...this.#diagnostics.keys()]) {
-                        this.#settleDiagnostic(requestId)?.reject(new Error("The Chat WebSocket bridge disconnected."));
-                    }
+                    this.#disconnected(socket);
                 },
                 { once: true },
             );
         });
-        this.#state = { kind: "connecting", connection };
+        this.#state = { kind: "connecting", connection, socket };
         return await this.#waitForConnection(connection, signal);
+    };
+
+    readonly #disconnected = (socket: WebSocket): void => {
+        if (this.#state.kind !== "connected" || this.#state.socket !== socket) {
+            return;
+        }
+        this.#state = { kind: "disconnected" };
+        for (const requestId of [...this.#pending.keys()]) {
+            this.#settle(requestId)?.reject(new ChatConnectionError());
+        }
+        for (const subscriptionId of [...this.#watches.keys()]) {
+            this.#settleWatch(subscriptionId)?.reject(new ChatConnectionError());
+        }
+        for (const subscriptionId of [...this.#eventStreams.keys()]) {
+            this.#settleEventStream(subscriptionId)?.reject(new ChatConnectionError());
+        }
+        for (const requestId of [...this.#diagnostics.keys()]) {
+            this.#settleDiagnostic(requestId)?.reject(new ChatConnectionError());
+        }
     };
 
     readonly #waitForConnection = async (connection: Promise<WebSocket>, signal: AbortSignal): Promise<WebSocket> => {
@@ -471,6 +499,10 @@ export class WebSocketApiTransport {
             }
             return;
         }
+        if (frame.kind === "watch.ready") {
+            this.#watches.get(frame.subscriptionId)?.ready?.();
+            return;
+        }
         if (frame.kind === "notification") {
             this.#settleWatch(frame.subscriptionId)?.resolve();
             return;
@@ -488,6 +520,7 @@ export class WebSocketApiTransport {
         }
         if (frame.kind === "subscription.end") {
             this.#settleEventStream(frame.subscriptionId)?.resolve();
+            this.#settleWatch(frame.subscriptionId)?.reject(new ChatConnectionError());
             return;
         }
         if (frame.requestId === null) {
@@ -496,7 +529,9 @@ export class WebSocketApiTransport {
         const pending = this.#pending.get(frame.requestId);
         if (pending === undefined) {
             if (frame.kind === "error") {
-                this.#settleEventStream(frame.requestId)?.reject(new Error(`${frame.code}: ${frame.message}`));
+                const failure = new Error(`${frame.code}: ${frame.message}`);
+                this.#settleEventStream(frame.requestId)?.reject(failure);
+                this.#settleWatch(frame.requestId)?.reject(failure);
             }
             return;
         }
