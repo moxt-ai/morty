@@ -291,6 +291,7 @@ export function createChatWorkspace(options: {
     const startDirectoryLoad = (): void => {
         directoryLifetime.abort(new Error("Directory loading restarted."));
         directoryLifetime = new AbortController();
+        statuses.getState().directoryLoadStarted();
         void directory
             .getState()
             .load(directoryLifetime.signal)

@@ -10,8 +10,24 @@ export type ConversationListStatus =
     | { readonly kind: "failed"; readonly commandId: string | null; readonly message: string }
     | { readonly kind: "unread" };
 
+/**
+ * What a Session shows once the Runtime reports it idle. A failed turn stays marked until the next turn starts, and a
+ * reply that finished while another Session was selected is unread.
+ */
+function settleIdle(current: ConversationListStatus | undefined, selected: boolean): ConversationListStatus {
+    if (current?.kind === "failed") {
+        return current;
+    }
+    if (!selected && (current?.kind === "working" || current?.kind === "unread")) {
+        return { kind: "unread" };
+    }
+    return { kind: "idle" };
+}
+
 interface ConversationStatusState {
     readonly statuses: ReadonlyMap<string, ConversationListStatus>;
+    /** A directory load starts; its snapshot will not replace statuses that change after this. */
+    readonly directoryLoadStarted: () => void;
     readonly directoryLoaded: (botId: string, sessions: readonly ManagedChatSession[], signal: AbortSignal) => void;
     readonly selectionChanged: (sessionId: string | null) => void;
     readonly statusChanged: (
@@ -37,37 +53,35 @@ export function createConversationStatusStore(
     } | null = null;
     let activeBotId = "";
     let selectedSessionId: string | null = null;
+    // The stream and the open pane report changes as they happen, while a directory snapshot describes the moment its
+    // request was served. Each change is numbered so that a snapshot keeps the statuses that changed after it started.
+    let changes = 0;
+    const changedAt = new Map<string, number>();
+    let directorySnapshotStartedAt = 0;
 
     const store = createStore<ConversationStatusState>((set, get) => {
         const replaceStatus = (sessionId: string, status: ConversationListStatus): void => {
+            changes += 1;
+            changedAt.set(sessionId, changes);
             set((state) => ({ statuses: new Map(state.statuses).set(sessionId, status) }));
         };
         const markCompleted = (sessionId: string): void => {
-            set((state) => {
-                const current = state.statuses.get(sessionId);
-                return {
-                    statuses: new Map(state.statuses).set(
-                        sessionId,
-                        sessionId !== selectedSessionId && (current?.kind === "working" || current?.kind === "unread")
-                            ? { kind: "unread" }
-                            : { kind: "idle" },
-                    ),
-                };
-            });
+            replaceStatus(sessionId, settleIdle(get().statuses.get(sessionId), sessionId === selectedSessionId));
         };
 
-        const replaceDirectory = (sessions: readonly ManagedChatSession[]): void => {
+        const replaceDirectory = (sessions: readonly ManagedChatSession[], snapshotStartedAt: number): void => {
             set((state) => {
                 const entries = sessions.map((session): readonly [string, ConversationListStatus] => {
                     const current = state.statuses.get(session.id);
-                    if (
-                        session.status.kind === "idle" &&
-                        session.id !== selectedSessionId &&
-                        (current?.kind === "working" || current?.kind === "unread")
-                    ) {
-                        return [session.id, { kind: "unread" }];
+                    if (current !== undefined && (changedAt.get(session.id) ?? 0) > snapshotStartedAt) {
+                        return [session.id, current];
                     }
-                    return [session.id, session.status];
+                    return [
+                        session.id,
+                        session.status.kind === "idle"
+                            ? settleIdle(current, session.id === selectedSessionId)
+                            : session.status,
+                    ];
                 });
                 return { statuses: new Map(entries) };
             });
@@ -114,7 +128,8 @@ export function createConversationStatusStore(
                                 throw cause;
                             }
                             recoveries += 1;
-                            replaceDirectory(await requests.managedSessions(botId, signal));
+                            const snapshotStartedAt = changes;
+                            replaceDirectory(await requests.managedSessions(botId, signal), snapshotStartedAt);
                         }
                     }
                 } catch (cause) {
@@ -131,12 +146,15 @@ export function createConversationStatusStore(
 
         return {
             statuses: new Map(),
+            directoryLoadStarted: () => {
+                directorySnapshotStartedAt = changes;
+            },
             directoryLoaded: (botId, sessions, signal) => {
                 if (activeBotId !== botId) {
                     closeWatcher();
                     activeBotId = botId;
                 }
-                replaceDirectory(sessions);
+                replaceDirectory(sessions, directorySnapshotStartedAt);
                 if (sessions.length > 0) {
                     watch(
                         botId,
@@ -147,13 +165,8 @@ export function createConversationStatusStore(
             },
             selectionChanged: (sessionId) => {
                 selectedSessionId = sessionId;
-                if (sessionId !== null) {
-                    set((state) => {
-                        if (state.statuses.get(sessionId)?.kind !== "unread") {
-                            return state;
-                        }
-                        return { statuses: new Map(state.statuses).set(sessionId, { kind: "idle" }) };
-                    });
+                if (sessionId !== null && get().statuses.get(sessionId)?.kind === "unread") {
+                    replaceStatus(sessionId, { kind: "idle" });
                 }
             },
             statusChanged: (botId, sessionId, status, signal) => {
