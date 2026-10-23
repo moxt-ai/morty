@@ -238,7 +238,6 @@ class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTra
 }
 
 export class BotChatApi {
-    readonly #agentSettingsCache = new Map<string, AgentSettingsResult>();
     readonly #fetchRequest: (request: Request) => Promise<Response>;
     readonly #origin: string;
     readonly #projectId: string;
@@ -422,21 +421,11 @@ export class BotChatApi {
     readonly agentSettings = async (
         botId: string,
         agentRef: string,
-        refresh: boolean,
         signal: AbortSignal,
     ): Promise<AgentSettingsResult> => {
         signal.throwIfAborted();
         const requestedBotId = v.parse(identifier, botId);
         const requestedAgentRef = v.parse(identifier, agentRef);
-        const cacheKey = JSON.stringify([requestedBotId, requestedAgentRef]);
-        if (refresh) {
-            this.#agentSettingsCache.delete(cacheKey);
-        } else {
-            const cached = this.#agentSettingsCache.get(cacheKey);
-            if (cached !== undefined) {
-                return cached;
-            }
-        }
         const result = v.parse(
             v.object({ settings: v.unknown() }),
             await this.#request(requestedBotId, "agent-settings", { agentRef: requestedAgentRef }, signal),
@@ -451,7 +440,6 @@ export class BotChatApi {
                         : defaultValue,
             })),
         };
-        this.#agentSettingsCache.set(cacheKey, settings);
         return settings;
     };
     readonly runtimeConfiguration = async (botId: string, parent: AbortSignal): Promise<BotRuntimeConfiguration> =>

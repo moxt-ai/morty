@@ -31,3 +31,23 @@ export function nativeSessionAgentTabs(runtime: ChatRuntime): readonly NativeSes
         },
     ];
 }
+
+/** A harness the configuration menu offers, as the Runtime configuration names it. */
+export interface HarnessOption {
+    readonly agentRef: string;
+    readonly installed: boolean;
+    readonly label: string;
+    readonly tabLabel: string;
+    readonly value: string;
+}
+
+/** The harnesses a configuration menu offers, derived from the Runtime configuration the page follows. */
+export function harnessOptions(runtime: ChatRuntime | null): readonly HarnessOption[] {
+    return (runtime === null ? [] : nativeSessionAgentTabs(runtime)).map((agent) => ({
+        agentRef: agent.agentRef,
+        installed: agent.installed,
+        label: agent.label,
+        tabLabel: agent.label,
+        value: `${agent.runtimeId}:${agent.agentRef}`,
+    }));
+}

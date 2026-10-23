@@ -27,7 +27,6 @@ import { formatError, isRetryableRuntimeConnectionFailure, isSessionClosedFailur
 import { reportApplicationError } from "../report-error.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
-import { nativeSessionAgentTabs } from "./native-session-agents.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { type SessionActivityState, sameSessionActivity, workingCommandId } from "./session-activity-machine.ts";
 import {
@@ -116,13 +115,6 @@ export interface SessionPaneStore {
     readonly followRevision: number;
     readonly operation: Operation;
     readonly activity: SessionActivityState;
-    /** Display-only harness list; loading failures leave the current harness. */
-    readonly harnesses: readonly {
-        readonly agentRef?: string;
-        readonly installed?: boolean;
-        readonly label: string;
-        readonly value: string;
-    }[];
     readonly connect: (signal: AbortSignal) => Promise<void>;
     readonly retryNow: () => void;
     /**
@@ -873,7 +865,6 @@ export function createSessionPaneModel(options: {
             historyRevision: 0,
             hasOlderHistory: false,
             draft: centralSessionStorage.read(draftEntry) ?? "",
-            harnesses: [{ agentRef: session.agentRef, label: session.agentRef, value: session.agentRef }],
             followRevision: 0,
             operation: { kind: "idle" },
             activity: turnActivity(currentTurn),
@@ -1560,35 +1551,6 @@ export function createSessionPaneModel(options: {
     // fresh controller (a detach aborts the previous one), so a re-attached
     // pane reconnects instead of reusing an aborted signal.
     let connection = new AbortController();
-    // The harness list is display-only in an existing conversation: every
-    // entry is disabled, so a failed load just leaves the current harness.
-    // The controller is re-armed on each attach so a re-attached pane can
-    // refresh the list again.
-    let harnessController = new AbortController();
-    const loadHarnesses = (): void => {
-        harnessController = new AbortController();
-        const signal = harnessController.signal;
-        requests
-            .runtimeConfiguration(botId, signal)
-            .then((configuration) => {
-                if (signal.aborted) {
-                    return;
-                }
-                store.setState({
-                    harnesses: nativeSessionAgentTabs(configuration.runtime).map((agent) => ({
-                        agentRef: agent.agentRef,
-                        installed: agent.installed,
-                        label: agent.label,
-                        value: `${agent.runtimeId}:${agent.agentRef}`,
-                    })),
-                });
-            })
-            .catch((cause: unknown) => {
-                if (!signal.aborted) {
-                    reportApplicationError(cause, "session-pane-harnesses");
-                }
-            });
-    };
     const waitForConnectionReady = async (signal: AbortSignal): Promise<void> => {
         while (true) {
             signal.throwIfAborted();
@@ -1647,7 +1609,6 @@ export function createSessionPaneModel(options: {
      */
     const stop = (): void => {
         filePreview.getState().close();
-        harnessController.abort(new Error("The session pane stopped."));
         connection.abort(new Error("The session pane stopped."));
     };
     /**
@@ -1669,7 +1630,6 @@ export function createSessionPaneModel(options: {
         // A previous cleanup aborted the old controllers; arm fresh ones so
         // this attach reconnects with a live signal.
         connection = new AbortController();
-        loadHarnesses();
         const signal = connection.signal;
         void store
             .getState()
