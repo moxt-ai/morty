@@ -161,6 +161,10 @@ export function createChatWorkspace(options: {
         entry: options.entry ?? "address",
         onRuntimeConfiguration: (configuration) => {
             options.computers?.updateCurrent(configuration);
+            void draftControls
+                .getState()
+                .runtimeChanged(configuration, chatLifetime.signal)
+                .catch(() => undefined);
             if (initialVisitPending) {
                 initialVisitPending = false;
                 if (home.getState().selection.kind === "draft") {

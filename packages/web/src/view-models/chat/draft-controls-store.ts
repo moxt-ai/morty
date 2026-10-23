@@ -74,6 +74,11 @@ export interface DraftControlsStore {
     readonly closeCwd: () => void;
     readonly forgetRecentCwd: (directoryId: string) => void;
     readonly load: (signal: AbortSignal) => Promise<void>;
+    /**
+     * The Runtime's Agents changed. A draft whose Agent the Runtime no longer offers loads again, which settles on an
+     * offered Agent and withdraws the settings published for the removed one.
+     */
+    readonly runtimeChanged: (configuration: BotRuntimeConfiguration, signal: AbortSignal) => Promise<void>;
     readonly openCwd: () => void;
     readonly setCwdMenuOpen: (open: boolean) => void;
     readonly refreshAgentSettings: (signal: AbortSignal) => Promise<void>;
@@ -374,6 +379,21 @@ export const createDraftControlsStore = (
                 });
             },
             load,
+            runtimeChanged: async (configuration, signal) => {
+                const settings = get().settings;
+                // An offline Runtime offers nothing for now, which says nothing about whether the Agent was removed.
+                if ((settings.kind !== "ready" && settings.kind !== "refreshing") || !configuration.runtime.online) {
+                    return;
+                }
+                const offered = connectedChatRuntimeAgents(configuration.runtime).some(
+                    (agent) =>
+                        agent.runtimeId === settings.selectedAgent.runtimeId &&
+                        agent.agentRef === settings.selectedAgent.agentRef,
+                );
+                if (!offered) {
+                    await load(signal);
+                }
+            },
             openCwd: () => {
                 const settings = get().settings;
                 if (settings.kind === "ready") {
