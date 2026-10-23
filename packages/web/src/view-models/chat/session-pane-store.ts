@@ -70,7 +70,13 @@ import {
     transitionSessionProjection,
 } from "./session-projection.ts";
 import { createSessionSettingsStore } from "./session-settings-store.ts";
-import { createSessionTaskControlsStore, type SessionTaskControlsStore } from "./session-task-controls.ts";
+import {
+    createSessionTaskControlsStore,
+    type RunningTurn,
+    type SessionTaskControlsStore,
+    stopFailure,
+    stopRequested,
+} from "./session-task-controls.ts";
 import { createSessionTurnLedger } from "./session-turn-ledger.ts";
 import { createSessionWelcomeStore } from "./session-welcome-store.ts";
 
@@ -115,6 +121,8 @@ export interface SessionPaneStore {
     readonly followRevision: number;
     readonly operation: Operation;
     readonly activity: SessionActivityState;
+    /** The turn the service reports running, as the current turn holds it; the stop control acts on it. */
+    readonly runningTurn: RunningTurn | null;
     readonly connect: (signal: AbortSignal) => Promise<void>;
     readonly retryNow: () => void;
     /**
@@ -164,10 +172,9 @@ export function sessionPanePresentation(
                 (interaction.elicitation.state.kind === "pending" ||
                     interaction.elicitation.state.kind === "submitted")),
     );
-    const controlRunning =
-        tasks.operation.kind === "running" ||
-        tasks.operation.kind === "steering" ||
-        tasks.operation.kind === "stopping";
+    // Which turn runs is the current turn's; the stop control only adds whether the user asked to stop it.
+    const controlRunning = model.runningTurn !== null;
+    const stopping = stopRequested(tasks, model.runningTurn);
     const composerDisabled =
         model.connection.kind !== "ready" ||
         delivery.state.kind === "submitting" ||
@@ -176,8 +183,7 @@ export function sessionPanePresentation(
         model.operation.kind === "configuring" ||
         waitingForInput ||
         queue.operation.kind === "submitting" ||
-        tasks.operation.kind === "steering" ||
-        tasks.operation.kind === "stopping";
+        stopping;
     const composerInputDisabled =
         (model.connection.kind !== "ready" && model.connection.kind !== "loading") ||
         delivery.state.kind === "submitting" ||
@@ -186,8 +192,7 @@ export function sessionPanePresentation(
         model.operation.kind === "configuring" ||
         waitingForInput ||
         queue.operation.kind === "submitting" ||
-        tasks.operation.kind === "steering" ||
-        tasks.operation.kind === "stopping";
+        stopping;
     const workingActivityCommandId = workingCommandId(model.activity);
     const submittingCommandId = model.operation.kind === "sending" ? model.operation.commandId : null;
     const activeCommandId = workingActivityCommandId ?? submittingCommandId;
@@ -232,9 +237,10 @@ export function sessionPanePresentation(
             connectionFailure(model.connection) ??
             (model.connection.kind === "closed"
                 ? ""
-                : ([model.activity, model.operation, delivery.state, tasks.feedback, queue.feedback].find(
-                      (state) => state.kind === "failed",
-                  )?.message ?? "")),
+                : ([model.activity, model.operation, delivery.state].find((state) => state.kind === "failed")
+                      ?.message ??
+                  stopFailure(tasks, model.runningTurn) ??
+                  (queue.feedback.kind === "failed" ? queue.feedback.message : ""))),
         controlRunning,
         deliveryUnknownUserMessageId,
         hasOlderHistory: model.hasOlderHistory,
@@ -242,7 +248,7 @@ export function sessionPanePresentation(
         outputState:
             queue.operation.kind === "submitting"
                 ? "sending"
-                : tasks.operation.kind === "stopping"
+                : stopping
                   ? "stopping"
                   : model.operation.kind === "sending" || delivery.state.kind === "submitting"
                     ? "sending"
@@ -253,10 +259,10 @@ export function sessionPanePresentation(
             !needsApproval &&
             activeCommandId !== null &&
             model.messages.some((message) => message.role === "user" && message.commandId === activeCommandId),
-        shouldQueueOnSubmit: tasks.operation.kind === "running",
+        shouldQueueOnSubmit: controlRunning && !stopping,
         submitDisabled:
             model.connection.kind !== "ready" ||
-            (tasks.operation.kind === "running" ? queue.operation.kind !== "idle" : busy) ||
+            (controlRunning && !stopping ? queue.operation.kind !== "idle" : busy) ||
             attachments.state.kind === "reading" ||
             (model.draft.trim() === "" && attachments.attachments.length === 0),
         unconfirmedDelivery,
@@ -465,26 +471,9 @@ export function createSessionPaneModel(options: {
                 }
                 return await client.turns.cancel(sessionId, turnId, { idempotencyKey }, signal);
             }),
-            submit: noticingClosure(async (request, signal) => {
-                if (client === null) {
-                    throw new Error("The Session is not connected.");
-                }
-                return await client.turns.submit(
-                    sessionId,
-                    withInstructions({
-                        ...request,
-                        agentId: session.agentRef,
-                        directoryId: session.result.ready.directoryId,
-                    }),
-                    signal,
-                );
-            }),
         },
+        runningTurn: () => acceptedTurn(currentTurn),
     });
-    const openedRunning = acceptedTurn(currentTurn);
-    if (openedRunning !== null) {
-        tasks.getState().start(openedRunning.commandId, openedRunning.turnId);
-    }
     const messageQueue = createSessionMessageQueueStore({
         port: {
             cancel: noticingClosure(async (turnId, idempotencyKey, signal) => {
@@ -607,21 +596,23 @@ export function createSessionPaneModel(options: {
             }
         };
         /**
-         * Moves the current turn, and with it the activity the pane shows and the running turn the stop control acts
-         * on. Callers announce the activity once their other updates are in.
+         * Moves the current turn, and with it what the pane derives from it in one update: the activity it shows and
+         * reports, and the running turn the stop control acts on. Callers announce the activity once their other
+         * updates are in.
          */
         const updateTurn = (event: CurrentTurnEvent): void => {
-            const previous = acceptedTurn(currentTurn);
             currentTurn = transitionCurrentTurn(currentTurn, event);
-            const accepted = acceptedTurn(currentTurn);
-            if ((event.kind === "running" || event.kind === "accepted") && accepted?.commandId === event.commandId) {
-                tasks.getState().start(accepted.commandId, accepted.turnId);
-            } else if (previous !== null && previous.commandId !== accepted?.commandId) {
-                tasks.getState().finish(previous.commandId);
-            }
             const activity = turnActivity(currentTurn);
-            if (!sameSessionActivity(activity, get().activity)) {
-                set({ activity });
+            const running = acceptedTurn(currentTurn);
+            const current = get();
+            const runningChanged =
+                running?.commandId !== current.runningTurn?.commandId ||
+                running?.turnId !== current.runningTurn?.turnId;
+            if (!sameSessionActivity(activity, current.activity) || runningChanged) {
+                set({
+                    ...(sameSessionActivity(activity, current.activity) ? {} : { activity }),
+                    ...(runningChanged ? { runningTurn: running } : {}),
+                });
             }
         };
         let historyLoadController: AbortController | null = null;
@@ -761,7 +752,7 @@ export function createSessionPaneModel(options: {
                 current.connection.kind !== "ready" ||
                 current.operation.kind === "sending" ||
                 current.operation.kind === "configuring" ||
-                tasks.getState().operation.kind !== "idle"
+                current.runningTurn !== null
             ) {
                 return;
             }
@@ -868,6 +859,7 @@ export function createSessionPaneModel(options: {
             followRevision: 0,
             operation: { kind: "idle" },
             activity: turnActivity(currentTurn),
+            runningTurn: acceptedTurn(currentTurn),
             loadOlderMessages: async (signal) => {
                 const pagination = sessionProjectionPagination(projection);
                 if (loadingOlderHistory || pagination === null || client === null) {
@@ -1348,11 +1340,12 @@ export function createSessionPaneModel(options: {
             queueDraft: async (signal) => {
                 const current = get();
                 const { attachments, state: attachmentState } = composerAttachments.getState();
-                const controls = tasks.getState();
+                const running = current.runningTurn;
                 if (
                     attachmentState.kind === "reading" ||
                     current.connection.kind !== "ready" ||
-                    controls.operation.kind !== "running"
+                    running === null ||
+                    stopRequested(tasks.getState(), running)
                 ) {
                     return;
                 }
@@ -1366,7 +1359,7 @@ export function createSessionPaneModel(options: {
                         .join(", ");
                 delivery.getState().dismissFailure();
                 const queued = await messageQueue.getState().enqueue(
-                    controls.operation.active.commandId,
+                    running.commandId,
                     summary,
                     {
                         ...request,
