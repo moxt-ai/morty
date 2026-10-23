@@ -13,9 +13,12 @@ function attachmentName(attachment: ComposerAttachment): string {
 
 function AttachmentPreview({
     attachment,
+    disabled,
     onRemove,
 }: {
     readonly attachment: ComposerAttachment;
+    /** A disabled composer cannot change what it holds, attachments included. */
+    readonly disabled: boolean;
     readonly onRemove: () => void;
 }) {
     const name = attachmentName(attachment);
@@ -37,7 +40,8 @@ function AttachmentPreview({
             </span>
             <button
                 aria-label={`Remove ${name}`}
-                className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-black/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+                className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-black/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-50"
+                disabled={disabled}
                 onClick={onRemove}
                 type="button"
             >
@@ -149,6 +153,7 @@ export function BotChatComposer({
                         {attachments.map((attachment, index) => (
                             <AttachmentPreview
                                 attachment={attachment}
+                                disabled={disabled}
                                 key={`${attachment.kind}:${attachmentName(attachment)}:${index.toString()}`}
                                 onRemove={() => attachmentModel.remove(index)}
                             />

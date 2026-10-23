@@ -865,7 +865,7 @@ function MobiusSessionPaneBody({
                     attachmentModel={attachmentModel}
                     attachmentSignal={pane.operationsSignal()}
                     disabled={presentation.composerInputDisabled}
-                    draft={model.connection.kind === "session-loading-after-create" ? "" : model.draft}
+                    draft={model.draft}
                     error={presentation.composerError}
                     errorStatus={
                         model.connection.kind === "disconnected" || model.connection.kind === "reconnecting" ? (

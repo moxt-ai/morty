@@ -11,6 +11,7 @@ import {
 } from "@moxt-ai/mobius-sdk";
 import type { SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
+import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import {
     type ComposerAttachmentStore,
     createComposerAttachmentStore,
@@ -358,7 +359,7 @@ export function createSessionPaneModel(options: {
     readonly onTitleChange: (sessionId: string, title: string) => void;
 }) {
     const { session, botId, requests, clock } = options;
-    const composerAttachments = createComposerAttachmentStore(options.initialMessage?.attachments);
+    const composerAttachments = createComposerAttachmentStore();
     const sessionId = session.result.ready.sessionId;
     // Working in a conversation makes it the reference for the next draft: its
     // harness and the settings it runs with carry into New Session.
@@ -379,7 +380,7 @@ export function createSessionPaneModel(options: {
                   startedAt: fallbackStartedAt,
               })
             : idleTurn;
-    const turns = createSessionTurnLedger({ initialCommandId: options.initialMessage?.commandId ?? null });
+    const turns = createSessionTurnLedger();
     let client: MobiusClient | null = null;
     let countdownInterrupt: AbortController | null = null;
     // The Runtime closed the Session. The connect loop turns this into the closed connection state.
@@ -411,11 +412,13 @@ export function createSessionPaneModel(options: {
     let projection = createSessionProjection();
     let loadingOlderHistory = false;
     let draftRevision = 0;
-    // The queued first message stays the pane's recovery responsibility until
-    // the service accepts it or the user discards it, not just until the send
-    // starts.
+    // The queued first message belongs to the home store's conversation creation. This pane submits it as given,
+    // never as a copy in its composer, and reports every outcome back. It stays the pane's recovery responsibility
+    // until the service accepts it or the user discards it, not just until the send starts.
     const queuedInitialCommandId = options.initialMessage?.commandId ?? options.unconfirmedMessage?.commandId ?? null;
     const isQueuedInitialMessage = (commandId: string): boolean => commandId === queuedInitialCommandId;
+    let queuedInitialSubmission: "waiting" | "submitted" =
+        options.initialMessage === undefined ? "submitted" : "waiting";
     const instructionUri = "morty://bot/instructions";
     const withInstructions = <T extends { readonly resources: readonly PromptResource[] }>(request: T): T => ({
         ...request,
@@ -451,6 +454,11 @@ export function createSessionPaneModel(options: {
             );
         }),
         initialUnknown: options.unconfirmedMessage,
+        onDelivered: (commandId) => {
+            if (isQueuedInitialMessage(commandId)) {
+                options.onInitialMessageDelivered?.();
+            }
+        },
     });
     const lastSentMessageEntry = sessionLastSentMessageEntry(sessionId);
     const deriveTimeline = (): { readonly messages: readonly SessionMessage[] } => ({
@@ -743,6 +751,120 @@ export function createSessionPaneModel(options: {
                 setAndSettle({ connection: { kind: "closed", reason, reopen: { kind: "available" } } });
             });
         };
+        /**
+         * Submits a message: the composer's draft, or the queued first message this pane was opened with, exactly
+         * as the home store holds it. The submission owns the message until it is accepted, journaled, or returned
+         * to the composer by an authoritative rejection.
+         */
+        const submit = async (
+            message: {
+                readonly commandId: string;
+                readonly content: string;
+                readonly attachments: readonly ComposerAttachment[];
+            },
+            signal: AbortSignal,
+        ): Promise<void> => {
+            const current = get();
+            if (
+                current.connection.kind !== "ready" ||
+                current.operation.kind === "sending" ||
+                current.operation.kind === "configuring" ||
+                tasks.getState().operation.kind !== "idle"
+            ) {
+                return;
+            }
+            const { attachments, commandId } = message;
+            welcome.getState().dismiss();
+            const queued = isQueuedInitialMessage(commandId);
+            if (queued) {
+                queuedInitialSubmission = "submitted";
+            }
+            const sent = turns.recordSent(commandId, Date.now());
+            void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
+            const prompt = message.content.trim();
+            const displayPrompt =
+                prompt ||
+                attachments
+                    .map((attachment) =>
+                        attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
+                    )
+                    .join(", ");
+            const images = attachments.flatMap((attachment) => (attachment.kind === "image" ? [attachment.image] : []));
+            if (!queued) {
+                // The draft leaves the composer for the submission.
+                centralSessionStorage.remove(draftEntry);
+                composerAttachments.getState().clear();
+                set({ draft: "" });
+            }
+            const submittedDraftRevision = draftRevision;
+            updateTurn({ kind: "submitting", commandId, startedAt: sent.sentAt });
+            const pending = deriveTimeline();
+            set({
+                followRevision: get().followRevision + 1,
+                operation: { kind: "sending", commandId },
+                messages: pending.messages,
+            });
+            try {
+                const submission = {
+                    ...request,
+                    content: prompt,
+                    images,
+                    resources: attachments.flatMap((attachment) =>
+                        attachment.kind === "resource" ? [attachment.resource] : [],
+                    ),
+                };
+                const outcome = await delivery.getState().submit(commandId, displayPrompt, submission, signal);
+                signal.throwIfAborted();
+                switch (outcome.kind) {
+                    case "accepted":
+                    case "delivered":
+                    case "delivery-unknown":
+                        break;
+                    case "rejected":
+                        // The rejected message becomes editable in the composer, unless the user has since
+                        // started another draft there.
+                        if (draftRevision === submittedDraftRevision) {
+                            set({ draft: message.content });
+                            composerAttachments.getState().restore(attachments);
+                            centralSessionStorage.write(draftEntry, message.content);
+                        }
+                        if (queued) {
+                            // This rejected message is editable again. Retire
+                            // the auto-send/retry copy owned by the home store.
+                            options.onInitialMessageRecoveryCleared?.(commandId);
+                        }
+                        break;
+                    default:
+                        return outcome satisfies never;
+                }
+                // The delivery store reports an accepted submission itself, as it reports any later confirmation.
+                if (outcome.kind === "delivery-unknown" && queued) {
+                    options.onInitialMessageUnconfirmed?.({ commandId, displayPrompt, request: submission });
+                }
+                if (outcome.kind === "accepted" || outcome.kind === "delivered") {
+                    // A delivered command's turn was already reported running by the event that showed it.
+                    if (outcome.kind === "accepted") {
+                        updateTurn({ kind: "accepted", commandId, turnId: outcome.turn.turnId });
+                    }
+                    set({ operation: finishPromptOperation(get().operation, commandId) });
+                    return;
+                }
+                updateTurn({ kind: "submission-abandoned", commandId, failure: null });
+                const restored = deriveTimeline();
+                set({
+                    messages: restored.messages,
+                    pendingInitialMessage: null,
+                    operation: finishPromptOperation(get().operation, commandId),
+                });
+                announceActivity();
+            } catch (cause) {
+                signal.throwIfAborted();
+                const message = formatError(cause, "The agent could not complete the message.");
+                updateTurn({ kind: "submission-abandoned", commandId, failure: message });
+                set({ pendingInitialMessage: null, operation: { kind: "failed", message } });
+                announceActivity();
+            }
+        };
         return {
             connection:
                 options.initialMessage === undefined ? { kind: "loading" } : { kind: "session-loading-after-create" },
@@ -753,7 +875,7 @@ export function createSessionPaneModel(options: {
             historyLoading: false,
             historyRevision: 0,
             hasOlderHistory: false,
-            draft: options.initialMessage?.content ?? centralSessionStorage.read(draftEntry) ?? "",
+            draft: centralSessionStorage.read(draftEntry) ?? "",
             harnesses: [{ agentRef: session.agentRef, label: session.agentRef, value: session.agentRef }],
             followRevision: 0,
             operation: { kind: "idle" },
@@ -996,14 +1118,21 @@ export function createSessionPaneModel(options: {
                     consecutiveFailures = 0;
                     setAndSettle({ connection: { kind: "ready", client: connected } });
                     welcome.getState().connected();
-                    if (turns.hasInitialCommand()) {
-                        // Send reports delivery itself, so an uncertain or
+                    if (options.initialMessage !== undefined && queuedInitialSubmission === "waiting") {
+                        // Submission reports delivery itself, so an uncertain or
                         // rejected submission leaves the queued message and its
                         // idempotent command id in the home store for a remount
                         // to recover.
                         // The send belongs to the pane, not to this attempt: a closing of the Session must not
                         // abandon a submission that is already on its way.
-                        await get().send(paneSignal);
+                        await submit(
+                            {
+                                commandId: options.initialMessage.commandId,
+                                content: options.initialMessage.content,
+                                attachments: options.initialMessage.attachments,
+                            },
+                            paneSignal,
+                        );
                         signal.throwIfAborted();
                     }
                     // A detach between submit and the delivery report can still
@@ -1160,103 +1289,12 @@ export function createSessionPaneModel(options: {
                 set({ draft });
             },
             send: async (signal) => {
-                const current = get();
                 const { attachments, state: attachmentState } = composerAttachments.getState();
-                if (
-                    current.connection.kind !== "ready" ||
-                    attachmentState.kind === "reading" ||
-                    (current.draft.trim() === "" && attachments.length === 0) ||
-                    current.operation.kind === "sending" ||
-                    current.operation.kind === "configuring" ||
-                    tasks.getState().operation.kind !== "idle"
-                ) {
+                const draft = get().draft;
+                if (attachmentState.kind === "reading" || (draft.trim() === "" && attachments.length === 0)) {
                     return;
                 }
-                const commandId = turns.claimCommand(crypto.randomUUID());
-                welcome.getState().dismiss();
-                const sent = turns.recordSent(commandId, Date.now());
-                void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
-                const prompt = current.draft.trim();
-                const displayPrompt =
-                    prompt ||
-                    attachments
-                        .map((attachment) =>
-                            attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
-                        )
-                        .join(", ");
-                const images = attachments.flatMap((attachment) =>
-                    attachment.kind === "image" ? [attachment.image] : [],
-                );
-                const submittedDraftRevision = draftRevision;
-                // The submission owns this snapshot until it is accepted, journaled,
-                // or returned to the composer by an authoritative rejection.
-                centralSessionStorage.remove(draftEntry);
-                composerAttachments.getState().clear();
-                updateTurn({ kind: "submitting", commandId, startedAt: sent.sentAt });
-                const pending = deriveTimeline();
-                set({
-                    followRevision: get().followRevision + 1,
-                    operation: { kind: "sending", commandId },
-                    messages: pending.messages,
-                    draft: "",
-                });
-                try {
-                    const submission = {
-                        ...request,
-                        content: prompt,
-                        images,
-                        resources: attachments.flatMap((attachment) =>
-                            attachment.kind === "resource" ? [attachment.resource] : [],
-                        ),
-                    };
-                    const outcome = await delivery.getState().submit(commandId, displayPrompt, submission, signal);
-                    signal.throwIfAborted();
-                    switch (outcome.kind) {
-                        case "accepted":
-                        case "delivery-unknown":
-                            break;
-                        case "rejected":
-                            if (draftRevision === submittedDraftRevision) {
-                                set({ draft: current.draft });
-                                composerAttachments.getState().restore(attachments);
-                                centralSessionStorage.write(draftEntry, current.draft);
-                            }
-                            if (isQueuedInitialMessage(commandId)) {
-                                // This rejected message is editable again. Retire
-                                // the auto-send/retry copy owned by the home store.
-                                options.onInitialMessageRecoveryCleared?.(commandId);
-                            }
-                            break;
-                        default:
-                            return outcome satisfies never;
-                    }
-                    if (outcome.kind === "accepted") {
-                        if (isQueuedInitialMessage(commandId)) {
-                            options.onInitialMessageDelivered?.();
-                        }
-                    } else if (outcome.kind === "delivery-unknown" && isQueuedInitialMessage(commandId)) {
-                        options.onInitialMessageUnconfirmed?.({ commandId, displayPrompt, request: submission });
-                    }
-                    if (outcome.kind === "accepted") {
-                        updateTurn({ kind: "accepted", commandId, turnId: outcome.turn.turnId });
-                        set({ operation: finishPromptOperation(get().operation, commandId) });
-                        return;
-                    }
-                    updateTurn({ kind: "submission-abandoned", commandId, failure: null });
-                    const restored = deriveTimeline();
-                    set({
-                        messages: restored.messages,
-                        pendingInitialMessage: null,
-                        operation: finishPromptOperation(get().operation, commandId),
-                    });
-                    announceActivity();
-                } catch (cause) {
-                    signal.throwIfAborted();
-                    const message = formatError(cause, "The agent could not complete the message.");
-                    updateTurn({ kind: "submission-abandoned", commandId, failure: message });
-                    set({ pendingInitialMessage: null, operation: { kind: "failed", message } });
-                    announceActivity();
-                }
+                await submit({ commandId: crypto.randomUUID(), content: draft, attachments }, signal);
             },
             removeUnknownDelivery: () => {
                 const commandId = delivery.getState().discardUnknown();
@@ -1292,10 +1330,9 @@ export function createSessionPaneModel(options: {
                 signal.throwIfAborted();
                 switch (outcome?.kind) {
                     case "accepted":
-                        if (isQueuedInitialMessage(pending.commandId)) {
-                            options.onInitialMessageDelivered?.();
-                        }
                         updateTurn({ kind: "accepted", commandId: pending.commandId, turnId: outcome.turn.turnId });
+                        return;
+                    case "delivered":
                         return;
                     case "rejected": {
                         const restoredAttachments = [
