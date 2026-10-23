@@ -20,7 +20,7 @@ async function openAgentConfiguration(app: TestApp): Promise<HTMLElement> {
 }
 
 test("Given a draft whose Runtime does not offer Pi, When the Runtime restarts offering Pi, Then the draft harness picker offers Pi without a reload", {
-    timeout: 30_000,
+    timeout: 45_000,
 }, async () => {
     const app = await createTestApp({ agents: [{ id: "codex", label: "Codex" }], connectAgent: true });
     const daemon = app.daemon;
@@ -39,9 +39,10 @@ test("Given a draft whose Runtime does not offer Pi, When the Runtime restarts o
     await waitForConnectedComposer(app);
 
     const after = await openAgentConfiguration(app);
+    // The Worker checks the Runtime every 5 s and retries a failed check 5 s later, so the change can take two checks.
     await app.waitForView(() => {
         const pi = getByRole(after, "tab", { name: "Pi" });
         expect(pi.getAttribute("data-installed")).toBe("true");
         expect(pi.hasAttribute("disabled")).toBe(false);
-    });
+    }, 20_000);
 });

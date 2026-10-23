@@ -1,16 +1,22 @@
-import { test } from "vitest";
+import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 
+// The Worker checks the Runtime every 5 s and retries a failed check 5 s later, so one change can take two checks.
+const RUNTIME_CHANGE_TIMEOUT_MS = 20_000;
+
 async function waitForConnectionStatus(app: TestApp, status: "connected" | "disconnected"): Promise<void> {
-    await app.queryElementByTestId(
-        dataTestId.botConnectionStatus,
-        (element) => element.getAttribute("data-connection-status") === status,
+    await app.waitForView(
+        () =>
+            expect(app.elementByTestId(dataTestId.botConnectionStatus).getAttribute("data-connection-status")).toBe(
+                status,
+            ),
+        RUNTIME_CHANGE_TIMEOUT_MS,
     );
 }
 
 test("Given a draft whose Runtime goes offline as the page loads, When it comes back, Then the status follows both changes without a reload", {
-    timeout: 30_000,
+    timeout: 60_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
