@@ -57,6 +57,8 @@ const managedSessionSchema = v.pipe(
         directoryId: v.string(),
         additionalDirectoryIds: v.array(v.string()),
         projectId: identifier,
+        /** Whether the Runtime has received the Session's first prompt, which gives the Session its title. */
+        prompted: v.optional(v.boolean(), false),
         status: v.variant("kind", [
             v.pipe(v.object({ kind: v.literal("idle") }), v.readonly()),
             v.pipe(v.object({ commandId: identifier, kind: v.literal("working") }), v.readonly()),

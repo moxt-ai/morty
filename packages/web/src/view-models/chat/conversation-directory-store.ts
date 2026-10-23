@@ -27,9 +27,8 @@ export interface ConversationDirectoryStore {
      */
     readonly titleObserved: (sessionId: string, title: string) => void;
     /**
-     * Shows a new conversation's first-prompt title. The Runtime's Session listing does not report that title, so it
-     * stays until a load reports a different title than the one first listed for the Session, such as a rename made
-     * by another client.
+     * Shows a new conversation's first-prompt title. The Runtime titles a Session once its first prompt arrives and
+     * lists a placeholder until then, so this title stays until a load reports the Session as prompted.
      */
     readonly conversationCreated: (sessionId: string, title: string) => void;
 }
@@ -38,22 +37,16 @@ export interface ConversationDirectoryStore {
 type LocalTitle =
     /** Learned from the Session itself; loads that start after it report the Runtime's title. */
     | { readonly kind: "observed"; readonly title: string; readonly keptByLoad: number }
-    /** A new conversation's first-prompt title, kept until the listing reports another title than it first did. */
-    | { readonly kind: "created"; readonly title: string; readonly firstListedTitle: string | null };
+    /** A new conversation's first-prompt title, kept until the listing reports the Session as prompted. */
+    | { readonly kind: "created"; readonly title: string };
 
-/** What a finished load leaves of a local title: the same or an updated one, or null when the listing wins. */
-function settleLocalTitle(local: LocalTitle, reported: string | undefined, load: number): LocalTitle | null {
+/** Whether a finished load keeps a local title, or reports the Runtime's title instead. */
+function keepsLocalTitle(local: LocalTitle, reported: ManagedChatSession | undefined, load: number): boolean {
     switch (local.kind) {
         case "observed":
-            return local.keptByLoad < load ? null : local;
+            return local.keptByLoad >= load;
         case "created":
-            if (reported === undefined) {
-                return local;
-            }
-            if (local.firstListedTitle === null) {
-                return { ...local, firstListedTitle: reported };
-            }
-            return reported === local.firstListedTitle ? local : null;
+            return reported === undefined || !reported.prompted;
         default:
             return local satisfies never;
     }
@@ -161,15 +154,12 @@ export const createConversationDirectoryStore = (
                 try {
                     const reported = await requests.managedSessions(botId, signal);
                     signal.throwIfAborted();
-                    const reportedTitles = new Map<string, string>(
-                        reported.map((session) => [session.id, session.title]),
+                    const reportedById = new Map<string, ManagedChatSession>(
+                        reported.map((session) => [session.id, session]),
                     );
                     for (const [sessionId, local] of localTitles) {
-                        const next = settleLocalTitle(local, reportedTitles.get(sessionId), load);
-                        if (next === null) {
+                        if (!keepsLocalTitle(local, reportedById.get(sessionId), load)) {
                             localTitles.delete(sessionId);
-                        } else {
-                            localTitles.set(sessionId, next);
                         }
                     }
                     const sessions = reported.map((session) => {
@@ -185,18 +175,26 @@ export const createConversationDirectoryStore = (
                             return;
                         }
                         const message = formatError(cause, "Sessions are unavailable.");
-                        set({
-                            state:
-                                cached === null
-                                    ? { kind: "failed", message }
-                                    : { kind: "stale", message, sessions: cached },
+                        // Keep the list as it is now, with titles shown while the load ran, rather than the list it
+                        // started from.
+                        set((current) => {
+                            const state = current.state;
+                            switch (state.kind) {
+                                case "ready":
+                                case "refreshing":
+                                case "stale":
+                                    return { state: { kind: "stale", message, sessions: state.sessions } };
+                                case "loading":
+                                case "setup-required":
+                                case "failed":
+                                    return { state: { kind: "failed", message } };
+                            }
                         });
                     }
                 }
             },
             titleObserved: (sessionId, title) =>
                 showTitle(sessionId, { kind: "observed", title, keptByLoad: loadsStarted }),
-            conversationCreated: (sessionId, title) =>
-                showTitle(sessionId, { kind: "created", title, firstListedTitle: null }),
+            conversationCreated: (sessionId, title) => showTitle(sessionId, { kind: "created", title }),
         };
     });

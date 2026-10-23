@@ -217,6 +217,8 @@ export class ChatService {
                     directoryId: details?.directoryId ?? "default",
                     directoryLabel: details?.directoryLabel ?? "",
                     isExternal: false,
+                    // The Runtime titles a Session from its first prompt; until then it lists a placeholder.
+                    prompted: details?.prompted ?? false,
                     status: details?.status ?? { kind: "idle" },
                     title: details?.title ?? "New chat",
                     updatedAt: details?.updatedAt ?? createdAt,
