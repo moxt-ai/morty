@@ -154,16 +154,21 @@ export async function connectControlledAgentRuntime(options: {
     const workspace = join(directory, "workspace");
     await mkdir(workspace);
     await writeWorkspaceFiles(options.behavior.files, workspace, options.signal);
-    const harness = createMortyFakeDaemon(options.behavior, workspace);
     const relayUrl = new URL("/mobius/api/v1/runtimes/connect", options.connection.origin);
     relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
     relayUrl.searchParams.set("token", options.connection.runtimeCredential);
-    const runtime = controlledRuntime(
-        options.behavior,
-        harness.agents,
-        { channelId: options.connection.channelId, defaultWorkspace: workspace, relayUrl },
-        directory,
-    );
+    // The Agents can change across restarts, as when the user installs another Agent on the machine.
+    const configure = (behavior: ControlledAgentBehavior) => {
+        const harness = createMortyFakeDaemon(behavior, workspace);
+        const runtime = controlledRuntime(
+            behavior,
+            harness.agents,
+            { channelId: options.connection.channelId, defaultWorkspace: workspace, relayUrl },
+            directory,
+        );
+        return { harness, runtime };
+    };
+    let { harness, runtime } = configure(options.behavior);
     const unexpectedFailure = Promise.withResolvers<never>();
     void unexpectedFailure.promise.catch(() => undefined);
     const start = async () => {
@@ -218,7 +223,7 @@ export async function connectControlledAgentRuntime(options: {
         await runtime.stop();
     };
     return {
-        continueReply: harness.continueReply,
+        continueReply: (...reply: Parameters<typeof harness.continueReply>) => harness.continueReply(...reply),
         writeFiles: async (files: NonNullable<ControlledAgentBehavior["files"]>): Promise<void> =>
             await writeWorkspaceFiles(files, workspace, options.signal),
         disconnect,
@@ -229,6 +234,17 @@ export async function connectControlledAgentRuntime(options: {
             if (state.kind === "disconnected") {
                 state = { kind: "running", runtime: await start() };
             }
+        },
+        /** Restarts the Runtime offering other Agents, which it publishes to the Platform when it reconnects. */
+        restartWithAgents: async (
+            agents: Pick<ControlledAgentBehavior, "additionalAgents" | "agentId" | "agentName">,
+        ): Promise<void> => {
+            if (state.kind === "disposed") {
+                throw new Error("Cannot restart a disposed controlled Runtime");
+            }
+            await disconnect();
+            ({ harness, runtime } = configure({ ...options.behavior, ...agents }));
+            state = { kind: "running", runtime: await start() };
         },
         failure: unexpectedFailure.promise,
         [Symbol.asyncDispose]: async (): Promise<void> => {

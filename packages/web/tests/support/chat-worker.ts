@@ -57,6 +57,18 @@ export async function createChatWorkerEnvironment() {
                 closeSession: async (sessionId: string): Promise<void> => {
                     await runtime.client.sessions.close(runtime.runtimeId, sessionId, new AbortController().signal);
                 },
+                /** Restarts the Runtime offering these Agents, as when the user installs or removes one. */
+                replaceAgents: async (replacement: readonly ControlledAgent[]): Promise<void> => {
+                    const [first, ...others] = replacement;
+                    if (first === undefined) {
+                        throw new Error("A controlled Runtime needs at least one Agent");
+                    }
+                    await runtime.restartWithAgents({
+                        additionalAgents: others.map((agent) => ({ id: agent.id, name: agent.label })),
+                        agentId: first.id,
+                        agentName: first.label,
+                    });
+                },
                 /** Renames a Session through the Platform, the way another Mobius client of this Runtime would. */
                 renameSession: async (sessionId: string, title: string): Promise<void> => {
                     await runtime.client.sessions.rename(

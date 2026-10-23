@@ -197,9 +197,14 @@ export function createChatWorkspace(options: {
             paneEntry.model.store.getState().sessionClosed(reason);
         }
     });
-    const draftControls = createDraftControlsStore(botId, requests, (settings: ChatDraftConfiguration | null) => {
-        home.setState({ draftSettings: settings });
-    });
+    const draftControls = createDraftControlsStore(
+        botId,
+        requests,
+        (settings: ChatDraftConfiguration | null) => {
+            home.setState({ draftSettings: settings });
+        },
+        () => home.getState().runtimeConfiguration,
+    );
     // Sidebar stores live with the workspace, outside React: dialogs (native
     // session import, identity sharing, expanded state), remote access, and
     // network diagnostics all outlive any single sidebar render.

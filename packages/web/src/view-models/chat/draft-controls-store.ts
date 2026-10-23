@@ -26,17 +26,14 @@ type DraftSettingsState =
     | {
           readonly kind: "switching";
           readonly selectedHarness: string;
-          readonly configuration: BotRuntimeConfiguration;
       }
     | {
           readonly kind: "refreshing";
-          readonly configuration: BotRuntimeConfiguration;
           readonly selectedAgent: ChatAgentSelection;
           readonly cwd: WorkspaceEntriesEvent;
       }
     | {
           readonly kind: "ready";
-          readonly configuration: BotRuntimeConfiguration;
           readonly selectedAgent: ChatAgentSelection;
           readonly cwd: WorkspaceEntriesEvent;
           readonly options: readonly SessionConfigOption[];
@@ -128,6 +125,8 @@ export const createDraftControlsStore = (
     botId: string,
     requests: Pick<BotChatApi, "runtimeConfiguration" | "directory" | "agentSettings">,
     onSettings: (settings: ChatDraftConfiguration | null) => void,
+    /** The Runtime configuration the workspace keeps current. */
+    runtimeConfiguration: () => BotRuntimeConfiguration | null,
 ) =>
     createStore<DraftControlsStore>()((set, get) => {
         const cachedSettings = draftSettingsCache.get(requests)?.get(botId);
@@ -179,7 +178,6 @@ export const createDraftControlsStore = (
             publishSettings(ready);
         };
         const applyAgentSettings = (
-            configuration: BotRuntimeConfiguration,
             selectedAgent: ChatAgentSelection,
             cwd: WorkspaceEntriesEvent,
             options: readonly SessionConfigOption[],
@@ -188,7 +186,6 @@ export const createDraftControlsStore = (
             const restoredSettings = restoreLastAgentSettings(botId, selectedAgent.agentRef, options);
             const ready = {
                 kind: "ready" as const,
-                configuration,
                 selectedAgent,
                 cwd,
                 options: restoredSettings.options,
@@ -337,13 +334,7 @@ export const createDraftControlsStore = (
                                 signal.throwIfAborted();
                             }
                         }
-                        applyAgentSettings(
-                            configuration,
-                            selected,
-                            cwd,
-                            result.options,
-                            requestedHarness === selected.agentRef,
-                        );
+                        applyAgentSettings(selected, cwd, result.options, requestedHarness === selected.agentRef);
                         return;
                     }
                     await wait(signal);
@@ -398,7 +389,6 @@ export const createDraftControlsStore = (
                 set({
                     settings: {
                         kind: "refreshing",
-                        configuration: settings.configuration,
                         selectedAgent: settings.selectedAgent,
                         cwd: settings.cwd,
                     },
@@ -407,13 +397,7 @@ export const createDraftControlsStore = (
                 try {
                     const result = await requests.agentSettings(botId, settings.selectedAgent.agentRef, true, signal);
                     signal.throwIfAborted();
-                    applyAgentSettings(
-                        settings.configuration,
-                        settings.selectedAgent,
-                        settings.cwd,
-                        result.options,
-                        false,
-                    );
+                    applyAgentSettings(settings.selectedAgent, settings.cwd, result.options, false);
                 } catch (cause) {
                     if (!signal.aborted) {
                         set({
@@ -519,14 +503,16 @@ export const createDraftControlsStore = (
                 if (settings.kind !== "ready" || disabled) {
                     return;
                 }
-                const agent = connectedChatRuntimeAgents(settings.configuration.runtime).find(
+                // The Runtime's Agents can change while the draft is open; choose among those it offers now.
+                const configuration = runtimeConfiguration();
+                const agent = (configuration === null ? [] : connectedChatRuntimeAgents(configuration.runtime)).find(
                     (item) => `${item.runtimeId}:${item.agentRef}` === value,
                 );
                 if (agent === undefined) {
                     return;
                 }
                 pendingHarness = agent.agentRef;
-                set({ settings: { kind: "switching", selectedHarness: value, configuration: settings.configuration } });
+                set({ settings: { kind: "switching", selectedHarness: value } });
                 onSettings(null);
                 try {
                     await load(signal);

@@ -1,5 +1,6 @@
 import { CircleAlert, CircleHelp, RefreshCw } from "lucide-react";
 import { Tooltip } from "radix-ui";
+import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import { CwdSelector } from "../../components/chat/cwd-selector.tsx";
@@ -17,6 +18,8 @@ export function DraftChatControls({
     readonly disabled: boolean;
 }) {
     const viewModel = useExternalStore(workspace.draftControls);
+    // The picker offers the Agents the Runtime offers now, which can change while the draft is open.
+    const runtimeConfiguration = useStore(workspace.home, (state) => state.runtimeConfiguration);
     const signal = workspace.chatSignal();
     const { settings } = viewModel;
     const retry = () => {
@@ -81,7 +84,10 @@ export function DraftChatControls({
                         onValueChange: (value) => {
                             void viewModel.selectHarness(value, disabled, signal);
                         },
-                        options: nativeSessionAgentTabs(settings.configuration.runtime).map((agent) => ({
+                        options: (runtimeConfiguration === null
+                            ? []
+                            : nativeSessionAgentTabs(runtimeConfiguration.runtime)
+                        ).map((agent) => ({
                             agentRef: agent.agentRef,
                             installed: agent.installed,
                             value: `${agent.runtimeId}:${agent.agentRef}`,
