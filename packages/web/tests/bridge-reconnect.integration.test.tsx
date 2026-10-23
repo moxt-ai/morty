@@ -1,4 +1,4 @@
-import { queryByRole } from "@testing-library/dom";
+import { getByRole, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
@@ -141,4 +141,98 @@ test("Given repeated bridge drops on one page, When the Runtime goes offline aft
         expect(queryByRole(document.body, "dialog", { name: "Runtime connection unavailable" })).toBeNull();
     }
     await app.waitForView(() => expect(machine().startsWith("Disconnected")).toBe(true));
+});
+
+test("Given an offline Runtime and a dropped bridge, When the bridge recovers and the Runtime comes back, Then the draft composer becomes usable", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const enabledComposer = async () =>
+        await app.queryElementByTestId(
+            dataTestId.messageComposer,
+            (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+        );
+    await enabledComposer();
+
+    // The Runtime goes offline first: the draft page loses its settings and
+    // offers the ordinary retry surface.
+    await app.daemon?.disconnect();
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "alert").textContent).toContain("Your Mobius is disconnected"),
+    );
+
+    // The bridge drops and returns while the Runtime is still offline. The
+    // recovery re-reads the pairing state and must keep following workspace
+    // changes for this configured Machine.
+    app.transport.disconnect();
+    await act(async () => {
+        clock.advanceBy(1_000);
+    });
+
+    // The Runtime returns: the draft page offers a usable composer again.
+    await app.daemon?.reconnect();
+    await enabledComposer();
+});
+
+test("Given a recovery that loses the bridge again, When the Runtime changes after the final recovery, Then the page still follows it", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const machine = (): string => {
+        const body = document.body.textContent ?? "";
+        const marker = body.indexOf("Machine: Controlled Agent Runtime");
+        return marker === -1 ? "" : body.slice(marker + "Machine: Controlled Agent Runtime".length, marker + 45);
+    };
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    await sendPrompt(app, composer, "Before the interrupted recovery");
+    await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: Before the interrupted recovery")).toBe(true));
+
+    // The bridge returns, and the drop cuts off the recovery read that follows
+    // it. The load must re-enter recovery instead of leaving the page behind.
+    app.transport.disconnect();
+    await act(async () => {
+        clock.advanceBy(1_000);
+    });
+    app.transport.disconnect();
+
+    // The next backoff reconnects and finishes the recovery.
+    await act(async () => {
+        clock.advanceBy(2_000);
+    });
+
+    // A Runtime change after the final recovery must reach the page.
+    await app.daemon?.disconnect();
+    await app.waitForView(() => expect(machine().startsWith("Disconnected")).toBe(true));
+});
+
+test("Given a setup page whose bridge drops again during recovery, When the agent pairs, Then the app leaves setup", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ clock });
+    await app.queryElementByTestId(dataTestId.pairingInstruction);
+
+    // First drop: the recovery waits on the setup watch for this unpaired
+    // Machine, which stays pending until the pairing changes.
+    app.transport.disconnect();
+    await act(async () => {
+        clock.advanceBy(1_000);
+    });
+
+    // Second drop while that recovery wait is in flight. The load must
+    // re-enter recovery instead of leaving the page behind.
+    app.transport.disconnect();
+    await act(async () => {
+        clock.advanceBy(2_000);
+    });
+
+    // Pairing completes: the setup watch must still be armed, so the page
+    // follows the new configuration into the chat.
+    await app.connectAgent();
+    await app.queryElementByTestId(dataTestId.messageComposer);
 });

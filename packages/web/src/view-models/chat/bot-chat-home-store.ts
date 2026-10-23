@@ -319,13 +319,45 @@ export const createBotChatHomeStore = (
                 /**
                  * A dropped socket takes every watch with it. This loop re-arms
                  * the safe watches every time the bridge returns, so repeated
-                 * drops on the same page keep being followed by recovery. It
-                 * only re-reads configuration and pairing, and never re-issues
-                 * a fork/import load that the user did not ask to repeat.
+                 * drops on the same page keep being followed by recovery, and a
+                 * drop during the recovery reads themselves re-enters it. The
+                 * recovery only re-reads configuration and pairing: it never
+                 * re-issues a fork/import load that the user did not ask to
+                 * repeat.
                  */
                 const followConfigurationChanges = async (watchSignal: AbortSignal): Promise<void> => {
+                    let dropped = true;
                     while (true) {
                         try {
+                            if (dropped) {
+                                await requests.waitForBridge(watchSignal);
+                                watchSignal.throwIfAborted();
+                                const detail = await requests.readBot(botId, watchSignal);
+                                watchSignal.throwIfAborted();
+                                if (!detail.configured) {
+                                    // The setup watch only exists for an
+                                    // unconfigured Machine; the pairing flow
+                                    // completes by restarting the load.
+                                    await requests.waitForSetupChange(botId, watchSignal);
+                                    watchSignal.throwIfAborted();
+                                    set((current) => ({
+                                        selection: transitionConversationSelection(current.selection, {
+                                            kind: "retry-requested",
+                                        }),
+                                        revision: current.revision + 1,
+                                    }));
+                                    onRestart();
+                                    return;
+                                }
+                                const configuration = await requests.runtimeConfiguration(botId, watchSignal);
+                                watchSignal.throwIfAborted();
+                                applyRecoveredConfiguration(configuration);
+                                dropped = false;
+                            }
+                            // A configured Machine keeps following workspace
+                            // changes even while its Runtime is offline: the
+                            // setup endpoint answers it a fixed
+                            // BOT_RUNTIME_FIXED fingerprint that never fires.
                             await watchRuntimeConfigurationChanges();
                             return;
                         } catch (cause) {
@@ -334,28 +366,7 @@ export const createBotChatHomeStore = (
                                 throw cause;
                             }
                             console.error("The Chat WebSocket bridge failed to complete a request.", cause);
-                            await requests.waitForBridge(watchSignal);
-                            watchSignal.throwIfAborted();
-                            const configuration = await requests.runtimeConfiguration(botId, watchSignal);
-                            watchSignal.throwIfAborted();
-                            applyRecoveredConfiguration(configuration);
-                            // The recovered configuration decides the watch:
-                            // only an unconfigured Machine can still be waiting
-                            // on the setup watch; a configured one keeps
-                            // following workspace changes.
-                            const recoveredReason = setupReason(configuration);
-                            if (recoveredReason !== null && get().view.kind === "setup") {
-                                await requests.waitForSetupChange(botId, watchSignal);
-                                watchSignal.throwIfAborted();
-                                set((current) => ({
-                                    selection: transitionConversationSelection(current.selection, {
-                                        kind: "retry-requested",
-                                    }),
-                                    revision: current.revision + 1,
-                                }));
-                                onRestart();
-                                return;
-                            }
+                            dropped = true;
                         }
                     }
                 };
@@ -409,13 +420,13 @@ export const createBotChatHomeStore = (
                                 ? { notices: { ...current.notices, pairing: { kind: "visible" as const } } }
                                 : {}),
                         }));
-                        await requests.waitForSetupChange(botId, signal);
-                        signal.throwIfAborted();
-                        set((current) => ({
-                            selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
-                            revision: current.revision + 1,
-                        }));
-                        onRestart();
+                        // The bridge drop during the setup wait is handled by
+                        // the same repeatable recovery loop that owns every
+                        // later watch: it waits for the bridge, re-reads the
+                        // pairing state, and keeps waiting on the setup watch
+                        // for an unconfigured Machine.
+                        phase = "watch";
+                        await followConfigurationChanges(signal);
                         return;
                     }
                     const configuration = await requests.runtimeConfiguration(botId, signal);
@@ -554,12 +565,6 @@ export const createBotChatHomeStore = (
                                 }),
                                 view: { kind: "failed", message },
                             });
-                            return;
-                        }
-                        if (current.view.kind === "loading" || current.view.kind === "connecting") {
-                            // Nothing has rendered yet, so the page cannot keep
-                            // showing content it does not have.
-                            set({ view: { kind: "failed", message } });
                             return;
                         }
                         // Content is already on screen: the view stays, and the
