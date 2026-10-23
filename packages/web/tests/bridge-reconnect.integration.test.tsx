@@ -17,6 +17,46 @@ function agentAnswered(app: Awaited<ReturnType<typeof createTestApp>>, text: str
     return app.elementsByTestId(dataTestId.agentResponse).some((message) => message.textContent?.includes(text));
 }
 
+test("Given pairing already completed, When a setup watch starts, Then it immediately reports that setup changed", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const signal = AbortSignal.timeout(10_000);
+    const token = await app.identity.getToken(signal);
+    await app.transport.waitForChange(
+        new Request(
+            `${app.origin}/morty/api/chat/projects/${app.identity.projectId}/bots/${app.botId}/setup/runtimes`,
+            {
+                method: "POST",
+                headers: { authorization: `Bearer ${token}` },
+                signal,
+            },
+        ),
+    );
+    await app.queryElementByTestId(dataTestId.messageComposer);
+});
+
+test("Given an unpaired Machine, When pairing finishes while the bridge is down, Then the recovered draft can send its first message", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ clock });
+    await app.queryElementByTestId(dataTestId.pairingInstruction);
+
+    app.transport.disconnect();
+    await app.connectAgent();
+    await act(async () => {
+        clock.advanceBy(1_000);
+    });
+
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    await sendPrompt(app, composer, "First message after offline pairing");
+    await app.waitForView(() =>
+        expect(agentAnswered(app, "Codex turn 1: First message after offline pairing")).toBe(true),
+    );
+});
+
 test("Given an open conversation, When the Chat WebSocket bridge drops, Then no connection dialog appears and Chat resumes after the bridge reconnects", {
     timeout: 30_000,
 }, async () => {

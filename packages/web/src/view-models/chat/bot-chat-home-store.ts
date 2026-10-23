@@ -263,7 +263,15 @@ export const createBotChatHomeStore = (
                  * background watches, which can be resumed without replaying
                  * the session load.
                  */
-                let phase: "request" | "watch" = "request";
+                let phase: "request" | "setup" | "watch" = "request";
+                const completeSetup = (): void => {
+                    signal.throwIfAborted();
+                    set((current) => ({
+                        selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
+                        revision: current.revision + 1,
+                    }));
+                    onRestart();
+                };
                 const watchRuntimeConfigurationChanges = async (): Promise<void> => {
                     while (true) {
                         try {
@@ -340,13 +348,16 @@ export const createBotChatHomeStore = (
                                     // completes by restarting the load.
                                     await requests.waitForSetupChange(botId, watchSignal);
                                     watchSignal.throwIfAborted();
-                                    set((current) => ({
-                                        selection: transitionConversationSelection(current.selection, {
-                                            kind: "retry-requested",
-                                        }),
-                                        revision: current.revision + 1,
-                                    }));
-                                    onRestart();
+                                    completeSetup();
+                                    return;
+                                }
+                                if (phase === "setup") {
+                                    // Pairing completed during the outage. Finish
+                                    // setup just as a setup-watch notification
+                                    // would, including draft settings and the
+                                    // directory. No session operation was issued
+                                    // while the Machine was unconfigured.
+                                    completeSetup();
                                     return;
                                 }
                                 const configuration = await requests.runtimeConfiguration(botId, watchSignal);
@@ -425,7 +436,7 @@ export const createBotChatHomeStore = (
                         // later watch: it waits for the bridge, re-reads the
                         // pairing state, and keeps waiting on the setup watch
                         // for an unconfigured Machine.
-                        phase = "watch";
+                        phase = "setup";
                         await followConfigurationChanges(signal);
                         return;
                     }
@@ -605,12 +616,11 @@ export const createBotChatHomeStore = (
                                 message,
                                 target: failedSelection.target,
                             }),
-                            view:
-                                phase === "watch"
-                                    ? runtimeFailure
-                                        ? { kind: "runtime-disconnected", botId, message }
-                                        : { kind: "active", botId }
-                                    : { kind: "failed", message },
+                            view: runtimeFailure
+                                ? { kind: "runtime-disconnected", botId, message }
+                                : phase === "watch"
+                                  ? { kind: "active", botId }
+                                  : { kind: "failed", message },
                             ...(runtimeFailure
                                 ? {
                                       connectionStatus: {
@@ -623,7 +633,7 @@ export const createBotChatHomeStore = (
                         });
                         return;
                     }
-                    if (phase === "watch" && runtimeFailure) {
+                    if (runtimeFailure) {
                         set((current) => ({
                             connectionStatus: { kind: "disconnected", label: "Disconnected" },
                             disconnectedNoticeDismissed:
