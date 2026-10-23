@@ -79,15 +79,16 @@ interface SetupIdentity {
     readonly context: Context;
 }
 
-type Options =
-    | { readonly kind: "revoke-all-access"; readonly base: string }
-    | {
-          readonly kind: "setup";
-          readonly base: string;
-          readonly cwd: string;
-          readonly harness: string;
-          readonly sessionId: string;
-      };
+interface SetupOptions {
+    readonly base: string;
+    readonly cwd: string;
+    readonly harness: string;
+    readonly sessionId: string;
+}
+
+interface RevokeAllAccessOptions {
+    readonly base: string;
+}
 
 function errorCode(cause: unknown): unknown {
     return cause !== null && typeof cause === "object" && "code" in cause ? cause.code : undefined;
@@ -401,10 +402,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return value;
     }
 
-    function readOptions(): Options {
-        const { values, positionals } = parseArgs({
-            args: [...args],
-            allowPositionals: true,
+    function readSetupOptions(commandArgs: readonly string[]): SetupOptions {
+        const { values } = parseArgs({
+            args: [...commandArgs],
             options: {
                 token: { type: "string" },
                 cwd: { type: "string" },
@@ -413,23 +413,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 "session-id": { type: "string" },
             },
         });
-        if (positionals.length !== 1 || !["setup", "revoke-all-access"].includes(positionals[0] ?? "")) {
-            fail("INVALID_ARGUMENTS");
-        }
         if (values["base-url"] === undefined) {
             fail("BASE_URL_REQUIRED");
-        }
-        const base = origin(values["base-url"]);
-        if (positionals[0] === "revoke-all-access") {
-            if (
-                values.token !== undefined ||
-                values.cwd !== undefined ||
-                values.harness !== undefined ||
-                values["session-id"] !== undefined
-            ) {
-                fail("INVALID_ARGUMENTS");
-            }
-            return { kind: "revoke-all-access", base };
         }
         if (values.harness === undefined) {
             fail("HARNESS_REQUIRED");
@@ -437,15 +422,29 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (values.cwd === undefined) {
             fail("WORKING_DIRECTORY_REQUIRED");
         }
-        const cwd = text(values.cwd);
-        const harness = identifier(values.harness);
         if (values.token !== undefined) {
             fail("INVALID_ARGUMENTS");
         }
         if (values["session-id"] === undefined) {
             fail("SESSION_ID_REQUIRED");
         }
-        return { kind: "setup", base, cwd, harness, sessionId: identifier(values["session-id"]) };
+        return {
+            base: origin(values["base-url"]),
+            cwd: text(values.cwd),
+            harness: identifier(values.harness),
+            sessionId: identifier(values["session-id"]),
+        };
+    }
+
+    function readRevokeAllAccessOptions(commandArgs: readonly string[]): RevokeAllAccessOptions {
+        const { values } = parseArgs({
+            args: [...commandArgs],
+            options: { "base-url": { type: "string" } },
+        });
+        if (values["base-url"] === undefined) {
+            fail("BASE_URL_REQUIRED");
+        }
+        return { base: origin(values["base-url"]) };
     }
 
     async function prepareIdentity(context: Context): Promise<SetupIdentity> {
@@ -922,11 +921,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return qrPath;
     }
 
-    async function finishSetup(
-        context: Context,
-        runtime: RuntimeSelection,
-        options: Extract<Options, { readonly kind: "setup" }>,
-    ) {
+    async function finishSetup(context: Context, runtime: RuntimeSelection, options: SetupOptions) {
         await waitForReadiness(context, runtime);
         const botId = context.config["bot_id"];
         const workingDirectory = text(context.config["workspace"]);
@@ -978,28 +973,28 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         });
     }
 
-    async function main() {
-        const options = readOptions();
-        const base = options.base;
+    async function revokeAllAccess(options: RevokeAllAccessOptions) {
         const directory = await prepareDirectory(await resolveDocumentsDirectory(host.documents, signal));
-        let context: Context = await loadConfiguration(directory, base);
-        if (options.kind === "revoke-all-access") {
-            if (context.config["user_token"] === undefined || context.config["project_id"] === undefined) {
-                fail("LOCAL_IDENTITY_REQUIRED");
-            }
-            const revoked = await request(context, "/identity/revoke-all-access", {});
-            if (revoked["status"] !== "access_revoked") {
-                fail("INVALID_RESPONSE");
-            }
-            emit({
-                status: "access_revoked",
-                projectId: identifier(context.config["project_id"]),
-                message:
-                    "Previous sharing links and other Morty credentials have been revoked. The local identity is retained. Existing session connections may remain usable until their access expires.",
-            });
-            return;
+        const context = await loadConfiguration(directory, options.base);
+        if (context.config["user_token"] === undefined || context.config["project_id"] === undefined) {
+            fail("LOCAL_IDENTITY_REQUIRED");
         }
+        const revoked = await request(context, "/identity/revoke-all-access", {});
+        if (revoked["status"] !== "access_revoked") {
+            fail("INVALID_RESPONSE");
+        }
+        emit({
+            status: "access_revoked",
+            projectId: identifier(context.config["project_id"]),
+            message:
+                "Previous sharing links and other Morty credentials have been revoked. The local identity is retained. Existing session connections may remain usable until their access expires.",
+        });
+    }
+
+    async function setup(options: SetupOptions) {
         const cwd = await resolveWorkingDirectory(options.cwd);
+        const directory = await prepareDirectory(await resolveDocumentsDirectory(host.documents, signal));
+        let context = await loadConfiguration(directory, options.base);
         const identity = await prepareIdentity(context);
         context = identity.context;
         const verified = await verifyIdentityAndBot(context);
@@ -1018,7 +1013,18 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     try {
-        await main();
+        const action = args[0];
+        const commandArgs = args.slice(1);
+        switch (action) {
+            case "setup":
+                await setup(readSetupOptions(commandArgs));
+                break;
+            case "revoke-all-access":
+                await revokeAllAccess(readRevokeAllAccessOptions(commandArgs));
+                break;
+            default:
+                fail("INVALID_ARGUMENTS");
+        }
         return 0;
     } catch (cause) {
         emit({
