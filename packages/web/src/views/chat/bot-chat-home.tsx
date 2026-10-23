@@ -124,139 +124,146 @@ export function BotChatHome({
                     {workspace.accessNotice}
                 </div>
             )}
-            {model.selection.kind === "ready" && active !== null ? (
-                <MobiusSessionPane key={model.selection.session.result.ready.sessionId} workspace={workspace} />
-            ) : model.selection.kind === "loading" && active !== null ? (
-                <MobiusSessionPaneLoading
-                    executionContext={executionContext}
-                    footer={
-                        <BotChatComposer
-                            attachmentModel={attachmentModel}
-                            attachmentSignal={workspace.operationsSignal()}
-                            disabled
-                            draft=""
-                            error=""
-                            onDraftChange={() => {}}
-                            onStop={() => {}}
-                            onSubmit={() => {}}
-                            outputState="idle"
-                            submitDisabled
+            <section aria-label="Conversation" className={chatSessionPaneSectionClassName}>
+                {model.selection.kind === "ready" && active !== null ? (
+                    <MobiusSessionPane key={model.selection.session.result.ready.sessionId} workspace={workspace} />
+                ) : model.selection.kind === "loading" && active !== null ? (
+                    <MobiusSessionPaneLoading
+                        executionContext={executionContext}
+                        footer={
+                            <BotChatComposer
+                                attachmentModel={attachmentModel}
+                                attachmentSignal={workspace.operationsSignal()}
+                                disabled
+                                draft=""
+                                error=""
+                                onDraftChange={() => {}}
+                                onStop={() => {}}
+                                onSubmit={() => {}}
+                                outputState="idle"
+                                submitDisabled
+                            >
+                                {null}
+                            </BotChatComposer>
+                        }
+                    />
+                ) : (
+                    <>
+                        <header className={cn(chatSessionExecutionHeaderClassName, "justify-end")}>
+                            <ExecutionContextBar context={executionContext} layout="header" />
+                        </header>
+                        <FollowLatestScrollArea
+                            followThreshold={80}
+                            followRevision={model.scrollFollowRevision}
+                            className={`flex flex-col gap-8 ${chatSessionMessageScrollClassName}`}
+                            role="log"
+                            aria-label="Messages"
                         >
-                            {null}
-                        </BotChatComposer>
-                    }
-                />
-            ) : (
-                <section className={chatSessionPaneSectionClassName}>
-                    <header className={cn(chatSessionExecutionHeaderClassName, "justify-end")}>
-                        <ExecutionContextBar context={executionContext} layout="header" />
-                    </header>
-                    <FollowLatestScrollArea
-                        followThreshold={80}
-                        followRevision={model.scrollFollowRevision}
-                        className={`flex flex-col gap-8 ${chatSessionMessageScrollClassName}`}
-                        role="log"
-                        aria-label="Messages"
-                    >
-                        <div className="flex min-h-full flex-col gap-8">
-                            {model.selection.kind === "loading" || model.view.kind === "loading" ? (
-                                <SessionMessageListSkeleton />
-                            ) : model.view.kind === "failed" || model.selection.kind === "failed" ? (
-                                <div className="m-auto grid justify-items-center gap-4 text-center">
-                                    <SessionLoadFailure
-                                        message={
-                                            model.selection.kind === "failed"
-                                                ? model.selection.message
-                                                : model.view.kind === "failed"
-                                                  ? model.view.message
-                                                  : "Chat is unavailable."
-                                        }
-                                    />
-                                    {model.selection.kind === "failed" &&
-                                    model.selection.target.kind === "continue" &&
-                                    model.selection.target.action === "import" ? (
-                                        <Button onClick={store.getState().forkInstead}>Fork session instead</Button>
-                                    ) : (
-                                        <div className="flex flex-wrap justify-center gap-2">
-                                            <Button onClick={store.getState().retry}>Reconnect</Button>
-                                        </div>
-                                    )}
-                                </div>
-                            ) : queuedInitialMessage !== null && creationStatus !== null ? (
-                                <div className={`${chatSessionColumnClassName} flex flex-col gap-2`}>
-                                    <div data-testid={dataTestId.queuedMessage}>
-                                        <UserPromptMessage
-                                            images={queuedInitialMessage.attachments.flatMap((attachment) =>
-                                                attachment.kind === "image" ? [attachment.image] : [],
-                                            )}
-                                            resources={queuedInitialMessage.attachments.flatMap((attachment) =>
-                                                attachment.kind === "resource" ? [attachment.resource] : [],
-                                            )}
-                                            text={queuedInitialMessage.content}
+                            <div className="flex min-h-full flex-col gap-8">
+                                {model.selection.kind === "loading" || model.view.kind === "loading" ? (
+                                    <SessionMessageListSkeleton />
+                                ) : model.view.kind === "failed" || model.selection.kind === "failed" ? (
+                                    <div className="m-auto grid justify-items-center gap-4 text-center">
+                                        <SessionLoadFailure
+                                            message={
+                                                model.selection.kind === "failed"
+                                                    ? model.selection.message
+                                                    : model.view.kind === "failed"
+                                                      ? model.view.message
+                                                      : "Chat is unavailable."
+                                            }
                                         />
+                                        {model.selection.kind === "failed" &&
+                                        model.selection.target.kind === "continue" &&
+                                        model.selection.target.action === "import" ? (
+                                            <Button onClick={store.getState().forkInstead}>Fork session instead</Button>
+                                        ) : (
+                                            <div className="flex flex-wrap justify-center gap-2">
+                                                <Button onClick={store.getState().retry}>Reconnect</Button>
+                                            </div>
+                                        )}
                                     </div>
-                                    <p
-                                        aria-live="polite"
-                                        className={`text-right text-xs ${creationError.length > 0 ? "text-destructive" : "text-muted-foreground"}`}
-                                        data-testid={dataTestId.initialMessageStatus}
-                                        role="status"
-                                    >
-                                        {creationStatus}
-                                    </p>
-                                    {creationError.length > 0 && (
+                                ) : queuedInitialMessage !== null && creationStatus !== null ? (
+                                    <div className={`${chatSessionColumnClassName} flex flex-col gap-2`}>
+                                        <div data-testid={dataTestId.queuedMessage}>
+                                            <UserPromptMessage
+                                                images={queuedInitialMessage.attachments.flatMap((attachment) =>
+                                                    attachment.kind === "image" ? [attachment.image] : [],
+                                                )}
+                                                resources={queuedInitialMessage.attachments.flatMap((attachment) =>
+                                                    attachment.kind === "resource" ? [attachment.resource] : [],
+                                                )}
+                                                text={queuedInitialMessage.content}
+                                            />
+                                        </div>
                                         <p
-                                            aria-live="assertive"
-                                            className="ml-auto max-w-[85%] rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-right text-xs text-destructive"
-                                            role="alert"
+                                            aria-live="polite"
+                                            className={`text-right text-xs ${creationError.length > 0 ? "text-destructive" : "text-muted-foreground"}`}
+                                            data-testid={dataTestId.initialMessageStatus}
+                                            role="status"
                                         >
-                                            {creationError}
+                                            {creationStatus}
                                         </p>
-                                    )}
-                                </div>
-                            ) : active === null ? null : (
-                                <div className="m-auto max-w-lg px-6 text-center" data-testid={dataTestId.chatLanding}>
-                                    <span className="mx-auto mb-5 flex size-14 items-center justify-center rounded-[18px] bg-primary-subtle text-primary shadow-[inset_0_0_0_1px_rgba(34,123,78,0.08)]">
-                                        <MessageSquare className="size-6" aria-hidden="true" />
-                                    </span>
-                                    <h1 className="text-[18px] leading-6 font-semibold tracking-[-0.025em]">Morty</h1>
-                                    <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
-                                        {model.view.kind === "connecting"
-                                            ? "Chat is restoring access to this session."
-                                            : "Ask a question, explore your project, or start a task with your local agent."}
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-                    </FollowLatestScrollArea>
-                    {model.runtimeConfiguration !== null && model.selection.kind === "draft" && (
-                        <BotChatComposer
-                            attachmentModel={attachmentModel}
-                            attachmentSignal={workspace.operationsSignal()}
-                            disabled={composerLocked}
-                            draft={draft}
-                            error={creationError}
-                            onDraftChange={store.getState().setDraft}
-                            onStop={() => {}}
-                            onSubmit={() => {
-                                void store.getState().createConversation(workspace.chatSignal());
-                            }}
-                            outputState="idle"
-                            submitDisabled={
-                                model.view.kind !== "active" ||
-                                creationBusy ||
-                                (draft.trim().length === 0 && attachmentModel.attachments.length === 0) ||
-                                model.draftSettings === null
-                            }
-                        >
-                            <DraftChatControls
-                                key={model.selection.key}
-                                workspace={workspace}
-                                disabled={composerLocked || model.view.kind !== "active"}
-                            />
-                        </BotChatComposer>
-                    )}
-                </section>
-            )}
+                                        {creationError.length > 0 && (
+                                            <p
+                                                aria-live="assertive"
+                                                className="ml-auto max-w-[85%] rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-right text-xs text-destructive"
+                                                role="alert"
+                                            >
+                                                {creationError}
+                                            </p>
+                                        )}
+                                    </div>
+                                ) : active === null ? null : (
+                                    <div
+                                        className="m-auto max-w-lg px-6 text-center"
+                                        data-testid={dataTestId.chatLanding}
+                                    >
+                                        <span className="mx-auto mb-5 flex size-14 items-center justify-center rounded-[18px] bg-primary-subtle text-primary shadow-[inset_0_0_0_1px_rgba(34,123,78,0.08)]">
+                                            <MessageSquare className="size-6" aria-hidden="true" />
+                                        </span>
+                                        <h1 className="text-[18px] leading-6 font-semibold tracking-[-0.025em]">
+                                            Morty
+                                        </h1>
+                                        <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
+                                            {model.view.kind === "connecting"
+                                                ? "Chat is restoring access to this session."
+                                                : "Ask a question, explore your project, or start a task with your local agent."}
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </FollowLatestScrollArea>
+                        {model.runtimeConfiguration !== null && model.selection.kind === "draft" && (
+                            <BotChatComposer
+                                attachmentModel={attachmentModel}
+                                attachmentSignal={workspace.operationsSignal()}
+                                disabled={composerLocked}
+                                draft={draft}
+                                error={creationError}
+                                onDraftChange={store.getState().setDraft}
+                                onStop={() => {}}
+                                onSubmit={() => {
+                                    void store.getState().createConversation(workspace.chatSignal());
+                                }}
+                                outputState="idle"
+                                submitDisabled={
+                                    model.view.kind !== "active" ||
+                                    creationBusy ||
+                                    (draft.trim().length === 0 && attachmentModel.attachments.length === 0) ||
+                                    model.draftSettings === null
+                                }
+                            >
+                                <DraftChatControls
+                                    key={model.selection.key}
+                                    workspace={workspace}
+                                    disabled={composerLocked || model.view.kind !== "active"}
+                                />
+                            </BotChatComposer>
+                        )}
+                    </>
+                )}
+            </section>
             {pairingNotice && setupView?.reason === "unconfigured" && active !== null && (
                 <Dialog
                     appearance="setup"

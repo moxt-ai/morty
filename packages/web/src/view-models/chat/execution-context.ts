@@ -73,6 +73,7 @@ export function sessionExecutionContext(
     };
     switch (connection.kind) {
         case "loading":
+        case "session-loading-after-create":
             return { ...base, connection: "Connecting" };
         case "ready":
             return { ...base, connection: "Connected" };

@@ -97,6 +97,7 @@ export interface SessionPaneStore {
     readonly title: string;
     readonly titleEdit: TitleEdit;
     readonly messages: readonly SessionMessage[];
+    readonly pendingInitialMessage: QueuedDraftMessage | null;
     readonly historyLoading: boolean;
     readonly historyRevision: number;
     readonly hasOlderHistory: boolean;
@@ -604,10 +605,19 @@ export function createSessionPaneModel(options: {
             const result = transitionSessionProjection(projection, input);
             projection = result.state;
             const pagination = sessionProjectionPagination(projection);
+            const messages = sessionProjectionMessages(projection);
+            const initialMessage = get().pendingInitialMessage;
             set({
                 hasOlderHistory: pagination !== null,
                 historyRevision: projection.revision,
-                messages: sessionProjectionMessages(projection),
+                messages,
+                pendingInitialMessage:
+                    initialMessage !== null &&
+                    messages.some(
+                        (message) => message.role === "user" && message.commandId === initialMessage.commandId,
+                    )
+                        ? null
+                        : initialMessage,
             });
             for (const effect of result.effects) {
                 if (effect.kind !== "adopted") {
@@ -716,10 +726,12 @@ export function createSessionPaneModel(options: {
             });
         };
         return {
-            connection: { kind: "loading" },
+            connection:
+                options.initialMessage === undefined ? { kind: "loading" } : { kind: "session-loading-after-create" },
             title: session.entry.title,
             titleEdit: { kind: "closed" },
             messages: initialTimeline.messages,
+            pendingInitialMessage: options.initialMessage ?? null,
             historyLoading: false,
             historyRevision: 0,
             hasOlderHistory: false,
@@ -1262,12 +1274,14 @@ export function createSessionPaneModel(options: {
                     set({
                         activity: transitionSessionActivity(get().activity, { commandId, kind: "work-completed" }),
                         messages: restored.messages,
+                        pendingInitialMessage: null,
                         operation: finishPromptOperation(get().operation, commandId),
                     });
                     announceActivity();
                 } catch (cause) {
                     signal.throwIfAborted();
                     set((current) => ({
+                        pendingInitialMessage: null,
                         activity: transitionSessionActivity(current.activity, {
                             commandId,
                             kind: "work-failed",
