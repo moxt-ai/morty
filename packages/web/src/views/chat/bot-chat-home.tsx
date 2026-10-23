@@ -80,10 +80,8 @@ export function BotChatHome({
     const active =
         model.view.kind === "connecting" ||
         model.view.kind === "active" ||
-        model.view.kind === "reconnecting" ||
         model.view.kind === "setup" ||
-        model.view.kind === "runtime-disconnected" ||
-        model.view.kind === "connection-failed"
+        model.view.kind === "runtime-disconnected"
             ? model.view
             : null;
     const activeConversationId = selectedConversationId(model.selection);
@@ -271,27 +269,11 @@ export function BotChatHome({
                     description="Morty is ready. Paste this instruction into your local agent to connect it."
                     onClose={() => {
                         store.getState().closePairingDialog();
-                        store.getState().dismissNotice("pairing");
+                        store.getState().dismissNotice();
                     }}
                 >
                     <PairingInstruction />
                 </Dialog>
-            )}
-            {(model.view.kind === "reconnecting" || model.view.kind === "connection-failed") && (
-                <div
-                    role="status"
-                    aria-label="Chat connection"
-                    className="fixed top-4 left-1/2 z-50 flex max-w-[calc(100%-2rem)] -translate-x-1/2 items-center gap-3 rounded-lg border border-border bg-background p-3 text-sm shadow-lg"
-                >
-                    <span>
-                        {model.view.kind === "reconnecting"
-                            ? model.view.attempt === 0
-                                ? "Reconnecting to Chat…"
-                                : `Reconnecting to Chat… Attempt ${model.view.attempt} of 3.`
-                            : model.view.message}
-                    </span>
-                    <Button onClick={store.getState().retry}>Reconnect</Button>
-                </div>
             )}
             {disconnectionNotice.kind === "visible" && !model.disconnectedNoticeDismissed && (
                 <div

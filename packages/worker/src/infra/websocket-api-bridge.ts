@@ -13,6 +13,7 @@ const requestFrame = v.strictObject({
 });
 const watchFrame = v.strictObject({
     kind: v.literal("watch"),
+    baseline: v.optional(v.pipe(v.string(), v.maxLength(7_000_000))),
     subscriptionId: requestId,
     method: v.picklist(["GET", "POST"]),
     path: v.pipe(v.string(), v.minLength(1), v.maxLength(4096)),
@@ -69,6 +70,7 @@ export interface WebSocketBridgeHandlers {
             readonly publish: (data: string) => void;
         },
         signal: AbortSignal,
+        baseline?: string,
     ) => Promise<void>;
 }
 
@@ -209,6 +211,7 @@ export function createWebSocketApiBridge(
                         publish: (data) => send(server, { data, kind: "event", subscriptionId: frame.subscriptionId }),
                     },
                     lifetime.signal,
+                    frame.kind === "watch" ? frame.baseline : undefined,
                 )
                 .catch((cause: unknown) => {
                     if (!lifetime.signal.aborted) {

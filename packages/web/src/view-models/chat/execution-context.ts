@@ -21,21 +21,13 @@ export function pendingExecutionContext(
         directory: null,
         directoryName: loading ? "Loading…" : "Unknown",
         directoryPlaceholder: loading ? "Loading…" : "Unknown",
-        connection:
-            home.view.kind === "reconnecting"
-                ? "Reconnecting"
-                : loading
-                  ? "Connecting"
-                  : home.selection.kind === "failed" ||
-                      home.view.kind === "failed" ||
-                      home.view.kind === "connection-failed"
-                    ? "Unavailable"
-                    : home.connectionStatus.label,
+        connection: loading
+            ? "Connecting"
+            : home.selection.kind === "failed" || home.view.kind === "failed"
+              ? "Unavailable"
+              : home.connectionStatus.label,
     };
-    if (
-        home.selection.kind !== "draft" ||
-        (home.view.kind !== "active" && home.view.kind !== "reconnecting" && home.view.kind !== "connection-failed")
-    ) {
+    if (home.selection.kind !== "draft" || home.view.kind !== "active") {
         return base;
     }
     switch (settings.kind) {

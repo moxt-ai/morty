@@ -246,6 +246,7 @@ export class BotChatApi {
     readonly #sessionTransports = new Map<string, BrowserSessionTransport>();
     readonly #subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
     readonly #waitForChange: ApiTransport["waitForChange"];
+    readonly #waitForBridge: ApiTransport["waitForBridge"];
     readonly readBot: ManagementApi["readBot"];
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
@@ -254,6 +255,7 @@ export class BotChatApi {
         readonly getToken: (signal: AbortSignal) => Promise<string | null>;
         readonly subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
         readonly waitForChange: ApiTransport["waitForChange"];
+        readonly waitForBridge: ApiTransport["waitForBridge"];
     }) {
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
         this.#projectId = v.parse(identifier, options.projectId);
@@ -261,9 +263,11 @@ export class BotChatApi {
         this.#getToken = options.getToken;
         this.#subscribe = options.subscribe;
         this.#waitForChange = options.waitForChange;
+        this.#waitForBridge = options.waitForBridge;
         const management = new ManagementApi(options);
         this.readBot = management.readBot;
     }
+    readonly waitForBridge = async (signal: AbortSignal): Promise<void> => await this.#waitForBridge(signal);
     readonly close = (): void => {
         for (const transport of this.#sessionTransports.values()) {
             transport.close();

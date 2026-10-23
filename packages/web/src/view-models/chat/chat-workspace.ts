@@ -156,7 +156,6 @@ export function createChatWorkspace(options: {
     };
     const home = createBotChatHomeStore(requests, {
         botId,
-        clock: options.clock,
         createId: () => crypto.randomUUID(),
         navigation: historyNavigation(recordHome),
         entry: options.entry ?? "address",
