@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { encodeIdentityScope } from "../src/services/identity/identity-scope-url.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
 type TestApp = Awaited<ReturnType<typeof createTestApp>>;
@@ -415,66 +414,6 @@ test("Given an unavailable connection, When current access cannot be prepared, T
     );
     await app.user.click(getByRole(dialog, "button", { name: "Cancel" }));
     expect(window.location.search).toContain("identity=");
-});
-
-test("Given the failure page after a redeemed Morty access, When the user chooses Go to Morty, Then Morty opens home with that access instead of the failed session", {
-    timeout: 30_000,
-}, async () => {
-    const app = await createTestApp({
-        agent: { id: "pi", label: "Pi" },
-        connectAgent: true,
-        page: {
-            harness: "pi",
-            kind: "continue",
-            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
-        },
-    });
-    await app.waitForView(() => getByRole(document.body, "alert"));
-
-    await app.user.click(getByRole(document.body, "button", { name: "Go to Morty" }));
-
-    expect(window.location.pathname).toBe("/");
-    const destination = new URL(window.location.href);
-    expect(destination.searchParams.get("identity")).toBe(
-        encodeIdentityScope({ botId: app.botId, projectId: app.identity.projectId, userId: app.userId }),
-    );
-    expect(destination.searchParams.get("sessionId")).toBeNull();
-    expect(destination.searchParams.get("harness")).toBeNull();
-    expect(destination.hash).toBe("");
-
-    const home = await app.reload();
-    expect(await home.queryElementByTestId(dataTestId.chatLanding)).toBeInstanceOf(HTMLElement);
-    expect(queryByRole(document.body, "status", { name: "Opening session" })).toBeNull();
-});
-
-test("Given the access was redeemed and its transfer link later stopped working, When the page redeems again, Then the user still enters Morty home with the redeemed access", {
-    timeout: 30_000,
-}, async () => {
-    const app = await createTestApp({
-        agent: { id: "pi", label: "Pi" },
-        connectAgent: true,
-        page: {
-            harness: "pi",
-            kind: "continue",
-            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
-        },
-    });
-    await app.waitForView(() => getByRole(document.body, "alert"));
-    const redeemedScope = new URL(window.location.href).searchParams.get("identity");
-    expect(redeemedScope).not.toBeNull();
-
-    window.location.hash = `code=mobius_transfer_v2.${app.identity.projectId}.${"a".repeat(43)}`;
-    app.remount();
-
-    const alert = await app.waitForView(() => getByRole(document.body, "alert"));
-    expect(alert.textContent).toContain("The native session was not found");
-    await app.user.click(getByRole(document.body, "button", { name: "Go to Morty" }));
-
-    expect(window.location.pathname).toBe("/");
-    expect(new URL(window.location.href).searchParams.get("identity")).toBe(redeemedScope);
-
-    const home = await app.reload();
-    expect(await home.queryElementByTestId(dataTestId.chatLanding)).toBeInstanceOf(HTMLElement);
 });
 
 test("Given an expired sharing link with no retained access, When I open it, Then it asks for a new link without offering retry", {

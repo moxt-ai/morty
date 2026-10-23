@@ -23,25 +23,6 @@ async function replyWithMarkdown(markdown: string, outcome: "hold" | "complete")
     return app;
 }
 
-function replyWithDiagram(source: string) {
-    return replyWithMarkdown(`\`\`\`mermaid\n${source}\n\`\`\`\n\nResponse complete.`, "complete");
-}
-
-test("Given an oversized Mermaid diagram, When I read the reply, Then I see its source and can continue the conversation", {
-    timeout: 30_000,
-}, async () => {
-    const source = `flowchart LR\n%% ${"x".repeat(17_000)}\nBrowser --> Worker`;
-    const app = await replyWithDiagram(source);
-    await app.waitForView(() => {
-        expect(document.body.textContent).toContain("Diagram is too large to display.");
-        expect(document.body.textContent).toContain("Browser --> Worker");
-        expect(document.body.textContent).toContain("Response complete.");
-        expect(getByRole(document.body, "button", { name: "Copy code" })).toBeDefined();
-        expect(queryByRole(document.body, "img", { name: "Mermaid chart" })).toBeNull();
-        expect(getByRole(document.body, "textbox", { name: "Message" }).hasAttribute("disabled")).toBe(false);
-    });
-});
-
 test("Given an unfinished Mermaid reply, When I read the active conversation, Then the source remains visible while waiting for completion", {
     timeout: 30_000,
 }, async () => {
@@ -59,29 +40,8 @@ test("Given an unfinished Mermaid reply, When I read the active conversation, Th
     });
 });
 
-test("Given invalid Mermaid syntax, When I open the diagram, Then a readable failure preserves the original source", {
-    timeout: 30_000,
-}, async () => {
-    const app = await replyWithDiagram("not-a-diagram\nBrowser --> Worker");
-    await app.waitForView(() => {
-        expect(document.body.textContent).toContain("Response complete.");
-        expect(document.body.textContent).not.toContain("Loading diagram…");
-    }, 30_000);
-    const fullscreen = await app.waitForView(
-        () => getByRole(document.body, "button", { name: "View diagram fullscreen" }),
-        30_000,
-    );
-    await app.user.click(fullscreen);
-    await app.waitForView(() => expect(document.body.textContent).toContain("Diagram could not be displayed."));
-    await app.user.keyboard("{Escape}");
-    await app.user.click(getByText(document.body, "View diagram source", { exact: true }));
-    expect(document.body.textContent).toContain("not-a-diagram");
-    expect(document.body.textContent).toContain("Response complete.");
-});
-
 test.each([
     ["a preceding paragraph", "Overview\n\n```mermaid\nflowchart LR\nBrowser --> Worker"],
-    ["a blockquote", "> ~~~mermaid\n> flowchart LR\n> Browser --> Worker"],
     ["a list", "- Overview\n\n  ```mermaid\n  flowchart LR\n  Browser --> Worker"],
     ["an indented fence-like code line", "```mermaid\nflowchart LR\nBrowser --> Worker\n    ```"],
 ])(

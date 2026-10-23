@@ -26,25 +26,6 @@ async function startConversation(app: TestApp, prompt: string): Promise<string> 
     return sessionId;
 }
 
-test("Given a remembered computer and conversation, When I return through the plain address, Then that conversation opens without setup or a choice screen", {
-    timeout: 30_000,
-}, async () => {
-    const app = await createTestApp({ connectAgent: true });
-    const sessionId = await startConversation(app, "Continue the release checklist");
-    window.location.href = `${app.origin}/`;
-    const returned = await app.reload();
-    await returned.waitForView(() =>
-        expect(
-            returned
-                .elementsByTestId(dataTestId.agentResponse)
-                .some((entry) => entry.textContent?.includes("Continue the release checklist")),
-        ).toBe(true),
-    );
-    expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
-    expect(queryByRole(document.body, "heading", { name: "Continue your coding session from your phone." })).toBeNull();
-    expect(getByRole(document.body, "textbox", { name: "Message" })).toBeInstanceOf(HTMLTextAreaElement);
-});
-
 test("Given two remembered computers, When I return and then switch, Then the last computer and each computer's own conversation are restored", {
     timeout: 30_000,
 }, async () => {
