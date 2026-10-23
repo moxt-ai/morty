@@ -18,7 +18,7 @@ async function clickDesktopEndRemoteAccess(app: TestApp) {
     await app.user.click(await app.queryElementByTestId(dataTestId.endRemoteAccess));
 }
 
-test("Given a stored identity for the active project, When the user shares access, Then a working transfer link and QR code appear", {
+test("Given a stored identity for the active project, When the user shares access, Then a copyable transfer link and QR code appear", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true, page: { kind: "bootstrap", identity: true } });
@@ -26,11 +26,12 @@ test("Given a stored identity for the active project, When the user shares acces
     const sharing = await app.queryElementByTestId(dataTestId.identitySharing);
     const image = getByRole(sharing, "img", { name: "Continue on another device QR code" });
     expect(image.getAttribute("src")).toMatch(/^data:image\/png;base64,/u);
-    const link = getByRole(sharing, "link", { name: "Open sharing link" });
-    const url = new URL(link.getAttribute("href") ?? "");
+    await app.user.click(getByRole(sharing, "button", { name: "Copy link" }));
+    const url = new URL(await navigator.clipboard.readText());
     expect(url.origin).toBe(app.origin);
     expect(url.pathname).toBe("/continue");
     expect(url.hash).toMatch(/^#code=\S+$/u);
+    expect(getByRole(sharing, "button", { name: "Copied" })).toBeInstanceOf(HTMLButtonElement);
     expect(queryByRole(sharing, "alert")).toBeNull();
 });
 
@@ -112,13 +113,14 @@ test("Given shared Morty access, When the user continues on another device, Then
     expect(dialog.textContent).toContain("not just the current conversation");
     expect(dialog.textContent).toContain("24 hours");
     expect(dialog.textContent).toContain("Access already granted does not end when the link expires");
-    const link = await app.waitForView(() => getByRole(dialog, "link", { name: "Open sharing link" }));
+    const copyLink = await app.waitForView(() => getByRole(dialog, "button", { name: "Copy link" }));
     expect(getByRole(dialog, "img", { name: "Continue on another device QR code" })).toBeInstanceOf(HTMLImageElement);
     const description = getByRole(dialog, "heading", { name: "Continue on another device" }).parentElement;
     if (description === null) {
-        throw new Error("The sharing description must precede its link.");
+        throw new Error("The sharing description must precede its copy-link button.");
     }
-    expect(description.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(description.compareDocumentPosition(copyLink) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(queryByRole(dialog, "link")).toBeNull();
     expect(queryByRole(dialog, "button", { name: "Confirm" })).toBeNull();
 });
 

@@ -57,20 +57,23 @@ for (const viewport of [
         await expect(sharing).toContainText("not just the current conversation");
         await expect(sharing).toContainText("24 hours");
         await expect(sharing).toContainText("Access already granted does not end when the link expires");
-        const link = sharing.getByRole("link", { name: "Open sharing link" });
+        const copyLink = sharing.getByRole("button", { name: "Copy link" });
         const qr = sharing.getByRole("img", { name: "Continue on another device QR code" });
-        await expect(link).toBeVisible();
+        await expect(copyLink).toBeVisible();
         await expect(qr).toBeVisible();
         await sharing.screenshot({
             animations: "disabled",
             path: testInfo.outputPath("sharing-scope.png"),
-            mask: [link, qr],
+            mask: [copyLink, qr],
             maskColor: "#e2e8f0",
         });
-        const url = await link.getAttribute("href");
+        await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+        await copyLink.click();
+        await expect(sharing.getByRole("button", { name: "Copied" })).toBeVisible();
+        const url = await page.evaluate(() => navigator.clipboard.readText());
         const browser = page.context().browser();
-        if (url === null || browser === null) {
-            throw new Error("Sharing needs a link and a browser for the receiving device.");
+        if (url === "" || browser === null) {
+            throw new Error("Sharing needs a copied link and a browser for the receiving device.");
         }
         const receiverContext = await browser.newContext({
             viewport,

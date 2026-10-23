@@ -1,4 +1,5 @@
 import type { StoreApi } from "zustand";
+import { CopyLinkButton } from "../../components/chat/copy-link-button.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { IdentitySharingStore } from "../../view-models/chat/identity-sharing-store.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
@@ -15,15 +16,7 @@ export function IdentitySharing({ store }: { readonly store: StoreApi<IdentitySh
     return (
         <div className="space-y-4 text-center" data-testid={dataTestId.identitySharing}>
             <img className="mx-auto size-56" src={state.image} alt="Continue on another device QR code" />
-            <a
-                className="block break-all font-mono text-xs text-primary underline underline-offset-4"
-                href={state.transfer.url}
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Open sharing link"
-            >
-                {state.transfer.url}
-            </a>
+            <CopyLinkButton url={state.transfer.url} />
             <p className="text-xs leading-5 text-muted-foreground">
                 New devices can join until {new Date(state.transfer.expiresAt).toLocaleString()}.
             </p>
