@@ -1,8 +1,12 @@
 import { getByRole } from "@testing-library/dom";
+import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
+import { TestClock } from "./infra/test-clock.ts";
+
+const CLOCK_ORIGIN = "2026-10-13T08:00:00Z";
 
 async function openAgentConfiguration(app: TestApp): Promise<HTMLElement> {
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
@@ -12,7 +16,8 @@ async function openAgentConfiguration(app: TestApp): Promise<HTMLElement> {
 test("Given an open conversation, When its Agent is renamed on the computer, Then the conversation shows the new name without a reload", {
     timeout: 60_000,
 }, async () => {
-    const app = await createTestApp({ agents: [{ id: "codex", label: "Codex" }], connectAgent: true });
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ agents: [{ id: "codex", label: "Codex" }], connectAgent: true, clock });
     const daemon = app.daemon;
     if (daemon === null) {
         throw new Error("Expected a connected controlled Agent Runtime");
@@ -34,6 +39,12 @@ test("Given an open conversation, When its Agent is renamed on the computer, The
     await app.user.keyboard("{Escape}");
 
     await daemon.replaceAgents([{ id: "codex", label: "Codex Pro" }]);
+    // The page hears the Runtime's current configuration when its Chat connection returns, without waiting for the
+    // Worker's periodic check: the recovered watch starts from that configuration.
+    app.transport.disconnect();
+    await act(async () => {
+        clock.advanceBy(1_000);
+    });
 
     // The conversation's own menu names the harness the way the computer now does.
     const after = await openAgentConfiguration(app);

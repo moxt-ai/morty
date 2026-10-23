@@ -144,6 +144,12 @@ export const createDraftControlsStore = (
             onSettings(null);
             set({ settings: { kind: "failed", message: runtimeDisconnectedMessage } });
         };
+        /** Waits for the Runtime to offer an Agent, settling any switch in progress so `runtimeChanged` can resume. */
+        const awaitAgent = (): void => {
+            waitingForRuntime = true;
+            onSettings(null);
+            set({ settings: { kind: "loading" } });
+        };
         const settleFailure = (cause: unknown, message: string): void => {
             if (isRuntimeConnectionFailure(cause)) {
                 awaitRuntime();
@@ -320,6 +326,7 @@ export const createDraftControlsStore = (
             }
             onSettings(null);
             waitingForRuntime = false;
+            const revision = configurationRevision;
             try {
                 const requestedHarness = pendingHarness ?? readLastHarnessPreference(botId);
                 const configuration = runtimeConfiguration();
@@ -338,10 +345,9 @@ export const createDraftControlsStore = (
                     (pendingHarness === null ? agents[0] : undefined);
                 if (selected === undefined) {
                     // The Runtime the page follows offers no Agent to load yet.
-                    waitingForRuntime = true;
+                    awaitAgent();
                     return;
                 }
-                const revision = configurationRevision;
                 const [result, defaultCwd] = await Promise.all([
                     readAgentSettings(selected.agentRef, false, signal),
                     requests.directory(botId, "default", signal),
@@ -357,16 +363,27 @@ export const createDraftControlsStore = (
                         signal.throwIfAborted();
                     }
                 }
-                if (revision !== configurationRevision) {
-                    await load(lifetimeSignal);
-                    return;
-                }
-                applyAgentSettings(selected, cwd, result.options, requestedHarness === selected.agentRef);
+                await completeRead(revision, lifetimeSignal, () =>
+                    applyAgentSettings(selected, cwd, result.options, requestedHarness === selected.agentRef),
+                );
             } catch (cause) {
                 if (!lifetimeSignal.aborted) {
-                    settleFailure(cause, "Harness settings are unavailable.");
+                    await completeRead(revision, lifetimeSignal, () =>
+                        settleFailure(cause, "Harness settings are unavailable."),
+                    );
                 }
             }
+        };
+        /**
+         * Ends a read that started under `revision`. A newer configuration overtakes it whether it succeeded or failed:
+         * the draft reloads against the newest configuration instead of showing what the read found.
+         */
+        const completeRead = async (revision: number, signal: AbortSignal, settle: () => void): Promise<void> => {
+            if (revision !== configurationRevision) {
+                await load(signal);
+                return;
+            }
+            settle();
         };
         /** Re-reads the selected Agent's settings, keeping the selection and directory while they load. */
         const refreshSettings = async (settings: ReadyDraftSettings, signal: AbortSignal): Promise<void> => {
@@ -382,15 +399,14 @@ export const createDraftControlsStore = (
             try {
                 const result = await readAgentSettings(settings.selectedAgent.agentRef, true, signal);
                 signal.throwIfAborted();
-                if (revision !== configurationRevision) {
-                    // The Runtime changed during the read, maybe dropping this Agent: the newest configuration decides.
-                    await load(signal);
-                    return;
-                }
-                applyAgentSettings(settings.selectedAgent, settings.cwd, result.options, false);
+                await completeRead(revision, signal, () =>
+                    applyAgentSettings(settings.selectedAgent, settings.cwd, result.options, false),
+                );
             } catch (cause) {
                 if (!signal.aborted) {
-                    settleFailure(cause, "Harness settings are unavailable.");
+                    await completeRead(revision, signal, () =>
+                        settleFailure(cause, "Harness settings are unavailable."),
+                    );
                 }
             }
         };
