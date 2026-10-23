@@ -142,6 +142,26 @@ export const createDraftControlsStore = (
             }
             return result;
         };
+        /**
+         * A directory choice writes the draft's settings and belongs to the directory browser, so it takes both
+         * lanes: a newer settings operation supersedes it, and closing, editing or browsing directories cancels it.
+         * It may write only while it is current in both.
+         */
+        const beginDirectoryChoice = (parent: AbortSignal) => {
+            cwdOperation?.abort();
+            const browsing = new AbortController();
+            cwdOperation = browsing;
+            const settings = beginSettingsOperation(parent);
+            return {
+                signal: AbortSignal.any([settings.signal, browsing.signal]),
+                current: (): boolean => settings.current() && cwdOperation === browsing,
+                release: (): void => {
+                    if (cwdOperation === browsing) {
+                        cwdOperation = null;
+                    }
+                },
+            };
+        };
         // Set when the draft could not load from the Runtime as the page knows it: no connected Agent yet, or the
         // Runtime cannot be reached. `runtimeChanged` loads once the Runtime is online.
         let waitingForRuntime = false;
@@ -480,10 +500,10 @@ export const createDraftControlsStore = (
                 ) {
                     return;
                 }
-                cwdOperation?.abort();
-                cwdOperation = null;
                 const requestedPath = browser.path.trim();
                 if (requestedPath.length === 0) {
+                    cwdOperation?.abort();
+                    cwdOperation = null;
                     set({
                         cwdBrowser: {
                             kind: "failed",
@@ -494,8 +514,7 @@ export const createDraftControlsStore = (
                     });
                     return;
                 }
-                // Choosing a directory writes the draft's settings, so it takes the settings lane.
-                const operation = beginSettingsOperation(signal);
+                const operation = beginDirectoryChoice(signal);
                 let directory = browser.directory;
                 if (requestedPath !== browser.directory.directoryLabel) {
                     const loading = { kind: "loading", directory: browser.directory, path: browser.path } as const;
@@ -508,12 +527,13 @@ export const createDraftControlsStore = (
                             return;
                         }
                         if (!operation.current()) {
-                            // A newer operation took over: undo only this choice's own loading state.
+                            // Cancelled or superseded: undo only this choice's own loading state.
                             if (get().cwdBrowser === loading) {
                                 set({ cwdBrowser: browser });
                             }
                             return;
                         }
+                        operation.release();
                         set({
                             cwdBrowser: {
                                 kind: "failed",
@@ -526,6 +546,7 @@ export const createDraftControlsStore = (
                     }
                 }
                 if (operation.current()) {
+                    operation.release();
                     applyDirectory(settings, directory);
                 }
             },
@@ -535,20 +556,19 @@ export const createDraftControlsStore = (
                 if (settings.kind !== "ready" || recent === undefined) {
                     return;
                 }
-                cwdOperation?.abort();
-                cwdOperation = null;
-                // Choosing a directory writes the draft's settings, so it takes the settings lane.
-                const operation = beginSettingsOperation(signal);
+                const operation = beginDirectoryChoice(signal);
                 try {
                     const directory = await requests.directory(botId, directoryId, operation.signal);
                     operation.signal.throwIfAborted();
                     if (operation.current()) {
+                        operation.release();
                         applyDirectory(settings, directory);
                     }
                 } catch (cause) {
                     if (signal.aborted || !operation.current()) {
                         return;
                     }
+                    operation.release();
                     set({
                         cwdBrowser: {
                             kind: "failed",
