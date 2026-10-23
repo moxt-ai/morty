@@ -1233,7 +1233,7 @@ export function createSessionPaneModel(options: {
                         set({ operation: finishPromptOperation(get().operation, commandId) });
                         return;
                     }
-                    updateTurn({ kind: "ended", commandId, failure: null });
+                    updateTurn({ kind: "submission-abandoned", commandId, failure: null });
                     const restored = deriveTimeline();
                     set({
                         messages: restored.messages,
@@ -1244,10 +1244,7 @@ export function createSessionPaneModel(options: {
                 } catch (cause) {
                     signal.throwIfAborted();
                     const message = formatError(cause, "The agent could not complete the message.");
-                    // The submission failed; a turn the service already reports running goes on regardless.
-                    if (acceptedTurn(currentTurn)?.commandId !== commandId) {
-                        updateTurn({ kind: "ended", commandId, failure: message });
-                    }
+                    updateTurn({ kind: "submission-abandoned", commandId, failure: message });
                     set({ pendingInitialMessage: null, operation: { kind: "failed", message } });
                     announceActivity();
                 }
@@ -1257,7 +1254,7 @@ export function createSessionPaneModel(options: {
                 if (commandId === null) {
                     return;
                 }
-                updateTurn({ kind: "ended", commandId, failure: null });
+                updateTurn({ kind: "submission-abandoned", commandId, failure: null });
                 // Mirrors the delivery report: dropping this pane's retry path
                 // must also drop the home store's recovery copy, or a remount
                 // would submit the message the user just discarded.
@@ -1311,7 +1308,7 @@ export function createSessionPaneModel(options: {
                     default:
                         return outcome satisfies never;
                 }
-                updateTurn({ kind: "ended", commandId: pending.commandId, failure: null });
+                updateTurn({ kind: "submission-abandoned", commandId: pending.commandId, failure: null });
                 announceActivity();
             },
             queueDraft: async (signal) => {

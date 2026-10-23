@@ -33,8 +33,13 @@ export type CurrentTurnEvent =
     | { readonly kind: "accepted"; readonly commandId: string; readonly turnId: string }
     /** The service reports the command running; it replaces any other current command. */
     | { readonly kind: "running"; readonly commandId: string; readonly turnId: string; readonly startedAt: number }
-    /** The command's turn ended, or its submission was given up; `failure` explains a failed one. */
+    /** The service reports the command's turn ended; `failure` explains a failed one. */
     | { readonly kind: "ended"; readonly commandId: string; readonly failure: string | null }
+    /**
+     * This pane gave up submitting the command: the service refused it, or its delivery is uncertain or failed.
+     * `failure` explains a failed submission.
+     */
+    | { readonly kind: "submission-abandoned"; readonly commandId: string; readonly failure: string | null }
     /** Nothing runs any more, as when the Session closed or a reconnect found no running turn. */
     | { readonly kind: "nothing-running" }
     /** This browser sent the command at `sentAt`, which is when its work started. */
@@ -60,6 +65,10 @@ function isCurrent(turn: CurrentTurn, commandId: string): turn is Extract<Curren
     return turn.kind === "current" && turn.commandId === commandId;
 }
 
+function endedTurn(commandId: string, failure: string | null): CurrentTurn {
+    return { kind: "idle", failure: failure === null ? null : { commandId, message: failure } };
+}
+
 export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent): CurrentTurn {
     switch (event.kind) {
         case "submitting":
@@ -70,6 +79,10 @@ export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent
                 submission: { kind: "submitting" },
             };
         case "retrying":
+            // Retrying a submission cannot displace a turn the service reports running.
+            if (turn.kind === "current" && turn.submission.kind === "accepted" && turn.commandId !== event.commandId) {
+                return turn;
+            }
             return {
                 kind: "current",
                 commandId: event.commandId,
@@ -89,13 +102,12 @@ export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent
                 submission: { kind: "accepted", turnId: decodeIdentifier(event.turnId) },
             };
         case "ended":
-            if (!isCurrent(turn, event.commandId)) {
-                return turn;
-            }
-            return {
-                kind: "idle",
-                failure: event.failure === null ? null : { commandId: event.commandId, message: event.failure },
-            };
+            return isCurrent(turn, event.commandId) ? endedTurn(event.commandId, event.failure) : turn;
+        case "submission-abandoned":
+            // The service's report that the command runs outranks this pane's account of its submission.
+            return isCurrent(turn, event.commandId) && turn.submission.kind !== "accepted"
+                ? endedTurn(event.commandId, event.failure)
+                : turn;
         case "nothing-running":
             // Learning that nothing runs cannot resolve an earlier turn failure.
             return turn.kind === "idle" ? turn : idleTurn;
