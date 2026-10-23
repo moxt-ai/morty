@@ -36,7 +36,7 @@ export function hasStoredAccess(): boolean {
 
 /** Keeps a newly issued access: its token, and its computer behind those already visited. */
 export function saveAccess(scope: IdentityScope, token: string): void {
-    updateComputers(withComputer(rememberedComputers(), scope), { userId: scope.userId, token });
+    updateComputers(withComputer(rememberedComputers(), scope), { added: { userId: scope.userId, token } });
 }
 
 /** Keeps a computer whose stored access was just confirmed. */
@@ -47,8 +47,12 @@ export function rememberComputer(scope: IdentityScope): void {
     }
 }
 
+/** Drops access that no longer opens this computer, listed or not, with its token unless another computer needs it. */
 export function forgetComputer(scope: IdentityScope): void {
-    updateComputers(rememberedComputers().filter((computer) => computerKey(computer.scope) !== computerKey(scope)));
+    updateComputers(
+        rememberedComputers().filter((computer) => computerKey(computer.scope) !== computerKey(scope)),
+        { released: scope.userId },
+    );
 }
 
 export function rememberComputerVisit(
@@ -110,17 +114,23 @@ function withComputer(saved: readonly RememberedComputer[], scope: IdentityScope
 }
 
 /**
- * The one place the saved computers change. A token leaves with the last computer that needed it, so a token is never
- * dropped while its computer is listed, and never outlives the computers it opened.
+ * The one place the saved computers change. A token leaves with the last computer that needed it, or when its access
+ * is found to be gone, so a token is never dropped while its computer is listed, and never outlives its access.
  */
 function updateComputers(
     computers: readonly RememberedComputer[],
-    added?: { readonly userId: string; readonly token: string },
+    change: {
+        readonly added?: { readonly userId: string; readonly token: string };
+        /** A user whose access ended, even if no listed computer held its token. */
+        readonly released?: string;
+    } = {},
 ): void {
+    const { added, released } = change;
     const previous = new Set(rememberedComputers().map((computer) => computer.scope.userId));
     const needed = new Set(computers.map((computer) => computer.scope.userId));
     const credentials = Object.entries(storedCredentials()).filter(
-        ([userId]) => userId !== added?.userId && (needed.has(userId) || !previous.has(userId)),
+        ([userId]) =>
+            userId !== added?.userId && (needed.has(userId) || (!previous.has(userId) && userId !== released)),
     );
     if (added !== undefined) {
         credentials.push([added.userId, added.token]);
