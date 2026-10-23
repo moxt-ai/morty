@@ -711,7 +711,12 @@ export function ConversationSidebar({
                     </Tooltip.Provider>
                 </div>
                 {dialogStore !== null && (
-                    <NativeSessionDialog store={dialogStore} onClose={dialogs.getState().closeNativeDialog} />
+                    <NativeSessionDialog
+                        store={dialogStore}
+                        onClose={dialogs.getState().closeNativeDialog}
+                        bugReportDialog={workspace.bugReportDialog}
+                        daemonSource={sessionDiagnostics}
+                    />
                 )}
                 {sharingStore !== null && (
                     <Dialog

@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { cn } from "../../lib/utils.ts";
 
 export function NativeSessionDirectoryPlaceholder({
@@ -9,7 +10,7 @@ export function NativeSessionDirectoryPlaceholder({
 }: {
     readonly icon: LucideIcon;
     readonly title: string;
-    readonly description?: string;
+    readonly description?: ReactNode;
     readonly tone?: "muted" | "destructive";
 }) {
     return (

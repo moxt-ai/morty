@@ -1,6 +1,5 @@
 import { CircleAlert, Inbox, MessageSquare, PackageOpen, Unplug } from "lucide-react";
 import type { ReactNode } from "react";
-import { createPortal } from "react-dom";
 import type { StoreApi } from "zustand/vanilla";
 import { mortyThinScrollbarClassName } from "../../components/chat/chat-session-layout.ts";
 import { NativeSessionDirectoryPlaceholder } from "../../components/chat/native-session-directory-placeholder.tsx";
@@ -12,8 +11,11 @@ import { Spinner } from "../../components/ui/spinner.tsx";
 import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
+import type { DaemonDiagnosticsSource } from "../../services/diagnostics/browser-diagnostics.ts";
+import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-store.ts";
 import type { NativeSessionStore } from "../../view-models/chat/native-session-store.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
+import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { MobiusSessionMessage } from "./mobius-session-message.tsx";
 
 const loadMoreNativeSessions = "load-more-native-sessions";
@@ -133,12 +135,22 @@ function NativeSessionPreviewSkeleton() {
 export function NativeSessionDialog({
     store,
     onClose,
+    bugReportDialog,
+    daemonSource,
 }: {
     /** Created by the owner when the dialog opens; it starts discovery itself. */
     readonly store: StoreApi<NativeSessionStore>;
     readonly onClose: () => void;
+    readonly bugReportDialog: BugReportDialogStore;
+    readonly daemonSource: DaemonDiagnosticsSource;
 }) {
     const model = useExternalStore(store);
+    const diagnostics: DaemonDiagnosticsSource = {
+        ...daemonSource,
+        sessionId: null,
+        nativeSessionId: model.preview.kind === "empty" ? null : model.preview.entry.nativeSessionId,
+    };
+    const reportButton = <BugReportButton appearance="icon" daemonSource={diagnostics} dialog={bugReportDialog} />;
     const withSignal = (action: (signal: AbortSignal) => Promise<void>) => {
         void action(store.getState().lifetimeSignal());
     };
@@ -209,7 +221,14 @@ export function NativeSessionDialog({
                                         <NativeSessionDirectoryPlaceholder
                                             icon={CircleAlert}
                                             title="Couldn't load sessions"
-                                            description={model.directory.message}
+                                            description={
+                                                <span className="inline-flex items-start gap-2 text-left">
+                                                    <span className="min-w-0 break-words">
+                                                        {model.directory.message}
+                                                    </span>
+                                                    {reportButton}
+                                                </span>
+                                            }
                                             tone="destructive"
                                         />
                                     )}
@@ -360,9 +379,10 @@ export function NativeSessionDialog({
                                         )}
                                         {model.preview.kind === "loading" && <NativeSessionPreviewSkeleton />}
                                         {model.preview.kind === "failed" && (
-                                            <p role="alert" className="text-destructive">
-                                                {model.preview.message}
-                                            </p>
+                                            <div role="alert" className="flex items-start gap-2 text-destructive">
+                                                <p className="min-w-0 flex-1 break-words">{model.preview.message}</p>
+                                                {reportButton}
+                                            </div>
                                         )}
                                         {model.preview.kind === "ready" && (
                                             <div className="space-y-4">
@@ -389,6 +409,15 @@ export function NativeSessionDialog({
                                         )}
                                     </ScrollEdgeFade>
                                 </section>
+                                {model.error !== "" && (
+                                    <div
+                                        className="mx-4 flex items-start gap-2 rounded-2xl border border-destructive/20 bg-card px-4 py-3 text-13 text-destructive sm:mx-5"
+                                        role="alert"
+                                    >
+                                        <span className="min-w-0 flex-1 break-words">{model.error}</span>
+                                        {reportButton}
+                                    </div>
+                                )}
                                 <footer className="flex shrink-0 justify-end gap-2 px-4 py-3 sm:px-5">
                                     <Button
                                         data-testid={dataTestId.importLocalSession}
@@ -419,16 +448,6 @@ export function NativeSessionDialog({
                             </div>
                         </div>
                     )}
-                    {model.error !== "" &&
-                        createPortal(
-                            <div
-                                className="fixed right-4 bottom-4 z-[70] max-w-sm rounded-2xl border border-destructive/20 bg-card px-4 py-3 text-13 text-destructive shadow-module"
-                                role="alert"
-                            >
-                                {model.error}
-                            </div>,
-                            document.body,
-                        )}
                 </>
             )}
         </Dialog>
