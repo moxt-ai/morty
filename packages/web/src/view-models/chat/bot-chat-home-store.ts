@@ -117,7 +117,6 @@ export interface BotChatHomeStore {
     readonly directoryRevision: number;
     readonly draft: string;
     readonly draftSettings: ChatDraftConfiguration | null;
-    readonly optimisticTitles: ReadonlyMap<string, string>;
     /** Bumped whenever the message list should re-arm following the latest message. */
     readonly scrollFollowRevision: number;
     /** The pairing dialog the user opened manually from the sidebar. */
@@ -201,6 +200,8 @@ export const createBotChatHomeStore = (
         readonly onRestart: () => void;
         /** Announced when only the directory revision advances (a created conversation joins it) without reloading the home view. */
         readonly onDirectoryRefreshed: () => void;
+        /** Announced with the first-prompt title of a conversation this page created, before the directory lists it. */
+        readonly onConversationCreated: (conversationId: string, title: string) => void;
         /** Announced after a transition that selects a new draft: the owner reloads the draft controls. */
         readonly onDraftSelected: () => void;
         /** Announced after a transition that targets another conversation: the owner re-scopes the status watch. */
@@ -217,7 +218,14 @@ export const createBotChatHomeStore = (
         options.entry === "restore" && selection.kind === "loading" && selection.target.kind === "session"
             ? selection.target.sessionId
             : null;
-    const { onRestart, onDirectoryRefreshed, onDraftSelected, onSelectionTargeted, onSelectionReady } = options;
+    const {
+        onRestart,
+        onDirectoryRefreshed,
+        onConversationCreated,
+        onDraftSelected,
+        onSelectionTargeted,
+        onSelectionReady,
+    } = options;
     return createStore<BotChatHomeStore>()((set, get) => {
         // Announced from the explicit transition sites: a ready selection
         // builds the pane for it, and every selection transition re-scopes
@@ -242,7 +250,6 @@ export const createBotChatHomeStore = (
             directoryRevision: 0,
             draft: "",
             draftSettings: null,
-            optimisticTitles: new Map(),
             scrollFollowRevision: 0,
             pairingDialogOpen: false,
             disconnectedNoticeDismissed: false,
@@ -632,7 +639,6 @@ export const createBotChatHomeStore = (
             dismissDisconnectedNotice: () => set({ disconnectedNoticeDismissed: true }),
             updateConversationTitle: (sessionId, title) =>
                 set((state) => ({
-                    optimisticTitles: new Map(state.optimisticTitles).set(sessionId, title),
                     selection: transitionConversationSelection(state.selection, {
                         kind: "session-title-updated",
                         sessionId,
@@ -769,12 +775,9 @@ export const createBotChatHomeStore = (
                             session: sent.session,
                         }),
                         directoryRevision: state.directoryRevision + 1,
-                        optimisticTitles: new Map(state.optimisticTitles).set(
-                            sent.conversationId,
-                            sent.message.summary,
-                        ),
                     }));
                     announceSelection();
+                    onConversationCreated(sent.conversationId, sent.message.summary);
                     onDirectoryRefreshed();
                     composerAttachments.getState().clear();
                     centralSessionStorage.remove(newConversationDraftEntry(activeBotId));

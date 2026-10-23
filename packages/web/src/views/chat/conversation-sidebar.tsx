@@ -328,7 +328,6 @@ export function ConversationSidebar({
     activeId,
     onOpen,
     onNewConversation,
-    optimisticTitles,
 }: {
     readonly botId: string;
     readonly connectionStatus: BotConnectionStatus;
@@ -345,7 +344,6 @@ export function ConversationSidebar({
         | "networkDiagnostic"
     >;
     readonly activeId: string;
-    readonly optimisticTitles: ReadonlyMap<string, string>;
     readonly onOpen: (session: ManagedChatSession) => void;
     readonly onNewConversation: () => void;
 }) {
@@ -383,7 +381,7 @@ export function ConversationSidebar({
         directory.kind === "ready" || directory.kind === "refreshing" || directory.kind === "stale"
             ? directory.sessions.map((session) => ({
                   ...session,
-                  title: optimisticTitles.get(session.id) ?? session.title,
+                  title: session.title,
               }))
             : null;
     const conversationGroups = sessions === null ? null : groupConversationsByUpdatedAt(sessions, new Date());

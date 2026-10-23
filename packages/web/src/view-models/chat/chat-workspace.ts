@@ -182,6 +182,8 @@ export function createChatWorkspace(options: {
             startDirectoryLoad();
         },
         onDirectoryRefreshed: () => startDirectoryLoad(),
+        onConversationCreated: (conversationId, title) =>
+            directory.getState().conversationCreated(conversationId, title),
         onSelectionReady: (selection) => replacePane(selection),
         onSelectionTargeted: (conversationId) => statuses.getState().selectionChanged(conversationId),
         url: options.url ?? window.location.href,
@@ -426,7 +428,10 @@ export function createChatWorkspace(options: {
             onInitialMessageUnconfirmed: (journal) => home.getState().initialMessageUnconfirmed(sessionId, journal),
             onStatusChange: (status) =>
                 statuses.getState().statusChanged(botId, sessionId, status, statusLifetime.signal),
-            onTitleChange: (id, title) => home.getState().updateConversationTitle(id, title),
+            onTitleChange: (id, title) => {
+                home.getState().updateConversationTitle(id, title);
+                directory.getState().titleObserved(id, title);
+            },
         });
         paneEntry = { model, session: selection.session };
     };

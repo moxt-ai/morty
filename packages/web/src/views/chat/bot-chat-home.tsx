@@ -109,7 +109,6 @@ export function BotChatHome({
                     botId={active.botId}
                     workspace={workspace}
                     activeId={activeConversationId}
-                    optimisticTitles={model.optimisticTitles}
                     connectionStatus={connectionStatus}
                     onConnectAgent={setupView?.reason === "unconfigured" ? store.getState().showPairingDialog : null}
                     requests={requests}

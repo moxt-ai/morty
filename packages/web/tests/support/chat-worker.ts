@@ -57,6 +57,15 @@ export async function createChatWorkerEnvironment() {
                 closeSession: async (sessionId: string): Promise<void> => {
                     await runtime.client.sessions.close(runtime.runtimeId, sessionId, new AbortController().signal);
                 },
+                /** Renames a Session through the Platform, the way another Mobius client of this Runtime would. */
+                renameSession: async (sessionId: string, title: string): Promise<void> => {
+                    await runtime.client.sessions.rename(
+                        runtime.runtimeId,
+                        sessionId,
+                        title,
+                        new AbortController().signal,
+                    );
+                },
                 disconnect: runtime.disconnect,
                 reconnect: runtime.reconnect,
                 writeFiles: runtime.writeFiles,
