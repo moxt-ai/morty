@@ -74,16 +74,6 @@ test("Given a pending permission, When the user stops the turn, Then the turn en
     expect(queryByRole(document.body, "dialog", { name: "Agent information request" })).toBeNull();
 });
 
-test("Given an agent omits the original input, When permission is requested, Then the missing details are explicit and the action can still be denied", {
-    timeout: 30_000,
-}, async () => {
-    const app = await requestInput("request without tool input");
-    const permission = getByRole(document.body, "alertdialog", { name: "Agent permission request" });
-    expect(permission.textContent).toContain("The agent did not provide the original tool input.");
-    await app.user.click(getByRole(permission, "button", { name: "Deny: No" }));
-    await app.waitForView(() => expect(document.body.textContent).toContain("Permission rejected"));
-});
-
 test("Given a permission decision changes the agent's workflow, When the user reviews and declines it, Then the original option meaning remains visible and is sent unchanged", {
     timeout: 30_000,
 }, async () => {

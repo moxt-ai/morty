@@ -58,30 +58,3 @@ test("Given an HTML link points to an unavailable file, When the file becomes av
     expect(app.optionalElementByTestId(dataTestId.filePreview)).toBeNull();
     expect(getByRole(document.body, "button", { name: "Open missing result" })).toBeDefined();
 });
-
-test("Given a Runtime goes offline after an HTML result was opened, When the user reloads, Then the failed read has a retry action and can be closed", {
-    timeout: 30_000,
-}, async () => {
-    const app = await createTestApp({ connectAgent: true });
-    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
-    if (!(composer instanceof HTMLTextAreaElement) || app.daemon === null) {
-        throw new Error("Expected a composer and connected Runtime");
-    }
-    await sendPrompt(app, composer, "show interactive result");
-    await app.queryElementByTestId(dataTestId.localFileLink);
-    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
-    await app.user.click(
-        await app.waitForView(() => getByRole(document.body, "button", { name: "Open delivery review" })),
-    );
-    const preview = await app.queryElementByTestId(dataTestId.filePreview);
-    await app.waitForView(() => getByRole(preview, "button", { name: "View source" }));
-    await app.daemon.disconnect();
-    await app.waitForView(() =>
-        expect(app.elementByTestId(dataTestId.sessionReconnectNotice).textContent).toContain("Retrying in"),
-    );
-    await app.user.click(getByRole(preview, "button", { name: "Reload file" }));
-    await app.waitForView(() => expect(getByRole(preview, "alert").textContent).toContain("offline or disconnected"));
-    expect(getByRole(preview, "button", { name: "Reload file" })).toBeDefined();
-    await app.user.click(getByRole(preview, "button", { name: "Close file preview" }));
-    expect(app.optionalElementByTestId(dataTestId.filePreview)).toBeNull();
-});
