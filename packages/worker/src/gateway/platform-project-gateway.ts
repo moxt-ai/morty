@@ -192,10 +192,13 @@ export class PlatformProjectGateway {
     };
 
     /**
-     * Asks the local Runtime to re-run Agent discovery and republish its catalog. The Runtime
-     * republishes before replying, so the directory this response describes is already stored.
+     * Asks the local Runtime to re-run Agent discovery and republish its catalog. The stored
+     * descriptor is read first, so the response carries the Runtime's machine name and the
+     * freshly discovered Agents in one reply; a successful discovery round-trip proves the
+     * Runtime answered, so it is reported online. The shape matches {@link getChatRuntimeAgents}.
      */
     readonly refreshChatRuntimeAgents = async (projectId: string, runtimeId: string, parent: AbortSignal) => {
+        const stored = await this.getChatRuntimeAgents(projectId, runtimeId, parent);
         const discovered = await this.#withProject(
             projectId,
             parent,
@@ -204,7 +207,11 @@ export class PlatformProjectGateway {
             },
             120000,
         );
-        return discovered.map((agent) => ({ agentRef: agent.id, label: agent.label }));
+        return {
+            ...stored,
+            online: true,
+            agents: discovered.map((agent) => ({ agentRef: agent.id, label: agent.label })),
+        };
     };
 
     readonly readRuntimeDiagnostics = async (projectId: string, runtimeId: string, parent: AbortSignal) => {

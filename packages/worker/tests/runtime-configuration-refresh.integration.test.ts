@@ -75,17 +75,15 @@ test("Given a configured Bot whose Runtime started without Pi, When its harness 
 
     const refreshedResponse = await botRequest("workspace/refresh", {});
     expect(refreshedResponse.status).toBe(200);
-    expect(
-        v.parse(
-            v.strictObject({
-                runtime: v.strictObject({
-                    runtimeId: v.string(),
-                    agents: v.array(v.strictObject({ agentRef: v.string(), label: v.string() })),
-                }),
-            }),
-            await refreshedResponse.json(),
-        ),
-    ).toMatchObject({ runtime: { agents: [{ agentRef: "codex" }, { agentRef: "pi" }] } });
+    // The refresh response satisfies the Web client's runtime configuration schema: the same
+    // parse the browser performs must succeed, or every client-side refresh would fail.
+    expect(v.parse(runtimeConfigurationSchema, await refreshedResponse.json())).toMatchObject({
+        runtime: {
+            runtimeId: runtime.runtimeId,
+            agents: [{ agentRef: "codex" }, { agentRef: "pi" }],
+            online: true,
+        },
+    });
 
     // The daemon republished, so ordinary reads stop serving the boot-time set.
     const reread = v.parse(runtimeConfigurationSchema, await (await botRequest("workspace", {})).json());
