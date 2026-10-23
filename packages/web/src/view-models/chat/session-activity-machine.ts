@@ -1,32 +1,8 @@
+/** What a Session reports about its work: its current turn, the last turn's failure, or nothing. */
 export type SessionActivityState =
     | { readonly kind: "idle" }
     | { readonly kind: "working"; readonly commandId: string; readonly startedAt: number }
     | { readonly kind: "failed"; readonly commandId: string; readonly message: string };
-
-export type SessionActivityEvent =
-    | { readonly kind: "work-completed"; readonly commandId: string }
-    | { readonly kind: "work-failed"; readonly commandId: string; readonly message: string };
-
-export function transitionSessionActivity(
-    state: SessionActivityState,
-    event: SessionActivityEvent,
-): SessionActivityState {
-    switch (event.kind) {
-        case "work-completed":
-            return state.kind === "working" && state.commandId === event.commandId ? { kind: "idle" } : state;
-        case "work-failed":
-            return state.kind === "working" && state.commandId === event.commandId
-                ? { commandId: event.commandId, kind: "failed", message: event.message }
-                : state;
-    }
-}
-
-export function startSessionWork(event: {
-    readonly commandId: string;
-    readonly startedAt: number;
-}): SessionActivityState {
-    return { commandId: event.commandId, kind: "working", startedAt: event.startedAt };
-}
 
 export function workingCommandId(state: SessionActivityState): string | null {
     switch (state.kind) {
@@ -35,5 +11,16 @@ export function workingCommandId(state: SessionActivityState): string | null {
             return null;
         case "working":
             return state.commandId;
+    }
+}
+
+export function sameSessionActivity(left: SessionActivityState, right: SessionActivityState): boolean {
+    switch (left.kind) {
+        case "idle":
+            return right.kind === "idle";
+        case "working":
+            return right.kind === "working" && right.commandId === left.commandId && right.startedAt === left.startedAt;
+        case "failed":
+            return right.kind === "failed" && right.commandId === left.commandId && right.message === left.message;
     }
 }
