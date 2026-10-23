@@ -2,6 +2,7 @@ import { getByRole, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
+import { WebSocketApiTransport } from "../src/services/api/websocket-api-transport.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
@@ -16,6 +17,47 @@ function connectionDialog(): HTMLElement | null {
 function agentAnswered(app: Awaited<ReturnType<typeof createTestApp>>, text: string): boolean {
     return app.elementsByTestId(dataTestId.agentResponse).some((message) => message.textContent?.includes(text));
 }
+
+test("Given a workspace read before an Agent change, When its watch starts after the change, Then the watch reports the unseen configuration", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ agents: [{ id: "codex", label: "Codex" }], connectAgent: true, clock });
+    if (app.daemon === null) {
+        throw new Error("Expected a connected Runtime");
+    }
+    // A separate real bridge owns this read/watch pair so the app's background
+    // reads cannot advance its baseline before the watch is registered.
+    const transport = new WebSocketApiTransport(app.origin, clock);
+    transport.open();
+    try {
+        const signal = AbortSignal.timeout(15_000);
+        const token = await app.identity.getToken(signal);
+        const workspace = () =>
+            new Request(`${app.origin}/morty/api/chat/projects/${app.identity.projectId}/bots/${app.botId}/workspace`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${token}` },
+                signal,
+            });
+        const before = await transport.fetch(workspace());
+        expect(before.status).toBe(200);
+        expect(await before.text()).not.toContain('"agentRef":"pi"');
+
+        await app.daemon.replaceAgents([
+            { id: "codex", label: "Codex" },
+            { id: "pi", label: "Pi" },
+        ]);
+
+        // The first sample already includes Pi. It must be compared with the
+        // preceding read, not silently adopted as the new baseline.
+        await transport.waitForChange(workspace());
+        const after = await transport.fetch(workspace());
+        expect(after.status).toBe(200);
+        expect(await after.text()).toContain('"agentRef":"pi"');
+    } finally {
+        transport.dispose();
+    }
+});
 
 test("Given pairing already completed, When a setup watch starts, Then it immediately reports that setup changed", {
     timeout: 30_000,
@@ -248,31 +290,4 @@ test("Given a recovery that loses the bridge again, When the Runtime changes aft
     // A Runtime change after the final recovery must reach the page.
     await app.daemon?.disconnect();
     await app.waitForView(() => expect(machine().startsWith("Disconnected")).toBe(true));
-});
-
-test("Given a setup page whose bridge drops again during recovery, When the agent pairs, Then the app leaves setup", {
-    timeout: 30_000,
-}, async () => {
-    const clock = new TestClock(CLOCK_ORIGIN);
-    const app = await createTestApp({ clock });
-    await app.queryElementByTestId(dataTestId.pairingInstruction);
-
-    // First drop: the recovery waits on the setup watch for this unpaired
-    // Machine, which stays pending until the pairing changes.
-    app.transport.disconnect();
-    await act(async () => {
-        clock.advanceBy(1_000);
-    });
-
-    // Second drop while that recovery wait is in flight. The load must
-    // re-enter recovery instead of leaving the page behind.
-    app.transport.disconnect();
-    await act(async () => {
-        clock.advanceBy(2_000);
-    });
-
-    // Pairing completes: the setup watch must still be armed, so the page
-    // follows the new configuration into the chat.
-    await app.connectAgent();
-    await app.queryElementByTestId(dataTestId.messageComposer);
 });

@@ -129,12 +129,16 @@ export function createCloudWebSocketHandlers(dependencies: CloudWebSocketDepende
     return {
         dispatch: dependencies.dispatch,
         resolve: resolveRequest,
-        subscribe: async (request, observer, signal) => {
+        subscribe: async (request, observer, signal, baseline) => {
             if (request.url.endsWith("/managed-session/status-events")) {
                 await subscribeSessionStatuses(request, observer, dependencies, signal);
                 return;
             }
-            let fingerprint: string | null = null;
+            // Compare the first sample with the configuration the client read,
+            // not a fresh baseline that could already include an unseen change.
+            // This is notification state only; every sample is still dispatched
+            // through the normal authorization boundary.
+            let fingerprint: string | null = baseline ?? null;
             while (!signal.aborted) {
                 const deadline = AbortSignal.timeout(WATCH_REQUEST_TIMEOUT_MILLISECONDS);
                 const requestSignal = AbortSignal.any([signal, deadline]);
