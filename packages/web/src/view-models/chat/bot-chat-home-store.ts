@@ -108,6 +108,22 @@ export function botConnectionStatus(
     }
 }
 
+/**
+ * Whether a load that failed because the Runtime was unreachable is retried by itself once the Runtime is back. Only
+ * loads that read are: continuing a native session forks or imports it, and a connection that dropped mid-request
+ * cannot show it did not happen, so the user decides whether to retry.
+ */
+function retriesAutomatically(selection: ConversationSelectionState): boolean {
+    switch (selection.kind) {
+        case "draft":
+            return false;
+        case "loading":
+        case "failed":
+        case "ready":
+            return selection.target.kind !== "continue";
+    }
+}
+
 export interface BotChatNavigation {
     readonly showDraft: () => void;
     readonly showManaged: (isExternal: boolean, id: string) => void;
@@ -234,7 +250,7 @@ export const createBotChatHomeStore = (
     const conversations = createConversationSessionStore(requests);
     const selection = initialSelection(options.url, options.createId);
     // Whether a load that failed because the Runtime was unreachable may be retried on a snapshot that follows no
-    // Runtime change. See `applyConfiguration`.
+    // Runtime change: seeing the Runtime offline makes it available again. See `applyConfiguration`.
     let runtimeRetryWithoutChange: "available" | "used" = "available";
     let restoredSessionId =
         options.entry === "restore" && selection.kind === "loading" && selection.target.kind === "session"
@@ -315,31 +331,23 @@ export const createBotChatHomeStore = (
                 /**
                  * Adopts a Runtime configuration snapshot: everything the page derives from the Runtime follows it,
                  * then the other workspace workflows hear of it. A load that failed because the Runtime was
-                 * unreachable is retried, the way Reconnect would, once a snapshot shows the Runtime online. A
-                 * snapshot that follows no change retries only once, so a Runtime reported online that still cannot
-                 * be reached waits for its next change instead of being retried in a loop.
+                 * unreachable is retried, the way Reconnect would, once a snapshot shows the Runtime online. Without a
+                 * change or an offline report in between, that happens only once, so a Runtime reported online that
+                 * still cannot be reached waits for its next change instead of being retried in a loop.
                  */
                 const applyConfiguration = (configuration: BotRuntimeConfiguration, afterChange: boolean): void => {
                     signal.throwIfAborted();
                     const reason = setupReason(configuration);
                     const before = get();
                     const failedForRuntime =
-                        before.view.kind === "runtime-disconnected" && before.selection.kind !== "draft";
-                    set((current) => ({
-                        runtimeConfiguration: configuration,
-                        // A dismissed disconnection notice stays dismissed until this disconnection ends.
-                        ...(configuration.runtime.online ? { disconnectedNoticeDismissed: false } : {}),
-                        ...(current.selection.kind === "draft"
-                            ? {
-                                  view:
-                                      reason === null
-                                          ? { kind: "active" as const, botId }
-                                          : { kind: "setup" as const, botId, reason },
-                              }
-                            : {}),
-                    }));
-                    options.onRuntimeConfiguration?.(configuration);
-                    if (!failedForRuntime || afterChange) {
+                        before.view.kind === "runtime-disconnected" && retriesAutomatically(before.selection);
+                    observeConfiguration(
+                        configuration,
+                        before.selection.kind === "draft"
+                            ? { view: reason === null ? { kind: "active", botId } : { kind: "setup", botId, reason } }
+                            : {},
+                    );
+                    if (!failedForRuntime) {
                         runtimeRetryWithoutChange = "available";
                     }
                     if (
@@ -350,6 +358,26 @@ export const createBotChatHomeStore = (
                         runtimeRetryWithoutChange = "used";
                         get().retry();
                     }
+                };
+                /**
+                 * Records a Runtime configuration the page observed, from a watch or a direct read, with whatever the
+                 * caller derives from it in the same update, and announces it to the other workspace workflows.
+                 */
+                const observeConfiguration = (
+                    configuration: BotRuntimeConfiguration,
+                    derived: Pick<Partial<BotChatHomeStore>, "view"> = {},
+                ): void => {
+                    set({
+                        ...derived,
+                        runtimeConfiguration: configuration,
+                        // A dismissed disconnection notice stays dismissed until this disconnection ends.
+                        ...(configuration.runtime.online ? { disconnectedNoticeDismissed: false } : {}),
+                    });
+                    if (!configuration.runtime.online) {
+                        // Once the page has seen the Runtime offline, its next online report is a return.
+                        runtimeRetryWithoutChange = "available";
+                    }
+                    options.onRuntimeConfiguration?.(configuration);
                 };
                 /**
                  * A dropped socket takes every watch with it. This loop re-arms
@@ -469,8 +497,7 @@ export const createBotChatHomeStore = (
                     }
                     const configuration = await requests.runtimeConfiguration(botId, signal);
                     signal.throwIfAborted();
-                    set({ runtimeConfiguration: configuration });
-                    options.onRuntimeConfiguration?.(configuration);
+                    observeConfiguration(configuration);
                     const currentSelection = get().selection;
                     const currentTarget = currentSelection.kind === "draft" ? null : currentSelection.target;
                     if (currentTarget?.kind === "continue") {
