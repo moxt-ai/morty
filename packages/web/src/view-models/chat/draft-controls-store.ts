@@ -117,17 +117,27 @@ export const createDraftControlsStore = (
         // after the Runtime reconnects or its Agents change, drops them.
         const agentSettings = new Map<string, Awaited<ReturnType<BotChatApi["agentSettings"]>>>();
         let settingsRuntime: string | null = null;
-        // Counts the different Runtime configurations seen. A read records the one it started under; a read that
-        // finishes under a newer one is neither shown nor cached, and the draft reloads against the newest.
-        let configurationRevision = 0;
-        const readAgentSettings = async (agentRef: string, refresh: boolean, signal: AbortSignal) => {
+        // Every operation that writes the draft's settings (a load, a refresh, a harness switch, a directory choice)
+        // takes this one lane: starting one stops the previous, and only the newest may write. A Runtime
+        // configuration change starts its own, so nothing read under an older configuration is shown or cached.
+        let settingsOperation: AbortController | null = null;
+        const beginSettingsOperation = (parent: AbortSignal) => {
+            settingsOperation?.abort(new Error("A newer draft settings operation started."));
+            const controller = new AbortController();
+            settingsOperation = controller;
+            return {
+                signal: AbortSignal.any([parent, controller.signal, AbortSignal.timeout(120_000)]),
+                current: (): boolean => settingsOperation === controller,
+            };
+        };
+        type SettingsOperation = ReturnType<typeof beginSettingsOperation>;
+        const readAgentSettings = async (agentRef: string, refresh: boolean, operation: SettingsOperation) => {
             const cached = refresh ? undefined : agentSettings.get(agentRef);
             if (cached !== undefined) {
                 return cached;
             }
-            const revision = configurationRevision;
-            const result = await requests.agentSettings(botId, agentRef, signal);
-            if (revision === configurationRevision) {
+            const result = await requests.agentSettings(botId, agentRef, operation.signal);
+            if (operation.current()) {
                 agentSettings.set(agentRef, result);
             }
             return result;
@@ -158,8 +168,8 @@ export const createDraftControlsStore = (
             onSettings(null);
             set({ settings: { kind: "failed", message: formatError(cause, message) } });
         };
-        // Set while an explicit harness choice is being loaded. The load selects
-        // that exact harness instead of falling back to another one.
+        // Set while an explicit harness choice is being loaded. The load selects that harness while the Runtime offers
+        // it, and otherwise falls back like any other load.
         let pendingHarness: string | null = null;
         const changedOptionIds = new Set<string>();
         const rememberAgentSettings = (settings: ReadyDraftSettings): void => {
@@ -316,7 +326,7 @@ export const createDraftControlsStore = (
             }
         };
         const load = async (lifetimeSignal: AbortSignal): Promise<void> => {
-            const signal = AbortSignal.any([lifetimeSignal, AbortSignal.timeout(120_000)]);
+            const operation = beginSettingsOperation(lifetimeSignal);
             const currentSettings = get().settings;
             // Nothing from the previous harness may stay submittable while the
             // target harness and its settings load: a message sent in that
@@ -326,7 +336,6 @@ export const createDraftControlsStore = (
             }
             onSettings(null);
             waitingForRuntime = false;
-            const revision = configurationRevision;
             try {
                 const requestedHarness = pendingHarness ?? readLastHarnessPreference(botId);
                 const configuration = runtimeConfiguration();
@@ -335,58 +344,47 @@ export const createDraftControlsStore = (
                     return;
                 }
                 const agents = configuration === null ? [] : connectedChatRuntimeAgents(configuration.runtime);
+                // A requested harness the Runtime does not offer must not block the draft; the first connected Agent
+                // stands in until the user chooses again.
                 const selected =
                     (requestedHarness === null
                         ? undefined
-                        : agents.find((agent) => agent.agentRef === requestedHarness)) ??
-                    // A remembered harness that is not connected must not
-                    // block the draft; the first connected Agent stands in
-                    // until the user chooses again.
-                    (pendingHarness === null ? agents[0] : undefined);
+                        : agents.find((agent) => agent.agentRef === requestedHarness)) ?? agents[0];
                 if (selected === undefined) {
                     // The Runtime the page follows offers no Agent to load yet.
                     awaitAgent();
                     return;
                 }
                 const [result, defaultCwd] = await Promise.all([
-                    readAgentSettings(selected.agentRef, false, signal),
-                    requests.directory(botId, "default", signal),
+                    readAgentSettings(selected.agentRef, false, operation),
+                    requests.directory(botId, "default", operation.signal),
                 ]);
-                signal.throwIfAborted();
+                operation.signal.throwIfAborted();
                 const savedDirectoryId = readLastCwdPreference(botId, selected.runtimeId, selected.agentRef);
                 let cwd = defaultCwd;
                 if (savedDirectoryId !== null && savedDirectoryId !== defaultCwd.directoryId) {
                     try {
-                        cwd = await requests.directory(botId, savedDirectoryId, signal);
-                        signal.throwIfAborted();
+                        cwd = await requests.directory(botId, savedDirectoryId, operation.signal);
+                        operation.signal.throwIfAborted();
                     } catch {
-                        signal.throwIfAborted();
+                        operation.signal.throwIfAborted();
                     }
                 }
-                await completeRead(revision, lifetimeSignal, () =>
-                    applyAgentSettings(selected, cwd, result.options, requestedHarness === selected.agentRef),
-                );
+                if (operation.current()) {
+                    applyAgentSettings(selected, cwd, result.options, requestedHarness === selected.agentRef);
+                }
             } catch (cause) {
-                if (!lifetimeSignal.aborted) {
-                    await completeRead(revision, lifetimeSignal, () =>
-                        settleFailure(cause, "Harness settings are unavailable."),
-                    );
+                if (!lifetimeSignal.aborted && operation.current()) {
+                    settleFailure(cause, "Harness settings are unavailable.");
                 }
             }
         };
-        /**
-         * Ends a read that started under `revision`. A newer configuration overtakes it whether it succeeded or failed:
-         * the draft reloads against the newest configuration instead of showing what the read found.
-         */
-        const completeRead = async (revision: number, signal: AbortSignal, settle: () => void): Promise<void> => {
-            if (revision !== configurationRevision) {
-                await load(signal);
-                return;
-            }
-            settle();
-        };
         /** Re-reads the selected Agent's settings, keeping the selection and directory while they load. */
-        const refreshSettings = async (settings: ReadyDraftSettings, signal: AbortSignal): Promise<void> => {
+        const refreshSettings = async (
+            settings: Pick<ReadyDraftSettings, "cwd" | "selectedAgent">,
+            parent: AbortSignal,
+        ): Promise<void> => {
+            const operation = beginSettingsOperation(parent);
             set({
                 settings: {
                     kind: "refreshing",
@@ -395,18 +393,15 @@ export const createDraftControlsStore = (
                 },
             });
             onSettings(null);
-            const revision = configurationRevision;
             try {
-                const result = await readAgentSettings(settings.selectedAgent.agentRef, true, signal);
-                signal.throwIfAborted();
-                await completeRead(revision, signal, () =>
-                    applyAgentSettings(settings.selectedAgent, settings.cwd, result.options, false),
-                );
+                const result = await readAgentSettings(settings.selectedAgent.agentRef, true, operation);
+                operation.signal.throwIfAborted();
+                if (operation.current()) {
+                    applyAgentSettings(settings.selectedAgent, settings.cwd, result.options, false);
+                }
             } catch (cause) {
-                if (!signal.aborted) {
-                    await completeRead(revision, signal, () =>
-                        settleFailure(cause, "Harness settings are unavailable."),
-                    );
+                if (!parent.aborted && operation.current()) {
+                    settleFailure(cause, "Harness settings are unavailable.");
                 }
             }
         };
@@ -439,44 +434,27 @@ export const createDraftControlsStore = (
                 const changed = runtime !== settingsRuntime;
                 settingsRuntime = runtime;
                 if (changed) {
-                    configurationRevision += 1;
                     agentSettings.clear();
                 }
                 // An offline Runtime offers nothing for now, which says nothing about whether the Agent was removed.
-                if (!configuration.runtime.online) {
+                if (!configuration.runtime.online || (!changed && !waitingForRuntime)) {
                     return;
                 }
+                // Reconcile with this configuration. The new operation supersedes any read still in flight.
                 const settings = get().settings;
-                switch (settings.kind) {
-                    case "loading":
-                        // A load in flight sees the newer revision when it finishes and reloads against it.
-                        if (waitingForRuntime) {
-                            await load(signal);
-                        }
-                        return;
-                    case "failed":
-                        if (waitingForRuntime || changed) {
-                            await load(signal);
-                        }
-                        return;
-                    case "refreshing":
-                    case "switching":
-                        // The read in flight sees the newer revision when it finishes and reloads against it.
-                        return;
-                    case "ready": {
-                        const offered = connectedChatRuntimeAgents(configuration.runtime).some(
-                            (agent) =>
-                                agent.runtimeId === settings.selectedAgent.runtimeId &&
-                                agent.agentRef === settings.selectedAgent.agentRef,
-                        );
-                        if (!offered) {
-                            await load(signal);
-                        } else if (changed) {
-                            await refreshSettings(settings, signal);
-                        }
-                        return;
-                    }
+                const selectedAgent =
+                    settings.kind === "ready" || settings.kind === "refreshing" ? settings.selectedAgent : null;
+                const offered =
+                    selectedAgent !== null &&
+                    connectedChatRuntimeAgents(configuration.runtime).some(
+                        (agent) =>
+                            agent.runtimeId === selectedAgent.runtimeId && agent.agentRef === selectedAgent.agentRef,
+                    );
+                if (offered && (settings.kind === "ready" || settings.kind === "refreshing")) {
+                    await refreshSettings(settings, signal);
+                    return;
                 }
+                await load(signal);
             },
             openCwd: () => {
                 const settings = get().settings;
@@ -516,20 +494,26 @@ export const createDraftControlsStore = (
                     });
                     return;
                 }
+                // Choosing a directory writes the draft's settings, so it takes the settings lane.
+                const operation = beginSettingsOperation(signal);
                 let directory = browser.directory;
                 if (requestedPath !== browser.directory.directoryLabel) {
-                    const operation = new AbortController();
-                    cwdOperation = operation;
-                    const requestSignal = AbortSignal.any([signal, operation.signal, AbortSignal.timeout(120_000)]);
-                    set({ cwdBrowser: { kind: "loading", directory: browser.directory, path: browser.path } });
+                    const loading = { kind: "loading", directory: browser.directory, path: browser.path } as const;
+                    set({ cwdBrowser: loading });
                     try {
-                        directory = await requests.directory(botId, pathDirectoryId(requestedPath), requestSignal);
-                        requestSignal.throwIfAborted();
+                        directory = await requests.directory(botId, pathDirectoryId(requestedPath), operation.signal);
+                        operation.signal.throwIfAborted();
                     } catch (cause) {
-                        if (operation.signal.aborted) {
+                        if (signal.aborted) {
                             return;
                         }
-                        signal.throwIfAborted();
+                        if (!operation.current()) {
+                            // A newer operation took over: undo only this choice's own loading state.
+                            if (get().cwdBrowser === loading) {
+                                set({ cwdBrowser: browser });
+                            }
+                            return;
+                        }
                         set({
                             cwdBrowser: {
                                 kind: "failed",
@@ -539,13 +523,11 @@ export const createDraftControlsStore = (
                             },
                         });
                         return;
-                    } finally {
-                        if (cwdOperation === operation) {
-                            cwdOperation = null;
-                        }
                     }
                 }
-                applyDirectory(settings, directory);
+                if (operation.current()) {
+                    applyDirectory(settings, directory);
+                }
             },
             selectRecentCwd: async (directoryId, signal) => {
                 const settings = get().settings;
@@ -554,18 +536,19 @@ export const createDraftControlsStore = (
                     return;
                 }
                 cwdOperation?.abort();
-                const operation = new AbortController();
-                cwdOperation = operation;
-                const requestSignal = AbortSignal.any([signal, operation.signal, AbortSignal.timeout(120_000)]);
+                cwdOperation = null;
+                // Choosing a directory writes the draft's settings, so it takes the settings lane.
+                const operation = beginSettingsOperation(signal);
                 try {
-                    const directory = await requests.directory(botId, directoryId, requestSignal);
-                    requestSignal.throwIfAborted();
-                    applyDirectory(settings, directory);
+                    const directory = await requests.directory(botId, directoryId, operation.signal);
+                    operation.signal.throwIfAborted();
+                    if (operation.current()) {
+                        applyDirectory(settings, directory);
+                    }
                 } catch (cause) {
-                    if (operation.signal.aborted) {
+                    if (signal.aborted || !operation.current()) {
                         return;
                     }
-                    signal.throwIfAborted();
                     set({
                         cwdBrowser: {
                             kind: "failed",
@@ -574,10 +557,6 @@ export const createDraftControlsStore = (
                             path: recent.directoryLabel,
                         },
                     });
-                } finally {
-                    if (cwdOperation === operation) {
-                        cwdOperation = null;
-                    }
                 }
             },
             selectHarness: async (value, disabled, signal) => {
