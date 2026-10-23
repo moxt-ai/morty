@@ -1,0 +1,37 @@
+name: Browser visual contracts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-visuals:
+    name: Browser visual contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+        with:
+          mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
+
+      - name: Install Chromium
+        run: pnpm --filter @moxt-ai/morty-e2e exec playwright install --with-deps chromium
+
+      - name: Verify agent text and source line alignment
+        run: pnpm test:e2e conversation.e2e.test.ts --grep 'grayer|linked TypeScript'
+
+      - name: Save browser screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v7.0.0
+        with:
+          name: browser-visuals
+          path: packages/e2e/test-results/
+          if-no-files-found: error
+          retention-days: 14
+
