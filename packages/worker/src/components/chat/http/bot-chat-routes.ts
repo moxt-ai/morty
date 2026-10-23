@@ -109,6 +109,18 @@ function privateJson(value: unknown) {
     return response;
 }
 
+/**
+ * Answers with a snapshot and its version, which is also its ETag. A client watches for changes from the version it
+ * holds, so a change made between its read and the start of its watch still reaches it.
+ */
+async function versionedPrivateJson(value: object) {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(value)));
+    const version = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    const response = privateJson({ ...value, version });
+    response.headers.set("ETag", `"${version}"`);
+    return response;
+}
+
 function encodeManagedSessionEvent(event: ManagedSessionEvent): string {
     switch (event.kind) {
         case "session.status.changed":
@@ -162,7 +174,9 @@ export function createBotChatRoutes() {
             }),
         )
         .post("/bots/:botId/workspace", authenticatedSession, authorizedChat(), async (context) => {
-            return privateJson(await context.env.services.chat.runtimeConfiguration(context.get("chatScope")));
+            return await versionedPrivateJson(
+                await context.env.services.chat.runtimeConfiguration(context.get("chatScope")),
+            );
         })
         .post("/bots/:botId/daemon-diagnostics", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(await context.env.services.chat.daemonDiagnostics(context.get("chatScope")));

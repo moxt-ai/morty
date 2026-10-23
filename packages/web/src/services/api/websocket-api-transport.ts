@@ -29,7 +29,7 @@ const serverFrame = v.variant("kind", [
     eventFrame,
     subscriptionEndFrame,
 ]);
-const permittedHeaders = new Set(["authorization", "content-type"]);
+const permittedHeaders = new Set(["authorization", "content-type", "if-none-match"]);
 const KEEPALIVE_MILLISECONDS = 25_000;
 
 type BridgeState =

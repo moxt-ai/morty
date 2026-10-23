@@ -5,7 +5,7 @@ import type { WebSocketBridgeHandlers, WebSocketBridgeRequest } from "../infra/w
 const BRIDGE_ORIGIN = "https://bridge.internal";
 const WATCH_INTERVAL_MILLISECONDS = 5_000;
 const WATCH_REQUEST_TIMEOUT_MILLISECONDS = 120_000;
-const permittedHeaders = new Set(["authorization", "content-type"]);
+const permittedHeaders = new Set(["authorization", "content-type", "if-none-match"]);
 const STATUS_SUBSCRIPTION_PATH =
     /^\/morty\/api\/chat\/projects\/([^/]+)\/bots\/([^/]+)\/managed-session\/status-events$/u;
 const statusSubscriptionPath = v.pipe(v.string(), v.regex(STATUS_SUBSCRIPTION_PATH));
@@ -133,7 +133,9 @@ export function createCloudWebSocketHandlers(dependencies: CloudWebSocketDepende
                 await subscribeSessionStatuses(request, observer, dependencies, signal);
                 return;
             }
-            let fingerprint: string | null = null;
+            // A watch that names the version its client holds reports any other version, including one the first
+            // read finds. Without it, the first read sets the baseline.
+            let fingerprint: string | null = request.headers.get("if-none-match");
             while (!signal.aborted) {
                 const deadline = AbortSignal.timeout(WATCH_REQUEST_TIMEOUT_MILLISECONDS);
                 const requestSignal = AbortSignal.any([signal, deadline]);
@@ -146,7 +148,7 @@ export function createCloudWebSocketHandlers(dependencies: CloudWebSocketDepende
                     }
                     const body = await response.text();
                     requestSignal.throwIfAborted();
-                    const next = `${response.status}\u0000${body}`;
+                    const next = response.headers.get("etag") ?? `${response.status}\u0000${body}`;
                     if (fingerprint !== null && fingerprint !== next) {
                         observer.notify();
                         return;

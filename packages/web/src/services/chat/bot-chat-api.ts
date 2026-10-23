@@ -82,7 +82,11 @@ const chatRuntimeSchema = v.object({
     ),
 });
 export type ChatRuntime = v.InferOutput<typeof chatRuntimeSchema>;
-const runtimeConfigurationSchema = v.object({ runtime: chatRuntimeSchema });
+const runtimeConfigurationSchema = v.object({
+    runtime: chatRuntimeSchema,
+    /** Identifies this snapshot, so a watch can report any change from it. */
+    version: v.optional(v.string()),
+});
 const networkDiagnosticSchema = v.strictObject({
     mobiusDaemonLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
     mobiusOrigin: v.pipe(v.string(), v.url()),
@@ -458,6 +462,7 @@ export class BotChatApi {
     readonly #waitForBotChange = async (
         botId: string,
         resource: "setup/runtimes" | "workspace",
+        knownVersion: string | undefined,
         parent: AbortSignal,
     ) => {
         const signal = AbortSignal.any([parent, AbortSignal.timeout(10 * 60 * 1000)]);
@@ -471,14 +476,28 @@ export class BotChatApi {
                     `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/${resource}`,
                     this.#origin,
                 ),
-                { method: "POST", headers: { authorization: `Bearer ${token}` }, signal },
+                {
+                    method: "POST",
+                    headers: {
+                        authorization: `Bearer ${token}`,
+                        ...(knownVersion === undefined ? {} : { "if-none-match": `"${knownVersion}"` }),
+                    },
+                    signal,
+                },
             ),
         );
     };
     readonly waitForSetupChange = async (botId: string, parent: AbortSignal): Promise<void> =>
-        await this.#waitForBotChange(botId, "setup/runtimes", parent);
-    readonly waitForRuntimeConfigurationChange = async (botId: string, parent: AbortSignal): Promise<void> =>
-        await this.#waitForBotChange(botId, "workspace", parent);
+        await this.#waitForBotChange(botId, "setup/runtimes", undefined, parent);
+    /**
+     * Resolves once the Runtime configuration differs from the version the caller holds, or, without one, from what
+     * the watch first reads.
+     */
+    readonly waitForRuntimeConfigurationChange = async (
+        botId: string,
+        knownVersion: string | undefined,
+        parent: AbortSignal,
+    ): Promise<void> => await this.#waitForBotChange(botId, "workspace", knownVersion, parent);
     readonly nativeSessions = async (
         botId: string,
         runtimeId: string,

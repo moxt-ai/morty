@@ -267,7 +267,13 @@ export const createBotChatHomeStore = (
                 const watchRuntimeConfigurationChanges = async (): Promise<void> => {
                     while (true) {
                         try {
-                            await requests.waitForRuntimeConfigurationChange(botId, signal);
+                            // Watch from the configuration this page shows, so a change it has not seen yet is
+                            // reported even when it happened before the watch started.
+                            await requests.waitForRuntimeConfigurationChange(
+                                botId,
+                                get().runtimeConfiguration?.version,
+                                signal,
+                            );
                         } catch (cause) {
                             if (cause instanceof DOMException && cause.name === "TimeoutError") {
                                 continue;
@@ -481,7 +487,7 @@ export const createBotChatHomeStore = (
                             selection: failedSelection,
                             view: { kind: "setup", botId, reason: "agent-required" },
                         });
-                        await requests.waitForRuntimeConfigurationChange(botId, signal);
+                        await requests.waitForRuntimeConfigurationChange(botId, undefined, signal);
                         signal.throwIfAborted();
                         set((current) => ({
                             selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
@@ -527,7 +533,11 @@ export const createBotChatHomeStore = (
                             view: { kind: "runtime-disconnected", botId, message },
                         }));
                         try {
-                            await requests.waitForRuntimeConfigurationChange(botId, signal);
+                            await requests.waitForRuntimeConfigurationChange(
+                                botId,
+                                get().runtimeConfiguration?.version,
+                                signal,
+                            );
                             signal.throwIfAborted();
                             set((current) => ({ revision: current.revision + 1 }));
                             onRestart();
