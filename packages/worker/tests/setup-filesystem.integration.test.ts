@@ -756,9 +756,18 @@ test("Given two shared links and redeemed access, When the local owner revokes a
             expect((await request(owner.projectId, "/identity/revoke-all-access", token, "POST")).status).toBe(403);
         }
         const otherLink = await share(other.projectId, other.token);
+        const mismatchEvents: Readonly<Record<string, unknown>>[] = [];
+        expect(
+            await runSetup(["revoke-all-access", "--base-url", "http://127.0.0.1:1"], {
+                documents,
+                signal,
+                emit: (event) => mismatchEvents.push(event),
+            }),
+        ).toBe(1);
+        expect(mismatchEvents.at(-1)).toMatchObject({ error: { code: "LOCAL_IDENTITY_REQUIRED" } });
         const events: Readonly<Record<string, unknown>>[] = [];
         expect(
-            await runSetup(["revoke-all-access", "--base-url", fixture.origin], {
+            await runSetup(["revoke-all-access"], {
                 documents,
                 signal,
                 emit: (event) => events.push(event),

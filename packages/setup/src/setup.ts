@@ -87,7 +87,7 @@ interface SetupOptions {
 }
 
 interface RevokeAllAccessOptions {
-    readonly base: string;
+    readonly base: string | undefined;
 }
 
 function errorCode(cause: unknown): unknown {
@@ -441,10 +441,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             args: [...commandArgs],
             options: { "base-url": { type: "string" } },
         });
-        if (values["base-url"] === undefined) {
-            fail("BASE_URL_REQUIRED");
-        }
-        return { base: origin(values["base-url"]) };
+        return { base: values["base-url"] === undefined ? undefined : origin(values["base-url"]) };
     }
 
     async function prepareIdentity(context: Context): Promise<SetupIdentity> {
@@ -975,10 +972,24 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     async function revokeAllAccess(options: RevokeAllAccessOptions) {
         const directory = await prepareDirectory(await resolveDocumentsDirectory(host.documents, signal));
-        const context = await loadConfiguration(directory, options.base);
-        if (context.config["user_token"] === undefined || context.config["project_id"] === undefined) {
+        let config: Readonly<Record<string, unknown>>;
+        try {
+            config = await readPrivateJson(join(directory, "config.json"));
+        } catch (cause) {
+            if (errorCode(cause) === "ENOENT") {
+                fail("LOCAL_IDENTITY_REQUIRED");
+            }
+            throw cause;
+        }
+        if (config["user_token"] === undefined || config["project_id"] === undefined) {
             fail("LOCAL_IDENTITY_REQUIRED");
         }
+        const base = origin(config["base_url"]);
+        // Never send the saved identity to a different origin, even when explicitly requested.
+        if (options.base !== undefined && options.base !== base) {
+            fail("LOCAL_IDENTITY_REQUIRED");
+        }
+        const context: Context = { directory, base, config };
         const revoked = await request(context, "/identity/revoke-all-access", {});
         if (revoked["status"] !== "access_revoked") {
             fail("INVALID_RESPONSE");
