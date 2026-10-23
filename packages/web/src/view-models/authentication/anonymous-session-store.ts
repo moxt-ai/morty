@@ -3,10 +3,10 @@ import { type AnonymousIdentity, AnonymousIdentityApi } from "../../services/ide
 import { hasIdentityScope } from "../../services/identity/identity-scope-url.ts";
 import {
     computerAddress,
+    hasStoredAccess,
     rememberComputerVisit,
     rememberedComputers,
 } from "../../services/identity/remembered-computers.ts";
-import { anonymousCredentialsEntry, centralLocalStorage } from "../../services/local-storage/central-local-storage.ts";
 import {
     accessEndedComputerEntry,
     accessEndedNoticeEntry,
@@ -121,12 +121,10 @@ export const createAnonymousSessionStore = (
                     }
                     centralSessionStorage.remove(accessEndedNoticeEntry);
                     centralSessionStorage.remove(accessEndedComputerEntry);
-                    const hasLegacyAccess =
-                        Object.keys(centralLocalStorage.read(anonymousCredentialsEntry) ?? {}).length > 0;
                     set({
                         state: {
                             kind: "setup",
-                            notice: ended ? "access-ended" : hasLegacyAccess ? "legacy" : "none",
+                            notice: ended ? "access-ended" : hasStoredAccess() ? "legacy" : "none",
                             returnHref: null,
                         },
                     });
