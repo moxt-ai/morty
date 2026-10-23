@@ -31,7 +31,7 @@ catalog:
   drizzle-kit: 0.31.8
   drizzle-orm: ^0.45.2
   esbuild: 0.25.12
-  happy-dom: 20.8.9
+  happy-dom: 21.0.4
   hono: ^4.13.5
   istanbul-lib-coverage: 3.2.2
   istanbul-lib-report: 3.0.1
