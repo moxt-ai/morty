@@ -152,7 +152,7 @@ export function createCloudWebSocketHandlers(dependencies: CloudWebSocketDepende
                         return;
                     }
                     if (fingerprint === null) {
-                        observer.ready();
+                        observer.ready(response, body);
                     }
                     fingerprint = next;
                 } catch (cause) {

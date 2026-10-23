@@ -65,7 +65,7 @@ test("Given a public HTTP client, When it requests browser-only APIs, Then Chat 
     }
 });
 
-test("Given a browser API request, When the Chat web application uses the WebSocket bridge, Then the response is readable JSON text and document requests are rejected", async () => {
+test("Given browser API requests and watches, When the Chat web application uses the WebSocket bridge, Then responses and watch snapshots preserve JSON errors and document requests are rejected", async () => {
     const response = await runtime.dispatchFetch("https://chat.test/morty/ws", {
         headers: { Origin: "https://chat.test", Upgrade: "websocket" },
     });
@@ -108,6 +108,23 @@ test("Given a browser API request, When the Chat web application uses the WebSoc
         requestId: "request-2",
         code: "INVALID_BRIDGE_REQUEST",
         message: "The bridged request is invalid.",
+    });
+    const watched = receive(socket);
+    socket.send(
+        JSON.stringify({
+            kind: "watch",
+            subscriptionId: "watch-1",
+            method: "POST",
+            path: "/morty/api/missing/workspace",
+            headers: [],
+            body: null,
+        }),
+    );
+    await expect(watched).resolves.toMatchObject({
+        kind: "watch.ready",
+        subscriptionId: "watch-1",
+        status: 404,
+        body: JSON.stringify({ error: { code: "NOT_FOUND", message: "Not found." } }),
     });
     socket.close(1000, "Test complete");
 });

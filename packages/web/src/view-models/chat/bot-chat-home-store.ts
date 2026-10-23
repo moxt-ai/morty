@@ -277,16 +277,16 @@ export const createBotChatHomeStore = (
                                 () => attempt.abort(new ChatConnectionError("CHAT_CONNECTION_TIMEOUT")),
                                 () => undefined,
                             );
-                            const ready = Promise.withResolvers<void>();
+                            const ready = Promise.withResolvers<BotRuntimeConfiguration>();
                             const watching = requests.waitForRuntimeConfigurationChange(
                                 botId,
                                 attemptSignal,
                                 ready.resolve,
                             );
-                            // Observe failures immediately, including while the snapshot is loading.
+                            // The snapshot and future changes share the watch's comparison baseline.
+                            // A separate read could observe a transient state that the watch never saw.
                             void watching.catch(ready.reject);
-                            await ready.promise;
-                            const configuration = await requests.runtimeConfiguration(botId, attemptSignal);
+                            const configuration = await ready.promise;
                             attemptSignal.throwIfAborted();
                             // A changed or failed watch cannot establish recovery, even if the read succeeded.
                             if ((await Promise.race([watching, Promise.resolve("watching")])) === undefined) {
@@ -295,7 +295,6 @@ export const createBotChatHomeStore = (
                             deadline.abort();
                             const recovered = get().view.kind === "reconnecting";
                             const reason = setupReason(configuration);
-                            options.onRuntimeConfiguration?.(configuration);
                             set((current) => ({
                                 runtimeConfiguration: configuration,
                                 connectionStatus: runtimeConnectionStatus(configuration),
@@ -304,6 +303,7 @@ export const createBotChatHomeStore = (
                                         ? { kind: "setup", botId, reason }
                                         : { kind: "active", botId },
                             }));
+                            options.onRuntimeConfiguration?.(configuration);
                             if (recovered) {
                                 onDirectoryRefreshed();
                                 if (get().selection.kind === "draft") {

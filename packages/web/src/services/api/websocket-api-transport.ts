@@ -1,5 +1,6 @@
 import * as v from "valibot";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
+import type { ApiResponseSnapshot } from "./api-transport.ts";
 import { ChatConnectionError } from "./chat-connection-error.ts";
 
 const responseFrame = v.strictObject({
@@ -17,7 +18,13 @@ const errorFrame = v.strictObject({
 });
 const pongFrame = v.strictObject({ kind: v.literal("pong") });
 const diagnosticPongFrame = v.strictObject({ kind: v.literal("diagnostic.pong"), requestId: v.string() });
-const watchReadyFrame = v.strictObject({ kind: v.literal("watch.ready"), subscriptionId: v.string() });
+const watchReadyFrame = v.strictObject({
+    kind: v.literal("watch.ready"),
+    subscriptionId: v.string(),
+    status: v.pipe(v.number(), v.integer(), v.minValue(100), v.maxValue(599)),
+    headers: v.array(v.tuple([v.string(), v.string()])),
+    body: v.string(),
+});
 const notificationFrame = v.strictObject({ kind: v.literal("notification"), subscriptionId: v.string() });
 const eventFrame = v.strictObject({ kind: v.literal("event"), subscriptionId: v.string(), data: v.string() });
 const subscriptionEndFrame = v.strictObject({ kind: v.literal("subscription.end"), subscriptionId: v.string() });
@@ -48,7 +55,7 @@ interface PendingRequest {
 }
 
 interface PendingWatch {
-    readonly ready?: () => void;
+    readonly ready?: (snapshot: ApiResponseSnapshot) => void;
     readonly reject: (cause: unknown) => void;
     readonly resolve: () => void;
     readonly release: () => void;
@@ -211,7 +218,10 @@ export class WebSocketApiTransport {
         return Math.max(0, Math.round(performance.now() - startedAt));
     };
 
-    readonly waitForChange = async (request: Request, onReady?: () => void): Promise<void> => {
+    readonly waitForChange = async (
+        request: Request,
+        onReady?: (snapshot: ApiResponseSnapshot) => void,
+    ): Promise<void> => {
         request.signal.throwIfAborted();
         const url = new URL(request.url);
         if (
@@ -416,7 +426,7 @@ export class WebSocketApiTransport {
             socket.addEventListener("close", closedWhileConnecting, { once: true });
             socket.addEventListener("message", (event) => {
                 if (this.#state.kind === "connected" && this.#state.socket === socket) {
-                    this.#receive(event);
+                    this.#receive(event, socket);
                 }
             });
             socket.addEventListener(
@@ -477,7 +487,7 @@ export class WebSocketApiTransport {
         });
     };
 
-    readonly #receive = (event: MessageEvent): void => {
+    readonly #receive = (event: MessageEvent, socket: WebSocket): void => {
         if (typeof event.data !== "string") {
             return;
         }
@@ -500,7 +510,19 @@ export class WebSocketApiTransport {
             return;
         }
         if (frame.kind === "watch.ready") {
-            this.#watches.get(frame.subscriptionId)?.ready?.();
+            const pending = this.#watches.get(frame.subscriptionId);
+            if (pending?.ready !== undefined) {
+                try {
+                    pending.ready({ status: frame.status, headers: new Headers(frame.headers), body: frame.body });
+                } catch (cause) {
+                    if (this.#settleWatch(frame.subscriptionId) !== undefined) {
+                        if (socket.readyState === WebSocket.OPEN) {
+                            socket.send(JSON.stringify({ kind: "unwatch", subscriptionId: frame.subscriptionId }));
+                        }
+                        pending.reject(cause);
+                    }
+                }
+            }
             return;
         }
         if (frame.kind === "notification") {
