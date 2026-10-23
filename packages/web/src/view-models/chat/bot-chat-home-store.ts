@@ -81,10 +81,31 @@ export function disconnectedBotNotice(
     }
 }
 
-function runtimeConnectionStatus(configuration: BotRuntimeConfiguration): BotConnectionStatus {
-    return configuration.runtime.online
-        ? { kind: "connected", label: "Connected" }
-        : { kind: "disconnected", label: "Disconnected" };
+/**
+ * The Machine's connection as the page shows it everywhere. It is derived from the Runtime configuration the page
+ * follows, so no failure path can leave one part of the page saying offline while another says online.
+ */
+export function botConnectionStatus(
+    home: Pick<BotChatHomeStore, "runtimeConfiguration" | "view">,
+): BotConnectionStatus {
+    if (home.view.kind === "setup" && home.view.reason === "unconfigured") {
+        return { kind: "unpaired", label: "Disconnected" };
+    }
+    if (home.runtimeConfiguration !== null) {
+        return home.runtimeConfiguration.runtime.online
+            ? { kind: "connected", label: "Connected" }
+            : { kind: "disconnected", label: "Disconnected" };
+    }
+    switch (home.view.kind) {
+        case "loading":
+        case "connecting":
+        case "active":
+            return { kind: "connecting", label: "Connecting" };
+        case "setup":
+        case "runtime-disconnected":
+        case "failed":
+            return { kind: "disconnected", label: "Disconnected" };
+    }
 }
 
 export interface BotChatNavigation {
@@ -107,7 +128,6 @@ interface ChatEntryNotices {
 export interface BotChatHomeStore {
     readonly composerAttachments: ReturnType<typeof createComposerAttachmentStore>;
     readonly view: BotChatHomeView;
-    readonly connectionStatus: BotConnectionStatus;
     readonly runtimeConfiguration: BotRuntimeConfiguration | null;
     readonly selection: ConversationSelectionState;
     readonly creation: ConversationCreationState;
@@ -213,6 +233,9 @@ export const createBotChatHomeStore = (
     const composerAttachments = createComposerAttachmentStore();
     const conversations = createConversationSessionStore(requests);
     const selection = initialSelection(options.url, options.createId);
+    // Whether a load that failed because the Runtime was unreachable may be retried on a snapshot that follows no
+    // Runtime change. See `applyConfiguration`.
+    let runtimeRetryWithoutChange: "available" | "used" = "available";
     let restoredSessionId =
         options.entry === "restore" && selection.kind === "loading" && selection.target.kind === "session"
             ? selection.target.sessionId
@@ -241,7 +264,6 @@ export const createBotChatHomeStore = (
         return {
             composerAttachments,
             view: { kind: "loading" },
-            connectionStatus: { kind: "connecting", label: "Connecting" },
             runtimeConfiguration: null,
             selection,
             creation: { kind: "draft" },
@@ -266,18 +288,20 @@ export const createBotChatHomeStore = (
                 let phase: "request" | "setup" | "watch" = "request";
                 const completeSetup = (): void => {
                     signal.throwIfAborted();
-                    set((current) => ({
-                        selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
-                        revision: current.revision + 1,
-                    }));
-                    onRestart();
+                    get().retry();
                 };
-                const watchRuntimeConfigurationChanges = async (): Promise<void> => {
+                /**
+                 * Follows the Runtime configuration. Each watch adopts its comparison baseline as the snapshot, so a
+                 * brief Runtime change between two reads cannot leave the page stale. `baselineFollowsChange` says
+                 * the first baseline may already differ from what the page last saw, as after a dropped bridge.
+                 */
+                const watchRuntimeConfigurationChanges = async (baselineFollowsChange = false): Promise<void> => {
+                    let afterChange = baselineFollowsChange;
                     while (true) {
                         try {
-                            // Adopt the watch's comparison baseline instead of a separate read.
-                            // A brief Runtime change between two reads must not leave the view stale.
-                            await requests.waitForRuntimeConfigurationChange(botId, signal, applyConfiguration);
+                            await requests.waitForRuntimeConfigurationChange(botId, signal, (configuration) =>
+                                applyConfiguration(configuration, afterChange),
+                            );
                         } catch (cause) {
                             if (cause instanceof DOMException && cause.name === "TimeoutError") {
                                 continue;
@@ -285,28 +309,47 @@ export const createBotChatHomeStore = (
                             throw cause;
                         }
                         signal.throwIfAborted();
+                        afterChange = true;
                     }
                 };
                 /**
-                 * Publishes the authoritative watch snapshot before announcing it
-                 * to the other workspace workflows.
+                 * Adopts a Runtime configuration snapshot: everything the page derives from the Runtime follows it,
+                 * then the other workspace workflows hear of it. A load that failed because the Runtime was
+                 * unreachable is retried, the way Reconnect would, once a snapshot shows the Runtime online. A
+                 * snapshot that follows no change retries only once, so a Runtime reported online that still cannot
+                 * be reached waits for its next change instead of being retried in a loop.
                  */
-                const applyConfiguration = (configuration: BotRuntimeConfiguration): void => {
+                const applyConfiguration = (configuration: BotRuntimeConfiguration, afterChange: boolean): void => {
                     signal.throwIfAborted();
                     const reason = setupReason(configuration);
-                    set((current) =>
-                        current.selection.kind === "draft"
+                    const before = get();
+                    const failedForRuntime =
+                        before.view.kind === "runtime-disconnected" && before.selection.kind !== "draft";
+                    set((current) => ({
+                        runtimeConfiguration: configuration,
+                        // A dismissed disconnection notice stays dismissed until this disconnection ends.
+                        ...(configuration.runtime.online ? { disconnectedNoticeDismissed: false } : {}),
+                        ...(current.selection.kind === "draft"
                             ? {
-                                  runtimeConfiguration: configuration,
-                                  connectionStatus: runtimeConnectionStatus(configuration),
-                                  view: reason === null ? { kind: "active", botId } : { kind: "setup", botId, reason },
+                                  view:
+                                      reason === null
+                                          ? { kind: "active" as const, botId }
+                                          : { kind: "setup" as const, botId, reason },
                               }
-                            : {
-                                  runtimeConfiguration: configuration,
-                                  connectionStatus: runtimeConnectionStatus(configuration),
-                              },
-                    );
+                            : {}),
+                    }));
                     options.onRuntimeConfiguration?.(configuration);
+                    if (!failedForRuntime || afterChange) {
+                        runtimeRetryWithoutChange = "available";
+                    }
+                    if (
+                        failedForRuntime &&
+                        configuration.runtime.online &&
+                        (afterChange || runtimeRetryWithoutChange === "available")
+                    ) {
+                        runtimeRetryWithoutChange = "used";
+                        get().retry();
+                    }
                 };
                 /**
                  * A dropped socket takes every watch with it. This loop re-arms
@@ -319,6 +362,7 @@ export const createBotChatHomeStore = (
                  */
                 const followConfigurationChanges = async (watchSignal: AbortSignal): Promise<void> => {
                     let dropped = true;
+                    let armed = false;
                     while (true) {
                         try {
                             if (dropped) {
@@ -350,7 +394,10 @@ export const createBotChatHomeStore = (
                             // changes even while its Runtime is offline: the
                             // setup endpoint answers it a fixed
                             // BOT_RUNTIME_FIXED fingerprint that never fires.
-                            await watchRuntimeConfigurationChanges();
+                            // A watch re-armed after a dropped bridge may find a Runtime that changed meanwhile.
+                            const rearmed = armed;
+                            armed = true;
+                            await watchRuntimeConfigurationChanges(rearmed);
                             return;
                         } catch (cause) {
                             watchSignal.throwIfAborted();
@@ -398,7 +445,6 @@ export const createBotChatHomeStore = (
                     signal.throwIfAborted();
                     if (!detail.configured) {
                         set((current) => ({
-                            connectionStatus: { kind: "unpaired", label: "Disconnected" },
                             selection:
                                 current.selection.kind === "loading"
                                     ? transitionConversationSelection(current.selection, {
@@ -423,10 +469,7 @@ export const createBotChatHomeStore = (
                     }
                     const configuration = await requests.runtimeConfiguration(botId, signal);
                     signal.throwIfAborted();
-                    set({
-                        runtimeConfiguration: configuration,
-                        connectionStatus: runtimeConnectionStatus(configuration),
-                    });
+                    set({ runtimeConfiguration: configuration });
                     options.onRuntimeConfiguration?.(configuration);
                     const currentSelection = get().selection;
                     const currentTarget = currentSelection.kind === "draft" ? null : currentSelection.target;
@@ -588,8 +631,24 @@ export const createBotChatHomeStore = (
                         return;
                     }
                     const message = formatError(cause, "Chat is unavailable.");
-                    const runtimeFailure = isRuntimeConnectionFailure(cause);
                     const failedSelection = get().selection;
+                    if (isRuntimeConnectionFailure(cause)) {
+                        // The Runtime could not be reached. The page keeps following it, and `applyConfiguration`
+                        // retries what failed once the Runtime is back, as Reconnect would.
+                        set({
+                            selection:
+                                failedSelection.kind === "loading"
+                                    ? transitionConversationSelection(failedSelection, {
+                                          kind: "session-load-failed",
+                                          message,
+                                          target: failedSelection.target,
+                                      })
+                                    : failedSelection,
+                            view: { kind: "runtime-disconnected", botId, message },
+                        });
+                        await followConfigurationChanges(signal);
+                        return;
+                    }
                     if (failedSelection.kind === "loading") {
                         set({
                             selection: transitionConversationSelection(failedSelection, {
@@ -597,57 +656,11 @@ export const createBotChatHomeStore = (
                                 message,
                                 target: failedSelection.target,
                             }),
-                            view: runtimeFailure
-                                ? { kind: "runtime-disconnected", botId, message }
-                                : phase === "watch"
-                                  ? { kind: "active", botId }
-                                  : { kind: "failed", message },
-                            ...(runtimeFailure
-                                ? {
-                                      connectionStatus: {
-                                          kind: "disconnected" as const,
-                                          label: "Disconnected" as const,
-                                      },
-                                      disconnectedNoticeDismissed: false,
-                                  }
-                                : {}),
+                            view: phase === "watch" ? { kind: "active", botId } : { kind: "failed", message },
                         });
                         return;
                     }
-                    if (runtimeFailure) {
-                        set((current) => ({
-                            connectionStatus: { kind: "disconnected", label: "Disconnected" },
-                            disconnectedNoticeDismissed:
-                                current.connectionStatus.kind === "disconnected"
-                                    ? current.disconnectedNoticeDismissed
-                                    : false,
-                            view: { kind: "runtime-disconnected", botId, message },
-                        }));
-                        try {
-                            await requests.waitForRuntimeConfigurationChange(botId, signal);
-                            signal.throwIfAborted();
-                            set((current) => ({ revision: current.revision + 1 }));
-                            onRestart();
-                        } catch (watchCause) {
-                            if (signal.aborted) {
-                                return;
-                            }
-                            if (watchCause instanceof DOMException && watchCause.name === "TimeoutError") {
-                                set((current) => ({ revision: current.revision + 1 }));
-                                onRestart();
-                                return;
-                            }
-                            throw watchCause;
-                        }
-                        return;
-                    }
-                    set((current) => ({
-                        connectionStatus:
-                            current.connectionStatus.kind === "connecting" || runtimeFailure
-                                ? { kind: "disconnected", label: "Disconnected" }
-                                : current.connectionStatus,
-                        view: { kind: "failed", message },
-                    }));
+                    set({ view: { kind: "failed", message } });
                 }
             },
             newConversation: () => {

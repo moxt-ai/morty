@@ -16,7 +16,7 @@ import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scr
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import { disconnectedBotNotice } from "../../view-models/chat/bot-chat-home-store.ts";
+import { botConnectionStatus, disconnectedBotNotice } from "../../view-models/chat/bot-chat-home-store.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import {
     conversationComposerLocked,
@@ -66,7 +66,7 @@ export function BotChatHome({
     const draftControls = useStore(workspace.draftControls);
     const executionContext = pendingExecutionContext(model, draftControls.settings);
     const attachmentModel = useStore(model.composerAttachments);
-    const connectionStatus = model.connectionStatus;
+    const connectionStatus = botConnectionStatus(model);
     const disconnectionNotice = disconnectedBotNotice(model.view, connectionStatus);
     const creationBusy = conversationCreationBusy(model.creation);
     const composerLocked = conversationComposerLocked(model.creation);
