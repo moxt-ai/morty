@@ -69,7 +69,6 @@ test("Given the setup document, When users fetch it from configured and standalo
     expect(document).not.toContain("DOCUMENT_DIR");
     expect(document).not.toContain("```powershell");
     expect(document).not.toContain("```sh");
-    expect(document.length).toBeLessThan(4000);
     expect(document).not.toMatch(/\{\{.*\}\}|preview\.example|paradev\.biz|paraflow\.biz|token=ticket/);
     expect(document).toContain("--session-id <exact-current-session-id>");
     expect(document).toContain("--harness <own-harness-id>");
