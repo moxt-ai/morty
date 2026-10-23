@@ -27,6 +27,7 @@ import {
 } from "../../view-models/chat/conversation-creation-machine.ts";
 import { selectedConversationId } from "../../view-models/chat/conversation-selection-machine.ts";
 import { pendingExecutionContext } from "../../view-models/chat/execution-context.ts";
+import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { OnlineComputerAlternative } from "./computer-switcher.tsx";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
@@ -85,6 +86,19 @@ export function BotChatHome({
             ? model.view
             : null;
     const activeConversationId = selectedConversationId(model.selection);
+    const reportButton = (
+        <BugReportButton
+            appearance="icon"
+            daemonSource={{
+                botId: workspace.botId,
+                sessionId: activeConversationId,
+                nativeSessionId: null,
+                read: (signal) => requests.daemonDiagnostics(workspace.botId, signal),
+                readNetwork: (signal) => requests.networkDiagnostic(workspace.botId, signal),
+            }}
+            dialog={workspace.bugReportDialog}
+        />
+    );
     const newConversation = () => {
         store.getState().newConversation();
     };
@@ -162,15 +176,18 @@ export function BotChatHome({
                                     <SessionMessageListSkeleton />
                                 ) : model.view.kind === "failed" || model.selection.kind === "failed" ? (
                                     <div className="m-auto grid justify-items-center gap-4 text-center">
-                                        <SessionLoadFailure
-                                            message={
-                                                model.selection.kind === "failed"
-                                                    ? model.selection.message
-                                                    : model.view.kind === "failed"
-                                                      ? model.view.message
-                                                      : "Chat is unavailable."
-                                            }
-                                        />
+                                        <div className="flex items-start gap-2">
+                                            <SessionLoadFailure
+                                                message={
+                                                    model.selection.kind === "failed"
+                                                        ? model.selection.message
+                                                        : model.view.kind === "failed"
+                                                          ? model.view.message
+                                                          : "Chat is unavailable."
+                                                }
+                                            />
+                                            {reportButton}
+                                        </div>
                                         {model.selection.kind === "failed" &&
                                         model.selection.target.kind === "continue" &&
                                         model.selection.target.action === "import" ? (
@@ -203,13 +220,14 @@ export function BotChatHome({
                                             {creationStatus}
                                         </p>
                                         {creationError.length > 0 && (
-                                            <p
+                                            <div
                                                 aria-live="assertive"
-                                                className="ml-auto max-w-[85%] rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-right text-xs text-destructive"
+                                                className="ml-auto flex max-w-[85%] items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-right text-xs text-destructive"
                                                 role="alert"
                                             >
-                                                {creationError}
-                                            </p>
+                                                <span className="min-w-0 flex-1 break-words">{creationError}</span>
+                                                {reportButton}
+                                            </div>
                                         )}
                                     </div>
                                 ) : active === null ? null : (
@@ -239,6 +257,7 @@ export function BotChatHome({
                                 disabled={composerLocked}
                                 draft={draft}
                                 error={creationError}
+                                errorStatus={creationError.length > 0 ? reportButton : undefined}
                                 onDraftChange={store.getState().setDraft}
                                 onStop={() => {}}
                                 onSubmit={() => {
