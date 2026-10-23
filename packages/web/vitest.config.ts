@@ -7,6 +7,16 @@ export default defineConfig({
     },
     test: {
         environment: "happy-dom",
+        environmentOptions: {
+            happyDOM: {
+                settings: {
+                    // The page and the Platform differ only by port here, so happy-dom preflights the Platform's file
+                    // reads. Its preflight lists CORS-safelisted headers such as Accept, which browsers leave out,
+                    // and the Platform rightly refuses them. Browsers send these reads, so the tests do too.
+                    fetch: { disableSameOriginPolicy: true },
+                },
+            },
+        },
         // Each file owns real Chat and Platform isolates. Bound their concurrent startup.
         maxWorkers: 2,
         include: ["tests/**/*.integration.test.tsx"],

@@ -256,7 +256,7 @@ test("Given Morty cannot load and no daemon is connected, When a user reports a 
         expect(report.network).toMatchObject({
             online: navigator.onLine,
             measurements: {
-                browserMorty: { kind: "unavailable", code: "NETWORK_DIAGNOSTIC_FAILED" },
+                browserMorty: { kind: "unavailable", code: "bridge_unavailable" },
                 browserMobius: { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" },
             },
         });

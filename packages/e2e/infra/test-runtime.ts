@@ -26,6 +26,9 @@ export async function createTestRuntime(
             agentName,
             files: mortyFiles,
             reply: mortyReply,
+            // Match Web/Worker fixtures: the daemon records the submitted
+            // prompt, so this controlled Agent does not echo it again.
+            echoUserMessage: false,
             nativeSessionIds: new Set(["setup-reconnect-session"]),
         },
         machineName,
@@ -84,6 +87,7 @@ export async function createTestRuntime(
             continueReply: runtime.continueReply,
             writeFiles: runtime.writeFiles,
             page,
+            origin: stack.chatOrigin,
             openChat,
             openPairedChat: async (computerName?: string) => {
                 const computer =
@@ -95,6 +99,7 @@ export async function createTestRuntime(
                                   agentName,
                                   files: mortyFiles,
                                   reply: mortyReply,
+                                  echoUserMessage: false,
                               },
                               computerName,
                           );

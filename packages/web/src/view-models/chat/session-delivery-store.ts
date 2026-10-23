@@ -7,6 +7,8 @@ type SubmitRequest = Parameters<MobiusClient["turns"]["submit"]>[1];
 export type AcceptedTurn = { readonly turnId: string };
 type SubmissionOutcome =
     | { readonly kind: "accepted"; readonly turn: AcceptedTurn }
+    /** The request failed, but the service had already shown it has the command. */
+    | { readonly kind: "delivered" }
     | { readonly kind: "rejected" }
     | { readonly kind: "delivery-unknown" };
 export type Journal = {
@@ -52,7 +54,21 @@ export const createSessionDeliveryStore = (options: {
      * nothing is resubmitted without that decision.
      */
     readonly initialUnknown?: Journal | undefined;
+    /**
+     * Hears that the service has a command, whether its submission was accepted or a later event showed a
+     * submission of uncertain delivery arrived. Each command is reported at most once.
+     */
+    readonly onDelivered?: ((commandId: string) => void) | undefined;
 }) => {
+    const delivered = new Set<string>();
+    // Commands the service showed it has while their submission was still in flight.
+    const shownWhileSubmitting = new Set<string>();
+    const reportDelivered = (commandId: string): void => {
+        if (!delivered.has(commandId)) {
+            delivered.add(commandId);
+            options.onDelivered?.(commandId);
+        }
+    };
     const send = async (
         journal: Journal,
         signal: AbortSignal,
@@ -76,6 +92,7 @@ export const createSessionDeliveryStore = (options: {
             );
             signal.throwIfAborted();
             set({ state: { kind: "idle" } });
+            reportDelivered(journal.commandId);
             return { kind: "accepted", turn: accepted };
         } catch (cause) {
             if (signal.aborted || cause instanceof MobiusCancellationError) {
@@ -89,6 +106,11 @@ export const createSessionDeliveryStore = (options: {
                     },
                 });
                 return { kind: "rejected" };
+            }
+            if (shownWhileSubmitting.has(journal.commandId)) {
+                set({ state: { kind: "idle" } });
+                reportDelivered(journal.commandId);
+                return { kind: "delivered" };
             }
             set({ state: { kind: "delivery-unknown", journal } });
             return { kind: "delivery-unknown" };
@@ -116,8 +138,12 @@ export const createSessionDeliveryStore = (options: {
             const state = get().state;
             // An in-flight request owns the disabled composer until it settles;
             // a live event must not expose the submitted draft to another send.
+            if (state.kind === "submitting" && commandIds.includes(state.journal.commandId)) {
+                shownWhileSubmitting.add(state.journal.commandId);
+            }
             if (state.kind === "delivery-unknown" && commandIds.includes(state.journal.commandId)) {
                 set({ state: { kind: "idle" } });
+                reportDelivered(state.journal.commandId);
             }
         },
         submit: async (commandId, displayPrompt, request, signal) =>

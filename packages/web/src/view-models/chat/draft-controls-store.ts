@@ -18,7 +18,8 @@ import {
 } from "@/services/chat/last-cwd-preference";
 import { readLastHarnessPreference, saveLastHarnessPreference } from "@/services/chat/last-harness-preference";
 import { pathDirectoryId } from "@/services/chat/workspace-directory-reference";
-import { formatError } from "../format-error.ts";
+import { isRuntimeConnectionFailure } from "@/services/management/management-api";
+import { formatError, runtimeDisconnectedMessage } from "../format-error.ts";
 
 type DraftSettingsState =
     | { readonly kind: "loading" }
@@ -40,17 +41,6 @@ type DraftSettingsState =
       };
 
 type ReadyDraftSettings = Extract<DraftSettingsState, { readonly kind: "ready" }>;
-
-const draftSettingsCache = new WeakMap<object, Map<string, ReadyDraftSettings>>();
-
-function cacheDraftSettings(requests: object, botId: string, settings: ReadyDraftSettings): void {
-    const existing = draftSettingsCache.get(requests);
-    if (existing === undefined) {
-        draftSettingsCache.set(requests, new Map([[botId, settings]]));
-        return;
-    }
-    existing.set(botId, settings);
-}
 
 type CwdBrowserState =
     | { readonly kind: "closed" }
@@ -96,18 +86,6 @@ function failureMessage(cause: unknown): string {
     return formatError(cause, "The working directory is unavailable.");
 }
 
-function wait(signal: AbortSignal): Promise<void> {
-    return new Promise((resolve) => {
-        const timeout = window.setTimeout(finish, 1_000);
-        function finish(): void {
-            window.clearTimeout(timeout);
-            signal.removeEventListener("abort", finish);
-            resolve();
-        }
-        signal.addEventListener("abort", finish, { once: true });
-    });
-}
-
 function waitForCwdPreview(signal: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
         signal.throwIfAborted();
@@ -128,23 +106,92 @@ function waitForCwdPreview(signal: AbortSignal): Promise<void> {
 
 export const createDraftControlsStore = (
     botId: string,
-    requests: Pick<BotChatApi, "runtimeConfiguration" | "directory" | "agentSettings">,
+    requests: Pick<BotChatApi, "directory" | "agentSettings">,
     onSettings: (settings: ChatDraftConfiguration | null) => void,
     /** The Runtime configuration the workspace keeps current. */
     runtimeConfiguration: () => BotRuntimeConfiguration | null,
 ) =>
     createStore<DraftControlsStore>()((set, get) => {
-        const cachedSettings = draftSettingsCache.get(requests)?.get(botId);
         let cwdOperation: AbortController | null = null;
-        // Set while an explicit harness choice is being loaded. The load waits
-        // for that exact harness instead of falling back to another one.
+        // Agent settings belong to the Runtime configuration they were read under: a different configuration, as
+        // after the Runtime reconnects or its Agents change, drops them.
+        const agentSettings = new Map<string, Awaited<ReturnType<BotChatApi["agentSettings"]>>>();
+        let settingsRuntime: string | null = null;
+        // Every operation that writes the draft's settings (a load, a refresh, a harness switch, a directory choice)
+        // takes this one lane: starting one stops the previous, and only the newest may write. A Runtime
+        // configuration change starts its own, so nothing read under an older configuration is shown or cached.
+        let settingsOperation: AbortController | null = null;
+        const beginSettingsOperation = (parent: AbortSignal) => {
+            settingsOperation?.abort(new Error("A newer draft settings operation started."));
+            const controller = new AbortController();
+            settingsOperation = controller;
+            return {
+                signal: AbortSignal.any([parent, controller.signal, AbortSignal.timeout(120_000)]),
+                current: (): boolean => settingsOperation === controller,
+            };
+        };
+        type SettingsOperation = ReturnType<typeof beginSettingsOperation>;
+        const readAgentSettings = async (agentRef: string, refresh: boolean, operation: SettingsOperation) => {
+            const cached = refresh ? undefined : agentSettings.get(agentRef);
+            if (cached !== undefined) {
+                return cached;
+            }
+            const result = await requests.agentSettings(botId, agentRef, operation.signal);
+            if (operation.current()) {
+                agentSettings.set(agentRef, result);
+            }
+            return result;
+        };
+        /**
+         * A directory choice writes the draft's settings and belongs to the directory browser, so it takes both
+         * lanes: a newer settings operation supersedes it, and closing, editing or browsing directories cancels it.
+         * It may write only while it is current in both.
+         */
+        const beginDirectoryChoice = (parent: AbortSignal) => {
+            cwdOperation?.abort();
+            const browsing = new AbortController();
+            cwdOperation = browsing;
+            const settings = beginSettingsOperation(parent);
+            return {
+                signal: AbortSignal.any([settings.signal, browsing.signal]),
+                current: (): boolean => settings.current() && cwdOperation === browsing,
+                release: (): void => {
+                    if (cwdOperation === browsing) {
+                        cwdOperation = null;
+                    }
+                },
+            };
+        };
+        // Set when the draft could not load from the Runtime as the page knows it: no connected Agent yet, or the
+        // Runtime cannot be reached. `runtimeChanged` loads once the Runtime is online.
+        let waitingForRuntime = false;
+        /**
+         * The draft cannot load while the Runtime is unreachable, whether the configuration already says so or a
+         * read found out. It says why and offers Retry, and loads by itself once the Runtime is back.
+         */
+        const awaitRuntime = (): void => {
+            waitingForRuntime = true;
+            onSettings(null);
+            set({ settings: { kind: "failed", message: runtimeDisconnectedMessage } });
+        };
+        /** Waits for the Runtime to offer an Agent, settling any switch in progress so `runtimeChanged` can resume. */
+        const awaitAgent = (): void => {
+            waitingForRuntime = true;
+            onSettings(null);
+            set({ settings: { kind: "loading" } });
+        };
+        const settleFailure = (cause: unknown, message: string): void => {
+            if (isRuntimeConnectionFailure(cause)) {
+                awaitRuntime();
+                return;
+            }
+            onSettings(null);
+            set({ settings: { kind: "failed", message: formatError(cause, message) } });
+        };
+        // Set while an explicit harness choice is being loaded. The load selects that harness while the Runtime offers
+        // it, and otherwise falls back like any other load.
         let pendingHarness: string | null = null;
-        const changedOptionIds = new Set(
-            cachedSettings === undefined
-                ? []
-                : restoreLastAgentSettings(botId, cachedSettings.selectedAgent.agentRef, cachedSettings.options)
-                      .restoredIds,
-        );
+        const changedOptionIds = new Set<string>();
         const rememberAgentSettings = (settings: ReadyDraftSettings): void => {
             saveLastAgentSettings(botId, settings.selectedAgent.agentRef, settings.options);
         };
@@ -178,7 +225,6 @@ export const createDraftControlsStore = (
         const applyDirectory = (settings: ReadyDraftSettings, directory: WorkspaceEntriesEvent): void => {
             const ready = { ...settings, cwd: directory };
             const recentCwds = rememberDirectory(ready, directory);
-            cacheDraftSettings(requests, botId, ready);
             set({ settings: ready, cwdBrowser: { kind: "closed" }, recentCwds });
             publishSettings(ready);
         };
@@ -215,7 +261,6 @@ export const createDraftControlsStore = (
                           [],
                       )
                     : existingRecentCwds;
-            cacheDraftSettings(requests, botId, ready);
             set({ settings: ready, recentCwds });
             publishSettings(ready);
         };
@@ -301,7 +346,7 @@ export const createDraftControlsStore = (
             }
         };
         const load = async (lifetimeSignal: AbortSignal): Promise<void> => {
-            const signal = AbortSignal.any([lifetimeSignal, AbortSignal.timeout(120_000)]);
+            const operation = beginSettingsOperation(lifetimeSignal);
             const currentSettings = get().settings;
             // Nothing from the previous harness may stay submittable while the
             // target harness and its settings load: a message sent in that
@@ -310,49 +355,73 @@ export const createDraftControlsStore = (
                 set({ settings: { kind: "loading" } });
             }
             onSettings(null);
+            waitingForRuntime = false;
             try {
                 const requestedHarness = pendingHarness ?? readLastHarnessPreference(botId);
-                while (!signal.aborted) {
-                    const configuration = await requests.runtimeConfiguration(botId, signal);
-                    const agents = connectedChatRuntimeAgents(configuration.runtime);
-                    const selected =
-                        (requestedHarness === null
-                            ? undefined
-                            : agents.find((agent) => agent.agentRef === requestedHarness)) ??
-                        // A remembered harness that is not connected must not
-                        // block the draft; the first connected Agent stands in
-                        // until the user chooses again.
-                        (pendingHarness === null ? agents[0] : undefined);
-                    if (selected !== undefined) {
-                        const [result, defaultCwd] = await Promise.all([
-                            requests.agentSettings(botId, selected.agentRef, false, signal),
-                            requests.directory(botId, "default", signal),
-                        ]);
-                        signal.throwIfAborted();
-                        const savedDirectoryId = readLastCwdPreference(botId, selected.runtimeId, selected.agentRef);
-                        let cwd = defaultCwd;
-                        if (savedDirectoryId !== null && savedDirectoryId !== defaultCwd.directoryId) {
-                            try {
-                                cwd = await requests.directory(botId, savedDirectoryId, signal);
-                                signal.throwIfAborted();
-                            } catch {
-                                signal.throwIfAborted();
-                            }
-                        }
-                        applyAgentSettings(selected, cwd, result.options, requestedHarness === selected.agentRef);
-                        return;
+                const configuration = runtimeConfiguration();
+                if (configuration?.runtime.online === false) {
+                    awaitRuntime();
+                    return;
+                }
+                const agents = configuration === null ? [] : connectedChatRuntimeAgents(configuration.runtime);
+                // A requested harness the Runtime does not offer must not block the draft; the first connected Agent
+                // stands in until the user chooses again.
+                const selected =
+                    (requestedHarness === null
+                        ? undefined
+                        : agents.find((agent) => agent.agentRef === requestedHarness)) ?? agents[0];
+                if (selected === undefined) {
+                    // The Runtime the page follows offers no Agent to load yet.
+                    awaitAgent();
+                    return;
+                }
+                const [result, defaultCwd] = await Promise.all([
+                    readAgentSettings(selected.agentRef, false, operation),
+                    requests.directory(botId, "default", operation.signal),
+                ]);
+                operation.signal.throwIfAborted();
+                const savedDirectoryId = readLastCwdPreference(botId, selected.runtimeId, selected.agentRef);
+                let cwd = defaultCwd;
+                if (savedDirectoryId !== null && savedDirectoryId !== defaultCwd.directoryId) {
+                    try {
+                        cwd = await requests.directory(botId, savedDirectoryId, operation.signal);
+                        operation.signal.throwIfAborted();
+                    } catch {
+                        operation.signal.throwIfAborted();
                     }
-                    await wait(signal);
+                }
+                if (operation.current()) {
+                    applyAgentSettings(selected, cwd, result.options, requestedHarness === selected.agentRef);
                 }
             } catch (cause) {
-                if (!lifetimeSignal.aborted) {
-                    onSettings(null);
-                    set({
-                        settings: {
-                            kind: "failed",
-                            message: formatError(cause, "Harness settings are unavailable."),
-                        },
-                    });
+                if (!lifetimeSignal.aborted && operation.current()) {
+                    settleFailure(cause, "Harness settings are unavailable.");
+                }
+            }
+        };
+        /** Re-reads the selected Agent's settings, keeping the selection and directory while they load. */
+        const refreshSettings = async (
+            settings: Pick<ReadyDraftSettings, "cwd" | "selectedAgent">,
+            parent: AbortSignal,
+        ): Promise<void> => {
+            const operation = beginSettingsOperation(parent);
+            set({
+                settings: {
+                    kind: "refreshing",
+                    selectedAgent: settings.selectedAgent,
+                    cwd: settings.cwd,
+                },
+            });
+            onSettings(null);
+            try {
+                const result = await readAgentSettings(settings.selectedAgent.agentRef, true, operation);
+                operation.signal.throwIfAborted();
+                if (operation.current()) {
+                    applyAgentSettings(settings.selectedAgent, settings.cwd, result.options, false);
+                }
+            } catch (cause) {
+                if (!parent.aborted && operation.current()) {
+                    settleFailure(cause, "Harness settings are unavailable.");
                 }
             }
         };
@@ -360,7 +429,7 @@ export const createDraftControlsStore = (
             cwdBrowser: { kind: "closed" },
             cwdMenuOpen: false,
             recentCwds: readRecentCwdPreferences(botId) ?? [],
-            settings: cachedSettings ?? { kind: "loading" },
+            settings: { kind: "loading" },
             browseCwd,
             closeCwd: () => {
                 cwdOperation?.abort();
@@ -380,19 +449,32 @@ export const createDraftControlsStore = (
             },
             load,
             runtimeChanged: async (configuration, signal) => {
-                const settings = get().settings;
+                // Agent settings follow the Runtime configuration: a different one drops those read before it.
+                const runtime = JSON.stringify(configuration.runtime);
+                const changed = runtime !== settingsRuntime;
+                settingsRuntime = runtime;
+                if (changed) {
+                    agentSettings.clear();
+                }
                 // An offline Runtime offers nothing for now, which says nothing about whether the Agent was removed.
-                if ((settings.kind !== "ready" && settings.kind !== "refreshing") || !configuration.runtime.online) {
+                if (!configuration.runtime.online || (!changed && !waitingForRuntime)) {
                     return;
                 }
-                const offered = connectedChatRuntimeAgents(configuration.runtime).some(
-                    (agent) =>
-                        agent.runtimeId === settings.selectedAgent.runtimeId &&
-                        agent.agentRef === settings.selectedAgent.agentRef,
-                );
-                if (!offered) {
-                    await load(signal);
+                // Reconcile with this configuration. The new operation supersedes any read still in flight.
+                const settings = get().settings;
+                const selectedAgent =
+                    settings.kind === "ready" || settings.kind === "refreshing" ? settings.selectedAgent : null;
+                const offered =
+                    selectedAgent !== null &&
+                    connectedChatRuntimeAgents(configuration.runtime).some(
+                        (agent) =>
+                            agent.runtimeId === selectedAgent.runtimeId && agent.agentRef === selectedAgent.agentRef,
+                    );
+                if (offered && (settings.kind === "ready" || settings.kind === "refreshing")) {
+                    await refreshSettings(settings, signal);
+                    return;
                 }
+                await load(signal);
             },
             openCwd: () => {
                 const settings = get().settings;
@@ -403,30 +485,8 @@ export const createDraftControlsStore = (
             setCwdMenuOpen: (open) => set({ cwdMenuOpen: open }),
             refreshAgentSettings: async (signal) => {
                 const settings = get().settings;
-                if (settings.kind !== "ready") {
-                    return;
-                }
-                set({
-                    settings: {
-                        kind: "refreshing",
-                        selectedAgent: settings.selectedAgent,
-                        cwd: settings.cwd,
-                    },
-                });
-                onSettings(null);
-                try {
-                    const result = await requests.agentSettings(botId, settings.selectedAgent.agentRef, true, signal);
-                    signal.throwIfAborted();
-                    applyAgentSettings(settings.selectedAgent, settings.cwd, result.options, false);
-                } catch (cause) {
-                    if (!signal.aborted) {
-                        set({
-                            settings: {
-                                kind: "failed",
-                                message: formatError(cause, "Harness settings are unavailable."),
-                            },
-                        });
-                    }
+                if (settings.kind === "ready") {
+                    await refreshSettings(settings, signal);
                 }
             },
             saveCwd: async (signal) => {
@@ -440,10 +500,10 @@ export const createDraftControlsStore = (
                 ) {
                     return;
                 }
-                cwdOperation?.abort();
-                cwdOperation = null;
                 const requestedPath = browser.path.trim();
                 if (requestedPath.length === 0) {
+                    cwdOperation?.abort();
+                    cwdOperation = null;
                     set({
                         cwdBrowser: {
                             kind: "failed",
@@ -454,20 +514,26 @@ export const createDraftControlsStore = (
                     });
                     return;
                 }
+                const operation = beginDirectoryChoice(signal);
                 let directory = browser.directory;
                 if (requestedPath !== browser.directory.directoryLabel) {
-                    const operation = new AbortController();
-                    cwdOperation = operation;
-                    const requestSignal = AbortSignal.any([signal, operation.signal, AbortSignal.timeout(120_000)]);
-                    set({ cwdBrowser: { kind: "loading", directory: browser.directory, path: browser.path } });
+                    const loading = { kind: "loading", directory: browser.directory, path: browser.path } as const;
+                    set({ cwdBrowser: loading });
                     try {
-                        directory = await requests.directory(botId, pathDirectoryId(requestedPath), requestSignal);
-                        requestSignal.throwIfAborted();
+                        directory = await requests.directory(botId, pathDirectoryId(requestedPath), operation.signal);
+                        operation.signal.throwIfAborted();
                     } catch (cause) {
-                        if (operation.signal.aborted) {
+                        if (signal.aborted) {
                             return;
                         }
-                        signal.throwIfAborted();
+                        if (!operation.current()) {
+                            // Cancelled or superseded: undo only this choice's own loading state.
+                            if (get().cwdBrowser === loading) {
+                                set({ cwdBrowser: browser });
+                            }
+                            return;
+                        }
+                        operation.release();
                         set({
                             cwdBrowser: {
                                 kind: "failed",
@@ -477,13 +543,12 @@ export const createDraftControlsStore = (
                             },
                         });
                         return;
-                    } finally {
-                        if (cwdOperation === operation) {
-                            cwdOperation = null;
-                        }
                     }
                 }
-                applyDirectory(settings, directory);
+                if (operation.current()) {
+                    operation.release();
+                    applyDirectory(settings, directory);
+                }
             },
             selectRecentCwd: async (directoryId, signal) => {
                 const settings = get().settings;
@@ -491,19 +556,19 @@ export const createDraftControlsStore = (
                 if (settings.kind !== "ready" || recent === undefined) {
                     return;
                 }
-                cwdOperation?.abort();
-                const operation = new AbortController();
-                cwdOperation = operation;
-                const requestSignal = AbortSignal.any([signal, operation.signal, AbortSignal.timeout(120_000)]);
+                const operation = beginDirectoryChoice(signal);
                 try {
-                    const directory = await requests.directory(botId, directoryId, requestSignal);
-                    requestSignal.throwIfAborted();
-                    applyDirectory(settings, directory);
+                    const directory = await requests.directory(botId, directoryId, operation.signal);
+                    operation.signal.throwIfAborted();
+                    if (operation.current()) {
+                        operation.release();
+                        applyDirectory(settings, directory);
+                    }
                 } catch (cause) {
-                    if (operation.signal.aborted) {
+                    if (signal.aborted || !operation.current()) {
                         return;
                     }
-                    signal.throwIfAborted();
+                    operation.release();
                     set({
                         cwdBrowser: {
                             kind: "failed",
@@ -512,10 +577,6 @@ export const createDraftControlsStore = (
                             path: recent.directoryLabel,
                         },
                     });
-                } finally {
-                    if (cwdOperation === operation) {
-                        cwdOperation = null;
-                    }
                 }
             },
             selectHarness: async (value, disabled, signal) => {
@@ -565,7 +626,6 @@ export const createDraftControlsStore = (
                 };
                 changedOptionIds.add(configId);
                 rememberAgentSettings(ready);
-                cacheDraftSettings(requests, botId, ready);
                 set({ settings: ready });
                 publishSettings(ready);
             },
@@ -584,7 +644,6 @@ export const createDraftControlsStore = (
                 };
                 changedOptionIds.add(configId);
                 rememberAgentSettings(ready);
-                cacheDraftSettings(requests, botId, ready);
                 set({ settings: ready });
                 publishSettings(ready);
             },

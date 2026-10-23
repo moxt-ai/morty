@@ -14,7 +14,6 @@ import {
     chatSessionMessageColumnClassName,
     chatSessionMessageItemClassName,
     chatSessionMessageScrollClassName,
-    chatSessionPaneSectionClassName,
 } from "../../components/chat/chat-session-layout.ts";
 import { ReadonlyWorkingDirectory } from "../../components/chat/cwd-selector.tsx";
 import { SessionExecutionHeaderEnd } from "../../components/chat/execution-context-bar.tsx";
@@ -26,6 +25,7 @@ import {
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
 import { SessionLoadFailure } from "../../components/chat/session-load-failure.tsx";
+import { SessionWelcome } from "../../components/chat/session-welcome.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -36,6 +36,7 @@ import { useDesktopChatLayout } from "../../components/utils/use-desktop-chat-la
 import { cn } from "../../lib/utils.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { type ExecutionContext, sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
+import { harnessOptions } from "../../view-models/chat/native-session-agents.ts";
 import { sessionInteractionPresentation } from "../../view-models/chat/session-interaction-store.ts";
 import {
     type SessionConnection,
@@ -395,7 +396,7 @@ function MobiusSessionPaneShell({
     readonly footer?: ReactNode;
 }) {
     return (
-        <section className={chatSessionPaneSectionClassName}>
+        <>
             <header
                 className={cn(chatSessionExecutionHeaderClassName, mobileTitlePortaled ? "hidden sm:flex" : "flex")}
             >
@@ -410,7 +411,7 @@ function MobiusSessionPaneShell({
             </header>
             {children}
             {footer}
-        </section>
+        </>
     );
 }
 
@@ -599,7 +600,7 @@ export function MobiusSessionPane({ workspace }: { readonly workspace: ChatWorks
     // hooks.
     const pane = workspace.sessionPane();
     if (pane === null) {
-        return <section className={chatSessionPaneSectionClassName} />;
+        return null;
     }
     return <MobiusSessionPaneBody pane={pane} workspace={workspace} />;
 }
@@ -621,7 +622,9 @@ function MobiusSessionPaneBody({
     const delivery = useStore(pane.delivery);
     const messageQueue = useStore(pane.messageQueue);
     const taskControls = useStore(pane.tasks);
-    const harnesses = model.harnesses;
+    const welcome = useStore(pane.welcome, (state) => state.state);
+    // The harness menu names harnesses the way the Runtime configuration the page follows does.
+    const harnesses = harnessOptions(runtimeConfiguration?.runtime ?? null);
 
     // The model owns the session connection through the same ref-cleanup
     // protocol the chat root uses: attach starts it, the cleanup detaches,
@@ -656,6 +659,7 @@ function MobiusSessionPaneBody({
     const renderGroups = sessionRenderGroups(renderItems);
     const lastRenderItemIndex = renderItems.length - 1;
     const sessionMessagesLoading = model.connection.kind === "loading";
+    const initialMessage = model.pendingInitialMessage;
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
     const openLocalFile = (path: string) => {
@@ -681,7 +685,7 @@ function MobiusSessionPaneBody({
 
     return (
         <>
-            <section className={chatSessionPaneSectionClassName} ref={pane.onAttach}>
+            <section className="contents" ref={pane.onAttach}>
                 {desktop ? (
                     <header className={chatSessionExecutionHeaderClassName}>
                         <div className="min-w-0 flex-1">
@@ -725,6 +729,7 @@ function MobiusSessionPaneBody({
                         </div>
                     )}
                     {!sessionMessagesLoading &&
+                        initialMessage === null &&
                         model.messages.length === 0 &&
                         model.connection.kind === "ready" &&
                         model.activity.kind === "idle" &&
@@ -738,6 +743,19 @@ function MobiusSessionPaneBody({
                     {!sessionMessagesLoading && model.historyLoading && <OlderHistorySkeleton />}
                     {!sessionMessagesLoading && (
                         <div className={chatSessionMessageColumnClassName}>
+                            {initialMessage !== null && (
+                                <div className={chatSessionMessageItemClassName}>
+                                    <UserPromptMessage
+                                        text={initialMessage.content}
+                                        images={initialMessage.attachments.flatMap((attachment) =>
+                                            attachment.kind === "image" ? [attachment.image] : [],
+                                        )}
+                                        resources={initialMessage.attachments.flatMap((attachment) =>
+                                            attachment.kind === "resource" ? [attachment.resource] : [],
+                                        )}
+                                    />
+                                </div>
+                            )}
                             {(() => {
                                 let flatIndex = 0;
                                 return renderGroups.map((group) => {
@@ -807,6 +825,13 @@ function MobiusSessionPaneBody({
                                         <WorkingIndicator startedAt={model.activity.startedAt} />
                                     </div>
                                 )}
+                            {welcome.kind === "visible" && model.connection.kind === "ready" && (
+                                <SessionWelcome
+                                    canSuggestProgress={presentation.canSuggestProgress}
+                                    onDismiss={pane.welcome.getState().dismiss}
+                                    onSuggestProgress={pane.welcome.getState().suggestProgress}
+                                />
+                            )}
                         </div>
                     )}
                 </FollowLatestScrollArea>
@@ -885,7 +910,11 @@ function MobiusSessionPaneBody({
                                           ...harnesses,
                                           {
                                               agentRef: pane.agentRef,
-                                              label: pane.agentRef,
+                                              // An offline Runtime offers no harnesses, but still names its Agents.
+                                              label:
+                                                  runtimeConfiguration?.runtime.agents.find(
+                                                      (agent) => agent.agentRef === pane.agentRef,
+                                                  )?.label ?? pane.agentRef,
                                               value: pane.agentRef,
                                           },
                                       ],

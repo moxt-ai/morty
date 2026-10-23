@@ -9,6 +9,7 @@ const permittedHeaders = new Set(["authorization", "content-type"]);
 const STATUS_SUBSCRIPTION_PATH =
     /^\/morty\/api\/chat\/projects\/([^/]+)\/bots\/([^/]+)\/managed-session\/status-events$/u;
 const statusSubscriptionPath = v.pipe(v.string(), v.regex(STATUS_SUBSCRIPTION_PATH));
+const configuredSetupResponse = v.object({ error: v.object({ code: v.literal("BOT_RUNTIME_FIXED") }) });
 
 interface CloudWebSocketDependencies {
     readonly dispatch: (request: Request) => Promise<Response>;
@@ -128,12 +129,16 @@ export function createCloudWebSocketHandlers(dependencies: CloudWebSocketDepende
     return {
         dispatch: dependencies.dispatch,
         resolve: resolveRequest,
-        subscribe: async (request, observer, signal) => {
+        subscribe: async (request, observer, signal, baseline) => {
             if (request.url.endsWith("/managed-session/status-events")) {
                 await subscribeSessionStatuses(request, observer, dependencies, signal);
                 return;
             }
-            let fingerprint: string | null = null;
+            // Compare the first sample with the configuration the client read,
+            // not a fresh baseline that could already include an unseen change.
+            // This is notification state only; every sample is still dispatched
+            // through the normal authorization boundary.
+            let fingerprint: string | null = baseline ?? null;
             while (!signal.aborted) {
                 const deadline = AbortSignal.timeout(WATCH_REQUEST_TIMEOUT_MILLISECONDS);
                 const requestSignal = AbortSignal.any([signal, deadline]);
@@ -146,10 +151,25 @@ export function createCloudWebSocketHandlers(dependencies: CloudWebSocketDepende
                     }
                     const body = await response.text();
                     requestSignal.throwIfAborted();
+                    // Pairing may finish between the client's read and this
+                    // watch's first response. A configured Machine has already
+                    // left setup; its fixed 409 must not become a baseline that
+                    // waits forever for another pairing change.
+                    if (
+                        new URL(request.url).pathname.endsWith("/setup/runtimes") &&
+                        response.status === 409 &&
+                        v.safeParse(configuredSetupResponse, JSON.parse(body)).success
+                    ) {
+                        observer.notify();
+                        return;
+                    }
                     const next = `${response.status}\u0000${body}`;
                     if (fingerprint !== null && fingerprint !== next) {
                         observer.notify();
                         return;
+                    }
+                    if (fingerprint === null) {
+                        observer.ready(response, body);
                     }
                     fingerprint = next;
                 } catch (cause) {

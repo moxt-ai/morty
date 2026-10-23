@@ -102,6 +102,14 @@ export const accessEndedComputerEntry = stringSessionStorageEntry({
     schema: v.pipe(v.string(), v.maxLength(256)),
 });
 
+/** Carries first-visit guidance from a successful native handoff to its session. */
+export const sessionWelcomeEntry = (botId: string, sessionId: string): SessionStorageEntry<"pending"> => ({
+    key: scopedKey("morty:session-welcome:v1:", botId, sessionId),
+    schema: v.literal("pending"),
+    encode: (value) => v.parse(v.literal("pending"), value),
+    decode: (raw) => (raw === "pending" ? "pending" : null),
+});
+
 export const newConversationDraftEntry = (botId: string): SessionStorageEntry<string> =>
     stringSessionStorageEntry({
         key: scopedKey("morty:message-draft:new:v1:", botId),

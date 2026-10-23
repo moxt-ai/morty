@@ -38,6 +38,13 @@ test("Given a conversation this page created, When another client renames it, Th
     await app.waitForView(() => {
         expect(queryByRole(document.body, "heading", { level: 2, name: firstPrompt })).not.toBeNull();
         expect(directoryTitles(app).some((title) => title.includes(firstPrompt))).toBe(true);
+        // The first-prompt title is optimistic; wait for delivery before leaving
+        // so this scenario renames a prompted Session, not an unsent draft.
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((response) => response.textContent?.includes(firstPrompt)),
+        ).toBe(true);
     });
     const sessionId = new URL(window.location.href).searchParams.get("sessionId");
     if (sessionId === null) {

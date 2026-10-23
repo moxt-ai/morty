@@ -1,5 +1,7 @@
 import * as v from "valibot";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
+import { type Clock, systemClock } from "../time/clock.ts";
+import type { ApiResponseSnapshot } from "./api-transport.ts";
 
 const responseFrame = v.strictObject({
     kind: v.literal("response"),
@@ -16,6 +18,13 @@ const errorFrame = v.strictObject({
 });
 const pongFrame = v.strictObject({ kind: v.literal("pong") });
 const diagnosticPongFrame = v.strictObject({ kind: v.literal("diagnostic.pong"), requestId: v.string() });
+const watchReadyFrame = v.strictObject({
+    kind: v.literal("watch.ready"),
+    subscriptionId: v.string(),
+    status: v.pipe(v.number(), v.integer(), v.minValue(100), v.maxValue(599)),
+    headers: v.array(v.tuple([v.string(), v.string()])),
+    body: v.string(),
+});
 const notificationFrame = v.strictObject({ kind: v.literal("notification"), subscriptionId: v.string() });
 const eventFrame = v.strictObject({ kind: v.literal("event"), subscriptionId: v.string(), data: v.string() });
 const subscriptionEndFrame = v.strictObject({ kind: v.literal("subscription.end"), subscriptionId: v.string() });
@@ -25,26 +34,68 @@ const serverFrame = v.variant("kind", [
     errorFrame,
     pongFrame,
     diagnosticPongFrame,
+    watchReadyFrame,
     notificationFrame,
     eventFrame,
     subscriptionEndFrame,
 ]);
 const permittedHeaders = new Set(["authorization", "content-type"]);
 const KEEPALIVE_MILLISECONDS = 25_000;
+/** Delays between automatic reconnects; the last entry repeats until the bridge returns. */
+const RECONNECT_DELAYS_MILLISECONDS = [1_000, 2_000, 4_000, 8_000, 15_000] as const;
+/** Background attempts before Chat waits for a user action to dial again. */
+const MAX_RECONNECT_ATTEMPTS = 10;
+/**
+ * How long one WebSocket upgrade may stay pending. A network that accepts the
+ * TCP connection but never completes the handshake must not leave the bridge
+ * connecting forever, so the attempt is abandoned and the retry budget continues.
+ */
+export const CHAT_BRIDGE_HANDSHAKE_TIMEOUT_MILLISECONDS = 10_000;
+
+/**
+ * A bridge failure that crosses the transport boundary. Requests and watches
+ * receive it at their call site so product workflows handle it like any other
+ * failed API call; subscriptions recover without surfacing it.
+ */
+export class ChatBridgeError extends Error {
+    /** One stable code: every bridge failure means the same unavailable transport. */
+    readonly code = "bridge_unavailable";
+    constructor(message: string) {
+        super(message);
+        this.name = "ChatBridgeError";
+    }
+}
+
+export function isChatBridgeError(cause: unknown): cause is ChatBridgeError {
+    return cause instanceof ChatBridgeError;
+}
+
+const bridgeClosed = (): ChatBridgeError => new ChatBridgeError("The WebSocket to Morty is closed.");
+const bridgeUnavailable = (): ChatBridgeError => new ChatBridgeError("The WebSocket to Morty could not connect.");
 
 type BridgeState =
     | { readonly kind: "closed" }
     | { readonly kind: "disconnected" }
-    | { readonly kind: "connecting"; readonly connection: Promise<WebSocket> }
+    | { readonly kind: "connecting"; readonly attempt: DialAttempt }
     | { readonly kind: "connected"; readonly socket: WebSocket };
 
+/** One WebSocket upgrade, including its handshake deadline. */
+interface DialAttempt {
+    readonly connection: Promise<WebSocket>;
+    readonly socket: WebSocket;
+    /** Ends an unfinished handshake: closes the socket and settles the attempt. */
+    readonly abandon: (cause: ChatBridgeError) => void;
+}
+
 interface PendingRequest {
+    readonly workspaceKey: string | null;
     readonly reject: (cause: unknown) => void;
     readonly resolve: (response: Response) => void;
     readonly release: () => void;
 }
 
 interface PendingWatch {
+    readonly ready?: (snapshot: ApiResponseSnapshot) => void;
     readonly reject: (cause: unknown) => void;
     readonly resolve: () => void;
     readonly release: () => void;
@@ -57,26 +108,85 @@ interface PendingDiagnostic {
     readonly startedAt: number;
 }
 
+interface PendingBridgeWaiter {
+    readonly reject: (cause: unknown) => void;
+    readonly resolve: () => void;
+}
+
 interface PendingEventStream extends PendingWatch {
+    /** The subscription frame replayed after the bridge reconnects. */
+    readonly frame: string;
     readonly receive: (data: string) => void;
 }
 
 export class WebSocketApiTransport {
+    // A watch starts from what this authenticated client actually received,
+    // including when registration or a reconnect happens after a change.
+    readonly #workspaceBaselines = new Map<string, string>();
+    readonly #clock: Clock;
     readonly #origin: string;
     readonly #pending = new Map<string, PendingRequest>();
     readonly #eventStreams = new Map<string, PendingEventStream>();
     readonly #diagnostics = new Map<string, PendingDiagnostic>();
     readonly #watches = new Map<string, PendingWatch>();
+    readonly #bridgeWaiters = new Set<PendingBridgeWaiter>();
+    readonly #lifetime = new AbortController();
     #state: BridgeState = { kind: "disconnected" };
+    #desired = false;
+    #disposed = false;
+    #reconnectAttempt = 0;
+    #reconnectTimer: { readonly cancel: () => void } | null = null;
 
-    constructor(origin: string) {
+    constructor(origin: string, clock: Clock = systemClock) {
         this.#origin = new URL(origin).origin;
+        this.#clock = clock;
     }
 
     readonly open = (): void => {
+        if (this.#disposed) {
+            return;
+        }
+        this.#desired = true;
         if (this.#state.kind === "closed") {
             this.#state = { kind: "disconnected" };
         }
+        // An explicit open cancels the scheduled retry so the next call dials
+        // immediately instead of failing fast while a timer is pending.
+        this.#cancelReconnect();
+        this.#reconnectAttempt = 0;
+    };
+
+    /**
+     * Resolves once the bridge is connected, so a workflow whose background
+     * watch was dropped with the socket can re-arm it. It never re-issues the
+     * caller's request: the caller decides what is safe to repeat.
+     */
+    readonly waitForBridge = async (signal: AbortSignal): Promise<void> => {
+        signal.throwIfAborted();
+        if (this.#disposed) {
+            throw bridgeClosed();
+        }
+        if (this.#state.kind === "connected" && this.#state.socket.readyState === WebSocket.OPEN) {
+            return;
+        }
+        await new Promise<void>((resolve, reject) => {
+            const waiter: PendingBridgeWaiter = {
+                resolve: () => {
+                    signal.removeEventListener("abort", abort);
+                    resolve();
+                },
+                reject: (cause) => {
+                    signal.removeEventListener("abort", abort);
+                    reject(cause);
+                },
+            };
+            const abort = () => {
+                this.#bridgeWaiters.delete(waiter);
+                waiter.reject(signal.reason);
+            };
+            this.#bridgeWaiters.add(waiter);
+            signal.addEventListener("abort", abort, { once: true });
+        });
     };
 
     readonly fetch = async (request: Request): Promise<Response> => {
@@ -122,15 +232,19 @@ export class WebSocketApiTransport {
         }
         const body = request.body === null ? null : await request.text();
         request.signal.throwIfAborted();
-        const socket = await this.#connect(request.signal);
+        const socket = await this.#connectForCall(request.signal);
         request.signal.throwIfAborted();
         return await new Promise<Response>((resolve, reject) => {
             const abort = () => {
-                socket.send(JSON.stringify({ kind: "cancel", requestId }));
+                if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ kind: "cancel", requestId }));
+                }
                 this.#settle(requestId)?.reject(request.signal.reason);
             };
             request.signal.addEventListener("abort", abort, { once: true });
             this.#pending.set(requestId, {
+                workspaceKey:
+                    request.method === "POST" && url.pathname.endsWith("/workspace") ? this.#watchKey(request) : null,
                 reject,
                 resolve,
                 release: () => request.signal.removeEventListener("abort", abort),
@@ -154,7 +268,7 @@ export class WebSocketApiTransport {
 
     readonly measureMortyLatency = async (parent: AbortSignal): Promise<number> => {
         parent.throwIfAborted();
-        const socket = await this.#connect(parent);
+        const socket = await this.#connectForCall(parent);
         parent.throwIfAborted();
         const requestId = crypto.randomUUID();
         const timeout = AbortSignal.timeout(10_000);
@@ -205,7 +319,13 @@ export class WebSocketApiTransport {
         return Math.max(0, Math.round(performance.now() - startedAt));
     };
 
-    readonly waitForChange = async (request: Request): Promise<void> => {
+    readonly #watchKey = (request: Request): string =>
+        JSON.stringify([request.url, request.headers.get("authorization")]);
+
+    readonly waitForChange = async (
+        request: Request,
+        onReady?: (snapshot: ApiResponseSnapshot) => void,
+    ): Promise<void> => {
         request.signal.throwIfAborted();
         const url = new URL(request.url);
         if (
@@ -224,15 +344,17 @@ export class WebSocketApiTransport {
         const requestBody = await request.text();
         const body = requestBody === "" ? null : requestBody;
         request.signal.throwIfAborted();
-        const socket = await this.#connect(request.signal);
+        const socket = await this.#connectForCall(request.signal);
+        request.signal.throwIfAborted();
         const subscriptionId = crypto.randomUUID();
         return await new Promise<void>((resolve, reject) => {
             const abort = () => {
-                socket.send(JSON.stringify({ kind: "unwatch", subscriptionId }));
+                this.#sendIfConnected(JSON.stringify({ kind: "unwatch", subscriptionId }));
                 this.#settleWatch(subscriptionId)?.reject(request.signal.reason);
             };
             request.signal.addEventListener("abort", abort, { once: true });
             this.#watches.set(subscriptionId, {
+                ...(onReady === undefined ? {} : { ready: onReady }),
                 reject,
                 resolve,
                 release: () => request.signal.removeEventListener("abort", abort),
@@ -241,6 +363,10 @@ export class WebSocketApiTransport {
                 socket.send(
                     JSON.stringify({
                         kind: "watch",
+                        // Snapshot consumers adopt this watch's baseline. Notification-only
+                        // consumers retain the preceding read as their comparison point.
+                        baseline:
+                            onReady === undefined ? this.#workspaceBaselines.get(this.#watchKey(request)) : undefined,
                         subscriptionId,
                         method: request.method,
                         path: `${url.pathname}${url.search}`,
@@ -270,91 +396,295 @@ export class WebSocketApiTransport {
                 headers.push([name, value]);
             }
         }
-        const socket = await this.#connect(request.signal);
+        const socket = await this.#connectForCall(request.signal);
         const subscriptionId = crypto.randomUUID();
+        const frame = JSON.stringify({
+            kind: "subscribe",
+            subscriptionId,
+            method: request.method,
+            path: `${url.pathname}${url.search}`,
+            headers,
+            body: null,
+        });
         return await new Promise<void>((resolve, reject) => {
             const abort = () => {
-                socket.send(JSON.stringify({ kind: "unwatch", subscriptionId }));
+                this.#sendIfConnected(JSON.stringify({ kind: "unwatch", subscriptionId }));
                 this.#settleEventStream(subscriptionId)?.reject(request.signal.reason);
             };
             request.signal.addEventListener("abort", abort, { once: true });
             this.#eventStreams.set(subscriptionId, {
+                frame,
                 receive,
                 reject,
                 resolve,
                 release: () => request.signal.removeEventListener("abort", abort),
             });
             try {
-                socket.send(
-                    JSON.stringify({
-                        kind: "subscribe",
-                        subscriptionId,
-                        method: request.method,
-                        path: `${url.pathname}${url.search}`,
-                        headers,
-                        body: null,
-                    }),
-                );
+                socket.send(frame);
             } catch (cause) {
                 this.#settleEventStream(subscriptionId)?.reject(cause);
             }
         });
     };
 
-    readonly close = (): void => {
-        const state = this.#state;
+    /**
+     * Drops the current bridge connection. Requests and watches in flight fail
+     * at their call site; subscriptions stay registered and resume after the
+     * transport reconnects on its own.
+     */
+    readonly disconnect = (): void => {
+        if (this.#disposed) {
+            return;
+        }
+        this.#desired = true;
+        this.#dropConnection(bridgeClosed());
+    };
+
+    /** Releases the bridge for good and stops reconnecting. */
+    readonly dispose = (): void => {
+        if (this.#disposed) {
+            return;
+        }
+        this.#disposed = true;
+        this.#workspaceBaselines.clear();
+        this.#desired = false;
+        this.#cancelReconnect();
+        this.#lifetime.abort(bridgeClosed());
+        this.#closeSocket("Chat API transport disposed");
         this.#state = { kind: "closed" };
-        if (state.kind === "connected") {
-            state.socket.close(1000, "Chat API transport closed");
-        } else if (state.kind === "connecting") {
-            void state.connection.then(
-                (socket) => socket.close(1000, "Chat API transport closed"),
-                () => undefined,
-            );
-        }
-        for (const requestId of [...this.#pending.keys()]) {
-            this.#settle(requestId)?.reject(new Error("The Chat API transport closed."));
-        }
-        for (const subscriptionId of [...this.#watches.keys()]) {
-            this.#settleWatch(subscriptionId)?.reject(new Error("The Chat API transport closed."));
-        }
+        const cause = bridgeClosed();
+        this.#rejectRequests(cause);
         for (const subscriptionId of [...this.#eventStreams.keys()]) {
-            this.#settleEventStream(subscriptionId)?.reject(new Error("The Chat API transport closed."));
+            this.#settleEventStream(subscriptionId)?.reject(cause);
         }
-        for (const requestId of [...this.#diagnostics.keys()]) {
-            this.#settleDiagnostic(requestId)?.reject(new Error("The Chat API transport closed."));
+        for (const waiter of [...this.#bridgeWaiters]) {
+            this.#bridgeWaiters.delete(waiter);
+            waiter.reject(cause);
         }
     };
 
+    readonly #closeSocket = (reason: string): void => {
+        const state = this.#state;
+        if (state.kind === "connected") {
+            state.socket.close(1000, reason);
+        } else if (state.kind === "connecting") {
+            // Closing during the handshake settles the attempt without waiting
+            // for a close event the browser may never deliver.
+            state.attempt.abandon(bridgeClosed());
+        }
+    };
+
+    readonly #dropConnection = (cause: ChatBridgeError): void => {
+        const state = this.#state;
+        this.#state = { kind: "disconnected" };
+        if (state.kind === "connected") {
+            state.socket.close(1000, "Chat API transport disconnected");
+        } else if (state.kind === "connecting") {
+            state.attempt.abandon(cause);
+        }
+        this.#rejectRequests(cause);
+        this.#scheduleReconnect();
+    };
+
+    readonly #rejectRequests = (cause: unknown): void => {
+        for (const requestId of [...this.#pending.keys()]) {
+            this.#settle(requestId)?.reject(cause);
+        }
+        for (const subscriptionId of [...this.#watches.keys()]) {
+            this.#settleWatch(subscriptionId)?.reject(cause);
+        }
+        for (const requestId of [...this.#diagnostics.keys()]) {
+            this.#settleDiagnostic(requestId)?.reject(cause);
+        }
+    };
+
+    readonly #dial = async (): Promise<void> => {
+        if (!this.#desired || this.#disposed) {
+            return;
+        }
+        if (this.#state.kind === "connected" || this.#state.kind === "connecting") {
+            return;
+        }
+        try {
+            await this.#connect(this.#lifetime.signal);
+        } catch {
+            // The attempt already scheduled the next backoff or exhausted the
+            // budget from its own failure path.
+        }
+    };
+
+    readonly #scheduleReconnect = (): void => {
+        if (!this.#desired || this.#disposed || this.#reconnectTimer !== null) {
+            return;
+        }
+        // One attempt at a time: the in-flight attempt schedules the next
+        // backoff when its handshake settles or its deadline expires.
+        if (this.#state.kind === "connected" || this.#state.kind === "connecting") {
+            return;
+        }
+        if (this.#reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
+            return;
+        }
+        const delay =
+            RECONNECT_DELAYS_MILLISECONDS[Math.min(this.#reconnectAttempt, RECONNECT_DELAYS_MILLISECONDS.length - 1)] ??
+            15_000;
+        this.#reconnectAttempt += 1;
+        const controller = new AbortController();
+        const timer = {
+            cancel: () => controller.abort(new Error("The Chat transport stopped reconnecting.")),
+        };
+        this.#reconnectTimer = timer;
+        void this.#clock.sleep(delay, AbortSignal.any([this.#lifetime.signal, controller.signal])).then(
+            () => {
+                if (this.#reconnectTimer !== timer) {
+                    return;
+                }
+                this.#reconnectTimer = null;
+                if (this.#state.kind === "connected") {
+                    this.#reconnectAttempt = 0;
+                    return;
+                }
+                void this.#dial();
+            },
+            () => {
+                if (this.#reconnectTimer === timer) {
+                    this.#reconnectTimer = null;
+                }
+            },
+        );
+    };
+
+    /**
+     * A failed handshake continues the bounded budget: arm the next backoff, or
+     * stop and tell waiting callers once the budget is spent.
+     */
+    readonly #attemptFailed = (): void => {
+        if (!this.#desired || this.#disposed) {
+            return;
+        }
+        // The budget is spent: stop background retries. The next user action
+        // dials again through the normal call path.
+        if (this.#reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
+            return;
+        }
+        this.#scheduleReconnect();
+    };
+
+    readonly #cancelReconnect = (): void => {
+        const timer = this.#reconnectTimer;
+        this.#reconnectTimer = null;
+        timer?.cancel();
+    };
+
+    readonly #notifyConnected = (): void => {
+        for (const waiter of [...this.#bridgeWaiters]) {
+            this.#bridgeWaiters.delete(waiter);
+            waiter.resolve();
+        }
+    };
+
+    /** Re-registers live subscriptions so a reconnect never surfaces to subscribers. */
+    readonly #replaySubscriptions = (socket: WebSocket): void => {
+        for (const [subscriptionId, stream] of this.#eventStreams) {
+            try {
+                socket.send(stream.frame);
+            } catch (cause) {
+                this.#settleEventStream(subscriptionId)?.reject(cause);
+            }
+        }
+    };
+
+    readonly #sendIfConnected = (frame: string): void => {
+        const state = this.#state;
+        if (state.kind !== "connected" || state.socket.readyState !== WebSocket.OPEN) {
+            return;
+        }
+        try {
+            state.socket.send(frame);
+        } catch {
+            // The connection closed first; the bridge already dropped the request.
+            return;
+        }
+    };
+
+    /**
+     * API calls fail fast while a backoff attempt is pending, like a refused
+     * HTTP connection, instead of racing another socket. Once the budget is
+     * spent a call dials again, so an explicit user retry can recover.
+     */
+    readonly #connectForCall = async (signal: AbortSignal): Promise<WebSocket> => {
+        if (this.#reconnectTimer !== null) {
+            throw bridgeClosed();
+        }
+        return await this.#connect(signal);
+    };
+
     readonly #connect = async (signal: AbortSignal): Promise<WebSocket> => {
-        if (this.#state.kind === "closed") {
-            throw new Error("The Chat API transport is closed.");
+        if (this.#disposed || this.#state.kind === "closed") {
+            throw bridgeClosed();
         }
         if (this.#state.kind === "connected" && this.#state.socket.readyState === WebSocket.OPEN) {
             return this.#state.socket;
         }
+        if (this.#state.kind === "connected") {
+            this.#dropConnection(bridgeClosed());
+        }
         if (this.#state.kind === "connecting") {
-            return await this.#waitForConnection(this.#state.connection, signal);
+            return await this.#waitForConnection(this.#state.attempt.connection, signal);
         }
         const endpoint = new URL("/morty/ws", this.#origin);
         endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
         const startedAt = performance.now();
         const socket = new WebSocket(endpoint);
+        const deadline = new AbortController();
+        let abandoned: (cause: ChatBridgeError) => void = () => undefined;
         const connection = new Promise<WebSocket>((resolve, reject) => {
-            const closedWhileConnecting = () => {
+            let settled = false;
+            /** Ends the handshake exactly once: listeners and deadline go away. */
+            const settle = (): boolean => {
+                if (settled) {
+                    return false;
+                }
+                settled = true;
                 socket.removeEventListener("open", opened);
                 socket.removeEventListener("error", failed);
-                if (this.#state.kind !== "closed") {
+                socket.removeEventListener("close", closedWhileConnecting);
+                deadline.abort(new Error("The Chat WebSocket handshake finished."));
+                return true;
+            };
+            const releaseState = (): void => {
+                if (this.#state.kind === "connecting" && this.#state.attempt.socket === socket && !this.#disposed) {
                     this.#state = { kind: "disconnected" };
                 }
-                reject(new Error("The Chat WebSocket bridge closed while connecting."));
+            };
+            abandoned = (cause: ChatBridgeError): void => {
+                if (!settle()) {
+                    return;
+                }
+                try {
+                    socket.close(1000, "Chat API transport stopped waiting for the handshake");
+                } catch {
+                    // The browser already discarded the socket.
+                }
+                releaseState();
+                reject(cause);
+                this.#attemptFailed();
+            };
+            const closedWhileConnecting = () => {
+                if (!settle()) {
+                    return;
+                }
+                releaseState();
+                reject(bridgeClosed());
+                this.#attemptFailed();
             };
             const opened = () => {
-                socket.removeEventListener("error", failed);
-                socket.removeEventListener("close", closedWhileConnecting);
-                if (this.#state.kind === "closed") {
-                    socket.close(1000, "Chat API transport closed");
-                    reject(new Error("The Chat API transport is closed."));
+                if (!settle()) {
+                    return;
+                }
+                if (this.#disposed || this.#state.kind !== "connecting" || this.#state.attempt.socket !== socket) {
+                    socket.close(1000, "Chat API transport disposed");
+                    reject(bridgeClosed());
                     return;
                 }
                 recordBrowserDiagnostic({
@@ -372,9 +702,18 @@ export class WebSocketApiTransport {
                     }
                 }, KEEPALIVE_MILLISECONDS);
                 socket.addEventListener("close", () => clearInterval(keepalive), { once: true });
+                // A successful connection retires any backoff that was armed
+                // while the attempt was in flight.
+                this.#cancelReconnect();
+                this.#reconnectAttempt = 0;
+                this.#notifyConnected();
+                this.#replaySubscriptions(socket);
                 resolve(socket);
             };
             const failed = () => {
+                if (!settle()) {
+                    return;
+                }
                 recordBrowserDiagnostic({
                     at: new Date().toISOString(),
                     component: "worker",
@@ -383,17 +722,18 @@ export class WebSocketApiTransport {
                     requestId: "",
                     elapsedMs: Math.round(performance.now() - startedAt),
                 });
-                socket.removeEventListener("open", opened);
-                socket.removeEventListener("close", closedWhileConnecting);
-                if (this.#state.kind !== "closed") {
-                    this.#state = { kind: "disconnected" };
-                }
-                reject(new Error("The Chat WebSocket bridge could not connect."));
+                releaseState();
+                reject(bridgeUnavailable());
+                this.#attemptFailed();
             };
             socket.addEventListener("open", opened, { once: true });
             socket.addEventListener("error", failed, { once: true });
             socket.addEventListener("close", closedWhileConnecting, { once: true });
-            socket.addEventListener("message", this.#receive);
+            socket.addEventListener("message", (event) => {
+                if (this.#state.kind === "connected" && this.#state.socket === socket) {
+                    this.#receive(event);
+                }
+            });
             socket.addEventListener(
                 "close",
                 (event) => {
@@ -406,28 +746,43 @@ export class WebSocketApiTransport {
                         requestId: "",
                         elapsedMs: 0,
                     });
-                    if (this.#state.kind === "connected" && this.#state.socket === socket) {
+                    if (this.#disposed) {
+                        return;
+                    }
+                    const current =
+                        this.#state.kind === "connected"
+                            ? this.#state.socket === socket
+                            : this.#state.kind === "connecting" && this.#state.attempt.socket === socket;
+                    if (!current) {
+                        // A socket from a finished attempt closing late must not
+                        // touch the bridge that replaced it.
+                        return;
+                    }
+                    if (this.#state.kind === "connected") {
                         this.#state = { kind: "disconnected" };
                     }
-                    for (const requestId of [...this.#pending.keys()]) {
-                        this.#settle(requestId)?.reject(new Error("The Chat WebSocket bridge disconnected."));
-                    }
-                    for (const subscriptionId of [...this.#watches.keys()]) {
-                        this.#settleWatch(subscriptionId)?.reject(new Error("The Chat WebSocket bridge disconnected."));
-                    }
-                    for (const subscriptionId of [...this.#eventStreams.keys()]) {
-                        this.#settleEventStream(subscriptionId)?.reject(
-                            new Error("The Chat WebSocket bridge disconnected."),
-                        );
-                    }
-                    for (const requestId of [...this.#diagnostics.keys()]) {
-                        this.#settleDiagnostic(requestId)?.reject(new Error("The Chat WebSocket bridge disconnected."));
-                    }
+                    this.#rejectRequests(bridgeClosed());
+                    this.#scheduleReconnect();
                 },
                 { once: true },
             );
+            // A handshake the network never finishes must not pin the bridge in
+            // "connecting": give up, release the state, and let the retry budget
+            // continue from a clean slate.
+            void this.#clock
+                .sleep(
+                    CHAT_BRIDGE_HANDSHAKE_TIMEOUT_MILLISECONDS,
+                    AbortSignal.any([this.#lifetime.signal, deadline.signal]),
+                )
+                .then(
+                    () => abandoned(bridgeUnavailable()),
+                    () => undefined,
+                );
         });
-        this.#state = { kind: "connecting", connection };
+        this.#state = {
+            kind: "connecting",
+            attempt: { connection, socket, abandon: (cause) => abandoned(cause) },
+        };
         return await this.#waitForConnection(connection, signal);
     };
 
@@ -475,6 +830,22 @@ export class WebSocketApiTransport {
             this.#settleWatch(frame.subscriptionId)?.resolve();
             return;
         }
+        if (frame.kind === "watch.ready") {
+            const pending = this.#watches.get(frame.subscriptionId);
+            if (pending?.ready !== undefined) {
+                try {
+                    pending.ready({ status: frame.status, headers: new Headers(frame.headers), body: frame.body });
+                } catch (cause) {
+                    if (this.#settleWatch(frame.subscriptionId) !== undefined) {
+                        this.#sendIfConnected(
+                            JSON.stringify({ kind: "unwatch", subscriptionId: frame.subscriptionId }),
+                        );
+                        pending.reject(cause);
+                    }
+                }
+            }
+            return;
+        }
         if (frame.kind === "event") {
             const subscription = this.#eventStreams.get(frame.subscriptionId);
             if (subscription !== undefined) {
@@ -503,6 +874,9 @@ export class WebSocketApiTransport {
         if (frame.kind === "error") {
             this.#settle(frame.requestId)?.reject(new Error(`${frame.code}: ${frame.message}`));
             return;
+        }
+        if (pending.workspaceKey !== null && frame.status >= 200 && frame.status < 300) {
+            this.#workspaceBaselines.set(pending.workspaceKey, `${frame.status}\u0000${frame.body ?? ""}`);
         }
         this.#settle(frame.requestId)?.resolve(
             new Response(frame.status === 204 || frame.status === 205 || frame.status === 304 ? null : frame.body, {

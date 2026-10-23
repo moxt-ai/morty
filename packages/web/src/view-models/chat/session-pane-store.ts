@@ -9,8 +9,9 @@ import {
     SESSION_CLOSED_ERROR_CODE,
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
-import { decodeIdentifier, type SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
+import type { SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
+import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import {
     type ComposerAttachmentStore,
     createComposerAttachmentStore,
@@ -26,14 +27,8 @@ import { formatError, isRetryableRuntimeConnectionFailure, isSessionClosedFailur
 import { reportApplicationError } from "../report-error.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
-import { nativeSessionAgentTabs } from "./native-session-agents.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
-import {
-    type SessionActivityState,
-    startSessionWork,
-    transitionSessionActivity,
-    workingCommandId,
-} from "./session-activity-machine.ts";
+import { type SessionActivityState, sameSessionActivity, workingCommandId } from "./session-activity-machine.ts";
 import {
     connectionFailure,
     disconnectedConnection,
@@ -42,6 +37,16 @@ import {
     sessionReconnectAttempt,
     sessionUpdatesEndedError,
 } from "./session-connection.ts";
+import {
+    acceptedTurn,
+    awaitsService,
+    type CurrentTurn,
+    type CurrentTurnEvent,
+    idleTurn,
+    openedTurn,
+    transitionCurrentTurn,
+    turnActivity,
+} from "./session-current-turn.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import { createSessionDeliveryStore, type Journal, type SessionDeliveryStore } from "./session-delivery-store.ts";
 import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
@@ -65,8 +70,15 @@ import {
     transitionSessionProjection,
 } from "./session-projection.ts";
 import { createSessionSettingsStore } from "./session-settings-store.ts";
-import { createSessionTaskControlsStore, type SessionTaskControlsStore } from "./session-task-controls.ts";
-import { createSessionTurnLedger, type SessionActiveTurn } from "./session-turn-ledger.ts";
+import {
+    createSessionTaskControlsStore,
+    type RunningTurn,
+    type SessionTaskControlsStore,
+    stopFailure,
+    stopRequested,
+} from "./session-task-controls.ts";
+import { createSessionTurnLedger } from "./session-turn-ledger.ts";
+import { createSessionWelcomeStore } from "./session-welcome-store.ts";
 
 export type SessionPaneModel = ReturnType<typeof createSessionPaneModel>;
 
@@ -97,6 +109,7 @@ export interface SessionPaneStore {
     readonly title: string;
     readonly titleEdit: TitleEdit;
     readonly messages: readonly SessionMessage[];
+    readonly pendingInitialMessage: QueuedDraftMessage | null;
     readonly historyLoading: boolean;
     readonly historyRevision: number;
     readonly hasOlderHistory: boolean;
@@ -108,13 +121,8 @@ export interface SessionPaneStore {
     readonly followRevision: number;
     readonly operation: Operation;
     readonly activity: SessionActivityState;
-    /** Display-only harness list; loading failures leave the current harness. */
-    readonly harnesses: readonly {
-        readonly agentRef?: string;
-        readonly installed?: boolean;
-        readonly label: string;
-        readonly value: string;
-    }[];
+    /** The turn the service reports running, as the current turn holds it; the stop control acts on it. */
+    readonly runningTurn: RunningTurn | null;
     readonly connect: (signal: AbortSignal) => Promise<void>;
     readonly retryNow: () => void;
     /**
@@ -164,10 +172,9 @@ export function sessionPanePresentation(
                 (interaction.elicitation.state.kind === "pending" ||
                     interaction.elicitation.state.kind === "submitted")),
     );
-    const controlRunning =
-        tasks.operation.kind === "running" ||
-        tasks.operation.kind === "steering" ||
-        tasks.operation.kind === "stopping";
+    // Which turn runs is the current turn's; the stop control only adds whether the user asked to stop it.
+    const controlRunning = model.runningTurn !== null;
+    const stopping = stopRequested(tasks, model.runningTurn);
     const composerDisabled =
         model.connection.kind !== "ready" ||
         delivery.state.kind === "submitting" ||
@@ -176,8 +183,7 @@ export function sessionPanePresentation(
         model.operation.kind === "configuring" ||
         waitingForInput ||
         queue.operation.kind === "submitting" ||
-        tasks.operation.kind === "steering" ||
-        tasks.operation.kind === "stopping";
+        stopping;
     const composerInputDisabled =
         (model.connection.kind !== "ready" && model.connection.kind !== "loading") ||
         delivery.state.kind === "submitting" ||
@@ -186,8 +192,7 @@ export function sessionPanePresentation(
         model.operation.kind === "configuring" ||
         waitingForInput ||
         queue.operation.kind === "submitting" ||
-        tasks.operation.kind === "steering" ||
-        tasks.operation.kind === "stopping";
+        stopping;
     const workingActivityCommandId = workingCommandId(model.activity);
     const submittingCommandId = model.operation.kind === "sending" ? model.operation.commandId : null;
     const activeCommandId = workingActivityCommandId ?? submittingCommandId;
@@ -221,14 +226,21 @@ export function sessionPanePresentation(
         busy,
         composerDisabled,
         composerInputDisabled,
+        canSuggestProgress:
+            !busy &&
+            !controlRunning &&
+            model.draft.length === 0 &&
+            attachments.attachments.length === 0 &&
+            attachments.state.kind !== "reading",
         // Operations that failed because the Session closed say nothing the closed notice does not already say.
         composerError:
             connectionFailure(model.connection) ??
             (model.connection.kind === "closed"
                 ? ""
-                : ([model.activity, model.operation, delivery.state, tasks.feedback, queue.feedback].find(
-                      (state) => state.kind === "failed",
-                  )?.message ?? "")),
+                : ([model.activity, model.operation, delivery.state].find((state) => state.kind === "failed")
+                      ?.message ??
+                  stopFailure(tasks) ??
+                  (queue.feedback.kind === "failed" ? queue.feedback.message : ""))),
         controlRunning,
         deliveryUnknownUserMessageId,
         hasOlderHistory: model.hasOlderHistory,
@@ -236,7 +248,7 @@ export function sessionPanePresentation(
         outputState:
             queue.operation.kind === "submitting"
                 ? "sending"
-                : tasks.operation.kind === "stopping"
+                : stopping
                   ? "stopping"
                   : model.operation.kind === "sending" || delivery.state.kind === "submitting"
                     ? "sending"
@@ -247,10 +259,10 @@ export function sessionPanePresentation(
             !needsApproval &&
             activeCommandId !== null &&
             model.messages.some((message) => message.role === "user" && message.commandId === activeCommandId),
-        shouldQueueOnSubmit: tasks.operation.kind === "running",
+        shouldQueueOnSubmit: controlRunning && !stopping,
         submitDisabled:
             model.connection.kind !== "ready" ||
-            (tasks.operation.kind === "running" ? queue.operation.kind !== "idle" : busy) ||
+            (controlRunning && !stopping ? queue.operation.kind !== "idle" : busy) ||
             attachments.state.kind === "reading" ||
             (model.draft.trim() === "" && attachments.attachments.length === 0),
         unconfirmedDelivery,
@@ -345,7 +357,7 @@ export function createSessionPaneModel(options: {
     readonly onTitleChange: (sessionId: string, title: string) => void;
 }) {
     const { session, botId, requests, clock } = options;
-    const composerAttachments = createComposerAttachmentStore(options.initialMessage?.attachments);
+    const composerAttachments = createComposerAttachmentStore();
     const sessionId = session.result.ready.sessionId;
     // Working in a conversation makes it the reference for the next draft: its
     // harness and the settings it runs with carry into New Session.
@@ -356,19 +368,17 @@ export function createSessionPaneModel(options: {
         agentRef: session.agentRef,
         initial: session.result.ready.configOptions,
     });
-    const openedActiveTurn: SessionActiveTurn =
-        session.result.action === "conversation" && session.result.activeTurn.kind === "running"
-            ? {
-                  commandId: decodeIdentifier(session.result.activeTurn.commandId),
-                  kind: "accepted" as const,
-                  turnId: decodeIdentifier(session.result.activeTurn.turnId),
-              }
-            : { kind: "idle" };
-    const turns = createSessionTurnLedger({
-        opened: openedActiveTurn,
-        initialCommandId: options.initialMessage?.commandId ?? null,
-    });
     const fallbackStartedAt = Date.now();
+    // The one record of the current turn. `updateTurn` moves it together with the activity and the stop control.
+    let currentTurn: CurrentTurn =
+        session.result.action === "conversation" && session.result.activeTurn.kind === "running"
+            ? openedTurn({
+                  commandId: session.result.activeTurn.commandId,
+                  turnId: session.result.activeTurn.turnId,
+                  startedAt: fallbackStartedAt,
+              })
+            : idleTurn;
+    const turns = createSessionTurnLedger();
     let client: MobiusClient | null = null;
     let countdownInterrupt: AbortController | null = null;
     // The Runtime closed the Session. The connect loop turns this into the closed connection state.
@@ -400,11 +410,13 @@ export function createSessionPaneModel(options: {
     let projection = createSessionProjection();
     let loadingOlderHistory = false;
     let draftRevision = 0;
-    // The queued first message stays the pane's recovery responsibility until
-    // the service accepts it or the user discards it, not just until the send
-    // starts.
+    // The queued first message belongs to the home store's conversation creation. This pane submits it as given,
+    // never as a copy in its composer, and reports every outcome back. It stays the pane's recovery responsibility
+    // until the service accepts it or the user discards it, not just until the send starts.
     const queuedInitialCommandId = options.initialMessage?.commandId ?? options.unconfirmedMessage?.commandId ?? null;
     const isQueuedInitialMessage = (commandId: string): boolean => commandId === queuedInitialCommandId;
+    let queuedInitialSubmission: "waiting" | "submitted" =
+        options.initialMessage === undefined ? "submitted" : "waiting";
     const instructionUri = "morty://bot/instructions";
     const withInstructions = <T extends { readonly resources: readonly PromptResource[] }>(request: T): T => ({
         ...request,
@@ -440,13 +452,13 @@ export function createSessionPaneModel(options: {
             );
         }),
         initialUnknown: options.unconfirmedMessage,
+        onDelivered: (commandId) => {
+            if (isQueuedInitialMessage(commandId)) {
+                options.onInitialMessageDelivered?.();
+            }
+        },
     });
     const lastSentMessageEntry = sessionLastSentMessageEntry(sessionId);
-    const openedCommand = turns.command();
-    const initialActivity: SessionActivityState =
-        openedCommand === null
-            ? { kind: "idle" }
-            : startSessionWork({ commandId: openedCommand, startedAt: fallbackStartedAt });
     const deriveTimeline = (): { readonly messages: readonly SessionMessage[] } => ({
         messages: sessionProjectionMessages(projection),
     });
@@ -459,25 +471,9 @@ export function createSessionPaneModel(options: {
                 }
                 return await client.turns.cancel(sessionId, turnId, { idempotencyKey }, signal);
             }),
-            submit: noticingClosure(async (request, signal) => {
-                if (client === null) {
-                    throw new Error("The Session is not connected.");
-                }
-                return await client.turns.submit(
-                    sessionId,
-                    withInstructions({
-                        ...request,
-                        agentId: session.agentRef,
-                        directoryId: session.result.ready.directoryId,
-                    }),
-                    signal,
-                );
-            }),
         },
+        runningTurn: () => acceptedTurn(currentTurn),
     });
-    if (openedActiveTurn.kind === "accepted") {
-        tasks.getState().start(openedActiveTurn.commandId, openedActiveTurn.turnId);
-    }
     const messageQueue = createSessionMessageQueueStore({
         port: {
             cancel: noticingClosure(async (turnId, idempotencyKey, signal) => {
@@ -599,15 +595,47 @@ export function createSessionPaneModel(options: {
                 options.onStatusChange?.(activity);
             }
         };
+        /**
+         * Moves the current turn, and with it what the pane derives from it in one update: the activity it shows and
+         * reports, and the running turn the stop control acts on. Callers announce the activity once their other
+         * updates are in.
+         */
+        const updateTurn = (event: CurrentTurnEvent): void => {
+            currentTurn = transitionCurrentTurn(currentTurn, event);
+            const activity = turnActivity(currentTurn);
+            const running = acceptedTurn(currentTurn);
+            const current = get();
+            const runningChanged =
+                running?.commandId !== current.runningTurn?.commandId ||
+                running?.turnId !== current.runningTurn?.turnId;
+            if (!sameSessionActivity(activity, current.activity) || runningChanged) {
+                set({
+                    ...(sameSessionActivity(activity, current.activity) ? {} : { activity }),
+                    ...(runningChanged ? { runningTurn: running } : {}),
+                });
+            }
+            if (running !== null && running.commandId !== current.runningTurn?.commandId) {
+                tasks.getState().turnRunning(running.commandId);
+            }
+        };
         let historyLoadController: AbortController | null = null;
         const commitProjection = (input: SessionProjectionInput): readonly SessionProjectionEffect[] => {
             const result = transitionSessionProjection(projection, input);
             projection = result.state;
             const pagination = sessionProjectionPagination(projection);
+            const messages = sessionProjectionMessages(projection);
+            const initialMessage = get().pendingInitialMessage;
             set({
                 hasOlderHistory: pagination !== null,
                 historyRevision: projection.revision,
-                messages: sessionProjectionMessages(projection),
+                messages,
+                pendingInitialMessage:
+                    initialMessage !== null &&
+                    messages.some(
+                        (message) => message.role === "user" && message.commandId === initialMessage.commandId,
+                    )
+                        ? null
+                        : initialMessage,
             });
             for (const effect of result.effects) {
                 if (effect.kind !== "adopted") {
@@ -687,14 +715,8 @@ export function createSessionPaneModel(options: {
         const settleClosedExecution = (): void => {
             commitProjection({ kind: "execution-idle" });
             messageQueue.getState().replace([]);
-            const controlled = tasks.getState().operation;
-            if (controlled.kind !== "idle") {
-                tasks.getState().finish(controlled.active.commandId);
-            }
-            turns.settleIdle();
-            const activity = get().activity;
+            updateTurn({ kind: "nothing-running" });
             interactions.getState().restore([]);
-            set({ activity: activity.kind === "failed" ? activity : { kind: "idle" } });
             announceActivity();
         };
         // Holds the connect loop on a closed Session until the user reopens it, then lets the loop connect again.
@@ -715,19 +737,132 @@ export function createSessionPaneModel(options: {
                 setAndSettle({ connection: { kind: "closed", reason, reopen: { kind: "available" } } });
             });
         };
+        /**
+         * Submits a message: the composer's draft, or the queued first message this pane was opened with, exactly
+         * as the home store holds it. The submission owns the message until it is accepted, journaled, or returned
+         * to the composer by an authoritative rejection.
+         */
+        const submit = async (
+            message: {
+                readonly commandId: string;
+                readonly content: string;
+                readonly attachments: readonly ComposerAttachment[];
+            },
+            signal: AbortSignal,
+        ): Promise<void> => {
+            const current = get();
+            if (
+                current.connection.kind !== "ready" ||
+                current.operation.kind === "sending" ||
+                current.operation.kind === "configuring" ||
+                current.runningTurn !== null
+            ) {
+                return;
+            }
+            const { attachments, commandId } = message;
+            welcome.getState().dismiss();
+            const queued = isQueuedInitialMessage(commandId);
+            if (queued) {
+                queuedInitialSubmission = "submitted";
+            }
+            const sent = turns.recordSent(commandId, Date.now());
+            void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
+            const prompt = message.content.trim();
+            const displayPrompt =
+                prompt ||
+                attachments
+                    .map((attachment) =>
+                        attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
+                    )
+                    .join(", ");
+            const images = attachments.flatMap((attachment) => (attachment.kind === "image" ? [attachment.image] : []));
+            if (!queued) {
+                // The draft leaves the composer for the submission.
+                centralSessionStorage.remove(draftEntry);
+                composerAttachments.getState().clear();
+                set({ draft: "" });
+            }
+            const submittedDraftRevision = draftRevision;
+            updateTurn({ kind: "submitting", commandId, startedAt: sent.sentAt });
+            const pending = deriveTimeline();
+            set({
+                followRevision: get().followRevision + 1,
+                operation: { kind: "sending", commandId },
+                messages: pending.messages,
+            });
+            try {
+                const submission = {
+                    ...request,
+                    content: prompt,
+                    images,
+                    resources: attachments.flatMap((attachment) =>
+                        attachment.kind === "resource" ? [attachment.resource] : [],
+                    ),
+                };
+                const outcome = await delivery.getState().submit(commandId, displayPrompt, submission, signal);
+                signal.throwIfAborted();
+                switch (outcome.kind) {
+                    case "accepted":
+                    case "delivered":
+                    case "delivery-unknown":
+                        break;
+                    case "rejected":
+                        // The rejected message becomes editable in the composer, unless the user has since
+                        // started another draft there.
+                        if (draftRevision === submittedDraftRevision) {
+                            set({ draft: message.content });
+                            composerAttachments.getState().restore(attachments);
+                            centralSessionStorage.write(draftEntry, message.content);
+                        }
+                        if (queued) {
+                            // This rejected message is editable again. Retire
+                            // the auto-send/retry copy owned by the home store.
+                            options.onInitialMessageRecoveryCleared?.(commandId);
+                        }
+                        break;
+                    default:
+                        return outcome satisfies never;
+                }
+                // The delivery store reports an accepted submission itself, as it reports any later confirmation.
+                if (outcome.kind === "delivery-unknown" && queued) {
+                    options.onInitialMessageUnconfirmed?.({ commandId, displayPrompt, request: submission });
+                }
+                if (outcome.kind === "accepted") {
+                    updateTurn({ kind: "accepted", commandId, turnId: outcome.turn.turnId });
+                    set({ operation: finishPromptOperation(get().operation, commandId) });
+                    return;
+                }
+                updateTurn({ kind: "submission-ended", commandId, failure: null });
+                const restored = deriveTimeline();
+                set({
+                    messages: restored.messages,
+                    pendingInitialMessage: null,
+                    operation: finishPromptOperation(get().operation, commandId),
+                });
+                announceActivity();
+            } catch (cause) {
+                signal.throwIfAborted();
+                const message = formatError(cause, "The agent could not complete the message.");
+                updateTurn({ kind: "submission-ended", commandId, failure: message });
+                set({ pendingInitialMessage: null, operation: { kind: "failed", message } });
+                announceActivity();
+            }
+        };
         return {
-            connection: { kind: "loading" },
+            connection:
+                options.initialMessage === undefined ? { kind: "loading" } : { kind: "session-loading-after-create" },
             title: session.entry.title,
             titleEdit: { kind: "closed" },
             messages: initialTimeline.messages,
+            pendingInitialMessage: options.initialMessage ?? null,
             historyLoading: false,
             historyRevision: 0,
             hasOlderHistory: false,
-            draft: options.initialMessage?.content ?? centralSessionStorage.read(draftEntry) ?? "",
-            harnesses: [{ agentRef: session.agentRef, label: session.agentRef, value: session.agentRef }],
+            draft: centralSessionStorage.read(draftEntry) ?? "",
             followRevision: 0,
             operation: { kind: "idle" },
-            activity: initialActivity,
+            activity: turnActivity(currentTurn),
+            runningTurn: acceptedTurn(currentTurn),
             loadOlderMessages: async (signal) => {
                 const pagination = sessionProjectionPagination(projection);
                 if (loadingOlderHistory || pagination === null || client === null) {
@@ -780,16 +915,8 @@ export function createSessionPaneModel(options: {
                         if (stored === null || !turns.adoptStoredSent(stored, revision)) {
                             return;
                         }
-                        const current = get().activity;
-                        if (current.kind === "working" && current.commandId === stored.commandId) {
-                            set({
-                                activity: startSessionWork({
-                                    commandId: current.commandId,
-                                    startedAt: stored.sentAt,
-                                }),
-                            });
-                            announceActivity();
-                        }
+                        updateTurn({ kind: "sent-at-known", commandId: stored.commandId, sentAt: stored.sentAt });
+                        announceActivity();
                     });
                 };
                 let consecutiveFailures = 0;
@@ -828,25 +955,15 @@ export function createSessionPaneModel(options: {
                                     // Steering starts a command, not a new execution to stop.
                                     return;
                                 }
-                                const superseded = turns.supersede(fact.commandId);
-                                if (superseded !== null) {
-                                    tasks.getState().finish(superseded);
-                                }
-                                turns.setCommand(fact.commandId);
-                                const accepted = turns.activeTurn();
-                                const turnId =
-                                    queued?.turnId ??
-                                    (accepted.kind === "accepted" && accepted.commandId === fact.commandId
-                                        ? accepted.turnId
-                                        : fact.commandId);
-                                tasks.getState().start(fact.commandId, turnId);
-                                turns.submissionAccepted(fact.commandId, turnId);
-                                const currentActivity = get().activity;
-                                const startedAt =
-                                    currentActivity.kind === "working" && currentActivity.commandId === fact.commandId
-                                        ? currentActivity.startedAt
-                                        : turns.startedAt(fact.commandId, Date.now());
-                                set({ activity: startSessionWork({ commandId: fact.commandId, startedAt }) });
+                                const accepted = acceptedTurn(currentTurn);
+                                updateTurn({
+                                    kind: "running",
+                                    commandId: fact.commandId,
+                                    turnId:
+                                        queued?.turnId ??
+                                        (accepted?.commandId === fact.commandId ? accepted.turnId : fact.commandId),
+                                    startedAt: turns.startedAt(fact.commandId, Date.now()),
+                                });
                                 announceActivity();
                                 return;
                             }
@@ -862,15 +979,14 @@ export function createSessionPaneModel(options: {
                                     signal.throwIfAborted();
                                     const running = execution.turn;
                                     if (running !== null) {
-                                        turns.setCommand(running.commandId);
-                                        tasks.getState().start(running.commandId, running.commandId);
-                                        turns.submissionAccepted(running.commandId, running.commandId);
+                                        updateTurn({
+                                            kind: "running",
+                                            commandId: running.commandId,
+                                            turnId: running.commandId,
+                                            startedAt: turns.startedAt(running.commandId, Date.now()),
+                                        });
                                         const timeline = deriveTimeline();
                                         set({
-                                            activity: startSessionWork({
-                                                commandId: running.commandId,
-                                                startedAt: turns.startedAt(running.commandId, Date.now()),
-                                            }),
                                             messages: timeline.messages,
                                             operation: finishPromptOperation(get().operation, fact.commandId),
                                         });
@@ -878,21 +994,17 @@ export function createSessionPaneModel(options: {
                                         return;
                                     }
                                 }
-                                const activity = transitionSessionActivity(
-                                    get().activity,
-                                    fact.kind === "turn-failed"
-                                        ? { commandId: fact.commandId, kind: "work-failed", message: fact.message }
-                                        : { commandId: fact.commandId, kind: "work-completed" },
-                                );
+                                updateTurn({
+                                    kind: "ended",
+                                    commandId: fact.commandId,
+                                    failure: fact.kind === "turn-failed" ? fact.message : null,
+                                });
                                 const completed = deriveTimeline();
                                 set({
-                                    activity,
                                     messages: completed.messages,
                                     operation: finishPromptOperation(get().operation, fact.commandId),
                                 });
                                 announceActivity();
-                                tasks.getState().finish(fact.commandId);
-                                turns.release(fact.commandId);
                                 return;
                             }
                             case "none":
@@ -903,7 +1015,7 @@ export function createSessionPaneModel(options: {
                     };
                     const observer: MobiusSessionEventObserver = {
                         reconcile: async (connection) => {
-                            const reconcilingTurn = turns.activeTurn();
+                            const reconcilingTurn = currentTurn;
                             const reconciliation =
                                 connection.kind === "initial"
                                     ? { kind: "initial-subscription" as const, turn: reconcilingTurn }
@@ -936,32 +1048,16 @@ export function createSessionPaneModel(options: {
                             }
                             messageQueue.getState().replace(execution.queued);
                             if (running !== null) {
-                                turns.setCommand(running.commandId);
-                                const turnId =
-                                    reconciliation.turn.kind === "accepted" &&
-                                    reconciliation.turn.commandId === running.commandId
-                                        ? reconciliation.turn.turnId
-                                        : running.commandId;
-                                tasks.getState().start(running.commandId, turnId);
-                                turns.submissionAccepted(running.commandId, turnId);
-                            } else if (reconciliation.turn.kind !== "idle") {
-                                tasks.getState().finish(reconciliation.turn.commandId);
-                                turns.abandon(reconciliation.turn.commandId);
-                            }
-                            const command = turns.command();
-                            const currentActivity = get().activity;
-                            let restoredActivity: SessionActivityState;
-                            if (command === null) {
-                                // Restoring the connection cannot resolve an independent turn failure.
-                                restoredActivity =
-                                    currentActivity.kind === "failed" ? currentActivity : { kind: "idle" };
-                            } else if (currentActivity.kind === "working" && currentActivity.commandId === command) {
-                                restoredActivity = currentActivity;
-                            } else {
-                                restoredActivity = startSessionWork({
-                                    commandId: command,
-                                    startedAt: turns.startedAt(command, Date.now()),
+                                const accepted = acceptedTurn(reconciliation.turn);
+                                updateTurn({
+                                    kind: "running",
+                                    commandId: running.commandId,
+                                    turnId:
+                                        accepted?.commandId === running.commandId ? accepted.turnId : running.commandId,
+                                    startedAt: turns.startedAt(running.commandId, Date.now()),
                                 });
+                            } else if (awaitsService(reconciliation.turn)) {
+                                updateTurn({ kind: "nothing-running" });
                             }
                             signal.throwIfAborted();
                             const interaction = execution.turn?.interaction;
@@ -972,7 +1068,6 @@ export function createSessionPaneModel(options: {
                                         ? []
                                         : [requestedInteraction(interaction)],
                                 );
-                            set({ activity: restoredActivity });
                             announceActivity();
                             switch (reconciliation.kind) {
                                 case "initial-subscription":
@@ -1005,14 +1100,22 @@ export function createSessionPaneModel(options: {
                     signal.throwIfAborted();
                     consecutiveFailures = 0;
                     setAndSettle({ connection: { kind: "ready", client: connected } });
-                    if (turns.hasInitialCommand()) {
-                        // Send reports delivery itself, so an uncertain or
+                    welcome.getState().connected();
+                    if (options.initialMessage !== undefined && queuedInitialSubmission === "waiting") {
+                        // Submission reports delivery itself, so an uncertain or
                         // rejected submission leaves the queued message and its
                         // idempotent command id in the home store for a remount
                         // to recover.
                         // The send belongs to the pane, not to this attempt: a closing of the Session must not
                         // abandon a submission that is already on its way.
-                        await get().send(paneSignal);
+                        await submit(
+                            {
+                                commandId: options.initialMessage.commandId,
+                                content: options.initialMessage.content,
+                                attachments: options.initialMessage.attachments,
+                            },
+                            paneSignal,
+                        );
                         signal.throwIfAborted();
                     }
                     // A detach between submit and the delivery report can still
@@ -1169,133 +1272,27 @@ export function createSessionPaneModel(options: {
                 set({ draft });
             },
             send: async (signal) => {
-                const current = get();
                 const { attachments, state: attachmentState } = composerAttachments.getState();
-                if (
-                    current.connection.kind !== "ready" ||
-                    attachmentState.kind === "reading" ||
-                    (current.draft.trim() === "" && attachments.length === 0) ||
-                    current.operation.kind === "sending" ||
-                    current.operation.kind === "configuring" ||
-                    tasks.getState().operation.kind !== "idle"
-                ) {
+                const draft = get().draft;
+                if (attachmentState.kind === "reading" || (draft.trim() === "" && attachments.length === 0)) {
                     return;
                 }
-                const commandId = turns.claimCommand(crypto.randomUUID());
-                const sent = turns.recordSent(commandId, Date.now());
-                void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
-                const prompt = current.draft.trim();
-                const displayPrompt =
-                    prompt ||
-                    attachments
-                        .map((attachment) =>
-                            attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
-                        )
-                        .join(", ");
-                const images = attachments.flatMap((attachment) =>
-                    attachment.kind === "image" ? [attachment.image] : [],
-                );
-                const submittedDraftRevision = draftRevision;
-                // The submission owns this snapshot until it is accepted, journaled,
-                // or returned to the composer by an authoritative rejection.
-                centralSessionStorage.remove(draftEntry);
-                composerAttachments.getState().clear();
-                const activity = startSessionWork({ commandId, startedAt: sent.sentAt });
-                const pending = deriveTimeline();
-                set({
-                    activity,
-                    followRevision: get().followRevision + 1,
-                    operation: { kind: "sending", commandId },
-                    messages: pending.messages,
-                    draft: "",
-                });
-                try {
-                    turns.submissionStarted(commandId);
-                    const submission = {
-                        ...request,
-                        content: prompt,
-                        images,
-                        resources: attachments.flatMap((attachment) =>
-                            attachment.kind === "resource" ? [attachment.resource] : [],
-                        ),
-                    };
-                    const outcome = await delivery.getState().submit(commandId, displayPrompt, submission, signal);
-                    signal.throwIfAborted();
-                    switch (outcome.kind) {
-                        case "accepted":
-                        case "delivery-unknown":
-                            break;
-                        case "rejected":
-                            if (draftRevision === submittedDraftRevision) {
-                                set({ draft: current.draft });
-                                composerAttachments.getState().restore(attachments);
-                                centralSessionStorage.write(draftEntry, current.draft);
-                            }
-                            if (isQueuedInitialMessage(commandId)) {
-                                // This rejected message is editable again. Retire
-                                // the auto-send/retry copy owned by the home store.
-                                options.onInitialMessageRecoveryCleared?.(commandId);
-                            }
-                            break;
-                        default:
-                            return outcome satisfies never;
-                    }
-                    if (outcome.kind === "accepted") {
-                        if (isQueuedInitialMessage(commandId)) {
-                            options.onInitialMessageDelivered?.();
-                        }
-                    } else if (outcome.kind === "delivery-unknown" && isQueuedInitialMessage(commandId)) {
-                        options.onInitialMessageUnconfirmed?.({ commandId, displayPrompt, request: submission });
-                    }
-                    if (outcome.kind === "accepted") {
-                        // A terminal live event may precede the acceptance response.
-                        // Its result already owns the activity; do not overwrite it.
-                        if (turns.command() === commandId) {
-                            tasks.getState().start(commandId, outcome.turn.turnId);
-                            turns.submissionAccepted(commandId, outcome.turn.turnId);
-                        }
-                        set({ operation: finishPromptOperation(get().operation, commandId) });
-                        return;
-                    }
-                    turns.release(commandId);
-                    const restored = deriveTimeline();
-                    set({
-                        activity: transitionSessionActivity(get().activity, { commandId, kind: "work-completed" }),
-                        messages: restored.messages,
-                        operation: finishPromptOperation(get().operation, commandId),
-                    });
-                    announceActivity();
-                } catch (cause) {
-                    signal.throwIfAborted();
-                    set((current) => ({
-                        activity: transitionSessionActivity(current.activity, {
-                            commandId,
-                            kind: "work-failed",
-                            message: formatError(cause, "The agent could not complete the message."),
-                        }),
-                        operation: {
-                            kind: "failed",
-                            message: formatError(cause, "The agent could not complete the message."),
-                        },
-                    }));
-                    announceActivity();
-                }
+                await submit({ commandId: crypto.randomUUID(), content: draft, attachments }, signal);
             },
             removeUnknownDelivery: () => {
                 const commandId = delivery.getState().discardUnknown();
                 if (commandId === null) {
                     return;
                 }
-                turns.discard(commandId);
+                updateTurn({ kind: "submission-ended", commandId, failure: null });
                 // Mirrors the delivery report: dropping this pane's retry path
                 // must also drop the home store's recovery copy, or a remount
                 // would submit the message the user just discarded.
                 if (isQueuedInitialMessage(commandId)) {
                     options.onInitialMessageRecoveryCleared?.(commandId);
                 }
-                const activity = transitionSessionActivity(get().activity, { commandId, kind: "work-completed" });
                 const restored = deriveTimeline();
-                set({ activity, messages: restored.messages });
+                set({ messages: restored.messages });
                 announceActivity();
             },
             retryUnknownDelivery: async (signal) => {
@@ -1304,26 +1301,22 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 const pending = state.journal;
-                turns.setCommand(pending.commandId);
-                const retrying = startSessionWork({
+                updateTurn({
+                    kind: "retrying",
                     commandId: pending.commandId,
                     startedAt: turns.startedAt(pending.commandId, Date.now()),
                 });
                 const retried = deriveTimeline();
-                set({ activity: retrying, messages: retried.messages });
+                set({ messages: retried.messages });
                 announceActivity();
                 const outcome = await delivery.getState().retry(signal);
                 signal.throwIfAborted();
                 switch (outcome?.kind) {
                     case "accepted":
-                        if (isQueuedInitialMessage(pending.commandId)) {
-                            options.onInitialMessageDelivered?.();
-                        }
-                        if (turns.command() === pending.commandId) {
-                            tasks.getState().start(pending.commandId, outcome.turn.turnId);
-                            turns.submissionAccepted(pending.commandId, outcome.turn.turnId);
-                        }
+                        updateTurn({ kind: "accepted", commandId: pending.commandId, turnId: outcome.turn.turnId });
                         return;
+                    case "delivered":
+                        break;
                     case "rejected": {
                         const restoredAttachments = [
                             ...pending.request.images.map((image) => ({ kind: "image" as const, image })),
@@ -1344,23 +1337,18 @@ export function createSessionPaneModel(options: {
                     default:
                         return outcome satisfies never;
                 }
-                turns.release(pending.commandId);
-                set({
-                    activity: transitionSessionActivity(get().activity, {
-                        commandId: pending.commandId,
-                        kind: "work-completed",
-                    }),
-                });
+                updateTurn({ kind: "submission-ended", commandId: pending.commandId, failure: null });
                 announceActivity();
             },
             queueDraft: async (signal) => {
                 const current = get();
                 const { attachments, state: attachmentState } = composerAttachments.getState();
-                const controls = tasks.getState();
+                const running = current.runningTurn;
                 if (
                     attachmentState.kind === "reading" ||
                     current.connection.kind !== "ready" ||
-                    controls.operation.kind !== "running"
+                    running === null ||
+                    stopRequested(tasks.getState(), running)
                 ) {
                     return;
                 }
@@ -1374,7 +1362,7 @@ export function createSessionPaneModel(options: {
                         .join(", ");
                 delivery.getState().dismissFailure();
                 const queued = await messageQueue.getState().enqueue(
-                    controls.operation.active.commandId,
+                    running.commandId,
                     summary,
                     {
                         ...request,
@@ -1390,6 +1378,7 @@ export function createSessionPaneModel(options: {
                 );
                 signal.throwIfAborted();
                 if (queued !== null) {
+                    welcome.getState().dismiss();
                     const sent = turns.recordSent(queued.commandId, Date.now());
                     void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
                     centralSessionStorage.remove(draftEntry);
@@ -1530,6 +1519,25 @@ export function createSessionPaneModel(options: {
             stop: async (signal) => await tasks.getState().stop(signal),
         };
     });
+    const welcome = createSessionWelcomeStore({
+        botId,
+        sessionId,
+        fillEmptyDraft: (text) => {
+            const presentation = sessionPanePresentation(
+                store.getState(),
+                delivery.getState(),
+                tasks.getState(),
+                messageQueue.getState(),
+                composerAttachments.getState(),
+                interactions.getState(),
+            );
+            if (!presentation.canSuggestProgress) {
+                return false;
+            }
+            store.getState().setDraft(text);
+            return true;
+        },
+    });
     // The pane's connection lifetime: attach starts connecting with its own
     // signal, detach aborts it. The view drives this through a ref callback,
     // so no component effect owns the session connection and nothing starts
@@ -1539,35 +1547,6 @@ export function createSessionPaneModel(options: {
     // fresh controller (a detach aborts the previous one), so a re-attached
     // pane reconnects instead of reusing an aborted signal.
     let connection = new AbortController();
-    // The harness list is display-only in an existing conversation: every
-    // entry is disabled, so a failed load just leaves the current harness.
-    // The controller is re-armed on each attach so a re-attached pane can
-    // refresh the list again.
-    let harnessController = new AbortController();
-    const loadHarnesses = (): void => {
-        harnessController = new AbortController();
-        const signal = harnessController.signal;
-        requests
-            .runtimeConfiguration(botId, signal)
-            .then((configuration) => {
-                if (signal.aborted) {
-                    return;
-                }
-                store.setState({
-                    harnesses: nativeSessionAgentTabs(configuration.runtime).map((agent) => ({
-                        agentRef: agent.agentRef,
-                        installed: agent.installed,
-                        label: agent.label,
-                        value: `${agent.runtimeId}:${agent.agentRef}`,
-                    })),
-                });
-            })
-            .catch((cause: unknown) => {
-                if (!signal.aborted) {
-                    reportApplicationError(cause, "session-pane-harnesses");
-                }
-            });
-    };
     const waitForConnectionReady = async (signal: AbortSignal): Promise<void> => {
         while (true) {
             signal.throwIfAborted();
@@ -1626,7 +1605,6 @@ export function createSessionPaneModel(options: {
      */
     const stop = (): void => {
         filePreview.getState().close();
-        harnessController.abort(new Error("The session pane stopped."));
         connection.abort(new Error("The session pane stopped."));
     };
     /**
@@ -1648,7 +1626,6 @@ export function createSessionPaneModel(options: {
         // A previous cleanup aborted the old controllers; arm fresh ones so
         // this attach reconnects with a live signal.
         connection = new AbortController();
-        loadHarnesses();
         const signal = connection.signal;
         void store
             .getState()
@@ -1674,6 +1651,7 @@ export function createSessionPaneModel(options: {
         filePreview,
         messageQueue,
         tasks,
+        welcome,
         /** The Bot this pane talks to; scopes failure approvals. */
         botId,
         /** The agent the session runs on; the harness lock offers it. */

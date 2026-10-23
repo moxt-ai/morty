@@ -13,6 +13,7 @@ const requestFrame = v.strictObject({
 });
 const watchFrame = v.strictObject({
     kind: v.literal("watch"),
+    baseline: v.optional(v.pipe(v.string(), v.maxLength(7_000_000))),
     subscriptionId: requestId,
     method: v.picklist(["GET", "POST"]),
     path: v.pipe(v.string(), v.minLength(1), v.maxLength(4096)),
@@ -63,8 +64,13 @@ export interface WebSocketBridgeHandlers {
     readonly dispatch: (request: Request) => Promise<Response>;
     readonly subscribe: (
         request: Request,
-        observer: { readonly notify: () => void; readonly publish: (data: string) => void },
+        observer: {
+            readonly ready: (response: Response, body: string) => void;
+            readonly notify: () => void;
+            readonly publish: (data: string) => void;
+        },
         signal: AbortSignal,
+        baseline?: string,
     ) => Promise<void>;
 }
 
@@ -193,10 +199,19 @@ export function createWebSocketApiBridge(
                 .subscribe(
                     request,
                     {
+                        ready: (response, body) =>
+                            send(server, {
+                                kind: "watch.ready",
+                                subscriptionId: frame.subscriptionId,
+                                status: response.status,
+                                headers: [...response.headers],
+                                body,
+                            }),
                         notify: () => send(server, { kind: "notification", subscriptionId: frame.subscriptionId }),
                         publish: (data) => send(server, { data, kind: "event", subscriptionId: frame.subscriptionId }),
                     },
                     lifetime.signal,
+                    frame.kind === "watch" ? frame.baseline : undefined,
                 )
                 .catch((cause: unknown) => {
                     if (!lifetime.signal.aborted) {

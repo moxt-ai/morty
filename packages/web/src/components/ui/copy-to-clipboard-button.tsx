@@ -14,6 +14,8 @@ export function CopyToClipboardButton({
     label,
     failureToast,
     successToast,
+    successContent,
+    idleContent,
     children,
     className = "",
     size,
@@ -23,6 +25,10 @@ export function CopyToClipboardButton({
     readonly label: string;
     readonly failureToast: { readonly description: string; readonly title: string };
     readonly successToast: { readonly description?: string; readonly title: string };
+    /** Inline feedback for a next step that should stay visible instead of a toast. */
+    readonly successContent?: ReactNode;
+    /** Guidance occupying the same place before the copy succeeds. */
+    readonly idleContent?: ReactNode;
     readonly children?: ReactNode;
     readonly className?: string;
     readonly size?: ComponentProps<typeof Button>["size"];
@@ -39,7 +45,9 @@ export function CopyToClipboardButton({
         void navigator.clipboard.writeText(value).then(
             () => {
                 setCopy("copied");
-                showToast(successToast);
+                if (successContent === undefined) {
+                    showToast(successToast);
+                }
             },
             () => showToast(failureToast),
         );
@@ -47,16 +55,19 @@ export function CopyToClipboardButton({
 
     if (children !== undefined) {
         return (
-            <Button
-                aria-label={ariaLabel}
-                className={className}
-                onClick={onClick}
-                {...(size !== undefined ? { size } : {})}
-                title={label}
-                variant={variant}
-            >
-                {copy === "copied" ? "Copied" : children}
-            </Button>
+            <>
+                <Button
+                    aria-label={ariaLabel}
+                    className={className}
+                    onClick={onClick}
+                    {...(size !== undefined ? { size } : {})}
+                    title={label}
+                    variant={variant}
+                >
+                    {copy === "copied" ? "Copied" : children}
+                </Button>
+                {copy === "copied" ? successContent : idleContent}
+            </>
         );
     }
 

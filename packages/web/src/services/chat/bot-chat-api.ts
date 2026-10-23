@@ -26,6 +26,7 @@ import {
     type SessionStatusChangedEvent,
 } from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
+import type { ApiResponseSnapshot, ApiTransport } from "../api/api-transport.ts";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 
@@ -237,14 +238,14 @@ class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTra
 }
 
 export class BotChatApi {
-    readonly #agentSettingsCache = new Map<string, AgentSettingsResult>();
     readonly #fetchRequest: (request: Request) => Promise<Response>;
     readonly #origin: string;
     readonly #projectId: string;
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly #sessionTransports = new Map<string, BrowserSessionTransport>();
     readonly #subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
-    readonly #waitForChange: (request: Request) => Promise<void>;
+    readonly #waitForChange: ApiTransport["waitForChange"];
+    readonly #waitForBridge: ApiTransport["waitForBridge"];
     readonly readBot: ManagementApi["readBot"];
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
@@ -252,7 +253,8 @@ export class BotChatApi {
         readonly projectId: string;
         readonly getToken: (signal: AbortSignal) => Promise<string | null>;
         readonly subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
-        readonly waitForChange: (request: Request) => Promise<void>;
+        readonly waitForChange: ApiTransport["waitForChange"];
+        readonly waitForBridge: ApiTransport["waitForBridge"];
     }) {
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
         this.#projectId = v.parse(identifier, options.projectId);
@@ -260,9 +262,11 @@ export class BotChatApi {
         this.#getToken = options.getToken;
         this.#subscribe = options.subscribe;
         this.#waitForChange = options.waitForChange;
+        this.#waitForBridge = options.waitForBridge;
         const management = new ManagementApi(options);
         this.readBot = management.readBot;
     }
+    readonly waitForBridge = async (signal: AbortSignal): Promise<void> => await this.#waitForBridge(signal);
     readonly close = (): void => {
         for (const transport of this.#sessionTransports.values()) {
             transport.close();
@@ -417,21 +421,11 @@ export class BotChatApi {
     readonly agentSettings = async (
         botId: string,
         agentRef: string,
-        refresh: boolean,
         signal: AbortSignal,
     ): Promise<AgentSettingsResult> => {
         signal.throwIfAborted();
         const requestedBotId = v.parse(identifier, botId);
         const requestedAgentRef = v.parse(identifier, agentRef);
-        const cacheKey = JSON.stringify([requestedBotId, requestedAgentRef]);
-        if (refresh) {
-            this.#agentSettingsCache.delete(cacheKey);
-        } else {
-            const cached = this.#agentSettingsCache.get(cacheKey);
-            if (cached !== undefined) {
-                return cached;
-            }
-        }
         const result = v.parse(
             v.object({ settings: v.unknown() }),
             await this.#request(requestedBotId, "agent-settings", { agentRef: requestedAgentRef }, signal),
@@ -446,7 +440,6 @@ export class BotChatApi {
                         : defaultValue,
             })),
         };
-        this.#agentSettingsCache.set(cacheKey, settings);
         return settings;
     };
     readonly runtimeConfiguration = async (botId: string, parent: AbortSignal): Promise<BotRuntimeConfiguration> =>
@@ -459,6 +452,7 @@ export class BotChatApi {
         botId: string,
         resource: "setup/runtimes" | "workspace",
         parent: AbortSignal,
+        onReady?: (snapshot: ApiResponseSnapshot) => void,
     ) => {
         const signal = AbortSignal.any([parent, AbortSignal.timeout(10 * 60 * 1000)]);
         const token = await this.#getToken(signal);
@@ -473,12 +467,27 @@ export class BotChatApi {
                 ),
                 { method: "POST", headers: { authorization: `Bearer ${token}` }, signal },
             ),
+            onReady,
         );
     };
     readonly waitForSetupChange = async (botId: string, parent: AbortSignal): Promise<void> =>
         await this.#waitForBotChange(botId, "setup/runtimes", parent);
-    readonly waitForRuntimeConfigurationChange = async (botId: string, parent: AbortSignal): Promise<void> =>
-        await this.#waitForBotChange(botId, "workspace", parent);
+    readonly waitForRuntimeConfigurationChange = async (
+        botId: string,
+        parent: AbortSignal,
+        onReady?: (configuration: BotRuntimeConfiguration) => void,
+    ): Promise<void> =>
+        await this.#waitForBotChange(
+            botId,
+            "workspace",
+            parent,
+            onReady === undefined
+                ? undefined
+                : (snapshot) => {
+                      const value = this.#readResponse(snapshot, parent);
+                      onReady(v.parse(runtimeConfigurationSchema, value));
+                  },
+        );
     readonly nativeSessions = async (
         botId: string,
         runtimeId: string,
@@ -624,15 +633,26 @@ export class BotChatApi {
                 },
             ),
         );
+        let responseBody: string;
+        try {
+            responseBody = await response.text();
+        } catch {
+            signal.throwIfAborted();
+            throw new CloudApiError("CHAT_UNAVAILABLE", "Chat returned an invalid response.");
+        }
+        return this.#readResponse({ status: response.status, headers: response.headers, body: responseBody }, signal);
+    };
+    readonly #readResponse = (response: ApiResponseSnapshot, signal: AbortSignal): unknown => {
+        signal.throwIfAborted();
         let value: unknown;
         try {
-            value = await response.json();
+            value = JSON.parse(response.body);
         } catch {
             signal.throwIfAborted();
             throw new CloudApiError("CHAT_UNAVAILABLE", "Chat returned an invalid response.");
         }
         signal.throwIfAborted();
-        if (!response.ok) {
+        if (response.status < 200 || response.status >= 300) {
             const parsed = v.safeParse(v.object({ error: v.object({ code: v.string(), message: v.string() }) }), value);
             throw new CloudApiError(
                 parsed.success ? parsed.output.error.code : "CHAT_UNAVAILABLE",

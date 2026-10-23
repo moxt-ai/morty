@@ -1,6 +1,6 @@
 import type { ExecutionContext } from "../../components/chat/execution-context.ts";
 import type { BotRuntimeConfiguration } from "../../services/chat/bot-chat-api.ts";
-import type { BotChatHomeStore } from "./bot-chat-home-store.ts";
+import { type BotChatHomeStore, botConnectionStatus } from "./bot-chat-home-store.ts";
 import { directoryName } from "./directory-name.ts";
 import type { DraftControlsStore } from "./draft-controls-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
@@ -23,9 +23,9 @@ export function pendingExecutionContext(
         directoryPlaceholder: loading ? "Loading…" : "Unknown",
         connection: loading
             ? "Connecting"
-            : home.selection.kind === "failed" || home.view.kind === "failed" || home.view.kind === "connection-failed"
+            : home.selection.kind === "failed" || home.view.kind === "failed"
               ? "Unavailable"
-              : home.connectionStatus.label,
+              : botConnectionStatus(home).label,
     };
     if (home.selection.kind !== "draft" || home.view.kind !== "active") {
         return base;
@@ -65,6 +65,7 @@ export function sessionExecutionContext(
     };
     switch (connection.kind) {
         case "loading":
+        case "session-loading-after-create":
             return { ...base, connection: "Connecting" };
         case "ready":
             return { ...base, connection: "Connected" };

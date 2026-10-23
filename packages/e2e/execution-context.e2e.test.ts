@@ -18,12 +18,12 @@ for (const viewport of [
         await runtime.openPairedChat();
         const context = page.getByRole("region", { name: "Execution context" });
         await expect(page.getByRole("button", { name: `Switch computer, ${machineName}` })).toContainText("Online");
-        await expect(context).toContainText("Claude Code");
-        await expect(context.getByRole("status", { name: "Connection" })).toHaveText("Connected");
+        await expect(context).toContainText(machineName);
+        await expect(page.getByRole("status", { name: "Connection" })).toHaveText("Connected");
         await page.getByRole("textbox", { name: "Message" }).fill("Verify execution context");
         await page.getByRole("button", { name: "Send message" }).click();
         await expect(page.getByRole("article", { name: "Agent response" })).toBeVisible();
-        await expect(context.getByRole("status", { name: "Connection" })).toHaveText("Connected");
+        await expect(page.getByRole("status", { name: "Connection" })).toHaveText("Connected");
         const box = await context.boundingBox();
         expect(box).not.toBeNull();
         if (box === null) {
@@ -33,15 +33,17 @@ for (const viewport of [
         expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
         expect(box.height).toBeLessThanOrEqual(48);
-        await expect(context.getByText("workspace", { exact: true })).toBeVisible();
         const details = context.getByRole("button", { name: "Show execution details" });
-        await expect(details).toHaveAccessibleDescription(/Claude Code.*workspace/);
+        await expect(details).toHaveAccessibleDescription(new RegExp(machineName));
         const target = await details.boundingBox();
-        expect(target?.height).toBeGreaterThanOrEqual(44);
+        // The compact header uses the 24px minimum pointer target; the
+        // Agent and complete directory are available in its details panel.
+        expect(target?.height).toBeGreaterThanOrEqual(24);
         await details.click();
         const dialog = page.getByRole("dialog", { name: "Execution details", exact: true });
         await expect(dialog).toBeVisible();
         await expect(dialog).toContainText(machineName);
+        await expect(dialog).toContainText("Claude Code");
         const fullPath = await dialog.getByTestId(dataTestId.executionDirectory).textContent();
         expect(fullPath).toMatch(/\/workspace$/);
         const detailBox = await dialog.boundingBox();
@@ -59,13 +61,14 @@ for (const viewport of [
         });
         await dialog.getByRole("button", { name: "Close execution details" }).click();
         await page.reload();
-        await expect(context).toContainText("Claude Code");
-        await expect(context.getByRole("status", { name: "Connection" })).toHaveText("Connected");
+        await expect(context).toContainText(machineName);
+        await expect(page.getByRole("status", { name: "Connection" })).toHaveText("Connected");
         await page.screenshot({
             animations: "disabled",
             path: testInfo.outputPath(`execution-context-${viewport.width}.png`),
         });
         await details.click();
+        await expect(dialog).toContainText("Claude Code");
         await expect(dialog.getByTestId(dataTestId.executionDirectory)).toHaveText(fullPath ?? "missing directory");
         await page.keyboard.press("Escape");
         await expect(dialog).toBeHidden();
