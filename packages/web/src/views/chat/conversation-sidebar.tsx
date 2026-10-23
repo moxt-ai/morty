@@ -1,22 +1,11 @@
-import {
-    Laptop,
-    List,
-    LoaderCircle,
-    LogOut,
-    MessageSquare,
-    RefreshCw,
-    Share2,
-    SquarePen,
-    UserRound,
-    Wifi,
-    X,
-} from "lucide-react";
-import { ContextMenu, DropdownMenu, Tooltip } from "radix-ui";
-import type { ReactNode } from "react";
+import { Laptop, List, LoaderCircle, LogOut, MessageSquare, RefreshCw, Share2, SquarePen, Wifi, X } from "lucide-react";
+import { ContextMenu, Tooltip } from "radix-ui";
+import type { MouseEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
 import { mortyThinScrollbarClassName } from "../../components/chat/chat-session-layout.ts";
 import { panelMotionClassName, usePanelPresence } from "../../components/chat/sidebar-panel-presence.ts";
+import { SidebarUserMenu } from "../../components/chat/sidebar-user-menu.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { MortyAlert } from "../../components/ui/morty-alert.tsx";
@@ -35,6 +24,13 @@ import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { ComputerSwitcher } from "./computer-switcher.tsx";
 import { IdentitySharing } from "./identity-sharing.tsx";
 import { NativeSessionDialog } from "./native-session-dialog.tsx";
+
+/** Releases pointer-click focus so the action's tooltip and focus ring do not linger. */
+function blurAfterPointerClick(event: MouseEvent<HTMLButtonElement>): void {
+    if (event.detail > 0) {
+        event.currentTarget.blur();
+    }
+}
 
 function SidebarSessionOption({
     label,
@@ -479,7 +475,10 @@ export function ConversationSidebar({
                                             aria-label="New Session"
                                             className="size-10 shrink-0 justify-center rounded-lg px-0 text-copy-secondary"
                                             data-testid={dataTestId.newConversation}
-                                            onClick={onNewConversation}
+                                            onClick={(event) => {
+                                                blurAfterPointerClick(event);
+                                                onNewConversation();
+                                            }}
                                             size="icon"
                                             variant="ghost"
                                         >
@@ -490,7 +489,10 @@ export function ConversationSidebar({
                                         <Button
                                             aria-label="Open Session"
                                             className="size-10 shrink-0 justify-center rounded-lg px-0 text-copy-secondary"
-                                            onClick={dialogs.getState().openNativeDialog}
+                                            onClick={(event) => {
+                                                blurAfterPointerClick(event);
+                                                dialogs.getState().openNativeDialog();
+                                            }}
                                             size="icon"
                                             variant="ghost"
                                         >
@@ -571,7 +573,10 @@ export function ConversationSidebar({
                                             aria-label={refreshing ? "Refreshing sessions" : "Refresh sessions"}
                                             aria-busy={refreshing}
                                             disabled={refreshing}
-                                            onClick={() => workspace.refreshDirectory()}
+                                            onClick={(event) => {
+                                                blurAfterPointerClick(event);
+                                                workspace.refreshDirectory();
+                                            }}
                                         >
                                             <RefreshCw
                                                 className={`size-3.5 ${refreshing ? "animate-spin motion-reduce:animate-none" : ""}`}
@@ -635,56 +640,16 @@ export function ConversationSidebar({
                                 </nav>
                             )}
                             {desktop && access.state.kind !== "ended" ? (
-                                <DropdownMenu.Root>
-                                    <SidebarActionTooltip label="User menu" side="top">
-                                        <DropdownMenu.Trigger asChild>
-                                            <Button
-                                                aria-label="User menu"
-                                                className="shrink-0 rounded-full border border-white bg-black/[0.08] text-copy-secondary hover:bg-black/[0.12] active:bg-black/[0.16] data-[state=open]:bg-black/[0.16]"
-                                                data-testid={dataTestId.userMenu}
-                                                disabled={access.state.kind === "loading"}
-                                                size="icon"
-                                                variant="ghost"
-                                            >
-                                                {access.state.kind === "loading" ? (
-                                                    <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-                                                ) : (
-                                                    <UserRound aria-hidden="true" className="size-4" />
-                                                )}
-                                            </Button>
-                                        </DropdownMenu.Trigger>
-                                    </SidebarActionTooltip>
-                                    <DropdownMenu.Portal>
-                                        <DropdownMenu.Content
-                                            align="start"
-                                            className="z-[110] min-w-52 rounded-lg border border-border bg-background p-1 text-sm text-foreground shadow-lg"
-                                            side="top"
-                                            sideOffset={6}
-                                        >
-                                            <DropdownMenu.Item
-                                                className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
-                                                onSelect={measureNetwork}
-                                            >
-                                                <Wifi aria-hidden="true" className="size-4" />
-                                                Network latency
-                                            </DropdownMenu.Item>
-                                            <DropdownMenu.Separator className="my-1 h-px bg-black/[0.06]" />
-                                            <DropdownMenu.Item
-                                                className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-destructive outline-none data-[highlighted]:bg-destructive/10"
-                                                data-testid={dataTestId.endRemoteAccess}
-                                                disabled={
-                                                    access.state.kind === "loading" || access.state.kind === "ending"
-                                                }
-                                                onSelect={() => {
-                                                    void access.requestEnd(workspace.operationsSignal());
-                                                }}
-                                            >
-                                                <LogOut aria-hidden="true" className="size-4" />
-                                                End current access
-                                            </DropdownMenu.Item>
-                                        </DropdownMenu.Content>
-                                    </DropdownMenu.Portal>
-                                </DropdownMenu.Root>
+                                <SidebarUserMenu
+                                    disabled={access.state.kind === "loading"}
+                                    endAccessDisabled={
+                                        access.state.kind === "loading" || access.state.kind === "ending"
+                                    }
+                                    onEndAccess={() => {
+                                        void access.requestEnd(workspace.operationsSignal());
+                                    }}
+                                    onMeasureNetwork={measureNetwork}
+                                />
                             ) : null}
                             {desktop ? (
                                 <div className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -693,7 +658,10 @@ export function ConversationSidebar({
                                             aria-label="Continue on another device"
                                             className="size-8! min-h-8! shrink-0 justify-center rounded-lg px-0"
                                             data-testid={dataTestId.shareIdentity}
-                                            onClick={dialogs.getState().openSharing}
+                                            onClick={(event) => {
+                                                blurAfterPointerClick(event);
+                                                dialogs.getState().openSharing();
+                                            }}
                                             size="icon"
                                             variant="ghost"
                                         >
