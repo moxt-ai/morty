@@ -9,6 +9,7 @@ import * as v from "valibot";
 import { expect, test } from "vitest";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
+import worker from "../src/application.ts";
 import { createIdentityFixture } from "./support/identity-fixture.ts";
 
 interface SetupModule {
@@ -700,3 +701,100 @@ test("Given a daemon upgrade is still switching releases when its budget expires
         expect(runtime.daemonRelease()).toBe("current");
     });
 });
+
+test("Given two shared links and redeemed access, When the local owner revokes all access, Then previous links and credentials fail while local setup and another machine remain usable", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "morty-revoke-access-"));
+    const documents = join(directory, "Documents");
+    const configurationDirectory = join(documents, "morty");
+    await mkdir(configurationDirectory, { recursive: true, mode: 0o700 });
+    const fixture = await createIdentityFixture({ listenOnLoopback: true });
+    const signal = AbortSignal.timeout(30000);
+    try {
+        const owner = await fixture.createAnonymousUser();
+        const other = await fixture.createAnonymousUser();
+        const configuration = JSON.stringify({
+            base_url: fixture.origin,
+            user_token: owner.token,
+            project_id: owner.projectId,
+        });
+        await writeFile(join(configurationDirectory, "config.json"), configuration, { mode: 0o600 });
+        const request = (projectId: string, path: string, token: string, method = "GET") =>
+            fetch(`${fixture.origin}/morty/api/projects/${projectId}${path}`, {
+                method,
+                headers: { authorization: `Bearer ${token}` },
+                signal,
+            });
+        const share = async (projectId: string, token: string) => {
+            const response = await request(projectId, "/identity/transfers", token, "POST");
+            expect(response.status).toBe(201);
+            return v.parse(v.object({ url: v.string() }), await response.json()).url;
+        };
+        const redeem = (url: string) =>
+            worker.fetch(
+                new Request(`${fixture.origin}/morty/api/identity/transfers/redeem`, {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ code: new URL(url).hash.slice("#code=".length) }),
+                    signal,
+                }),
+                fixture.environment(fixture.origin),
+            );
+        const links = [await share(owner.projectId, owner.token), await share(owner.projectId, owner.token)];
+        const tokens: string[] = [];
+        for (const link of links) {
+            for (let index = 0; index < 2; index++) {
+                const response = await redeem(link);
+                expect(response.status).toBe(200);
+                tokens.push(v.parse(v.object({ token: v.string() }), await response.json()).token);
+            }
+        }
+        const remote = v.parse(v.string(), tokens[0]);
+        const recovery = await request(owner.projectId, "/identity/recovery-token", remote, "POST");
+        expect(recovery.status).toBe(201);
+        const recoveryToken = v.parse(v.object({ token: v.string() }), await recovery.json()).token;
+        for (const token of [remote, recoveryToken]) {
+            expect((await request(owner.projectId, "/identity/revoke-all-access", token, "POST")).status).toBe(403);
+        }
+        const otherLink = await share(other.projectId, other.token);
+        const mismatchEvents: Readonly<Record<string, unknown>>[] = [];
+        expect(
+            await runSetup(["revoke-all-access", "--base-url", "http://127.0.0.1:1"], {
+                documents,
+                signal,
+                emit: (event) => mismatchEvents.push(event),
+            }),
+        ).toBe(1);
+        expect(mismatchEvents.at(-1)).toMatchObject({ error: { code: "LOCAL_IDENTITY_REQUIRED" } });
+        const events: Readonly<Record<string, unknown>>[] = [];
+        expect(
+            await runSetup(["revoke-all-access"], {
+                documents,
+                signal,
+                emit: (event) => events.push(event),
+            }),
+        ).toBe(0);
+        expect(events.at(-1)).toMatchObject({ status: "access_revoked", projectId: owner.projectId });
+        expect(JSON.stringify(events)).not.toContain(owner.token);
+        for (const link of links) {
+            expect((await redeem(link)).status).toBe(410);
+        }
+        for (const token of [...tokens, recoveryToken]) {
+            expect((await request(owner.projectId, "/session", token)).status).toBe(401);
+            expect((await request(owner.projectId, "/identity/transfers", token, "POST")).status).toBe(401);
+        }
+        expect(await readFile(join(configurationDirectory, "config.json"), "utf8")).toBe(configuration);
+        expect((await request(owner.projectId, "/session", owner.token)).status).toBe(200);
+        expect((await redeem(otherLink)).status).toBe(200);
+        expect(
+            await runSetup(["revoke-all-access", "--base-url", fixture.origin], {
+                documents,
+                signal,
+                emit: () => undefined,
+            }),
+        ).toBe(0);
+        expect((await redeem(await share(owner.projectId, owner.token))).status).toBe(200);
+    } finally {
+        await fixture.close();
+        await rm(directory, { recursive: true, force: true });
+    }
+}, 30000);

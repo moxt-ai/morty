@@ -104,6 +104,24 @@ export function createAuthenticationRoutes() {
                 return json(identity);
             },
         )
+        .post("/identity/revoke-all-access", async (context) => {
+            const result = await context.env.services.authentication.revokeAllAccess(
+                context.get("bearerToken"),
+                context.req.raw.signal,
+            );
+            switch (result.kind) {
+                case "revoked":
+                    return json({ status: "access_revoked" }, 200, { "Cache-Control": "no-store" });
+                case "unauthenticated":
+                    throw new ManagementError("UNAUTHENTICATED", "Local identity is required.", 401);
+                case "forbidden":
+                    throw new ManagementError(
+                        "LOCAL_IDENTITY_REQUIRED",
+                        "Use the original identity saved on the machine to revoke all access.",
+                        403,
+                    );
+            }
+        })
         .delete("/identity/remote-access", async (context) => {
             const result = await context.env.services.authentication.endRemoteAccess(
                 context.get("bearerToken"),

@@ -79,11 +79,15 @@ interface SetupIdentity {
     readonly context: Context;
 }
 
-interface Options {
+interface SetupOptions {
     readonly base: string;
     readonly cwd: string;
     readonly harness: string;
     readonly sessionId: string;
+}
+
+interface RevokeAllAccessOptions {
+    readonly base: string | undefined;
 }
 
 function errorCode(cause: unknown): unknown {
@@ -398,10 +402,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return value;
     }
 
-    function readOptions(): Options {
-        const { values, positionals } = parseArgs({
-            args: [...args],
-            allowPositionals: true,
+    function readSetupOptions(commandArgs: readonly string[]): SetupOptions {
+        const { values } = parseArgs({
+            args: [...commandArgs],
             options: {
                 token: { type: "string" },
                 cwd: { type: "string" },
@@ -410,28 +413,35 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 "session-id": { type: "string" },
             },
         });
-        if (positionals.length !== 1 || positionals[0] !== "setup") {
-            fail("INVALID_ARGUMENTS");
+        if (values["base-url"] === undefined) {
+            fail("BASE_URL_REQUIRED");
         }
         if (values.harness === undefined) {
             fail("HARNESS_REQUIRED");
         }
-        if (values["base-url"] === undefined) {
-            fail("BASE_URL_REQUIRED");
-        }
         if (values.cwd === undefined) {
             fail("WORKING_DIRECTORY_REQUIRED");
         }
-        const base = origin(values["base-url"]);
-        const cwd = text(values.cwd);
-        const harness = identifier(values.harness);
         if (values.token !== undefined) {
             fail("INVALID_ARGUMENTS");
         }
         if (values["session-id"] === undefined) {
             fail("SESSION_ID_REQUIRED");
         }
-        return { base, cwd, harness, sessionId: identifier(values["session-id"]) };
+        return {
+            base: origin(values["base-url"]),
+            cwd: text(values.cwd),
+            harness: identifier(values.harness),
+            sessionId: identifier(values["session-id"]),
+        };
+    }
+
+    function readRevokeAllAccessOptions(commandArgs: readonly string[]): RevokeAllAccessOptions {
+        const { values } = parseArgs({
+            args: [...commandArgs],
+            options: { "base-url": { type: "string" } },
+        });
+        return { base: values["base-url"] === undefined ? undefined : origin(values["base-url"]) };
     }
 
     async function prepareIdentity(context: Context): Promise<SetupIdentity> {
@@ -908,7 +918,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return qrPath;
     }
 
-    async function finishSetup(context: Context, runtime: RuntimeSelection, options: Options) {
+    async function finishSetup(context: Context, runtime: RuntimeSelection, options: SetupOptions) {
         await waitForReadiness(context, runtime);
         const botId = context.config["bot_id"];
         const workingDirectory = text(context.config["workspace"]);
@@ -960,12 +970,42 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         });
     }
 
-    async function main() {
-        const options = readOptions();
-        const base = options.base;
+    async function revokeAllAccess(options: RevokeAllAccessOptions) {
+        const directory = await prepareDirectory(await resolveDocumentsDirectory(host.documents, signal));
+        let config: Readonly<Record<string, unknown>>;
+        try {
+            config = await readPrivateJson(join(directory, "config.json"));
+        } catch (cause) {
+            if (errorCode(cause) === "ENOENT") {
+                fail("LOCAL_IDENTITY_REQUIRED");
+            }
+            throw cause;
+        }
+        if (config["user_token"] === undefined || config["project_id"] === undefined) {
+            fail("LOCAL_IDENTITY_REQUIRED");
+        }
+        const base = origin(config["base_url"]);
+        // Never send the saved identity to a different origin, even when explicitly requested.
+        if (options.base !== undefined && options.base !== base) {
+            fail("LOCAL_IDENTITY_REQUIRED");
+        }
+        const context: Context = { directory, base, config };
+        const revoked = await request(context, "/identity/revoke-all-access", {});
+        if (revoked["status"] !== "access_revoked") {
+            fail("INVALID_RESPONSE");
+        }
+        emit({
+            status: "access_revoked",
+            projectId: identifier(context.config["project_id"]),
+            message:
+                "Previous sharing links and other Morty credentials have been revoked. The local identity is retained. Existing session connections may remain usable until their access expires.",
+        });
+    }
+
+    async function setup(options: SetupOptions) {
         const cwd = await resolveWorkingDirectory(options.cwd);
         const directory = await prepareDirectory(await resolveDocumentsDirectory(host.documents, signal));
-        let context: Context = await loadConfiguration(directory, base);
+        let context = await loadConfiguration(directory, options.base);
         const identity = await prepareIdentity(context);
         context = identity.context;
         const verified = await verifyIdentityAndBot(context);
@@ -984,7 +1024,18 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     try {
-        await main();
+        const action = args[0];
+        const commandArgs = args.slice(1);
+        switch (action) {
+            case "setup":
+                await setup(readSetupOptions(commandArgs));
+                break;
+            case "revoke-all-access":
+                await revokeAllAccess(readRevokeAllAccessOptions(commandArgs));
+                break;
+            default:
+                fail("INVALID_ARGUMENTS");
+        }
         return 0;
     } catch (cause) {
         emit({

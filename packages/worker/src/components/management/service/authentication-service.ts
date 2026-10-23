@@ -40,7 +40,7 @@ export class AuthenticationService {
         if (userId === null) {
             return null;
         }
-        return await this.identities.createTransfer(userId, Date.now(), signal);
+        return await this.identities.createTransfer(userId, token, Date.now(), signal);
     };
 
     readonly createRecoveryToken = async (token: string | undefined, signal: AbortSignal): Promise<string | null> => {
@@ -51,11 +51,30 @@ export class AuthenticationService {
         if (userId === null) {
             return null;
         }
-        return await this.identities.createRecoveryToken(userId, Date.now(), signal);
+        return await this.identities.createRecoveryToken(userId, token, Date.now(), signal);
     };
 
     readonly redeemTransfer = async (code: string, signal: AbortSignal): Promise<AnonymousIdentity | null> =>
         await this.identities.redeemTransfer(code, Date.now(), signal);
+
+    readonly revokeAllAccess = async (
+        token: string | undefined,
+        signal: AbortSignal,
+    ): Promise<{ readonly kind: "revoked" | "unauthenticated" | "forbidden" }> => {
+        if (token === undefined) {
+            return { kind: "unauthenticated" };
+        }
+        const userId = await this.identities.authenticateAnonymous(token, signal);
+        if (userId === null) {
+            return { kind: "unauthenticated" };
+        }
+        // Recovery and shared browser credentials must not gain local administration rights.
+        if (!token.startsWith("mobius_anon_v2_") || !(await this.identities.isLocalCredential(token, userId, signal))) {
+            return { kind: "forbidden" };
+        }
+        await this.identities.revokeOtherAccess(userId, token, Date.now(), signal);
+        return { kind: "revoked" };
+    };
 
     readonly endRemoteAccess = async (token: string | undefined, signal: AbortSignal) => {
         if (token === undefined) {
