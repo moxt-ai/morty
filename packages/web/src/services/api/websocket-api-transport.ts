@@ -44,16 +44,25 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 export const CHAT_BRIDGE_HANDSHAKE_TIMEOUT_MILLISECONDS = 10_000;
 
 /**
+ * Whether a bridge failure can still heal on its own. An ordinary drop keeps
+ * the bounded background retry, so a caller may wait for the bridge to return;
+ * an exhausted budget has stopped retrying, so waiting is terminal until a user
+ * action dials again.
+ */
+export type ChatBridgeErrorCode = "bridge_unavailable" | "bridge_exhausted";
+
+/**
  * A bridge failure that crosses the transport boundary. Requests and watches
  * receive it at their call site so product workflows handle it like any other
  * failed API call; subscriptions recover without surfacing it.
  */
 export class ChatBridgeError extends Error {
-    /** One stable code: every bridge failure means the same unavailable transport. */
-    readonly code = "bridge_unavailable";
-    constructor(message: string) {
+    /** One stable code per outcome: callers branch on it, never on the message. */
+    readonly code: ChatBridgeErrorCode;
+    constructor(message: string, code: ChatBridgeErrorCode = "bridge_unavailable") {
         super(message);
         this.name = "ChatBridgeError";
+        this.code = code;
     }
 }
 
@@ -61,8 +70,20 @@ export function isChatBridgeError(cause: unknown): cause is ChatBridgeError {
     return cause instanceof ChatBridgeError;
 }
 
+/**
+ * Whether a bridge failure is the terminal exhausted-budget outcome. A workflow
+ * must not send this back into a wait-for-bridge loop: the transport has stopped
+ * dialing, so the wait can only end in a user-visible failure with an explicit
+ * retry action.
+ */
+export function isBridgeExhausted(cause: unknown): boolean {
+    return isChatBridgeError(cause) && cause.code === "bridge_exhausted";
+}
+
 const bridgeClosed = (): ChatBridgeError => new ChatBridgeError("The WebSocket to Morty is closed.");
 const bridgeUnavailable = (): ChatBridgeError => new ChatBridgeError("The WebSocket to Morty could not connect.");
+const bridgeExhausted = (): ChatBridgeError =>
+    new ChatBridgeError("The WebSocket to Morty stopped reconnecting.", "bridge_exhausted");
 
 type BridgeState =
     | { readonly kind: "closed" }
@@ -125,6 +146,7 @@ export class WebSocketApiTransport {
     #desired = false;
     #disposed = false;
     #reconnectAttempt = 0;
+    #reconnectExhausted = false;
     #reconnectTimer: { readonly cancel: () => void } | null = null;
 
     constructor(origin: string, clock: Clock = systemClock) {
@@ -144,17 +166,27 @@ export class WebSocketApiTransport {
         // immediately instead of failing fast while a timer is pending.
         this.#cancelReconnect();
         this.#reconnectAttempt = 0;
+        this.#reconnectExhausted = false;
     };
 
     /**
      * Resolves once the bridge is connected, so a workflow whose background
      * watch was dropped with the socket can re-arm it. It never re-issues the
      * caller's request: the caller decides what is safe to repeat.
+     *
+     * Once the reconnect budget is spent the transport no longer dials, so a
+     * wait can only end in the caller's hands. This rejects immediately with
+     * the terminal `bridge_exhausted` code rather than parking a waiter nothing
+     * will ever settle, so the waiting workflow can move to a recoverable
+     * failure with an explicit retry action.
      */
     readonly waitForBridge = async (signal: AbortSignal): Promise<void> => {
         signal.throwIfAborted();
         if (this.#disposed) {
             throw bridgeClosed();
+        }
+        if (this.#reconnectExhausted) {
+            throw bridgeExhausted();
         }
         if (this.#state.kind === "connected" && this.#state.socket.readyState === WebSocket.OPEN) {
             return;
@@ -503,6 +535,7 @@ export class WebSocketApiTransport {
             return;
         }
         if (this.#reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
+            this.#exhaustReconnect();
             return;
         }
         const delay =
@@ -522,6 +555,7 @@ export class WebSocketApiTransport {
                 this.#reconnectTimer = null;
                 if (this.#state.kind === "connected") {
                     this.#reconnectAttempt = 0;
+                    this.#reconnectExhausted = false;
                     return;
                 }
                 void this.#dial();
@@ -542,12 +576,33 @@ export class WebSocketApiTransport {
         if (!this.#desired || this.#disposed) {
             return;
         }
-        // The budget is spent: stop background retries. The next user action
+        // The budget is spent: stop background retries and end every bridge
+        // wait, so a parked workflow moves to a recoverable failure instead of
+        // waiting on a dial that will never happen. The next user action still
         // dials again through the normal call path.
         if (this.#reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
+            this.#exhaustReconnect();
             return;
         }
         this.#scheduleReconnect();
+    };
+
+    /**
+     * Stops reconnecting and tells callers waiting for the bridge, so a stalled
+     * page can offer an explicit retry instead of waiting forever. Idempotent:
+     * later failed attempts and waits reuse the same terminal outcome until a
+     * successful connection clears it.
+     */
+    readonly #exhaustReconnect = (): void => {
+        if (this.#reconnectExhausted) {
+            return;
+        }
+        this.#reconnectExhausted = true;
+        const cause = bridgeExhausted();
+        for (const waiter of [...this.#bridgeWaiters]) {
+            this.#bridgeWaiters.delete(waiter);
+            waiter.reject(cause);
+        }
     };
 
     readonly #cancelReconnect = (): void => {
@@ -683,6 +738,7 @@ export class WebSocketApiTransport {
                 // while the attempt was in flight.
                 this.#cancelReconnect();
                 this.#reconnectAttempt = 0;
+                this.#reconnectExhausted = false;
                 this.#notifyConnected();
                 this.#replaySubscriptions(socket);
                 resolve(socket);

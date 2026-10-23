@@ -1,7 +1,7 @@
 import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
 import { createComposerAttachmentStore } from "../../components/chat/composer-attachment-store.ts";
-import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
+import { isBridgeExhausted, isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import type {
     BotChatApi,
     BotRuntimeConfiguration,
@@ -272,6 +272,36 @@ export const createBotChatHomeStore = (
                     }));
                     onRestart();
                 };
+                /**
+                 * The reconnect budget is spent, so the transport no longer
+                 * dials on its own. Waiting for the bridge again would spin, so
+                 * the page moves to a terminal state with a visible recovery
+                 * action instead. A load the user is still waiting on keeps its
+                 * target and becomes the operable failed view, whose Reconnect
+                 * dials again on demand. A conversation already on screen keeps
+                 * its content — its own Session reconnect owns recovery — and the
+                 * exhausted watch simply stops instead of parking forever.
+                 */
+                const failBridgeExhausted = (cause: unknown): void => {
+                    console.error("The Chat WebSocket bridge stopped reconnecting.", cause);
+                    const message = formatError(cause, "Chat is unavailable.");
+                    const current = get();
+                    if (current.selection.kind === "ready") {
+                        // Content is on screen and the Session pane keeps its own
+                        // retry; do not blank the conversation for a dropped
+                        // background watch.
+                        return;
+                    }
+                    const failedSelection =
+                        current.selection.kind === "loading"
+                            ? transitionConversationSelection(current.selection, {
+                                  kind: "session-load-failed",
+                                  message,
+                                  target: current.selection.target,
+                              })
+                            : current.selection;
+                    set({ selection: failedSelection, view: { kind: "failed", message } });
+                };
                 const watchRuntimeConfigurationChanges = async (): Promise<void> => {
                     while (true) {
                         try {
@@ -375,6 +405,14 @@ export const createBotChatHomeStore = (
                             watchSignal.throwIfAborted();
                             if (!isChatBridgeError(cause)) {
                                 throw cause;
+                            }
+                            // The budget is spent: the transport will not dial on
+                            // its own, so re-entering the wait would spin. Move
+                            // to the operable failure whose Reconnect dials
+                            // again on demand.
+                            if (isBridgeExhausted(cause)) {
+                                failBridgeExhausted(cause);
+                                return;
                             }
                             console.error("The Chat WebSocket bridge failed to complete a request.", cause);
                             dropped = true;
@@ -560,7 +598,9 @@ export const createBotChatHomeStore = (
                         // the next user action reports its own failure; a load
                         // the user is still waiting on must not strand the page,
                         // so it becomes an operable failure state that keeps its
-                        // target.
+                        // target. A spent reconnect budget never reaches here:
+                        // it only comes from waitForBridge, which the recovery
+                        // loop below turns into its own terminal state.
                         console.error("The Chat WebSocket bridge failed to complete a request.", cause);
                         const message = formatError(cause, "Chat is unavailable.");
                         const current = get();

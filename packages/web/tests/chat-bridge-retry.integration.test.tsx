@@ -5,6 +5,7 @@ import { afterEach, expect, test } from "vitest";
 import {
     CHAT_BRIDGE_HANDSHAKE_TIMEOUT_MILLISECONDS,
     ChatBridgeError,
+    isBridgeExhausted,
     WebSocketApiTransport,
 } from "../src/services/api/websocket-api-transport.ts";
 import { TestClock } from "./infra/test-clock.ts";
@@ -182,5 +183,59 @@ test("Given a bridge whose handshake never completes, When the retry budget is c
     await waitForArmedTimer(clock);
     clock.advanceBy(CHAT_BRIDGE_HANDSHAKE_TIMEOUT_MILLISECONDS);
     await expect(retrying).rejects.toBeInstanceOf(ChatBridgeError);
+    transport.dispose();
+});
+
+/**
+ * Boundary contract for the transport: spending the retry budget is terminal for
+ * anything parked on the bridge. A workflow that dropped a watch and is waiting
+ * for the bridge to return must be told the transport gave up, not left to wait
+ * on a dial that will never happen.
+ */
+test("Given a bridge whose handshake never completes, When the retry budget is spent, Then bridge waiters are told instead of waiting forever", {
+    timeout: 30_000,
+}, async () => {
+    endpoint = await bridgeEndpoint({ upgradeAfter: Number.POSITIVE_INFINITY });
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const transport = new WebSocketApiTransport(endpoint.origin, clock);
+    transport.open();
+    transport.disconnect();
+
+    // A waiter parked while the budget is still open must survive every drop
+    // until the budget is actually spent, exactly like a real recovery loop.
+    const parkedSignal = new AbortController().signal;
+    const parked = transport.waitForBridge(parkedSignal);
+    let parkedSettled = false;
+    void parked.then(
+        () => {
+            parkedSettled = true;
+        },
+        () => {
+            parkedSettled = true;
+        },
+    );
+
+    for (const [index, delay] of RECONNECT_DELAYS_MILLISECONDS.entries()) {
+        clock.advanceBy(delay);
+        await waitForArmedTimer(clock);
+        clock.advanceBy(CHAT_BRIDGE_HANDSHAKE_TIMEOUT_MILLISECONDS);
+        // The waiter is only told once the budget is really spent, not on the
+        // way down: every attempt but the last keeps it parked.
+        if (index < RECONNECT_DELAYS_MILLISECONDS.length - 1) {
+            await Promise.resolve();
+            expect(parkedSettled).toBe(false);
+        }
+    }
+
+    // The tenth failure spends the budget and tells the parked waiter it is
+    // terminal, rather than leaving it waiting forever. This is the reviewer's
+    // core concern: a workflow that dropped a watch and parked on the bridge
+    // must be told the transport gave up so it can surface a recovery action.
+    await expect(parked).rejects.toSatisfy(isBridgeExhausted);
+
+    // A waiter that arrives after exhaustion is refused immediately instead of
+    // parking on a bridge nothing will ever reconnect. Recovery from here is a
+    // user-initiated dial, covered end-to-end at the application boundary.
+    await expect(transport.waitForBridge(parkedSignal)).rejects.toSatisfy(isBridgeExhausted);
     transport.dispose();
 });
