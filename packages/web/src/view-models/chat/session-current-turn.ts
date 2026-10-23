@@ -36,10 +36,12 @@ export type CurrentTurnEvent =
     /** The service reports the command's turn ended; `failure` explains a failed one. */
     | { readonly kind: "ended"; readonly commandId: string; readonly failure: string | null }
     /**
-     * This pane gave up submitting the command: the service refused it, or its delivery is uncertain or failed.
+     * This pane's submission of the command ended without the service accepting it in reply: it was refused, its
+     * delivery is uncertain, failed or was discarded, or only an event showed the service has it. Whether the
+     * command's turn runs is the service's to report, so this ends only a turn the service has not reported running.
      * `failure` explains a failed submission.
      */
-    | { readonly kind: "submission-abandoned"; readonly commandId: string; readonly failure: string | null }
+    | { readonly kind: "submission-ended"; readonly commandId: string; readonly failure: string | null }
     /** Nothing runs any more, as when the Session closed or a reconnect found no running turn. */
     | { readonly kind: "nothing-running" }
     /** This browser sent the command at `sentAt`, which is when its work started. */
@@ -103,7 +105,7 @@ export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent
             };
         case "ended":
             return isCurrent(turn, event.commandId) ? endedTurn(event.commandId, event.failure) : turn;
-        case "submission-abandoned":
+        case "submission-ended":
             // The service's report that the command runs outranks this pane's account of its submission.
             return isCurrent(turn, event.commandId) && turn.submission.kind !== "accepted"
                 ? endedTurn(event.commandId, event.failure)

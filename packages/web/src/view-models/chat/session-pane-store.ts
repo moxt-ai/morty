@@ -841,15 +841,12 @@ export function createSessionPaneModel(options: {
                 if (outcome.kind === "delivery-unknown" && queued) {
                     options.onInitialMessageUnconfirmed?.({ commandId, displayPrompt, request: submission });
                 }
-                if (outcome.kind === "accepted" || outcome.kind === "delivered") {
-                    // A delivered command's turn was already reported running by the event that showed it.
-                    if (outcome.kind === "accepted") {
-                        updateTurn({ kind: "accepted", commandId, turnId: outcome.turn.turnId });
-                    }
+                if (outcome.kind === "accepted") {
+                    updateTurn({ kind: "accepted", commandId, turnId: outcome.turn.turnId });
                     set({ operation: finishPromptOperation(get().operation, commandId) });
                     return;
                 }
-                updateTurn({ kind: "submission-abandoned", commandId, failure: null });
+                updateTurn({ kind: "submission-ended", commandId, failure: null });
                 const restored = deriveTimeline();
                 set({
                     messages: restored.messages,
@@ -860,7 +857,7 @@ export function createSessionPaneModel(options: {
             } catch (cause) {
                 signal.throwIfAborted();
                 const message = formatError(cause, "The agent could not complete the message.");
-                updateTurn({ kind: "submission-abandoned", commandId, failure: message });
+                updateTurn({ kind: "submission-ended", commandId, failure: message });
                 set({ pendingInitialMessage: null, operation: { kind: "failed", message } });
                 announceActivity();
             }
@@ -1301,7 +1298,7 @@ export function createSessionPaneModel(options: {
                 if (commandId === null) {
                     return;
                 }
-                updateTurn({ kind: "submission-abandoned", commandId, failure: null });
+                updateTurn({ kind: "submission-ended", commandId, failure: null });
                 // Mirrors the delivery report: dropping this pane's retry path
                 // must also drop the home store's recovery copy, or a remount
                 // would submit the message the user just discarded.
@@ -1333,7 +1330,7 @@ export function createSessionPaneModel(options: {
                         updateTurn({ kind: "accepted", commandId: pending.commandId, turnId: outcome.turn.turnId });
                         return;
                     case "delivered":
-                        return;
+                        break;
                     case "rejected": {
                         const restoredAttachments = [
                             ...pending.request.images.map((image) => ({ kind: "image" as const, image })),
@@ -1354,7 +1351,7 @@ export function createSessionPaneModel(options: {
                     default:
                         return outcome satisfies never;
                 }
-                updateTurn({ kind: "submission-abandoned", commandId: pending.commandId, failure: null });
+                updateTurn({ kind: "submission-ended", commandId: pending.commandId, failure: null });
                 announceActivity();
             },
             queueDraft: async (signal) => {
