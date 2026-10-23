@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, ne, or, sql } from "drizzle-orm";
 import * as v from "valibot";
 import {
     anonymousCredential,
@@ -85,39 +85,124 @@ export class IdentityStorage {
         return row.success ? row.output.userId : null;
     };
 
-    readonly createTransfer = async (userId: string, now: number, signal: AbortSignal): Promise<IdentityTransfer> => {
+    readonly isLocalCredential = async (token: string, userId: string, signal: AbortSignal): Promise<boolean> => {
+        signal.throwIfAborted();
+        const row = await requireIdentityDatabase(this.#database)
+            .select({ id: anonymousCredential.id })
+            .from(anonymousCredential)
+            .where(
+                and(
+                    eq(anonymousCredential.tokenHash, await digest(token)),
+                    eq(anonymousCredential.userId, userId),
+                    eq(anonymousCredential.status, "active"),
+                    isNull(anonymousCredential.remoteTransferId),
+                ),
+            )
+            .get();
+        signal.throwIfAborted();
+        return row !== undefined;
+    };
+
+    readonly revokeOtherAccess = async (
+        userId: string,
+        token: string,
+        now: number,
+        signal: AbortSignal,
+    ): Promise<void> => {
+        signal.throwIfAborted();
+        const database = requireIdentityDatabase(this.#database);
+        const tokenHash = await digest(token);
+        await database.batch([
+            database
+                .update(continueLink)
+                .set({ revokedAt: now })
+                .where(and(eq(continueLink.userId, userId), isNull(continueLink.revokedAt))),
+            database
+                .update(anonymousCredential)
+                .set({ status: "revoked", revokedAt: now })
+                .where(
+                    and(
+                        eq(anonymousCredential.userId, userId),
+                        ne(anonymousCredential.tokenHash, tokenHash),
+                        eq(anonymousCredential.status, "active"),
+                    ),
+                ),
+        ]);
+        signal.throwIfAborted();
+    };
+
+    readonly createTransfer = async (
+        userId: string,
+        parentToken: string,
+        now: number,
+        signal: AbortSignal,
+    ): Promise<IdentityTransfer | null> => {
         signal.throwIfAborted();
         const code = createProjectCredential("mobius_transfer_v2", v.parse(v.string(), this.#projectId));
         const expiresAt = now + continueLinkLifetime;
-        await requireIdentityDatabase(this.#database)
+        // Check the issuing credential in the write itself so revocation cannot race issuance.
+        const database = requireIdentityDatabase(this.#database);
+        const result = await database
             .insert(continueLink)
-            .values({
-                id: `transfer_${crypto.randomUUID()}`,
-                codeHash: await digest(code),
-                userId,
-                expiresAt,
-                createdAt: now,
-            })
+            .select(
+                database
+                    .select({
+                        id: sql<string>`${`transfer_${crypto.randomUUID()}`}`.as("id"),
+                        codeHash: sql<string>`${await digest(code)}`.as("code_hash"),
+                        userId: anonymousCredential.userId,
+                        expiresAt: sql<number>`${expiresAt}`.as("expires_at"),
+                        claimNonce: sql<null>`null`.as("claim_nonce"),
+                        createdAt: sql<number>`${now}`.as("created_at"),
+                        revokedAt: sql<null>`null`.as("revoked_at"),
+                    })
+                    .from(anonymousCredential)
+                    .where(
+                        and(
+                            eq(anonymousCredential.userId, userId),
+                            eq(anonymousCredential.tokenHash, await digest(parentToken)),
+                            eq(anonymousCredential.status, "active"),
+                        ),
+                    ),
+            )
             .run();
         signal.throwIfAborted();
-        return { code, expiresAt };
+        return result.meta.changes === 1 ? { code, expiresAt } : null;
     };
 
-    readonly createRecoveryToken = async (userId: string, now: number, signal: AbortSignal): Promise<string> => {
+    readonly createRecoveryToken = async (
+        userId: string,
+        parentToken: string,
+        now: number,
+        signal: AbortSignal,
+    ): Promise<string | null> => {
         signal.throwIfAborted();
         const token = createProjectCredential("mobius_recovery_v1", v.parse(v.string(), this.#projectId));
-        await requireIdentityDatabase(this.#database)
+        const database = requireIdentityDatabase(this.#database);
+        const result = await database
             .insert(anonymousCredential)
-            .values({
-                id: `cred_${crypto.randomUUID()}`,
-                userId,
-                tokenHash: await digest(token),
-                status: "active",
-                createdAt: now,
-            })
+            .select(
+                database
+                    .select({
+                        id: sql<string>`${`cred_${crypto.randomUUID()}`}`.as("id"),
+                        userId: anonymousCredential.userId,
+                        tokenHash: sql<string>`${await digest(token)}`.as("token_hash"),
+                        status: sql<"active">`'active'`.as("status"),
+                        createdAt: sql<number>`${now}`.as("created_at"),
+                        revokedAt: sql<null>`null`.as("revoked_at"),
+                        remoteTransferId: sql<null>`null`.as("remote_transfer_id"),
+                    })
+                    .from(anonymousCredential)
+                    .where(
+                        and(
+                            eq(anonymousCredential.userId, userId),
+                            eq(anonymousCredential.tokenHash, await digest(parentToken)),
+                            eq(anonymousCredential.status, "active"),
+                        ),
+                    ),
+            )
             .run();
         signal.throwIfAborted();
-        return token;
+        return result.meta.changes === 1 ? token : null;
     };
 
     readonly redeemTransfer = async (
