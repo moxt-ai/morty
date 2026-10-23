@@ -239,7 +239,7 @@ export function sessionPanePresentation(
                 ? ""
                 : ([model.activity, model.operation, delivery.state].find((state) => state.kind === "failed")
                       ?.message ??
-                  stopFailure(tasks, model.runningTurn) ??
+                  stopFailure(tasks) ??
                   (queue.feedback.kind === "failed" ? queue.feedback.message : ""))),
         controlRunning,
         deliveryUnknownUserMessageId,
@@ -613,6 +613,9 @@ export function createSessionPaneModel(options: {
                     ...(sameSessionActivity(activity, current.activity) ? {} : { activity }),
                     ...(runningChanged ? { runningTurn: running } : {}),
                 });
+            }
+            if (running !== null && running.commandId !== current.runningTurn?.commandId) {
+                tasks.getState().turnRunning(running.commandId);
             }
         };
         let historyLoadController: AbortController | null = null;

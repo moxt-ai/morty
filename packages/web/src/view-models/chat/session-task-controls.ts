@@ -26,6 +26,8 @@ export interface SessionTaskControlsStore {
     readonly stopRequest: { readonly commandId: string } | null;
     readonly steeringSupported: boolean;
     readonly dismissFailure: () => void;
+    /** A turn runs. What the user asked of another command no longer applies: its stop failure is retired. */
+    readonly turnRunning: (commandId: string) => void;
     readonly stop: (signal: AbortSignal) => Promise<void>;
 }
 
@@ -37,14 +39,9 @@ export function stopRequested(
     return running !== null && tasks.stopRequest?.commandId === running.commandId;
 }
 
-/** The stop control's failure, shown until a different turn runs. */
-export function stopFailure(
-    tasks: Pick<SessionTaskControlsStore, "feedback">,
-    running: RunningTurn | null,
-): string | null {
-    return tasks.feedback.kind === "failed" && (running === null || running.commandId === tasks.feedback.commandId)
-        ? tasks.feedback.message
-        : null;
+/** The stop control's failure, which lasts until a different turn runs. */
+export function stopFailure(tasks: Pick<SessionTaskControlsStore, "feedback">): string | null {
+    return tasks.feedback.kind === "failed" ? tasks.feedback.message : null;
 }
 
 export const createSessionTaskControlsStore = (options: {
@@ -57,6 +54,17 @@ export const createSessionTaskControlsStore = (options: {
         stopRequest: null,
         steeringSupported: options.steeringSupported,
         dismissFailure: () => set({ feedback: { kind: "none" } }),
+        turnRunning: (commandId) => {
+            const { feedback, stopRequest } = get();
+            const staleFeedback = feedback.kind === "failed" && feedback.commandId !== commandId;
+            const staleRequest = stopRequest !== null && stopRequest.commandId !== commandId;
+            if (staleFeedback || staleRequest) {
+                set({
+                    ...(staleFeedback ? { feedback: { kind: "none" as const } } : {}),
+                    ...(staleRequest ? { stopRequest: null } : {}),
+                });
+            }
+        },
         stop: async (parent) => {
             const running = options.runningTurn();
             if (running === null || stopRequested(get(), running)) {
