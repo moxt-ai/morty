@@ -6,7 +6,8 @@ const runtimeDisconnectedFailure = {
     title: "Your Mobius is disconnected.",
 } as const;
 
-const runtimeDisconnectedMessage = `${runtimeDisconnectedFailure.title} ${runtimeDisconnectedFailure.detail}`;
+/** How a failure because the Runtime cannot be reached reads everywhere. */
+export const runtimeDisconnectedMessage = `${runtimeDisconnectedFailure.title} ${runtimeDisconnectedFailure.detail}`;
 
 export function describeSessionFailureMessage(
     message: string,

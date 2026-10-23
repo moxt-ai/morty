@@ -4,9 +4,6 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 
-// The Worker checks the Runtime every 5 s and retries a failed check 5 s later, so one change can take two checks.
-const RUNTIME_CHANGE_TIMEOUT_MS = 20_000;
-
 async function openAgentConfiguration(app: TestApp): Promise<HTMLElement> {
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
     return getByRole(document.body, "dialog", { name: "Agent configuration" });
@@ -40,8 +37,5 @@ test("Given an open conversation, When its Agent is renamed on the computer, The
 
     // The conversation's own menu names the harness the way the computer now does.
     const after = await openAgentConfiguration(app);
-    await app.waitForView(
-        () => expect(getByRole(after, "heading", { name: "Codex Pro" })).toBeDefined(),
-        RUNTIME_CHANGE_TIMEOUT_MS,
-    );
+    await app.waitForView(() => expect(getByRole(after, "heading", { name: "Codex Pro" })).toBeDefined());
 });

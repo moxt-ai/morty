@@ -18,7 +18,8 @@ import {
 } from "@/services/chat/last-cwd-preference";
 import { readLastHarnessPreference, saveLastHarnessPreference } from "@/services/chat/last-harness-preference";
 import { pathDirectoryId } from "@/services/chat/workspace-directory-reference";
-import { formatError } from "../format-error.ts";
+import { isRuntimeConnectionFailure } from "@/services/management/management-api";
+import { formatError, runtimeDisconnectedMessage } from "../format-error.ts";
 
 type DraftSettingsState =
     | { readonly kind: "loading" }
@@ -116,18 +117,41 @@ export const createDraftControlsStore = (
         // after the Runtime reconnects or its Agents change, drops them.
         const agentSettings = new Map<string, Awaited<ReturnType<BotChatApi["agentSettings"]>>>();
         let settingsRuntime: string | null = null;
+        // Counts the different Runtime configurations seen. A read records the one it started under; a read that
+        // finishes under a newer one is neither shown nor cached, and the draft reloads against the newest.
+        let configurationRevision = 0;
         const readAgentSettings = async (agentRef: string, refresh: boolean, signal: AbortSignal) => {
             const cached = refresh ? undefined : agentSettings.get(agentRef);
             if (cached !== undefined) {
                 return cached;
             }
+            const revision = configurationRevision;
             const result = await requests.agentSettings(botId, agentRef, signal);
-            agentSettings.set(agentRef, result);
+            if (revision === configurationRevision) {
+                agentSettings.set(agentRef, result);
+            }
             return result;
         };
-        // Set when a load found no connected Agent in the Runtime configuration; `runtimeChanged` loads once the
-        // Runtime offers one.
-        let waitingForAgent = false;
+        // Set when the draft could not load from the Runtime as the page knows it: no connected Agent yet, or the
+        // Runtime cannot be reached. `runtimeChanged` loads once the Runtime is online.
+        let waitingForRuntime = false;
+        /**
+         * The draft cannot load while the Runtime is unreachable, whether the configuration already says so or a
+         * read found out. It says why and offers Retry, and loads by itself once the Runtime is back.
+         */
+        const awaitRuntime = (): void => {
+            waitingForRuntime = true;
+            onSettings(null);
+            set({ settings: { kind: "failed", message: runtimeDisconnectedMessage } });
+        };
+        const settleFailure = (cause: unknown, message: string): void => {
+            if (isRuntimeConnectionFailure(cause)) {
+                awaitRuntime();
+                return;
+            }
+            onSettings(null);
+            set({ settings: { kind: "failed", message: formatError(cause, message) } });
+        };
         // Set while an explicit harness choice is being loaded. The load selects
         // that exact harness instead of falling back to another one.
         let pendingHarness: string | null = null;
@@ -295,10 +319,14 @@ export const createDraftControlsStore = (
                 set({ settings: { kind: "loading" } });
             }
             onSettings(null);
-            waitingForAgent = false;
+            waitingForRuntime = false;
             try {
                 const requestedHarness = pendingHarness ?? readLastHarnessPreference(botId);
                 const configuration = runtimeConfiguration();
+                if (configuration?.runtime.online === false) {
+                    awaitRuntime();
+                    return;
+                }
                 const agents = configuration === null ? [] : connectedChatRuntimeAgents(configuration.runtime);
                 const selected =
                     (requestedHarness === null
@@ -310,9 +338,10 @@ export const createDraftControlsStore = (
                     (pendingHarness === null ? agents[0] : undefined);
                 if (selected === undefined) {
                     // The Runtime the page follows offers no Agent to load yet.
-                    waitingForAgent = true;
+                    waitingForRuntime = true;
                     return;
                 }
+                const revision = configurationRevision;
                 const [result, defaultCwd] = await Promise.all([
                     readAgentSettings(selected.agentRef, false, signal),
                     requests.directory(botId, "default", signal),
@@ -328,16 +357,14 @@ export const createDraftControlsStore = (
                         signal.throwIfAborted();
                     }
                 }
+                if (revision !== configurationRevision) {
+                    await load(lifetimeSignal);
+                    return;
+                }
                 applyAgentSettings(selected, cwd, result.options, requestedHarness === selected.agentRef);
             } catch (cause) {
                 if (!lifetimeSignal.aborted) {
-                    onSettings(null);
-                    set({
-                        settings: {
-                            kind: "failed",
-                            message: formatError(cause, "Harness settings are unavailable."),
-                        },
-                    });
+                    settleFailure(cause, "Harness settings are unavailable.");
                 }
             }
         };
@@ -351,18 +378,19 @@ export const createDraftControlsStore = (
                 },
             });
             onSettings(null);
+            const revision = configurationRevision;
             try {
                 const result = await readAgentSettings(settings.selectedAgent.agentRef, true, signal);
                 signal.throwIfAborted();
+                if (revision !== configurationRevision) {
+                    // The Runtime changed during the read, maybe dropping this Agent: the newest configuration decides.
+                    await load(signal);
+                    return;
+                }
                 applyAgentSettings(settings.selectedAgent, settings.cwd, result.options, false);
             } catch (cause) {
                 if (!signal.aborted) {
-                    set({
-                        settings: {
-                            kind: "failed",
-                            message: formatError(cause, "Harness settings are unavailable."),
-                        },
-                    });
+                    settleFailure(cause, "Harness settings are unavailable.");
                 }
             }
         };
@@ -395,6 +423,7 @@ export const createDraftControlsStore = (
                 const changed = runtime !== settingsRuntime;
                 settingsRuntime = runtime;
                 if (changed) {
+                    configurationRevision += 1;
                     agentSettings.clear();
                 }
                 // An offline Runtime offers nothing for now, which says nothing about whether the Agent was removed.
@@ -404,18 +433,19 @@ export const createDraftControlsStore = (
                 const settings = get().settings;
                 switch (settings.kind) {
                     case "loading":
-                        if (waitingForAgent) {
+                        // A load in flight sees the newer revision when it finishes and reloads against it.
+                        if (waitingForRuntime) {
                             await load(signal);
                         }
                         return;
                     case "failed":
-                        if (changed) {
+                        if (waitingForRuntime || changed) {
                             await load(signal);
                         }
                         return;
                     case "refreshing":
                     case "switching":
-                        // The read in flight completes against what it started with; a later change follows.
+                        // The read in flight sees the newer revision when it finishes and reloads against it.
                         return;
                     case "ready": {
                         const offered = connectedChatRuntimeAgents(configuration.runtime).some(
