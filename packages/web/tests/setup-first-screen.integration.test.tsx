@@ -1,41 +1,39 @@
-import { getAllByRole, getByRole } from "@testing-library/dom";
+import { getAllByRole, getByRole, getByText, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
-import { dataTestId } from "../src/data-testid.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given a browser without a finished setup, When the first screen opens, Then it presents phone continuation above a single copy action", {
+test("Given a new visitor, When the setup page opens, Then it explains working with their agent from any browser and where to send the setup prompt", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap" } });
+    await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup prompt" }));
 
-    expect(
-        await app.waitForView(() =>
-            getByRole(document.body, "heading", { level: 1, name: "Continue your coding session from your phone." }),
-        ),
-    ).toBeInstanceOf(HTMLElement);
-    expect(document.body.textContent).toContain(
-        "Check progress, send instructions, and approve requests while your agent runs on your computer.",
-    );
+    expect(getAllByRole(document.body, "heading")).toHaveLength(1);
+    expect(getByRole(document.body, "heading", { level: 1 })).toHaveProperty("textContent", "Just one prompt.");
+    expect(document.body.textContent).toContain("Connect your agent. Continue from any browser.");
     expect(document.body.textContent).toContain("Works with Codex, Claude Code, and Pi.");
-    expect(getByRole(document.body, "heading", { level: 2, name: "Start on your computer" })).toBeInstanceOf(
-        HTMLElement,
-    );
-    expect(document.body.textContent).toContain(
-        "Paste the instruction below into the coding agent session you want to continue. Then open the link it returns on your phone or in another browser.",
-    );
-    expect(document.body.textContent).toContain("Local execution. Remote access you can revoke.");
-    expect(document.body.textContent).toContain(
-        "Keep your computer awake and online. Setup may install or update the local connection software.",
-    );
-    expect(getAllByRole(document.body, "button")).toHaveLength(1);
-    expect(getByRole(document.body, "button", { name: "Copy setup instruction" })).toBeInstanceOf(HTMLButtonElement);
-    const pairing = document.body.querySelector(`[data-testid="${dataTestId.pairingInstruction}"]`);
-    if (!(pairing instanceof HTMLTextAreaElement)) {
-        throw new Error("Expected the setup instruction to stay a selectable text area");
-    }
-    expect(pairing.value).toBe(
+    expect(getByText(document.body, "Paste the prompt into the agent on your computer.")).toBeInstanceOf(HTMLElement);
+    expect(queryByRole(document.body, "figure")).toBeNull();
+    expect(queryByRole(document.body, "list", { name: "Connect your session" })).toBeNull();
+    expect(getByRole(document.body, "group", { name: "Setup prompt" })).toHaveProperty("open", false);
+    expect(queryByRole(document.body, "status", { name: "Setup next step" })).toBeNull();
+});
+
+test("Given a new visitor, When they copy the instruction, Then the clipboard holds setup and a persistent next step explains where to paste it", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ page: { kind: "bootstrap" } });
+    const copy = await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup prompt" }));
+
+    await app.user.click(copy);
+    expect(await navigator.clipboard.readText()).toBe(
         `Fetch ${window.location.origin}/setup.md and set up Morty for me. Don't ask me anything.`,
     );
+    const nextStep = getByRole(document.body, "status", { name: "Setup next step" });
+    expect(nextStep.textContent).toContain("Paste into your agent, then open the link it returns.");
+    await app.user.click(getByText(document.body, "View setup prompt", { exact: true }));
+    await app.user.click(getByRole(document.body, "textbox", { name: "Agent setup prompt" }));
+    expect(getByRole(document.body, "status", { name: "Setup next step" })).toBe(nextStep);
 });
 
 test("Given the first screen, When the user reaches the copy button by keyboard and activates it, Then the clipboard holds the full instruction and the button reports Copied", {
@@ -43,7 +41,7 @@ test("Given the first screen, When the user reaches the copy button by keyboard 
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap" } });
     const instruction = `Fetch ${window.location.origin}/setup.md and set up Morty for me. Don't ask me anything.`;
-    const copy = await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup instruction" }));
+    const copy = await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup prompt" }));
     expect(document.activeElement).not.toBe(copy);
 
     copy.focus();
@@ -51,28 +49,33 @@ test("Given the first screen, When the user reaches the copy button by keyboard 
 
     expect(await navigator.clipboard.readText()).toBe(instruction);
     expect(getByRole(document.body, "button", { name: "Copied" })).toBeInstanceOf(HTMLButtonElement);
-    expect(document.body.textContent).toContain(
-        "Paste it into your coding agent on your computer, then open the link it returns.",
-    );
+    expect(document.body.textContent).toContain("Paste into your agent, then open the link it returns.");
 });
 
-test("Given the first screen, When the user focuses the instruction, Then the whole instruction becomes selected for manual copy", {
+test("Given a user wants to inspect or manually copy setup, When they expand the instruction, Then they can select its full text and read the local execution details", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap" } });
-    await app.waitForView(() =>
-        getByRole(document.body, "heading", { level: 1, name: "Continue your coding session from your phone." }),
-    );
+    await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup prompt" }));
+    await app.user.click(getByText(document.body, "View setup prompt", { exact: true }));
+    expect(getByRole(document.body, "group", { name: "Setup prompt" })).toHaveProperty("open", true);
 
-    const pairing = app.elementByTestId(dataTestId.pairingInstruction);
+    const pairing = getByRole(document.body, "textbox", { name: "Agent setup prompt" });
     if (!(pairing instanceof HTMLTextAreaElement)) {
         throw new Error("Expected a selectable setup instruction");
     }
     await app.user.click(pairing);
 
     expect(pairing.readOnly).toBe(true);
+    expect(pairing.value).toBe(
+        `Fetch ${window.location.origin}/setup.md and set up Morty for me. Don't ask me anything.`,
+    );
     expect(pairing.selectionStart).toBe(0);
     expect(pairing.selectionEnd).toBe(pairing.value.length);
+    expect(document.body.textContent).toContain(
+        "Your agent keeps running on its original computer. Keep it awake and online.",
+    );
+    expect(document.body.textContent).toContain("Setup may install or update the local connection software.");
 });
 
 test("Given the first screen, When the user clicks Copy again after success, Then the instruction is copied again", {
@@ -82,7 +85,7 @@ test("Given the first screen, When the user clicks Copy again after success, The
     const instruction = `Fetch ${window.location.origin}/setup.md and set up Morty for me. Don't ask me anything.`;
 
     await app.user.click(
-        await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup instruction" })),
+        await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup prompt" })),
     );
     const copied = getByRole(document.body, "button", { name: "Copied" });
     expect(await navigator.clipboard.readText()).toBe(instruction);

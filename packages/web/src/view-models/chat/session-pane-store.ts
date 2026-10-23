@@ -72,6 +72,7 @@ import {
 import { createSessionSettingsStore } from "./session-settings-store.ts";
 import { createSessionTaskControlsStore, type SessionTaskControlsStore } from "./session-task-controls.ts";
 import { createSessionTurnLedger } from "./session-turn-ledger.ts";
+import { createSessionWelcomeStore } from "./session-welcome-store.ts";
 
 export type SessionPaneModel = ReturnType<typeof createSessionPaneModel>;
 
@@ -227,6 +228,12 @@ export function sessionPanePresentation(
         busy,
         composerDisabled,
         composerInputDisabled,
+        canSuggestProgress:
+            !busy &&
+            !controlRunning &&
+            model.draft.length === 0 &&
+            attachments.attachments.length === 0 &&
+            attachments.state.kind !== "reading",
         // Operations that failed because the Session closed say nothing the closed notice does not already say.
         composerError:
             connectionFailure(model.connection) ??
@@ -988,6 +995,7 @@ export function createSessionPaneModel(options: {
                     signal.throwIfAborted();
                     consecutiveFailures = 0;
                     setAndSettle({ connection: { kind: "ready", client: connected } });
+                    welcome.getState().connected();
                     if (turns.hasInitialCommand()) {
                         // Send reports delivery itself, so an uncertain or
                         // rejected submission leaves the queued message and its
@@ -1165,6 +1173,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 const commandId = turns.claimCommand(crypto.randomUUID());
+                welcome.getState().dismiss();
                 const sent = turns.recordSent(commandId, Date.now());
                 void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
                 const prompt = current.draft.trim();
@@ -1348,6 +1357,7 @@ export function createSessionPaneModel(options: {
                 );
                 signal.throwIfAborted();
                 if (queued !== null) {
+                    welcome.getState().dismiss();
                     const sent = turns.recordSent(queued.commandId, Date.now());
                     void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
                     centralSessionStorage.remove(draftEntry);
@@ -1487,6 +1497,25 @@ export function createSessionPaneModel(options: {
             },
             stop: async (signal) => await tasks.getState().stop(signal),
         };
+    });
+    const welcome = createSessionWelcomeStore({
+        botId,
+        sessionId,
+        fillEmptyDraft: (text) => {
+            const presentation = sessionPanePresentation(
+                store.getState(),
+                delivery.getState(),
+                tasks.getState(),
+                messageQueue.getState(),
+                composerAttachments.getState(),
+                interactions.getState(),
+            );
+            if (!presentation.canSuggestProgress) {
+                return false;
+            }
+            store.getState().setDraft(text);
+            return true;
+        },
     });
     // The pane's connection lifetime: attach starts connecting with its own
     // signal, detach aborts it. The view drives this through a ref callback,
@@ -1632,6 +1661,7 @@ export function createSessionPaneModel(options: {
         filePreview,
         messageQueue,
         tasks,
+        welcome,
         /** The Bot this pane talks to; scopes failure approvals. */
         botId,
         /** The agent the session runs on; the harness lock offers it. */

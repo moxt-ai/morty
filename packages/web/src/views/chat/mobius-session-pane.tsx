@@ -25,6 +25,7 @@ import {
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
 import { SessionLoadFailure } from "../../components/chat/session-load-failure.tsx";
+import { SessionWelcome } from "../../components/chat/session-welcome.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -620,6 +621,7 @@ function MobiusSessionPaneBody({
     const delivery = useStore(pane.delivery);
     const messageQueue = useStore(pane.messageQueue);
     const taskControls = useStore(pane.tasks);
+    const welcome = useStore(pane.welcome, (state) => state.state);
     const harnesses = model.harnesses;
 
     // The model owns the session connection through the same ref-cleanup
@@ -821,6 +823,13 @@ function MobiusSessionPaneBody({
                                         <WorkingIndicator startedAt={model.activity.startedAt} />
                                     </div>
                                 )}
+                            {welcome.kind === "visible" && model.connection.kind === "ready" && (
+                                <SessionWelcome
+                                    canSuggestProgress={presentation.canSuggestProgress}
+                                    onDismiss={pane.welcome.getState().dismiss}
+                                    onSuggestProgress={pane.welcome.getState().suggestProgress}
+                                />
+                            )}
                         </div>
                     )}
                 </FollowLatestScrollArea>

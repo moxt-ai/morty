@@ -15,6 +15,7 @@ import {
 } from "@/services/identity/anonymous-identity-api";
 import { encodeIdentityScope, hasIdentityScope, readIdentityScope } from "@/services/identity/identity-scope-url";
 import { computerKey, rememberedComputers } from "@/services/identity/remembered-computers";
+import { centralSessionStorage, sessionWelcomeEntry } from "@/services/session-storage/central-session-storage";
 import { formatError } from "@/view-models/format-error";
 
 export type ContinueStoreApi = ReturnType<typeof createContinueStore>;
@@ -205,6 +206,15 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     signal,
                 );
                 signal.throwIfAborted();
+                const visited = rememberedComputers().some(
+                    (computer) => computerKey(computer.scope) === computerKey(identity) && computer.lastUsedAt > 0,
+                );
+                if (!visited) {
+                    centralSessionStorage.write(
+                        sessionWelcomeEntry(identity.botId, session.result.ready.sessionId),
+                        "pending",
+                    );
+                }
                 const destination = identityDestination("/chat", identity);
                 destination.searchParams.set("sessionId", session.result.ready.sessionId);
                 window.location.replace(destination);

@@ -168,6 +168,7 @@ export async function createTestApp(
                     let lastFailure: unknown;
                     const cleanup = () => {
                         observer.disconnect();
+                        window.removeEventListener("hashchange", check);
                         clearTimeout(deadline);
                         lifetime.signal.removeEventListener("abort", abort);
                     };
@@ -200,6 +201,9 @@ export async function createTestApp(
                         childList: true,
                         subtree: true,
                     });
+                    // A completed handoff removes the transfer-code hash without
+                    // changing the old document before its navigation is followed.
+                    window.addEventListener("hashchange", check);
                     check();
                 }),
         );
