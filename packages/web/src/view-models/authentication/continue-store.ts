@@ -163,6 +163,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 subscribe: async () => {
                     throw new Error("Session status updates are unavailable while continuing this session.");
                 },
+                recoverBridge: async (signal) => signal.throwIfAborted(),
                 waitForBridge: async () => {
                     throw new Error("Bridge updates are unavailable while continuing this session.");
                 },

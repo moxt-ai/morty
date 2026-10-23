@@ -17,6 +17,7 @@ import {
     createComposerAttachmentStore,
 } from "../../components/chat/composer-attachment-store.ts";
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
+import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
@@ -124,6 +125,7 @@ export interface SessionPaneStore {
     /** The turn the service reports running, as the current turn holds it; the stop control acts on it. */
     readonly runningTurn: RunningTurn | null;
     readonly connect: (signal: AbortSignal) => Promise<void>;
+    readonly recover: (signal: AbortSignal) => Promise<void>;
     readonly retryNow: () => void;
     /**
      * Records that the Runtime closed the Session and stops the connection until it is reopened. `reason` is the
@@ -338,7 +340,15 @@ export function createSessionPaneModel(options: {
     readonly clock: Clock;
     readonly session: OpenMobiusSession;
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "connectSession" | "managedSession" | "runtimeConfiguration">;
+    readonly requests: Pick<
+        BotChatApi,
+        | "connectSession"
+        | "managedSession"
+        | "runtimeConfiguration"
+        | "recoverBridge"
+        | "waitForBridge"
+        | "resetSessionConnections"
+    >;
     readonly initialMessage?: QueuedDraftMessage | undefined;
     /**
      * A previous pane's unconfirmed first-message submission. Adopted as the
@@ -380,6 +390,8 @@ export function createSessionPaneModel(options: {
             : idleTurn;
     const turns = createSessionTurnLedger();
     let client: MobiusClient | null = null;
+    let healthCheck: Promise<void> | null = null;
+    let recoveryRequested = false;
     let countdownInterrupt: AbortController | null = null;
     // The Runtime closed the Session. The connect loop turns this into the closed connection state.
     let closure: { readonly reason: string | null } | null = null;
@@ -1100,29 +1112,46 @@ export function createSessionPaneModel(options: {
                     signal.throwIfAborted();
                     consecutiveFailures = 0;
                     setAndSettle({ connection: { kind: "ready", client: connected } });
-                    welcome.getState().connected();
-                    if (options.initialMessage !== undefined && queuedInitialSubmission === "waiting") {
-                        // Submission reports delivery itself, so an uncertain or
-                        // rejected submission leaves the queued message and its
-                        // idempotent command id in the home store for a remount
-                        // to recover.
-                        // The send belongs to the pane, not to this attempt: a closing of the Session must not
-                        // abandon a submission that is already on its way.
-                        await submit(
-                            {
-                                commandId: options.initialMessage.commandId,
-                                content: options.initialMessage.content,
-                                attachments: options.initialMessage.attachments,
-                            },
-                            paneSignal,
-                        );
-                        signal.throwIfAborted();
+                    const monitoring = new AbortController();
+                    const monitorSignal = AbortSignal.any([signal, monitoring.signal]);
+                    void (async () => {
+                        try {
+                            for (;;) {
+                                await clock.sleep(25_000, monitorSignal);
+                                monitorSignal.throwIfAborted();
+                                await get().recover(monitorSignal);
+                            }
+                        } catch {
+                            // The subscription owns and cancels this monitor.
+                        }
+                    })();
+                    try {
+                        welcome.getState().connected();
+                        if (options.initialMessage !== undefined && queuedInitialSubmission === "waiting") {
+                            // Submission reports delivery itself, so an uncertain or
+                            // rejected submission leaves the queued message and its
+                            // idempotent command id in the home store for a remount
+                            // to recover.
+                            // The send belongs to the pane, not to this attempt: a closing of the Session must not
+                            // abandon a submission that is already on its way.
+                            await submit(
+                                {
+                                    commandId: options.initialMessage.commandId,
+                                    content: options.initialMessage.content,
+                                    attachments: options.initialMessage.attachments,
+                                },
+                                paneSignal,
+                            );
+                            signal.throwIfAborted();
+                        }
+                        // A detach between submit and the delivery report can still
+                        // re-send the queued message on re-attach. That is safe:
+                        // the command id is the turn submit's idempotency key, so
+                        // the service deduplicates the repeated submission.
+                        await subscription.completed;
+                    } finally {
+                        monitoring.abort();
                     }
-                    // A detach between submit and the delivery report can still
-                    // re-send the queued message on re-attach. That is safe:
-                    // the command id is the turn submit's idempotency key, so
-                    // the service deduplicates the repeated submission.
-                    await subscription.completed;
                     signal.throwIfAborted();
                     throw sessionUpdatesEndedError();
                 };
@@ -1147,7 +1176,9 @@ export function createSessionPaneModel(options: {
                     attempt = running;
                     try {
                         await observeSession(AbortSignal.any([signal, running.signal]));
-                    } catch (cause) {
+                    } catch (failure) {
+                        const cause = running.signal.aborted ? running.signal.reason : failure;
+                        running.abort();
                         attempt = null;
                         client?.close();
                         client = null;
@@ -1167,6 +1198,10 @@ export function createSessionPaneModel(options: {
                             });
                             return;
                         }
+                        if (recoveryRequested) {
+                            recoveryRequested = false;
+                            consecutiveFailures = 0;
+                        }
                         const retry = sessionReconnectAttempt(consecutiveFailures);
                         consecutiveFailures += 1;
                         const message = formatError(cause, "The Session could not be opened.");
@@ -1179,7 +1214,19 @@ export function createSessionPaneModel(options: {
                         countdownInterrupt = new AbortController();
                         const retrySignal = AbortSignal.any([signal, countdownInterrupt.signal]);
                         try {
-                            if (retry.kind === "scheduled") {
+                            if (isChatBridgeError(cause)) {
+                                // The bridge owns its dial/backoff. Do not spend a
+                                // second retry budget waiting for that dependency.
+                                setAndSettle({
+                                    connection: {
+                                        kind: "disconnected",
+                                        message,
+                                        retry: { kind: "waiting-for-bridge" },
+                                    },
+                                });
+                                await requests.waitForBridge(retrySignal);
+                                consecutiveFailures = 0;
+                            } else if (retry.kind === "scheduled") {
                                 const retryAt = clock.now() + retry.delayMs;
                                 while (clock.now() < retryAt) {
                                     await clock.sleep(Math.min(1000, retryAt - clock.now()), retrySignal);
@@ -1209,7 +1256,53 @@ export function createSessionPaneModel(options: {
                     }
                 }
             },
+            recover: async (parent) => {
+                parent.throwIfAborted();
+                if (get().connection.kind === "disconnected") {
+                    get().retryNow();
+                    return;
+                }
+                if (get().connection.kind !== "ready" || client === null || attempt === null) {
+                    return;
+                }
+                if (healthCheck !== null) {
+                    return await healthCheck;
+                }
+                const connected = client;
+                const running = attempt;
+                healthCheck = (async () => {
+                    const deadline = new AbortController();
+                    const signal = AbortSignal.any([parent, running.signal, deadline.signal]);
+                    void clock.sleep(5_000, signal).then(
+                        () =>
+                            deadline.abort(
+                                new MobiusError("service_unavailable", "The Session connection stopped responding."),
+                            ),
+                        () => undefined,
+                    );
+                    try {
+                        await connected.sessions.readSessionExecution(sessionId, sessionIdentity, signal);
+                    } catch (failure) {
+                        if (parent.aborted || running.signal.aborted || attempt !== running) {
+                            return;
+                        }
+                        const cause = deadline.signal.aborted ? deadline.signal.reason : failure;
+                        if (isRetryableRuntimeConnectionFailure(cause)) {
+                            requests.resetSessionConnections();
+                        }
+                        recoveryRequested = true;
+                        running.abort(cause);
+                    } finally {
+                        deadline.abort();
+                    }
+                })().finally(() => {
+                    healthCheck = null;
+                });
+                await healthCheck;
+            },
             retryNow: () => {
+                recoveryRequested = true;
+                void requests.recoverBridge(connection.signal).catch(() => undefined);
                 countdownInterrupt?.abort(new Error("Retried now"));
             },
             sessionClosed: (reason) => {

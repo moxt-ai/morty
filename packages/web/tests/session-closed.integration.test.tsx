@@ -70,7 +70,7 @@ async function openWatchedConversation(app: TestApp): Promise<string> {
     return sessionId;
 }
 
-test("Given an open conversation, When another client closes its Session, Then Chat says the session is closed and why, and offers to reopen it", {
+test("Given an open conversation, When another client closes its Session and the browser resumes, Then Chat keeps it closed and offers to reopen it", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -85,6 +85,11 @@ test("Given an open conversation, When another client closes its Session, Then C
     await app.waitForView(() =>
         expect(closedNoticeText(app)).toBe(`The session is closed. Reason: ${CLOSED_ON_REQUEST} Reopen it`),
     );
+    await act(async () => {
+        window.dispatchEvent(new Event("online"));
+        document.dispatchEvent(new Event("visibilitychange"));
+        document.dispatchEvent(new Event("resume"));
+    });
     const composer = app.elementByTestId(dataTestId.messageComposer);
     expect(composer instanceof HTMLTextAreaElement && composer.disabled).toBe(true);
     expect(

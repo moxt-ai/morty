@@ -1,4 +1,5 @@
 import { MobiusError, SESSION_CLOSED_ERROR_CODE } from "@moxt-ai/mobius-sdk";
+import { isChatBridgeError } from "../services/api/websocket-api-transport.ts";
 import { isRuntimeConnectionFailure } from "../services/management/management-api.ts";
 
 const runtimeDisconnectedFailure = {
@@ -46,7 +47,7 @@ export function isSessionClosedFailure(cause: unknown): boolean {
  * upgrade), so the Session keeps retrying them instead of settling as failed.
  */
 export function isRetryableRuntimeConnectionFailure(cause: unknown): boolean {
-    if (isRuntimeConnectionFailure(cause)) {
+    if (isChatBridgeError(cause) || isRuntimeConnectionFailure(cause)) {
         return true;
     }
     return cause instanceof MobiusError && retryableRuntimeFailureCodes.has(cause.code);

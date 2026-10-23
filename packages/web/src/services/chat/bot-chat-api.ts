@@ -165,7 +165,7 @@ function sessionEndpoint(value: string): string {
 
 class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTransport {
     readonly #http = new HttpTransport();
-    readonly #webSocket = new WsTransport();
+    #webSocket = new WsTransport();
 
     readonly #fetch = async (request: Request): Promise<Response> =>
         await (request.headers.get("accept")?.startsWith("text/event-stream") === true ||
@@ -234,6 +234,11 @@ class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTra
         }
     };
 
+    readonly reset = (): void => {
+        const previous = this.#webSocket;
+        this.#webSocket = new WsTransport();
+        previous.close();
+    };
     readonly close = (): void => this.#webSocket.close();
 }
 
@@ -245,6 +250,7 @@ export class BotChatApi {
     readonly #sessionTransports = new Map<string, BrowserSessionTransport>();
     readonly #subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
     readonly #waitForChange: ApiTransport["waitForChange"];
+    readonly recoverBridge: ApiTransport["recover"];
     readonly #waitForBridge: ApiTransport["waitForBridge"];
     readonly readBot: ManagementApi["readBot"];
     constructor(options: {
@@ -254,6 +260,7 @@ export class BotChatApi {
         readonly getToken: (signal: AbortSignal) => Promise<string | null>;
         readonly subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
         readonly waitForChange: ApiTransport["waitForChange"];
+        readonly recoverBridge: ApiTransport["recover"];
         readonly waitForBridge: ApiTransport["waitForBridge"];
     }) {
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
@@ -263,10 +270,16 @@ export class BotChatApi {
         this.#subscribe = options.subscribe;
         this.#waitForChange = options.waitForChange;
         this.#waitForBridge = options.waitForBridge;
+        this.recoverBridge = options.recoverBridge;
         const management = new ManagementApi(options);
         this.readBot = management.readBot;
     }
     readonly waitForBridge = async (signal: AbortSignal): Promise<void> => await this.#waitForBridge(signal);
+    readonly resetSessionConnections = (): void => {
+        for (const transport of this.#sessionTransports.values()) {
+            transport.reset();
+        }
+    };
     readonly close = (): void => {
         for (const transport of this.#sessionTransports.values()) {
             transport.close();

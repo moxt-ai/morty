@@ -122,6 +122,7 @@ export function createMortyApplication(options: {
             origin: options.origin,
             projectId: identity.projectId,
             subscribe: transport.subscribe,
+            recoverBridge: transport.recover,
             waitForBridge: transport.waitForBridge,
             waitForChange: transport.waitForChange,
         });
@@ -136,6 +137,7 @@ export function createMortyApplication(options: {
                 requests: (saved) =>
                     new BotChatApi({
                         fetchRequest: transport.fetch,
+                        recoverBridge: transport.recover,
                         waitForBridge: transport.waitForBridge,
                         getToken: async (signal) => {
                             signal.throwIfAborted();
@@ -174,6 +176,32 @@ export function createMortyApplication(options: {
         identityAttempt = new AbortController();
         void anonymousSession.getState().load(AbortSignal.any([lifetime.signal, identityAttempt.signal]));
     };
+    // Browser lifecycle signals are hints: probe real connections and let the
+    // existing session reconciliation restore history, execution and approvals.
+    let recovery: Promise<void> | null = null;
+    const recover = (): void => {
+        if (disposed || document.visibilityState === "hidden" || recovery !== null) {
+            return;
+        }
+        recovery = Promise.allSettled([
+            transport.recover(lifetime.signal),
+            workspace?.sessionPane()?.store.getState().recover(lifetime.signal),
+        ])
+            // Both connection owners retain their retry and manual recovery paths.
+            .then(() => undefined)
+            .finally(() => {
+                recovery = null;
+            });
+    };
+    const restored = (event: PageTransitionEvent): void => {
+        if (event.persisted) {
+            recover();
+        }
+    };
+    window.addEventListener("online", recover);
+    window.addEventListener("pageshow", restored);
+    document.addEventListener("visibilitychange", recover);
+    document.addEventListener("resume", recover);
     if (!window.location.pathname.startsWith("/continue")) {
         reloadIdentity();
     }
@@ -197,6 +225,10 @@ export function createMortyApplication(options: {
                 return;
             }
             disposed = true;
+            window.removeEventListener("online", recover);
+            window.removeEventListener("pageshow", restored);
+            document.removeEventListener("visibilitychange", recover);
+            document.removeEventListener("resume", recover);
             lifetime.abort(new DOMException("The Morty application was disposed.", "AbortError"));
             continuation.getState().cancel();
             releaseWorkspace();

@@ -6,6 +6,8 @@ export interface ApiResponseSnapshot {
 
 export interface ApiTransport {
     readonly open: () => void;
+    /** Checks a resumed connection and restarts a suspended retry budget. */
+    readonly recover: (signal: AbortSignal) => Promise<void>;
     readonly fetch: (request: Request) => Promise<Response>;
     /** Resolves once the bridge is connected again; it never re-issues a request. */
     readonly waitForBridge: (signal: AbortSignal) => Promise<void>;

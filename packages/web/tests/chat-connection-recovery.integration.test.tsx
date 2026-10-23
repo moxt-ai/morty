@@ -6,10 +6,10 @@ import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 
-async function recoverChat(app: TestApp, clock: TestClock): Promise<void> {
+async function recoverChat(app: TestApp, clock: TestClock, delayMs = 1_000): Promise<void> {
     await act(async () => {
         const connected = app.transport.waitForBridge(AbortSignal.timeout(10_000));
-        clock.advanceBy(1_000);
+        clock.advanceBy(delayMs);
         await connected;
     });
 }
@@ -59,10 +59,11 @@ test("Given a draft on an open Chat, When its bridge repeatedly disconnects and 
     }
     await app.user.click(composer);
     await app.user.paste("Do not resend this draft");
-    for (const _cycle of [1, 2, 3]) {
+    // Repeated drops before a healthy interval retain the bounded backoff.
+    for (const delayMs of [1_000, 2_000, 4_000]) {
         app.transport.disconnect();
         expect(queryByRole(document.body, "dialog")).toBeNull();
-        await recoverChat(app, clock);
+        await recoverChat(app, clock, delayMs);
         expect(app.elementByTestId(dataTestId.messageComposer)).toBe(composer);
         expect(composer.value).toBe("Do not resend this draft");
         expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain(

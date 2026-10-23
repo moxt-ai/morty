@@ -454,12 +454,16 @@ function DisconnectedNotice({
     retry,
 }: {
     readonly onRetryNow: () => void;
-    readonly retry: { readonly kind: "scheduled"; readonly remainingSeconds: number } | { readonly kind: "exhausted" };
+    readonly retry: Extract<SessionConnection, { readonly kind: "disconnected" }>["retry"];
 }) {
     return (
         <div data-testid={dataTestId.sessionReconnectNotice} className="shrink-0 text-muted-foreground">
             {retry.kind === "scheduled" ? (
                 <ScheduledRetryNotice onRetryNow={onRetryNow} remainingSeconds={retry.remainingSeconds} />
+            ) : retry.kind === "waiting-for-bridge" ? (
+                <p role="status">
+                    Waiting for connection. <LinkButton onClick={onRetryNow}>Retry now</LinkButton>
+                </p>
             ) : (
                 <p role="status">
                     Automatic retries stopped. <LinkButton onClick={onRetryNow}>Retry now</LinkButton>

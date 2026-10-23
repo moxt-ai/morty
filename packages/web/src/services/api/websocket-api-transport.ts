@@ -132,6 +132,7 @@ export class WebSocketApiTransport {
     readonly #bridgeWaiters = new Set<PendingBridgeWaiter>();
     readonly #lifetime = new AbortController();
     #state: BridgeState = { kind: "disconnected" };
+    #healthLifetime: AbortController | null = null;
     #desired = false;
     #disposed = false;
     #reconnectAttempt = 0;
@@ -154,6 +155,57 @@ export class WebSocketApiTransport {
         // immediately instead of failing fast while a timer is pending.
         this.#cancelReconnect();
         this.#reconnectAttempt = 0;
+    };
+
+    readonly recover = async (signal: AbortSignal): Promise<void> => {
+        signal.throwIfAborted();
+        if (this.#disposed) {
+            return;
+        }
+        const state = this.#state;
+        if (state.kind === "connected") {
+            await this.#checkHealth(state.socket, signal);
+            signal.throwIfAborted();
+            if (this.#state.kind === "connected") {
+                return;
+            }
+        }
+        this.open();
+        await this.#connect(signal);
+        signal.throwIfAborted();
+    };
+
+    readonly #checkHealth = async (socket: WebSocket, parent: AbortSignal): Promise<void> => {
+        const deadline = new AbortController();
+        const signal = AbortSignal.any([parent, deadline.signal]);
+        void this.#clock.sleep(5_000, signal).then(
+            () => deadline.abort(bridgeUnavailable()),
+            () => undefined,
+        );
+        try {
+            await this.measureMortyLatency(signal);
+            if (this.#state.kind === "connected" && this.#state.socket === socket) {
+                this.#reconnectAttempt = 0;
+            }
+        } catch {
+            if (!parent.aborted && this.#state.kind === "connected" && this.#state.socket === socket) {
+                this.#dropConnection(bridgeUnavailable());
+            }
+        } finally {
+            deadline.abort();
+        }
+    };
+
+    readonly #monitorHealth = async (socket: WebSocket, signal: AbortSignal): Promise<void> => {
+        try {
+            while (!signal.aborted) {
+                await this.#clock.sleep(KEEPALIVE_MILLISECONDS, signal);
+                signal.throwIfAborted();
+                await this.#checkHealth(socket, signal);
+            }
+        } catch {
+            // Closing or replacing the connection releases its health monitor.
+        }
     };
 
     /**
@@ -446,6 +498,7 @@ export class WebSocketApiTransport {
             return;
         }
         this.#disposed = true;
+        this.#healthLifetime?.abort();
         this.#workspaceBaselines.clear();
         this.#desired = false;
         this.#cancelReconnect();
@@ -476,6 +529,7 @@ export class WebSocketApiTransport {
 
     readonly #dropConnection = (cause: ChatBridgeError): void => {
         const state = this.#state;
+        this.#healthLifetime?.abort();
         this.#state = { kind: "disconnected" };
         if (state.kind === "connected") {
             state.socket.close(1000, "Chat API transport disconnected");
@@ -534,24 +588,29 @@ export class WebSocketApiTransport {
             cancel: () => controller.abort(new Error("The Chat transport stopped reconnecting.")),
         };
         this.#reconnectTimer = timer;
-        void this.#clock.sleep(delay, AbortSignal.any([this.#lifetime.signal, controller.signal])).then(
-            () => {
-                if (this.#reconnectTimer !== timer) {
-                    return;
-                }
-                this.#reconnectTimer = null;
-                if (this.#state.kind === "connected") {
-                    this.#reconnectAttempt = 0;
-                    return;
-                }
-                void this.#dial();
-            },
-            () => {
-                if (this.#reconnectTimer === timer) {
+        void this.#clock
+            .sleep(
+                Math.round(delay * (0.5 + Math.random() * 0.5)),
+                AbortSignal.any([this.#lifetime.signal, controller.signal]),
+            )
+            .then(
+                () => {
+                    if (this.#reconnectTimer !== timer) {
+                        return;
+                    }
                     this.#reconnectTimer = null;
-                }
-            },
-        );
+                    if (this.#state.kind === "connected") {
+                        this.#reconnectAttempt = 0;
+                        return;
+                    }
+                    void this.#dial();
+                },
+                () => {
+                    if (this.#reconnectTimer === timer) {
+                        this.#reconnectTimer = null;
+                    }
+                },
+            );
     };
 
     /**
@@ -696,16 +755,14 @@ export class WebSocketApiTransport {
                     elapsedMs: Math.round(performance.now() - startedAt),
                 });
                 this.#state = { kind: "connected", socket };
-                const keepalive = setInterval(() => {
-                    if (socket.readyState === WebSocket.OPEN) {
-                        socket.send(JSON.stringify({ kind: "ping" }));
-                    }
-                }, KEEPALIVE_MILLISECONDS);
-                socket.addEventListener("close", () => clearInterval(keepalive), { once: true });
+                this.#healthLifetime?.abort();
+                const healthLifetime = new AbortController();
+                this.#healthLifetime = healthLifetime;
+                socket.addEventListener("close", () => healthLifetime.abort(), { once: true });
+                void this.#monitorHealth(socket, healthLifetime.signal);
                 // A successful connection retires any backoff that was armed
                 // while the attempt was in flight.
                 this.#cancelReconnect();
-                this.#reconnectAttempt = 0;
                 this.#notifyConnected();
                 this.#replaySubscriptions(socket);
                 resolve(socket);
