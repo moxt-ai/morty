@@ -162,6 +162,9 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 subscribe: async () => {
                     throw new Error("Session status updates are unavailable while continuing this session.");
                 },
+                waitForBridge: async () => {
+                    throw new Error("Bridge updates are unavailable while continuing this session.");
+                },
                 waitForChange: async () => {
                     throw new Error("Runtime updates are unavailable while continuing this session.");
                 },

@@ -1,6 +1,7 @@
 import { getAllByRole, getByRole, getByTitle, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
+import { WebSocketApiTransport } from "../src/services/api/websocket-api-transport.ts";
 import { encodeIdentityScope } from "../src/services/identity/identity-scope-url.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
@@ -224,8 +225,13 @@ test("Given a saved computer and a failed connection, When I retry after reconne
     const sessionId = await startConversation(app, "Preserve access through a network failure");
     await app.close();
     window.location.href = `${app.origin}/`;
-    const unavailable = await createTestApp({ application: app, page: { kind: "reload" } });
-    unavailable.transport.close();
+    // A reload gets its own page transport; the previous one was disposed.
+    const transport = new WebSocketApiTransport(app.origin);
+    const unavailable = await createTestApp({
+        application: { ...app, transport, close: () => transport.dispose() },
+        page: { kind: "reload" },
+    });
+    unavailable.transport.disconnect();
     const retry = await unavailable.waitForView(() => getByRole(document.body, "button", { name: "Retry" }));
     expect(document.body.textContent).toContain("Your saved computers are still here");
     unavailable.transport.open();
