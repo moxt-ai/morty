@@ -1,6 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import type { ApiTransport } from "../services/api/api-transport.ts";
 import { BotChatApi } from "../services/chat/bot-chat-api.ts";
+import { recordBrowserDiagnostic } from "../services/diagnostics/browser-diagnostics.ts";
 import { type Clock, systemClock } from "../services/time/clock.ts";
 import { type ActiveAnonymousSession, createAnonymousSessionStore } from "./authentication/anonymous-session-store.ts";
 import { createContinueStore } from "./authentication/continue-store.ts";
@@ -179,8 +180,19 @@ export function createMortyApplication(options: {
     // Browser lifecycle signals are hints: probe real connections and let the
     // existing session reconciliation restore history, execution and approvals.
     let recovery: Promise<void> | null = null;
-    const recover = (): void => {
-        if (disposed || document.visibilityState === "hidden" || recovery !== null) {
+    const recover = (event: Event): void => {
+        if (disposed) {
+            return;
+        }
+        recordBrowserDiagnostic({
+            at: new Date().toISOString(),
+            component: "web",
+            operation: `page-${event.type}`,
+            outcome: document.visibilityState,
+            requestId: "",
+            elapsedMs: 0,
+        });
+        if (document.visibilityState === "hidden" || recovery !== null) {
             return;
         }
         recovery = Promise.allSettled([
@@ -195,7 +207,7 @@ export function createMortyApplication(options: {
     };
     const restored = (event: PageTransitionEvent): void => {
         if (event.persisted) {
-            recover();
+            recover(event);
         }
     };
     window.addEventListener("online", recover);

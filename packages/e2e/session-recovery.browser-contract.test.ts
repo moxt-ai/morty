@@ -8,6 +8,7 @@ type Network = {
     readonly url: string;
     readonly blackhole: (route: "all" | "session" | "bridge") => void;
     readonly disconnect: () => void;
+    readonly interruptSession: () => void;
     readonly restore: () => void;
 };
 
@@ -95,6 +96,13 @@ const test = base.extend<{ readonly network: Network }>({
                         socket.destroy();
                     }
                 },
+                interruptSession: () => {
+                    for (const tunnel of tunnels) {
+                        if (tunnel.route === "session") {
+                            tunnel.client.destroy();
+                        }
+                    }
+                },
                 restore: () => {
                     offline = false;
                     for (const socket of sockets) {
@@ -121,6 +129,99 @@ const test = base.extend<{ readonly network: Network }>({
 
 test.use({
     browserName: "webkit",
+});
+
+test("Given a healthy conversation, when overdue timers and foreground signals arrive together, then it keeps its connection without an error", async ({
+    runtime,
+}) => {
+    const { page } = runtime;
+    let connections = 0;
+    page.on("websocket", (socket) => {
+        if (new URL(socket.url()).pathname === "/mobius/api/v1/transport") {
+            connections += 1;
+        }
+    });
+    await page.clock.install({ time: new Date("2026-10-24T00:00:00Z") });
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    await page.goto(connected.url);
+    const composer = page.getByRole("textbox", { name: "Message" });
+    await expect(composer).toBeEnabled();
+    await composer.fill("Establish a healthy conversation.");
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect(page.getByRole("article", { name: "Agent response" })).toContainText(
+        "Establish a healthy conversation.",
+    );
+    await composer.fill("Keep this draft across a healthy resume.");
+    const before = connections;
+    await page.clock.fastForward(180000);
+    await page.evaluate(() => {
+        document.dispatchEvent(new Event("visibilitychange"));
+        document.dispatchEvent(new Event("resume"));
+        window.dispatchEvent(new Event("online"));
+    });
+    await page.clock.runFor(5000);
+    await expect(composer).toBeEnabled();
+    await expect(composer).toHaveValue("Keep this draft across a healthy resume.");
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    expect(connections).toBe(before);
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect(page.getByRole("article", { name: "Agent response" }).last()).toContainText(
+        "Keep this draft across a healthy resume.",
+    );
+});
+
+test("Given an interrupted browser connection, when a task completes before foreground recovery, then the interruption stays neutral and its result is restored", async ({
+    runtime,
+    network,
+}, testInfo) => {
+    const { page } = runtime;
+    const sockets = new Set<WebSocket>();
+    page.on("websocket", (socket) => {
+        if (new URL(socket.url()).pathname === "/mobius/api/v1/transport") {
+            sockets.add(socket);
+            socket.on("close", () => sockets.delete(socket));
+        }
+    });
+    await page.clock.install({ time: new Date("2026-10-24T00:00:00Z") });
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    await page.goto(connected.url);
+    const composer = page.getByRole("textbox", { name: "Message" });
+    await expect(composer).toBeEnabled();
+    await composer.fill("hold after first delta");
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect(page.getByRole("article", { name: "Agent response" })).toContainText("Partial reply");
+    await composer.fill("Preserve this unsent draft.");
+    const closed = Promise.all(
+        [...sockets].map((socket) => new Promise<void>((resolve) => socket.once("close", () => resolve()))),
+    );
+    network.interruptSession();
+    await closed;
+    await expect(composer).toBeDisabled();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Retry now", exact: true })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("recoverable-interruption.png") });
+    await runtime.continueReply("hold after first delta", {
+        outcome: "complete",
+        output: [{ kind: "text", text: "Task finished while the browser was disconnected." }],
+    });
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await page.clock.runFor(5000);
+    await expect(composer).toBeEnabled();
+    await expect(composer).toHaveValue("Preserve this unsent draft.");
+    await expect(
+        page
+            .getByRole("article", { name: "Agent response" })
+            .filter({ hasText: "Task finished while the browser was disconnected." }),
+    ).toHaveCount(1);
+    await expect(page.getByRole("article", { name: "Your message" })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Stop agent output" })).toBeHidden();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath("foreground-recovered.png") });
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect(page.getByRole("article", { name: "Agent response" }).last()).toContainText(
+        "Preserve this unsent draft.",
+    );
+    await expect(page.getByRole("article", { name: "Your message" })).toHaveCount(2);
 });
 
 for (const recovery of ["automatic", "online", "manual"] as const) {

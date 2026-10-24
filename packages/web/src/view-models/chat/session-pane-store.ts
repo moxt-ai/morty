@@ -21,6 +21,7 @@ import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
+import { recordBrowserDiagnostic } from "../../services/diagnostics/browser-diagnostics.ts";
 import { centralIndexedDB, sessionLastSentMessageEntry } from "../../services/indexed-db/central-indexed-db.ts";
 import { centralSessionStorage, sessionDraftEntry } from "../../services/session-storage/central-session-storage.ts";
 import type { Clock } from "../../services/time/clock.ts";
@@ -31,6 +32,7 @@ import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { type SessionActivityState, sameSessionActivity, workingCommandId } from "./session-activity-machine.ts";
 import {
+    connectionErrorMessage,
     connectionFailure,
     disconnectedConnection,
     isConnectionSettled,
@@ -236,7 +238,7 @@ export function sessionPanePresentation(
             attachments.state.kind !== "reading",
         // Operations that failed because the Session closed say nothing the closed notice does not already say.
         composerError:
-            connectionFailure(model.connection) ??
+            connectionErrorMessage(model.connection) ??
             (model.connection.kind === "closed"
                 ? ""
                 : ([model.activity, model.operation, delivery.state].find((state) => state.kind === "failed")
@@ -581,6 +583,7 @@ export function createSessionPaneModel(options: {
     let reportedStatus: SessionActivityState | null = null;
     const connectionWaiters = new Set<() => void>();
     const store = createStore<SessionPaneStore>()((set, get) => {
+        let connectionChangedAt = clock.now();
         const settleConnectionWaiters = (): void => {
             if (isConnectionSettled(get().connection)) {
                 for (const wake of connectionWaiters) {
@@ -595,7 +598,21 @@ export function createSessionPaneModel(options: {
                 | Partial<SessionPaneStore>
                 | ((state: SessionPaneStore) => SessionPaneStore | Partial<SessionPaneStore>),
         ): void => {
+            const previous = get().connection.kind;
             set(partial);
+            const current = get().connection.kind;
+            if (current !== previous) {
+                const now = clock.now();
+                recordBrowserDiagnostic({
+                    at: new Date().toISOString(),
+                    component: "web",
+                    operation: "session-connection",
+                    outcome: current,
+                    elapsedMs: Math.max(0, now - connectionChangedAt),
+                    requestId: "",
+                });
+                connectionChangedAt = now;
+            }
             settleConnectionWaiters();
         };
         // Reports an activity transition to the owner through the latch; the
@@ -1110,7 +1127,6 @@ export function createSessionPaneModel(options: {
                     };
                     const subscription = await connected.events.subscribeLive(sessionId, observer, signal);
                     signal.throwIfAborted();
-                    consecutiveFailures = 0;
                     setAndSettle({ connection: { kind: "ready", client: connected } });
                     const monitoring = new AbortController();
                     const monitorSignal = AbortSignal.any([signal, monitoring.signal]);
@@ -1120,6 +1136,12 @@ export function createSessionPaneModel(options: {
                                 await clock.sleep(25_000, monitorSignal);
                                 monitorSignal.throwIfAborted();
                                 await get().recover(monitorSignal);
+                                monitorSignal.throwIfAborted();
+                                // A short-lived subscription must not repeatedly reset the
+                                // backoff. Confirm it survives a scheduled liveness check.
+                                if (get().connection.kind === "ready" && client === connected) {
+                                    consecutiveFailures = 0;
+                                }
                             }
                         } catch {
                             // The subscription owns and cancels this monitor.
@@ -1204,6 +1226,15 @@ export function createSessionPaneModel(options: {
                         }
                         const retry = sessionReconnectAttempt(consecutiveFailures);
                         consecutiveFailures += 1;
+                        recordBrowserDiagnostic({
+                            at: new Date().toISOString(),
+                            component: "web",
+                            operation: "session-interruption",
+                            outcome: cause instanceof MobiusError ? cause.code : "bridge_unavailable",
+                            attempt: consecutiveFailures,
+                            elapsedMs: 0,
+                            requestId: "",
+                        });
                         const message = formatError(cause, "The Session could not be opened.");
                         setAndSettle({
                             connection: disconnectedConnection(
@@ -1258,8 +1289,15 @@ export function createSessionPaneModel(options: {
             },
             recover: async (parent) => {
                 parent.throwIfAborted();
-                if (get().connection.kind === "disconnected") {
-                    get().retryNow();
+                const state = get().connection;
+                if (state.kind === "disconnected") {
+                    // A foreground hint can expedite recovery without replenishing
+                    // every short-lived connection's retry budget.
+                    if (state.retry.kind === "exhausted") {
+                        recoveryRequested = true;
+                    }
+                    void requests.recoverBridge(parent).catch(() => undefined);
+                    countdownInterrupt?.abort(new Error("The browser resumed."));
                     return;
                 }
                 if (get().connection.kind !== "ready" || client === null || attempt === null) {
@@ -1271,6 +1309,7 @@ export function createSessionPaneModel(options: {
                 const connected = client;
                 const running = attempt;
                 healthCheck = (async () => {
+                    const started = clock.now();
                     const deadline = new AbortController();
                     const signal = AbortSignal.any([parent, running.signal, deadline.signal]);
                     void clock.sleep(5_000, signal).then(
@@ -1282,15 +1321,31 @@ export function createSessionPaneModel(options: {
                     );
                     try {
                         await connected.sessions.readSessionExecution(sessionId, sessionIdentity, signal);
+                        signal.throwIfAborted();
+                        recordBrowserDiagnostic({
+                            at: new Date().toISOString(),
+                            component: "web",
+                            operation: "session-health",
+                            outcome: "healthy",
+                            elapsedMs: Math.max(0, clock.now() - started),
+                            requestId: "",
+                        });
                     } catch (failure) {
                         if (parent.aborted || running.signal.aborted || attempt !== running) {
                             return;
                         }
                         const cause = deadline.signal.aborted ? deadline.signal.reason : failure;
+                        recordBrowserDiagnostic({
+                            at: new Date().toISOString(),
+                            component: "web",
+                            operation: "session-health",
+                            outcome: deadline.signal.aborted ? "timeout" : "error",
+                            elapsedMs: Math.max(0, clock.now() - started),
+                            requestId: "",
+                        });
                         if (isRetryableRuntimeConnectionFailure(cause)) {
                             requests.resetSessionConnections();
                         }
-                        recoveryRequested = true;
                         running.abort(cause);
                     } finally {
                         deadline.abort();

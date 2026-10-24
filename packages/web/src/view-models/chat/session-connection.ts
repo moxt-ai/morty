@@ -1,9 +1,7 @@
 import { type MobiusClient, MobiusError } from "@moxt-ai/mobius-sdk";
 
-// The Session pane's connection state and its reconnect policy. The Mobius SDK
-// already retries a dropped live stream quickly; this policy is the slower
-// outer layer that reopens the Session after the SDK gives up or the Runtime is
-// unreachable.
+// The Session pane owns live-stream recovery; SDK retries are disabled so
+// connection attempts and reconciliation share one bounded retry policy.
 
 export type SessionConnection =
     | { readonly kind: "loading" }
@@ -62,6 +60,22 @@ export function connectionFailure(connection: SessionConnection): string | null 
     }
 }
 
+/** Recoverable interruptions have a retry notice, not a terminal error alert. */
+export function connectionErrorMessage(connection: SessionConnection): string | null {
+    switch (connection.kind) {
+        case "failed":
+            return connection.message;
+        case "closed":
+            return connection.reopen.kind === "failed" ? connection.reopen.message : null;
+        case "loading":
+        case "session-loading-after-create":
+        case "ready":
+        case "reconnecting":
+        case "disconnected":
+            return null;
+    }
+}
+
 /** Whether the connection reached a state that operations waiting for it can act on. */
 export function isConnectionSettled(connection: SessionConnection): boolean {
     switch (connection.kind) {
@@ -88,13 +102,11 @@ export function sessionReconnectAttempt(
     if (consecutiveFailures >= SESSION_AUTO_RECONNECT_ATTEMPTS) {
         return { kind: "exhausted" };
     }
-    return {
-        kind: "scheduled",
-        delayMs: Math.min(
-            SESSION_RECONNECT_DELAYS_MS[consecutiveFailures] ?? SESSION_RECONNECT_DELAY_CAP_MS,
-            SESSION_RECONNECT_DELAY_CAP_MS,
-        ),
-    };
+    const ceiling = Math.min(
+        SESSION_RECONNECT_DELAYS_MS[consecutiveFailures] ?? SESSION_RECONNECT_DELAY_CAP_MS,
+        SESSION_RECONNECT_DELAY_CAP_MS,
+    );
+    return { kind: "scheduled", delayMs: Math.round(ceiling * (0.5 + Math.random() * 0.5)) };
 }
 
 /** The disconnected state while an automatic retry counts down, or after retries are exhausted. */

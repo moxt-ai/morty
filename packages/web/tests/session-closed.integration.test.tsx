@@ -183,7 +183,7 @@ test("Given a conversation whose Runtime restarted and then closed its Session w
         throw new Error("The opened conversation must have an address");
     }
     await daemon.disconnect();
-    await app.waitForView(() => expect(reconnectStatusText(app)).toBe("Retrying in 5 s Retry now"));
+    await app.waitForView(() => expect(reconnectStatusText(app)).toContain("Retrying in"));
     await daemon.reconnect();
     await daemon.closeSession(sessionId);
 
