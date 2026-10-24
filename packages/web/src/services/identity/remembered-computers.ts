@@ -4,6 +4,8 @@ import {
     centralLocalStorage,
     MAX_REMEMBERED_COMPUTERS,
     type RememberedComputer,
+    readableComputer,
+    readableCredential,
     rememberedComputersEntry,
 } from "../local-storage/central-local-storage.ts";
 import { encodeIdentityScope, type IdentityScope } from "./identity-scope-url.ts";
@@ -18,20 +20,17 @@ export const computerKey = (scope: IdentityScope): string => encodeIdentityScope
  * computers were remembered, only fill the room the list leaves.
  */
 export function rememberedComputers(): readonly RememberedComputer[] {
-    const credentials = storedCredentials();
-    return (centralLocalStorage.read(rememberedComputersEntry) ?? []).filter(
-        (computer) => computer.scope.userId in credentials,
-    );
+    return openable(readStoredAccess());
 }
 
 /** The token this browser holds for a user, if any of its computers may still be opened. */
 export function storedToken(userId: string): string | null {
-    return storedCredentials()[userId] ?? null;
+    return readStoredAccess().credentials.get(userId) ?? null;
 }
 
 /** Whether this browser holds any access at all, including access saved before computers were remembered. */
 export function hasStoredAccess(): boolean {
-    return Object.keys(storedCredentials()).length > 0;
+    return readStoredAccess().credentials.size > 0;
 }
 
 /** Keeps a newly issued access: its token, and its computer behind those already visited. */
@@ -96,8 +95,44 @@ export function computerAddress(scope: IdentityScope, destination: ComputerDesti
     return `/chat?${query}`;
 }
 
-function storedCredentials(): Readonly<Record<string, string>> {
-    return centralLocalStorage.read(anonymousCredentialsEntry) ?? {};
+/**
+ * Everything this browser stores about its access, read entry by entry. Another Morty version may store tokens or
+ * computer records this version cannot read; they are kept aside and written back untouched, never dropped.
+ */
+interface StoredAccess {
+    readonly credentials: ReadonlyMap<string, string>;
+    readonly unreadableCredentials: Readonly<Record<string, unknown>>;
+    readonly computers: readonly RememberedComputer[];
+    readonly unreadableComputers: readonly unknown[];
+}
+
+function readStoredAccess(): StoredAccess {
+    const credentials = new Map<string, string>();
+    const unreadableCredentials: Record<string, unknown> = {};
+    for (const [userId, token] of Object.entries(centralLocalStorage.read(anonymousCredentialsEntry) ?? {})) {
+        const readable = readableCredential(userId, token);
+        if (readable === null) {
+            unreadableCredentials[userId] = token;
+        } else {
+            credentials.set(userId, readable);
+        }
+    }
+    const computers: RememberedComputer[] = [];
+    const unreadableComputers: unknown[] = [];
+    for (const record of centralLocalStorage.read(rememberedComputersEntry) ?? []) {
+        const readable = readableComputer(record);
+        if (readable === null) {
+            unreadableComputers.push(record);
+        } else {
+            computers.push(readable);
+        }
+    }
+    return { credentials, unreadableCredentials, computers, unreadableComputers };
+}
+
+/** The computers this version can open: those whose token it can read. */
+function openable(stored: StoredAccess): readonly RememberedComputer[] {
+    return stored.computers.filter((computer) => stored.credentials.has(computer.scope.userId));
 }
 
 /** The list with this computer in it. A new computer goes last, which makes room by dropping the least recent one. */
@@ -126,9 +161,10 @@ function updateComputers(
     } = {},
 ): void {
     const { added, released } = change;
-    const previous = new Set(rememberedComputers().map((computer) => computer.scope.userId));
+    const stored = readStoredAccess();
+    const previous = new Set(openable(stored).map((computer) => computer.scope.userId));
     const needed = new Set(computers.map((computer) => computer.scope.userId));
-    const credentials = Object.entries(storedCredentials()).filter(
+    const credentials = [...stored.credentials].filter(
         ([userId]) =>
             userId !== added?.userId && (needed.has(userId) || (!previous.has(userId) && userId !== released)),
     );
@@ -144,10 +180,22 @@ function updateComputers(
         excess -= 1;
         return false;
     });
-    if (kept.length === 0) {
+    // What only another version can read stays as it was: its tokens, and the computers that need them.
+    const unreadable = Object.fromEntries(
+        Object.entries(stored.unreadableCredentials).filter(
+            ([userId]) => !kept.some(([keptUserId]) => keptUserId === userId),
+        ),
+    );
+    const theirs = stored.computers.filter(
+        (computer) =>
+            computer.scope.userId in unreadable &&
+            !computers.some((listed) => computerKey(listed.scope) === computerKey(computer.scope)),
+    );
+    const allCredentials = { ...unreadable, ...Object.fromEntries(kept) };
+    if (Object.keys(allCredentials).length === 0) {
         centralLocalStorage.remove(anonymousCredentialsEntry);
     } else {
-        centralLocalStorage.write(anonymousCredentialsEntry, Object.fromEntries(kept));
+        centralLocalStorage.write(anonymousCredentialsEntry, allCredentials);
     }
-    centralLocalStorage.write(rememberedComputersEntry, computers);
+    centralLocalStorage.write(rememberedComputersEntry, [...computers, ...theirs, ...stored.unreadableComputers]);
 }

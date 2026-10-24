@@ -485,3 +485,47 @@ test("Given a computer I keep using, When ten more computers are saved in this b
     expect(offered).not.toContain(oldestScope);
     expect(offered.filter((scope) => scope !== null)).toHaveLength(10);
 });
+
+// Another Morty version can store access this version cannot read, such as a newer token format.
+const FUTURE_USER_ID = "usr_saved-by-a-newer-version";
+const FUTURE_TOKEN = `mobius_anon_v3_${"f".repeat(43)}`;
+
+function addStoredValue(key: string, add: (stored: unknown) => unknown): void {
+    const raw = window.localStorage.getItem(key);
+    window.localStorage.setItem(key, JSON.stringify(add(raw === null ? null : JSON.parse(raw))));
+}
+
+test("Given a remembered computer and a credential this version cannot read, When I return through the plain address, Then my computer opens and the other credential is kept", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const sessionId = await startConversation(app, "Keep my computer");
+    addStoredValue("mobius.anonymous-credentials.v1", (stored) => ({
+        ...(typeof stored === "object" && stored !== null ? stored : {}),
+        [FUTURE_USER_ID]: FUTURE_TOKEN,
+    }));
+
+    window.location.href = `${app.origin}/`;
+    const returned = await app.reload();
+    await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ }));
+    expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
+    // Opening the computer saved its visit; the credential this version cannot read is still there for the other.
+    expect(JSON.parse(window.localStorage.getItem("mobius.anonymous-credentials.v1") ?? "{}")).toMatchObject({
+        [FUTURE_USER_ID]: FUTURE_TOKEN,
+    });
+});
+
+test("Given a remembered computer and a computer record this version cannot read, When I return through the plain address, Then my computer opens and the other record is kept", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const sessionId = await startConversation(app, "Keep my computer list");
+    const future = { scope: { userId: FUTURE_USER_ID }, destination: { kind: "workspace" }, lastUsedAt: 0 };
+    addStoredValue("morty:remembered-computers:v1", (stored) => [...(Array.isArray(stored) ? stored : []), future]);
+
+    window.location.href = `${app.origin}/`;
+    const returned = await app.reload();
+    await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ }));
+    expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
+    expect(JSON.parse(window.localStorage.getItem("morty:remembered-computers:v1") ?? "[]")).toContainEqual(future);
+});
