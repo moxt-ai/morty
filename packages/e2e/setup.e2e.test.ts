@@ -56,7 +56,7 @@ test("Given a saved Machine whose Runtime the manager no longer manages, When se
     expect(statuses).toContain("ready");
 });
 
-test("Given a browser opened the saved Machine's link, When setup replaces its Project, Then nothing from the previous Project opens Morty and the new link does", async ({
+test("Given a browser opened the saved Machine's link, When setup replaces its Project, Then nothing from the previous Project opens Morty and the new link does in the same tab", async ({
     runtime,
 }) => {
     const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
@@ -80,9 +80,9 @@ test("Given a browser opened the saved Machine's link, When setup replaces its P
     await expect(page.getByRole("heading", { name: "This link is no longer valid" })).toBeVisible();
     await page.goto(original.url);
     await expect(page.getByRole("heading", { name: "This link is no longer available" })).toBeVisible();
-    const opened = await page.context().newPage();
-    await opened.goto(connected.url);
-    await expect(opened.getByRole("textbox", { name: "Message" })).toBeEnabled();
+    // The new link differs only after "#", so the browser keeps the page that showed the previous one.
+    await page.goto(connected.url);
+    await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
 });
 
 test("Given a saved Machine and another same-App connection, When its Runtime reconnects, Then setup reuses the Machine's bound Runtime", async ({

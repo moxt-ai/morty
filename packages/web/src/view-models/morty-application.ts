@@ -38,7 +38,8 @@ export interface MortyApplication {
     /**
      * The /continue handoff redeem. Created with the application: its store
      * reads the transfer code from the location at creation, and only a real
-     * continuation visit starts network work.
+     * continuation visit starts network work. Another code in the address
+     * reloads the page, so the store always describes the link in it.
      */
     readonly continuation: ReturnType<typeof createContinueStore>;
     /** The signed-in surface; carries the workspace for the active identity. */
@@ -210,6 +211,13 @@ export function createMortyApplication(options: {
             recover(event);
         }
     };
+    // A continuation link carries its code after "#", and the continuation reads it when the page starts. Opening
+    // another link that differs only there keeps the page, so it starts again for the link now in the address.
+    const linkChanged = (): void => {
+        if (window.location.pathname.startsWith("/continue")) {
+            window.location.reload();
+        }
+    };
     const networkChanged = (): void => {
         workspace?.home.getState().setNetworkAvailable(navigator.onLine);
     };
@@ -217,6 +225,7 @@ export function createMortyApplication(options: {
     window.addEventListener("online", networkChanged);
     window.addEventListener("online", recover);
     window.addEventListener("pageshow", restored);
+    window.addEventListener("hashchange", linkChanged);
     document.addEventListener("visibilitychange", recover);
     document.addEventListener("resume", recover);
     if (!window.location.pathname.startsWith("/continue")) {
@@ -246,6 +255,7 @@ export function createMortyApplication(options: {
             window.removeEventListener("online", networkChanged);
             window.removeEventListener("online", recover);
             window.removeEventListener("pageshow", restored);
+            window.removeEventListener("hashchange", linkChanged);
             document.removeEventListener("visibilitychange", recover);
             document.removeEventListener("resume", recover);
             lifetime.abort(new DOMException("The Morty application was disposed.", "AbortError"));
