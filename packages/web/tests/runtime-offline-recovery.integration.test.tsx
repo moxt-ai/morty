@@ -1,5 +1,5 @@
 import { getByRole, queryAllByRole, queryByRole } from "@testing-library/dom";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
@@ -114,19 +114,10 @@ test("Given a page following its sessions' statuses, When the Runtime goes offli
     await app.user.click(app.elementByTestId(dataTestId.newConversation));
     await app.waitForView(() => expect(directoryTitles(app)).toHaveLength(1));
 
-    const errors = vi.spyOn(console, "error");
-    try {
-        await daemon.disconnect();
-        // The status stream ends with the Runtime, and so does the page's attempt to read the sessions again.
-        await app.waitForView(() => {
-            expect(connectionStatus(app)).toBe("disconnected");
-            expect(errors.mock.calls.some(([message]) => message === "Conversation status updates disconnected")).toBe(
-                true,
-            );
-        }, RUNTIME_CHANGE_TIMEOUT_MS);
-    } finally {
-        errors.mockRestore();
-    }
+    await daemon.disconnect();
+    // The Platform tells the status stream at once that the Runtime went offline, while the page learns it from its
+    // next Runtime check. By the time the page shows it, the stream has ended and could not read the sessions again.
+    await app.waitForView(() => expect(connectionStatus(app)).toBe("disconnected"), RUNTIME_CHANGE_TIMEOUT_MS);
 
     await daemon.reconnect();
     await app.waitForView(() => expect(connectionStatus(app)).toBe("connected"), RUNTIME_CHANGE_TIMEOUT_MS);
