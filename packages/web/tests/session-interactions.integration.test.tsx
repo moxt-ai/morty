@@ -4,6 +4,45 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
+test("Given an open conversation, When I open agent configuration, Then I can copy a terminal command for this same session", {
+    timeout: 30_000,
+}, async () => {
+    const app = await requestInput();
+    await app.user.click(getByRole(document.body, "button", { name: "Deny: No" }));
+    await app.waitForView(() => expect(document.body.textContent).toContain("Permission rejected"));
+    await app.user.click(getByRole(document.body, "button", { name: "Configure agent" }));
+    const terminal = getByRole(document.body, "region", { name: "Connect a terminal" });
+    expect(getByRole(terminal, "textbox", { name: "Terminal command" })).toHaveProperty(
+        "value",
+        expect.stringMatching(/^mobius chat --runtime [a-zA-Z0-9._:-]+ --session [a-zA-Z0-9._:-]+$/u),
+    );
+    expect(getByRole(terminal, "button", { name: "Copy terminal command" })).toBeDefined();
+    expect(terminal.textContent).toContain("same conversation");
+});
+
+test("Given choices and a multiline question, When I choose visible options and edit the draft, Then the exact selections, newlines, and empty answer reach the agent", {
+    timeout: 30_000,
+}, async () => {
+    const app = await requestInput("request detailed input");
+    await app.user.click(getByRole(document.body, "button", { name: "Allow: Yes" }));
+    const form = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Agent information request" }));
+    expect(form.textContent).toContain("A green theme for the dashboard");
+    await app.user.click(getByRole(form, "radio", { name: "Green A green theme for the dashboard" }));
+    await app.user.click(getByRole(form, "checkbox", { name: "Web" }));
+    await app.user.click(getByRole(form, "checkbox", { name: "Mobile" }));
+    const editor = getByRole(form, "textbox", { name: "Message" });
+    expect(editor).toBeInstanceOf(HTMLTextAreaElement);
+    expect(editor).toHaveProperty("value", "First draft\nSecond line");
+    await app.user.clear(editor);
+    await app.user.type(editor, "Revised first line{Enter}Second line");
+    await app.user.click(getByRole(form, "button", { name: "Continue" }));
+    await app.waitForView(() =>
+        expect(document.body.textContent).toContain(
+            'Received answers: {"color":"green","channels":["web","mobile"],"message":"Revised first line\\nSecond line","answer":""}',
+        ),
+    );
+});
+
 async function requestInput(prompt = "request user input") {
     const app = await createTestApp({
         connectAgent: true,

@@ -1,3 +1,4 @@
+import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import type { ExecutionContext } from "../../components/chat/execution-context.ts";
 import type { BotRuntimeConfiguration } from "../../services/chat/bot-chat-api.ts";
 import { type BotChatHomeStore, botConnectionStatus } from "./bot-chat-home-store.ts";
@@ -7,6 +8,17 @@ import type { OpenMobiusSession } from "./open-session.ts";
 import type { SessionConnection } from "./session-pane-store.ts";
 
 export type { ExecutionContext };
+
+export function sessionTerminalCommand(
+    session: OpenMobiusSession,
+    configuration: BotRuntimeConfiguration | null,
+): string | null {
+    const runtimeId = configuration?.runtime.runtimeId;
+    const sessionId = session.result.ready.sessionId;
+    return isIdentifier(runtimeId) && isIdentifier(sessionId)
+        ? `mobius chat --runtime ${runtimeId} --session ${sessionId}`
+        : null;
+}
 
 export function pendingExecutionContext(
     home: BotChatHomeStore,

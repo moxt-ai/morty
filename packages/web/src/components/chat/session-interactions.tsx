@@ -53,34 +53,78 @@ function FieldControl({
         );
     }
     if (field.type === "select" || field.type === "multiselect") {
+        const selected =
+            field.type === "multiselect" && Array.isArray(value)
+                ? value.filter((entry): entry is string => typeof entry === "string")
+                : typeof value === "string"
+                  ? [value]
+                  : field.type === "multiselect"
+                    ? readMultiselectDefaults(field)
+                    : field.hasDefaultValue
+                      ? [field.defaultStringValue]
+                      : [];
         return (
-            <label className="grid gap-1.5 text-[11px] font-medium text-[#555c68]">
+            <fieldset className="min-w-0 space-y-2" disabled={disabled}>
+                <legend className="mb-1 text-sm font-medium text-foreground">{field.title}</legend>
+                {field.description.length > 0 && (
+                    <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">{field.description}</p>
+                )}
+                {field.type === "multiselect" && (
+                    <p className="text-xs text-muted-foreground">Select all that apply.</p>
+                )}
+                {field.options.map((option) => (
+                    <label
+                        className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-input px-3 py-2.5 has-checked:border-primary has-checked:bg-primary/5 has-focus-visible:ring-2 has-focus-visible:ring-ring/70"
+                        key={option.value}
+                    >
+                        <input
+                            className="mt-1 size-4 shrink-0 accent-primary"
+                            defaultChecked={selected.includes(option.value)}
+                            name={field.name}
+                            required={field.type === "select" && field.required}
+                            type={field.type === "multiselect" ? "checkbox" : "radio"}
+                            value={option.value}
+                        />
+                        <span className="min-w-0 [overflow-wrap:anywhere]">
+                            <span className="block text-sm font-medium text-foreground">{option.label}</span>
+                            {option.description.length > 0 && (
+                                <span className="mt-0.5 block text-sm text-muted-foreground">{option.description}</span>
+                            )}
+                        </span>
+                    </label>
+                ))}
+                {!field.required && field.type === "select" && (
+                    <label className="flex min-h-11 cursor-pointer items-center gap-3 px-3 text-sm text-muted-foreground">
+                        <input
+                            className="size-4 accent-primary"
+                            defaultChecked={selected.length === 0}
+                            name={field.name}
+                            type="radio"
+                            value=""
+                        />
+                        Skip this question
+                    </label>
+                )}
+            </fieldset>
+        );
+    }
+    if (field.type === "string" && field.multiline === true) {
+        return (
+            <label className="grid min-w-0 gap-1.5 text-sm font-medium text-foreground">
                 {field.title}
-                <select
-                    className="min-h-11 rounded-md border-[0.5px] border-black/12 bg-white px-2.5 text-base font-normal text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/70 md:min-h-10 md:text-xs"
+                <textarea
+                    className="min-h-32 w-full resize-y rounded-lg border border-input bg-white px-3 py-2 text-base font-normal leading-6 outline-none focus-visible:ring-2 focus-visible:ring-ring/70 md:text-sm"
                     defaultValue={
-                        field.type === "multiselect" && Array.isArray(value)
-                            ? value.filter((entry): entry is string => typeof entry === "string")
-                            : typeof value === "string"
-                              ? value
-                              : field.type === "multiselect"
-                                ? readMultiselectDefaults(field)
-                                : field.hasDefaultValue
-                                  ? field.defaultStringValue
-                                  : undefined
+                        typeof value === "string" ? value : field.hasDefaultValue ? field.defaultStringValue : ""
                     }
                     disabled={disabled}
-                    multiple={field.type === "multiselect"}
+                    maxLength={field.maximumLength.length > 0 ? Number(field.maximumLength) : undefined}
+                    minLength={field.minimumLength.length > 0 ? Number(field.minimumLength) : undefined}
                     name={field.name}
+                    placeholder={field.description}
                     required={field.required}
-                >
-                    {!field.required && field.type === "select" && <option value="">Not selected</option>}
-                    {field.options.map((option) => (
-                        <option key={option.value} title={option.description} value={option.value}>
-                            {option.label}
-                        </option>
-                    ))}
-                </select>
+                    rows={4}
+                />
                 {field.description.length > 0 && (
                     <span className="font-normal text-muted-foreground">{field.description}</span>
                 )}
@@ -261,7 +305,9 @@ function ElicitationCard({
                     <p className="text-base leading-6 font-semibold text-foreground">
                         {answered ? "Asked" : "Agent needs input"}
                     </p>
-                    <p className="mt-1 text-sm leading-6 text-foreground">{elicitation.message}</p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]">
+                        {elicitation.message}
+                    </p>
                     {elicitation.mode === "url" ? (
                         <div className="mt-2.5">
                             <code className="block break-all rounded-lg border-[0.5px] border-[#2f6feb]/15 bg-white/70 px-2.5 py-2 text-[10px] leading-4 text-[#435f8c]">

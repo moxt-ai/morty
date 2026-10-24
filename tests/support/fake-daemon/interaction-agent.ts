@@ -47,6 +47,9 @@ export function createInteractionAgent() {
                 const sessionScope = context.params.prompt.some(
                     (content) => content.type === "text" && content.text === "request session permission",
                 );
+                const detailedInput = context.params.prompt.some(
+                    (content) => content.type === "text" && content.text === "request detailed input",
+                );
                 const options: acp.PermissionOption[] = sessionScope
                     ? [
                           { optionId: "allow-session", kind: "allow_always", name: "Allow for this session" },
@@ -107,15 +110,57 @@ export function createInteractionAgent() {
                                     sessionId,
                                     mode: "form",
                                     message: "Choose a branch to verify",
-                                    requestedSchema: {
-                                        type: "object",
-                                        properties: { branch: { type: "string", title: "Branch", minLength: 1 } },
-                                        required: ["branch"],
-                                    },
+                                    requestedSchema: detailedInput
+                                        ? {
+                                              type: "object",
+                                              properties: {
+                                                  color: {
+                                                      type: "string",
+                                                      title: "Color",
+                                                      oneOf: [
+                                                          {
+                                                              const: "blue",
+                                                              title: "Blue",
+                                                              description: "A calm blue theme with readable contrast",
+                                                          },
+                                                          {
+                                                              const: "green",
+                                                              title: "Green",
+                                                              description: "A green theme for the dashboard",
+                                                          },
+                                                      ],
+                                                  },
+                                                  channels: {
+                                                      type: "array",
+                                                      title: "Channels",
+                                                      items: {
+                                                          anyOf: [
+                                                              { const: "web", title: "Web" },
+                                                              { const: "mobile", title: "Mobile" },
+                                                          ],
+                                                      },
+                                                  },
+                                                  message: {
+                                                      type: "string",
+                                                      title: "Message",
+                                                      default: "First draft\nSecond line",
+                                                      _meta: { "ai.moxt/elicitation": { multiline: true } },
+                                                  },
+                                                  answer: { type: "string", title: "Optional answer" },
+                                              },
+                                          }
+                                        : {
+                                              type: "object",
+                                              properties: { branch: { type: "string", title: "Branch", minLength: 1 } },
+                                              required: ["branch"],
+                                          },
                                 },
                                 { cancellationSignal: signal },
                             );
                             text = `Input ${input.action}`;
+                            if (detailedInput && input.action === "accept") {
+                                text = `Received answers: ${JSON.stringify(input.content)}`;
+                            }
                             if (
                                 input.action === "accept" &&
                                 typeof input.content === "object" &&

@@ -3,6 +3,7 @@ import { Tooltip } from "radix-ui";
 import { useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
+import { CopyToClipboardButton } from "../ui/copy-to-clipboard-button.tsx";
 import { MortyTooltipContent } from "../ui/morty-tooltip-content.tsx";
 import { Select } from "../ui/option-select.tsx";
 import { overlaySurfacePanelClassName, overlaySurfaceRadiusClassName } from "../ui/overlay-surface.ts";
@@ -48,9 +49,11 @@ const configurationHarnessTabClassName =
 export function ChatConfigurationMenu({
     controls,
     settingsLoading = false,
+    terminalCommand = null,
 }: {
     readonly controls: readonly ChatConfigurationControl[];
     readonly settingsLoading?: boolean;
+    readonly terminalCommand?: string | null;
 }) {
     // TEMP style-tuning preview: `?agentConfigPreview=menu-open|menu-model-open|menu-loading`. Remove with chat-configuration-menu-preview.ts.
     const previewState = useAgentConfigPreviewState();
@@ -251,6 +254,39 @@ export function ChatConfigurationMenu({
                             ))
                         )}
                     </div>
+                    {terminalCommand !== null && (
+                        <section
+                            aria-label="Connect a terminal"
+                            className="flex flex-col gap-3 border-t border-border p-4"
+                        >
+                            <h3 className="text-sm font-medium">Connect a terminal</h3>
+                            <p className="text-xs leading-5 text-copy-secondary">
+                                Run this on the connected computer with the latest Mobius CLI. Your terminal and Morty
+                                share this same conversation. Answer questions from either screen.
+                            </p>
+                            <textarea
+                                aria-label="Terminal command"
+                                className="min-h-24 w-full resize-none rounded-lg border border-border bg-surface-subtle p-3 font-mono text-base leading-6 sm:text-xs"
+                                onFocus={(event) => event.currentTarget.select()}
+                                readOnly
+                                rows={3}
+                                value={terminalCommand}
+                            />
+                            <CopyToClipboardButton
+                                className="min-h-11"
+                                failureToast={{
+                                    title: "Copy the command manually",
+                                    description: "Select the terminal command above and copy it.",
+                                }}
+                                label="Copy terminal command"
+                                successToast={{ title: "Terminal command copied" }}
+                                value={terminalCommand}
+                                variant="outline"
+                            >
+                                Copy terminal command
+                            </CopyToClipboardButton>
+                        </section>
+                    )}
                 </Popover.Content>
             </Popover.Portal>
         </Popover.Root>

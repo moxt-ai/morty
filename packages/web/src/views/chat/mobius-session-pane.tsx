@@ -35,7 +35,11 @@ import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { useDesktopChatLayout } from "../../components/utils/use-desktop-chat-layout.ts";
 import { cn } from "../../lib/utils.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
-import { type ExecutionContext, sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
+import {
+    type ExecutionContext,
+    sessionExecutionContext,
+    sessionTerminalCommand,
+} from "../../view-models/chat/execution-context.ts";
 import { harnessOptions } from "../../view-models/chat/native-session-agents.ts";
 import { sessionInteractionPresentation } from "../../view-models/chat/session-interaction-store.ts";
 import {
@@ -954,6 +958,7 @@ function MobiusSessionPaneBody({
                             ),
                         ]}
                         settingsLoading={model.operation.kind === "configuring"}
+                        terminalCommand={sessionTerminalCommand(pane.session, runtimeConfiguration)}
                     />
                     <ReadonlyWorkingDirectory
                         directoryLabel={executionContext.directory ?? executionContext.directoryPlaceholder}
