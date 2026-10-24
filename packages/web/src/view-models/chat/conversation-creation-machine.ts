@@ -34,7 +34,7 @@ export type ConversationCreationState =
  * discards it. It belongs to that conversation, not to whichever conversation is on screen: leaving the conversation
  * keeps it, and the conversation's pane delivers it whenever it opens.
  */
-export type FirstMessageDelivery =
+type FirstMessageDelivery =
     | { readonly kind: "pending"; readonly message: QueuedDraftMessage }
     | {
           /**
@@ -50,7 +50,7 @@ export type FirstMessageDelivery =
 /** First messages not yet accepted by the service, by conversation id. */
 export type FirstMessages = ReadonlyMap<string, FirstMessageDelivery>;
 
-export type FirstMessageEvent =
+type FirstMessageEvent =
     | { readonly kind: "queued"; readonly conversationId: string; readonly message: QueuedDraftMessage }
     | { readonly kind: "delivered"; readonly conversationId: string }
     | { readonly kind: "discarded"; readonly conversationId: string; readonly commandId: string }

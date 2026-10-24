@@ -76,3 +76,41 @@ for (const moment of moments) {
         await app.waitForView(() => expect(answered(app, `Codex turn 1: ${prompt}`)).toBe(true), 20_000);
     });
 }
+
+test("Given a first prompt whose conversation is still being created, When I start another new conversation with the same text, Then the new draft keeps its text after the first conversation is created", {
+    timeout: 60_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const prompt = "Draft this twice";
+    let restarted = false;
+    const observer = new MutationObserver(() => {
+        if (
+            !restarted &&
+            document.querySelector(`[data-testid="${dataTestId.initialMessageStatus}"]`)?.textContent ===
+                "Session creating"
+        ) {
+            restarted = true;
+            app.elementByTestId(dataTestId.newConversation).click();
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    onTestFinished(() => observer.disconnect());
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    await sendPrompt(app, composer, prompt);
+    await app.waitForView(() => expect(restarted).toBe(true));
+    observer.disconnect();
+    // The new draft gets the same text before the first conversation is created.
+    const draft = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled && element.value === "",
+    );
+    await app.user.click(draft);
+    await app.user.paste(prompt);
+
+    await app.waitForView(() => expect(conversationEntry(app, prompt)).toBeDefined());
+    const current = app.elementByTestId(dataTestId.messageComposer);
+    expect(current instanceof HTMLTextAreaElement ? current.value : null).toBe(prompt);
+});

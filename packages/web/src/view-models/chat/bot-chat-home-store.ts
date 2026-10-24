@@ -134,6 +134,8 @@ export interface BotChatHomeStore {
     readonly revision: number;
     readonly directoryRevision: number;
     readonly draft: string;
+    /** The draft the composer text belongs to. Only starting a new draft changes it. */
+    readonly draftKey: string;
     readonly draftSettings: ChatDraftConfiguration | null;
     /** Bumped whenever the message list should re-arm following the latest message. */
     readonly scrollFollowRevision: number;
@@ -290,6 +292,7 @@ export const createBotChatHomeStore = (
             revision: 0,
             directoryRevision: 0,
             draft: "",
+            draftKey: selection.kind === "draft" ? selection.key : options.createId(),
             draftSettings: null,
             scrollFollowRevision: 0,
             pairingDialogOpen: false,
@@ -702,13 +705,15 @@ export const createBotChatHomeStore = (
                     centralSessionStorage.remove(newConversationDraftEntry(current.view.botId));
                 }
                 options.navigation.showDraft();
+                const draftKey = options.createId();
                 set((state) => ({
                     selection: transitionConversationSelection(state.selection, {
                         kind: "draft-selected",
-                        key: options.createId(),
+                        key: draftKey,
                     }),
                     creation: transitionConversationCreation(state.creation, { kind: "reset" }),
                     draft: "",
+                    draftKey,
                     draftSettings: null,
                     scrollFollowRevision: state.scrollFollowRevision + 1,
                     revision: state.view.kind === "active" ? state.revision : state.revision + 1,
@@ -921,8 +926,9 @@ export const createBotChatHomeStore = (
                                   session,
                               }),
                           }
-                        : // The draft text was sent with this conversation, so it must not be offered again.
-                          state.draft === draft
+                        : // The draft text was sent with this conversation, so it must not be offered again. A
+                          // new draft started meanwhile owns whatever text the composer holds now.
+                          state.draftKey === commandId
                           ? { draft: "" }
                           : {}),
                 }));
@@ -934,7 +940,7 @@ export const createBotChatHomeStore = (
                 if (following) {
                     composerAttachments.getState().clear();
                 }
-                if (following || centralSessionStorage.read(newConversationDraftEntry(activeBotId)) === draft) {
+                if (get().draftKey === commandId) {
                     centralSessionStorage.remove(newConversationDraftEntry(activeBotId));
                 }
                 return true;
