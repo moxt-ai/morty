@@ -82,7 +82,6 @@ export function connectionPresentation(
                 title: session.kind === "failed" ? "Connection unavailable" : "Couldn’t reconnect",
                 description:
                     session.kind === "failed" ? session.message : "Automatic retries stopped. Your draft is saved.",
-                action: session.kind === "failed" ? "reload" : "retry",
             },
         );
     }

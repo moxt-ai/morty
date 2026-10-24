@@ -1,4 +1,4 @@
-import { getByRole, queryByRole } from "@testing-library/dom";
+import { getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
@@ -266,6 +266,13 @@ test("Given an unavailable Runtime and an editable draft, When automatic retries
     expect(composer.disabled).toBe(false);
     expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true);
     await app.user.type(composer, " even now");
+    await app.user.upload(
+        getByLabelText(document.body, "Choose attachments"),
+        new File(["Keep this unsent attachment"], "recovery-notes.json", { type: "text/plain" }),
+    );
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "list", { name: "Attachments" }).textContent).toContain("recovery-notes.json"),
+    );
     expect(
         queryByRole(document.body, "button", { name: /Switch computer/, description: "Connection available" }),
     ).toBeNull();
@@ -274,6 +281,7 @@ test("Given an unavailable Runtime and an editable draft, When automatic retries
     await app.waitForView(() => expect(reconnectStatusText(app)).toBeNull());
     expect(queryByRole(document.body, "alert")).toBeNull();
     expect(composer.value).toBe("Keep editing through failure even now");
+    expect(getByRole(document.body, "list", { name: "Attachments" }).textContent).toContain("recovery-notes.json");
     expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false);
     expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain(
         "Keep editing through failure",

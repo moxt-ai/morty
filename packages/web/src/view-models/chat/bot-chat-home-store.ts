@@ -729,9 +729,7 @@ export const createBotChatHomeStore = (
             },
             retry: () => {
                 set((current) => ({
-                    selection: transitionConversationSelection(current.selection, {
-                        kind: current.selection.kind === "ready" ? "reload-requested" : "retry-requested",
-                    }),
+                    selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
                     revision: current.revision + 1,
                 }));
                 onRestart();

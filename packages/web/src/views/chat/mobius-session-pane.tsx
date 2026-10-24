@@ -777,12 +777,7 @@ function MobiusSessionPaneBody({
                         executionContext.feedback.kind === "hidden" ? undefined : (
                             <ConnectionNotice
                                 feedback={executionContext.feedback}
-                                onRetryNow={() =>
-                                    executionContext.feedback.kind === "failed" &&
-                                    executionContext.feedback.action === "reload"
-                                        ? workspace.home.getState().retry()
-                                        : pane.store.getState().retryNow()
-                                }
+                                onRetryNow={pane.store.getState().retryNow}
                                 onReopen={() => run(pane.store.getState().reopen)}
                             />
                         )

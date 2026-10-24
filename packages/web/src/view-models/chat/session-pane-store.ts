@@ -1215,18 +1215,14 @@ export function createSessionPaneModel(options: {
                         if (closure !== null) {
                             continue;
                         }
-                        if (!isRetryableRuntimeConnectionFailure(cause)) {
-                            const message = formatError(cause, "The Session could not be opened.");
-                            setAndSettle({
-                                connection: { kind: "failed", message },
-                            });
-                            return;
-                        }
+                        const retryable = isRetryableRuntimeConnectionFailure(cause);
                         if (recoveryRequested) {
                             recoveryRequested = false;
                             consecutiveFailures = 0;
                         }
-                        const retry = sessionReconnectAttempt(consecutiveFailures);
+                        const retry = retryable
+                            ? sessionReconnectAttempt(consecutiveFailures)
+                            : { kind: "exhausted" as const };
                         consecutiveFailures += 1;
                         recordBrowserDiagnostic({
                             at: new Date().toISOString(),
@@ -1239,10 +1235,9 @@ export function createSessionPaneModel(options: {
                         });
                         const message = formatError(cause, "The Session could not be opened.");
                         setAndSettle({
-                            connection: disconnectedConnection(
-                                message,
-                                retry.kind === "scheduled" ? retry.delayMs : null,
-                            ),
+                            connection: retryable
+                                ? disconnectedConnection(message, retry.kind === "scheduled" ? retry.delayMs : null)
+                                : { kind: "failed", message },
                         });
                         countdownInterrupt = new AbortController();
                         const retrySignal = AbortSignal.any([signal, countdownInterrupt.signal]);

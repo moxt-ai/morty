@@ -40,7 +40,6 @@ export type ConnectionFeedback =
           readonly kind: "failed";
           readonly title: string;
           readonly description: string;
-          readonly action: "retry" | "reload";
       }
     | {
           readonly kind: "closed";
