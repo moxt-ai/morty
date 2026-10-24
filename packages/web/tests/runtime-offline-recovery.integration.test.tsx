@@ -136,3 +136,37 @@ test("Given a page following its sessions' statuses, When the Runtime goes offli
         RUNTIME_CHANGE_TIMEOUT_MS,
     );
 });
+
+test("Given a background reply is running when the Runtime goes offline, When the Runtime comes back, Then the sidebar shows that reply no longer working", {
+    timeout: 90_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected a connected controlled Agent Runtime");
+    }
+    await sendPrompt(app, await readyComposer(app), "Background conversation");
+    await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: Background conversation")).toBe(true));
+    await app.user.click(app.elementByTestId(dataTestId.newConversation));
+    await app.waitForView(() => expect(directoryTitles(app)).toHaveLength(1));
+    // Another page starts a reply in the background conversation that is still running when the Runtime goes away.
+    const viewer = await app.openViewer();
+    await viewer.user.click(
+        await viewer.queryElementByTestId(dataTestId.managedConversation, (entry) =>
+            Boolean(entry.textContent?.includes("Background conversation")),
+        ),
+    );
+    await sendPrompt(viewer, await readyComposer(viewer), "hold after first delta");
+    await app.waitForView(() => expect(entryStatus(app, "Background conversation")).toBe("Session working"));
+    await viewer.close();
+
+    await daemon.disconnect();
+    await app.waitForView(() => expect(connectionStatus(app)).toBe("disconnected"), RUNTIME_CHANGE_TIMEOUT_MS);
+    await daemon.reconnect();
+    await app.waitForView(() => expect(connectionStatus(app)).toBe("connected"), RUNTIME_CHANGE_TIMEOUT_MS);
+
+    await app.waitForView(
+        () => expect(entryStatus(app, "Background conversation")).not.toBe("Session working"),
+        RUNTIME_CHANGE_TIMEOUT_MS,
+    );
+});

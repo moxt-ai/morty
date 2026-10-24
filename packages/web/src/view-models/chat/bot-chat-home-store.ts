@@ -224,6 +224,8 @@ export const createBotChatHomeStore = (
             observation: RuntimeObservation,
         ) => void;
         readonly onRuntimeConfigurationUnavailable: () => void;
+        /** Announced when the view failed only because the Runtime was unreachable and waits for it to be retried. */
+        readonly onWaitingForRuntime: () => void;
         readonly now: () => number;
         readonly url: string;
         readonly createId: () => string;
@@ -670,6 +672,7 @@ export const createBotChatHomeStore = (
                                     : failedSelection,
                             view: { kind: "runtime-disconnected", botId, message },
                         });
+                        options.onWaitingForRuntime();
                         await followConfigurationChanges(signal);
                         return;
                     }
