@@ -28,6 +28,7 @@ import {
 } from "./conversation-selection-machine.ts";
 import { createConversationSessionStore } from "./conversation-session-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
+import type { RuntimeObservation } from "./runtime-recovery.ts";
 import type { UnconfirmedSubmission } from "./session-delivery-store.ts";
 
 export type BotChatHomeStoreApi = ReturnType<typeof createBotChatHomeStore>;
@@ -85,10 +86,14 @@ export function botConnectionStatus(
 }
 
 /**
- * Whether a load that failed because the Runtime was unreachable is retried by itself once the Runtime is back. Only
- * loads that read are: continuing a native session forks or imports it, and a connection that dropped mid-request
- * cannot show it did not happen, so the user decides whether to retry.
+ * Whether the home view failed only because the Runtime was unreachable, so the workspace retries it once the Runtime
+ * is back. Only loads that read are: continuing a native session forks or imports it, and a connection that dropped
+ * mid-request cannot show it did not happen, so the user decides whether to retry.
  */
+export function homeWaitsForRuntime(home: Pick<BotChatHomeStore, "view" | "selection">): boolean {
+    return home.view.kind === "runtime-disconnected" && retriesAutomatically(home.selection);
+}
+
 function retriesAutomatically(selection: ConversationSelectionState): boolean {
     switch (selection.kind) {
         case "draft":
@@ -210,7 +215,14 @@ export const createBotChatHomeStore = (
     options: {
         readonly botId: string;
         readonly entry?: "address" | "restore";
-        readonly onRuntimeConfiguration?: (configuration: BotRuntimeConfiguration) => void;
+        /**
+         * Announced with every Runtime configuration the page observes, after the view follows it: the owner keeps the
+         * other workspace workflows on it and retries what the Runtime failed once it is back.
+         */
+        readonly onRuntimeConfiguration: (
+            configuration: BotRuntimeConfiguration,
+            observation: RuntimeObservation,
+        ) => void;
         readonly onRuntimeConfigurationUnavailable: () => void;
         readonly now: () => number;
         readonly url: string;
@@ -234,9 +246,6 @@ export const createBotChatHomeStore = (
     const composerAttachments = createComposerAttachmentStore();
     const conversations = createConversationSessionStore(requests);
     const selection = initialSelection(options.url, options.createId);
-    // Whether a load that failed because the Runtime was unreachable may be retried on a snapshot that follows no
-    // Runtime change: seeing the Runtime offline makes it available again. See `applyConfiguration`.
-    let runtimeRetryWithoutChange: "available" | "used" = "available";
     let restoredSessionId =
         options.entry === "restore" && selection.kind === "loading" && selection.target.kind === "session"
             ? selection.target.sessionId
@@ -335,35 +344,19 @@ export const createBotChatHomeStore = (
                     }
                 };
                 /**
-                 * Adopts a Runtime configuration snapshot: everything the page derives from the Runtime follows it,
-                 * then the other workspace workflows hear of it. A load that failed because the Runtime was
-                 * unreachable is retried, the way Reconnect would, once a snapshot shows the Runtime online. Without a
-                 * change or an offline report in between, that happens only once, so a Runtime reported online that
-                 * still cannot be reached waits for its next change instead of being retried in a loop.
+                 * Adopts a watched Runtime configuration snapshot: a draft's view follows it, and the workspace
+                 * retries what the Runtime failed once a snapshot shows it back.
                  */
                 const applyConfiguration = (configuration: BotRuntimeConfiguration, afterChange: boolean): void => {
                     signal.throwIfAborted();
                     const reason = setupReason(configuration);
-                    const before = get();
-                    const failedForRuntime =
-                        before.view.kind === "runtime-disconnected" && retriesAutomatically(before.selection);
                     observeConfiguration(
                         configuration,
-                        before.selection.kind === "draft"
+                        { kind: "watch", afterChange },
+                        get().selection.kind === "draft"
                             ? { view: reason === null ? { kind: "active", botId } : { kind: "setup", botId, reason } }
                             : {},
                     );
-                    if (!failedForRuntime) {
-                        runtimeRetryWithoutChange = "available";
-                    }
-                    if (
-                        failedForRuntime &&
-                        configuration.runtime.online &&
-                        (afterChange || runtimeRetryWithoutChange === "available")
-                    ) {
-                        runtimeRetryWithoutChange = "used";
-                        get().retry();
-                    }
                 };
                 /**
                  * Records a Runtime configuration the page observed, from a watch or a direct read, with whatever the
@@ -371,6 +364,7 @@ export const createBotChatHomeStore = (
                  */
                 const observeConfiguration = (
                     configuration: BotRuntimeConfiguration,
+                    observation: RuntimeObservation,
                     derived: Pick<Partial<BotChatHomeStore>, "view"> = {},
                 ): void => {
                     set({
@@ -378,11 +372,7 @@ export const createBotChatHomeStore = (
                         runtimeConfiguration: configuration,
                         configurationWatch: { kind: "current", checkedAt: options.now() },
                     });
-                    if (!configuration.runtime.online) {
-                        // Once the page has seen the Runtime offline, its next online report is a return.
-                        runtimeRetryWithoutChange = "available";
-                    }
-                    options.onRuntimeConfiguration?.(configuration);
+                    options.onRuntimeConfiguration(configuration, observation);
                 };
                 /**
                  * A dropped socket takes every watch with it. This loop re-arms
@@ -503,7 +493,7 @@ export const createBotChatHomeStore = (
                     }
                     const configuration = await requests.runtimeConfiguration(botId, signal);
                     signal.throwIfAborted();
-                    observeConfiguration(configuration);
+                    observeConfiguration(configuration, { kind: "read" });
                     const currentSelection = get().selection;
                     const currentTarget = currentSelection.kind === "draft" ? null : currentSelection.target;
                     if (currentTarget?.kind === "continue") {
@@ -667,8 +657,8 @@ export const createBotChatHomeStore = (
                     const message = formatError(cause, "Chat is unavailable.");
                     const failedSelection = get().selection;
                     if (isRuntimeConnectionFailure(cause)) {
-                        // The Runtime could not be reached. The page keeps following it, and `applyConfiguration`
-                        // retries what failed once the Runtime is back, as Reconnect would.
+                        // The Runtime could not be reached. The page keeps following it, and the workspace retries
+                        // what failed once the Runtime is back, as Reconnect would.
                         set({
                             selection:
                                 failedSelection.kind === "loading"

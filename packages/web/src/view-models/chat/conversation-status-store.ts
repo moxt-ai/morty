@@ -36,6 +36,11 @@ interface ConversationStatusState {
         status: SessionActivityState,
         signal: AbortSignal,
     ) => void;
+    /**
+     * Whether Sessions have statuses but no stream follows them: the last one gave up, as when the Runtime went away.
+     * The next directory load follows them again.
+     */
+    readonly unfollowed: () => boolean;
     readonly close: () => void;
 }
 
@@ -178,6 +183,7 @@ export function createConversationStatusStore(
                 replaceStatus(sessionId, status);
                 watch(botId, [...get().statuses.keys()], signal);
             },
+            unfollowed: () => watcher === null && get().statuses.size > 0,
             close: closeWatcher,
         };
     });

@@ -1,5 +1,5 @@
 import type { StoreApi } from "zustand/vanilla";
-import type { BotChatApi, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi, BotRuntimeConfiguration, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import type { IdentityScope } from "../../services/identity/identity-scope-url.ts";
 import { rememberComputerName, rememberComputerVisit } from "../../services/identity/remembered-computers.ts";
@@ -7,7 +7,7 @@ import type { Clock } from "../../services/time/clock.ts";
 import type { BugReportDialogStore } from "../bug-report-dialog-store.ts";
 import { formatError } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
-import { type BotChatHomeStoreApi, createBotChatHomeStore } from "./bot-chat-home-store.ts";
+import { type BotChatHomeStoreApi, createBotChatHomeStore, homeWaitsForRuntime } from "./bot-chat-home-store.ts";
 import type { ComputerSwitcherModel } from "./computer-switcher-store.ts";
 import { type ConversationDirectoryStore, createConversationDirectoryStore } from "./conversation-directory-store.ts";
 import type { ConversationSelectionState, SelectedConversationTarget } from "./conversation-selection-machine.ts";
@@ -17,6 +17,7 @@ import { createDraftControlsStore, type DraftControlsStore } from "./draft-contr
 import { createNetworkDiagnosticStore, type NetworkDiagnosticStore } from "./network-diagnostic-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
+import { createRuntimeRecovery, type RuntimeObservation } from "./runtime-recovery.ts";
 import type { SessionActivityState } from "./session-activity-machine.ts";
 import { createSessionPaneModel, type SessionPaneModel } from "./session-pane-store.ts";
 import { createSidebarDialogs, type SidebarDialogs } from "./sidebar-dialogs.ts";
@@ -161,7 +162,7 @@ export function createChatWorkspace(options: {
         createId: () => crypto.randomUUID(),
         navigation: historyNavigation(recordHome),
         entry: options.entry ?? "address",
-        onRuntimeConfiguration: (configuration) => {
+        onRuntimeConfiguration: (configuration, observation) => {
             options.computers?.updateCurrent(configuration);
             sidebar.dialogs.getState().runtimeChanged();
             void draftControls
@@ -177,6 +178,7 @@ export function createChatWorkspace(options: {
             if (options.rememberedIdentity !== undefined) {
                 rememberComputerName(options.rememberedIdentity, configuration.runtime.machineName);
             }
+            recoverFromRuntime(configuration, observation);
         },
         onDraftSelected: () => {
             void draftControls
@@ -300,6 +302,25 @@ export function createChatWorkspace(options: {
             .getState()
             .load(directoryLifetime.signal)
             .catch(() => undefined);
+    };
+    const runtimeRecovery = createRuntimeRecovery();
+    /**
+     * Retries everything the page reads through the Runtime that it could not read while the Runtime was unreachable:
+     * the home view, the session list, and the stream that follows their statuses. Restarting the home view reloads
+     * the list with it, and a list load follows the statuses again.
+     */
+    const recoverFromRuntime = (configuration: BotRuntimeConfiguration, observation: RuntimeObservation): void => {
+        const homeWaiting = homeWaitsForRuntime(home.getState());
+        const listed = directory.getState().state.kind;
+        const listWaiting = listed === "failed" || listed === "stale" || statuses.getState().unfollowed();
+        if (!runtimeRecovery.observe(configuration.runtime.online, observation, homeWaiting || listWaiting)) {
+            return;
+        }
+        if (homeWaiting) {
+            home.getState().retry();
+        } else {
+            startDirectoryLoad();
+        }
     };
     const announcedViews = new WeakSet<HTMLElement>();
     const loadSelectedSession = (target: SelectedConversationTarget): void => {
