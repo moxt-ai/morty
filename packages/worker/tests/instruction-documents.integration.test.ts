@@ -65,8 +65,10 @@ test("Given the setup document, When users fetch it from configured and standalo
     expect(document).toContain("Chat origin: https://chat.example");
     expect(document).toContain("https://chat.example/setup.mjs");
     expect(document).not.toContain("/setup-help/");
-    expect(document).toContain("`~/Documents`");
+    expect(document).toContain("local\napplication data directory");
+    expect(document).not.toContain("Documents");
     expect(document).not.toContain("DOCUMENT_DIR");
+    expect(document).not.toContain("MORTY_STATE_DIRECTORY");
     expect(document).not.toContain("```powershell");
     expect(document).not.toContain("```sh");
     expect(document).not.toMatch(/\{\{.*\}\}|preview\.example|paradev\.biz|paraflow\.biz|token=ticket/);

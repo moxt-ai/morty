@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { constants } from "node:fs";
 import { mkdir, open, readFile, realpath, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { validateLocalPath } from "@moxt-ai/mobius/filesystem";
@@ -12,7 +12,7 @@ import { decodeIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
 import QRCode from "qrcode";
-import { resolveDocumentsDirectory } from "./platform/index.ts";
+import { resolveDocumentsDirectory, resolveStateDirectory } from "./platform/index.ts";
 
 export interface SetupRuntime {
     readonly run: (
@@ -27,6 +27,12 @@ export interface SetupRuntime {
 }
 
 export interface SetupHost {
+    /**
+     * Where this computer keeps Morty's private state. Empty selects the platform's local application data directory,
+     * which is not synced to the user's other computers.
+     */
+    readonly state: string;
+    /** The Documents directory earlier releases kept that state in, read once to move it. Empty selects the user's. */
     readonly documents: string;
     readonly signal: AbortSignal;
     readonly emit: (value: Readonly<Record<string, unknown>>) => void;
@@ -261,42 +267,42 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function prepareDirectory(documents: string) {
-        const requested = text(documents);
-        if (!isAbsolute(requested)) {
-            fail("DOCUMENT_DIR_REQUIRED");
-        }
-        const normalized = resolve(requested);
-        let resolvedDocuments: string;
-        try {
-            await safeLocalPath(normalized, true, false);
-            resolvedDocuments = await realpath(normalized);
-        } catch (cause) {
-            if (errorCode(cause) !== "ENOENT") {
-                throw cause;
-            }
-            const requestedParent = dirname(normalized);
-            await safeLocalPath(requestedParent, true, false);
-            const resolvedParent = await realpath(requestedParent);
-            await safeLocalPath(resolvedParent, true, false);
-            const creatable = join(resolvedParent, basename(normalized));
-            signal.throwIfAborted();
-            try {
-                await mkdir(creatable, { mode: 0o700 });
-            } catch (createCause) {
-                if (errorCode(createCause) !== "EEXIST") {
-                    throw createCause;
-                }
-            }
-            signal.throwIfAborted();
-            await safeLocalPath(creatable, true, false);
-            resolvedDocuments = await realpath(creatable);
-        }
-        await safeLocalPath(resolvedDocuments, true, false);
-        const directory = join(resolvedDocuments, "morty");
+    /** Creates the state directory with private permissions, refusing one that is a link to somewhere else. */
+    async function prepareStateDirectory(requested: string) {
+        const directory = resolve(requested);
         await mkdir(directory, { mode: 0o700, recursive: true });
+        signal.throwIfAborted();
         await safeLocalPath(directory, true, true);
         return directory;
+    }
+
+    /** The directory earlier releases kept this state in, under Documents, or null when it does not exist. */
+    async function earlierStateDirectory() {
+        const documents = resolveDocumentsDirectory(host.documents, signal);
+        if (documents === null) {
+            return null;
+        }
+        const directory = join(resolve(documents), "morty");
+        try {
+            await safeLocalPath(directory, true, false);
+        } catch (cause) {
+            if (errorCode(cause) === "ENOENT") {
+                return null;
+            }
+            throw cause;
+        }
+        return directory;
+    }
+
+    async function readOptionalPrivateJson(path: string) {
+        try {
+            return await readPrivateJson(path);
+        } catch (cause) {
+            if (errorCode(cause) === "ENOENT") {
+                return null;
+            }
+            throw cause;
+        }
     }
 
     async function resolveWorkingDirectory(requested: string) {
@@ -342,6 +348,81 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         await writePrivateFile(path, JSON.stringify(value, null, 2));
     }
 
+    function savedIdentity(config: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
+        return Object.fromEntries(
+            Object.entries(config).filter(([key]) =>
+                [
+                    "user_token",
+                    "user_id",
+                    "project_id",
+                    "bot_id",
+                    "agent_ref",
+                    "agent_config_revision",
+                    "pairing_runtime_id",
+                    "replaced_project_id",
+                    "replaced_user_token",
+                ].includes(key),
+            ),
+        );
+    }
+
+    /**
+     * Moves the state an earlier release kept under Documents into this computer's state directory, but only when its
+     * Machine runs on this computer. Documents may sync to the user's other computers: a copy whose Machine runs
+     * elsewhere is left to that computer, and this one sets up a Machine of its own instead of replacing that one.
+     */
+    async function adoptEarlierState(directory: string, base: string | undefined, cwd: string): Promise<void> {
+        if ((await readOptionalPrivateJson(join(directory, "config.json"))) !== null) {
+            return;
+        }
+        const earlierDirectory = await earlierStateDirectory();
+        const earlierPath = earlierDirectory === null ? null : join(earlierDirectory, "config.json");
+        const earlier = earlierPath === null ? null : await readOptionalPrivateJson(earlierPath);
+        if (earlierPath === null || earlier === null || typeof earlier["base_url"] !== "string") {
+            return;
+        }
+        const context: Context = { directory, base: origin(earlier["base_url"]), config: savedIdentity(earlier) };
+        if ((base !== undefined && context.base !== base) || !(await runsOnThisComputer(context, cwd))) {
+            return;
+        }
+        await saveConfiguration(context, {});
+        await rm(earlierPath, { force: true });
+        progress("identity", "Moved the saved identity out of Documents into this computer's private state.");
+    }
+
+    /** Whether the saved Machine runs here: its bound Runtime, or the one a stopped run paired for it, is managed here. */
+    async function runsOnThisComputer(context: Context, cwd: string): Promise<boolean> {
+        if (context.config["user_token"] === undefined || context.config["project_id"] === undefined) {
+            return false;
+        }
+        let appId: string;
+        let runtimeIds: readonly unknown[];
+        try {
+            appId = identifier((await request(context, "/management/project"))["appId"]);
+            const listed = await request(context, "/management/bots");
+            const bot = (Array.isArray(listed["bots"]) ? listed["bots"] : [])
+                .map(object)
+                .find((item) => context.config["bot_id"] === undefined || item["botId"] === context.config["bot_id"]);
+            const binding =
+                bot === undefined
+                    ? null
+                    : await request(
+                          context,
+                          `/management/bots/${encodeURIComponent(identifier(bot["botId"]))}/runtime-binding`,
+                      );
+            runtimeIds = [binding?.["runtimeId"], context.config["pairing_runtime_id"]];
+        } catch (cause) {
+            // An identity this origin no longer accepts names no Machine on any computer.
+            if (errorCode(cause) === "UNAUTHENTICATED") {
+                return false;
+            }
+            throw cause;
+        }
+        return (await listManagedConnections(context, cwd)).some(
+            (connection) => connection.appId === appId && runtimeIds.includes(connection.runtimeId),
+        );
+    }
+
     async function loadConfiguration(directory: string, base: string): Promise<Context> {
         let config: Readonly<Record<string, unknown>> = {};
         try {
@@ -353,24 +434,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return { directory, base, config };
         }
         // Preserve identity and Bot configuration; resolve Runtime connections through the manager.
-        const identity =
-            config["base_url"] !== undefined && config["base_url"] !== base
-                ? {}
-                : Object.fromEntries(
-                      Object.entries(config).filter(([key]) =>
-                          [
-                              "user_token",
-                              "user_id",
-                              "project_id",
-                              "bot_id",
-                              "agent_ref",
-                              "agent_config_revision",
-                              "pairing_runtime_id",
-                              "replaced_project_id",
-                              "replaced_user_token",
-                          ].includes(key),
-                      ),
-                  );
+        const identity = config["base_url"] !== undefined && config["base_url"] !== base ? {} : savedIdentity(config);
         return { directory, base, config: identity };
     }
 
@@ -1072,7 +1136,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function revokeAllAccess(options: RevokeAllAccessOptions) {
-        const directory = await prepareDirectory(await resolveDocumentsDirectory(host.documents, signal));
+        const directory = await prepareStateDirectory(resolveStateDirectory(host.state, signal));
+        await adoptEarlierState(directory, options.base, directory);
         let config: Readonly<Record<string, unknown>>;
         try {
             config = await readPrivateJson(join(directory, "config.json"));
@@ -1105,7 +1170,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     async function setup(options: SetupOptions) {
         const cwd = await resolveWorkingDirectory(options.cwd);
-        const directory = await prepareDirectory(await resolveDocumentsDirectory(host.documents, signal));
+        const directory = await prepareStateDirectory(resolveStateDirectory(host.state, signal));
+        await adoptEarlierState(directory, options.base, cwd);
         let context = await retireReplacedIdentity(await loadConfiguration(directory, options.base));
         const identity = await prepareIdentity(context);
         context = identity.context;
