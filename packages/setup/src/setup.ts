@@ -51,6 +51,12 @@ type RuntimeSelection =
           readonly appId: string;
           readonly connectionId: string;
           readonly runtimeId: string;
+          /**
+           * Whether the Worker binds the Machine to this Runtime. The Worker's binding is the record; the local
+           * `agent_ref` only remembers the harness a finished run bound, and a run that stopped after the Worker
+           * bound the Machine never wrote it.
+           */
+          readonly bound: boolean;
       }
     | {
           readonly kind: "pairing";
@@ -671,7 +677,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (expectedRuntimeId !== null) {
             const existing = await reusable(expectedRuntimeId);
             if (existing !== undefined) {
-                return { context, runtime: { kind: "existing", ...existing } };
+                return { context, runtime: { kind: "existing", ...existing, bound: true } };
             }
             // The saved Machine's Runtime is not managed here anymore: keep the user, but
             // continue on a fresh Project with a fresh Machine and a new Runtime pairing.
@@ -684,7 +690,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (typeof pairing === "string") {
             const existing = await reusable(pairing);
             if (existing !== undefined) {
-                return { context, runtime: { kind: "existing", ...existing } };
+                return { context, runtime: { kind: "existing", ...existing, bound: false } };
             }
         }
         return await pairRuntime(context, appId);
@@ -808,7 +814,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     /** The Agents the Runtime offers while it is online, or null while it is not. */
     async function onlineRuntimeAgents(context: Context, runtime: RuntimeSelection): Promise<readonly string[] | null> {
         const botPath = `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}`;
-        const alreadyConfigured = runtime.kind === "existing" && typeof context.config["agent_ref"] === "string";
+        // A bound Machine's Runtime is read through the Machine; an unbound one is among the setup candidates.
+        const alreadyConfigured = runtime.kind === "existing" && runtime.bound;
         const state = await request(context, `${botPath}/${alreadyConfigured ? "workspace" : "setup/runtimes"}`, {});
         const candidates = alreadyConfigured
             ? [object(state["runtime"])]

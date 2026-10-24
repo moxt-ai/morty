@@ -720,6 +720,31 @@ test("Given setup continues on a Runtime that does not offer the chosen harness 
     );
 });
 
+test("Given setup bound the Machine but never received the reply, When the user runs setup again, Then setup finishes on the bound Runtime", {
+    timeout: 90_000,
+}, async () => {
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        const first = await setupMachine(runtime, paths);
+        expect(first.code, JSON.stringify(first.events)).toBe(0);
+        // The Worker committed the binding, but the run stopped before it saved the binding locally, as when the
+        // reply is lost to an interruption, a dropped connection or the request deadline.
+        const configPath = join(paths.documents, "morty", "config.json");
+        const saved: Record<string, unknown> = {
+            ...v.parse(v.record(v.string(), v.unknown()), JSON.parse(await readFile(configPath, "utf8"))),
+        };
+        delete saved["agent_ref"];
+        delete saved["agent_config_revision"];
+        await rm(configPath);
+        await writeFile(configPath, JSON.stringify(saved), { mode: 0o600 });
+
+        const rerun = await setupMachine(runtime, paths);
+        expect(rerun.code, JSON.stringify(rerun.events)).toBe(0);
+        expect(rerun.events).toContainEqual(expect.objectContaining({ status: "runtime_reused" }));
+        expect(rerun.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
+        expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({ agent_ref: "settings-test" });
+    });
+});
+
 test("Given a machine runs a previous daemon release and no upgrade is reachable, When setup prepares the Runtime, Then setup completes on the running release and reports why", {
     timeout: 60_000,
 }, async () => {
