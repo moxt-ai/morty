@@ -15,7 +15,7 @@ export function encodeElicitationForm(form: FormData, fields: readonly SessionEl
             continue;
         }
         const value = form.get(field.name);
-        if (typeof value !== "string" || value.length === 0) {
+        if (typeof value !== "string" || (value.length === 0 && field.type !== "string")) {
             continue;
         }
         if (field.type === "integer" || field.type === "number") {

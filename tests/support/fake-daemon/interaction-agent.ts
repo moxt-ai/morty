@@ -66,6 +66,48 @@ export function createInteractionAgent() {
                             { optionId: "reject", kind: "reject_once", name: "No" },
                         ];
                 try {
+                    if (
+                        context.params.prompt.some(
+                            (content) => content.type === "text" && content.text === "request text answers",
+                        )
+                    ) {
+                        const input = await context.client.request(
+                            acp.methods.client.elicitation.create,
+                            {
+                                sessionId,
+                                mode: "form",
+                                message: "Edit the text answers; empty answers are valid",
+                                requestedSchema: {
+                                    type: "object",
+                                    properties: {
+                                        name: {
+                                            type: "string",
+                                            title: "Name",
+                                            default: "Initial name",
+                                            maxLength: 10_000,
+                                        },
+                                        draft: {
+                                            type: "string",
+                                            title: "Draft",
+                                            default: `${String.fromCodePoint(0x7b2c, 0x4e00, 0x884c)}\nSecond line`,
+                                            maxLength: 10_000,
+                                            _meta: { "io.mobius/multiline": true },
+                                        },
+                                    },
+                                    required: ["name", "draft"],
+                                },
+                            },
+                            { cancellationSignal: signal },
+                        );
+                        await context.client.notify(acp.methods.client.session.update, {
+                            sessionId,
+                            update: {
+                                sessionUpdate: "agent_message_chunk",
+                                content: { type: "text", text: `Text answers: ${JSON.stringify(input)}` },
+                            },
+                        });
+                        return { stopReason: "end_turn" };
+                    }
                     const permission = await context.client.request(
                         acp.methods.client.session.requestPermission,
                         {

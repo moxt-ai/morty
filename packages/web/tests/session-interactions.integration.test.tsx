@@ -18,6 +18,49 @@ async function requestInput(prompt = "request user input") {
     return app;
 }
 
+for (const empty of [false, true]) {
+    test(`Given an agent requests text and a multiline draft, When the user ${empty ? "clears" : "edits"} both answers, Then the exact text reaches the agent`, {
+        timeout: 30_000,
+    }, async () => {
+        const app = await createTestApp({
+            connectAgent: true,
+            agent: { id: "interaction-test", label: "Interaction Agent" },
+        });
+        const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+        if (!(composer instanceof HTMLTextAreaElement)) {
+            throw new Error("Expected the composer");
+        }
+        await sendPrompt(app, composer, "request text answers");
+        const form = await app.waitForView(() =>
+            getByRole(document.body, "dialog", { name: "Agent information request" }),
+        );
+        const name = getByRole(form, "textbox", { name: "Name" });
+        const draft = getByRole(form, "textbox", { name: "Draft" });
+        expect(draft).toBeInstanceOf(HTMLTextAreaElement);
+        if (!(draft instanceof HTMLTextAreaElement)) {
+            throw new Error("Expected a multiline editor");
+        }
+        expect(draft.value).toBe(`${String.fromCodePoint(0x7b2c, 0x4e00, 0x884c)}\nSecond line`);
+        await app.user.clear(name);
+        await app.user.clear(draft);
+        const nameValue = empty ? "" : `${String.fromCodePoint(0x59da)} 🌊`;
+        const draftValue = empty
+            ? ""
+            : `${String.fromCodePoint(0x6539, 0x5199, 0x7b2c, 0x4e00, 0x884c)}\nSecond line\n${String.fromCodePoint(0x7b2c, 0x4e09, 0x884c)}`;
+        if (!empty) {
+            await app.user.type(name, nameValue);
+            await app.user.type(draft, draftValue);
+        }
+        await app.user.click(getByRole(form, "button", { name: "Continue" }));
+        await app.waitForView(() =>
+            expect(document.body.textContent).toContain(
+                `"content":${JSON.stringify({ name: nameValue, draft: draftValue })}`,
+            ),
+        );
+        expect(queryByRole(document.body, "dialog", { name: "Agent information request" })).toBeNull();
+    });
+}
+
 test("Given the agent asks a question, When the user reads and answers it, Then Chat shows a waiting status instead of working and clears it after the answer", {
     timeout: 30_000,
 }, async () => {
