@@ -159,15 +159,18 @@ test("Given a healthy conversation, when overdue timers and foreground signals a
         document.dispatchEvent(new Event("resume"));
         window.dispatchEvent(new Event("online"));
     });
-    await page.clock.runFor(5000);
     await expect(composer).toBeEnabled();
     await expect(composer).toHaveValue("Keep this draft across a healthy resume.");
-    await expect(page.getByRole("alert")).toHaveCount(0);
-    expect(connections).toBe(before);
+    // Let real network I/O settle through a user-visible round trip before
+    // advancing virtual deadlines; the healthy probe shares this transport.
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("article", { name: "Agent response" }).last()).toContainText(
         "Keep this draft across a healthy resume.",
     );
+    await page.clock.runFor(5000);
+    await expect(composer).toBeEnabled();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    expect(connections).toBe(before);
 });
 
 test("Given an interrupted browser connection, when a task completes before foreground recovery, then the interruption stays neutral and its result is restored", async ({
