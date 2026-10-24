@@ -386,3 +386,28 @@ test("Given a mobile browser with an unsent draft, when its network is disabled 
         "Keep this draft and my offline edits",
     );
 });
+
+test("Given an active turn on mobile, when the browser goes offline and the user presses Enter, then the follow-up stays editable and can be queued after recovery", async ({
+    runtime,
+}) => {
+    const { page } = runtime;
+    await page.clock.install({ time: new Date("2026-10-24T00:00:00Z") });
+    await runtime.openPairedChat();
+    const composer = page.getByRole("textbox", { name: "Message" });
+    await composer.fill("wait for steering");
+    await page.getByRole("button", { name: "Send message" }).click();
+    await expect(page.getByTestId(dataTestId.sessionStatus)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Stop agent output" })).toBeEnabled();
+    await page.context().setOffline(true);
+    await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toContainText("No network connection");
+    await composer.fill("Keep this follow-up");
+    await expect(page.getByTestId(dataTestId.sendMessage)).toBeDisabled();
+    await composer.press("Enter");
+    await expect(composer).toHaveValue("Keep this follow-up");
+    await expect(page.getByTestId(dataTestId.queuedMessage)).toHaveCount(0);
+    await page.context().setOffline(false);
+    await page.clock.runFor(5000);
+    await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
+    await composer.press("Enter");
+    await expect(page.getByTestId(dataTestId.queuedMessage)).toContainText("Keep this follow-up");
+});

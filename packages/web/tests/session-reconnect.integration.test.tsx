@@ -279,3 +279,32 @@ test("Given an unavailable Runtime and an editable draft, When automatic retries
         "Keep editing through failure",
     );
 });
+
+test("Given an active turn and an unsent follow-up, When connection freshness is lost and Enter is pressed, Then the follow-up stays in the composer until recovery", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
+    await app.queryElementByTestId(dataTestId.sessionStatus);
+    await app.waitForView(() => expect(reconnectStatusText(app)).toBeNull());
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    await app.user.type(composer, "Keep my follow-up");
+    expect(composer).toHaveProperty("value", "Keep my follow-up");
+    app.transport.disconnect();
+    await app.waitForView(() => expect(app.elementByTestId(dataTestId.sendMessage)).toHaveProperty("disabled", true));
+    await app.user.keyboard("{Enter}");
+    expect(composer).toHaveProperty("value", "Keep my follow-up");
+    expect(app.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull();
+    await act(async () => clock.advanceBy(1_000));
+    await app.waitForView(() => expect(reconnectStatusText(app)).toBeNull());
+    expect(composer).toHaveProperty("value", "Keep my follow-up");
+    await app.user.keyboard("{Enter}");
+    await app.queryElementByTestId(
+        dataTestId.queuedMessage,
+        (element) => element.textContent?.includes("Keep my follow-up") === true,
+    );
+});

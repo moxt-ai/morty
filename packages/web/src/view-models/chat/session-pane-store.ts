@@ -266,6 +266,7 @@ export function sessionPanePresentation(
             model.messages.some((message) => message.role === "user" && message.commandId === activeCommandId),
         shouldQueueOnSubmit: controlRunning && !stopping,
         submitDisabled:
+            !connectionAvailable ||
             model.connection.kind !== "ready" ||
             (controlRunning && !stopping ? queue.operation.kind !== "idle" : busy) ||
             attachments.state.kind === "reading" ||
