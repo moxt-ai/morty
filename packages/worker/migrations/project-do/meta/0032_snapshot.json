@@ -1,7 +1,7 @@
 {
     "version": "6",
     "dialect": "sqlite",
-    "id": "b9f97bfb-e26c-422c-9ce8-6c1512331817",
+    "id": "6b995eb4-b594-464e-b4fa-2086d8147e7d",
     "prevId": "bf3cca54-9a8d-4aae-b7d0-0a4fac6d4457",
     "tables": {
         "agent_pairing_ticket": {
@@ -123,8 +123,8 @@
                     "notNull": false,
                     "autoincrement": false
                 },
-                "superseded_by": {
-                    "name": "superseded_by",
+                "browser_id": {
+                    "name": "browser_id",
                     "type": "text",
                     "primaryKey": false,
                     "notNull": false,
@@ -147,9 +147,9 @@
                     "columns": ["remote_transfer_id", "status"],
                     "isUnique": false
                 },
-                "anonymous_credential_superseded_by_idx": {
-                    "name": "anonymous_credential_superseded_by_idx",
-                    "columns": ["superseded_by"],
+                "anonymous_credential_browser_idx": {
+                    "name": "anonymous_credential_browser_idx",
+                    "columns": ["browser_id"],
                     "isUnique": false
                 }
             },

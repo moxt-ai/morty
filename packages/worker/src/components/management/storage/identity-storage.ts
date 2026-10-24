@@ -190,7 +190,7 @@ export class IdentityStorage {
                         createdAt: sql<number>`${now}`.as("created_at"),
                         revokedAt: sql<null>`null`.as("revoked_at"),
                         remoteTransferId: sql<null>`null`.as("remote_transfer_id"),
-                        supersededBy: sql<null>`null`.as("superseded_by"),
+                        browserId: sql<null>`null`.as("browser_id"),
                     })
                     .from(anonymousCredential)
                     .where(
@@ -208,7 +208,8 @@ export class IdentityStorage {
 
     /**
      * Opens a link in a browser. `replaces` is the credential the browser already holds for this Project: a browser
-     * keeps one credential, so the new one replaces it at once and takes over the links it came from.
+     * keeps one credential, so the new one replaces it at once and belongs to the same browser. A credential another
+     * redemption already replaced still names that browser, so concurrent or retried redemptions stay in it too.
      */
     readonly redeemTransfer = async (
         code: string,
@@ -243,6 +244,20 @@ export class IdentityStorage {
                     ),
                 ),
             );
+        const replacedHash = replaces === null ? null : await digest(replaces);
+        // Only a browser credential of the link's own user names the browser.
+        const replaced = and(
+            eq(anonymousCredential.tokenHash, replacedHash ?? ""),
+            isNotNull(anonymousCredential.remoteTransferId),
+            inArray(
+                anonymousCredential.userId,
+                database.select({ userId: continueLink.userId }).from(continueLink).where(claimed),
+            ),
+        );
+        const browser = database
+            .select({ browserId: sql<string>`coalesce(${anonymousCredential.browserId}, ${anonymousCredential.id})` })
+            .from(anonymousCredential)
+            .where(replaced);
         const issue = database.insert(anonymousCredential).select(
             database
                 .select({
@@ -253,35 +268,23 @@ export class IdentityStorage {
                     createdAt: sql<number>`${now}`.as("created_at"),
                     revokedAt: sql<null>`null`.as("revoked_at"),
                     remoteTransferId: continueLink.id,
-                    supersededBy: sql<null>`null`.as("superseded_by"),
+                    browserId: (replacedHash === null ? sql<null>`null` : sql<string | null>`(${browser})`).as(
+                        "browser_id",
+                    ),
                 })
                 .from(continueLink)
                 .where(claimed),
         );
         const results =
-            replaces === null
+            replacedHash === null
                 ? await database.batch([claim, issue])
                 : await database.batch([
                       claim,
                       issue,
-                      // Only a browser credential of the link's own user is replaced.
                       database
                           .update(anonymousCredential)
-                          .set({ status: "revoked", revokedAt: now, supersededBy: credentialId })
-                          .where(
-                              and(
-                                  eq(anonymousCredential.tokenHash, await digest(replaces)),
-                                  eq(anonymousCredential.status, "active"),
-                                  isNotNull(anonymousCredential.remoteTransferId),
-                                  inArray(
-                                      anonymousCredential.userId,
-                                      database
-                                          .select({ userId: continueLink.userId })
-                                          .from(continueLink)
-                                          .where(claimed),
-                                  ),
-                              ),
-                          ),
+                          .set({ status: "revoked", revokedAt: now })
+                          .where(and(replaced, eq(anonymousCredential.status, "active"))),
                   ]);
         signal.throwIfAborted();
         if (results[0]?.meta.changes !== 1) {
@@ -309,6 +312,7 @@ export class IdentityStorage {
         const database = requireIdentityDatabase(this.#database);
         const credential = await database
             .select({
+                browserId: anonymousCredential.browserId,
                 credentialId: anonymousCredential.id,
                 transferId: anonymousCredential.remoteTransferId,
                 userId: anonymousCredential.userId,
@@ -350,28 +354,25 @@ export class IdentityStorage {
                   }
                 : { kind: "unauthenticated" };
         }
-        // The browser joined through this credential's link and through the links of the credentials it replaced.
-        const transferIds = [credential.transferId];
-        let replaced = [credential.credentialId];
-        while (replaced.length > 0) {
-            const earlier = await database
-                .select({ id: anonymousCredential.id, transferId: anonymousCredential.remoteTransferId })
-                .from(anonymousCredential)
-                .where(
-                    and(
-                        inArray(anonymousCredential.supersededBy, replaced),
-                        eq(anonymousCredential.userId, credential.userId),
-                    ),
-                )
-                .all();
-            signal.throwIfAborted();
-            replaced = earlier.map((entry) => entry.id);
-            for (const entry of earlier) {
-                if (entry.transferId !== null && !transferIds.includes(entry.transferId)) {
-                    transferIds.push(entry.transferId);
-                }
-            }
-        }
+        // The browser joined through this credential's link and through the links of every credential it held.
+        const browserId = credential.browserId ?? credential.credentialId;
+        const held = await database
+            .select({ transferId: anonymousCredential.remoteTransferId })
+            .from(anonymousCredential)
+            .where(
+                and(
+                    eq(anonymousCredential.userId, credential.userId),
+                    or(eq(anonymousCredential.id, browserId), eq(anonymousCredential.browserId, browserId)),
+                ),
+            )
+            .all();
+        signal.throwIfAborted();
+        const transferIds = [
+            ...new Set([
+                credential.transferId,
+                ...held.flatMap((entry) => (entry.transferId === null ? [] : [entry.transferId])),
+            ]),
+        ];
         const results = await database.batch([
             database
                 .update(continueLink)

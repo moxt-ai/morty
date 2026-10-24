@@ -12,10 +12,10 @@ type RemoteAccessState =
     | { readonly kind: "available" }
     | { readonly kind: "loading" }
     | { readonly kind: "unavailable"; readonly message: string }
-    | { readonly kind: "confirming-end"; readonly accessToken: string }
-    | { readonly kind: "ending"; readonly accessToken: string }
+    | { readonly kind: "confirming-end" }
+    | { readonly kind: "ending" }
     | { readonly kind: "ended" }
-    | { readonly kind: "failed"; readonly accessToken: string; readonly message: string };
+    | { readonly kind: "failed"; readonly message: string };
 
 interface RemoteAccessOperations {
     readonly currentAccessToken: (signal: AbortSignal) => Promise<string>;
@@ -70,9 +70,9 @@ export const createRemoteAccessStore = (operations: RemoteAccessOperations) =>
         requestEnd: async (signal) => {
             set({ state: { kind: "loading" } });
             try {
-                const accessToken = await operations.currentAccessToken(operationSignal(signal));
+                await operations.currentAccessToken(operationSignal(signal));
                 signal.throwIfAborted();
-                set({ state: { kind: "confirming-end", accessToken } });
+                set({ state: { kind: "confirming-end" } });
             } catch {
                 signal.throwIfAborted();
                 set({
@@ -89,9 +89,12 @@ export const createRemoteAccessStore = (operations: RemoteAccessOperations) =>
             if (state.kind !== "confirming-end" && state.kind !== "failed") {
                 return;
             }
-            set({ state: { kind: "ending", accessToken: state.accessToken } });
+            set({ state: { kind: "ending" } });
             try {
-                await operations.endRemoteAccess(state.accessToken, operationSignal(signal));
+                // The access this browser holds now: another tab may have replaced it while the user confirmed.
+                const accessToken = await operations.currentAccessToken(operationSignal(signal));
+                signal.throwIfAborted();
+                await operations.endRemoteAccess(accessToken, operationSignal(signal));
                 signal.throwIfAborted();
                 set({ state: { kind: "ended" } });
             } catch (cause) {
@@ -99,7 +102,6 @@ export const createRemoteAccessStore = (operations: RemoteAccessOperations) =>
                 set({
                     state: {
                         kind: "failed",
-                        accessToken: state.accessToken,
                         message:
                             cause instanceof IdentityApiError && cause.code === "UNAUTHENTICATED"
                                 ? "This request was not authorized. Reload Morty to check your current access."

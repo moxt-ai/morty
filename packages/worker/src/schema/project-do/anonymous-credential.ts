@@ -12,15 +12,15 @@ export const anonymousCredential = sqliteTable(
         revokedAt: integer("revoked_at"),
         remoteTransferId: text("remote_transfer_id"),
         /**
-         * The credential that replaced this one when the same browser opened another link. Ending that credential's
-         * access ends the links this one came from too.
+         * The browser this credential was issued to, named by the first credential it held: one a browser receives for
+         * another link replaces the one it holds and keeps its browser. Null names the credential itself.
          */
-        supersededBy: text("superseded_by"),
+        browserId: text("browser_id"),
     },
     (table) => [
         check("anonymous_credential_status_check", sql`${table.status} in ('active', 'revoked')`),
         index("anonymous_credential_user_idx").on(table.userId, table.status),
         index("anonymous_credential_remote_transfer_idx").on(table.remoteTransferId, table.status),
-        index("anonymous_credential_superseded_by_idx").on(table.supersededBy),
+        index("anonymous_credential_browser_idx").on(table.browserId),
     ],
 );

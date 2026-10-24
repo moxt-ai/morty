@@ -199,3 +199,29 @@ test("Given one browser opened two setup links in two tabs, When the user ends c
         await expect(firstTab.getByRole("heading", { name: "This link is no longer available" })).toBeVisible();
     }
 });
+
+test("Given the end-access confirmation is open in one tab, When another tab opens a new link and the user confirms, Then the browser's current access ends in both tabs", async ({
+    runtime,
+}) => {
+    const first = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const firstTab = runtime.page;
+    await firstTab.goto(first.url);
+    await expect(firstTab.getByRole("textbox", { name: "Message" })).toBeEnabled();
+    await clickEndCurrentAccess(firstTab, "desktop");
+    const confirmation = firstTab.getByRole("dialog", { name: "End current access?" });
+    await expect(confirmation).toBeVisible();
+
+    const second = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const secondTab = await firstTab.context().newPage();
+    await secondTab.goto(second.url);
+    await expect(secondTab.getByRole("textbox", { name: "Message" })).toBeEnabled();
+
+    await confirmation.getByRole("button", { name: "End current access", exact: true }).click();
+
+    await expect(firstTab.getByRole("status")).toContainText("Current access ended");
+    await expect(secondTab.getByRole("heading", { name: "This link is no longer valid" })).toBeVisible();
+    for (const link of [first.url, second.url]) {
+        await secondTab.goto(link);
+        await expect(secondTab.getByRole("heading", { name: "This link is no longer available" })).toBeVisible();
+    }
+});
