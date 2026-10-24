@@ -13,6 +13,7 @@ export async function followSetupInstructions(options: {
     readonly clock?: SetupHost["clock"];
     readonly cwd: string;
     readonly documents: string;
+    readonly state: string;
     readonly harness: string;
     readonly instructionUrl: string;
     readonly runtime: SetupRuntime;
@@ -45,6 +46,7 @@ export async function followSetupInstructions(options: {
     const events: Readonly<Record<string, unknown>>[] = [];
     const exitCode = await bundle.runSetup(args, {
         ...(options.clock === undefined ? {} : { clock: options.clock }),
+        state: options.state,
         documents: options.documents,
         emit: (event) => events.push(event),
         runtime: options.runtime,
@@ -54,7 +56,7 @@ export async function followSetupInstructions(options: {
     const ready = events.find((event) => event["status"] === "ready");
     assert.ok(ready);
     const configuration = object(
-        JSON.parse(await readFile(join(options.documents, "morty/config.json"), "utf8")),
+        JSON.parse(await readFile(join(options.state, "config.json"), "utf8")),
         "local configuration",
     );
     return {

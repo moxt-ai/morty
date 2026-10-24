@@ -27,9 +27,10 @@ Chat origin: {{BASE_URL}}
 node <downloaded-setup.mjs> setup --base-url {{BASE_URL}} --cwd <absolute-current-working-directory> --harness <own-harness-id> --session-id <exact-current-session-id>
 ```
 
-The script stores its configuration under the current user's `~/Documents` directory
-and protects it using the operating system's filesystem permissions. Do not use a
-repository as a substitute.
+The script keeps this computer's Morty identity in the operating system's local
+application data directory for the current user, which is not synced to other
+computers, and protects it using filesystem permissions. Each computer has its own.
+Do not copy it to a repository, a synced folder, or another computer.
 The script reuses the saved identity and Machine for this origin and reconnects an
 active managed connection when possible. When the saved Machine's Runtime is no
 longer managed here, it keeps the user, replaces the Project and Machine, and pairs
@@ -61,6 +62,6 @@ Keep saved credentials private. Do not output tokens, pairing tickets, or privat
 configuration; only the ready handoff URL is intended for the user.
 
 Managing previously shared access:
-- When the user asks to revoke all previously shared access from this machine, run `node <setup.mjs> revoke-all-access`, using the same Documents directory as setup. The command defaults to the origin in the saved local configuration; `--base-url <same Morty origin>` is optional and must match that saved origin. No harness, session ID, or workspace argument is needed. Use the deployment-owned setup download as above; never put local credentials in command arguments or output.
+- When the user asks to revoke all previously shared access from this machine, run `node <setup.mjs> revoke-all-access`, as the same user on the same computer as setup. The command defaults to the origin in the saved local configuration; `--base-url <same Morty origin>` is optional and must match that saved origin. No harness, session ID, or workspace argument is needed. Use the deployment-owned setup download as above; never put local credentials in command arguments or output.
 - This command uses the original locally saved identity, revokes previous sharing links and all other Morty credentials for its current Project (including recovery credentials), and retains the local identity so new sharing links can be created. It does not stop the daemon or its tasks. Already issued session access and open connections can remain usable until their access expires.
 - Report success only after `status: "access_revoked"`. A missing local identity is an error; do not run setup or create a new identity to conceal it. This command is scoped to the Project saved in this local configuration, not other installations; a Project that setup replaced already ended everything shared from it.
