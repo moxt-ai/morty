@@ -1,8 +1,14 @@
 import { mkdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { dirname, isAbsolute, join, relative } from "node:path";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
+
+/** How the Runtime shows a directory: under the user's home directory as `~/…`, elsewhere in full. */
+function directoryLabel(path: string): string {
+    const suffix = relative(homedir(), path);
+    return suffix === "" ? "~" : !isAbsolute(suffix) && !suffix.startsWith("..") ? `~/${suffix}` : path;
+}
 
 test("Given a saved setup handoff, When its Runtime reconnects, Then setup returns a concise QR image reference", async ({
     runtime,
@@ -141,6 +147,6 @@ test("Given setup was previously paired in another directory, When a new project
     await runtime.page.getByRole("button", { name: /^Switch computer, / }).click();
     await runtime.page.getByRole("menuitem", { name: "Execution details", exact: true }).click();
     const details = runtime.page.getByRole("dialog", { name: "Execution details", exact: true });
-    await expect(details.getByTestId(dataTestId.executionDirectory)).toHaveText(workspace);
+    await expect(details.getByTestId(dataTestId.executionDirectory)).toHaveText(directoryLabel(workspace));
     await runtime.page.screenshot({ path: testInfo.outputPath("long-workspace-handoff.png"), fullPage: true });
 });
