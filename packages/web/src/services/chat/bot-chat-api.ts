@@ -69,8 +69,16 @@ const managedSessionSchema = v.pipe(
     v.readonly(),
 );
 export type ManagedChatSession = v.InferOutput<typeof managedSessionSchema>;
-/** What the Chat Worker's Session stream tells this page: a Session's activity changed, or the Runtime closed one. */
-export type ManagedSessionEvent = SessionStatusChangedEvent | SessionCloseNoticeEvent;
+/** The Chat Worker sends this once the status stream reaches the Runtime and follows the Sessions. */
+const MANAGED_SESSION_STATUSES_FOLLOWING_KIND = "managed-session.statuses.following";
+/**
+ * What the Chat Worker's Session stream tells this page: it follows the Sessions, a Session's activity changed, or the
+ * Runtime closed one.
+ */
+export type ManagedSessionEvent =
+    | { readonly kind: typeof MANAGED_SESSION_STATUSES_FOLLOWING_KIND }
+    | SessionStatusChangedEvent
+    | SessionCloseNoticeEvent;
 const chatRuntimeSchema = v.object({
     runtimeId: identifier,
     machineName: v.string(),
@@ -370,6 +378,9 @@ export class BotChatApi {
             (data) => {
                 // A newer Chat Worker may send other kinds; this page skips them and keeps its stream.
                 switch (decodeMessageKind(data)) {
+                    case MANAGED_SESSION_STATUSES_FOLLOWING_KIND:
+                        receive({ kind: MANAGED_SESSION_STATUSES_FOLLOWING_KIND });
+                        return;
                     case SESSION_CLOSE_NOTICE_KIND:
                         receive(decodeSessionCloseNoticeEvent(data));
                         return;

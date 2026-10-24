@@ -16,8 +16,17 @@ import type { ManagedSessionStorage } from "../storage/managed-session-storage.t
 
 const STATUS_LIVENESS_MILLISECONDS = 120_000;
 
-/** What the managed Session stream tells a client: a Session's activity changed, or the Runtime closed a Session. */
-export type ManagedSessionEvent = SessionStatusChangedEvent | SessionCloseNoticeEvent;
+/** Sent once the stream reaches the Runtime and follows the Sessions' statuses. */
+export const MANAGED_SESSION_STATUSES_FOLLOWING_KIND = "managed-session.statuses.following";
+
+/**
+ * What the managed Session stream tells a client: it now follows the Sessions, a Session's activity changed, or the
+ * Runtime closed a Session.
+ */
+export type ManagedSessionEvent =
+    | { readonly kind: typeof MANAGED_SESSION_STATUSES_FOLLOWING_KIND }
+    | SessionStatusChangedEvent
+    | SessionCloseNoticeEvent;
 
 export type ChatScope = {
     readonly userId: string;
@@ -238,6 +247,7 @@ export class ChatService {
         scope.signal.throwIfAborted();
         const owned = new Set<string>(ownedSessions.map((session) => session.id));
         const socket = await this.#platform.openChatRuntimeHost(scope.projectId, runtime.runtimeId, signal);
+        publish({ kind: MANAGED_SESSION_STATUSES_FOLLOWING_KIND });
         await new Promise<void>((_resolve, reject) => {
             let settled = false;
             let liveness: ReturnType<typeof setTimeout>;

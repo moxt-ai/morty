@@ -194,7 +194,10 @@ export function createChatWorkspace(options: {
         onDirectoryRefreshed: () => startDirectoryLoad(),
         onConversationCreated: (conversationId, title) =>
             directory.getState().conversationCreated(conversationId, title),
-        onSelectionReady: (selection) => replacePane(selection),
+        onSelectionReady: (selection) => {
+            runtimeRecovery.working();
+            replacePane(selection);
+        },
         onSelectionTargeted: (conversationId) => statuses.getState().selectionChanged(conversationId),
         url: options.url ?? window.location.href,
     });
@@ -210,6 +213,7 @@ export function createChatWorkspace(options: {
             }
         },
         () => runtimeRecovery.failed(),
+        () => runtimeRecovery.working(),
     );
     const draftControls = createDraftControlsStore(
         botId,
@@ -309,8 +313,13 @@ export function createChatWorkspace(options: {
             .load(signal)
             .catch(() => undefined)
             .finally(() => {
-                if (!signal.aborted && listWaitsForRuntime()) {
+                if (signal.aborted) {
+                    return;
+                }
+                if (listWaitsForRuntime()) {
                     runtimeRecovery.failed();
+                } else {
+                    runtimeRecovery.working();
                 }
             });
     };

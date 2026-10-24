@@ -53,6 +53,8 @@ export function createConversationStatusStore(
     onSessionClosed: (sessionId: string, reason: string) => void,
     /** Announced when the stream following the Sessions gives up, as when the Runtime went away. */
     onUnfollowed: () => void,
+    /** Announced when the stream reaches the Runtime and follows the Sessions again. */
+    onFollowing: () => void,
 ) {
     let watcher: {
         readonly botId: string;
@@ -133,7 +135,9 @@ export function createConversationStatusStore(
                                 botId,
                                 (event) => {
                                     recoveries = 0;
-                                    if (event.kind === "session.close.notice") {
+                                    if (event.kind === "managed-session.statuses.following") {
+                                        onFollowing();
+                                    } else if (event.kind === "session.close.notice") {
                                         onSessionClosed(event.sessionId, event.reason);
                                     } else if (event.status.kind === "idle") {
                                         markCompleted(event.sessionId);

@@ -11,7 +11,7 @@ export type RuntimeObservation = { readonly kind: "read" } | { readonly kind: "w
  * may not serve yet, so retries continue with growing delays; once they are used up, the next change starts over.
  */
 const RECOVERY_DELAYS_MS = [0, 1_000, 2_000, 5_000, 10_000, 20_000, 30_000] as const;
-/** A failure this long after the previous one is a new outage, which starts the delays over. */
+/** A failure after the readers have worked this long is a new outage, which starts the delays over. */
 const RECOVERY_STABLE_MS = 60_000;
 
 /**
@@ -20,9 +20,9 @@ const RECOVERY_STABLE_MS = 60_000;
  *
  * A return the page observes retries at once. Otherwise a retry follows only a reported failure, after a delay that
  * grows with each failure of the same outage, so a retry still in flight is never restarted, and a Runtime reported
- * online that cannot serve is not retried in a loop. Seeing the Runtime offline, a change, or a failure long after the
- * previous one starts the delays over. `waiting` is derived from what the readers hold: something that is loading or
- * following again is in flight, not waiting.
+ * online that cannot serve is not retried in a loop. Seeing the Runtime offline, a change, or a failure after the
+ * readers worked for a while starts the delays over; time spent failing never counts as working. `waiting` is derived
+ * from what the readers hold: something that is loading or following again is in flight, not waiting.
  */
 export function createRuntimeRecovery(options: {
     readonly clock: Clock;
@@ -34,7 +34,8 @@ export function createRuntimeRecovery(options: {
 }) {
     let online = false;
     let attempts = 0;
-    let lastFailureAt: number | null = null;
+    // When a reader last showed it works again, cleared by the next failure.
+    let workingSince: number | null = null;
     let scheduled: AbortController | null = null;
     const startOver = (): void => {
         attempts = 0;
@@ -84,13 +85,16 @@ export function createRuntimeRecovery(options: {
                 schedule();
             }
         },
+        /** Something read through the Runtime works again: a session opened, a list loaded, or statuses are followed. */
+        working: (): void => {
+            workingSince ??= options.clock.now();
+        },
         /** Something read through the Runtime failed for it: the home view, a list load, or the status stream. */
         failed: (): void => {
-            const now = options.clock.now();
-            if (lastFailureAt !== null && now - lastFailureAt > RECOVERY_STABLE_MS) {
+            if (workingSince !== null && options.clock.now() - workingSince >= RECOVERY_STABLE_MS) {
                 startOver();
             }
-            lastFailureAt = now;
+            workingSince = null;
             // What failed on its own waits before its retry; only an observed return retries at once.
             attempts = Math.max(attempts, 1);
             schedule();
