@@ -1,5 +1,5 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
-import type { AcpSessionUpdate, SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
+import type { AcpSessionUpdate, SessionEvent, SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
 import {
     appendSessionMessageEvent,
     createSessionMessageReduction,
@@ -11,6 +11,7 @@ import {
 } from "./session-presentation.ts";
 
 export interface SessionEventHistory {
+    readonly throughPosition: string | null;
     readonly events: readonly SessionEvent[];
     readonly nextCursor: string | null;
     readonly sessionGenerationId: string;
@@ -18,7 +19,7 @@ export interface SessionEventHistory {
 
 interface PendingEvents {
     readonly generation: string | null;
-    readonly buffer: readonly SessionEvent[];
+    readonly buffer: readonly SessionLiveEvent[];
 }
 
 export type SessionProjection =
@@ -27,6 +28,8 @@ export type SessionProjection =
           readonly kind: "established";
           readonly eventIds: ReadonlySet<string>;
           readonly generation: string;
+          readonly firstEventId: string | null;
+          readonly throughPosition: string | null;
           readonly pagination: { readonly nextCursor: string | null };
           readonly pending: PendingEvents | null;
           readonly reduction: SessionMessageReduction;
@@ -34,7 +37,7 @@ export type SessionProjection =
       };
 
 export type SessionProjectionInput =
-    | { readonly event: SessionEvent; readonly kind: "live-event" }
+    | { readonly event: SessionLiveEvent; readonly kind: "live-event" }
     | { readonly kind: "reconcile" }
     | { readonly kind: "execution-idle" }
     | { readonly history: SessionEventHistory; readonly kind: "history-loaded"; readonly revision: number }
@@ -169,6 +172,8 @@ function adoptGeneration(
     return {
         eventIds: new Set(events.map((event) => event.eventId)),
         generation: history.sessionGenerationId,
+        firstEventId: events.at(0)?.eventId ?? null,
+        throughPosition: history.throughPosition,
         kind: "established",
         pagination: { nextCursor: history.nextCursor },
         pending: null,
@@ -190,6 +195,7 @@ function applyNewerEvents(
         next = {
             ...next,
             eventIds: new Set([...next.eventIds, event.eventId]),
+            firstEventId: next.firstEventId ?? event.eventId,
             reduction: appendSessionMessageEvent(next.reduction, event),
         };
         applied.push(event);
@@ -231,7 +237,22 @@ export function transitionSessionProjection(
                     },
                 };
             }
-            if (state.eventIds.has(event.eventId)) {
+            if (state.pending !== null) {
+                return {
+                    effects: [],
+                    state:
+                        state.pending.generation !== null
+                            ? state
+                            : {
+                                  ...state,
+                                  pending: { ...state.pending, buffer: [...state.pending.buffer, event] },
+                              },
+                };
+            }
+            if (
+                (state.throughPosition !== null && BigInt(event.position) <= BigInt(state.throughPosition)) ||
+                state.eventIds.has(event.eventId)
+            ) {
                 return { effects: [], state };
             }
             return {
@@ -239,6 +260,7 @@ export function transitionSessionProjection(
                 state: {
                     ...state,
                     eventIds: new Set([...state.eventIds, event.eventId]),
+                    firstEventId: state.firstEventId ?? event.eventId,
                     reduction: appendSessionMessageEvent(state.reduction, event),
                 },
             };
@@ -258,14 +280,24 @@ export function transitionSessionProjection(
                 state.pending.generation !== null ||
                 state.kind === "pristine" ||
                 input.history.sessionGenerationId !== state.generation;
-            const events = mergeSessionEvents(input.history.events, state.pending.buffer);
-            if (replacing) {
+            const events = mergeSessionEvents(
+                input.history.events,
+                state.pending.buffer.filter(
+                    (event) =>
+                        event.sessionGenerationId === input.history.sessionGenerationId &&
+                        (input.history.throughPosition === null ||
+                            BigInt(event.position) > BigInt(input.history.throughPosition)),
+                ),
+            );
+            // Older Runtimes have no coverage boundary, so retain their existing
+            // append-only recovery until they are upgraded.
+            if (replacing || input.history.throughPosition !== null) {
                 return {
                     effects: baselineEffects(events),
                     state: adoptGeneration(state, input.history, events),
                 };
             }
-            const merged = applyNewerEvents(state, input.history);
+            const merged = applyNewerEvents(state, { ...input.history, events });
             return { effects: catchUpEffects(merged.events), state: merged.state };
         }
         case "older-page": {
@@ -282,6 +314,8 @@ export function transitionSessionProjection(
                 state: {
                     ...state,
                     pagination: { nextCursor: input.page.nextCursor },
+                    firstEventId: input.page.events.at(0)?.eventId ?? state.firstEventId,
+                    eventIds: new Set([...input.page.events.map((event) => event.eventId), ...state.eventIds]),
                     reduction: prependSessionMessageEvents(state.reduction, input.page),
                     revision: state.revision + 1,
                 },

@@ -285,10 +285,12 @@ async function readSessionHistory(
     newerEvents: readonly SessionEvent[],
     expectedSessionGenerationId: string | null,
     signal: AbortSignal,
+    loadedRange: { readonly generation: string; readonly firstEventId: string | null } | null = null,
 ): Promise<SessionEventHistory> {
     let events: readonly SessionEvent[] = newerEvents;
     let nextCursor = initialCursor;
     let sessionGenerationId = expectedSessionGenerationId;
+    let throughPosition: string | null = null;
     let renderableMessages = sessionReductionMessages(createSessionMessageReduction({ events, nextCursor }));
     do {
         const requestedCursor = nextCursor;
@@ -299,6 +301,10 @@ async function readSessionHistory(
             { omit: ["agent-reasoning"] },
         );
         signal.throwIfAborted();
+        // Only the newest page defines which live deltas the snapshot covers.
+        if (requestedCursor === initialCursor) {
+            throughPosition = page.throughPosition ?? null;
+        }
         if (sessionGenerationId !== null && page.sessionGenerationId !== sessionGenerationId) {
             throw new Error("The Session reloaded while message history was loading.");
         }
@@ -309,11 +315,18 @@ async function readSessionHistory(
         events = mergeSessionEvents(page.events, events);
         nextCursor = page.nextCursor;
         renderableMessages = sessionReductionMessages(createSessionMessageReduction({ events, nextCursor }));
-    } while (nextCursor !== null && renderableMessages.length < HISTORY_MESSAGE_TARGET);
+    } while (
+        nextCursor !== null &&
+        (renderableMessages.length < HISTORY_MESSAGE_TARGET ||
+            (loadedRange !== null &&
+                loadedRange.generation === sessionGenerationId &&
+                loadedRange.firstEventId !== null &&
+                !events.some((event) => event.eventId === loadedRange.firstEventId)))
+    );
     if (sessionGenerationId === null) {
         throw new Error("The Runtime returned no Session history generation.");
     }
-    return { events, nextCursor, sessionGenerationId };
+    return { events, nextCursor, sessionGenerationId, throughPosition };
 }
 
 /** The settings a turn submission carries, read from the options the pane shows. */
@@ -696,6 +709,7 @@ export function createSessionPaneModel(options: {
                     [],
                     effect.generation,
                     AbortSignal.any([parentSignal, controller.signal, AbortSignal.timeout(45_000)]),
+                    projection.kind === "established" ? projection : null,
                 );
                 parentSignal.throwIfAborted();
                 if (controller.signal.aborted || projection.pending === null || projection.revision !== revision) {
