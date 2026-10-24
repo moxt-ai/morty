@@ -134,10 +134,14 @@ export function createConversationStatusStore(
                             await requests.subscribeManagedSessionStatuses(
                                 botId,
                                 (event) => {
-                                    recoveries = 0;
+                                    // Opening the stream shows it works, but only a Session event shows it keeps working,
+                                    // so only that restores the stream's own retries.
                                     if (event.kind === "managed-session.statuses.following") {
                                         onFollowing();
-                                    } else if (event.kind === "session.close.notice") {
+                                        return;
+                                    }
+                                    recoveries = 0;
+                                    if (event.kind === "session.close.notice") {
                                         onSessionClosed(event.sessionId, event.reason);
                                     } else if (event.status.kind === "idle") {
                                         markCompleted(event.sessionId);
