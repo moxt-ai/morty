@@ -2,6 +2,7 @@ import { createServer, request } from "node:http";
 import { connect, type Socket } from "node:net";
 import type { Duplex } from "node:stream";
 import type { WebSocket } from "playwright-core";
+import { dataTestId } from "../web/src/data-testid.ts";
 import { test as base, expect } from "./infra/test.ts";
 
 type Network = {
@@ -160,6 +161,7 @@ test("Given a healthy conversation, when overdue timers and foreground signals a
         window.dispatchEvent(new Event("online"));
     });
     await expect(composer).toBeEnabled();
+    await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
     await expect(composer).toHaveValue("Keep this draft across a healthy resume.");
     // Let real network I/O settle through a user-visible round trip before
     // advancing virtual deadlines; the healthy probe shares this transport.
@@ -199,7 +201,8 @@ test("Given an interrupted browser connection, when a task completes before fore
     );
     network.interruptSession();
     await closed;
-    await expect(composer).toBeDisabled();
+    await expect(composer).toBeEnabled();
+    await expect(page.getByTestId(dataTestId.sendMessage)).toBeDisabled();
     await expect(page.getByRole("alert")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Retry now", exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("recoverable-interruption.png") });
@@ -210,6 +213,7 @@ test("Given an interrupted browser connection, when a task completes before fore
     await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
     await page.clock.runFor(5000);
     await expect(composer).toBeEnabled();
+    await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
     await expect(composer).toHaveValue("Preserve this unsent draft.");
     await expect(
         page
@@ -254,7 +258,8 @@ for (const recovery of ["automatic", "online", "manual"] as const) {
         );
         network.disconnect();
         await socketsClosed;
-        await expect(composer).toBeDisabled();
+        await expect(composer).toBeEnabled();
+        await expect(page.getByTestId(dataTestId.sendMessage)).toBeDisabled();
         await page.clock.runFor(12000);
         if (recovery !== "automatic") {
             // Spend the bounded bridge retry budget before an explicit wakeup.
@@ -268,6 +273,7 @@ for (const recovery of ["automatic", "online", "manual"] as const) {
         }
         await page.clock.runFor(6000);
         await expect(composer).toBeEnabled();
+        await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
         await expect(composer).toHaveValue("Preserve my unsent draft.");
         await expect(page.getByRole("article", { name: "Agent response" })).toHaveCount(1);
         await page.getByRole("button", { name: "Send message", exact: true }).click();
@@ -307,10 +313,12 @@ for (const route of ["all", "session", "bridge", "suspended"] as const) {
         });
         await page.clock.runFor(5000);
         if (route !== "bridge") {
-            await expect(composer).toBeDisabled();
+            await expect(composer).toBeEnabled();
+            await expect(page.getByTestId(dataTestId.sendMessage)).toBeDisabled();
         }
         await page.clock.runFor(5000);
         await expect(composer).toBeEnabled();
+        await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
         await expect(composer).toHaveValue("Continue after resuming.");
         await expect(page.getByRole("article", { name: "Agent response" })).toHaveCount(1);
         await page.getByRole("button", { name: "Send message", exact: true }).click();
@@ -338,12 +346,43 @@ test("Given a silently stalled session without a lifecycle event, when its liven
     network.blackhole("session");
     await page.clock.runFor(25000);
     await page.clock.runFor(5000);
-    await expect(composer).toBeDisabled();
+    await expect(composer).toBeEnabled();
+    await expect(page.getByTestId(dataTestId.sendMessage)).toBeDisabled();
     await page.clock.runFor(5000);
     await expect(composer).toBeEnabled();
     await composer.fill("Send after silent network recovery.");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("article", { name: "Agent response" }).last()).toContainText(
         "Send after silent network recovery.",
+    );
+});
+
+test("Given a mobile browser with an unsent draft, when its network is disabled and restored, then offline feedback and send availability follow the network without losing edits", async ({
+    runtime,
+}) => {
+    const { page } = runtime;
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.clock.install({ time: new Date("2026-10-24T00:00:00Z") });
+    await runtime.openPairedChat();
+    const composer = page.getByRole("textbox", { name: "Message" });
+    await composer.fill("Keep this draft");
+    await expect(page.getByRole("button", { name: "Send message" })).toBeEnabled();
+    await page.context().setOffline(true);
+    await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toContainText("No network connection");
+    await expect(composer).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
+    await composer.fill("Keep this draft and my offline edits");
+    await expect(page.getByRole("button", { name: /Switch computer/ })).toHaveAccessibleDescription(
+        "No network connection",
+    );
+    await page.context().setOffline(false);
+    await page.clock.runFor(5000);
+    await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
+    await expect(page.getByRole("button", { name: "Send message" })).toBeEnabled();
+    await expect(composer).toHaveValue("Keep this draft and my offline edits");
+    await expect(page.getByRole("article", { name: "Your message" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Send message" }).click();
+    await expect(page.getByRole("article", { name: "Agent response" })).toContainText(
+        "Keep this draft and my offline edits",
     );
 });

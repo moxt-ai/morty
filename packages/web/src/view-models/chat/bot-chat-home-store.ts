@@ -33,7 +33,7 @@ export type SetupReason = "unconfigured" | "agent-missing" | "runtime-offline" |
  * identity. Views carry its identifier; the Bot has no user-facing name.
  */
 type BotView = { readonly botId: string };
-export type BotChatHomeView =
+type BotChatHomeView =
     | { readonly kind: "loading" }
     | ({ readonly kind: "connecting" } & BotView)
     | ({ readonly kind: "active" } & BotView)
@@ -44,52 +44,22 @@ export type BotChatHomeView =
 export type BotConnectionStatus =
     | { readonly kind: "connecting"; readonly label: "Connecting" }
     | { readonly kind: "connected"; readonly label: "Connected" }
+    | { readonly kind: "unavailable"; readonly label: "Unavailable" }
     | { readonly kind: "unpaired"; readonly label: "Disconnected" }
     | { readonly kind: "disconnected"; readonly label: "Disconnected" };
-
-export type DisconnectedBotNotice =
-    | { readonly kind: "hidden" }
-    | { readonly description: string; readonly kind: "visible"; readonly title: string };
-
-export function disconnectedBotNotice(
-    view: BotChatHomeView,
-    connectionStatus: BotConnectionStatus,
-): DisconnectedBotNotice {
-    if (connectionStatus.kind !== "disconnected") {
-        return { kind: "hidden" };
-    }
-    switch (view.kind) {
-        case "active":
-        case "runtime-disconnected":
-            return {
-                kind: "visible",
-                title: "Your agent is disconnected",
-                description: "Start your local agent to reconnect it and use its sessions.",
-            };
-        case "setup":
-            return view.reason === "unconfigured"
-                ? { kind: "hidden" }
-                : {
-                      kind: "visible",
-                      title: "Your agent is disconnected",
-                      description: "Start your local agent to reconnect it and use its sessions.",
-                  };
-        case "loading":
-        case "connecting":
-        case "failed":
-            return { kind: "hidden" };
-    }
-}
 
 /**
  * The Machine's connection as the page shows it everywhere. It is derived from the Runtime configuration the page
  * follows, so no failure path can leave one part of the page saying offline while another says online.
  */
 export function botConnectionStatus(
-    home: Pick<BotChatHomeStore, "runtimeConfiguration" | "view">,
+    home: Pick<BotChatHomeStore, "runtimeConfiguration" | "view" | "configurationWatch" | "networkAvailable">,
 ): BotConnectionStatus {
     if (home.view.kind === "setup" && home.view.reason === "unconfigured") {
         return { kind: "unpaired", label: "Disconnected" };
+    }
+    if (!home.networkAvailable || home.configurationWatch.kind === "unavailable") {
+        return { kind: "unavailable", label: "Unavailable" };
     }
     if (home.runtimeConfiguration !== null) {
         return home.runtimeConfiguration.runtime.online
@@ -145,6 +115,12 @@ export interface BotChatHomeStore {
     readonly composerAttachments: ReturnType<typeof createComposerAttachmentStore>;
     readonly view: BotChatHomeView;
     readonly runtimeConfiguration: BotRuntimeConfiguration | null;
+    readonly configurationWatch:
+        | { readonly kind: "checking" }
+        | { readonly kind: "current"; readonly checkedAt: number }
+        | { readonly kind: "unavailable"; readonly lastCheckedAt: number | null };
+    readonly networkAvailable: boolean;
+    readonly setNetworkAvailable: (available: boolean) => void;
     readonly selection: ConversationSelectionState;
     readonly creation: ConversationCreationState;
     readonly revision: number;
@@ -155,8 +131,6 @@ export interface BotChatHomeStore {
     readonly scrollFollowRevision: number;
     /** The pairing dialog the user opened manually from the sidebar. */
     readonly pairingDialogOpen: boolean;
-    /** Set once the user dismisses the disconnected-agent toast for this disconnect. */
-    readonly disconnectedNoticeDismissed: boolean;
     /** Entry notices that surface a dialog once when the workflow resolves. */
     readonly notices: ChatEntryNotices;
     readonly dismissNotice: () => void;
@@ -169,7 +143,6 @@ export interface BotChatHomeStore {
     readonly setDraftSettings: (settings: ChatDraftConfiguration | null) => void;
     readonly showPairingDialog: () => void;
     readonly closePairingDialog: () => void;
-    readonly dismissDisconnectedNotice: () => void;
     readonly updateConversationTitle: (sessionId: string, title: string) => void;
     /** Clears the queued first message once the pane has sent it. */
     readonly initialMessageDelivered: (conversationId: string) => void;
@@ -228,6 +201,8 @@ export const createBotChatHomeStore = (
         readonly botId: string;
         readonly entry?: "address" | "restore";
         readonly onRuntimeConfiguration?: (configuration: BotRuntimeConfiguration) => void;
+        readonly onRuntimeConfigurationUnavailable: () => void;
+        readonly now: () => number;
         readonly url: string;
         readonly createId: () => string;
         readonly navigation: BotChatNavigation;
@@ -277,10 +252,30 @@ export const createBotChatHomeStore = (
                 onSelectionReady(selection);
             }
         };
+        const configurationUnavailable = (): void => {
+            const watch = get().configurationWatch;
+            set({
+                configurationWatch: {
+                    kind: "unavailable",
+                    lastCheckedAt:
+                        watch.kind === "current"
+                            ? watch.checkedAt
+                            : watch.kind === "unavailable"
+                              ? watch.lastCheckedAt
+                              : null,
+                },
+            });
+            options.onRuntimeConfigurationUnavailable();
+        };
         return {
             composerAttachments,
             view: { kind: "loading" },
             runtimeConfiguration: null,
+            configurationWatch: { kind: "checking" },
+            networkAvailable: navigator.onLine,
+            setNetworkAvailable: (available) => {
+                set({ networkAvailable: available });
+            },
             selection,
             creation: { kind: "draft" },
             revision: 0,
@@ -289,7 +284,6 @@ export const createBotChatHomeStore = (
             draftSettings: null,
             scrollFollowRevision: 0,
             pairingDialogOpen: false,
-            disconnectedNoticeDismissed: false,
             notices: { pairing: { kind: "hidden" } },
             dismissNotice: () => set((current) => ({ notices: { ...current.notices, pairing: { kind: "hidden" } } })),
             load: async (signal) => {
@@ -370,8 +364,7 @@ export const createBotChatHomeStore = (
                     set({
                         ...derived,
                         runtimeConfiguration: configuration,
-                        // A dismissed disconnection notice stays dismissed until this disconnection ends.
-                        ...(configuration.runtime.online ? { disconnectedNoticeDismissed: false } : {}),
+                        configurationWatch: { kind: "current", checkedAt: options.now() },
                     });
                     if (!configuration.runtime.online) {
                         // Once the page has seen the Runtime offline, its next online report is a return.
@@ -433,6 +426,7 @@ export const createBotChatHomeStore = (
                                 throw cause;
                             }
                             console.error("The Chat WebSocket bridge failed to complete a request.", cause);
+                            configurationUnavailable();
                             dropped = true;
                         }
                     }
@@ -606,6 +600,7 @@ export const createBotChatHomeStore = (
                         return;
                     }
                     if (isChatBridgeError(cause)) {
+                        configurationUnavailable();
                         // A dropped bridge is an ordinary failed call. An
                         // established conversation keeps whatever it showed, and
                         // the next user action reports its own failure; a load
@@ -770,7 +765,6 @@ export const createBotChatHomeStore = (
             setDraftSettings: (draftSettings) => set({ draftSettings }),
             showPairingDialog: () => set({ pairingDialogOpen: true }),
             closePairingDialog: () => set({ pairingDialogOpen: false }),
-            dismissDisconnectedNotice: () => set({ disconnectedNoticeDismissed: true }),
             updateConversationTitle: (sessionId, title) =>
                 set((state) => ({
                     selection: transitionConversationSelection(state.selection, {

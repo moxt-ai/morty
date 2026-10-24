@@ -210,6 +210,11 @@ export function createMortyApplication(options: {
             recover(event);
         }
     };
+    const networkChanged = (): void => {
+        workspace?.home.getState().setNetworkAvailable(navigator.onLine);
+    };
+    window.addEventListener("offline", networkChanged);
+    window.addEventListener("online", networkChanged);
     window.addEventListener("online", recover);
     window.addEventListener("pageshow", restored);
     document.addEventListener("visibilitychange", recover);
@@ -237,6 +242,8 @@ export function createMortyApplication(options: {
                 return;
             }
             disposed = true;
+            window.removeEventListener("offline", networkChanged);
+            window.removeEventListener("online", networkChanged);
             window.removeEventListener("online", recover);
             window.removeEventListener("pageshow", restored);
             document.removeEventListener("visibilitychange", recover);

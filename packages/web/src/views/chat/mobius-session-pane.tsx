@@ -1,5 +1,6 @@
 import type { PromptImage, PromptResource, SessionConfigOption } from "@moxt-ai/mobius-sdk";
-import { Check, CircleAlert, X } from "lucide-react";
+import { CircleAlert, X } from "lucide-react";
+import { Dialog } from "radix-ui";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
@@ -15,8 +16,8 @@ import {
     chatSessionMessageItemClassName,
     chatSessionMessageScrollClassName,
 } from "../../components/chat/chat-session-layout.ts";
+import { ConnectionNotice } from "../../components/chat/connection-notice.tsx";
 import { ReadonlyWorkingDirectory } from "../../components/chat/cwd-selector.tsx";
-import { SessionExecutionHeaderEnd } from "../../components/chat/execution-context-bar.tsx";
 import { HarnessMark } from "../../components/chat/harness-mark.tsx";
 import { MobileSessionTitlePortal } from "../../components/chat/mobile-session-title-portal.tsx";
 import {
@@ -29,20 +30,15 @@ import { SessionWelcome } from "../../components/chat/session-welcome.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
-import { LinkButton } from "../../components/ui/link-button.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { useDesktopChatLayout } from "../../components/utils/use-desktop-chat-layout.ts";
 import { cn } from "../../lib/utils.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
-import { type ExecutionContext, sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
+import { sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { harnessOptions } from "../../view-models/chat/native-session-agents.ts";
 import { sessionInteractionPresentation } from "../../view-models/chat/session-interaction-store.ts";
-import {
-    type SessionConnection,
-    type SessionPaneModel,
-    sessionPanePresentation,
-} from "../../view-models/chat/session-pane-store.ts";
+import { type SessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
 import { type SessionMessage, sessionTextValue } from "../../view-models/chat/session-presentation.ts";
 import { createSessionResourceStore } from "../../view-models/chat/session-resource-store.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
@@ -298,11 +294,21 @@ function SessionConversationTitleBar({
     readonly onConfirmTitleEdit: () => void;
 }) {
     const displayTitle = title || "Untitled session";
-    if (titleEdit.kind === "closed") {
-        if (titleLoading) {
-            return <SessionTitleSkeleton centered={centered} />;
-        }
-        return (
+    const saving = titleEdit.kind === "saving";
+    if (titleLoading) {
+        return <SessionTitleSkeleton centered={centered} />;
+    }
+    return (
+        <Dialog.Root
+            open={titleEdit.kind !== "closed"}
+            onOpenChange={(open) => {
+                if (open) {
+                    onOpenTitleEdit();
+                } else if (!saving) {
+                    onCancelTitleEdit();
+                }
+            }}
+        >
             <h2
                 className={cn(
                     "flex min-w-0 items-center gap-2 text-sm font-semibold",
@@ -317,66 +323,61 @@ function SessionConversationTitleBar({
                     label={agentLabel}
                     testId={dataTestId.sessionTitleHarnessMark}
                 />
-                <button
-                    type="button"
-                    aria-label={displayTitle}
-                    className={cn(
-                        "min-w-0 max-w-full cursor-pointer truncate rounded-md outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/70",
-                        centered ? "text-center" : "text-left",
-                    )}
-                    title="Rename conversation"
-                    onClick={onOpenTitleEdit}
-                >
-                    {displayTitle}
-                </button>
+                <Dialog.Trigger asChild>
+                    <button
+                        type="button"
+                        aria-label={displayTitle}
+                        className={cn(
+                            "min-h-11 min-w-0 max-w-full cursor-pointer truncate rounded-md outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/70",
+                            centered ? "text-center" : "text-left",
+                        )}
+                        title="Rename conversation"
+                    >
+                        {displayTitle}
+                    </button>
+                </Dialog.Trigger>
             </h2>
-        );
-    }
-    const saving = titleEdit.kind === "saving";
-    return (
-        <div
-            className={cn("flex min-w-0 items-center gap-2", centered ? "w-full max-w-full justify-center" : "flex-1")}
-        >
-            <HarnessMark
-                agentRef={agentRef || agentLabel}
-                appearance="line"
-                className="text-copy-secondary"
-                label={agentLabel}
-                testId={dataTestId.sessionTitleHarnessMark}
-            />
-            <AutoFocusInput
-                aria-label="Conversation title"
-                className={cn(
-                    "min-w-0 flex-1 appearance-none rounded-none border-0 bg-transparent px-0 py-0 text-sm font-semibold shadow-none outline-none ring-0 focus:ring-0 focus-visible:ring-0",
-                    centered && "text-center",
-                )}
-                disabled={saving}
-                maxLength={500}
-                value={titleEdit.draft}
-                onChange={(event) => onSetTitleDraft(event.target.value)}
-                onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                        event.preventDefault();
-                        onConfirmTitleEdit();
-                    }
-                    if (event.key === "Escape") {
-                        onCancelTitleEdit();
-                    }
-                }}
-            />
-            <Button
-                aria-label="Cancel rename"
-                disabled={saving}
-                size="icon"
-                variant="ghost"
-                onClick={onCancelTitleEdit}
-            >
-                <X className="size-4" />
-            </Button>
-            <Button aria-label="Save title" disabled={saving} size="icon" variant="ghost" onClick={onConfirmTitleEdit}>
-                <Check className="size-4" />
-            </Button>
-        </div>
+            <Dialog.Portal>
+                <Dialog.Overlay className="fixed inset-0 z-[190] bg-black/25" />
+                <Dialog.Content className="fixed left-1/2 top-1/2 z-[191] w-[400px] max-w-[calc(100vw-24px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-card p-6 shadow-xl">
+                    <Dialog.Title className="mb-4 text-base font-semibold">Rename conversation</Dialog.Title>
+                    <Dialog.Description className="sr-only">Choose a title for this conversation.</Dialog.Description>
+                    <AutoFocusInput
+                        aria-label="Conversation title"
+                        className="min-h-11 w-full min-w-0 rounded-lg border border-border bg-transparent px-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                        disabled={saving}
+                        maxLength={500}
+                        value={titleEdit.kind === "closed" ? displayTitle : titleEdit.draft}
+                        onChange={(event) => onSetTitleDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                                event.preventDefault();
+                                onConfirmTitleEdit();
+                            }
+                        }}
+                    />
+                    <div className="mt-4 flex justify-end gap-2">
+                        <Button
+                            aria-label="Cancel rename"
+                            className="min-h-11"
+                            disabled={saving}
+                            variant="ghost"
+                            onClick={onCancelTitleEdit}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            aria-label="Save title"
+                            className="min-h-11"
+                            disabled={saving}
+                            onClick={onConfirmTitleEdit}
+                        >
+                            {saving ? "Saving…" : "Save"}
+                        </Button>
+                    </div>
+                </Dialog.Content>
+            </Dialog.Portal>
+        </Dialog.Root>
     );
 }
 
@@ -384,14 +385,12 @@ function MobiusSessionPaneShell({
     title,
     titleLoading = false,
     mobileTitlePortaled = false,
-    headerEnd,
     children,
     footer,
 }: {
     readonly title?: string;
     readonly titleLoading?: boolean;
     readonly mobileTitlePortaled?: boolean;
-    readonly headerEnd?: ReactNode;
     readonly children: ReactNode;
     readonly footer?: ReactNode;
 }) {
@@ -407,7 +406,6 @@ function MobiusSessionPaneShell({
                         {title}
                     </h2>
                 )}
-                {headerEnd}
             </header>
             {children}
             {footer}
@@ -415,27 +413,11 @@ function MobiusSessionPaneShell({
     );
 }
 
-export function MobiusSessionPaneLoading({
-    executionContext,
-    footer,
-}: {
-    readonly executionContext: ExecutionContext;
-    readonly footer?: ReactNode;
-}) {
+export function MobiusSessionPaneLoading({ footer }: { readonly footer?: ReactNode }) {
     const desktop = useDesktopChatLayout();
     return (
         <>
-            <MobiusSessionPaneShell
-                footer={footer}
-                headerEnd={desktop ? <SessionExecutionHeaderEnd context={executionContext} /> : null}
-                mobileTitlePortaled={!desktop}
-                titleLoading={desktop}
-            >
-                {desktop ? null : (
-                    <header className={cn(chatSessionExecutionHeaderClassName, "justify-end")}>
-                        <SessionExecutionHeaderEnd context={executionContext} />
-                    </header>
-                )}
+            <MobiusSessionPaneShell footer={footer} mobileTitlePortaled={!desktop} titleLoading={desktop}>
                 <div aria-label="Messages" className={chatSessionMessageScrollClassName} role="log">
                     <SessionMessageListSkeleton />
                 </div>
@@ -446,44 +428,6 @@ export function MobiusSessionPaneLoading({
                 </MobileSessionTitlePortal>
             )}
         </>
-    );
-}
-
-function DisconnectedNotice({
-    onRetryNow,
-    retry,
-}: {
-    readonly onRetryNow: () => void;
-    readonly retry: Extract<SessionConnection, { readonly kind: "disconnected" }>["retry"];
-}) {
-    return (
-        <div data-testid={dataTestId.sessionReconnectNotice} className="shrink-0 text-muted-foreground">
-            {retry.kind === "scheduled" ? (
-                <ScheduledRetryNotice onRetryNow={onRetryNow} remainingSeconds={retry.remainingSeconds} />
-            ) : retry.kind === "waiting-for-bridge" ? (
-                <p role="status">
-                    Waiting for connection. <LinkButton onClick={onRetryNow}>Retry now</LinkButton>
-                </p>
-            ) : (
-                <p role="status">
-                    Automatic retries stopped. <LinkButton onClick={onRetryNow}>Retry now</LinkButton>
-                </p>
-            )}
-        </div>
-    );
-}
-
-function ScheduledRetryNotice({
-    onRetryNow,
-    remainingSeconds,
-}: {
-    readonly onRetryNow: () => void;
-    readonly remainingSeconds: number;
-}) {
-    return (
-        <p role="status">
-            Retrying in {remainingSeconds} s <LinkButton onClick={onRetryNow}>Retry now</LinkButton>
-        </p>
     );
 }
 
@@ -533,47 +477,6 @@ function UnconfirmedDeliveryCard({
     );
 }
 
-function ReconnectingNotice() {
-    return (
-        <div data-testid={dataTestId.sessionReconnectNotice} className="shrink-0 text-muted-foreground">
-            <p role="status">Mobius is reconnecting…</p>
-        </div>
-    );
-}
-
-function SessionReconnectNotice({
-    connection,
-    onRetryNow,
-}: {
-    readonly connection: SessionConnection;
-    readonly onRetryNow: () => void;
-}) {
-    if (connection.kind === "disconnected") {
-        return <DisconnectedNotice onRetryNow={onRetryNow} retry={connection.retry} />;
-    }
-    return <ReconnectingNotice />;
-}
-
-/** Tells the user that the Runtime closed the Session, and why when it said so, and offers to reopen it. */
-function SessionClosedNotice({
-    connection,
-    onReopen,
-}: {
-    readonly connection: Extract<SessionConnection, { readonly kind: "closed" }>;
-    readonly onReopen: () => void;
-}) {
-    return (
-        <div data-testid={dataTestId.sessionClosedNotice} className="mb-2 px-1 text-sm text-muted-foreground">
-            <p role="status">
-                The session is closed.{connection.reason === null ? "" : ` Reason: ${connection.reason}`}{" "}
-                <LinkButton disabled={connection.reopen.kind === "reopening"} onClick={onReopen}>
-                    {connection.reopen.kind === "reopening" ? "Reopening…" : "Reopen it"}
-                </LinkButton>
-            </p>
-        </div>
-    );
-}
-
 /**
  * Stands in for older messages while an earlier history page is fetched above
  * the visible list. It carries no text of its own so the placeholder reads as
@@ -616,7 +519,8 @@ function MobiusSessionPaneBody({
     readonly pane: SessionPaneModel;
     readonly workspace: ChatWorkspace;
 }) {
-    const runtimeConfiguration = useStore(workspace.home, (state) => state.runtimeConfiguration);
+    const home = useStore(workspace.home);
+    const runtimeConfiguration = home.runtimeConfiguration;
     const model = useStore(pane.store);
     const attachmentModel = useStore(pane.composerAttachments);
     const interactionModel = useStore(pane.interactions);
@@ -651,6 +555,7 @@ function MobiusSessionPaneBody({
     const respondToElicitation = (response: ElicitationInteractionResponse): void => {
         interactionModel.respondToElicitation(response, pane.operationsSignal());
     };
+    const executionContext = sessionExecutionContext(pane.session, home, model.connection);
     const presentation = sessionPanePresentation(
         model,
         delivery,
@@ -658,6 +563,7 @@ function MobiusSessionPaneBody({
         messageQueue,
         attachmentModel,
         interactionModel,
+        executionContext.available,
     );
     const renderItems = sessionRenderItems(model.messages);
     const renderGroups = sessionRenderGroups(renderItems);
@@ -674,7 +580,6 @@ function MobiusSessionPaneBody({
     };
 
     const desktop = useDesktopChatLayout();
-    const executionContext = sessionExecutionContext(pane.session, runtimeConfiguration, model.connection);
     const titleBarProps = {
         title: model.title,
         titleEdit: model.titleEdit,
@@ -695,13 +600,8 @@ function MobiusSessionPaneBody({
                         <div className="min-w-0 flex-1">
                             <SessionConversationTitleBar {...titleBarProps} centered={false} />
                         </div>
-                        <SessionExecutionHeaderEnd context={executionContext} />
                     </header>
-                ) : (
-                    <header className={cn(chatSessionExecutionHeaderClassName, "justify-end")}>
-                        <SessionExecutionHeaderEnd context={executionContext} />
-                    </header>
-                )}
+                ) : null}
                 <FollowLatestScrollArea
                     role="log"
                     followThreshold={80}
@@ -874,17 +774,18 @@ function MobiusSessionPaneBody({
                     draft={model.draft}
                     error={presentation.composerError}
                     errorStatus={
-                        model.connection.kind === "disconnected" || model.connection.kind === "reconnecting" ? (
-                            <SessionReconnectNotice
-                                connection={model.connection}
-                                onRetryNow={() => pane.store.getState().retryNow()}
-                            />
-                        ) : model.connection.kind === "closed" ? (
-                            <SessionClosedNotice
-                                connection={model.connection}
+                        executionContext.feedback.kind === "hidden" ? undefined : (
+                            <ConnectionNotice
+                                feedback={executionContext.feedback}
+                                onRetryNow={() =>
+                                    executionContext.feedback.kind === "failed" &&
+                                    executionContext.feedback.action === "reload"
+                                        ? workspace.home.getState().retry()
+                                        : pane.store.getState().retryNow()
+                                }
                                 onReopen={() => run(pane.store.getState().reopen)}
                             />
-                        ) : undefined
+                        )
                     }
                     onDraftChange={pane.store.getState().setDraft}
                     onStop={() => run(pane.store.getState().stop)}
@@ -897,6 +798,7 @@ function MobiusSessionPaneBody({
                     }
                     outputState={presentation.outputState}
                     submitDisabled={presentation.submitDisabled}
+                    stopDisabled={presentation.stopDisabled}
                 >
                     <ChatConfigurationMenu
                         controls={[
@@ -967,7 +869,7 @@ function MobiusSessionPaneBody({
             </section>
             {desktop ? null : (
                 <MobileSessionTitlePortal>
-                    <SessionConversationTitleBar {...titleBarProps} centered />
+                    <SessionConversationTitleBar {...titleBarProps} centered={false} />
                 </MobileSessionTitlePortal>
             )}
             <FilePreview

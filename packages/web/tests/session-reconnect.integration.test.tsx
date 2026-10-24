@@ -11,11 +11,11 @@ function reconnectStatusText(app: TestApp): string | null {
     if (notice === null) {
         return null;
     }
-    return queryByRole(notice, "status")?.textContent ?? null;
+    return notice.textContent;
 }
 
 function retrySeconds(app: TestApp): number {
-    const match = /^Retrying in (\d+) s Retry now$/u.exec(reconnectStatusText(app) ?? "");
+    const match = /Retrying in (\d+) s/u.exec(reconnectStatusText(app) ?? "");
     if (match === null) {
         throw new Error("Waiting for the visible retry countdown");
     }
@@ -118,7 +118,10 @@ test("Given a disconnected conversation with an unsent draft, When the same Runt
         await app.daemon.disconnect();
         await app.waitForView(() => expect(reconnectStatusText(app), `disconnect ${cycle}`).toContain("Retrying in"));
         expect(queryByRole(form, "alert")).toBeNull();
-        expect(composer.disabled).toBe(true);
+        expect(composer.disabled).toBe(false);
+        expect(getByRole(form, "button", { name: "Send message" })).toHaveProperty("disabled", true);
+        await app.user.clear(composer);
+        await app.user.type(composer, `Keep this unsent draft ${cycle}`);
         await app.daemon.reconnect();
         const retry = queryByRole(form, "button", { name: "Retry now" });
         if (!(retry instanceof HTMLButtonElement)) {
@@ -126,11 +129,11 @@ test("Given a disconnected conversation with an unsent draft, When the same Runt
         }
         await app.user.click(retry);
         await app.waitForView(() => {
-            expect(composer.disabled, `recovery ${cycle}`).toBe(false);
             expect(reconnectStatusText(app)).toBeNull();
+            expect(getByRole(form, "button", { name: "Send message" })).toHaveProperty("disabled", false);
         });
         expect(queryByRole(form, "alert")).toBeNull();
-        expect(composer.value).toBe("Keep this unsent draft");
+        expect(composer.value).toBe(`Keep this unsent draft ${cycle}`);
     }
     await app.user.clear(composer);
     await sendPrompt(app, composer, "After the Runtime restart");
@@ -198,7 +201,7 @@ test("Given repeated short-lived recoveries, When the Runtime drops again after 
         } else {
             await act(async () => clock.advanceBy(delay * 1000));
         }
-        await app.waitForView(() => expect(composer.disabled).toBe(false));
+        await app.waitForView(() => expect(reconnectStatusText(app)).toBeNull());
     }
     // Let the connection pass its normal health check, then exercise real
     // user traffic before checking that a later outage starts a fresh budget.
@@ -230,15 +233,49 @@ test("Given a recovered Runtime and an unsent draft, When the retry deadline arr
     const delay = await app.waitForView(() => retrySeconds(app));
     await app.daemon.reconnect();
     await act(async () => clock.advanceBy((delay - 1) * 1000));
-    expect(composer.disabled).toBe(true);
-    expect(reconnectStatusText(app)).toBe("Retrying in 1 s Retry now");
+    expect(composer.disabled).toBe(false);
+    expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true);
+    expect(reconnectStatusText(app)).toContain("Retrying in 1 s");
     await act(async () => clock.advanceBy(1000));
-    await app.waitForView(() => expect(composer.disabled).toBe(false));
-    expect(reconnectStatusText(app)).toBeNull();
+    await app.waitForView(() => expect(reconnectStatusText(app)).toBeNull());
+    expect(composer.disabled).toBe(false);
     expect(queryByRole(composer.closest("form") ?? document.body, "alert")).toBeNull();
     expect(composer.value).toBe("Still unsent");
     expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain("Still unsent");
     await act(async () => clock.advanceBy(60000));
     expect(composer.disabled).toBe(false);
     expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain("Still unsent");
+});
+
+test("Given an unavailable Runtime and an editable draft, When automatic retries are exhausted and the user reconnects, Then one actionable failure clears and the draft is never sent automatically", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const composer = await openSavedConversation(app, "Recover after exhausted retries");
+    if (app.daemon === null) {
+        throw new Error("Expected a connected Runtime");
+    }
+    await app.user.type(composer, "Keep editing through failure");
+    await app.daemon.disconnect();
+    for (let attempt = 0; attempt < 7; attempt += 1) {
+        const seconds = await app.waitForView(() => retrySeconds(app));
+        await act(async () => clock.advanceBy(seconds * 1000));
+    }
+    await app.waitForView(() => expect(getByRole(document.body, "alert").textContent).toContain("Couldn’t reconnect"));
+    expect(composer.disabled).toBe(false);
+    expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true);
+    await app.user.type(composer, " even now");
+    expect(
+        queryByRole(document.body, "button", { name: /Switch computer/, description: "Connection available" }),
+    ).toBeNull();
+    await app.daemon.reconnect();
+    await app.user.click(getByRole(document.body, "button", { name: "Retry now" }));
+    await app.waitForView(() => expect(reconnectStatusText(app)).toBeNull());
+    expect(queryByRole(document.body, "alert")).toBeNull();
+    expect(composer.value).toBe("Keep editing through failure even now");
+    expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false);
+    expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain(
+        "Keep editing through failure",
+    );
 });

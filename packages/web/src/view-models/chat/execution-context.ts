@@ -1,6 +1,6 @@
 import type { ExecutionContext } from "../../components/chat/execution-context.ts";
-import type { BotRuntimeConfiguration } from "../../services/chat/bot-chat-api.ts";
-import { type BotChatHomeStore, botConnectionStatus } from "./bot-chat-home-store.ts";
+import type { BotChatHomeStore } from "./bot-chat-home-store.ts";
+import { connectionPresentation } from "./connection-presentation.ts";
 import { directoryName } from "./directory-name.ts";
 import type { DraftControlsStore } from "./draft-controls-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
@@ -15,17 +15,13 @@ export function pendingExecutionContext(
     const loading =
         home.selection.kind === "loading" || home.view.kind === "loading" || home.view.kind === "connecting";
     const base: ExecutionContext = {
+        ...connectionPresentation(home, null),
         agentRef: "",
         machine: home.runtimeConfiguration?.runtime.machineName.trim() || (loading ? "Loading…" : "Unknown"),
         agent: loading ? "Loading…" : "Unknown",
         directory: null,
         directoryName: loading ? "Loading…" : "Unknown",
         directoryPlaceholder: loading ? "Loading…" : "Unknown",
-        connection: loading
-            ? "Connecting"
-            : home.selection.kind === "failed" || home.view.kind === "failed"
-              ? "Unavailable"
-              : botConnectionStatus(home).label,
     };
     if (home.selection.kind !== "draft" || home.view.kind !== "active") {
         return base;
@@ -51,11 +47,14 @@ export function pendingExecutionContext(
 
 export function sessionExecutionContext(
     session: OpenMobiusSession,
-    configuration: BotRuntimeConfiguration | null,
+    home: BotChatHomeStore,
     connection: SessionConnection,
 ): ExecutionContext {
+    const configuration = home.runtimeConfiguration;
     const agent = configuration?.runtime.agents.find((candidate) => candidate.agentRef === session.agentRef);
-    const base = {
+
+    return {
+        ...connectionPresentation(home, connection),
         agentRef: session.agentRef,
         machine: configuration?.runtime.machineName.trim() || "Unknown",
         agent: agent?.label.trim() || session.result.ready.agentName.trim() || "Unknown",
@@ -63,19 +62,4 @@ export function sessionExecutionContext(
         directoryName: directoryName(session.result.ready.directoryLabel),
         directoryPlaceholder: "Unknown",
     };
-    switch (connection.kind) {
-        case "loading":
-        case "session-loading-after-create":
-            return { ...base, connection: "Connecting" };
-        case "ready":
-            return { ...base, connection: "Connected" };
-        case "disconnected":
-            return { ...base, connection: "Disconnected" };
-        case "reconnecting":
-            return { ...base, connection: "Reconnecting" };
-        case "closed":
-            return { ...base, connection: "Closed" };
-        case "failed":
-            return { ...base, connection: "Unavailable" };
-    }
 }

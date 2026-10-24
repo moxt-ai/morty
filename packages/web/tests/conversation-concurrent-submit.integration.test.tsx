@@ -128,6 +128,9 @@ test("Given two attachments in a message, When an attachment is removed while su
     await app.waitForView(() =>
         expect(getByRole(form, "list", { name: "Attachments" }).textContent).toContain("second.json"),
     );
+    await app.waitForView(() =>
+        expect(getByRole(form, "button", { name: "Send message" })).toHaveProperty("disabled", false),
+    );
     const remove = getByRole(form, "button", { name: "Remove first.json" });
     act(() => {
         fireEvent.submit(form);

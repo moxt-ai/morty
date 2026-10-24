@@ -32,7 +32,6 @@ import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { type SessionActivityState, sameSessionActivity, workingCommandId } from "./session-activity-machine.ts";
 import {
-    connectionErrorMessage,
     connectionFailure,
     disconnectedConnection,
     isConnectionSettled,
@@ -165,6 +164,7 @@ export function sessionPanePresentation(
     queue: SessionMessageQueueStore,
     attachments: ComposerAttachmentStore,
     interactions: SessionInteractionStore,
+    connectionAvailable = true,
 ) {
     const needsApproval = interactions.interactions.some(
         (interaction) => interaction.kind === "permission" && interaction.permission.state.kind === "pending",
@@ -180,6 +180,7 @@ export function sessionPanePresentation(
     const controlRunning = model.runningTurn !== null;
     const stopping = stopRequested(tasks, model.runningTurn);
     const composerDisabled =
+        !connectionAvailable ||
         model.connection.kind !== "ready" ||
         delivery.state.kind === "submitting" ||
         delivery.state.kind === "delivery-unknown" ||
@@ -189,7 +190,7 @@ export function sessionPanePresentation(
         queue.operation.kind === "submitting" ||
         stopping;
     const composerInputDisabled =
-        (model.connection.kind !== "ready" && model.connection.kind !== "loading") ||
+        model.connection.kind === "closed" ||
         delivery.state.kind === "submitting" ||
         delivery.state.kind === "delivery-unknown" ||
         model.operation.kind === "sending" ||
@@ -230,6 +231,7 @@ export function sessionPanePresentation(
         busy,
         composerDisabled,
         composerInputDisabled,
+        stopDisabled: !connectionAvailable || model.connection.kind !== "ready",
         canSuggestProgress:
             !busy &&
             !controlRunning &&
@@ -238,13 +240,12 @@ export function sessionPanePresentation(
             attachments.state.kind !== "reading",
         // Operations that failed because the Session closed say nothing the closed notice does not already say.
         composerError:
-            connectionErrorMessage(model.connection) ??
-            (model.connection.kind === "closed"
+            model.connection.kind === "closed"
                 ? ""
                 : ([model.activity, model.operation, delivery.state].find((state) => state.kind === "failed")
                       ?.message ??
                   stopFailure(tasks) ??
-                  (queue.feedback.kind === "failed" ? queue.feedback.message : ""))),
+                  (queue.feedback.kind === "failed" ? queue.feedback.message : "")),
         controlRunning,
         deliveryUnknownUserMessageId,
         hasOlderHistory: model.hasOlderHistory,

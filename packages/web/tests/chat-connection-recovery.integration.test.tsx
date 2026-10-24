@@ -2,7 +2,7 @@ import { getByRole, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { openExecutionDetails, sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 
@@ -30,6 +30,17 @@ test("Given a connected Chat with an unsent draft, When its network drops and re
     await app.user.paste("Keep this draft unsent");
 
     app.transport.disconnect();
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true),
+    );
+    expect(composer.disabled).toBe(false);
+    expect(
+        queryByRole(document.body, "button", { name: /Switch computer/, description: "Connection available" }),
+    ).toBeNull();
+    const details = await openExecutionDetails(app);
+    expect(details.textContent).toContain("Status unavailable");
+    expect(details.textContent).toContain("Last confirmed online");
+    await app.user.keyboard("{Escape}");
     expect(queryByRole(document.body, "dialog")).toBeNull();
     expect(composer.value).toBe("Keep this draft unsent");
 
@@ -39,7 +50,7 @@ test("Given a connected Chat with an unsent draft, When its network drops and re
 
     // This needs the restored configuration watch, not merely an open socket.
     await app.daemon.disconnect();
-    await app.waitForView(() => expect(document.body.textContent).toContain("Your agent is disconnected"), 30_000);
+    await app.waitForView(() => expect(document.body.textContent).toContain("Computer is offline"), 30_000);
     expect(app.elementByTestId(dataTestId.messageComposer)).toBe(composer);
     expect(composer.value).toBe("Keep this draft unsent");
     expect(queryByRole(document.body, "dialog")).toBeNull();

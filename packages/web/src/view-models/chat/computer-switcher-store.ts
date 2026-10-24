@@ -53,6 +53,15 @@ export function createComputerSwitcher(options: {
     return {
         store,
         activeKey,
+        invalidateCurrent: () => {
+            current = null;
+            store.setState((state) => ({
+                ...state,
+                choices: state.choices.map((choice) =>
+                    choice.key === activeKey ? { ...choice, status: "unavailable" } : choice,
+                ),
+            }));
+        },
         updateCurrent: (configuration: BotRuntimeConfiguration) => {
             current = configuration;
             rememberComputerName(options.active, configuration.runtime.machineName);

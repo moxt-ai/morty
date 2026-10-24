@@ -1,3 +1,4 @@
+import { getByRole } from "@testing-library/dom";
 import { dataTestId } from "../../src/data-testid.ts";
 import type { TestApp } from "./test-app.tsx";
 
@@ -34,4 +35,12 @@ export async function sendPrompt(app: TestApp, composer: HTMLElement, prompt: st
         return element;
     });
     await app.user.click(send);
+}
+
+export async function openExecutionDetails(app: TestApp): Promise<HTMLElement> {
+    await app.user.click(getByRole(document.body, "button", { name: /Switch computer/ }));
+    await app.user.click(
+        await app.waitForView(() => getByRole(document.body, "menuitem", { name: "Execution details" })),
+    );
+    return app.waitForView(() => getByRole(document.body, "dialog", { name: "Execution details" }));
 }

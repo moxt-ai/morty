@@ -223,9 +223,9 @@ test("Given a dropped bridge that reconnected, When the Runtime changes, Then th
     // "connected" forever.
     await app.daemon?.disconnect();
     await app.waitForView(() => {
-        // The execution-context bar shows the Machine connection, which the
-        // re-armed watch keeps current.
-        expect(document.body.textContent).toContain("Disconnected");
+        expect(app.elementByTestId(dataTestId.botConnectionStatus).getAttribute("data-connection-status")).toBe(
+            "disconnected",
+        );
     });
     void failure;
 });
@@ -235,12 +235,6 @@ test("Given repeated bridge drops on one page, When the Runtime goes offline aft
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
     const app = await createTestApp({ connectAgent: true, clock });
-    const machine = (): string => {
-        const body = document.body.textContent ?? "";
-        const marker = body.indexOf("Machine: Controlled Agent Runtime");
-        const rest = marker === -1 ? "" : body.slice(marker + "Machine: Controlled Agent Runtime".length);
-        return rest.slice(0, rest.indexOf("Test ") === -1 ? 30 : rest.indexOf("Test "));
-    };
     const composer = await app.queryElementByTestId(
         dataTestId.messageComposer,
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
@@ -256,19 +250,32 @@ test("Given repeated bridge drops on one page, When the Runtime goes offline aft
 
     // The re-armed watch is live: the Runtime going away reaches the page.
     await app.daemon?.disconnect();
-    await app.waitForView(() => expect(machine().startsWith("Disconnected")).toBe(true));
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.botConnectionStatus).getAttribute("data-connection-status")).toBe(
+            "disconnected",
+        ),
+    );
 
     // Later drops on the same page must each be followed by recovery: the
     // watch re-armed by the first resume is itself dropped and re-armed again,
     // and none of them may surface a failure dialog over the conversation.
-    for (const backoff of [2_000, 2_000]) {
+    for (const backoff of [2_000, 4_000]) {
         app.transport.disconnect();
         await act(async () => {
             clock.advanceBy(backoff);
         });
+        await app.waitForView(() =>
+            expect(app.elementByTestId(dataTestId.botConnectionStatus).getAttribute("data-connection-status")).toBe(
+                "disconnected",
+            ),
+        );
         expect(queryByRole(document.body, "dialog", { name: "Runtime connection unavailable" })).toBeNull();
     }
-    await app.waitForView(() => expect(machine().startsWith("Disconnected")).toBe(true));
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.botConnectionStatus).getAttribute("data-connection-status")).toBe(
+            "disconnected",
+        ),
+    );
 });
 
 test("Given an offline Runtime and a dropped bridge, When the bridge recovers and the Runtime comes back, Then the draft composer becomes usable", {
@@ -308,11 +315,6 @@ test("Given a recovery that loses the bridge again, When the Runtime changes aft
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
     const app = await createTestApp({ connectAgent: true, clock });
-    const machine = (): string => {
-        const body = document.body.textContent ?? "";
-        const marker = body.indexOf("Machine: Controlled Agent Runtime");
-        return marker === -1 ? "" : body.slice(marker + "Machine: Controlled Agent Runtime".length, marker + 45);
-    };
     const composer = await app.queryElementByTestId(
         dataTestId.messageComposer,
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
@@ -335,5 +337,9 @@ test("Given a recovery that loses the bridge again, When the Runtime changes aft
 
     // A Runtime change after the final recovery must reach the page.
     await app.daemon?.disconnect();
-    await app.waitForView(() => expect(machine().startsWith("Disconnected")).toBe(true));
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.botConnectionStatus).getAttribute("data-connection-status")).toBe(
+            "disconnected",
+        ),
+    );
 });

@@ -19,7 +19,7 @@ export function MobileSessionTitlePortal({ children }: { readonly children: Reac
         return null;
     }
     return createPortal(
-        <div className="pointer-events-auto flex min-w-0 w-full max-w-full justify-center overflow-hidden">
+        <div className="pointer-events-auto flex min-w-0 w-full max-w-full items-center justify-start overflow-hidden">
             {children}
         </div>,
         slot,

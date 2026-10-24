@@ -60,22 +60,6 @@ export function connectionFailure(connection: SessionConnection): string | null 
     }
 }
 
-/** Recoverable interruptions have a retry notice, not a terminal error alert. */
-export function connectionErrorMessage(connection: SessionConnection): string | null {
-    switch (connection.kind) {
-        case "failed":
-            return connection.message;
-        case "closed":
-            return connection.reopen.kind === "failed" ? connection.reopen.message : null;
-        case "loading":
-        case "session-loading-after-create":
-        case "ready":
-        case "reconnecting":
-        case "disconnected":
-            return null;
-    }
-}
-
 /** Whether the connection reached a state that operations waiting for it can act on. */
 export function isConnectionSettled(connection: SessionConnection): boolean {
     switch (connection.kind) {

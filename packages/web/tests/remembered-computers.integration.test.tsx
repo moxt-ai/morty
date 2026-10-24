@@ -186,7 +186,21 @@ test("Given the last computer is offline and another is online, When I return, T
     await second.daemon.disconnect();
     window.location.href = `${second.origin}/`;
     const returned = await second.reload();
-    const alternative = await returned.waitForView(() => getByRole(document.body, "link", { name: /^Switch to / }));
+    await returned.user.click(
+        await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ })),
+    );
+    const alternative = await returned.waitForView(() => {
+        const choice = getAllByRole(document.body, "menuitem").find(
+            (item) =>
+                new URL(item.getAttribute("href") ?? "/", returned.origin).searchParams.get("sessionId") ===
+                firstSession,
+        );
+        if (!(choice instanceof HTMLAnchorElement)) {
+            throw new Error("Waiting for the other computer");
+        }
+        expect(choice.textContent).toContain("Online");
+        return choice;
+    });
     expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(secondSession);
     expect(new URL(alternative.getAttribute("href") ?? "", returned.origin).searchParams.get("sessionId")).toBe(
         firstSession,

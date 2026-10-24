@@ -32,7 +32,7 @@ import type { ConversationDirectoryStore } from "../../view-models/chat/conversa
 import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
 import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
-import { ComputerSwitcher } from "./computer-switcher.tsx";
+import { WorkspaceComputerSwitcher } from "./computer-switcher.tsx";
 import { IdentitySharing } from "./identity-sharing.tsx";
 import { NativeSessionDialog } from "./native-session-dialog.tsx";
 
@@ -55,7 +55,7 @@ function SidebarSessionOption({
         <button
             type="button"
             className={cn(
-                "flex w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium outline-none transition-[background-color,color] duration-150 focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50",
+                "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium outline-none transition-[background-color,color] duration-150 focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50",
                 destructive
                     ? "text-destructive hover:bg-destructive/10 active:bg-destructive/15"
                     : "text-copy-secondary hover:bg-morty-fill-opacity-2 hover:text-foreground active:bg-morty-fill-opacity-3 active:text-foreground disabled:hover:text-copy-secondary disabled:active:text-copy-secondary",
@@ -350,7 +350,6 @@ export function ConversationSidebar({
     // The workspace owns the sidebar's dialog, remote-access, and diagnostic
     // stores outside React; the view only subscribes.
     const dialogs = workspace.sidebar.dialogs;
-    const computerName = useStore(workspace.home, (state) => state.runtimeConfiguration?.runtime.machineName ?? "");
     const directory = useStore(workspace.directory, (state) => state.state);
     const archive = useStore(workspace.directory, (state) => state.archive);
 
@@ -424,14 +423,14 @@ export function ConversationSidebar({
                 aria-label="Morty navigation"
                 className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-card/90 px-3 pt-0 max-sm:overflow-visible sm:w-[264px] sm:gap-0 sm:bg-sidebar sm:pt-2 sm:pb-4"
             >
-                <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-3 py-2 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:bg-card/90">
+                <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-2 py-1 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:bg-card/90">
                     <div className="relative z-[1] flex w-fit shrink-0 items-center gap-3">
                         <button
                             type="button"
                             aria-controls="conversation-sidebar-mobile-drawer"
                             aria-expanded={mobileNavOpen}
                             aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
-                            className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_4px_12px_rgba(34,123,78,0.18)] outline-none transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-ring/60 sm:hidden"
+                            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-copy-secondary outline-none transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-ring/60 sm:hidden"
                             onClick={() => {
                                 mobileNavOpen
                                     ? dialogs.getState().closeMobileNav()
@@ -447,59 +446,13 @@ export function ConversationSidebar({
                         <span className="hidden min-w-0 sm:block">
                             <h1 className="truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">Morty</h1>
                         </span>
-                        <Button
-                            variant="ghost"
-                            className="ml-0 size-10 shrink-0 justify-center rounded-lg px-0 text-copy-secondary sm:hidden"
-                            aria-label="Recent sessions"
-                            aria-expanded={mobileSessionsOpen}
-                            aria-controls="chat-conversations-mobile-sheet"
-                            onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                if (mobileSessionsOpen) {
-                                    closeMobileRecentSessions();
-                                    return;
-                                }
-                                openMobileRecentSessions();
-                            }}
-                        >
-                            <List aria-hidden="true" className="size-5" />
-                        </Button>
                     </div>
                     <div
                         id={dataTestId.mobileSessionTitleSlot}
-                        className="pointer-events-none flex min-w-0 flex-1 items-center justify-center overflow-hidden sm:hidden"
+                        className="pointer-events-none flex min-w-0 flex-1 items-center justify-start overflow-hidden sm:hidden"
                     />
                     <div className="flex shrink-0 items-center justify-end gap-0.5">
-                        <Tooltip.Provider delayDuration={150}>
-                            {!desktop && (
-                                <div className="flex items-center gap-3 sm:hidden">
-                                    <SidebarActionTooltip label="New Session">
-                                        <Button
-                                            aria-label="New Session"
-                                            className="size-10 shrink-0 justify-center rounded-lg px-0 text-copy-secondary"
-                                            data-testid={dataTestId.newConversation}
-                                            onClick={onNewConversation}
-                                            size="icon"
-                                            variant="ghost"
-                                        >
-                                            <SquarePen aria-hidden="true" className="size-5" />
-                                        </Button>
-                                    </SidebarActionTooltip>
-                                    <SidebarActionTooltip label="Open Session">
-                                        <Button
-                                            aria-label="Open Session"
-                                            className="size-10 shrink-0 justify-center rounded-lg px-0 text-copy-secondary"
-                                            onClick={dialogs.getState().openNativeDialog}
-                                            size="icon"
-                                            variant="ghost"
-                                        >
-                                            <Laptop aria-hidden="true" className="size-5" />
-                                        </Button>
-                                    </SidebarActionTooltip>
-                                </div>
-                            )}
-                        </Tooltip.Provider>
+                        {!desktop && <WorkspaceComputerSwitcher workspace={workspace} compact />}
                         {workspace.computers === null && (
                             <ConnectionStatus
                                 className="max-sm:hidden pr-[10px]"
@@ -509,9 +462,7 @@ export function ConversationSidebar({
                         )}
                     </div>
                 </header>
-                {workspace.computers !== null && (
-                    <ComputerSwitcher model={workspace.computers} name={computerName} status={connectionStatus} />
-                )}
+                {desktop && <WorkspaceComputerSwitcher workspace={workspace} compact={false} />}
                 <div
                     id="conversation-sidebar-mobile-drawer"
                     className={cn(
@@ -534,26 +485,39 @@ export function ConversationSidebar({
                         <span className="min-w-0 flex-1 truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">
                             Morty
                         </span>
-                        <ConnectionStatus status={connectionStatus} />
                     </div>
-                    {desktop && (
-                        <nav
-                            aria-label="Session actions"
-                            className="box-border hidden min-w-0 w-full shrink-0 flex-col gap-0.5 sm:mt-2 sm:mb-3 sm:flex"
-                        >
+                    <nav
+                        aria-label="Session actions"
+                        className="box-border flex min-w-0 w-full shrink-0 flex-col gap-0.5 mt-2 mb-3"
+                    >
+                        <SidebarSessionOption
+                            icon={SquarePen}
+                            label="New Session"
+                            testId={dataTestId.newConversation}
+                            onClick={() => {
+                                onNewConversation();
+                                dialogs.getState().closeMobileNav();
+                            }}
+                        />
+                        <SidebarSessionOption
+                            icon={Laptop}
+                            label="Open Session"
+                            onClick={() => {
+                                dialogs.getState().closeMobileNav();
+                                dialogs.getState().openNativeDialog();
+                            }}
+                        />
+                        {!desktop && (
                             <SidebarSessionOption
-                                icon={SquarePen}
-                                label="New Session"
-                                testId={dataTestId.newConversation}
-                                onClick={onNewConversation}
+                                icon={List}
+                                label="Recent sessions"
+                                onClick={() => {
+                                    dialogs.getState().closeMobileNav();
+                                    openMobileRecentSessions();
+                                }}
                             />
-                            <SidebarSessionOption
-                                icon={Laptop}
-                                label="Open Session"
-                                onClick={dialogs.getState().openNativeDialog}
-                            />
-                        </nav>
-                    )}
+                        )}
+                    </nav>
                     {desktop && (
                         <div className="hidden min-h-0 flex-1 sm:flex sm:min-h-0 sm:flex-col sm:gap-0">
                             <Tooltip.Provider delayDuration={150}>

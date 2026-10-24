@@ -5,7 +5,6 @@ export const dataTestId = Object.freeze({
     harnessMark: "chat-harness-mark",
     harnessTriggerMark: "chat-harness-trigger-mark",
     sessionTitleHarnessMark: "chat-session-title-harness-mark",
-    executionContextHarnessMark: "chat-execution-context-harness-mark",
     agentSettingsLoading: "chat-agent-settings-loading",
     agentSetting: (configId: string) => `chat-agent-setting-${configId}`,
     sessionConfigValue: (value: string) => `chat-session-config-value-${value}`,
