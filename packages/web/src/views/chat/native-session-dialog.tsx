@@ -13,6 +13,7 @@ import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
 import type { DaemonDiagnosticsSource } from "../../services/diagnostics/browser-diagnostics.ts";
 import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-store.ts";
+import type { NativeSessionAgent } from "../../view-models/chat/native-session-agents.ts";
 import type { NativeSessionStore } from "../../view-models/chat/native-session-store.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
@@ -134,12 +135,15 @@ function NativeSessionPreviewSkeleton() {
 
 export function NativeSessionDialog({
     store,
+    agents,
     onClose,
     bugReportDialog,
     daemonSource,
 }: {
     /** Created by the owner when the dialog opens; it starts discovery itself. */
     readonly store: StoreApi<NativeSessionStore>;
+    /** The agent tabs, as the Runtime configuration the page follows offers them. */
+    readonly agents: readonly NativeSessionAgent[];
     readonly onClose: () => void;
     readonly bugReportDialog: BugReportDialogStore;
     readonly daemonSource: DaemonDiagnosticsSource;
@@ -154,7 +158,7 @@ export function NativeSessionDialog({
     const withSignal = (action: (signal: AbortSignal) => Promise<void>) => {
         void action(store.getState().lifetimeSignal());
     };
-    const fallback = model.agents[0];
+    const fallback = agents[0];
     const selectedEntryId = model.preview.kind === "empty" ? "" : model.preview.entry.entryId;
     const closeDialog = () => {
         store.getState().stop();
@@ -180,9 +184,9 @@ export function NativeSessionDialog({
                                     aria-label="Native sessions"
                                     className="-mx-2.5 flex min-h-0 flex-1 flex-col gap-2"
                                 >
-                                    {model.agents.length > 0 && (
+                                    {agents.length > 0 && (
                                         <SessionAgentTabs
-                                            agents={model.agents}
+                                            agents={agents}
                                             className="mx-2.5"
                                             dimInactive={
                                                 !(

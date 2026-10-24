@@ -4,6 +4,7 @@ import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
+import { TestClock } from "./infra/test-clock.ts";
 
 test("Given Chat is ready, When the user views recent sessions and opens a local session, Then every action uses session terminology", {
     timeout: 30_000,
@@ -133,4 +134,46 @@ test("Given native sessions were discovered before the Runtime disconnected, Whe
     });
     await app.user.click(getByRole(dialog, "button", { name: "Report a bug" }));
     await app.waitForView(() => getByRole(document.body, "dialog", { name: "Report a bug" }));
+});
+
+test("Given Open Session was opened while the Runtime was offline, When the Runtime comes back online, Then the open dialog lists its sessions without reopening", {
+    timeout: 60_000,
+}, async () => {
+    const clock = new TestClock("2026-10-24T08:00:00Z");
+    const app = await createTestApp({
+        connectAgent: true,
+        nativeSessionIds: new Set(["session-after-reconnect"]),
+        clock,
+    });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("The scenario requires a connected Runtime.");
+    }
+    const connection = (): string | null =>
+        app.elementByTestId(dataTestId.botConnectionStatus).getAttribute("data-connection-status");
+    await app.waitForView(() => expect(connection()).toBe("connected"));
+    // The page hears the Runtime's current configuration when its Chat connection returns, without waiting for
+    // the Worker's periodic check.
+    const followRuntime = async (): Promise<void> => {
+        app.transport.disconnect();
+        // Past the bridge's longest reconnect delay, so the watch is armed again whichever attempt this is.
+        await act(async () => {
+            clock.advanceBy(15_000);
+        });
+    };
+
+    await daemon.disconnect();
+    await followRuntime();
+    await app.waitForView(() => expect(connection()).toBe("disconnected"));
+    await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
+    const dialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
+    await app.waitForView(() => expect(dialog.textContent).toContain("No local agent"));
+
+    await daemon.reconnect();
+    await followRuntime();
+    await app.waitForView(() => expect(connection()).toBe("connected"));
+    const menu = await app.waitForView(() => getByRole(dialog, "combobox", { name: "Native session" }));
+    await app.user.click(menu);
+    expect(getByRole(document.body, "option", { name: /Native session-after-reconnect/ })).toBeDefined();
+    expect(dialog.textContent).not.toContain("No local agent");
 });

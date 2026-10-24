@@ -1,5 +1,5 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi, ChatRuntime } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import { createIdentitySharingStore, type IdentitySharingStore } from "./identity-sharing-store.ts";
@@ -24,6 +24,8 @@ interface SidebarDialogsState {
     readonly dismissMobileRecentSessions: () => void;
     readonly openNativeDialog: () => void;
     readonly closeNativeDialog: () => void;
+    /** The Runtime configuration the page follows changed; an open Open Session dialog follows it. */
+    readonly runtimeChanged: () => void;
     readonly openSharing: () => void;
     readonly closeSharing: () => void;
     /**
@@ -49,12 +51,14 @@ const MOBILE_SHEET_DISMISS_LOCK_MILLISECONDS = 450;
 export function createSidebarDialogs(options: {
     readonly clock: Clock;
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "nativeSessions" | "nativeSession" | "runtimeConfiguration">;
+    readonly requests: Pick<BotChatApi, "nativeSessions" | "nativeSession">;
+    /** The Runtime the page follows. */
+    readonly runtime: () => ChatRuntime | null;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly onOpenSession: (session: OpenMobiusSession) => void;
     readonly onOpenedSession: () => void;
 }): SidebarDialogs {
-    const { botId, clock, requests, createTransfer, onOpenSession, onOpenedSession } = options;
+    const { botId, clock, requests, runtime, createTransfer, onOpenSession, onOpenedSession } = options;
     const attachedViews = new WeakSet<HTMLElement>();
     return createStore<SidebarDialogsState>()((set, get) => ({
         mobileNavOpen: false,
@@ -81,7 +85,7 @@ export function createSidebarDialogs(options: {
             if (get().nativeDialog !== null) {
                 return;
             }
-            const store = createNativeSessionStore(botId, requests, (session) => {
+            const store = createNativeSessionStore(botId, requests, runtime, (session) => {
                 onOpenSession(session);
                 get().closeNativeDialog();
                 onOpenedSession();
@@ -96,6 +100,9 @@ export function createSidebarDialogs(options: {
             }
             dialog.getState().stop();
             set({ nativeDialog: null });
+        },
+        runtimeChanged: () => {
+            get().nativeDialog?.getState().runtimeChanged();
         },
         openSharing: () => {
             if (get().sharing !== null) {

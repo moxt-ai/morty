@@ -30,6 +30,7 @@ import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-s
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import type { ConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
 import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
+import { nativeSessionAgentTabs } from "../../view-models/chat/native-session-agents.ts";
 import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { WorkspaceComputerSwitcher } from "./computer-switcher.tsx";
@@ -336,7 +337,6 @@ export function ConversationSidebar({
     readonly requests: Pick<
         BotChatApi,
         | "archiveManagedSession"
-        | "runtimeConfiguration"
         | "nativeSessions"
         | "nativeSession"
         | "managedSessions"
@@ -361,6 +361,9 @@ export function ConversationSidebar({
     const sessionsMotion = usePanelPresence(mobileSessionsOpen);
     const desktop = useDesktopChatLayout();
     const dialogStore = dialogState.nativeDialog;
+    // Open Session offers the agents of the Runtime configuration the page follows.
+    const runtime = useStore(workspace.home, (state) => state.runtimeConfiguration?.runtime ?? null);
+    const nativeAgents = runtime === null ? [] : nativeSessionAgentTabs(runtime);
     const sharingStore = dialogState.sharing;
     const openMobileRecentSessions = dialogs.getState().openMobileRecentSessions;
     const closeMobileRecentSessions = dialogs.getState().closeMobileRecentSessions;
@@ -677,6 +680,7 @@ export function ConversationSidebar({
                 {dialogStore !== null && (
                     <NativeSessionDialog
                         store={dialogStore}
+                        agents={nativeAgents}
                         onClose={dialogs.getState().closeNativeDialog}
                         bugReportDialog={workspace.bugReportDialog}
                         daemonSource={sessionDiagnostics}

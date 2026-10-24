@@ -163,6 +163,7 @@ export function createChatWorkspace(options: {
         entry: options.entry ?? "address",
         onRuntimeConfiguration: (configuration) => {
             options.computers?.updateCurrent(configuration);
+            sidebar.dialogs.getState().runtimeChanged();
             void draftControls
                 .getState()
                 .runtimeChanged(configuration, chatLifetime.signal)
@@ -219,6 +220,7 @@ export function createChatWorkspace(options: {
             clock: options.clock,
             botId,
             requests,
+            runtime: () => home.getState().runtimeConfiguration?.runtime ?? null,
             createTransfer: (signal) => {
                 if (options.createTransfer === undefined) {
                     return Promise.reject(new Error("Identity sharing is unavailable."));

@@ -28,15 +28,19 @@ export function pendingExecutionContext(
     }
     switch (settings.kind) {
         case "ready":
-        case "refreshing":
+        case "refreshing": {
+            // The draft only chose which agent runs; its names come from the Runtime configuration the page follows.
+            const runtime = home.runtimeConfiguration?.runtime;
+            const offered = runtime?.agents.find((agent) => agent.agentRef === settings.selectedAgent.agentRef);
             return {
                 ...base,
                 agentRef: settings.selectedAgent.agentRef,
-                machine: settings.selectedAgent.machineName.trim() || "Unknown",
-                agent: settings.selectedAgent.label.trim() || "Unknown",
+                machine: runtime?.machineName.trim() || settings.selectedAgent.machineName.trim() || "Unknown",
+                agent: offered?.label.trim() || settings.selectedAgent.label.trim() || "Unknown",
                 directory: settings.cwd.directoryLabel,
                 directoryName: directoryName(settings.cwd.directoryLabel),
             };
+        }
         case "loading":
         case "switching":
             return { ...base, agent: "Loading…", directoryName: "Loading…", directoryPlaceholder: "Loading…" };
