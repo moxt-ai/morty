@@ -28,6 +28,12 @@ export function storedToken(userId: string): string | null {
     return readStoredAccess().credentials.get(userId) ?? null;
 }
 
+/** The access this browser holds for a Project's user, or null when it holds none. */
+export function storedTokenForProject(projectId: string): string | null {
+    const computer = rememberedComputers().find((entry) => entry.scope.projectId === projectId);
+    return computer === undefined ? null : storedToken(computer.scope.userId);
+}
+
 /** Whether this browser holds any access at all, including access saved before computers were remembered. */
 export function hasStoredAccess(): boolean {
     return readStoredAccess().credentials.size > 0;

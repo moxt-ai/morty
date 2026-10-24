@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import * as v from "valibot";
 import {
     anonymousCredential,
@@ -190,6 +190,7 @@ export class IdentityStorage {
                         createdAt: sql<number>`${now}`.as("created_at"),
                         revokedAt: sql<null>`null`.as("revoked_at"),
                         remoteTransferId: sql<null>`null`.as("remote_transfer_id"),
+                        supersededBy: sql<null>`null`.as("superseded_by"),
                     })
                     .from(anonymousCredential)
                     .where(
@@ -205,8 +206,13 @@ export class IdentityStorage {
         return result.meta.changes === 1 ? token : null;
     };
 
+    /**
+     * Opens a link in a browser. `replaces` is the credential the browser already holds for this Project: a browser
+     * keeps one credential, so the new one replaces it at once and takes over the links it came from.
+     */
     readonly redeemTransfer = async (
         code: string,
+        replaces: string | null,
         now: number,
         signal: AbortSignal,
     ): Promise<AnonymousIdentity | null> => {
@@ -220,40 +226,63 @@ export class IdentityStorage {
         const claimNonce = crypto.randomUUID();
         const credentialId = `cred_${crypto.randomUUID()}`;
         const token = `mobius_anon_v2_${randomSecret()}`;
-        const results = await database.batch([
-            database
-                .update(continueLink)
-                .set({
-                    claimNonce,
-                })
-                .where(
-                    and(
-                        eq(continueLink.codeHash, codeHash),
-                        isNull(continueLink.revokedAt),
-                        or(
-                            gt(continueLink.expiresAt, now),
-                            and(
-                                eq(continueLink.expiresAt, 0),
-                                gt(sql`${continueLink.createdAt} + ${continueLinkLifetime}`, now),
-                            ),
+        const claimed = and(eq(continueLink.codeHash, codeHash), eq(continueLink.claimNonce, claimNonce));
+        const claim = database
+            .update(continueLink)
+            .set({ claimNonce })
+            .where(
+                and(
+                    eq(continueLink.codeHash, codeHash),
+                    isNull(continueLink.revokedAt),
+                    or(
+                        gt(continueLink.expiresAt, now),
+                        and(
+                            eq(continueLink.expiresAt, 0),
+                            gt(sql`${continueLink.createdAt} + ${continueLinkLifetime}`, now),
                         ),
                     ),
                 ),
-            database.insert(anonymousCredential).select(
-                database
-                    .select({
-                        id: sql<string>`${credentialId}`.as("id"),
-                        userId: continueLink.userId,
-                        tokenHash: sql<string>`${await digest(token)}`.as("token_hash"),
-                        status: sql<"active">`'active'`.as("status"),
-                        createdAt: sql<number>`${now}`.as("created_at"),
-                        revokedAt: sql<null>`null`.as("revoked_at"),
-                        remoteTransferId: continueLink.id,
-                    })
-                    .from(continueLink)
-                    .where(and(eq(continueLink.codeHash, codeHash), eq(continueLink.claimNonce, claimNonce))),
-            ),
-        ]);
+            );
+        const issue = database.insert(anonymousCredential).select(
+            database
+                .select({
+                    id: sql<string>`${credentialId}`.as("id"),
+                    userId: continueLink.userId,
+                    tokenHash: sql<string>`${await digest(token)}`.as("token_hash"),
+                    status: sql<"active">`'active'`.as("status"),
+                    createdAt: sql<number>`${now}`.as("created_at"),
+                    revokedAt: sql<null>`null`.as("revoked_at"),
+                    remoteTransferId: continueLink.id,
+                    supersededBy: sql<null>`null`.as("superseded_by"),
+                })
+                .from(continueLink)
+                .where(claimed),
+        );
+        const results =
+            replaces === null
+                ? await database.batch([claim, issue])
+                : await database.batch([
+                      claim,
+                      issue,
+                      // Only a browser credential of the link's own user is replaced.
+                      database
+                          .update(anonymousCredential)
+                          .set({ status: "revoked", revokedAt: now, supersededBy: credentialId })
+                          .where(
+                              and(
+                                  eq(anonymousCredential.tokenHash, await digest(replaces)),
+                                  eq(anonymousCredential.status, "active"),
+                                  isNotNull(anonymousCredential.remoteTransferId),
+                                  inArray(
+                                      anonymousCredential.userId,
+                                      database
+                                          .select({ userId: continueLink.userId })
+                                          .from(continueLink)
+                                          .where(claimed),
+                                  ),
+                              ),
+                          ),
+                  ]);
         signal.throwIfAborted();
         if (results[0]?.meta.changes !== 1) {
             return null;
@@ -321,6 +350,28 @@ export class IdentityStorage {
                   }
                 : { kind: "unauthenticated" };
         }
+        // The browser joined through this credential's link and through the links of the credentials it replaced.
+        const transferIds = [credential.transferId];
+        let replaced = [credential.credentialId];
+        while (replaced.length > 0) {
+            const earlier = await database
+                .select({ id: anonymousCredential.id, transferId: anonymousCredential.remoteTransferId })
+                .from(anonymousCredential)
+                .where(
+                    and(
+                        inArray(anonymousCredential.supersededBy, replaced),
+                        eq(anonymousCredential.userId, credential.userId),
+                    ),
+                )
+                .all();
+            signal.throwIfAborted();
+            replaced = earlier.map((entry) => entry.id);
+            for (const entry of earlier) {
+                if (entry.transferId !== null && !transferIds.includes(entry.transferId)) {
+                    transferIds.push(entry.transferId);
+                }
+            }
+        }
         const results = await database.batch([
             database
                 .update(continueLink)
@@ -333,11 +384,21 @@ export class IdentityStorage {
                     ),
                 ),
             database
+                .update(continueLink)
+                .set({ revokedAt: now })
+                .where(
+                    and(
+                        inArray(continueLink.id, transferIds),
+                        eq(continueLink.userId, credential.userId),
+                        isNull(continueLink.revokedAt),
+                    ),
+                ),
+            database
                 .update(anonymousCredential)
                 .set({ status: "revoked", revokedAt: now })
                 .where(
                     and(
-                        eq(anonymousCredential.remoteTransferId, credential.transferId),
+                        inArray(anonymousCredential.remoteTransferId, transferIds),
                         eq(anonymousCredential.status, "active"),
                     ),
                 ),

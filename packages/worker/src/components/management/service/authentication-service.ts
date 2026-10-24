@@ -54,8 +54,11 @@ export class AuthenticationService {
         return await this.identities.createRecoveryToken(userId, token, Date.now(), signal);
     };
 
-    readonly redeemTransfer = async (code: string, signal: AbortSignal): Promise<AnonymousIdentity | null> =>
-        await this.identities.redeemTransfer(code, Date.now(), signal);
+    readonly redeemTransfer = async (
+        code: string,
+        replaces: string | null,
+        signal: AbortSignal,
+    ): Promise<AnonymousIdentity | null> => await this.identities.redeemTransfer(code, replaces, Date.now(), signal);
 
     /**
      * The user behind the machine's own local credential. Shared browser and recovery credentials are not local, so

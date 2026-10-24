@@ -8,6 +8,7 @@ import {
     type AnonymousIdentity,
     AnonymousIdentityApi,
     IdentityApiError,
+    transferCodeProject,
 } from "@/services/identity/anonymous-identity-api";
 import { encodeIdentityScope, hasIdentityScope, readIdentityScope } from "@/services/identity/identity-scope-url";
 import { computerKey, rememberedComputers } from "@/services/identity/remembered-computers";
@@ -102,16 +103,6 @@ function identityDestination(path: "/" | "/chat", identity: AnonymousIdentity): 
         encodeIdentityScope({ botId: identity.botId, projectId: identity.projectId, userId: identity.userId }),
     );
     return url;
-}
-
-/**
- * The Project a well-formed transfer code names, or null when the code cannot
- * name one. A code that was already redeemed in this browser still names its
- * Project, which is what lets a dead link fall back to the access it issued.
- */
-function transferCodeProject(code: string): string | null {
-    const parts = code.split(".");
-    return parts.length === 3 && parts[0] === "mobius_transfer_v2" ? (parts[1] ?? null) : null;
 }
 
 /**

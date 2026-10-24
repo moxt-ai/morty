@@ -169,3 +169,33 @@ test("Given a recent session on mobile, When the user expands the session list, 
     await page.getByRole("button", { name: "Continue on another device", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "Continue on another device", exact: true })).toBeVisible();
 });
+
+test("Given one browser opened two setup links in two tabs, When the user ends current access in one tab, Then neither tab nor either link opens Morty any more", async ({
+    runtime,
+}) => {
+    const first = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const firstTab = runtime.page;
+    await firstTab.goto(first.url);
+    await expect(firstTab.getByRole("textbox", { name: "Message" })).toBeEnabled();
+    // Running setup again hands off with a new link for the same user and Machine.
+    const second = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    expect(second.identity.userId).toBe(first.identity.userId);
+    const secondTab = await firstTab.context().newPage();
+    await secondTab.goto(second.url);
+    await expect(secondTab.getByRole("textbox", { name: "Message" })).toBeEnabled();
+
+    await clickEndCurrentAccess(secondTab, "desktop");
+    await secondTab
+        .getByRole("dialog", { name: "End current access?" })
+        .getByRole("button", { name: "End current access", exact: true })
+        .click();
+    await expect(secondTab.getByRole("status")).toContainText("Current access ended");
+
+    // The first tab ends with the browser's access, without the user touching it.
+    await expect(firstTab.getByRole("heading", { name: "This link is no longer valid" })).toBeVisible();
+    await expect(firstTab.getByRole("textbox", { name: "Message" })).toHaveCount(0);
+    for (const link of [first.url, second.url]) {
+        await firstTab.goto(link);
+        await expect(firstTab.getByRole("heading", { name: "This link is no longer available" })).toBeVisible();
+    }
+});

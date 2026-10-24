@@ -3,7 +3,13 @@ import * as v from "valibot";
 import { anonymousCredentialsEntry } from "../local-storage/central-local-storage.ts";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 import { clearIdentityScope, type IdentityScope, readIdentityScope, writeIdentityScope } from "./identity-scope-url.ts";
-import { forgetComputer, rememberComputer, saveAccess, storedToken } from "./remembered-computers.ts";
+import {
+    forgetComputer,
+    rememberComputer,
+    saveAccess,
+    storedToken,
+    storedTokenForProject,
+} from "./remembered-computers.ts";
 
 const tokenSchema = v.pipe(
     v.string(),
@@ -30,6 +36,16 @@ const createdIdentitySchema = v.pipe(
     }),
     v.readonly(),
 );
+
+/**
+ * The Project a well-formed transfer code names, or null when the code cannot
+ * name one. A code that was already redeemed in this browser still names its
+ * Project, which is what lets a dead link fall back to the access it issued.
+ */
+export function transferCodeProject(code: string): string | null {
+    const parts = code.split(".");
+    return parts.length === 3 && parts[0] === "mobius_transfer_v2" ? (parts[1] ?? null) : null;
+}
 
 /** Stored key name of the anonymous credential map, shared with browser tests. */
 export const ANONYMOUS_CREDENTIAL_KEY_NAME = anonymousCredentialsEntry.key;
@@ -160,7 +176,13 @@ export class AnonymousIdentityApi {
             ),
         );
 
+    /**
+     * Opens a link in this browser. A browser keeps one access per user: the access it already holds for the link's
+     * Project is replaced by the new one, which also takes over the links it came from.
+     */
     readonly redeemTransfer = async (code: string, signal: AbortSignal): Promise<AnonymousIdentity> => {
+        const projectId = transferCodeProject(code);
+        const replaces = projectId === null ? null : storedTokenForProject(projectId);
         const identity = v.parse(
             identitySchema,
             await this.#request(
@@ -168,7 +190,7 @@ export class AnonymousIdentityApi {
                 {
                     method: "POST",
                     headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ code }),
+                    body: JSON.stringify({ code, ...(replaces === null ? {} : { replaces }) }),
                 },
                 signal,
             ),

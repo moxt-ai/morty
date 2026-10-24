@@ -174,8 +174,8 @@ export class ManagementService {
         return await this.#platform.readPairing(project.projectId, pairingId, signal);
     };
 
-    readonly redeemTransfer = async (code: string, signal: AbortSignal) => {
-        const identity = await this.#authentication.redeemTransfer(code, signal);
+    readonly redeemTransfer = async (code: string, replaces: string | null, signal: AbortSignal) => {
+        const identity = await this.#authentication.redeemTransfer(code, replaces, signal);
         if (identity === null) {
             return null;
         }
