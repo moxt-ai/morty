@@ -701,8 +701,16 @@ export function createSessionPaneModel(options: {
                 if (controller.signal.aborted || projection.pending === null || projection.revision !== revision) {
                     return;
                 }
-                commitProjection({ history, kind: "history-loaded", revision });
+                const effects = commitProjection({ history, kind: "history-loaded", revision });
                 delivery.getState().reconcile(sessionEventCommandIds(history.events));
+                if (effects.some((loaded) => loaded.kind === "read-settings")) {
+                    settings
+                        .getState()
+                        .readInBackground(
+                            (readSignal) => connected.sessions.readConfiguration(sessionId, readSignal),
+                            parentSignal,
+                        );
+                }
             } catch (cause) {
                 parentSignal.throwIfAborted();
                 if (controller.signal.aborted || projection.revision !== revision) {
@@ -721,21 +729,10 @@ export function createSessionPaneModel(options: {
             signal: AbortSignal,
         ): Promise<void> => {
             const effects = commitProjection(input);
-            let historyReloaded = false;
             for (const effect of effects) {
                 if (effect.kind === "load-history") {
                     await loadProjectionHistory(effect, connected, signal);
-                    historyReloaded = true;
                 }
-            }
-            // A reloaded log without any config event is the post-restart shape.
-            if (historyReloaded && projection.kind === "established" && projection.config === null) {
-                settings
-                    .getState()
-                    .readInBackground(
-                        (readSignal) => connected.sessions.readConfiguration(sessionId, readSignal),
-                        signal,
-                    );
             }
         };
         // A closed Session runs nothing. Settles the turn, queue and interactions it was holding, the way a

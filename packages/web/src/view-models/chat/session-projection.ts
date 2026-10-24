@@ -21,16 +21,10 @@ interface PendingEvents {
     readonly buffer: readonly SessionEvent[];
 }
 
-interface ObservedConfig {
-    readonly eventId: string;
-    readonly options: readonly SessionConfigOption[];
-}
-
 export type SessionProjection =
     | { readonly kind: "pristine"; readonly pending: PendingEvents | null; readonly revision: number }
     | {
           readonly kind: "established";
-          readonly config: ObservedConfig | null;
           readonly eventIds: ReadonlySet<string>;
           readonly generation: string;
           readonly pagination: { readonly nextCursor: string | null };
@@ -52,7 +46,13 @@ export type SessionProjectionEffect =
           readonly config?: readonly SessionConfigOption[] | undefined;
           readonly kind: "adopted";
           readonly title?: string | undefined;
-      };
+      }
+    /**
+     * The history was loaded again: the page may have missed settings changes, and the history's settings events
+     * cannot tell the current settings, because a change made from a settings menu writes none. The Runtime is asked
+     * for its current settings.
+     */
+    | { readonly kind: "read-settings" };
 
 export interface SessionProjectionResult {
     readonly effects: readonly SessionProjectionEffect[];
@@ -107,11 +107,11 @@ function mergeSessionEvents(first: readonly SessionEvent[], second: readonly Ses
     return [...events.values()];
 }
 
-function newestConfig(events: readonly SessionEvent[]): ObservedConfig | null {
+function newestConfig(events: readonly SessionEvent[]): readonly SessionConfigOption[] | null {
     for (let index = events.length - 1; index >= 0; index -= 1) {
         const event = events[index];
         if (event?.type === "acp" && event.payload.sessionUpdate === "config_option_update") {
-            return { eventId: event.eventId, options: sessionConfigOptionsFromAcp(event.payload) };
+            return sessionConfigOptionsFromAcp(event.payload);
         }
     }
     return null;
@@ -133,6 +133,7 @@ function newestTitle(events: readonly SessionEvent[]): string | undefined {
     return undefined;
 }
 
+/** What events the page sees as they happen change: the settings and title they report become current. */
 function adoptionEffect(events: readonly SessionEvent[]): readonly SessionProjectionEffect[] {
     const config = newestConfig(events);
     const title = newestTitle(events);
@@ -141,13 +142,23 @@ function adoptionEffect(events: readonly SessionEvent[]): readonly SessionProjec
     }
     return [
         {
-            // Rebuilt history may omit configuration events. Only an explicit
-            // config update, including an empty one, can replace current settings.
-            ...(config === null ? {} : { config: config.options }),
+            // Only an explicit config update, including an empty one, can replace current settings.
+            ...(config === null ? {} : { config }),
             kind: "adopted",
             ...(title === undefined ? {} : { title }),
         },
     ];
+}
+
+/** A new history baseline adopts its title, and leaves the current settings to the Runtime. */
+function baselineEffects(events: readonly SessionEvent[]): readonly SessionProjectionEffect[] {
+    const title = newestTitle(events);
+    return [...(title === undefined ? [] : [{ kind: "adopted" as const, title }]), { kind: "read-settings" }];
+}
+
+/** Events a reload found after the ones the page saw apply as they would have live; the Runtime then confirms. */
+function catchUpEffects(events: readonly SessionEvent[]): readonly SessionProjectionEffect[] {
+    return [...adoptionEffect(events), { kind: "read-settings" }];
 }
 
 function adoptGeneration(
@@ -156,7 +167,6 @@ function adoptGeneration(
     events: readonly SessionEvent[],
 ): SessionProjection {
     return {
-        config: newestConfig(events),
         eventIds: new Set(events.map((event) => event.eventId)),
         generation: history.sessionGenerationId,
         kind: "established",
@@ -177,10 +187,8 @@ function applyNewerEvents(
         if (next.eventIds.has(event.eventId)) {
             continue;
         }
-        const config = newestConfig([event]) ?? next.config;
         next = {
             ...next,
-            config,
             eventIds: new Set([...next.eventIds, event.eventId]),
             reduction: appendSessionMessageEvent(next.reduction, event),
         };
@@ -226,12 +234,10 @@ export function transitionSessionProjection(
             if (state.eventIds.has(event.eventId)) {
                 return { effects: [], state };
             }
-            const config = newestConfig([event]) ?? state.config;
             return {
                 effects: adoptionEffect([event]),
                 state: {
                     ...state,
-                    config,
                     eventIds: new Set([...state.eventIds, event.eventId]),
                     reduction: appendSessionMessageEvent(state.reduction, event),
                 },
@@ -255,12 +261,12 @@ export function transitionSessionProjection(
             const events = mergeSessionEvents(input.history.events, state.pending.buffer);
             if (replacing) {
                 return {
-                    effects: adoptionEffect(events),
+                    effects: baselineEffects(events),
                     state: adoptGeneration(state, input.history, events),
                 };
             }
             const merged = applyNewerEvents(state, input.history);
-            return { effects: adoptionEffect(merged.events), state: merged.state };
+            return { effects: catchUpEffects(merged.events), state: merged.state };
         }
         case "older-page": {
             if (
