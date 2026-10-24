@@ -88,6 +88,29 @@ function FieldControl({
         );
     }
     const numeric = field.type === "integer" || field.type === "number";
+    if (field.type === "string" && field.multiline === true) {
+        return (
+            <label className="grid gap-1.5 text-[11px] font-medium text-[#555c68]">
+                {field.title}
+                <textarea
+                    className="min-h-28 resize-y rounded-md border-[0.5px] border-black/12 bg-white px-3 py-2 text-base font-normal text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/70 md:text-xs"
+                    defaultValue={
+                        typeof value === "string" ? value : field.hasDefaultValue ? field.defaultStringValue : undefined
+                    }
+                    disabled={disabled}
+                    maxLength={field.maximumLength.length > 0 ? Number(field.maximumLength) : undefined}
+                    minLength={field.minimumLength.length > 0 ? Number(field.minimumLength) : undefined}
+                    name={field.name}
+                    placeholder={field.description}
+                    required={field.required && Number(field.minimumLength) > 0}
+                    rows={5}
+                />
+                {field.description.length > 0 && (
+                    <span className="font-normal text-muted-foreground">{field.description}</span>
+                )}
+            </label>
+        );
+    }
     return (
         <label className="grid gap-1.5 text-[11px] font-medium text-[#555c68]">
             {field.title}
@@ -110,7 +133,7 @@ function FieldControl({
                 name={field.name}
                 pattern={field.pattern.length > 0 ? field.pattern : undefined}
                 placeholder={field.description}
-                required={field.required}
+                required={field.required && (numeric || Number(field.minimumLength) > 0)}
                 step={field.type === "integer" ? 1 : "any"}
                 type={
                     numeric
