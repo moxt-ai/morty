@@ -529,3 +529,32 @@ test("Given a remembered computer and a computer record this version cannot read
     expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
     expect(JSON.parse(window.localStorage.getItem("morty:remembered-computers:v1") ?? "[]")).toContainEqual(future);
 });
+
+test("Given a computer record this version cannot read whose token it can read, When saving a visit has to make room for tokens, Then that computer keeps its token", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const sessionId = await startConversation(app, "Keep the other version's computer");
+    const theirToken = `mobius_anon_v2_${"t".repeat(43)}`;
+    const future = { scope: { userId: FUTURE_USER_ID }, destination: { kind: "workspace" }, lastUsedAt: 0 };
+    addStoredValue("morty:remembered-computers:v1", (stored) => [...(Array.isArray(stored) ? stored : []), future]);
+    // Its token comes first, and older tokens no computer claims fill the remaining room.
+    addStoredValue("mobius.anonymous-credentials.v1", (stored) => ({
+        [FUTURE_USER_ID]: theirToken,
+        ...(typeof stored === "object" && stored !== null ? stored : {}),
+        ...Object.fromEntries(
+            Array.from({ length: 9 }, (_, index) => [
+                `usr_unclaimed-${index}`,
+                `mobius_anon_v2_${String(index).repeat(43)}`,
+            ]),
+        ),
+    }));
+
+    window.location.href = `${app.origin}/`;
+    const returned = await app.reload();
+    await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ }));
+    expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
+    const credentials = JSON.parse(window.localStorage.getItem("mobius.anonymous-credentials.v1") ?? "{}");
+    expect(credentials).toMatchObject({ [FUTURE_USER_ID]: theirToken });
+    expect(Object.keys(credentials)).toHaveLength(10);
+});

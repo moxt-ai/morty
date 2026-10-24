@@ -104,6 +104,20 @@ interface StoredAccess {
     readonly unreadableCredentials: Readonly<Record<string, unknown>>;
     readonly computers: readonly RememberedComputer[];
     readonly unreadableComputers: readonly unknown[];
+    /** The users of computer records this version cannot read, as far as their records say. */
+    readonly unreadableComputerUsers: ReadonlySet<string>;
+}
+
+/** Whose computer a record this version cannot read is, when it still names its user the way this version does. */
+function recordedUser(record: unknown): string | null {
+    if (typeof record !== "object" || record === null || !("scope" in record)) {
+        return null;
+    }
+    const scope = record.scope;
+    if (typeof scope !== "object" || scope === null || !("userId" in scope)) {
+        return null;
+    }
+    return typeof scope.userId === "string" ? scope.userId : null;
 }
 
 function readStoredAccess(): StoredAccess {
@@ -127,7 +141,10 @@ function readStoredAccess(): StoredAccess {
             computers.push(readable);
         }
     }
-    return { credentials, unreadableCredentials, computers, unreadableComputers };
+    const unreadableComputerUsers = new Set(
+        unreadableComputers.map(recordedUser).filter((userId): userId is string => userId !== null),
+    );
+    return { credentials, unreadableCredentials, computers, unreadableComputers, unreadableComputerUsers };
 }
 
 /** The computers this version can open: those whose token it can read. */
@@ -163,7 +180,8 @@ function updateComputers(
     const { added, released } = change;
     const stored = readStoredAccess();
     const previous = new Set(openable(stored).map((computer) => computer.scope.userId));
-    const needed = new Set(computers.map((computer) => computer.scope.userId));
+    // Computer records this version cannot read are kept, so the tokens they name are needed as much as any other.
+    const needed = new Set([...computers.map((computer) => computer.scope.userId), ...stored.unreadableComputerUsers]);
     const credentials = [...stored.credentials].filter(
         ([userId]) =>
             userId !== added?.userId && (needed.has(userId) || (!previous.has(userId) && userId !== released)),
