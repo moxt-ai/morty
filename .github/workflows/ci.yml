@@ -171,13 +171,18 @@ jobs:
         run: pnpm test:e2e --shard="$E2E_SHARD"
         env:
           E2E_SHARD: ${{ matrix.shard }}
+          # Each journey writes its failure screenshot, page, browser events and trace under its `artifacts`
+          # directory here; its `work` directory holds runtime state and is not kept.
+          MOBIUS_E2E_ARTIFACT_ROOT: ${{ runner.temp }}/e2e-journeys
 
       - name: Save failed journey results
         if: ${{ failure() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: e2e-results-${{ strategy.job-index }}
-          path: packages/e2e/test-results/
+          path: |
+            packages/e2e/test-results/
+            ${{ runner.temp }}/e2e-journeys/*/artifacts/
           if-no-files-found: ignore
           retention-days: 14
 
