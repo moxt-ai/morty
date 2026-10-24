@@ -169,7 +169,9 @@ export const createNativeSessionStore = (
         },
         runtimeChanged: () => {
             const current = runtime();
-            if (current === null) {
+            // An Open, Fork or Load more the user sent keeps running: restarting discovery would cancel a request
+            // the Runtime may already be carrying out. Its end checks the listing against the configuration again.
+            if (current === null || get().operation !== "idle") {
                 return;
             }
             const { directory, selected } = get();
@@ -274,6 +276,7 @@ export const createNativeSessionStore = (
             } finally {
                 if (!signal.aborted) {
                     set({ operation: "idle" });
+                    get().runtimeChanged();
                 }
             }
         },
@@ -320,6 +323,7 @@ export const createNativeSessionStore = (
             } finally {
                 if (!signal.aborted) {
                     set({ operation: "idle" });
+                    get().runtimeChanged();
                 }
             }
         },
