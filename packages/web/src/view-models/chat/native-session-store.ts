@@ -7,7 +7,12 @@ import type { OpenMobiusSession } from "./open-session.ts";
 import { type SessionMessage, sessionEventLogPresentation } from "./session-presentation.ts";
 
 type NativeSessionDirectory =
-    | { readonly kind: "loading"; readonly scope: "initial" | "refresh" }
+    | {
+          readonly kind: "loading";
+          readonly scope: "initial" | "refresh";
+          /** The listing the request in flight is for, or null while the page waits for the Runtime. */
+          readonly listing: string | null;
+      }
     | { readonly kind: "empty" }
     | {
           readonly kind: "ready";
@@ -96,24 +101,32 @@ export const createNativeSessionStore = (
             get().dispose();
         },
         selected: "",
-        directory: { kind: "loading", scope: "initial" },
+        directory: { kind: "loading", scope: "initial", listing: null },
         preview: { kind: "empty" },
         operation: "idle",
         error: "",
         load: async (parent) => {
+            const current = runtime();
+            const agent = current === null ? undefined : chosenAgent(nativeSessionAgentTabs(current), get().selected);
+            const listing = current === null ? null : listingFor(agent);
+            const before = get().directory;
+            // The Runtime runs one native session operation per agent at a time: a request it is still carrying
+            // out answers for this listing too, and cancelling it to send the same request again would only be
+            // refused as busy.
+            if (listing !== null && before.kind === "loading" && before.listing === listing) {
+                return;
+            }
             const attempt = new AbortController();
             discovery?.abort(new Error("Native session discovery restarted."));
             discovery = attempt;
             const signal = AbortSignal.any([parent, attempt.signal]);
             const scope = get().selected === "" ? ("initial" as const) : ("refresh" as const);
-            set({ directory: { kind: "loading", scope }, preview: { kind: "empty" }, error: "" });
-            const current = runtime();
+            set({ directory: { kind: "loading", scope, listing }, preview: { kind: "empty" }, error: "" });
             if (current === null) {
                 // The page has not heard from the Runtime yet; its first configuration starts the listing.
                 return;
             }
             try {
-                const agent = chosenAgent(nativeSessionAgentTabs(current), get().selected);
                 if (agent === undefined) {
                     set({ directory: { kind: "empty" } });
                     return;
@@ -182,7 +195,9 @@ export const createNativeSessionStore = (
                       ? `agent-unavailable:${selected}`
                       : directory.kind === "ready"
                         ? `ready:${directory.runtimeId}:${directory.agentRef}`
-                        : null;
+                        : directory.kind === "loading"
+                          ? directory.listing
+                          : null;
             if (shown !== listingFor(chosenAgent(nativeSessionAgentTabs(current), selected))) {
                 void get().load(lifetime.signal);
             }
