@@ -18,7 +18,8 @@
         "typecheck": "pnpm typegen && pnpm --filter './packages/**' --recursive --if-present typecheck && pnpm --filter './packages/**' --recursive --if-present typecheck:tests && pnpm typecheck:tooling",
         "check:no-chinese": "node scripts/check-no-chinese.ts",
         "check:store-subscribe": "node scripts/check-store-subscribe.ts",
-        "lint": "biome ci --error-on-warnings && pnpm check:no-chinese && pnpm check:store-subscribe && pnpm check:architecture",
+        "check:view-hooks": "node scripts/check-view-hooks.ts",
+        "lint": "biome ci --error-on-warnings && pnpm check:no-chinese && pnpm check:store-subscribe && pnpm check:view-hooks && pnpm check:architecture",
         "check:architecture": "depcruise --config dependency-cruiser.config.cjs packages/web/src packages/worker/src",
         "lint:fix": "biome check --write --error-on-warnings && pnpm check:no-chinese && pnpm check:architecture",
         "format": "biome format --write",
@@ -44,7 +45,7 @@
         "typecheck:tooling": "tsc --project tsconfig.tooling.json"
     },
     "simple-git-hooks": {
-        "pre-commit": "pnpm typecheck && pnpm check:no-chinese && pnpm biome check --error-on-warnings --staged --files-ignore-unknown=true --no-errors-on-unmatched && pnpm check:architecture"
+        "pre-commit": "pnpm typecheck && pnpm check:no-chinese && pnpm check:view-hooks && pnpm biome check --error-on-warnings --staged --files-ignore-unknown=true --no-errors-on-unmatched && pnpm check:architecture"
     },
     "devDependencies": {
         "@agentclientprotocol/sdk": "1.4.0",

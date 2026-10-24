@@ -30,9 +30,9 @@ import { SessionWelcome } from "../../components/chat/session-welcome.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
+import { DesktopChatLayout } from "../../components/utils/desktop-chat-layout.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
-import { useDesktopChatLayout } from "../../components/utils/use-desktop-chat-layout.ts";
 import { cn } from "../../lib/utils.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
@@ -414,20 +414,23 @@ function MobiusSessionPaneShell({
 }
 
 export function MobiusSessionPaneLoading({ footer }: { readonly footer?: ReactNode }) {
-    const desktop = useDesktopChatLayout();
     return (
-        <>
-            <MobiusSessionPaneShell footer={footer} mobileTitlePortaled={!desktop} titleLoading={desktop}>
-                <div aria-label="Messages" className={chatSessionMessageScrollClassName} role="log">
-                    <SessionMessageListSkeleton />
-                </div>
-            </MobiusSessionPaneShell>
-            {desktop ? null : (
-                <MobileSessionTitlePortal>
-                    <SessionTitleSkeleton centered />
-                </MobileSessionTitlePortal>
+        <DesktopChatLayout>
+            {(desktop) => (
+                <>
+                    <MobiusSessionPaneShell footer={footer} mobileTitlePortaled={!desktop} titleLoading={desktop}>
+                        <div aria-label="Messages" className={chatSessionMessageScrollClassName} role="log">
+                            <SessionMessageListSkeleton />
+                        </div>
+                    </MobiusSessionPaneShell>
+                    {desktop ? null : (
+                        <MobileSessionTitlePortal>
+                            <SessionTitleSkeleton centered />
+                        </MobileSessionTitlePortal>
+                    )}
+                </>
             )}
-        </>
+        </DesktopChatLayout>
     );
 }
 
@@ -512,12 +515,20 @@ export function MobiusSessionPane({ workspace }: { readonly workspace: ChatWorks
     return <MobiusSessionPaneBody pane={pane} workspace={workspace} />;
 }
 
-function MobiusSessionPaneBody({
+function MobiusSessionPaneBody(props: { readonly pane: SessionPaneModel; readonly workspace: ChatWorkspace }) {
+    return (
+        <DesktopChatLayout>{(desktop) => <MobiusSessionPaneLayout {...props} desktop={desktop} />}</DesktopChatLayout>
+    );
+}
+
+function MobiusSessionPaneLayout({
     pane,
     workspace,
+    desktop,
 }: {
     readonly pane: SessionPaneModel;
     readonly workspace: ChatWorkspace;
+    readonly desktop: boolean;
 }) {
     const home = useStore(workspace.home);
     const runtimeConfiguration = home.runtimeConfiguration;
@@ -579,7 +590,6 @@ function MobiusSessionPaneBody({
         void pane.filePreview.getState().reload(pane.operationsSignal());
     };
 
-    const desktop = useDesktopChatLayout();
     const titleBarProps = {
         title: model.title,
         titleEdit: model.titleEdit,

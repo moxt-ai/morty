@@ -13,8 +13,8 @@ import { SessionLoadFailure } from "../../components/chat/session-load-failure.t
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
+import { DesktopChatLayout } from "../../components/utils/desktop-chat-layout.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
-import { useDesktopChatLayout } from "../../components/utils/use-desktop-chat-layout.ts";
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
@@ -36,10 +36,7 @@ import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { MobiusSessionPane, MobiusSessionPaneLoading, SessionMessageListSkeleton } from "./mobius-session-pane.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 
-export function BotChatHome({
-    requests,
-    workspace,
-}: {
+type BotChatHomeProps = {
     readonly requests: Pick<
         BotChatApi,
         | "readBot"
@@ -63,8 +60,14 @@ export function BotChatHome({
         | "networkDiagnostic"
     >;
     readonly workspace: ChatWorkspace;
-}) {
-    const desktop = useDesktopChatLayout();
+};
+
+/** The chat home renders its desktop or compact layout as the viewport allows. */
+export function BotChatHome(props: BotChatHomeProps) {
+    return <DesktopChatLayout>{(desktop) => <BotChatHomeLayout {...props} desktop={desktop} />}</DesktopChatLayout>;
+}
+
+function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & { readonly desktop: boolean }) {
     const store = workspace.home;
     const model = useStore(store);
     const draftControls = useStore(workspace.draftControls);

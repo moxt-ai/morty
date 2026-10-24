@@ -16,13 +16,14 @@ import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
 import { mortyThinScrollbarClassName } from "../../components/chat/chat-session-layout.ts";
-import { panelMotionClassName, usePanelPresence } from "../../components/chat/sidebar-panel-presence.ts";
+import { type PanelMotion, PanelPresence } from "../../components/chat/panel-presence.tsx";
+import { panelMotionClassName } from "../../components/chat/sidebar-panel-presence.ts";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { MortyAlert } from "../../components/ui/morty-alert.tsx";
 import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.tsx";
+import { DesktopChatLayout } from "../../components/utils/desktop-chat-layout.tsx";
 import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
-import { useDesktopChatLayout } from "../../components/utils/use-desktop-chat-layout.ts";
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
@@ -320,16 +321,7 @@ function ConnectionStatus({
     );
 }
 
-export function ConversationSidebar({
-    botId,
-    connectionStatus,
-    workspace,
-    onConnectAgent,
-    requests,
-    activeId,
-    onOpen,
-    onNewConversation,
-}: {
+type ConversationSidebarProps = {
     readonly botId: string;
     readonly connectionStatus: BotConnectionStatus;
     readonly workspace: ChatWorkspace;
@@ -346,6 +338,52 @@ export function ConversationSidebar({
     readonly activeId: string;
     readonly onOpen: (session: ManagedChatSession) => void;
     readonly onNewConversation: () => void;
+};
+
+/**
+ * The sidebar renders its layout for the viewport and the motion of its mobile panels, which components own; the
+ * view only subscribes to the stores.
+ */
+export function ConversationSidebar(props: ConversationSidebarProps) {
+    const dialogState = useStore(props.workspace.sidebar.dialogs);
+    return (
+        <PanelPresence open={dialogState.mobileNavOpen}>
+            {(navigationMotion) => (
+                <PanelPresence open={dialogState.mobileSessionsOpen}>
+                    {(sessionsMotion) => (
+                        <DesktopChatLayout>
+                            {(desktop) => (
+                                <ConversationSidebarLayout
+                                    {...props}
+                                    desktop={desktop}
+                                    navigationMotion={navigationMotion}
+                                    sessionsMotion={sessionsMotion}
+                                />
+                            )}
+                        </DesktopChatLayout>
+                    )}
+                </PanelPresence>
+            )}
+        </PanelPresence>
+    );
+}
+
+function ConversationSidebarLayout({
+    botId,
+    connectionStatus,
+    workspace,
+    onConnectAgent,
+    requests,
+    activeId,
+    onOpen,
+    onNewConversation,
+    desktop,
+    navigationMotion,
+    sessionsMotion,
+}: ConversationSidebarProps & {
+    readonly desktop: boolean;
+    readonly navigationMotion: PanelMotion;
+    readonly sessionsMotion: PanelMotion;
 }) {
     // The workspace owns the sidebar's dialog, remote-access, and diagnostic
     // stores outside React; the view only subscribes.
@@ -356,10 +394,6 @@ export function ConversationSidebar({
     const sessionStatuses = useStore(workspace.statuses, (state) => state.statuses);
     const dialogState = useStore(dialogs);
     const mobileNavOpen = dialogState.mobileNavOpen;
-    const mobileSessionsOpen = dialogState.mobileSessionsOpen;
-    const navigationMotion = usePanelPresence(mobileNavOpen);
-    const sessionsMotion = usePanelPresence(mobileSessionsOpen);
-    const desktop = useDesktopChatLayout();
     const dialogStore = dialogState.nativeDialog;
     // Open Session offers the agents of the Runtime configuration the page follows.
     const runtime = useStore(workspace.home, (state) => state.runtimeConfiguration?.runtime ?? null);
