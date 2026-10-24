@@ -56,6 +56,35 @@ test("Given a saved Machine whose Runtime the manager no longer manages, When se
     expect(statuses).toContain("ready");
 });
 
+test("Given a browser opened the saved Machine's link, When setup replaces its Project, Then nothing from the previous Project opens Morty and the new link does", async ({
+    runtime,
+}) => {
+    const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const { page } = runtime;
+    await page.goto(original.url);
+    await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
+    const previousToken = original.configuration["user_token"];
+    await runtime.forgetRuntimeConnections();
+
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+
+    expect(connected.identity.projectId).not.toBe(original.identity.projectId);
+    expect(connected.configuration).not.toHaveProperty("replaced_project_id");
+    expect(connected.configuration).not.toHaveProperty("replaced_user_token");
+    const session = await page.request.get(
+        `${runtime.origin}/morty/api/projects/${original.identity.projectId}/session`,
+        { headers: { authorization: `Bearer ${String(previousToken)}` } },
+    );
+    expect(session.status()).toBe(401);
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "This link is no longer valid" })).toBeVisible();
+    await page.goto(original.url);
+    await expect(page.getByRole("heading", { name: "This link is no longer available" })).toBeVisible();
+    const opened = await page.context().newPage();
+    await opened.goto(connected.url);
+    await expect(opened.getByRole("textbox", { name: "Message" })).toBeEnabled();
+});
+
 test("Given a saved Machine and another same-App connection, When its Runtime reconnects, Then setup reuses the Machine's bound Runtime", async ({
     runtime,
 }) => {

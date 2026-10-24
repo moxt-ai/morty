@@ -33,19 +33,39 @@ export function createPlatformProjectRoutes() {
                 ),
             });
         })
-        .post("/project/replacement", authenticatedSession, async (context) => {
-            const session = context.get("session");
+        .post("/project/replacement", async (context) => {
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);
-            const project = await context.env.services.management.replaceProject(session.userId, signal);
+            const { authentication, management } = context.env.services;
+            const local = await authentication.localIdentity(context.get("bearerToken"), signal);
+            switch (local.kind) {
+                case "unauthenticated":
+                    throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
+                case "forbidden":
+                    throw new ManagementError(
+                        "LOCAL_IDENTITY_REQUIRED",
+                        "Use the identity saved on the machine to replace its Project.",
+                        403,
+                    );
+                case "local":
+                    break;
+            }
+            const project = await management.replaceProject(local.userId, signal);
             const response = await projectObject(context.env.config.bindings, project.projectId).fetch(
                 new Request("https://project.internal/__project/bootstrap", {
-                    body: JSON.stringify({ project, userId: session.userId }),
+                    body: JSON.stringify({ project, userId: local.userId }),
                     headers: { "content-type": "application/json" },
                     method: "POST",
                     signal,
                 }),
             );
             signal.throwIfAborted();
+            if (!response.ok) {
+                return response;
+            }
+            // The successor holds the user's access from now on, so nothing shared from this Project opens it any
+            // more. The local identity stays until setup has saved the successor's and ends it itself: a reply lost on
+            // the way can be asked for again.
+            await authentication.revokeAllAccess(local.token, signal);
             return response;
         })
         .post(

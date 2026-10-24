@@ -366,6 +366,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                               "agent_ref",
                               "agent_config_revision",
                               "pairing_runtime_id",
+                              "replaced_project_id",
+                              "replaced_user_token",
                           ].includes(key),
                       ),
                   );
@@ -402,15 +404,44 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         });
         const value = object(await response.json());
         if (!response.ok) {
-            const failure = object(value["error"]);
-            const code = text(failure["code"], /^[A-Za-z0-9_-]+$/u);
-            const message =
-                typeof failure["message"] === "string"
-                    ? failure["message"]
-                    : `Request failed with HTTP ${response.status}`;
-            fail(code, Object.assign(new Error(message), { name: "RemoteError" }));
+            remoteFailure(value, response.status);
         }
         return value;
+    }
+
+    function remoteFailure(value: Readonly<Record<string, unknown>>, status: number): never {
+        const failure = object(value["error"]);
+        const code = text(failure["code"], /^[A-Za-z0-9_-]+$/u);
+        const message =
+            typeof failure["message"] === "string" ? failure["message"] : `Request failed with HTTP ${status}`;
+        fail(code, Object.assign(new Error(message), { name: "RemoteError" }));
+    }
+
+    /**
+     * Ends the local identity of a Project this machine replaced. Setup keeps it with the successor's identity until
+     * then, so a run that stops on the way ends it next time instead of leaving a credential that opens the replaced
+     * Project. Nothing else from that Project opens it: its replacement ended everything shared from it.
+     */
+    async function retireReplacedIdentity(context: Context): Promise<Context> {
+        const projectId = context.config["replaced_project_id"];
+        const token = context.config["replaced_user_token"];
+        if (projectId === undefined && token === undefined) {
+            return context;
+        }
+        const response = await fetch(
+            new URL(`/morty/api/projects/${identifier(projectId)}/identity/remote-access`, context.base),
+            {
+                method: "DELETE",
+                headers: { authorization: `Bearer ${credential(token)}` },
+                redirect: "error",
+                signal: AbortSignal.any([signal, AbortSignal.timeout(45000)]),
+            },
+        );
+        // A credential that no longer authenticates was ended by an earlier run that stopped before saving it.
+        if (!response.ok && response.status !== 401) {
+            remoteFailure(object(await response.json()), response.status);
+        }
+        return await saveConfiguration(context, { replaced_project_id: undefined, replaced_user_token: undefined });
     }
 
     function readSetupOptions(commandArgs: readonly string[]): SetupOptions {
@@ -647,10 +678,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             agent_ref: undefined,
             agent_config_revision: undefined,
             pairing_runtime_id: undefined,
+            replaced_project_id: context.config["project_id"],
+            replaced_user_token: context.config["user_token"],
             entry: "setup",
         });
         emit({ status: "project_replaced", botId: saved.config["bot_id"], projectId: saved.config["project_id"] });
-        return saved;
+        return await retireReplacedIdentity(saved);
     }
 
     async function prepareRuntime(
@@ -1057,7 +1090,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (options.base !== undefined && options.base !== base) {
             fail("LOCAL_IDENTITY_REQUIRED");
         }
-        const context: Context = { directory, base, config };
+        const context = await retireReplacedIdentity({ directory, base, config });
         const revoked = await request(context, "/identity/revoke-all-access", {});
         if (revoked["status"] !== "access_revoked") {
             fail("INVALID_RESPONSE");
@@ -1073,7 +1106,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function setup(options: SetupOptions) {
         const cwd = await resolveWorkingDirectory(options.cwd);
         const directory = await prepareDirectory(await resolveDocumentsDirectory(host.documents, signal));
-        let context = await loadConfiguration(directory, options.base);
+        let context = await retireReplacedIdentity(await loadConfiguration(directory, options.base));
         const identity = await prepareIdentity(context);
         context = identity.context;
         const verified = await verifyIdentityAndBot(context);

@@ -33,7 +33,8 @@ repository as a substitute.
 The script reuses the saved identity and Machine for this origin and reconnects an
 active managed connection when possible. When the saved Machine's Runtime is no
 longer managed here, it keeps the user, replaces the Project and Machine, and pairs
-a new Runtime.
+a new Runtime. Links and browsers from the replaced Project stop working; the new
+link replaces them.
 Mobius owns Runtime connection state and identifiers; do not save or back them up yourself.
 No registration, separate bind command, or replacement confirmation is needed.
 
@@ -62,4 +63,4 @@ configuration; only the ready handoff URL is intended for the user.
 Managing previously shared access:
 - When the user asks to revoke all previously shared access from this machine, run `node <setup.mjs> revoke-all-access`, using the same Documents directory as setup. The command defaults to the origin in the saved local configuration; `--base-url <same Morty origin>` is optional and must match that saved origin. No harness, session ID, or workspace argument is needed. Use the deployment-owned setup download as above; never put local credentials in command arguments or output.
 - This command uses the original locally saved identity, revokes previous sharing links and all other Morty credentials for its current Project (including recovery credentials), and retains the local identity so new sharing links can be created. It does not stop the daemon or its tasks. Already issued session access and open connections can remain usable until their access expires.
-- Report success only after `status: "access_revoked"`. A missing local identity is an error; do not run setup or create a new identity to conceal it. This command is scoped to the Project saved in this local configuration, not other installations or previously replaced Projects.
+- Report success only after `status: "access_revoked"`. A missing local identity is an error; do not run setup or create a new identity to conceal it. This command is scoped to the Project saved in this local configuration, not other installations; a Project that setup replaced already ended everything shared from it.

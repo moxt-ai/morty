@@ -905,3 +905,52 @@ test("Given two shared links and redeemed access, When the local owner revokes a
         await rm(directory, { recursive: true, force: true });
     }
 }, 30000);
+
+test("Given setup replaced the Project but stopped before ending the previous identity, When the user revokes all access, Then nothing opens the previous Project and the current identity stays usable", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "morty-replaced-identity-"));
+    const documents = join(directory, "Documents");
+    const configurationDirectory = join(documents, "morty");
+    await mkdir(configurationDirectory, { recursive: true, mode: 0o700 });
+    const fixture = await createIdentityFixture({ listenOnLoopback: true });
+    const signal = AbortSignal.timeout(30000);
+    try {
+        const previous = await fixture.createAnonymousUser();
+        const request = (projectId: string, path: string, token: string, method = "GET") =>
+            fetch(`${fixture.origin}/morty/api/projects/${projectId}${path}`, {
+                method,
+                headers: { authorization: `Bearer ${token}` },
+                signal,
+            });
+        const replaced = await request(previous.projectId, "/management/project/replacement", previous.token, "POST");
+        expect(replaced.status).toBe(201);
+        const current = v.parse(v.object({ projectId: v.string(), token: v.string() }), await replaced.json());
+        // What setup saved before it stopped: the successor's identity, with the previous one still to end.
+        await writeFile(
+            join(configurationDirectory, "config.json"),
+            JSON.stringify({
+                base_url: fixture.origin,
+                user_token: current.token,
+                project_id: current.projectId,
+                replaced_project_id: previous.projectId,
+                replaced_user_token: previous.token,
+            }),
+            { mode: 0o600 },
+        );
+        expect((await request(previous.projectId, "/session", previous.token)).status).toBe(200);
+
+        const events: Readonly<Record<string, unknown>>[] = [];
+        const code = await runSetup(["revoke-all-access"], { documents, signal, emit: (event) => events.push(event) });
+        expect(code, JSON.stringify(events)).toBe(0);
+
+        expect(events.at(-1)).toMatchObject({ status: "access_revoked", projectId: current.projectId });
+        expect(JSON.stringify(events)).not.toContain(previous.token);
+        expect((await request(previous.projectId, "/session", previous.token)).status).toBe(401);
+        expect((await request(previous.projectId, "/identity/transfers", previous.token, "POST")).status).toBe(401);
+        expect((await request(current.projectId, "/session", current.token)).status).toBe(200);
+        const saved = JSON.parse(await readFile(join(configurationDirectory, "config.json"), "utf8"));
+        expect(saved).toEqual({ base_url: fixture.origin, user_token: current.token, project_id: current.projectId });
+    } finally {
+        await fixture.close();
+        await rm(directory, { recursive: true, force: true });
+    }
+}, 30000);
