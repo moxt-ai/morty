@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { type BrowserContextOptions, chromium, firefox, webkit } from "playwright-core";
 import { mortyFiles, mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../web/src/services/identity/anonymous-identity-api.ts";
@@ -168,6 +169,7 @@ export async function createTestRuntime(
                     instructionUrl: url.href,
                     cwd: workspace ?? stack.directories.workspace,
                     documents: harness.workDirectory,
+                    state: join(harness.workDirectory, "morty-state"),
                     harness: agentId,
                     signal: harness.signal,
                     clock: {

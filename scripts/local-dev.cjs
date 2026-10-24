@@ -586,8 +586,9 @@ function readSetupRecord(line) {
 
 /**
  * Runs the Chat-served setup bundle's `setup` flow with Morty's writable
- * location isolated under the stack's state directory. `documents/` isolates
- * Morty's saved setup files, `mobius/` isolates its CLI manager and connection
+ * location isolated under the stack's state directory. `morty/` isolates
+ * Morty's saved setup state, `documents/` stands in for the Documents folder
+ * earlier releases kept it in, `mobius/` isolates its CLI manager and connection
  * state, and `workspace/` is the default working directory. On success prints
  * one JSON record whose `handoffUrl` continues the setup identity in the
  * browser.
@@ -615,9 +616,10 @@ async function setup(options) {
         fail("the stack's Chat Worker is not running; run prepare first");
     }
     const documents = path.join(stack.stateDir, "documents");
+    const mortyStateDirectory = path.join(stack.stateDir, "morty");
     const mobiusStateDirectory = path.join(stack.stateDir, "mobius");
     const workspace = path.resolve(options.workspace ?? path.join(stack.stateDir, "workspace"));
-    for (const directory of [documents, mobiusStateDirectory, workspace]) {
+    for (const directory of [documents, mortyStateDirectory, mobiusStateDirectory, workspace]) {
         fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     }
     const origin = new URL(stack.chatOrigin).origin;
@@ -667,6 +669,7 @@ process.exit(result.status ?? 1);
         process.execPath,
         {
             DOCUMENT_DIR: documents,
+            MORTY_STATE_DIRECTORY: mortyStateDirectory,
             MOBIUS_STATE_DIRECTORY: mobiusStateDirectory,
             PATH: `${shimDirectory}${path.delimiter}${process.env.PATH ?? ""}`,
         },
@@ -767,6 +770,7 @@ process.exit(result.status ?? 1);
         connectionId,
         documents,
         handoffUrl,
+        mortyStateDirectory,
         harness,
         mobiusStateDirectory,
         runtimePid,
