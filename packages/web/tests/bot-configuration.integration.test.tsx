@@ -297,7 +297,7 @@ test("Given a Bot paired with Pi, When the user opens its settings and sends a p
     });
 });
 
-test("Given another tab saved a recent directory while this tab's menu was open, When the user forgets a directory here and reopens the menu, Then the other tab's directory remains", {
+test("Given another tab saved a recent directory, When this tab reopens its directory menu and forgets a directory, Then the other tab's directory is listed and remains", {
     timeout: 30_000,
 }, async () => {
     const key = (botId: string) => `mobius:recent-cwd:${encodeURIComponent(botId)}`;
@@ -314,12 +314,17 @@ test("Given another tab saved a recent directory while this tab's menu was open,
     await app.waitForView(() => expect(recent("/project-here")).toBe(true));
     // Another tab of the same Bot saves a directory through the same storage.
     window.localStorage.setItem(key(app.botId), JSON.stringify([there, here]));
-    await app.user.click(
-        await app.queryElementByTestId(
-            dataTestId.forgetRecentWorkingDirectory,
-            (element) => element.getAttribute("aria-label")?.includes("/project-here") === true,
-        ),
-    );
+    // Reopening the menu shows it, with no change made in this tab.
+    await app.user.keyboard("{Escape}");
+    await app.user.click(await app.queryElementByTestId(dataTestId.workingDirectory));
+    await app.waitForView(() => expect(recent("/project-from-another-tab")).toBe(true));
+    const forget = app
+        .elementsByTestId(dataTestId.forgetRecentWorkingDirectory)
+        .find((element) => element.getAttribute("aria-label")?.includes("/project-here") === true);
+    if (forget === undefined) {
+        throw new Error("Expected to forget /project-here");
+    }
+    await app.user.click(forget);
     await app.user.keyboard("{Escape}");
 
     await app.user.click(await app.queryElementByTestId(dataTestId.workingDirectory));
