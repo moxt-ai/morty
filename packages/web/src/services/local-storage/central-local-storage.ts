@@ -190,10 +190,16 @@ const anonymousTokenSchema = v.pipe(
     ),
 );
 
-/** Maps a user identifier to their anonymous access token, keeping at most ten users. */
+/** How many computers this browser remembers. Each needs its user's token, so the tokens share this limit. */
+export const MAX_REMEMBERED_COMPUTERS = 10;
+
+/** Maps a user identifier to their anonymous access token. The remembered computers decide which tokens are kept. */
 const storedAnonymousCredentialsSchema = v.pipe(
     v.record(v.pipe(v.string(), v.minLength(8), v.maxLength(128)), anonymousTokenSchema),
-    v.check((credentials) => Object.keys(credentials).length <= 10, "Too many anonymous credentials"),
+    v.check(
+        (credentials) => Object.keys(credentials).length <= MAX_REMEMBERED_COMPUTERS,
+        "Too many anonymous credentials",
+    ),
     v.readonly(),
 );
 
@@ -224,8 +230,8 @@ const rememberedComputerSchema = v.pipe(
 export type ComputerDestination = v.InferOutput<typeof computerDestinationSchema>;
 export type RememberedComputer = v.InferOutput<typeof rememberedComputerSchema>;
 
-/** Credentials remain separate; these are only validated navigation preferences. */
+/** The computers this browser can open, most recently used first. Their tokens are stored by user. */
 export const rememberedComputersEntry = jsonLocalStorageEntry({
     key: "morty:remembered-computers:v1",
-    schema: v.pipe(v.array(rememberedComputerSchema), v.maxLength(10), v.readonly()),
+    schema: v.pipe(v.array(rememberedComputerSchema), v.maxLength(MAX_REMEMBERED_COMPUTERS), v.readonly()),
 });

@@ -109,3 +109,28 @@ test("Given native sessions are available, When the user selects a session from 
     });
     await app.waitForView(() => getByRole(preview, "heading", { name: longSessionTitle }));
 });
+
+test("Given native sessions were discovered before the Runtime disconnected, When a preview fails, Then Open Session shows one error with one bug report action", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true, nativeSessionIds: new Set(["preview-error-session"]) });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.getAttribute("data-connection-status") === "connected",
+    );
+    await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
+    const menu = await app.waitForView(() => getByRole(document.body, "combobox", { name: "Native session" }));
+    if (app.daemon === null) {
+        throw new Error("The scenario requires a connected Runtime.");
+    }
+    await app.daemon.disconnect();
+    await app.user.click(menu);
+    act(() => fireEvent.click(getByRole(document.body, "option", { name: /Native preview-error-session/ })));
+    const dialog = getByRole(document.body, "dialog", { name: "Open Session" });
+    await app.waitForView(() => {
+        expect(getAllByRole(dialog, "alert")).toHaveLength(1);
+        expect(getAllByRole(dialog, "button", { name: "Report a bug" })).toHaveLength(1);
+    });
+    await app.user.click(getByRole(dialog, "button", { name: "Report a bug" }));
+    await app.waitForView(() => getByRole(document.body, "dialog", { name: "Report a bug" }));
+});

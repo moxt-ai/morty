@@ -218,6 +218,24 @@ test("Given only a legacy credential, When I open the plain address, Then Morty 
     expect(document.body.textContent).not.toContain("Open the link your agent gave you once");
 });
 
+test("Given only a legacy credential whose access was revoked, When I open its link and then the plain address, Then Morty stops asking for that link", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await startConversation(app, "Revoked legacy user");
+    const originalLink = window.location.href;
+    // Simulate an existing browser from before computer metadata was introduced.
+    window.localStorage.removeItem("morty:remembered-computers:v1");
+    await revokeAccess(app);
+    const linked = await app.reload();
+    await linked.waitForView(() => getByRole(document.body, "heading", { name: "This link is no longer valid" }));
+    expect(window.location.href).toBe(originalLink);
+    window.location.href = `${app.origin}/`;
+    const returned = await linked.reload();
+    await returned.waitForView(() => getByRole(document.body, "heading", { name: "Just one prompt." }));
+    expect(document.body.textContent).not.toContain("Open the link your agent gave you once");
+});
+
 test("Given a saved computer and a failed connection, When I retry after reconnecting, Then my original conversation is retained", {
     timeout: 30_000,
 }, async () => {
@@ -399,4 +417,57 @@ test("Given the last computer was deleted, When I return, Then the next valid co
                 deletedScope,
         ),
     ).toBe(false);
+});
+
+test("Given a computer I keep using, When ten more computers are saved in this browser, Then its link still opens and older unused computers make room", {
+    timeout: 120_000,
+}, async () => {
+    const daily = await createTestApp({ connectAgent: true });
+    const dailySession = await startConversation(daily, "My daily computer");
+    const dailyLink = window.location.href;
+    const dailyScope = new URL(dailyLink).searchParams.get("identity");
+    await daily.close();
+    const openShared = async (): Promise<TestApp> => {
+        const shared = await createTestApp({ page: { kind: "share" } });
+        const scope = encodeIdentityScope({
+            botId: shared.botId,
+            projectId: shared.identity.projectId,
+            userId: shared.userId,
+        });
+        await shared.waitForView(() => expect(new URL(window.location.href).searchParams.get("identity")).toBe(scope));
+        // The redeemed link replaces the page, which then opens that computer and asks to connect its agent.
+        const opened = await shared.reload();
+        await opened.waitForView(() => getByRole(document.body, "dialog", { name: "Connect agent" }));
+        return opened;
+    };
+    const openDaily = async (app: TestApp): Promise<TestApp> => {
+        window.location.href = dailyLink;
+        const opened = await app.reload();
+        await opened.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ }));
+        expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(dailySession);
+        return opened;
+    };
+
+    // The browser fills up with computers, and the daily one is used again before the last is saved.
+    let shared = await openShared();
+    const oldestScope = new URL(window.location.href).searchParams.get("identity");
+    for (let saved = 1; saved < 9; saved += 1) {
+        await shared.close();
+        shared = await openShared();
+    }
+    await (await openDaily(shared)).close();
+    shared = await openShared();
+
+    // The daily computer is the most recently used of the computers before the last, so it keeps its access.
+    const returned = await openDaily(shared);
+    await returned.user.click(
+        await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ })),
+    );
+    await returned.waitForView(() => expect(document.body.textContent).not.toContain("Checking connections"));
+    const offered = getAllByRole(document.body, "menuitem").map((item) =>
+        new URL(item.getAttribute("href") ?? "/", returned.origin).searchParams.get("identity"),
+    );
+    expect(offered).toContain(dailyScope);
+    expect(offered).not.toContain(oldestScope);
+    expect(offered.filter((scope) => scope !== null)).toHaveLength(10);
 });

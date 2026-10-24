@@ -1,9 +1,9 @@
 import { type Identifier, isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
-import { anonymousCredentialsEntry, centralLocalStorage } from "../local-storage/central-local-storage.ts";
+import { anonymousCredentialsEntry } from "../local-storage/central-local-storage.ts";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 import { clearIdentityScope, type IdentityScope, readIdentityScope, writeIdentityScope } from "./identity-scope-url.ts";
-import { forgetComputer, rememberComputer, rememberedComputers } from "./remembered-computers.ts";
+import { forgetComputer, rememberComputer, saveAccess, storedToken } from "./remembered-computers.ts";
 
 const tokenSchema = v.pipe(
     v.string(),
@@ -80,16 +80,16 @@ export class AnonymousIdentityApi {
     /** Validate one access without navigating or changing recency. */
     readonly loadScope = async (scope: IdentityScope, signal: AbortSignal): Promise<AnonymousIdentity | null> => {
         signal.throwIfAborted();
-        const token = readStoredToken(scope.userId);
+        const token = storedToken(scope.userId);
         if (token === null) {
-            this.#forgetScope(scope);
+            forgetComputer(scope);
             return null;
         }
         const identity: AnonymousIdentity = { ...scope, token };
         const session = await this.#anonymousSession(identity, signal);
         signal.throwIfAborted();
         if (session?.userId !== identity.userId) {
-            this.#forgetScope(scope);
+            forgetComputer(scope);
             return null;
         }
         const management = new ManagementApi({
@@ -110,7 +110,7 @@ export class AnonymousIdentityApi {
                 cause instanceof CloudApiError &&
                 (cause.code === "BOT_NOT_FOUND" || cause.status === 401 || cause.status === 403)
             ) {
-                this.#forgetScope(scope);
+                forgetComputer(scope);
                 return null;
             }
             throw cause;
@@ -185,7 +185,7 @@ export class AnonymousIdentityApi {
         );
         const scope = readIdentityScope();
         if (scope !== null) {
-            this.#forgetScope(scope);
+            forgetComputer(scope);
         }
         clearIdentityScope();
         const destination = new URL(window.location.href);
@@ -217,16 +217,9 @@ export class AnonymousIdentityApi {
         this.#saveIdentity(v.parse(identitySchema, identity));
 
     readonly #saveIdentity = (identity: AnonymousIdentity) => {
-        writeStoredToken(identity.userId, identity.token);
-        rememberComputer(identity);
-        writeIdentityScope({ botId: identity.botId, projectId: identity.projectId, userId: identity.userId });
-    };
-
-    readonly #forgetScope = (scope: IdentityScope) => {
-        forgetComputer(scope);
-        if (!rememberedComputers().some((computer) => computer.scope.userId === scope.userId)) {
-            removeStoredToken(scope.userId);
-        }
+        const scope = { botId: identity.botId, projectId: identity.projectId, userId: identity.userId };
+        saveAccess(scope, identity.token);
+        writeIdentityScope(scope);
     };
 
     /** Maps the nested `bot` of an anonymous-user creation response onto the identity. */
@@ -292,36 +285,6 @@ export class AnonymousIdentityApi {
         }
         return value;
     };
-}
-
-function readStoredToken(userId: string): string | null {
-    return centralLocalStorage.read(anonymousCredentialsEntry)?.[userId] ?? null;
-}
-
-function writeStoredToken(userId: string, token: string): void {
-    const existing = centralLocalStorage.read(anonymousCredentialsEntry) ?? {};
-    const updated: Record<string, string> = {};
-    for (const [storedUserId, storedToken] of Object.entries(existing)) {
-        if (storedUserId !== userId) {
-            updated[storedUserId] = storedToken;
-        }
-    }
-    updated[userId] = token;
-    const kept = Object.entries(updated).slice(-10);
-    centralLocalStorage.write(anonymousCredentialsEntry, Object.fromEntries(kept));
-}
-
-function removeStoredToken(userId: string): void {
-    const existing = centralLocalStorage.read(anonymousCredentialsEntry);
-    if (existing === null || !(userId in existing)) {
-        return;
-    }
-    const kept = Object.fromEntries(Object.entries(existing).filter(([storedUserId]) => storedUserId !== userId));
-    if (Object.keys(kept).length === 0) {
-        centralLocalStorage.remove(anonymousCredentialsEntry);
-        return;
-    }
-    centralLocalStorage.write(anonymousCredentialsEntry, kept);
 }
 
 export class IdentityApiError extends Error {

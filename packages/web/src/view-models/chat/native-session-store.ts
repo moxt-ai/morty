@@ -147,7 +147,6 @@ export const createNativeSessionStore = (
                             kind: "failed",
                             message: formatError(cause, "Native sessions are unavailable."),
                         },
-                        error: formatError(cause, "Native sessions are unavailable."),
                     });
                 }
             }
@@ -198,7 +197,6 @@ export const createNativeSessionStore = (
                             entry,
                             message: formatError(cause, "The preview could not be loaded."),
                         },
-                        error: formatError(cause, "The preview could not be loaded."),
                     });
                 }
             }
