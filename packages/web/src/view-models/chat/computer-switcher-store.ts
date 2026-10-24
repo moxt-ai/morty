@@ -3,10 +3,10 @@ import type { BotChatApi, BotRuntimeConfiguration } from "../../services/chat/bo
 import { type AnonymousIdentity, AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
 import type { IdentityScope } from "../../services/identity/identity-scope-url.ts";
 import {
-    computerAddress,
     computerKey,
     rememberComputerName,
     rememberedComputers,
+    resumeComputerAddress,
 } from "../../services/identity/remembered-computers.ts";
 
 import { directoryName } from "./directory-name.ts";
@@ -82,7 +82,7 @@ export function createComputerSwitcher(options: {
                         const choice: ComputerChoice = {
                             key: computerKey(computer.scope),
                             name: computer.name || "Computer",
-                            href: computerAddress(computer.scope, computer.destination),
+                            href: resumeComputerAddress(computer.scope, computer.destination),
                             directory: computer.directory,
                             directoryName: computer.directory === null ? null : directoryName(computer.directory),
                             lastUsedAt: computer.lastUsedAt,

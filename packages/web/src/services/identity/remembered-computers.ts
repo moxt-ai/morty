@@ -95,6 +95,28 @@ export function computerAddress(scope: IdentityScope, destination: ComputerDesti
     return `/chat?${query}`;
 }
 
+/** Marks an address this browser built from what it remembers, rather than a link someone gave the user. */
+const RESUME_PARAMETER = "resume";
+
+/**
+ * The address that continues on a computer where this browser left it. The remembered place is only a hint: if it is
+ * gone, the computer opens at its chat home, as when the user returns through the plain address.
+ */
+export function resumeComputerAddress(scope: IdentityScope, destination: ComputerDestination): string {
+    return `${computerAddress(scope, destination)}&${RESUME_PARAMETER}=1`;
+}
+
+/** Whether an address continues where this browser left a computer; reading it removes the marker from the address. */
+export function takeResumeMarker(): boolean {
+    const address = new URL(window.location.href);
+    if (!address.searchParams.has(RESUME_PARAMETER)) {
+        return false;
+    }
+    address.searchParams.delete(RESUME_PARAMETER);
+    window.history.replaceState(window.history.state, "", address);
+    return true;
+}
+
 /**
  * Everything this browser stores about its access, read entry by entry. Another Morty version may store tokens or
  * computer records this version cannot read; they are kept aside and written back untouched, never dropped.

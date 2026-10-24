@@ -558,3 +558,54 @@ test("Given a computer record this version cannot read whose token it can read, 
     expect(credentials).toMatchObject({ [FUTURE_USER_ID]: theirToken });
     expect(Object.keys(credentials)).toHaveLength(10);
 });
+
+test("Given a computer whose remembered conversation was closed elsewhere, When I switch to it from another computer, Then it opens at its chat home", {
+    timeout: 30_000,
+}, async () => {
+    const first = await createTestApp({ connectAgent: true });
+    const closedSession = await startConversation(first, "Closed on another device");
+    const firstScope = encodeIdentityScope({
+        botId: first.botId,
+        projectId: first.identity.projectId,
+        userId: first.userId,
+    });
+    const signal = AbortSignal.timeout(10_000);
+    const archived = await first.transport.fetch(
+        new Request(
+            `${first.origin}/morty/api/chat/projects/${first.identity.projectId}/bots/${first.botId}/managed-session/archive`,
+            {
+                method: "POST",
+                headers: {
+                    authorization: `Bearer ${await first.identity.getToken(signal)}`,
+                    "content-type": "application/json",
+                },
+                body: JSON.stringify({ sessionId: closedSession }),
+                signal,
+            },
+        ),
+    );
+    expect(archived.status).toBe(200);
+    await first.close();
+    const second = await createTestApp({ connectAgent: true });
+    await startConversation(second, "Work on the other computer");
+
+    await second.user.click(
+        await second.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ })),
+    );
+    const firstLink = await second.waitForView(() => {
+        const item = getAllByRole(document.body, "menuitem").find(
+            (item) =>
+                new URL(item.getAttribute("href") ?? "/", second.origin).searchParams.get("identity") === firstScope,
+        );
+        if (!(item instanceof HTMLAnchorElement)) {
+            throw new Error("Waiting for the first computer");
+        }
+        return item;
+    });
+    window.location.href = firstLink.href;
+    const switched = await second.reload();
+    await switched.waitForView(() => getByRole(document.body, "textbox", { name: "Message" }));
+    await switched.waitForView(() => expect(new URL(window.location.href).searchParams.has("sessionId")).toBe(false));
+    expect(new URL(window.location.href).searchParams.get("identity")).toBe(firstScope);
+    expect(document.body.textContent).not.toContain("Your Chat session was not found");
+});
