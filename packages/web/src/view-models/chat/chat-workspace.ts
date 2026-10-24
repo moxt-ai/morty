@@ -426,14 +426,14 @@ export function createChatWorkspace(options: {
             );
             rememberedSessionId = sessionId;
         }
-        const creation = home.getState().creation;
+        const firstMessage = home.getState().firstMessages.get(sessionId);
         const model = createSessionPaneModel({
             clock: options.clock,
             session: selection.session,
             botId,
             requests,
-            initialMessage: creation.kind === "initial-message-pending" ? creation.message : undefined,
-            unconfirmedMessage: creation.kind === "initial-message-unconfirmed" ? creation.journal : undefined,
+            initialMessage: firstMessage?.kind === "pending" ? firstMessage.message : undefined,
+            unconfirmedMessage: firstMessage?.kind === "unconfirmed" ? firstMessage.journal : undefined,
             onInitialMessageDelivered: () => home.getState().initialMessageDelivered(sessionId),
             onInitialMessageRecoveryCleared: (commandId) =>
                 home.getState().initialMessageRecoveryCleared(sessionId, commandId),

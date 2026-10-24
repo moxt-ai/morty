@@ -283,7 +283,7 @@ export function BotChatHome({
                                 onDraftChange={store.getState().setDraft}
                                 onStop={() => {}}
                                 onSubmit={() => {
-                                    void store.getState().createConversation(workspace.chatSignal());
+                                    void store.getState().createConversation(workspace.operationsSignal());
                                 }}
                                 outputState="idle"
                                 submitDisabled={
