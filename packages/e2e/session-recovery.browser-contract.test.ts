@@ -396,7 +396,7 @@ test("Given an active turn on mobile, when the browser goes offline and the user
     const composer = page.getByRole("textbox", { name: "Message" });
     await composer.fill("wait for steering");
     await page.getByRole("button", { name: "Send message" }).click();
-    await expect(page.getByTestId(dataTestId.sessionStatus)).toBeVisible();
+    await expect(page.getByRole("status", { name: "Agent is working" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Stop agent output" })).toBeEnabled();
     await page.context().setOffline(true);
     await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toContainText("No network connection");
