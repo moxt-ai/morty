@@ -559,9 +559,15 @@ async function setupMachine(
     runtime: ControlledSetupRuntime,
     paths: { readonly origin: string; readonly documents: string; readonly workspace: string },
     deadline?: (milliseconds: number) => AbortSignal,
+    run: {
+        readonly harness?: string;
+        /** The user stops setup as soon as it reports this status. */
+        readonly interruptAt?: string;
+    } = {},
 ): Promise<{ readonly code: number; readonly events: readonly Readonly<Record<string, unknown>>[] }> {
     const events: Readonly<Record<string, unknown>>[] = [];
     let time = Date.parse("2026-10-22T12:00:00Z");
+    const interrupt = new AbortController();
     const code = await runSetup(
         [
             "setup",
@@ -570,15 +576,20 @@ async function setupMachine(
             "--cwd",
             paths.workspace,
             "--harness",
-            "settings-test",
+            run.harness ?? "settings-test",
             "--session-id",
             "native-upgrade-project",
         ],
         {
             documents: paths.documents,
-            signal: AbortSignal.timeout(55_000),
+            signal: AbortSignal.any([interrupt.signal, AbortSignal.timeout(55_000)]),
             runtime,
-            emit: (event) => events.push(event),
+            emit: (event) => {
+                events.push(event);
+                if (run.interruptAt !== undefined && event["status"] === run.interruptAt) {
+                    interrupt.abort(new Error("The user stopped setup."));
+                }
+            },
             clock: {
                 now: () => new Date(time),
                 wait: async (milliseconds, signal) => {
@@ -635,6 +646,38 @@ test("Given a paired machine whose online daemon runs a previous release, When t
         expect(rerun.events).toContainEqual(expect.objectContaining({ status: "runtime_already_online" }));
         expect(rerun.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
         expect(runtime.daemonRelease()).toBe("current");
+    });
+});
+
+test("Given setup was stopped after pairing its Runtime, When the user runs setup again and again, Then each run continues on that Runtime and setup finishes", {
+    timeout: 120_000,
+}, async () => {
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        // A Project holds at most eight Runtimes; each stopped run must not leave another one behind.
+        for (let attempt = 1; attempt <= 8; attempt += 1) {
+            const stopped = await setupMachine(runtime, paths, undefined, { interruptAt: "runtime_paired" });
+            expect(stopped.code, JSON.stringify(stopped.events)).not.toBe(0);
+        }
+        const finished = await setupMachine(runtime, paths);
+        expect(finished.code, JSON.stringify(finished.events)).toBe(0);
+        expect(finished.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
+    });
+});
+
+test("Given the chosen harness is not installed, When the user reruns setup with it, Then each run reports it unavailable and setup finishes once an installed harness is chosen", {
+    timeout: 120_000,
+}, async () => {
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        for (let attempt = 1; attempt <= 8; attempt += 1) {
+            const failed = await setupMachine(runtime, paths, undefined, { harness: "pi" });
+            expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
+            expect(failed.events).toContainEqual(
+                expect.objectContaining({ status: "harness_unavailable", harness: "pi", available: ["settings-test"] }),
+            );
+        }
+        const finished = await setupMachine(runtime, paths);
+        expect(finished.code, JSON.stringify(finished.events)).toBe(0);
+        expect(finished.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
     });
 });
 

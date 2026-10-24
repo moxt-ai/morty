@@ -355,6 +355,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                               "bot_id",
                               "agent_ref",
                               "agent_config_revision",
+                              "pairing_runtime_id",
                           ].includes(key),
                       ),
                   );
@@ -635,6 +636,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             // The replacement Machine starts unbound; drop the previous Machine's Agent binding.
             agent_ref: undefined,
             agent_config_revision: undefined,
+            pairing_runtime_id: undefined,
             entry: "setup",
         });
         emit({ status: "project_replaced", botId: saved.config["bot_id"], projectId: saved.config["project_id"] });
@@ -649,9 +651,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         progress("pairing", "Preparing the Runtime connection.");
         const project = await request(context, "/management/project");
         const appId = identifier(project["appId"]);
-        if (expectedRuntimeId !== null) {
+        const reusable = async (runtimeId: string) => {
             const existing = (await listManagedConnections(context, cwd)).find(
-                (connection) => connection.appId === appId && connection.runtimeId === expectedRuntimeId,
+                (connection) => connection.appId === appId && connection.runtimeId === runtimeId,
             );
             if (existing !== undefined) {
                 emit({
@@ -659,14 +661,41 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     runtimeId: existing.runtimeId,
                     connectionId: existing.connectionId,
                 });
+            }
+            return existing;
+        };
+        if (expectedRuntimeId !== null) {
+            const existing = await reusable(expectedRuntimeId);
+            if (existing !== undefined) {
                 return { context, runtime: { kind: "existing", ...existing } };
             }
             // The saved Machine's Runtime is not managed here anymore: keep the user, but
             // continue on a fresh Project with a fresh Machine and a new Runtime pairing.
             const replaced = await replaceProject(context);
-            return { context: replaced, runtime: await createRuntimePairing(replaced, appId) };
+            return await pairRuntime(replaced, appId);
         }
-        return { context, runtime: await createRuntimePairing(context, appId) };
+        // The Machine is unbound. A Runtime an earlier run paired for it still holds one of the Project's Runtime
+        // slots, so continue on it while this machine still manages its connection.
+        const pairing = context.config["pairing_runtime_id"];
+        if (typeof pairing === "string") {
+            const existing = await reusable(pairing);
+            if (existing !== undefined) {
+                return { context, runtime: { kind: "existing", ...existing } };
+            }
+        }
+        return await pairRuntime(context, appId);
+    }
+
+    /**
+     * Pairs a new Runtime for the unbound Machine. The Runtime is recorded before its code is redeemed, so a run that
+     * stops at any later point leaves the next run a Runtime to continue on rather than another one to pair.
+     */
+    async function pairRuntime(
+        context: Context,
+        appId: string,
+    ): Promise<{ readonly context: Context; readonly runtime: RuntimeSelection }> {
+        const runtime = await createRuntimePairing(context, appId);
+        return { context: await saveConfiguration(context, { pairing_runtime_id: runtime.runtimeId }), runtime };
     }
 
     function runtimeArguments(runtime: RuntimeSelection, cwd: string): readonly string[] {
@@ -772,20 +801,33 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         );
     }
 
-    function setupHasOnlineRuntimeAgent(setup: Record<string, unknown>, runtimeId: string, agentRef: string): boolean {
-        return (
-            Array.isArray(setup["runtimes"]) &&
-            setup["runtimes"].some((runtime) => hasOnlineRuntimeAgent(object(runtime), runtimeId, agentRef))
-        );
-    }
-
-    async function runtimeIsOnline(context: Context, runtime: RuntimeSelection, harness: string): Promise<boolean> {
+    /** The Agents the Runtime offers while it is online, or null while it is not. */
+    async function onlineRuntimeAgents(context: Context, runtime: RuntimeSelection): Promise<readonly string[] | null> {
         const botPath = `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}`;
         const alreadyConfigured = runtime.kind === "existing" && typeof context.config["agent_ref"] === "string";
         const state = await request(context, `${botPath}/${alreadyConfigured ? "workspace" : "setup/runtimes"}`, {});
-        return alreadyConfigured
-            ? hasOnlineRuntimeAgent(object(state["runtime"]), runtime.runtimeId, harness)
-            : setupHasOnlineRuntimeAgent(state, runtime.runtimeId, harness);
+        const candidates = alreadyConfigured
+            ? [object(state["runtime"])]
+            : Array.isArray(state["runtimes"])
+              ? state["runtimes"].map(object)
+              : [];
+        const current = candidates.find(
+            (candidate) => candidate["runtimeId"] === runtime.runtimeId && candidate["online"] === true,
+        );
+        if (current === undefined || !Array.isArray(current["agents"])) {
+            return null;
+        }
+        return current["agents"].map((agent) => identifier(object(agent)["agentRef"]));
+    }
+
+    async function runtimeIsOnline(context: Context, runtime: RuntimeSelection, harness: string): Promise<boolean> {
+        return (await onlineRuntimeAgents(context, runtime))?.includes(harness) === true;
+    }
+
+    /** One rule for every Runtime setup waits on: an online Runtime without the chosen harness cannot run it. */
+    function harnessUnavailable(harness: string, available: readonly string[]): never {
+        emit({ status: "harness_unavailable", harness, available });
+        fail("HARNESS_UNAVAILABLE");
     }
 
     async function waitForRuntime(context: Context, runtime: RuntimeSelection, harness: string) {
@@ -809,12 +851,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                         emit({ status: "runtime_paired", runtimeId, harness });
                         break;
                     }
-                    emit({
-                        status: "harness_unavailable",
+                    harnessUnavailable(
                         harness,
-                        available: status["agents"].map((agent) => identifier(object(agent)["id"])),
-                    });
-                    fail("HARNESS_UNAVAILABLE");
+                        status["agents"].map((agent) => identifier(object(agent)["id"])),
+                    );
                 }
                 await clock.wait(1000, signal);
             }
@@ -823,13 +863,16 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         attempts = 0;
         while (true) {
             signal.throwIfAborted();
-            const online = await runtimeIsOnline(context, runtime, harness);
-            if (online) {
+            const agents = await onlineRuntimeAgents(context, runtime);
+            if (agents?.includes(harness) === true) {
                 if (runtime.kind === "existing") {
                     emit({ status: "runtime_paired", runtimeId, harness });
                 }
                 emit({ status: "runtime_online", runtimeId, harness });
                 return;
+            }
+            if (agents !== null) {
+                harnessUnavailable(harness, agents);
             }
             if (attempts++ % 10 === 0) {
                 progress("runtime", `Waiting for the Runtime and ${harness} to come online.`);
@@ -854,7 +897,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 agentRef,
             },
         );
-        const saved = await saveConfiguration(context, { agent_ref: agentRef, agent_config_revision: revision });
+        // The Machine now owns its Runtime, so the pairing record is no longer needed.
+        const saved = await saveConfiguration(context, {
+            agent_ref: agentRef,
+            agent_config_revision: revision,
+            pairing_runtime_id: undefined,
+        });
         emit({ status: "binding_activated", botId: context.config["bot_id"], harness });
         return saved;
     }

@@ -179,7 +179,12 @@ export class ControlledSetupRuntime implements SetupRuntime {
         }
     }
 
+    /**
+     * Like the manager's daemon, a connection runs in the background: the command that starts it can be cancelled,
+     * but only `disconnect` stops the daemon once it runs.
+     */
     async #connect(connection: Connection, signal: AbortSignal): Promise<void> {
+        signal.throwIfAborted();
         if (this.#active.has(connection.connection_id)) {
             return;
         }
@@ -190,7 +195,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
                 origin: connection.origin,
                 runtimeCredential: connection.credential,
             },
-            signal,
+            signal: new AbortController().signal,
         });
         this.#active.set(connection.connection_id, daemon);
         void daemon.failure.catch((error: unknown) => {
