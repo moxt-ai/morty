@@ -28,7 +28,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
     readonly #failed = Promise.withResolvers<never>();
     readonly failure = this.#failed.promise;
 
-    readonly #options: ControlledAgentBehavior;
+    #options: ControlledAgentBehavior;
     readonly #machineName: string;
     #upgrade: ControlledUpgrade;
     #release: NonNullable<ControlledAgentBehavior["runtime"]>;
@@ -112,6 +112,19 @@ export class ControlledSetupRuntime implements SetupRuntime {
         this.#saved.set(connection.connection_id, connection);
         await this.#connect(connection, signal);
         return result;
+    };
+
+    /**
+     * Installs other Agents on the machine. Like the manager after an install, running connections restart and
+     * publish the new catalog once they reconnect; later connections offer the same Agents.
+     */
+    readonly installAgents = async (
+        agents: Pick<ControlledAgentBehavior, "additionalAgents" | "agentId" | "agentName">,
+    ): Promise<void> => {
+        this.#options = { ...this.#options, ...agents };
+        for (const daemon of this.#active.values()) {
+            await daemon.restartWithAgents(agents);
+        }
     };
 
     /** Changes how later `mobius upgrade` runs behave, such as when the registry becomes reachable. */

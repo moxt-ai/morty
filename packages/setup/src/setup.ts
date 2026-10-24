@@ -179,6 +179,10 @@ function serializeErrorCause(cause: unknown, seen = new WeakSet<object>()): Erro
 // of its 300 second budget.
 const RUNTIME_UPGRADE_BUDGET_MILLISECONDS = 180_000;
 
+// A Runtime comes online while it still republishes its harness catalog, so the catalog an existing Runtime shows
+// right after it starts may predate an install. A new pairing carries the catalog it was redeemed with instead.
+const HARNESS_CATALOG_GRACE_MILLISECONDS = 30_000;
+
 export async function runSetup(args: readonly string[], host: SetupHost): Promise<number> {
     const signal = AbortSignal.any([host.signal, AbortSignal.timeout(300000)]);
     const clock = host.clock ?? {
@@ -861,6 +865,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
 
         attempts = 0;
+        // When the online Runtime was first seen without the harness. Only a catalog that stayed without it through
+        // the grace period means the harness is not installed.
+        let missingSince: number | null = null;
         while (true) {
             signal.throwIfAborted();
             const agents = await onlineRuntimeAgents(context, runtime);
@@ -871,8 +878,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 emit({ status: "runtime_online", runtimeId, harness });
                 return;
             }
-            if (agents !== null) {
-                harnessUnavailable(harness, agents);
+            if (agents === null) {
+                missingSince = null;
+            } else {
+                const now = clock.now().getTime();
+                missingSince ??= now;
+                if (now - missingSince >= HARNESS_CATALOG_GRACE_MILLISECONDS) {
+                    harnessUnavailable(harness, agents);
+                }
             }
             if (attempts++ % 10 === 0) {
                 progress("runtime", `Waiting for the Runtime and ${harness} to come online.`);

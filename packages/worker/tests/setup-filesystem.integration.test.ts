@@ -563,6 +563,8 @@ async function setupMachine(
         readonly harness?: string;
         /** The user stops setup as soon as it reports this status. */
         readonly interruptAt?: string;
+        /** Runs before setup's clock moves on, with every event setup reported so far. */
+        readonly whileWaiting?: (events: readonly Readonly<Record<string, unknown>>[]) => Promise<void>;
     } = {},
 ): Promise<{ readonly code: number; readonly events: readonly Readonly<Record<string, unknown>>[] }> {
     const events: Readonly<Record<string, unknown>>[] = [];
@@ -594,6 +596,7 @@ async function setupMachine(
                 now: () => new Date(time),
                 wait: async (milliseconds, signal) => {
                     signal.throwIfAborted();
+                    await run.whileWaiting?.(events);
                     time += milliseconds;
                 },
                 ...(deadline === undefined ? {} : { deadline }),
@@ -613,13 +616,15 @@ async function withUpgradeMachine(
         runtime: ControlledSetupRuntime,
         paths: { readonly origin: string; readonly documents: string; readonly workspace: string },
     ) => Promise<void>,
+    /** The daemon release the machine runs before setup. Only the current release can run Agents other than settings. */
+    release: "previous" | "current" = "previous",
 ): Promise<void> {
     const root = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-upgrade-")));
     const workspace = join(root, "workspace");
     await mkdir(workspace, { recursive: true });
     const fixture = await createIdentityFixture({ listenOnLoopback: true });
     const runtime = new ControlledSetupRuntime(
-        { agentId: "settings-test", agentName: "Settings Agent", reply: mortyReply, runtime: "previous" },
+        { agentId: "settings-test", agentName: "Settings Agent", reply: mortyReply, runtime: release },
         "Setup test Runtime",
         upgrade,
     );
@@ -679,6 +684,40 @@ test("Given the chosen harness is not installed, When the user reruns setup with
         expect(finished.code, JSON.stringify(finished.events)).toBe(0);
         expect(finished.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
     });
+});
+
+test("Given setup continues on a Runtime that does not offer the chosen harness yet, When the user installs it while setup waits, Then setup finishes once the Runtime publishes it", {
+    timeout: 120_000,
+}, async () => {
+    await withUpgradeMachine(
+        "unavailable",
+        async (runtime, paths) => {
+            const missing = await setupMachine(runtime, paths, undefined, { harness: "pi" });
+            expect(missing.code, JSON.stringify(missing.events)).not.toBe(0);
+
+            // The Runtime is online with its earlier catalog until it republishes the newly installed harness.
+            let installing: Promise<void> | null = null;
+            const installed = await setupMachine(runtime, paths, undefined, {
+                harness: "pi",
+                whileWaiting: async (events) => {
+                    if (events.some((event) => event["status"] === "runtime_reused") && installing === null) {
+                        installing = runtime.installAgents({
+                            agentId: "pi",
+                            agentName: "Pi",
+                            additionalAgents: [{ id: "settings-test", name: "Settings Agent" }],
+                        });
+                    }
+                    await installing;
+                },
+            });
+            expect(installed.code, JSON.stringify(installed.events)).toBe(0);
+            expect(installed.events).toContainEqual(
+                expect.objectContaining({ status: "runtime_online", harness: "pi" }),
+            );
+            expect(installed.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
+        },
+        "current",
+    );
 });
 
 test("Given a machine runs a previous daemon release and no upgrade is reachable, When setup prepares the Runtime, Then setup completes on the running release and reports why", {
