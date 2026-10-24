@@ -18,6 +18,22 @@ async function requestInput(prompt = "request user input") {
     return app;
 }
 
+test("Given the agent asks a question, When the user reads and answers it, Then Chat shows a waiting status instead of working and clears it after the answer", {
+    timeout: 30_000,
+}, async () => {
+    const app = await requestInput();
+    await app.user.click(getByRole(document.body, "button", { name: "Allow: Yes" }));
+    const form = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Agent information request" }));
+    expect(getByRole(form, "status", { name: "Waiting for your answer" }).textContent).toBe("Waiting for your answer");
+    expect(queryByRole(document.body, "status", { name: "Agent is working" })).toBeNull();
+
+    await app.user.type(getByRole(form, "textbox", { name: "Branch" }), "feature/answer-status");
+    await app.user.click(getByRole(form, "button", { name: "Continue" }));
+    await app.waitForView(() => expect(document.body.textContent).toContain("Selected branch: feature/answer-status"));
+    expect(queryByRole(document.body, "status", { name: "Waiting for your answer" })).toBeNull();
+    expect(queryByRole(document.body, "dialog", { name: "Agent information request" })).toBeNull();
+});
+
 test("Given a pending permission, When Chat remounts and the user allows it and answers the form, Then the agent receives the answer and both cards disappear", {
     timeout: 30_000,
 }, async () => {

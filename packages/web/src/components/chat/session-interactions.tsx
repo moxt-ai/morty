@@ -258,9 +258,17 @@ function ElicitationCard({
                     <HelpCircle className="size-4" />
                 </span>
                 <div className="min-w-0 flex-1">
-                    <p className="text-base leading-6 font-semibold text-foreground">
-                        {answered ? "Asked" : "Agent needs input"}
-                    </p>
+                    {answered ? (
+                        <p className="text-base leading-6 font-semibold text-foreground">Asked</p>
+                    ) : (
+                        <p
+                            aria-label="Waiting for your answer"
+                            className="text-base leading-6 font-semibold text-foreground"
+                            role="status"
+                        >
+                            Waiting for your answer
+                        </p>
+                    )}
                     <p className="mt-1 text-sm leading-6 text-foreground">{elicitation.message}</p>
                     {elicitation.mode === "url" ? (
                         <div className="mt-2.5">
