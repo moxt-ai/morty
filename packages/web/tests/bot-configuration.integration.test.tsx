@@ -296,3 +296,33 @@ test("Given a Bot paired with Pi, When the user opens its settings and sends a p
         return reply;
     });
 });
+
+test("Given another tab saved a recent directory while this tab's menu was open, When the user forgets a directory here and reopens the menu, Then the other tab's directory remains", {
+    timeout: 30_000,
+}, async () => {
+    const key = (botId: string) => `mobius:recent-cwd:${encodeURIComponent(botId)}`;
+    const here = { directoryId: "directory-here", directoryLabel: "/project-here" };
+    const there = { directoryId: "directory-there", directoryLabel: "/project-from-another-tab" };
+    const app = await createTestApp({
+        connectAgent: true,
+        prepare: (current) => window.localStorage.setItem(key(current.botId), JSON.stringify([here])),
+    });
+    const recent = (label: string) =>
+        app.elementsByTestId(dataTestId.recentWorkingDirectory).some((item) => item.textContent?.includes(label));
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.workingDirectory));
+    await app.waitForView(() => expect(recent("/project-here")).toBe(true));
+    // Another tab of the same Bot saves a directory through the same storage.
+    window.localStorage.setItem(key(app.botId), JSON.stringify([there, here]));
+    await app.user.click(
+        await app.queryElementByTestId(
+            dataTestId.forgetRecentWorkingDirectory,
+            (element) => element.getAttribute("aria-label")?.includes("/project-here") === true,
+        ),
+    );
+    await app.user.keyboard("{Escape}");
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.workingDirectory));
+    await app.waitForView(() => expect(recent("/project-from-another-tab")).toBe(true));
+    expect(recent("/project-here")).toBe(false);
+});

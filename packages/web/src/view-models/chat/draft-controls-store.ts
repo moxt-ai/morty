@@ -216,11 +216,10 @@ export const createDraftControlsStore = (
         ): readonly RecentCwdPreference[] => {
             const selected = settings.selectedAgent;
             saveLastCwdPreference(botId, selected.runtimeId, selected.agentRef, directory.directoryId);
-            return saveRecentCwdPreference(
-                botId,
-                { directoryId: directory.directoryId, directoryLabel: directory.directoryLabel },
-                get().recentCwds,
-            );
+            return saveRecentCwdPreference(botId, {
+                directoryId: directory.directoryId,
+                directoryLabel: directory.directoryLabel,
+            });
         };
         const applyDirectory = (settings: ReadyDraftSettings, directory: WorkspaceEntriesEvent): void => {
             const ready = { ...settings, cwd: directory };
@@ -255,11 +254,10 @@ export const createDraftControlsStore = (
             saveLastCwdPreference(botId, selectedAgent.runtimeId, selectedAgent.agentRef, cwd.directoryId);
             const recentCwds =
                 existingRecentCwds === null
-                    ? saveRecentCwdPreference(
-                          botId,
-                          { directoryId: cwd.directoryId, directoryLabel: cwd.directoryLabel },
-                          [],
-                      )
+                    ? saveRecentCwdPreference(botId, {
+                          directoryId: cwd.directoryId,
+                          directoryLabel: cwd.directoryLabel,
+                      })
                     : existingRecentCwds;
             set({ settings: ready, recentCwds });
             publishSettings(ready);
@@ -443,9 +441,7 @@ export const createDraftControlsStore = (
                 if (selected === null || !recentCwds.some((directory) => directory.directoryId === directoryId)) {
                     return;
                 }
-                set({
-                    recentCwds: forgetRecentCwdPreference(botId, directoryId, recentCwds),
-                });
+                set({ recentCwds: forgetRecentCwdPreference(botId, directoryId) });
             },
             load,
             runtimeChanged: async (configuration, signal) => {
@@ -482,7 +478,13 @@ export const createDraftControlsStore = (
                     set({ cwdBrowser: { kind: "ready", directory: settings.cwd, path: settings.cwd.directoryLabel } });
                 }
             },
-            setCwdMenuOpen: (open) => set({ cwdMenuOpen: open }),
+            // The menu shows the recent directories as storage holds them now, including another tab's changes.
+            setCwdMenuOpen: (open) =>
+                set(
+                    open
+                        ? { cwdMenuOpen: true, recentCwds: readRecentCwdPreferences(botId) ?? [] }
+                        : { cwdMenuOpen: false },
+                ),
             refreshAgentSettings: async (signal) => {
                 const settings = get().settings;
                 if (settings.kind === "ready") {

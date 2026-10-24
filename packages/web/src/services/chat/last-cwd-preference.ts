@@ -12,11 +12,12 @@ export function readRecentCwdPreferences(botId: string): readonly RecentCwdPrefe
     return centralLocalStorage.read(recentCwdEntry(botId));
 }
 
-export function saveRecentCwdPreference(
-    botId: string,
-    directory: RecentCwdPreference,
-    existing: readonly RecentCwdPreference[],
-): readonly RecentCwdPreference[] {
+/**
+ * Storage owns the recent directories, which every tab of the Bot shares: a change starts from what storage holds now,
+ * never from a copy a tab read earlier, so it cannot drop or bring back another tab's change.
+ */
+export function saveRecentCwdPreference(botId: string, directory: RecentCwdPreference): readonly RecentCwdPreference[] {
+    const existing = readRecentCwdPreferences(botId) ?? [];
     if (
         !isDirectoryIdentifier(directory.directoryId) ||
         directory.directoryLabel.length === 0 ||
@@ -32,12 +33,10 @@ export function saveRecentCwdPreference(
     return recent;
 }
 
-export function forgetRecentCwdPreference(
-    botId: string,
-    directoryId: string,
-    existing: readonly RecentCwdPreference[],
-): readonly RecentCwdPreference[] {
-    const recent = existing.filter((preference) => preference.directoryId !== directoryId);
+export function forgetRecentCwdPreference(botId: string, directoryId: string): readonly RecentCwdPreference[] {
+    const recent = (readRecentCwdPreferences(botId) ?? []).filter(
+        (preference) => preference.directoryId !== directoryId,
+    );
     centralLocalStorage.write(recentCwdEntry(botId), recent);
     return recent;
 }

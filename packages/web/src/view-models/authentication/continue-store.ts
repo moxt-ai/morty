@@ -1,11 +1,7 @@
 import { isIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
 import { BotChatApi } from "@/services/chat/bot-chat-api";
-import {
-    readRecentCwdPreferences,
-    saveLastCwdPreference,
-    saveRecentCwdPreference,
-} from "@/services/chat/last-cwd-preference";
+import { saveLastCwdPreference, saveRecentCwdPreference } from "@/services/chat/last-cwd-preference";
 import { pathDirectoryId } from "@/services/chat/workspace-directory-reference";
 import { type DaemonDiagnosticsSource, recordBrowserError } from "@/services/diagnostics/browser-diagnostics";
 import {
@@ -193,11 +189,10 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                         handoff.harness,
                         directory.directoryId,
                     );
-                    saveRecentCwdPreference(
-                        identity.botId,
-                        { directoryId: directory.directoryId, directoryLabel: directory.directoryLabel },
-                        readRecentCwdPreferences(identity.botId) ?? [],
-                    );
+                    saveRecentCwdPreference(identity.botId, {
+                        directoryId: directory.directoryId,
+                        directoryLabel: directory.directoryLabel,
+                    });
                 }
                 const session = await chat.continueNativeSession(
                     identity.botId,
