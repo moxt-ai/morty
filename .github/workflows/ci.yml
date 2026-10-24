@@ -144,6 +144,43 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  e2e:
+    name: Browser e2e (${{ matrix.shard }})
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each journey starts two Wrangler Workers and a local Runtime, so a shard runs one journey at a time and
+        # the suite spreads across shards.
+        shard: [1/4, 2/4, 3/4, 4/4]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+        with:
+          mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
+
+      - name: Install browsers
+        run: pnpm --filter @moxt-ai/morty-e2e exec playwright install --with-deps chromium webkit
+
+      - name: Run browser journeys
+        run: pnpm test:e2e --shard="$E2E_SHARD"
+        env:
+          E2E_SHARD: ${{ matrix.shard }}
+
+      - name: Save failed journey results
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: e2e-results-${{ strategy.job-index }}
+          path: packages/e2e/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
   coverage:
     name: Merge coverage
     needs: [tests]
@@ -177,7 +214,7 @@ jobs:
 
   check:
     name: check
-    needs: [static, tests, coverage]
+    needs: [static, tests, coverage, e2e]
     if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -187,10 +224,12 @@ jobs:
           test "$STATIC_RESULT" = success
           test "$TESTS_RESULT" = success
           test "$COVERAGE_RESULT" = success
+          test "$E2E_RESULT" = success
         env:
           STATIC_RESULT: ${{ needs.static.result }}
           TESTS_RESULT: ${{ needs.tests.result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
 
   deploy:
     needs: [validate-worker-config]

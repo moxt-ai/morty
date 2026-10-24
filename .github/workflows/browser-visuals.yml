@@ -24,7 +24,7 @@ jobs:
         run: pnpm --filter @moxt-ai/morty-e2e exec playwright install --with-deps chromium
 
       - name: Verify agent text and source line alignment
-        run: pnpm test:e2e conversation.e2e.test.ts --grep 'grayer|linked TypeScript'
+        run: pnpm test:e2e conversation.e2e.test.ts --grep 'grayer'
 
       - name: Save browser screenshots
         if: ${{ !cancelled() }}
