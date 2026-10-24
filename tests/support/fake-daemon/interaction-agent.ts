@@ -93,6 +93,8 @@ export function createInteractionAgent() {
                                             maxLength: 10_000,
                                             _meta: { "io.mobius/multiline": true },
                                         },
+                                        nickname: { type: "string", title: "Optional nickname", minLength: 1 },
+                                        code: { type: "string", title: "Optional code", pattern: "^[A-Z]+$" },
                                     },
                                     required: ["name", "draft"],
                                 },

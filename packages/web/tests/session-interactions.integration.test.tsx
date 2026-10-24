@@ -19,7 +19,7 @@ async function requestInput(prompt = "request user input") {
 }
 
 for (const empty of [false, true]) {
-    test(`Given an agent requests text and a multiline draft, When the user ${empty ? "clears" : "edits"} both answers, Then the exact text reaches the agent`, {
+    test(`Given an agent requests text and a multiline draft, When the user ${empty ? "clears" : "edits"} both answers and skips optional constrained strings, Then the exact text reaches the agent without optional values`, {
         timeout: 30_000,
     }, async () => {
         const app = await createTestApp({
@@ -36,6 +36,8 @@ for (const empty of [false, true]) {
         );
         const name = getByRole(form, "textbox", { name: "Name" });
         const draft = getByRole(form, "textbox", { name: "Draft" });
+        expect(getByRole(form, "textbox", { name: "Optional nickname" })).toBeDefined();
+        expect(getByRole(form, "textbox", { name: "Optional code" })).toBeDefined();
         expect(draft).toBeInstanceOf(HTMLTextAreaElement);
         if (!(draft instanceof HTMLTextAreaElement)) {
             throw new Error("Expected a multiline editor");
