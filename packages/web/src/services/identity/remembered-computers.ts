@@ -106,15 +106,21 @@ export function resumeComputerAddress(scope: IdentityScope, destination: Compute
     return `${computerAddress(scope, destination)}&${RESUME_PARAMETER}=1`;
 }
 
-/** Whether an address continues where this browser left a computer; reading it removes the marker from the address. */
-export function takeResumeMarker(): boolean {
+/** Whether the address continues where this browser left a computer. */
+export function resumesComputer(): boolean {
+    return new URL(window.location.href).searchParams.has(RESUME_PARAMETER);
+}
+
+/**
+ * Removes the resume marker once the computer opened. Until then it stays, so a retry after a failed attempt, or a
+ * reload, still continues where this browser left the computer.
+ */
+export function settleResumedComputer(): void {
     const address = new URL(window.location.href);
-    if (!address.searchParams.has(RESUME_PARAMETER)) {
-        return false;
+    if (address.searchParams.has(RESUME_PARAMETER)) {
+        address.searchParams.delete(RESUME_PARAMETER);
+        window.history.replaceState(window.history.state, "", address);
     }
-    address.searchParams.delete(RESUME_PARAMETER);
-    window.history.replaceState(window.history.state, "", address);
-    return true;
 }
 
 /**
