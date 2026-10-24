@@ -111,3 +111,56 @@ test("Given a configured conversation on a Runtime released before settings read
     );
     expect(reloaded.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large");
 });
+
+test("Given the Agent changed its model during a turn and the user then picked another, When the user reopens the conversation, Then it shows and keeps the model the user picked", {
+    timeout: 60_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    if (app.daemon === null) {
+        throw new Error("Expected the connected Runtime");
+    }
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    // The Agent switches its own model during a turn, as Claude Code does on entering plan mode.
+    await sendPrompt(app, composer, "hold after first delta");
+    await app.daemon.continueReply("hold after first delta", {
+        outcome: "complete",
+        output: [
+            {
+                kind: "agent-config",
+                configOptions: [
+                    {
+                        category: "model",
+                        currentValue: "test-large",
+                        id: "model",
+                        name: "Model",
+                        options: [
+                            { name: "Test Small", value: "test-small" },
+                            { name: "Test Large", value: "test-large" },
+                        ],
+                        type: "select",
+                    },
+                ],
+            },
+        ],
+    });
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large"),
+    );
+    await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
+    await openAgentModelPicker(app);
+    await app.user.click(await app.queryElementByTestId(dataTestId.sessionConfigValue("test-small")));
+    await app.user.keyboard("{Escape}");
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Small"),
+    );
+
+    const reloaded = await app.reload();
+    // The history, which still records the Agent's own switch, has loaded.
+    await reloaded.waitForView(() =>
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain("hold after first delta"),
+    );
+    expect(reloaded.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Small");
+});
