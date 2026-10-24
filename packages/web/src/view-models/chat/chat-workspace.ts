@@ -159,7 +159,7 @@ export function createChatWorkspace(options: {
         botId,
         now: options.clock.now,
         onRuntimeConfigurationUnavailable: () => options.computers?.invalidateCurrent(),
-        onWaitingForRuntime: () => runtimeRecovery.settled(),
+        onWaitingForRuntime: () => runtimeRecovery.failed(),
         createId: () => crypto.randomUUID(),
         navigation: historyNavigation(recordHome),
         entry: options.entry ?? "address",
@@ -209,7 +209,7 @@ export function createChatWorkspace(options: {
                 paneEntry.model.store.getState().sessionClosed(reason);
             }
         },
-        () => runtimeRecovery.settled(),
+        () => runtimeRecovery.failed(),
     );
     const draftControls = createDraftControlsStore(
         botId,
@@ -309,8 +309,8 @@ export function createChatWorkspace(options: {
             .load(signal)
             .catch(() => undefined)
             .finally(() => {
-                if (!signal.aborted) {
-                    runtimeRecovery.settled();
+                if (!signal.aborted && listWaitsForRuntime()) {
+                    runtimeRecovery.failed();
                 }
             });
     };

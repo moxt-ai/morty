@@ -7,42 +7,49 @@ import type { Clock } from "../../services/time/clock.ts";
 export type RuntimeObservation = { readonly kind: "read" } | { readonly kind: "watch"; readonly afterChange: boolean };
 
 /**
- * How long to wait before each retry of what still waits for a Runtime the page sees online. A Runtime reported online
+ * How long to wait before each retry of what failed while the page sees the Runtime online. A Runtime reported online
  * may not serve yet, so retries continue with growing delays; once they are used up, the next change starts over.
  */
 const RECOVERY_DELAYS_MS = [0, 1_000, 2_000, 5_000, 10_000, 20_000, 30_000] as const;
+/** A failure this long after the previous one is a new outage, which starts the delays over. */
+const RECOVERY_STABLE_MS = 60_000;
 
 /**
  * Retries what the workspace reads through the Runtime and could not read while the Runtime was unreachable, the way
- * Reconnect would, while the page sees the Runtime online. A return the page observes retries at once; a retry that
- * fails again, or something that only starts waiting later, is retried after a growing delay. Seeing the Runtime
- * offline, or a change, starts the delays over, and nothing is retried while nothing waits.
+ * Reconnect would, while the page sees the Runtime online.
+ *
+ * A return the page observes retries at once. Otherwise a retry follows only a reported failure, after a delay that
+ * grows with each failure of the same outage, so a retry still in flight is never restarted, and a Runtime reported
+ * online that cannot serve is not retried in a loop. Seeing the Runtime offline, a change, or a failure long after the
+ * previous one starts the delays over. `waiting` is derived from what the readers hold: something that is loading or
+ * following again is in flight, not waiting.
  */
 export function createRuntimeRecovery(options: {
     readonly clock: Clock;
     readonly lifetime: AbortSignal;
-    /** Whether anything still waits for the Runtime. */
+    /** Whether anything failed for the Runtime and is not being retried now. */
     readonly waiting: () => boolean;
     /** Retries everything that waits. */
     readonly retry: () => void;
 }) {
     let online = false;
     let attempts = 0;
+    let lastFailureAt: number | null = null;
     let scheduled: AbortController | null = null;
-    const cancelScheduled = (): void => {
-        scheduled?.abort(new DOMException("The Runtime recovery was rescheduled", "AbortError"));
+    const startOver = (): void => {
+        attempts = 0;
+        scheduled?.abort(new DOMException("The Runtime recovery started over", "AbortError"));
         scheduled = null;
     };
     const retry = (): void => {
+        if (!online || options.lifetime.aborted || !options.waiting()) {
+            return;
+        }
         attempts += 1;
         options.retry();
     };
     const schedule = (): void => {
-        if (scheduled !== null || !online || options.lifetime.aborted) {
-            return;
-        }
-        if (!options.waiting()) {
-            attempts = 0;
+        if (scheduled !== null || !online || options.lifetime.aborted || !options.waiting()) {
             return;
         }
         const delay = RECOVERY_DELAYS_MS[attempts];
@@ -57,8 +64,8 @@ export function createRuntimeRecovery(options: {
         scheduled = controller;
         void options.clock.sleep(delay, AbortSignal.any([options.lifetime, controller.signal])).then(
             () => {
-                scheduled = null;
-                if (online && options.waiting()) {
+                if (scheduled === controller) {
+                    scheduled = null;
                     retry();
                 }
             },
@@ -69,8 +76,7 @@ export function createRuntimeRecovery(options: {
         /** Adopts a Runtime configuration the page observed. */
         observe: (configurationOnline: boolean, observation: RuntimeObservation): void => {
             if (!configurationOnline || (observation.kind === "watch" && observation.afterChange)) {
-                attempts = 0;
-                cancelScheduled();
+                startOver();
             }
             online = configurationOnline;
             // A load reads the configuration before it reads through the Runtime, so nothing it reads waits yet.
@@ -78,11 +84,14 @@ export function createRuntimeRecovery(options: {
                 schedule();
             }
         },
-        /**
-         * Something read through the Runtime finished, failed or stopped following it. What failed on its own waits
-         * before its first retry; only an observed return retries at once.
-         */
-        settled: (): void => {
+        /** Something read through the Runtime failed for it: the home view, a list load, or the status stream. */
+        failed: (): void => {
+            const now = options.clock.now();
+            if (lastFailureAt !== null && now - lastFailureAt > RECOVERY_STABLE_MS) {
+                startOver();
+            }
+            lastFailureAt = now;
+            // What failed on its own waits before its retry; only an observed return retries at once.
             attempts = Math.max(attempts, 1);
             schedule();
         },

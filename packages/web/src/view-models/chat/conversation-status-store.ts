@@ -51,11 +51,8 @@ export function createConversationStatusStore(
     requests: ConversationStatusRequests,
     /** Announced when the Runtime closes a Session, with the reason it gives. */
     onSessionClosed: (sessionId: string, reason: string) => void,
-    /**
-     * Announced when following the Sessions' statuses settles: the stream gave up, as when the Runtime went away, or
-     * following resumed from a fresh snapshot.
-     */
-    onFollowingSettled: () => void,
+    /** Announced when the stream following the Sessions gives up, as when the Runtime went away. */
+    onUnfollowed: () => void,
 ) {
     let watcher: {
         readonly botId: string;
@@ -123,8 +120,7 @@ export function createConversationStatusStore(
             const signal = AbortSignal.any([parent, controller.signal]);
             void (async () => {
                 let recoveries = 0;
-                let resuming = start === "after-gap";
-                let snapshotNeeded = resuming;
+                let snapshotNeeded = start === "after-gap";
                 try {
                     while (!signal.aborted) {
                         try {
@@ -132,10 +128,6 @@ export function createConversationStatusStore(
                                 const snapshotStartedAt = changes;
                                 replaceDirectory(await requests.managedSessions(botId, signal), snapshotStartedAt);
                                 snapshotNeeded = false;
-                                if (resuming) {
-                                    resuming = false;
-                                    onFollowingSettled();
-                                }
                             }
                             await requests.subscribeManagedSessionStatuses(
                                 botId,
@@ -170,7 +162,7 @@ export function createConversationStatusStore(
                     if (watcher?.controller === controller) {
                         watcher = null;
                         if (!signal.aborted) {
-                            onFollowingSettled();
+                            onUnfollowed();
                         }
                     }
                 }
