@@ -3,7 +3,7 @@ import type { ApiTransport } from "../services/api/api-transport.ts";
 import { BotChatApi } from "../services/chat/bot-chat-api.ts";
 import { recordBrowserDiagnostic } from "../services/diagnostics/browser-diagnostics.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../services/identity/anonymous-identity-api.ts";
-import { storedToken } from "../services/identity/remembered-computers.ts";
+import { replacedToken, storedToken } from "../services/identity/remembered-computers.ts";
 import { type Clock, systemClock } from "../services/time/clock.ts";
 import { type ActiveAnonymousSession, createAnonymousSessionStore } from "./authentication/anonymous-session-store.ts";
 import { createContinueStore } from "./authentication/continue-store.ts";
@@ -127,6 +127,7 @@ export function createMortyApplication(options: {
         const requests = new BotChatApi({
             fetchRequest: transport.fetch,
             getToken: scope.getToken,
+            replacedToken: (rejected, signal) => replacedToken(identity.userId, rejected, signal),
             origin: options.origin,
             projectId: identity.projectId,
             subscribe: transport.subscribe,

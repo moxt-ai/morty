@@ -65,6 +65,14 @@ export async function withStoredAccessLock<T>(signal: AbortSignal, change: () =>
         : await locks.request("morty-stored-access", { signal }, change);
 }
 
+/** The access that replaced `rejected` for a user, once the tab replacing it has saved it, or null when none did. */
+export async function replacedToken(userId: string, rejected: string, signal: AbortSignal): Promise<string | null> {
+    return await withStoredAccessLock(signal, async () => {
+        const current = storedToken(userId);
+        return current !== null && current !== rejected ? current : null;
+    });
+}
+
 /**
  * Forgets a computer whose access was found to be gone, unless another tab replaced that access meanwhile: then the
  * replacement is current and false says to check it instead.

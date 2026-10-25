@@ -96,8 +96,9 @@ export class AnonymousIdentityApi {
     };
 
     /**
-     * Validate one access without navigating or changing recency. Access another tab saved while the check ran is
-     * checked in turn instead of being forgotten with the access it replaced.
+     * Validate one access without navigating or changing recency. Access another tab replaced while the check ran,
+     * including a replacement still being saved, is checked in turn instead of being forgotten with the access it
+     * replaced.
      */
     readonly loadScope = async (scope: IdentityScope, signal: AbortSignal): Promise<AnonymousIdentity | null> => {
         for (;;) {
@@ -112,7 +113,9 @@ export class AnonymousIdentityApi {
                 rememberComputer(scope);
                 return checked;
             }
-            if (forgetComputerAccess(scope, token)) {
+            // A tab replacing this access holds the lock until it saves the replacement, so forgetting waits for it
+            // and checks the replacement instead.
+            if (await withStoredAccessLock(signal, async () => forgetComputerAccess(scope, token))) {
                 return null;
             }
         }

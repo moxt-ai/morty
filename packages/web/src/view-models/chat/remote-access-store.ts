@@ -4,6 +4,7 @@ import { readIdentityScope } from "../../services/identity/identity-scope-url.ts
 import {
     computerKey,
     rememberedComputers,
+    storedTokenForProject,
     withStoredAccessLock,
 } from "../../services/identity/remembered-computers.ts";
 import {
@@ -52,9 +53,13 @@ export function createRemoteAccessOperations(options: {
                 scope === null
                     ? undefined
                     : rememberedComputers().find((entry) => computerKey(entry.scope) === computerKey(scope));
-            // Another tab may have replaced the access while the user confirmed; end the one held now.
+            // Another tab may have replaced the access while the user confirmed; end the one held now. The Worker
+            // checks it, so it is read without validating it again, which would wait for this same lock.
             await withStoredAccessLock(signal, async () =>
-                api.endRemoteAccess(await currentAccessToken(signal), signal),
+                api.endRemoteAccess(
+                    storedTokenForProject(options.identity.projectId) ?? (await options.identity.getToken(signal)),
+                    signal,
+                ),
             );
             signal.throwIfAborted();
             centralSessionStorage.write(accessEndedNoticeEntry, "ended");
