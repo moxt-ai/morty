@@ -5,10 +5,12 @@ import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 import { clearIdentityScope, type IdentityScope, readIdentityScope, writeIdentityScope } from "./identity-scope-url.ts";
 import {
     forgetComputer,
+    forgetComputerAccess,
     rememberComputer,
     saveAccess,
     storedToken,
     storedTokenForProject,
+    withStoredAccessLock,
 } from "./remembered-computers.ts";
 
 const tokenSchema = v.pipe(
@@ -93,19 +95,37 @@ export class AnonymousIdentityApi {
         return scope === null ? null : await this.loadScope(scope, signal);
     };
 
-    /** Validate one access without navigating or changing recency. */
+    /**
+     * Validate one access without navigating or changing recency. Access another tab saved while the check ran is
+     * checked in turn instead of being forgotten with the access it replaced.
+     */
     readonly loadScope = async (scope: IdentityScope, signal: AbortSignal): Promise<AnonymousIdentity | null> => {
-        signal.throwIfAborted();
-        const token = storedToken(scope.userId);
-        if (token === null) {
-            forgetComputer(scope);
-            return null;
+        for (;;) {
+            signal.throwIfAborted();
+            const token = storedToken(scope.userId);
+            if (token === null) {
+                forgetComputer(scope);
+                return null;
+            }
+            const checked = await this.#checkAccess({ ...scope, token }, signal);
+            if (checked !== null) {
+                rememberComputer(scope);
+                return checked;
+            }
+            if (forgetComputerAccess(scope, token)) {
+                return null;
+            }
         }
-        const identity: AnonymousIdentity = { ...scope, token };
+    };
+
+    /** The access when it still opens its computer, or null when it is gone. */
+    readonly #checkAccess = async (
+        identity: AnonymousIdentity,
+        signal: AbortSignal,
+    ): Promise<AnonymousIdentity | null> => {
         const session = await this.#anonymousSession(identity, signal);
         signal.throwIfAborted();
         if (session?.userId !== identity.userId) {
-            forgetComputer(scope);
             return null;
         }
         const management = new ManagementApi({
@@ -126,12 +146,10 @@ export class AnonymousIdentityApi {
                 cause instanceof CloudApiError &&
                 (cause.code === "BOT_NOT_FOUND" || cause.status === 401 || cause.status === 403)
             ) {
-                forgetComputer(scope);
                 return null;
             }
             throw cause;
         }
-        rememberComputer(scope);
         return identity;
     };
 
@@ -180,7 +198,10 @@ export class AnonymousIdentityApi {
      * Opens a link in this browser. A browser keeps one access per user: the access it already holds for the link's
      * Project is replaced by the new one, which also takes over the links it came from.
      */
-    readonly redeemTransfer = async (code: string, signal: AbortSignal): Promise<AnonymousIdentity> => {
+    readonly redeemTransfer = async (code: string, signal: AbortSignal): Promise<AnonymousIdentity> =>
+        await withStoredAccessLock(signal, () => this.#redeemTransfer(code, signal));
+
+    readonly #redeemTransfer = async (code: string, signal: AbortSignal): Promise<AnonymousIdentity> => {
         const projectId = transferCodeProject(code);
         const replaces = projectId === null ? null : storedTokenForProject(projectId);
         const identity = v.parse(

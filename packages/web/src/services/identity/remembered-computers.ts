@@ -53,6 +53,30 @@ export function rememberComputer(scope: IdentityScope): void {
 }
 
 /** Drops access that no longer opens this computer, listed or not, with its token unless another computer needs it. */
+/**
+ * Runs a change to the access this browser stores while no other tab of the browser changes it: opening a link reads
+ * the access it replaces and saves the new one, and ending access reads the access it ends. Browsers without the Web
+ * Locks API run the change directly.
+ */
+export async function withStoredAccessLock<T>(signal: AbortSignal, change: () => Promise<T>): Promise<T> {
+    const locks: LockManager | null | undefined = typeof navigator === "undefined" ? undefined : navigator.locks;
+    return locks === null || locks === undefined
+        ? await change()
+        : await locks.request("morty-stored-access", { signal }, change);
+}
+
+/**
+ * Forgets a computer whose access was found to be gone, unless another tab replaced that access meanwhile: then the
+ * replacement is current and false says to check it instead.
+ */
+export function forgetComputerAccess(scope: IdentityScope, token: string): boolean {
+    if (storedToken(scope.userId) !== token) {
+        return false;
+    }
+    forgetComputer(scope);
+    return true;
+}
+
 export function forgetComputer(scope: IdentityScope): void {
     updateComputers(
         rememberedComputers().filter((computer) => computerKey(computer.scope) !== computerKey(scope)),

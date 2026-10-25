@@ -11,7 +11,7 @@ import {
     transferCodeProject,
 } from "@/services/identity/anonymous-identity-api";
 import { encodeIdentityScope, hasIdentityScope, readIdentityScope } from "@/services/identity/identity-scope-url";
-import { computerKey, rememberedComputers } from "@/services/identity/remembered-computers";
+import { computerKey, rememberedComputers, storedToken } from "@/services/identity/remembered-computers";
 import { centralSessionStorage, sessionWelcomeEntry } from "@/services/session-storage/central-session-storage";
 import { formatError } from "@/view-models/format-error";
 
@@ -146,7 +146,8 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 fetchRequest,
                 origin: window.location.origin,
                 projectId: identity.projectId,
-                getToken: async () => identity.token,
+                // The access this browser holds: another tab may have replaced the one this link issued.
+                getToken: async () => storedToken(identity.userId) ?? identity.token,
                 subscribe: async () => {
                     throw new Error("Session status updates are unavailable while continuing this session.");
                 },

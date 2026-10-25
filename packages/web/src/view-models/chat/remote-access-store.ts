@@ -1,7 +1,11 @@
 import { createStore } from "zustand/vanilla";
 import { AnonymousIdentityApi, IdentityApiError } from "../../services/identity/anonymous-identity-api.ts";
 import { readIdentityScope } from "../../services/identity/identity-scope-url.ts";
-import { computerKey, rememberedComputers } from "../../services/identity/remembered-computers.ts";
+import {
+    computerKey,
+    rememberedComputers,
+    withStoredAccessLock,
+} from "../../services/identity/remembered-computers.ts";
 import {
     accessEndedComputerEntry,
     accessEndedNoticeEntry,
@@ -19,7 +23,8 @@ type RemoteAccessState =
 
 interface RemoteAccessOperations {
     readonly currentAccessToken: (signal: AbortSignal) => Promise<string>;
-    readonly endRemoteAccess: (token: string, signal: AbortSignal) => Promise<void>;
+    /** Ends the access this browser holds when it runs, while no other tab changes it. */
+    readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
 }
 
 export function createRemoteAccessOperations(options: {
@@ -32,21 +37,25 @@ export function createRemoteAccessOperations(options: {
     readonly onEnded: () => void;
 }): RemoteAccessOperations {
     const api = new AnonymousIdentityApi(options);
+    const currentAccessToken = async (signal: AbortSignal): Promise<string> => {
+        const localIdentity = await api.loadExisting(signal);
+        signal.throwIfAborted();
+        return localIdentity?.projectId === options.identity.projectId
+            ? localIdentity.token
+            : await options.identity.getToken(signal);
+    };
     return {
-        currentAccessToken: async (signal) => {
-            const localIdentity = await api.loadExisting(signal);
-            signal.throwIfAborted();
-            return localIdentity?.projectId === options.identity.projectId
-                ? localIdentity.token
-                : await options.identity.getToken(signal);
-        },
-        endRemoteAccess: async (token, signal) => {
+        currentAccessToken,
+        endRemoteAccess: async (signal) => {
             const scope = readIdentityScope();
             const computer =
                 scope === null
                     ? undefined
                     : rememberedComputers().find((entry) => computerKey(entry.scope) === computerKey(scope));
-            await api.endRemoteAccess(token, signal);
+            // Another tab may have replaced the access while the user confirmed; end the one held now.
+            await withStoredAccessLock(signal, async () =>
+                api.endRemoteAccess(await currentAccessToken(signal), signal),
+            );
             signal.throwIfAborted();
             centralSessionStorage.write(accessEndedNoticeEntry, "ended");
             centralSessionStorage.write(accessEndedComputerEntry, computer?.name || "the previous computer");
@@ -91,10 +100,7 @@ export const createRemoteAccessStore = (operations: RemoteAccessOperations) =>
             }
             set({ state: { kind: "ending" } });
             try {
-                // The access this browser holds now: another tab may have replaced it while the user confirmed.
-                const accessToken = await operations.currentAccessToken(operationSignal(signal));
-                signal.throwIfAborted();
-                await operations.endRemoteAccess(accessToken, operationSignal(signal));
+                await operations.endRemoteAccess(operationSignal(signal));
                 signal.throwIfAborted();
                 set({ state: { kind: "ended" } });
             } catch (cause) {

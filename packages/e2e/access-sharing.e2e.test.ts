@@ -225,3 +225,29 @@ test("Given the end-access confirmation is open in one tab, When another tab ope
         await expect(secondTab.getByRole("heading", { name: "This link is no longer available" })).toBeVisible();
     }
 });
+
+test("Given a browser without Morty access opens two setup links in two tabs at once, When the user ends current access, Then neither link opens Morty any more", async ({
+    runtime,
+}) => {
+    const first = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const second = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const firstTab = runtime.page;
+    const secondTab = await firstTab.context().newPage();
+
+    await Promise.all([firstTab.goto(first.url), secondTab.goto(second.url)]);
+    await expect(firstTab.getByRole("textbox", { name: "Message" })).toBeEnabled();
+    await expect(secondTab.getByRole("textbox", { name: "Message" })).toBeEnabled();
+
+    await clickEndCurrentAccess(secondTab, "desktop");
+    await secondTab
+        .getByRole("dialog", { name: "End current access?" })
+        .getByRole("button", { name: "End current access", exact: true })
+        .click();
+    await expect(secondTab.getByRole("status")).toContainText("Current access ended");
+
+    await expect(firstTab.getByRole("heading", { name: "This link is no longer valid" })).toBeVisible();
+    for (const link of [first.url, second.url]) {
+        await secondTab.goto(link);
+        await expect(secondTab.getByRole("heading", { name: "This link is no longer available" })).toBeVisible();
+    }
+});
