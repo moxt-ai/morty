@@ -2,6 +2,8 @@ import { createStore } from "zustand/vanilla";
 import type { ApiTransport } from "../services/api/api-transport.ts";
 import { BotChatApi } from "../services/chat/bot-chat-api.ts";
 import { recordBrowserDiagnostic } from "../services/diagnostics/browser-diagnostics.ts";
+import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../services/identity/anonymous-identity-api.ts";
+import { replacedToken, storedToken } from "../services/identity/remembered-computers.ts";
 import { type Clock, systemClock } from "../services/time/clock.ts";
 import { type ActiveAnonymousSession, createAnonymousSessionStore } from "./authentication/anonymous-session-store.ts";
 import { createContinueStore } from "./authentication/continue-store.ts";
@@ -94,7 +96,10 @@ export function createMortyApplication(options: {
     let workspace: ChatWorkspace | null = null;
     let workspaceRequests: BotChatApi | null = null;
     let disposed = false;
+    // The identity this page works as. Its access is the one this browser stores for that user, shared by every tab.
+    let activeUserId: string | null = null;
     const releaseWorkspace = (): void => {
+        activeUserId = null;
         workspace?.dispose();
         // The workspace receives the chat API by injection; the application
         // owns it, so it closes the pooled session transports here.
@@ -104,12 +109,13 @@ export function createMortyApplication(options: {
     };
     const activateWorkspace = (session: ActiveAnonymousSession): void => {
         const identity = session.identity;
+        activeUserId = identity.userId;
         const scope: ChatIdentity = {
             botId: identity.botId,
             projectId: identity.projectId,
             getToken: async (signal) => {
                 signal.throwIfAborted();
-                return identity.token;
+                return storedToken(identity.userId) ?? identity.token;
             },
         };
         const access = createIdentityAccess({
@@ -121,6 +127,7 @@ export function createMortyApplication(options: {
         const requests = new BotChatApi({
             fetchRequest: transport.fetch,
             getToken: scope.getToken,
+            replacedToken: (rejected, signal) => replacedToken(identity.userId, rejected, signal),
             origin: options.origin,
             projectId: identity.projectId,
             subscribe: transport.subscribe,
@@ -143,7 +150,7 @@ export function createMortyApplication(options: {
                         waitForBridge: transport.waitForBridge,
                         getToken: async (signal) => {
                             signal.throwIfAborted();
-                            return saved.token;
+                            return storedToken(saved.userId) ?? saved.token;
                         },
                         origin: options.origin,
                         projectId: saved.projectId,
@@ -218,6 +225,16 @@ export function createMortyApplication(options: {
             window.location.reload();
         }
     };
+    // Another tab ended this browser's access, or opened a link that replaced it. Every tab uses the stored access,
+    // so a replacement needs nothing; access that is gone ends here too.
+    const accessChanged = (event: StorageEvent): void => {
+        if (event.key !== null && event.key !== ANONYMOUS_CREDENTIAL_KEY_NAME) {
+            return;
+        }
+        if (activeUserId !== null && storedToken(activeUserId) === null) {
+            window.location.reload();
+        }
+    };
     const networkChanged = (): void => {
         workspace?.home.getState().setNetworkAvailable(navigator.onLine);
     };
@@ -226,6 +243,7 @@ export function createMortyApplication(options: {
     window.addEventListener("online", recover);
     window.addEventListener("pageshow", restored);
     window.addEventListener("hashchange", linkChanged);
+    window.addEventListener("storage", accessChanged);
     document.addEventListener("visibilitychange", recover);
     document.addEventListener("resume", recover);
     if (!window.location.pathname.startsWith("/continue")) {
@@ -256,6 +274,7 @@ export function createMortyApplication(options: {
             window.removeEventListener("online", recover);
             window.removeEventListener("pageshow", restored);
             window.removeEventListener("hashchange", linkChanged);
+            window.removeEventListener("storage", accessChanged);
             document.removeEventListener("visibilitychange", recover);
             document.removeEventListener("resume", recover);
             lifetime.abort(new DOMException("The Morty application was disposed.", "AbortError"));

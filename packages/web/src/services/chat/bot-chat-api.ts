@@ -255,6 +255,7 @@ export class BotChatApi {
     readonly #origin: string;
     readonly #projectId: string;
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
+    readonly #replacedToken: ((rejected: string, signal: AbortSignal) => Promise<string | null>) | undefined;
     readonly #sessionTransports = new Map<string, BrowserSessionTransport>();
     readonly #subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
     readonly #waitForChange: ApiTransport["waitForChange"];
@@ -266,6 +267,11 @@ export class BotChatApi {
         readonly origin: string;
         readonly projectId: string;
         readonly getToken: (signal: AbortSignal) => Promise<string | null>;
+        /**
+         * The access that replaced `rejected`, once whoever replaces it has finished, or null when nothing did. A
+         * request refused while another tab replaced its access is sent again with the replacement.
+         */
+        readonly replacedToken?: (rejected: string, signal: AbortSignal) => Promise<string | null>;
         readonly subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
         readonly waitForChange: ApiTransport["waitForChange"];
         readonly recoverBridge: ApiTransport["recover"];
@@ -275,6 +281,7 @@ export class BotChatApi {
         this.#projectId = v.parse(identifier, options.projectId);
         this.#fetchRequest = options.fetchRequest;
         this.#getToken = options.getToken;
+        this.#replacedToken = options.replacedToken;
         this.#subscribe = options.subscribe;
         this.#waitForChange = options.waitForChange;
         this.#waitForBridge = options.waitForBridge;
@@ -639,24 +646,33 @@ export class BotChatApi {
         if (token === null) {
             throw new CloudApiError("UNAUTHENTICATED", "Your session is unavailable.");
         }
-        const response = await this.#fetchRequest(
-            new Request(
-                new URL(
-                    `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(requestedBotId)}/${operation}`,
-                    this.#origin,
-                ),
-                {
-                    method: "POST",
-                    signal,
-                    redirect: "error",
-                    headers: {
-                        authorization: `Bearer ${token}`,
-                        "content-type": "application/json",
+        const send = (access: string) =>
+            this.#fetchRequest(
+                new Request(
+                    new URL(
+                        `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(requestedBotId)}/${operation}`,
+                        this.#origin,
+                    ),
+                    {
+                        method: "POST",
+                        signal,
+                        redirect: "error",
+                        headers: {
+                            authorization: `Bearer ${access}`,
+                            "content-type": "application/json",
+                        },
+                        body: body === undefined ? null : JSON.stringify(body),
                     },
-                    body: body === undefined ? null : JSON.stringify(body),
-                },
-            ),
-        );
+                ),
+            );
+        let response = await send(token);
+        if (response.status === 401 && this.#replacedToken !== undefined) {
+            const replacement = await this.#replacedToken(token, signal);
+            if (replacement !== null) {
+                await response.body?.cancel();
+                response = await send(replacement);
+            }
+        }
         let responseBody: string;
         try {
             responseBody = await response.text();

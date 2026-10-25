@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import * as v from "valibot";
 import {
     anonymousCredential,
@@ -190,6 +190,7 @@ export class IdentityStorage {
                         createdAt: sql<number>`${now}`.as("created_at"),
                         revokedAt: sql<null>`null`.as("revoked_at"),
                         remoteTransferId: sql<null>`null`.as("remote_transfer_id"),
+                        browserId: sql<null>`null`.as("browser_id"),
                     })
                     .from(anonymousCredential)
                     .where(
@@ -205,8 +206,14 @@ export class IdentityStorage {
         return result.meta.changes === 1 ? token : null;
     };
 
+    /**
+     * Opens a link in a browser. `replaces` is the credential the browser already holds for this Project: a browser
+     * keeps one credential, so the new one replaces it at once and belongs to the same browser. A credential another
+     * redemption already replaced still names that browser, so concurrent or retried redemptions stay in it too.
+     */
     readonly redeemTransfer = async (
         code: string,
+        replaces: string | null,
         now: number,
         signal: AbortSignal,
     ): Promise<AnonymousIdentity | null> => {
@@ -220,40 +227,65 @@ export class IdentityStorage {
         const claimNonce = crypto.randomUUID();
         const credentialId = `cred_${crypto.randomUUID()}`;
         const token = `mobius_anon_v2_${randomSecret()}`;
-        const results = await database.batch([
-            database
-                .update(continueLink)
-                .set({
-                    claimNonce,
-                })
-                .where(
-                    and(
-                        eq(continueLink.codeHash, codeHash),
-                        isNull(continueLink.revokedAt),
-                        or(
-                            gt(continueLink.expiresAt, now),
-                            and(
-                                eq(continueLink.expiresAt, 0),
-                                gt(sql`${continueLink.createdAt} + ${continueLinkLifetime}`, now),
-                            ),
+        const claimed = and(eq(continueLink.codeHash, codeHash), eq(continueLink.claimNonce, claimNonce));
+        const claim = database
+            .update(continueLink)
+            .set({ claimNonce })
+            .where(
+                and(
+                    eq(continueLink.codeHash, codeHash),
+                    isNull(continueLink.revokedAt),
+                    or(
+                        gt(continueLink.expiresAt, now),
+                        and(
+                            eq(continueLink.expiresAt, 0),
+                            gt(sql`${continueLink.createdAt} + ${continueLinkLifetime}`, now),
                         ),
                     ),
                 ),
-            database.insert(anonymousCredential).select(
-                database
-                    .select({
-                        id: sql<string>`${credentialId}`.as("id"),
-                        userId: continueLink.userId,
-                        tokenHash: sql<string>`${await digest(token)}`.as("token_hash"),
-                        status: sql<"active">`'active'`.as("status"),
-                        createdAt: sql<number>`${now}`.as("created_at"),
-                        revokedAt: sql<null>`null`.as("revoked_at"),
-                        remoteTransferId: continueLink.id,
-                    })
-                    .from(continueLink)
-                    .where(and(eq(continueLink.codeHash, codeHash), eq(continueLink.claimNonce, claimNonce))),
+            );
+        const replacedHash = replaces === null ? null : await digest(replaces);
+        // Only a browser credential of the link's own user names the browser.
+        const replaced = and(
+            eq(anonymousCredential.tokenHash, replacedHash ?? ""),
+            isNotNull(anonymousCredential.remoteTransferId),
+            inArray(
+                anonymousCredential.userId,
+                database.select({ userId: continueLink.userId }).from(continueLink).where(claimed),
             ),
-        ]);
+        );
+        const browser = database
+            .select({ browserId: sql<string>`coalesce(${anonymousCredential.browserId}, ${anonymousCredential.id})` })
+            .from(anonymousCredential)
+            .where(replaced);
+        const issue = database.insert(anonymousCredential).select(
+            database
+                .select({
+                    id: sql<string>`${credentialId}`.as("id"),
+                    userId: continueLink.userId,
+                    tokenHash: sql<string>`${await digest(token)}`.as("token_hash"),
+                    status: sql<"active">`'active'`.as("status"),
+                    createdAt: sql<number>`${now}`.as("created_at"),
+                    revokedAt: sql<null>`null`.as("revoked_at"),
+                    remoteTransferId: continueLink.id,
+                    browserId: (replacedHash === null ? sql<null>`null` : sql<string | null>`(${browser})`).as(
+                        "browser_id",
+                    ),
+                })
+                .from(continueLink)
+                .where(claimed),
+        );
+        const results =
+            replacedHash === null
+                ? await database.batch([claim, issue])
+                : await database.batch([
+                      claim,
+                      issue,
+                      database
+                          .update(anonymousCredential)
+                          .set({ status: "revoked", revokedAt: now })
+                          .where(and(replaced, eq(anonymousCredential.status, "active"))),
+                  ]);
         signal.throwIfAborted();
         if (results[0]?.meta.changes !== 1) {
             return null;
@@ -280,6 +312,7 @@ export class IdentityStorage {
         const database = requireIdentityDatabase(this.#database);
         const credential = await database
             .select({
+                browserId: anonymousCredential.browserId,
                 credentialId: anonymousCredential.id,
                 transferId: anonymousCredential.remoteTransferId,
                 userId: anonymousCredential.userId,
@@ -321,6 +354,25 @@ export class IdentityStorage {
                   }
                 : { kind: "unauthenticated" };
         }
+        // The browser joined through this credential's link and through the links of every credential it held.
+        const browserId = credential.browserId ?? credential.credentialId;
+        const held = await database
+            .select({ transferId: anonymousCredential.remoteTransferId })
+            .from(anonymousCredential)
+            .where(
+                and(
+                    eq(anonymousCredential.userId, credential.userId),
+                    or(eq(anonymousCredential.id, browserId), eq(anonymousCredential.browserId, browserId)),
+                ),
+            )
+            .all();
+        signal.throwIfAborted();
+        const transferIds = [
+            ...new Set([
+                credential.transferId,
+                ...held.flatMap((entry) => (entry.transferId === null ? [] : [entry.transferId])),
+            ]),
+        ];
         const results = await database.batch([
             database
                 .update(continueLink)
@@ -333,11 +385,21 @@ export class IdentityStorage {
                     ),
                 ),
             database
+                .update(continueLink)
+                .set({ revokedAt: now })
+                .where(
+                    and(
+                        inArray(continueLink.id, transferIds),
+                        eq(continueLink.userId, credential.userId),
+                        isNull(continueLink.revokedAt),
+                    ),
+                ),
+            database
                 .update(anonymousCredential)
                 .set({ status: "revoked", revokedAt: now })
                 .where(
                     and(
-                        eq(anonymousCredential.remoteTransferId, credential.transferId),
+                        inArray(anonymousCredential.remoteTransferId, transferIds),
                         eq(anonymousCredential.status, "active"),
                     ),
                 ),

@@ -7,7 +7,14 @@ import { ManagementError } from "../entity/management-error.ts";
 import { projectLocationHint } from "../util/project-location.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 
-const transferInput = v.pipe(v.object({ code: v.string() }), v.readonly());
+const transferInput = v.pipe(
+    v.object({
+        code: v.string(),
+        /** The credential this browser already holds for the link's Project, which the new one replaces. */
+        replaces: v.optional(v.pipe(v.string(), v.maxLength(512))),
+    }),
+    v.readonly(),
+);
 const anonymousUserInput = v.strictObject({
     locationHint: v.optional(
         v.picklist(["wnam", "enam", "sam", "weur", "eeur", "apac", "apac-ne", "apac-se", "oc", "afr", "me"]),
@@ -92,6 +99,7 @@ export function createAuthenticationRoutes() {
                 const input = context.req.valid("json");
                 const identity = await context.env.services.management.redeemTransfer(
                     input.code,
+                    input.replaces ?? null,
                     context.req.raw.signal,
                 );
                 if (identity === null) {

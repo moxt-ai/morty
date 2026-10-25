@@ -139,7 +139,7 @@ export function createChatWorkspace(options: {
     readonly url?: string;
     readonly createTransfer?: ((signal: AbortSignal) => Promise<IdentityTransfer>) | undefined;
     readonly currentAccessToken?: ((signal: AbortSignal) => Promise<string>) | undefined;
-    readonly endRemoteAccess?: ((token: string, signal: AbortSignal) => Promise<void>) | undefined;
+    readonly endRemoteAccess?: ((signal: AbortSignal) => Promise<void>) | undefined;
     readonly networkDiagnostics?: {
         readonly measureBrowserMobius: (origin: string, signal: AbortSignal) => Promise<number>;
         readonly measureBrowserMorty: (signal: AbortSignal) => Promise<number>;
@@ -250,11 +250,11 @@ export function createChatWorkspace(options: {
                 }
                 return options.currentAccessToken(signal);
             },
-            endRemoteAccess: (token, signal) => {
+            endRemoteAccess: (signal) => {
                 if (options.endRemoteAccess === undefined) {
                     return Promise.reject(new Error("Remote access is unavailable."));
                 }
-                return options.endRemoteAccess(token, signal);
+                return options.endRemoteAccess(signal);
             },
         }),
         networkDiagnostic: createNetworkDiagnosticStore({
