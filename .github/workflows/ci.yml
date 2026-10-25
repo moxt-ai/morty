@@ -167,6 +167,11 @@ jobs:
       - name: Install browsers
         run: pnpm --filter @moxt-ai/morty-e2e exec playwright install --with-deps chromium webkit
 
+      - name: Install Codex for the borrowed-session journey
+        run: |
+          npm install --global --prefix "$RUNNER_TEMP/codex-e2e" @openai/codex@0.154.0
+          echo "MOBIUS_TEST_CODEX_PATH=$RUNNER_TEMP/codex-e2e/bin/codex" >> "$GITHUB_ENV"
+
       - name: Run browser journeys
         run: pnpm test:e2e --shard="$E2E_SHARD"
         env:
