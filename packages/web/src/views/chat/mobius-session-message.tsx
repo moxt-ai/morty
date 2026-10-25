@@ -8,10 +8,12 @@ import { loadDiagramRenderer } from "../../components/agents/mermaid-code-block.
 import type { SessionResourceStoreFactory } from "../../components/agents/resource-reader.ts";
 import { AgentThinking } from "../../components/chat/agent-thinking.tsx";
 import { AttemptFailure } from "../../components/chat/attempt-failure.tsx";
+import { AuthenticationNotice } from "../../components/chat/authentication-notice.tsx";
 import { CompactionDisclosure } from "../../components/chat/compaction-disclosure.tsx";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { UserMessageShell } from "../../components/chat/user-message-shell.tsx";
 import { dataTestId } from "../../data-testid.ts";
+import { authenticationGuidance } from "../../view-models/chat/authentication-guidance.ts";
 import {
     COMPACTION_CHARACTER_LIMIT,
     completedTurnNotice,
@@ -231,8 +233,12 @@ export function MobiusSessionMessage({
     openLocalFile,
     active = false,
     failureApproval,
+    failureAgentRef = "",
+    failureMachineName = "",
 }: {
     readonly message: SessionMessage;
+    readonly failureAgentRef?: string;
+    readonly failureMachineName?: string;
     readonly deliveryUnknownUserMessageId: string | null;
     readonly onRemoveUnknownDelivery: () => void;
     readonly onRetryUnknownDelivery: () => void;
@@ -312,6 +318,10 @@ export function MobiusSessionMessage({
         );
     }
     if (presentation.kind === "failure") {
+        const guidance = authenticationGuidance(presentation.code, failureAgentRef, failureMachineName);
+        if (guidance !== null) {
+            return <AuthenticationNotice guidance={guidance} code={presentation.code} message={presentation.message} />;
+        }
         return <AttemptFailure approval={failureApproval} code={presentation.code} message={presentation.message} />;
     }
     if (presentation.kind === "compaction") {

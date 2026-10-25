@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
 import { AgentThinking, type AgentThinkingEntry } from "../../components/chat/agent-thinking.tsx";
+import { AuthenticationNotice } from "../../components/chat/authentication-notice.tsx";
 import { AutoFocusInput } from "../../components/chat/auto-focus-input.tsx";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
@@ -34,6 +35,7 @@ import { DesktopChatLayout } from "../../components/utils/desktop-chat-layout.ts
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { cn } from "../../lib/utils.ts";
+import { authenticationGuidance } from "../../view-models/chat/authentication-guidance.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { harnessOptions } from "../../view-models/chat/native-session-agents.ts";
@@ -176,6 +178,7 @@ function sessionRenderGroups(items: readonly SessionRenderItem[]): readonly Sess
 
 function SessionRenderItemContent({
     active,
+    machineName,
     item,
     onRetryUnknownDelivery,
     onRemoveUnknownDelivery,
@@ -184,6 +187,7 @@ function SessionRenderItemContent({
     presentation,
 }: {
     readonly active: boolean;
+    readonly machineName: string;
     readonly item: SessionRenderItem;
     readonly onRemoveUnknownDelivery: () => void;
     readonly onRetryUnknownDelivery: () => void;
@@ -217,6 +221,8 @@ function SessionRenderItemContent({
     return (
         <MobiusSessionMessage
             active={active}
+            failureAgentRef={pane.agentRef}
+            failureMachineName={machineName}
             deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
             failureApproval={{ botId: pane.botId, kind: "bot-approval" }}
             message={item.message}
@@ -576,6 +582,10 @@ function MobiusSessionPaneLayout({
         interactionModel,
         executionContext.available,
     );
+    const authenticationRecovery =
+        presentation.authenticationFailure === null
+            ? null
+            : authenticationGuidance(presentation.authenticationFailure.code, pane.agentRef, executionContext.machine);
     const renderItems = sessionRenderItems(model.messages);
     const renderGroups = sessionRenderGroups(renderItems);
     const lastRenderItemIndex = renderItems.length - 1;
@@ -682,6 +692,7 @@ function MobiusSessionPaneLayout({
                                             <div key={group.id} className={chatSessionMessageItemClassName}>
                                                 <SessionRenderItemContent
                                                     active={active}
+                                                    machineName={executionContext.machine}
                                                     item={item}
                                                     onRemoveUnknownDelivery={
                                                         pane.store.getState().removeUnknownDelivery
@@ -707,6 +718,7 @@ function MobiusSessionPaneLayout({
                                                     <div key={sessionRenderItemId(item)}>
                                                         <SessionRenderItemContent
                                                             active={active}
+                                                            machineName={executionContext.machine}
                                                             item={item}
                                                             onRemoveUnknownDelivery={
                                                                 pane.store.getState().removeUnknownDelivery
@@ -725,6 +737,15 @@ function MobiusSessionPaneLayout({
                                     );
                                 });
                             })()}
+                            {authenticationRecovery !== null && presentation.authenticationFailure !== null && (
+                                <div className={chatSessionMessageItemClassName}>
+                                    <AuthenticationNotice
+                                        guidance={authenticationRecovery}
+                                        code={presentation.authenticationFailure.code}
+                                        message={presentation.authenticationFailure.message}
+                                    />
+                                </div>
+                            )}
                             {presentation.unconfirmedDelivery !== null && (
                                 <UnconfirmedDeliveryCard
                                     delivery={presentation.unconfirmedDelivery}

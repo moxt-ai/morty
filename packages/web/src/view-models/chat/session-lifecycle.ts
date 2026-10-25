@@ -28,7 +28,7 @@ export type SessionLifecycleFact =
     | { readonly kind: "queue-changed" }
     | { readonly kind: "turn-started"; readonly commandId: string }
     | { readonly kind: "turn-completed"; readonly commandId: string; readonly steered: boolean }
-    | { readonly kind: "turn-failed"; readonly commandId: string; readonly message: string }
+    | { readonly kind: "turn-failed"; readonly commandId: string; readonly code: string; readonly message: string }
     /** The event changes nothing the pane tracks outside the message projection. */
     | { readonly kind: "none" };
 
@@ -60,7 +60,7 @@ export function sessionLifecycleFact(payload: LifecycleMetadata): SessionLifecyc
             return { kind: "turn-completed", commandId: payload.commandId, steered: payload.stopReason === "steered" };
         case "prompt.failed":
         case "prompt.failed-before-start":
-            return { kind: "turn-failed", commandId: payload.commandId, message: payload.message };
+            return { kind: "turn-failed", commandId: payload.commandId, code: payload.code, message: payload.message };
         default:
             return payload satisfies never;
     }

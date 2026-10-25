@@ -67,9 +67,10 @@ test("Given Claude needs sign-in, When I send a message and retry after reloadin
         await expect(composer).toBeEnabled();
         await composer.fill("Reply with a greeting");
         await page.getByRole("button", { name: "Send message", exact: true }).click();
-        await expect(page.getByText("authentication_required", { exact: true })).toBeVisible();
-        await expect(page.getByText("Agent authentication is required", { exact: true })).toHaveCount(1);
-        await expect(page.getByRole("alert").filter({ hasText: "Agent authentication is required" })).toHaveCount(1);
+        await expect(page.getByText("Claude Code needs sign-in", { exact: true })).toBeVisible();
+        await expect(page.getByText("authentication_required", { exact: true })).toBeHidden();
+        await expect(page.getByText("Claude Code needs sign-in", { exact: true })).toHaveCount(1);
+        await expect(page.getByRole("alert").filter({ hasText: "Claude Code needs sign-in" })).toHaveCount(1);
         await expect(
             page.getByText("Failed to authenticate: OAuth session expired and could not be refreshed", { exact: true }),
         ).toHaveCount(0);
@@ -87,9 +88,17 @@ test("Given Claude needs sign-in, When I send a message and retry after reloadin
         await composer.fill("Try the greeting again");
         await page.getByRole("button", { name: "Send message", exact: true }).click();
         await expect(page.getByText("authentication_required", { exact: true })).toHaveCount(1);
-        await expect(page.getByText("Agent authentication is required", { exact: true })).toHaveCount(1);
-        await expect(page.getByRole("alert").filter({ hasText: "Agent authentication is required" })).toHaveCount(1);
+        await expect(page.getByText("Claude Code needs sign-in", { exact: true })).toHaveCount(1);
+        await expect(page.getByRole("alert").filter({ hasText: "Claude Code needs sign-in" })).toHaveCount(1);
         await page.screenshot({ path: testInfo.outputPath("authentication-mobile.png"), fullPage: true });
+        await composer.fill("Keep this draft until I sign in");
+        await page.getByText("View steps", { exact: true }).click();
+        await expect(page.getByText("Run claude,", { exact: false })).toBeVisible();
+        await expect(page.getByText("authentication_required", { exact: true })).toBeHidden();
+        await page.screenshot({ path: testInfo.outputPath("authentication-mobile-steps.png"), fullPage: true });
+        await page.getByText("Technical details", { exact: true }).click();
+        await expect(page.getByText("authentication_required", { exact: true })).toBeVisible();
+        await expect(composer).toHaveValue("Keep this draft until I sign in");
         success = true;
     } catch (cause) {
         await page.screenshot({ path: testInfo.outputPath("failure.png"), fullPage: true });

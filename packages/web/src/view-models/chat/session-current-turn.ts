@@ -5,6 +5,8 @@ import type { SessionActivityState } from "./session-activity-machine.ts";
 // confirmed it and when it started. The working indicator, the stop control and the status the pane reports are all
 // derived from it, so they cannot disagree.
 
+type TurnFailure = { readonly code: string; readonly message: string };
+
 type TurnSubmission =
     /** The command is current, but this pane has not submitted it, as when it retries an unconfirmed delivery. */
     | { readonly kind: "unconfirmed" }
@@ -15,7 +17,7 @@ export type CurrentTurn =
     | {
           readonly kind: "idle";
           /** The last turn's failure, reported until another turn starts. */
-          readonly failure: { readonly commandId: string; readonly message: string } | null;
+          readonly failure: (TurnFailure & { readonly commandId: string }) | null;
       }
     | {
           readonly kind: "current";
@@ -34,14 +36,14 @@ export type CurrentTurnEvent =
     /** The service reports the command running; it replaces any other current command. */
     | { readonly kind: "running"; readonly commandId: string; readonly turnId: string; readonly startedAt: number }
     /** The service reports the command's turn ended; `failure` explains a failed one. */
-    | { readonly kind: "ended"; readonly commandId: string; readonly failure: string | null }
+    | { readonly kind: "ended"; readonly commandId: string; readonly failure: TurnFailure | null }
     /**
      * This pane's submission of the command ended without the service accepting it in reply: it was refused, its
      * delivery is uncertain, failed or was discarded, or only an event showed the service has it. Whether the
      * command's turn runs is the service's to report, so this ends only a turn the service has not reported running.
      * `failure` explains a failed submission.
      */
-    | { readonly kind: "submission-ended"; readonly commandId: string; readonly failure: string | null }
+    | { readonly kind: "submission-ended"; readonly commandId: string; readonly failure: TurnFailure | null }
     /** Nothing runs any more, as when the Session closed or a reconnect found no running turn. */
     | { readonly kind: "nothing-running" }
     /** This browser sent the command at `sentAt`, which is when its work started. */
@@ -67,8 +69,8 @@ function isCurrent(turn: CurrentTurn, commandId: string): turn is Extract<Curren
     return turn.kind === "current" && turn.commandId === commandId;
 }
 
-function endedTurn(commandId: string, failure: string | null): CurrentTurn {
-    return { kind: "idle", failure: failure === null ? null : { commandId, message: failure } };
+function endedTurn(commandId: string, failure: TurnFailure | null): CurrentTurn {
+    return { kind: "idle", failure: failure === null ? null : { commandId, ...failure } };
 }
 
 export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent): CurrentTurn {
@@ -136,8 +138,6 @@ export function turnActivity(turn: CurrentTurn): SessionActivityState {
         case "current":
             return { kind: "working", commandId: turn.commandId, startedAt: turn.startedAt };
         case "idle":
-            return turn.failure === null
-                ? { kind: "idle" }
-                : { kind: "failed", commandId: turn.failure.commandId, message: turn.failure.message };
+            return turn.failure === null ? { kind: "idle" } : { kind: "failed", ...turn.failure };
     }
 }

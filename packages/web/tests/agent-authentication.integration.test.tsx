@@ -1,0 +1,67 @@
+import { getByRole, getByText, queryByRole } from "@testing-library/dom";
+import { expect, test } from "vitest";
+import { dataTestId } from "../src/data-testid.ts";
+import { sendPrompt } from "./infra/application-scenario.ts";
+import { createTestApp } from "./infra/test-app.tsx";
+
+for (const agent of [
+    { id: "claude", label: "Claude Code", title: "Claude Code needs sign-in", command: "claude" },
+    { id: "codex", label: "Codex", title: "Codex needs authentication", command: "codex" },
+    { id: "pi", label: "Pi", title: "Pi's model provider needs authentication", command: "pi" },
+]) {
+    test(`Given ${agent.label} requires authentication, When I send a message, Then one notice names its computer and offers recovery steps without losing my draft`, {
+        timeout: 30_000,
+    }, async () => {
+        const app = await createTestApp({ connectAgent: true, agent });
+        const initialComposer = await app.queryElementByTestId(
+            dataTestId.messageComposer,
+            (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+        );
+        await sendPrompt(app, initialComposer, "require agent authentication");
+        const notice = await app.waitForView(() => {
+            const alert = getByRole(getByRole(document.body, "log", { name: "Messages" }), "alert");
+            expect(alert.textContent).toContain(agent.title);
+            return alert;
+        });
+        const composer = await app.queryElementByTestId(
+            dataTestId.messageComposer,
+            (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+        );
+        expect(notice.textContent).toContain("Controlled Agent Runtime");
+        expect(queryByRole(composer.closest("form") ?? document.body, "alert")).toBeNull();
+        const details = getByText(notice, "Technical details").closest("details");
+        const steps = getByText(notice, "View steps").closest("details");
+        expect(details).toHaveProperty("open", false);
+        expect(steps).toHaveProperty("open", false);
+        await app.user.type(composer, "Keep my next message");
+        await app.user.click(getByText(notice, "View steps"));
+        expect(steps).toHaveProperty("open", true);
+        expect(steps?.textContent).toContain(`Run ${agent.command}`);
+        expect(steps?.textContent).toContain("send your message again");
+        if (agent.id === "pi") {
+            expect(steps?.textContent).toContain("/login");
+            expect(steps?.textContent).toContain("API key");
+        }
+        await app.user.click(getByText(notice, "Technical details"));
+        expect(details).toHaveProperty("open", true);
+        expect(details?.textContent).toContain("authentication_required");
+        expect(composer).toHaveProperty("value", "Keep my next message");
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain("Keep my next message");
+        if (agent.id === "claude") {
+            if (app.daemon === null) {
+                throw new Error("Expected the connected Runtime");
+            }
+            await app.daemon.disconnect();
+            await app.waitForView(() =>
+                expect(app.elementByTestId(dataTestId.sessionReconnectNotice).textContent).toContain("Retrying in"),
+            );
+            await app.daemon.reconnect();
+            await app.user.click(getByRole(document.body, "button", { name: "Retry now" }));
+            await app.waitForView(() => {
+                expect(app.optionalElementByTestId(dataTestId.sessionReconnectNotice)).toBeNull();
+                expect(getByRole(document.body, "alert").textContent).toContain(agent.title);
+            });
+            expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "Keep my next message");
+        }
+    });
+}

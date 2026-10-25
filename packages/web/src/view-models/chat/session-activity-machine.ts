@@ -2,7 +2,7 @@
 export type SessionActivityState =
     | { readonly kind: "idle" }
     | { readonly kind: "working"; readonly commandId: string; readonly startedAt: number }
-    | { readonly kind: "failed"; readonly commandId: string; readonly message: string };
+    | { readonly kind: "failed"; readonly commandId: string; readonly code: string; readonly message: string };
 
 export function workingCommandId(state: SessionActivityState): string | null {
     switch (state.kind) {
@@ -21,6 +21,11 @@ export function sameSessionActivity(left: SessionActivityState, right: SessionAc
         case "working":
             return right.kind === "working" && right.commandId === left.commandId && right.startedAt === left.startedAt;
         case "failed":
-            return right.kind === "failed" && right.commandId === left.commandId && right.message === left.message;
+            return (
+                right.kind === "failed" &&
+                right.commandId === left.commandId &&
+                right.code === left.code &&
+                right.message === left.message
+            );
     }
 }
