@@ -285,10 +285,12 @@ async function readSessionHistory(
     newerEvents: readonly SessionEvent[],
     expectedSessionGenerationId: string | null,
     signal: AbortSignal,
+    loadedRange: { readonly generation: string; readonly firstEventId: string | null } | null = null,
 ): Promise<SessionEventHistory> {
     let events: readonly SessionEvent[] = newerEvents;
     let nextCursor = initialCursor;
     let sessionGenerationId = expectedSessionGenerationId;
+    let throughPosition: string | null = null;
     let renderableMessages = sessionReductionMessages(createSessionMessageReduction({ events, nextCursor }));
     do {
         const requestedCursor = nextCursor;
@@ -299,6 +301,10 @@ async function readSessionHistory(
             { omit: ["agent-reasoning"] },
         );
         signal.throwIfAborted();
+        // Only the newest page defines which live deltas the snapshot covers.
+        if (requestedCursor === initialCursor) {
+            throughPosition = page.throughPosition ?? null;
+        }
         if (sessionGenerationId !== null && page.sessionGenerationId !== sessionGenerationId) {
             throw new Error("The Session reloaded while message history was loading.");
         }
@@ -309,11 +315,18 @@ async function readSessionHistory(
         events = mergeSessionEvents(page.events, events);
         nextCursor = page.nextCursor;
         renderableMessages = sessionReductionMessages(createSessionMessageReduction({ events, nextCursor }));
-    } while (nextCursor !== null && renderableMessages.length < HISTORY_MESSAGE_TARGET);
+    } while (
+        nextCursor !== null &&
+        (renderableMessages.length < HISTORY_MESSAGE_TARGET ||
+            (loadedRange !== null &&
+                loadedRange.generation === sessionGenerationId &&
+                loadedRange.firstEventId !== null &&
+                !events.some((event) => event.eventId === loadedRange.firstEventId)))
+    );
     if (sessionGenerationId === null) {
         throw new Error("The Runtime returned no Session history generation.");
     }
-    return { events, nextCursor, sessionGenerationId };
+    return { events, nextCursor, sessionGenerationId, throughPosition };
 }
 
 /** The settings a turn submission carries, read from the options the pane shows. */
@@ -696,13 +709,22 @@ export function createSessionPaneModel(options: {
                     [],
                     effect.generation,
                     AbortSignal.any([parentSignal, controller.signal, AbortSignal.timeout(45_000)]),
+                    projection.kind === "established" ? projection : null,
                 );
                 parentSignal.throwIfAborted();
                 if (controller.signal.aborted || projection.pending === null || projection.revision !== revision) {
                     return;
                 }
-                commitProjection({ history, kind: "history-loaded", revision });
+                const effects = commitProjection({ history, kind: "history-loaded", revision });
                 delivery.getState().reconcile(sessionEventCommandIds(history.events));
+                if (effects.some((loaded) => loaded.kind === "read-settings")) {
+                    settings
+                        .getState()
+                        .readInBackground(
+                            (readSignal) => connected.sessions.readConfiguration(sessionId, readSignal),
+                            parentSignal,
+                        );
+                }
             } catch (cause) {
                 parentSignal.throwIfAborted();
                 if (controller.signal.aborted || projection.revision !== revision) {
@@ -721,21 +743,10 @@ export function createSessionPaneModel(options: {
             signal: AbortSignal,
         ): Promise<void> => {
             const effects = commitProjection(input);
-            let historyReloaded = false;
             for (const effect of effects) {
                 if (effect.kind === "load-history") {
                     await loadProjectionHistory(effect, connected, signal);
-                    historyReloaded = true;
                 }
-            }
-            // A reloaded log without any config event is the post-restart shape.
-            if (historyReloaded && projection.kind === "established" && projection.config === null) {
-                settings
-                    .getState()
-                    .readInBackground(
-                        (readSignal) => connected.sessions.readConfiguration(sessionId, readSignal),
-                        signal,
-                    );
             }
         };
         // A closed Session runs nothing. Settles the turn, queue and interactions it was holding, the way a

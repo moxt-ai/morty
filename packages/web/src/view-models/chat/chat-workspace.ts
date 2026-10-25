@@ -1,5 +1,5 @@
 import type { StoreApi } from "zustand/vanilla";
-import type { BotChatApi, BotRuntimeConfiguration, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import type { IdentityScope } from "../../services/identity/identity-scope-url.ts";
 import { rememberComputerName, rememberComputerVisit } from "../../services/identity/remembered-computers.ts";
@@ -17,7 +17,7 @@ import { createDraftControlsStore, type DraftControlsStore } from "./draft-contr
 import { createNetworkDiagnosticStore, type NetworkDiagnosticStore } from "./network-diagnostic-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
-import { createRuntimeRecovery, type RuntimeObservation } from "./runtime-recovery.ts";
+import { createRuntimeRecovery } from "./runtime-recovery.ts";
 import type { SessionActivityState } from "./session-activity-machine.ts";
 import { createSessionPaneModel, type SessionPaneModel } from "./session-pane-store.ts";
 import { createSidebarDialogs, type SidebarDialogs } from "./sidebar-dialogs.ts";
@@ -159,6 +159,7 @@ export function createChatWorkspace(options: {
         botId,
         now: options.clock.now,
         onRuntimeConfigurationUnavailable: () => options.computers?.invalidateCurrent(),
+        onWaitingForRuntime: () => runtimeRecovery.failed(),
         createId: () => crypto.randomUUID(),
         navigation: historyNavigation(recordHome),
         entry: options.entry ?? "address",
@@ -178,7 +179,7 @@ export function createChatWorkspace(options: {
             if (options.rememberedIdentity !== undefined) {
                 rememberComputerName(options.rememberedIdentity, configuration.runtime.machineName);
             }
-            recoverFromRuntime(configuration, observation);
+            runtimeRecovery.observe(configuration.runtime.online, observation);
         },
         onDraftSelected: () => {
             void draftControls
@@ -193,19 +194,27 @@ export function createChatWorkspace(options: {
         onDirectoryRefreshed: () => startDirectoryLoad(),
         onConversationCreated: (conversationId, title) =>
             directory.getState().conversationCreated(conversationId, title),
-        onSelectionReady: (selection) => replacePane(selection),
+        onSelectionReady: (selection) => {
+            runtimeRecovery.working();
+            replacePane(selection);
+        },
         onSelectionTargeted: (conversationId) => statuses.getState().selectionChanged(conversationId),
         url: options.url ?? window.location.href,
     });
     const directory = createConversationDirectoryStore(botId, requests, (sessions) => {
         statuses.getState().directoryLoaded(botId, sessions, statusLifetime.signal);
     });
-    const statuses = createConversationStatusStore(requests, (sessionId, reason) => {
-        // Only the open pane has something to tell its user; the other Sessions reopen when selected.
-        if (paneEntry?.session.result.ready.sessionId === sessionId) {
-            paneEntry.model.store.getState().sessionClosed(reason);
-        }
-    });
+    const statuses = createConversationStatusStore(
+        requests,
+        (sessionId, reason) => {
+            // Only the open pane has something to tell its user; the other Sessions reopen when selected.
+            if (paneEntry?.session.result.ready.sessionId === sessionId) {
+                paneEntry.model.store.getState().sessionClosed(reason);
+            }
+        },
+        () => runtimeRecovery.failed(),
+        () => runtimeRecovery.working(),
+    );
     const draftControls = createDraftControlsStore(
         botId,
         requests,
@@ -297,31 +306,47 @@ export function createChatWorkspace(options: {
     const startDirectoryLoad = (): void => {
         directoryLifetime.abort(new Error("Directory loading restarted."));
         directoryLifetime = new AbortController();
+        const signal = directoryLifetime.signal;
         statuses.getState().directoryLoadStarted();
         void directory
             .getState()
-            .load(directoryLifetime.signal)
-            .catch(() => undefined);
+            .load(signal)
+            .catch(() => undefined)
+            .finally(() => {
+                if (signal.aborted) {
+                    return;
+                }
+                if (listWaitsForRuntime()) {
+                    runtimeRecovery.failed();
+                } else {
+                    runtimeRecovery.working();
+                }
+            });
     };
-    const runtimeRecovery = createRuntimeRecovery();
+    const listWaitsForRuntime = (): boolean => {
+        const listed = directory.getState().state.kind;
+        return listed === "failed" || listed === "stale";
+    };
     /**
      * Retries everything the page reads through the Runtime that it could not read while the Runtime was unreachable:
-     * the home view, the session list, and the stream that follows their statuses. Restarting the home view reloads
-     * the list with it, and a list load follows the statuses again.
+     * the home view, the session list, and the stream that follows their statuses. Each retries only what it lost.
+     * Restarting the home view reloads the list with it, and a list load follows the statuses again.
      */
-    const recoverFromRuntime = (configuration: BotRuntimeConfiguration, observation: RuntimeObservation): void => {
-        const homeWaiting = homeWaitsForRuntime(home.getState());
-        const listed = directory.getState().state.kind;
-        const listWaiting = listed === "failed" || listed === "stale" || statuses.getState().unfollowed();
-        if (!runtimeRecovery.observe(configuration.runtime.online, observation, homeWaiting || listWaiting)) {
-            return;
-        }
-        if (homeWaiting) {
-            home.getState().retry();
-        } else {
-            startDirectoryLoad();
-        }
-    };
+    const runtimeRecovery = createRuntimeRecovery({
+        clock: options.clock,
+        lifetime: operationsLifetime.signal,
+        waiting: () =>
+            homeWaitsForRuntime(home.getState()) || listWaitsForRuntime() || statuses.getState().unfollowed(),
+        retry: () => {
+            if (homeWaitsForRuntime(home.getState())) {
+                home.getState().retry();
+            } else if (listWaitsForRuntime()) {
+                startDirectoryLoad();
+            } else {
+                statuses.getState().follow(statusLifetime.signal);
+            }
+        },
+    });
     const announcedViews = new WeakSet<HTMLElement>();
     const loadSelectedSession = (target: SelectedConversationTarget): void => {
         const sessionId = target.kind === "conversation" ? target.conversationId : target.sessionId;

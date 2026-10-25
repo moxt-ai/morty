@@ -1,5 +1,5 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
-import type { AcpSessionUpdate, SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
+import type { AcpSessionUpdate, SessionEvent, SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
 import {
     appendSessionMessageEvent,
     createSessionMessageReduction,
@@ -11,6 +11,7 @@ import {
 } from "./session-presentation.ts";
 
 export interface SessionEventHistory {
+    readonly throughPosition: string | null;
     readonly events: readonly SessionEvent[];
     readonly nextCursor: string | null;
     readonly sessionGenerationId: string;
@@ -18,21 +19,17 @@ export interface SessionEventHistory {
 
 interface PendingEvents {
     readonly generation: string | null;
-    readonly buffer: readonly SessionEvent[];
-}
-
-interface ObservedConfig {
-    readonly eventId: string;
-    readonly options: readonly SessionConfigOption[];
+    readonly buffer: readonly SessionLiveEvent[];
 }
 
 export type SessionProjection =
     | { readonly kind: "pristine"; readonly pending: PendingEvents | null; readonly revision: number }
     | {
           readonly kind: "established";
-          readonly config: ObservedConfig | null;
           readonly eventIds: ReadonlySet<string>;
           readonly generation: string;
+          readonly firstEventId: string | null;
+          readonly throughPosition: string | null;
           readonly pagination: { readonly nextCursor: string | null };
           readonly pending: PendingEvents | null;
           readonly reduction: SessionMessageReduction;
@@ -40,7 +37,7 @@ export type SessionProjection =
       };
 
 export type SessionProjectionInput =
-    | { readonly event: SessionEvent; readonly kind: "live-event" }
+    | { readonly event: SessionLiveEvent; readonly kind: "live-event" }
     | { readonly kind: "reconcile" }
     | { readonly kind: "execution-idle" }
     | { readonly history: SessionEventHistory; readonly kind: "history-loaded"; readonly revision: number }
@@ -52,7 +49,13 @@ export type SessionProjectionEffect =
           readonly config?: readonly SessionConfigOption[] | undefined;
           readonly kind: "adopted";
           readonly title?: string | undefined;
-      };
+      }
+    /**
+     * The history was loaded again: the page may have missed settings changes, and the history's settings events
+     * cannot tell the current settings, because a change made from a settings menu writes none. The Runtime is asked
+     * for its current settings.
+     */
+    | { readonly kind: "read-settings" };
 
 export interface SessionProjectionResult {
     readonly effects: readonly SessionProjectionEffect[];
@@ -107,11 +110,11 @@ function mergeSessionEvents(first: readonly SessionEvent[], second: readonly Ses
     return [...events.values()];
 }
 
-function newestConfig(events: readonly SessionEvent[]): ObservedConfig | null {
+function newestConfig(events: readonly SessionEvent[]): readonly SessionConfigOption[] | null {
     for (let index = events.length - 1; index >= 0; index -= 1) {
         const event = events[index];
         if (event?.type === "acp" && event.payload.sessionUpdate === "config_option_update") {
-            return { eventId: event.eventId, options: sessionConfigOptionsFromAcp(event.payload) };
+            return sessionConfigOptionsFromAcp(event.payload);
         }
     }
     return null;
@@ -133,6 +136,7 @@ function newestTitle(events: readonly SessionEvent[]): string | undefined {
     return undefined;
 }
 
+/** What events the page sees as they happen change: the settings and title they report become current. */
 function adoptionEffect(events: readonly SessionEvent[]): readonly SessionProjectionEffect[] {
     const config = newestConfig(events);
     const title = newestTitle(events);
@@ -141,13 +145,23 @@ function adoptionEffect(events: readonly SessionEvent[]): readonly SessionProjec
     }
     return [
         {
-            // Rebuilt history may omit configuration events. Only an explicit
-            // config update, including an empty one, can replace current settings.
-            ...(config === null ? {} : { config: config.options }),
+            // Only an explicit config update, including an empty one, can replace current settings.
+            ...(config === null ? {} : { config }),
             kind: "adopted",
             ...(title === undefined ? {} : { title }),
         },
     ];
+}
+
+/** A new history baseline adopts its title, and leaves the current settings to the Runtime. */
+function baselineEffects(events: readonly SessionEvent[]): readonly SessionProjectionEffect[] {
+    const title = newestTitle(events);
+    return [...(title === undefined ? [] : [{ kind: "adopted" as const, title }]), { kind: "read-settings" }];
+}
+
+/** Events a reload found after the ones the page saw apply as they would have live; the Runtime then confirms. */
+function catchUpEffects(events: readonly SessionEvent[]): readonly SessionProjectionEffect[] {
+    return [...adoptionEffect(events), { kind: "read-settings" }];
 }
 
 function adoptGeneration(
@@ -156,9 +170,10 @@ function adoptGeneration(
     events: readonly SessionEvent[],
 ): SessionProjection {
     return {
-        config: newestConfig(events),
         eventIds: new Set(events.map((event) => event.eventId)),
         generation: history.sessionGenerationId,
+        firstEventId: events.at(0)?.eventId ?? null,
+        throughPosition: history.throughPosition,
         kind: "established",
         pagination: { nextCursor: history.nextCursor },
         pending: null,
@@ -177,11 +192,10 @@ function applyNewerEvents(
         if (next.eventIds.has(event.eventId)) {
             continue;
         }
-        const config = newestConfig([event]) ?? next.config;
         next = {
             ...next,
-            config,
             eventIds: new Set([...next.eventIds, event.eventId]),
+            firstEventId: next.firstEventId ?? event.eventId,
             reduction: appendSessionMessageEvent(next.reduction, event),
         };
         applied.push(event);
@@ -223,16 +237,30 @@ export function transitionSessionProjection(
                     },
                 };
             }
-            if (state.eventIds.has(event.eventId)) {
+            if (state.pending !== null) {
+                return {
+                    effects: [],
+                    state:
+                        state.pending.generation !== null
+                            ? state
+                            : {
+                                  ...state,
+                                  pending: { ...state.pending, buffer: [...state.pending.buffer, event] },
+                              },
+                };
+            }
+            if (
+                (state.throughPosition !== null && BigInt(event.position) <= BigInt(state.throughPosition)) ||
+                state.eventIds.has(event.eventId)
+            ) {
                 return { effects: [], state };
             }
-            const config = newestConfig([event]) ?? state.config;
             return {
                 effects: adoptionEffect([event]),
                 state: {
                     ...state,
-                    config,
                     eventIds: new Set([...state.eventIds, event.eventId]),
+                    firstEventId: state.firstEventId ?? event.eventId,
                     reduction: appendSessionMessageEvent(state.reduction, event),
                 },
             };
@@ -252,15 +280,25 @@ export function transitionSessionProjection(
                 state.pending.generation !== null ||
                 state.kind === "pristine" ||
                 input.history.sessionGenerationId !== state.generation;
-            const events = mergeSessionEvents(input.history.events, state.pending.buffer);
-            if (replacing) {
+            const events = mergeSessionEvents(
+                input.history.events,
+                state.pending.buffer.filter(
+                    (event) =>
+                        event.sessionGenerationId === input.history.sessionGenerationId &&
+                        (input.history.throughPosition === null ||
+                            BigInt(event.position) > BigInt(input.history.throughPosition)),
+                ),
+            );
+            // Older Runtimes have no coverage boundary, so retain their existing
+            // append-only recovery until they are upgraded.
+            if (replacing || input.history.throughPosition !== null) {
                 return {
-                    effects: adoptionEffect(events),
+                    effects: baselineEffects(events),
                     state: adoptGeneration(state, input.history, events),
                 };
             }
-            const merged = applyNewerEvents(state, input.history);
-            return { effects: adoptionEffect(merged.events), state: merged.state };
+            const merged = applyNewerEvents(state, { ...input.history, events });
+            return { effects: catchUpEffects(merged.events), state: merged.state };
         }
         case "older-page": {
             if (
@@ -276,6 +314,8 @@ export function transitionSessionProjection(
                 state: {
                     ...state,
                     pagination: { nextCursor: input.page.nextCursor },
+                    firstEventId: input.page.events.at(0)?.eventId ?? state.firstEventId,
+                    eventIds: new Set([...input.page.events.map((event) => event.eventId), ...state.eventIds]),
                     reduction: prependSessionMessageEvents(state.reduction, input.page),
                     revision: state.revision + 1,
                 },

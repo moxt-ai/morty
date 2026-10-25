@@ -87,11 +87,16 @@ export function botConnectionStatus(
 
 /**
  * Whether the home view failed only because the Runtime was unreachable, so the workspace retries it once the Runtime
- * is back. Only loads that read are: continuing a native session forks or imports it, and a connection that dropped
- * mid-request cannot show it did not happen, so the user decides whether to retry.
+ * is back. A selection that is loading again is a retry in flight, not a failure. Only loads that read are retried:
+ * continuing a native session forks or imports it, and a connection that dropped mid-request cannot show it did not
+ * happen, so the user decides whether to retry.
  */
 export function homeWaitsForRuntime(home: Pick<BotChatHomeStore, "view" | "selection">): boolean {
-    return home.view.kind === "runtime-disconnected" && retriesAutomatically(home.selection);
+    return (
+        home.view.kind === "runtime-disconnected" &&
+        home.selection.kind !== "loading" &&
+        retriesAutomatically(home.selection)
+    );
 }
 
 function retriesAutomatically(selection: ConversationSelectionState): boolean {
@@ -224,6 +229,8 @@ export const createBotChatHomeStore = (
             observation: RuntimeObservation,
         ) => void;
         readonly onRuntimeConfigurationUnavailable: () => void;
+        /** Announced when the view failed only because the Runtime was unreachable and waits for it to be retried. */
+        readonly onWaitingForRuntime: () => void;
         readonly now: () => number;
         readonly url: string;
         readonly createId: () => string;
@@ -670,6 +677,7 @@ export const createBotChatHomeStore = (
                                     : failedSelection,
                             view: { kind: "runtime-disconnected", botId, message },
                         });
+                        options.onWaitingForRuntime();
                         await followConfigurationChanges(signal);
                         return;
                     }

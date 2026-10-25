@@ -12,7 +12,11 @@ import { bodyParser } from "../../../middleware/body-parser.ts";
 import type { Session } from "../../management/entity/authentication/session.ts";
 import { PlatformProjectError, platformIdentifier } from "../../management/entity/platform-project.ts";
 import { authenticatedSession } from "../../management/http/authenticated-session.ts";
-import type { ChatScope, ManagedSessionEvent } from "../service/chat-service.ts";
+import {
+    type ChatScope,
+    MANAGED_SESSION_STATUSES_FOLLOWING_KIND,
+    type ManagedSessionEvent,
+} from "../service/chat-service.ts";
 import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
 
 const setupInput = v.strictObject({
@@ -111,6 +115,8 @@ function privateJson(value: unknown) {
 
 function encodeManagedSessionEvent(event: ManagedSessionEvent): string {
     switch (event.kind) {
+        case MANAGED_SESSION_STATUSES_FOLLOWING_KIND:
+            return JSON.stringify({ kind: event.kind });
         case "session.status.changed":
             return encodeSessionStatusChangedEvent(event);
         case "session.close.notice":

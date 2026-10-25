@@ -28,9 +28,9 @@ jobs:
         run: |
           codex --version
           claude --version
-      - name: Verify instruction delivery and native Documents resolution
+      - name: Verify instruction delivery and native state directory resolution
         env:
-          MORTY_VERIFY_SYSTEM_DOCUMENTS: 'true'
+          MORTY_VERIFY_SYSTEM_STATE: 'true'
         run: >-
           pnpm --filter @moxt-ai/morty-worker exec vitest run
           tests/instruction-documents.integration.test.ts
