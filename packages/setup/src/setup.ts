@@ -7,7 +7,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { validateLocalPath } from "@moxt-ai/mobius/filesystem";
-import { executableLaunch, findExecutableOnPath, stopProcessTree } from "@moxt-ai/mobius/process";
+import { executableLaunch, findExecutableOnPath, runBoundedProcess, stopProcessTree } from "@moxt-ai/mobius/process";
 import { decodeIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
@@ -142,6 +142,26 @@ class RuntimeStartError extends Error {
     }
 
     readonly diagnostic = () => ({ termination: this.termination, logPath: this.logPath, nextStep: this.nextStep });
+}
+
+class RuntimePreflightError extends Error {
+    readonly code = "RUNTIME_PREFLIGHT_FAILED";
+    readonly nextStep =
+        "Install Node.js 22.19.0 or newer and npm, reinstall the latest @moxt-ai/mobius using that Node.js, then verify mobius --version in the same terminal and rerun setup.";
+
+    constructor(message: string, cause?: unknown) {
+        super(message, { cause });
+        this.name = "RuntimePreflightError";
+    }
+
+    readonly diagnostic = () => ({
+        nodeVersion: process.versions.node,
+        nodeExecutable: process.execPath,
+        ...(this.cause instanceof RuntimeStartError
+            ? { logPath: this.cause.logPath, termination: this.cause.termination }
+            : {}),
+        nextStep: this.nextStep,
+    });
 }
 
 interface ErrorCause {
@@ -1168,9 +1188,47 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         });
     }
 
+    async function preflightRuntime(context: Context, cwd: string) {
+        progress("preflight", "Checking Node.js, npm and the installed Runtime before creating an identity.");
+        const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
+        if (major < 22 || (major === 22 && minor < 19)) {
+            throw new RuntimePreflightError(
+                `Node.js 22.19.0 or newer is required; found ${process.versions.node} at ${process.execPath}.`,
+            );
+        }
+        try {
+            // This uses the same executable resolution as start/pair, including the Node
+            // selected by its launcher. A package's engines field is not proof it starts.
+            await runMobius(context, ["--version"], cwd, AbortSignal.any([signal, deadline(30_000)]), "process-tree");
+            if (host.runtime === undefined) {
+                const npm = await findExecutableOnPath("npm", process.env);
+                if (npm === null) {
+                    throw new Error("npm is required for Runtime upgrades");
+                }
+                await runBoundedProcess({
+                    command: npm.path,
+                    arguments: ["--version"],
+                    cwd,
+                    environment: process.env,
+                    signal,
+                    timeoutMilliseconds: 10_000,
+                    outputLimitBytes: 4096,
+                });
+            }
+        } catch (cause) {
+            signal.throwIfAborted();
+            throw new RuntimePreflightError(
+                "The local Runtime failed its startup check. No remote identity or pairing was created by this run.",
+                cause,
+            );
+        }
+        emit({ status: "runtime_verified", nodeVersion: process.versions.node, nodeExecutable: process.execPath });
+    }
+
     async function setup(options: SetupOptions) {
         const cwd = await resolveWorkingDirectory(options.cwd);
         const directory = await prepareStateDirectory(resolveStateDirectory(host.state, signal));
+        await preflightRuntime({ directory, base: options.base, config: {} }, cwd);
         await adoptEarlierState(directory, options.base, cwd);
         let context = await retireReplacedIdentity(await loadConfiguration(directory, options.base));
         const identity = await prepareIdentity(context);
@@ -1217,7 +1275,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                           ? "TIMEOUT"
                           : "SETUP_FAILED",
                 cause: serializeErrorCause(cause),
-                ...(cause instanceof RuntimeStartError ? { runtime: cause.diagnostic() } : {}),
+                ...(cause instanceof RuntimeStartError || cause instanceof RuntimePreflightError
+                    ? { runtime: cause.diagnostic() }
+                    : {}),
             },
         });
         return 1;

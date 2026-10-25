@@ -222,9 +222,32 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  native-setup:
+    name: Setup preflight (${{ matrix.os }})
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
+      - name: Verify native executable and private state boundaries
+        run: >-
+          pnpm --filter @moxt-ai/morty-worker exec vitest run
+          tests/setup-filesystem.integration.test.ts
+          -t "Mobius executable|local workspace and a private state directory|junction replaces"
+          --maxWorkers=1
+
   check:
     name: check
-    needs: [static, tests, coverage, e2e]
+    needs: [static, tests, coverage, e2e, native-setup]
     if: ${{ always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -235,11 +258,13 @@ jobs:
           test "$TESTS_RESULT" = success
           test "$COVERAGE_RESULT" = success
           test "$E2E_RESULT" = success
+          test "$NATIVE_SETUP_RESULT" = success
         env:
           STATIC_RESULT: ${{ needs.static.result }}
           TESTS_RESULT: ${{ needs.tests.result }}
           COVERAGE_RESULT: ${{ needs.coverage.result }}
           E2E_RESULT: ${{ needs.e2e.result }}
+          NATIVE_SETUP_RESULT: ${{ needs.native-setup.result }}
 
   deploy:
     needs: [validate-worker-config]

@@ -51,6 +51,9 @@ export class ControlledSetupRuntime implements SetupRuntime {
     readonly run: SetupRuntime["run"] = async (directory, args, _cwd, signal) => {
         signal.throwIfAborted();
         const result = { pid: process.pid, logPath: join(directory, "controlled-runtime.log") };
+        if (args[0] === "--version") {
+            return result;
+        }
         if (args[0] === "pair" && args[1] === "list") {
             const output = args.find((argument) => argument.startsWith("--output-json="));
             if (output === undefined) {

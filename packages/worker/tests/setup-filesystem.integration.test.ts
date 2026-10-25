@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import * as v from "valibot";
 import { expect, test } from "vitest";
@@ -40,6 +40,86 @@ if (!isSetupModule(setupModule)) {
     throw new Error("Missing setup entrypoint");
 }
 const { runSetup } = setupModule;
+
+test.each(["missing", "unlaunchable", "npm-missing", "npm-unlaunchable"] as const)(
+    "Given a %s local dependency, When setup checks the Mobius executable, Then it fails before creating an identity and reports recovery instructions",
+    async (failure) => {
+        const directory = await mkdtemp(join(tmpdir(), "morty-setup-preflight-"));
+        const state = join(directory, "state");
+        const bin = join(directory, "bin");
+        await mkdir(bin);
+        const fixture = await createIdentityFixture({ listenOnLoopback: true });
+        try {
+            if (failure !== "missing") {
+                const entry = join(bin, "broken.mjs");
+                await writeFile(
+                    entry,
+                    failure === "unlaunchable"
+                        ? "await using = ;"
+                        : `import ${JSON.stringify(new URL("../../../third-party/mobius/packages/cli/src/cli/entrypoint.ts", import.meta.url).href)};`,
+                );
+                if (failure === "npm-unlaunchable") {
+                    await writeFile(
+                        join(bin, process.platform === "win32" ? "npm.cmd" : "npm"),
+                        process.platform === "win32" ? "@exit /b 42\r\n" : `#!${process.execPath}\nprocess.exit(42);\n`,
+                        { mode: 0o700 },
+                    );
+                }
+                await writeFile(
+                    join(bin, process.platform === "win32" ? "mobius.cmd" : "mobius"),
+                    process.platform === "win32"
+                        ? `@echo off\r\n"${process.execPath}" "${entry}" %*\r\n`
+                        : `#!${process.execPath}\nimport ${JSON.stringify(pathToFileURL(entry).href)};\n`,
+                    { mode: 0o700 },
+                );
+            }
+            let output = "";
+            const child = spawn(
+                process.execPath,
+                [
+                    fileURLToPath(new URL("../../setup/src/cli.ts", import.meta.url)),
+                    "setup",
+                    "--base-url",
+                    fixture.origin,
+                    "--cwd",
+                    directory,
+                    "--harness",
+                    "codex",
+                    "--session-id",
+                    "preflight-test",
+                ],
+                {
+                    env: {
+                        ...process.env,
+                        PATH: bin,
+                        MOBIUS_STATE_DIRECTORY: join(directory, "mobius-state"),
+                        MORTY_STATE_DIRECTORY: state,
+                        DOCUMENT_DIR: directory,
+                    },
+                    stdio: ["ignore", "pipe", "pipe"],
+                    signal: AbortSignal.timeout(20000),
+                    windowsHide: true,
+                },
+            );
+            child.stdout.on("data", (chunk: Buffer) => {
+                output += chunk.toString();
+            });
+            child.stderr.on("data", (chunk: Buffer) => {
+                output += chunk.toString();
+            });
+            const [code] = await once(child, "close");
+            expect(code, output).toBe(1);
+            expect(output).toContain('"code":"RUNTIME_PREFLIGHT_FAILED"');
+            expect(output).toContain("nextStep");
+            expect(output).not.toContain('"status":"identity_ready"');
+            await expect(readFile(join(state, "config.json"))).rejects.toMatchObject({ code: "ENOENT" });
+        } finally {
+            await fixture.close();
+            await rm(directory, { recursive: true, force: true });
+        }
+    },
+    30000,
+);
 
 test("Given a local workspace and a private state directory, When setup creates its identity and the user cancels, Then credentials remain private and can be reused", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-setup-filesystem-"));
@@ -289,6 +369,7 @@ for (const [failure, scenario] of starterFailures) {
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 const output = process.argv.find(arg => arg.startsWith('--output-json='));
+if (process.argv[2] === '--version') { process.exit(0); }
 if (process.argv[2] === 'upgrade') {
     ${
         failure === "cancel-upgrade"
