@@ -239,8 +239,20 @@ export function sessionPanePresentation(
         composerError:
             model.connection.kind === "closed"
                 ? ""
-                : ([model.activity, model.operation, delivery.state].find((state) => state.kind === "failed")
-                      ?.message ??
+                : ([model.activity, model.operation, delivery.state]
+                      .filter((state) => state.kind === "failed")
+                      .find(
+                          (state) =>
+                              // A turn failure belongs to its timeline card. Keep the
+                              // composer fallback only when that command has no card.
+                              !("commandId" in state) ||
+                              !model.messages.some(
+                                  (message) =>
+                                      message.commandId === state.commandId &&
+                                      message.role === "assistant" &&
+                                      message.presentation.kind === "failure",
+                              ),
+                      )?.message ??
                   stopFailure(tasks) ??
                   (queue.feedback.kind === "failed" ? queue.feedback.message : "")),
         controlRunning,

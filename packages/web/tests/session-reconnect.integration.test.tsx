@@ -1,4 +1,4 @@
-import { getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
+import { getByLabelText, getByRole, queryAllByText, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
@@ -146,7 +146,7 @@ test("Given a disconnected conversation with an unsent draft, When the same Runt
     );
 });
 
-test("Given a failed Agent turn, When its Runtime disconnects and reconnects, Then the unrelated turn error remains visible", {
+test("Given a failed Agent turn, When its Runtime disconnects and reconnects, Then its failure stays visible once", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
@@ -160,14 +160,16 @@ test("Given a failed Agent turn, When its Runtime disconnects and reconnects, Th
         throw new Error("Expected the composer form");
     }
     await sendPrompt(app, composer, "fail this turn explicitly");
-    await app.waitForView(() =>
-        expect(queryByRole(form, "alert")?.textContent, document.body.textContent ?? "").toContain(
+    const messages = getByRole(document.body, "log", { name: "Messages" });
+    await app.waitForView(() => {
+        expect(queryByRole(messages, "alert")?.textContent, document.body.textContent ?? "").toContain(
             "The controlled Agent rejected this turn.",
-        ),
-    );
+        );
+        expect(queryByRole(form, "alert")).toBeNull();
+    });
     await app.daemon.disconnect();
     await app.waitForView(() => expect(reconnectStatusText(app)).toContain("Retrying in"));
-    expect(queryByRole(form, "alert")?.textContent).toContain("The controlled Agent rejected this turn.");
+    expect(queryAllByText(document.body, "The controlled Agent rejected this turn.", { exact: true })).toHaveLength(1);
     await app.daemon.reconnect();
     const retry = queryByRole(form, "button", { name: "Retry now" });
     if (!(retry instanceof HTMLButtonElement)) {
@@ -178,7 +180,13 @@ test("Given a failed Agent turn, When its Runtime disconnects and reconnects, Th
         expect(composer.disabled).toBe(false);
         expect(reconnectStatusText(app)).toBeNull();
     });
-    expect(queryByRole(form, "alert")?.textContent).toContain("The controlled Agent rejected this turn.");
+    // Native history need not retain lifecycle failures. The pane keeps one
+    // fallback when the reloaded timeline no longer has that command's card.
+    await app.waitForView(() =>
+        expect(queryAllByText(document.body, "The controlled Agent rejected this turn.", { exact: true })).toHaveLength(
+            1,
+        ),
+    );
 });
 
 test("Given repeated short-lived recoveries, When the Runtime drops again after automatic or foreground recovery, Then backoff grows until a healthy connection stabilizes", {

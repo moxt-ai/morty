@@ -172,6 +172,11 @@ jobs:
           npm install --global --prefix "$RUNNER_TEMP/codex-e2e" @openai/codex@0.154.0
           echo "MOBIUS_TEST_CODEX_PATH=$RUNNER_TEMP/codex-e2e/bin/codex" >> "$GITHUB_ENV"
 
+      - name: Install Claude Code for the authentication journey
+        run: |
+          npm install --global --prefix "$RUNNER_TEMP/claude-e2e" @anthropic-ai/claude-code@2.1.273
+          echo "MOBIUS_TEST_CLAUDE_PATH=$RUNNER_TEMP/claude-e2e/bin/claude" >> "$GITHUB_ENV"
+
       - name: Run browser journeys
         run: pnpm test:e2e --shard="$E2E_SHARD"
         env:
