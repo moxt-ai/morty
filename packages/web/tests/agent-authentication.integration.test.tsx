@@ -9,7 +9,7 @@ for (const agent of [
     { id: "codex", label: "Codex", title: "Codex needs authentication", command: "codex" },
     { id: "pi", label: "Pi", title: "Pi's model provider needs authentication", command: "pi" },
 ]) {
-    test(`Given ${agent.label} requires authentication, When I send a message, Then one notice names its computer and offers recovery steps without losing my draft`, {
+    test(`Given ${agent.label} requires authentication, When I send a message and retry after reloading, Then one notice offers recovery steps and preserves my draft`, {
         timeout: 30_000,
     }, async () => {
         const app = await createTestApp({ connectAgent: true, agent });
@@ -63,5 +63,21 @@ for (const agent of [
             });
             expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "Keep my next message");
         }
+        const reloaded = await app.reload();
+        const restoredComposer = await reloaded.queryElementByTestId(
+            dataTestId.messageComposer,
+            (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+        );
+        expect(restoredComposer).toHaveProperty("value", "Keep my next message");
+        const messages = getByRole(document.body, "log", { name: "Messages" });
+        expect(messages.textContent).not.toContain("Keep my next message");
+        expect(messages.textContent).not.toContain("Agent authentication is required");
+        await reloaded.user.clear(restoredComposer);
+        await sendPrompt(reloaded, restoredComposer, "require agent authentication");
+        await reloaded.waitForView(() => {
+            expect(getByRole(document.body, "alert").textContent).toContain(agent.title);
+            expect(queryByRole(restoredComposer.closest("form") ?? document.body, "alert")).toBeNull();
+        });
+        expect(getByText(document.body, "Technical details").closest("details")).toHaveProperty("open", false);
     });
 }
