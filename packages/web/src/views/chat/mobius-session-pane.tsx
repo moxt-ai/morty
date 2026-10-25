@@ -1,11 +1,9 @@
 import type { PromptImage, PromptResource, SessionConfigOption } from "@moxt-ai/mobius-sdk";
-import { CircleAlert, X } from "lucide-react";
-import { Dialog } from "radix-ui";
+import { Check, CircleAlert, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
 import { AgentThinking, type AgentThinkingEntry } from "../../components/chat/agent-thinking.tsx";
-import { AuthenticationNotice } from "../../components/chat/authentication-notice.tsx";
 import { AutoFocusInput } from "../../components/chat/auto-focus-input.tsx";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
@@ -16,9 +14,10 @@ import {
     chatSessionMessageColumnClassName,
     chatSessionMessageItemClassName,
     chatSessionMessageScrollClassName,
+    chatSessionPaneSectionClassName,
 } from "../../components/chat/chat-session-layout.ts";
 import { ConnectionNotice } from "../../components/chat/connection-notice.tsx";
-import { ReadonlyWorkingDirectory } from "../../components/chat/cwd-selector.tsx";
+import { ReadonlyWorkingDirectory, WorkingDirectorySkeleton } from "../../components/chat/cwd-selector.tsx";
 import { HarnessMark } from "../../components/chat/harness-mark.tsx";
 import { MobileSessionTitlePortal } from "../../components/chat/mobile-session-title-portal.tsx";
 import {
@@ -27,7 +26,6 @@ import {
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
 import { SessionLoadFailure } from "../../components/chat/session-load-failure.tsx";
-import { SessionWelcome } from "../../components/chat/session-welcome.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -35,7 +33,6 @@ import { DesktopChatLayout } from "../../components/utils/desktop-chat-layout.ts
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { cn } from "../../lib/utils.ts";
-import { authenticationGuidance } from "../../view-models/chat/authentication-guidance.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { harnessOptions } from "../../view-models/chat/native-session-agents.ts";
@@ -178,7 +175,6 @@ function sessionRenderGroups(items: readonly SessionRenderItem[]): readonly Sess
 
 function SessionRenderItemContent({
     active,
-    machineName,
     item,
     onRetryUnknownDelivery,
     onRemoveUnknownDelivery,
@@ -187,7 +183,6 @@ function SessionRenderItemContent({
     presentation,
 }: {
     readonly active: boolean;
-    readonly machineName: string;
     readonly item: SessionRenderItem;
     readonly onRemoveUnknownDelivery: () => void;
     readonly onRetryUnknownDelivery: () => void;
@@ -221,8 +216,6 @@ function SessionRenderItemContent({
     return (
         <MobiusSessionMessage
             active={active}
-            failureAgentRef={pane.agentRef}
-            failureMachineName={machineName}
             deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
             failureApproval={{ botId: pane.botId, kind: "bot-approval" }}
             message={item.message}
@@ -266,7 +259,10 @@ function SessionTitleSkeleton({ centered = false }: { readonly centered?: boolea
                 <span className="sr-only">Loading conversation title</span>
                 <div
                     aria-hidden="true"
-                    className="h-4 w-40 max-w-full animate-pulse rounded-full bg-muted motion-reduce:animate-none"
+                    className={cn(
+                        "w-40 max-w-full animate-pulse rounded-full bg-muted motion-reduce:animate-none",
+                        centered ? "h-5" : "h-4",
+                    )}
                 />
             </div>
         </h2>
@@ -300,90 +296,101 @@ function SessionConversationTitleBar({
     readonly onConfirmTitleEdit: () => void;
 }) {
     const displayTitle = title || "Untitled session";
-    const saving = titleEdit.kind === "saving";
-    if (titleLoading) {
-        return <SessionTitleSkeleton centered={centered} />;
-    }
-    return (
-        <Dialog.Root
-            open={titleEdit.kind !== "closed"}
-            onOpenChange={(open) => {
-                if (open) {
-                    onOpenTitleEdit();
-                } else if (!saving) {
-                    onCancelTitleEdit();
-                }
-            }}
-        >
+    const titleTextClassName = centered ? "text-[14px] leading-5" : "text-sm";
+    const harnessMarkClassName = cn("text-copy-secondary", centered && "size-[18px]");
+    if (titleEdit.kind === "closed" || centered) {
+        if (titleLoading) {
+            return <SessionTitleSkeleton centered={centered} />;
+        }
+        return (
             <h2
                 className={cn(
-                    "flex min-w-0 items-center gap-2 text-sm font-semibold",
-                    centered && "w-full max-w-full justify-center",
+                    "flex min-w-0 items-center font-semibold",
+                    titleTextClassName,
+                    centered ? "w-full max-w-full justify-center gap-1" : "gap-2",
                 )}
                 title={displayTitle}
             >
                 <HarnessMark
                     agentRef={agentRef || agentLabel}
                     appearance="line"
-                    className="text-copy-secondary"
+                    className={harnessMarkClassName}
                     label={agentLabel}
                     testId={dataTestId.sessionTitleHarnessMark}
                 />
-                <Dialog.Trigger asChild>
+                {centered ? (
+                    <span className="min-w-0 max-w-full truncate text-center">{displayTitle}</span>
+                ) : (
                     <button
                         type="button"
                         aria-label={displayTitle}
-                        className={cn(
-                            "min-h-11 min-w-0 max-w-full cursor-pointer truncate rounded-md outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/70",
-                            centered ? "text-center" : "text-left",
-                        )}
+                        className="min-w-0 max-w-full cursor-pointer truncate text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/70"
                         title="Rename conversation"
+                        onClick={onOpenTitleEdit}
                     >
                         {displayTitle}
                     </button>
-                </Dialog.Trigger>
+                )}
             </h2>
-            <Dialog.Portal>
-                <Dialog.Overlay className="fixed inset-0 z-[190] bg-black/25" />
-                <Dialog.Content className="fixed left-1/2 top-1/2 z-[191] w-[400px] max-w-[calc(100vw-24px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-card p-6 shadow-xl">
-                    <Dialog.Title className="mb-4 text-base font-semibold">Rename conversation</Dialog.Title>
-                    <Dialog.Description className="sr-only">Choose a title for this conversation.</Dialog.Description>
-                    <AutoFocusInput
-                        aria-label="Conversation title"
-                        className="min-h-11 w-full min-w-0 rounded-lg border border-border bg-transparent px-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
-                        disabled={saving}
-                        maxLength={500}
-                        value={titleEdit.kind === "closed" ? displayTitle : titleEdit.draft}
-                        onChange={(event) => onSetTitleDraft(event.target.value)}
-                        onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                                event.preventDefault();
-                                onConfirmTitleEdit();
-                            }
-                        }}
-                    />
-                    <div className="mt-4 flex justify-end gap-2">
-                        <Button
-                            aria-label="Cancel rename"
-                            className="min-h-11"
-                            disabled={saving}
-                            variant="ghost"
-                            onClick={onCancelTitleEdit}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            aria-label="Save title"
-                            className="min-h-11"
-                            disabled={saving}
-                            onClick={onConfirmTitleEdit}
-                        >
-                            {saving ? "Saving…" : "Save"}
-                        </Button>
-                    </div>
-                </Dialog.Content>
-            </Dialog.Portal>
-        </Dialog.Root>
+        );
+    }
+    const saving = titleEdit.kind === "saving";
+    return (
+        <div
+            className={cn(
+                "flex min-w-0 items-center",
+                centered ? "w-full max-w-full justify-center gap-1" : "flex-1 gap-2",
+            )}
+        >
+            <HarnessMark
+                agentRef={agentRef || agentLabel}
+                appearance="line"
+                className={harnessMarkClassName}
+                label={agentLabel}
+                testId={dataTestId.sessionTitleHarnessMark}
+            />
+            <AutoFocusInput
+                aria-label="Conversation title"
+                className={cn(
+                    "min-w-0 flex-1 appearance-none rounded-none border-0 bg-transparent px-0 py-0 font-semibold shadow-none outline-none ring-0 focus:ring-0 focus-visible:ring-0",
+                    titleTextClassName,
+                    centered && "text-center",
+                )}
+                disabled={saving}
+                maxLength={500}
+                value={titleEdit.draft}
+                onChange={(event) => onSetTitleDraft(event.target.value)}
+                onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                        event.preventDefault();
+                        onConfirmTitleEdit();
+                    }
+                    if (event.key === "Escape") {
+                        onCancelTitleEdit();
+                    }
+                }}
+            />
+            <div className="flex shrink-0 items-center gap-1">
+                <Button
+                    aria-label="Cancel rename"
+                    disabled={saving}
+                    size="icon"
+                    variant="ghost"
+                    onClick={onCancelTitleEdit}
+                >
+                    <X className="size-4" />
+                </Button>
+                <Button
+                    aria-label="Save title"
+                    disabled={saving}
+                    size="icon"
+                    variant="ghost"
+                    onClick={onConfirmTitleEdit}
+                >
+                    <Check className="size-4" />
+                </Button>
+            </div>
+        </div>
     );
 }
 
@@ -401,7 +408,7 @@ function MobiusSessionPaneShell({
     readonly footer?: ReactNode;
 }) {
     return (
-        <>
+        <section className={chatSessionPaneSectionClassName}>
             <header
                 className={cn(chatSessionExecutionHeaderClassName, mobileTitlePortaled ? "hidden sm:flex" : "flex")}
             >
@@ -412,10 +419,11 @@ function MobiusSessionPaneShell({
                         {title}
                     </h2>
                 )}
+                {titleLoading ? <WorkingDirectorySkeleton /> : null}
             </header>
             {children}
             {footer}
-        </>
+        </section>
     );
 }
 
@@ -516,25 +524,17 @@ export function MobiusSessionPane({ workspace }: { readonly workspace: ChatWorks
     // hooks.
     const pane = workspace.sessionPane();
     if (pane === null) {
-        return null;
+        return <section className={chatSessionPaneSectionClassName} />;
     }
     return <MobiusSessionPaneBody pane={pane} workspace={workspace} />;
 }
 
-function MobiusSessionPaneBody(props: { readonly pane: SessionPaneModel; readonly workspace: ChatWorkspace }) {
-    return (
-        <DesktopChatLayout>{(desktop) => <MobiusSessionPaneLayout {...props} desktop={desktop} />}</DesktopChatLayout>
-    );
-}
-
-function MobiusSessionPaneLayout({
+function MobiusSessionPaneBody({
     pane,
     workspace,
-    desktop,
 }: {
     readonly pane: SessionPaneModel;
     readonly workspace: ChatWorkspace;
-    readonly desktop: boolean;
 }) {
     const home = useStore(workspace.home);
     const runtimeConfiguration = home.runtimeConfiguration;
@@ -547,8 +547,6 @@ function MobiusSessionPaneLayout({
     const delivery = useStore(pane.delivery);
     const messageQueue = useStore(pane.messageQueue);
     const taskControls = useStore(pane.tasks);
-    const welcome = useStore(pane.welcome, (state) => state.state);
-    // The harness menu names harnesses the way the Runtime configuration the page follows does.
     const harnesses = harnessOptions(runtimeConfiguration?.runtime ?? null);
 
     // The model owns the session connection through the same ref-cleanup
@@ -572,7 +570,6 @@ function MobiusSessionPaneLayout({
     const respondToElicitation = (response: ElicitationInteractionResponse): void => {
         interactionModel.respondToElicitation(response, pane.operationsSignal());
     };
-    const executionContext = sessionExecutionContext(pane.session, home, model.connection);
     const presentation = sessionPanePresentation(
         model,
         delivery,
@@ -580,16 +577,20 @@ function MobiusSessionPaneLayout({
         messageQueue,
         attachmentModel,
         interactionModel,
-        executionContext.available,
     );
-    const authenticationRecovery =
-        presentation.authenticationFailure === null
-            ? null
-            : authenticationGuidance(presentation.authenticationFailure.code, pane.agentRef, executionContext.machine);
     const renderItems = sessionRenderItems(model.messages);
     const renderGroups = sessionRenderGroups(renderItems);
     const lastRenderItemIndex = renderItems.length - 1;
-    const sessionMessagesLoading = model.connection.kind === "loading";
+    const workingStartedAt =
+        presentation.workingIndicatorVisible && presentation.outputState !== "idle" && model.activity.kind === "working"
+            ? model.activity.startedAt
+            : null;
+    const lastRenderGroup = renderGroups.at(-1);
+    const workingIndicatorFollowsReply =
+        workingStartedAt !== null &&
+        presentation.unconfirmedDelivery === null &&
+        lastRenderGroup?.kind === "agent-reply";
+    const sessionMessagesLoading = model.connection.kind === "loading" && model.messages.length === 0;
     const initialMessage = model.pendingInitialMessage;
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
@@ -600,6 +601,8 @@ function MobiusSessionPaneLayout({
         void pane.filePreview.getState().reload(pane.operationsSignal());
     };
 
+    const executionContext = sessionExecutionContext(pane.session, home, model.connection);
+    const workingDirectoryLabel = executionContext.directory ?? executionContext.directoryPlaceholder;
     const titleBarProps = {
         title: model.title,
         titleEdit: model.titleEdit,
@@ -613,112 +616,101 @@ function MobiusSessionPaneLayout({
     };
 
     return (
-        <>
-            <section className="contents" ref={pane.onAttach}>
-                {desktop ? (
-                    <header className={chatSessionExecutionHeaderClassName}>
-                        <div className="min-w-0 flex-1">
-                            <SessionConversationTitleBar {...titleBarProps} centered={false} />
-                        </div>
-                    </header>
-                ) : null}
-                <FollowLatestScrollArea
-                    role="log"
-                    followThreshold={80}
-                    followRevision={model.followRevision}
-                    showTopFade
-                    aria-label="Messages"
-                    className={chatSessionMessageScrollClassName}
-                    loadOlder={{
-                        hasMore: model.hasOlderHistory,
-                        loading: model.historyLoading,
-                        onLoadMore: (signal) => pane.store.getState().loadOlderMessages(signal),
-                        revision: model.historyRevision,
-                    }}
-                >
-                    {sessionMessagesLoading && <SessionMessageListSkeleton />}
-                    {!sessionMessagesLoading && model.messages.length === 0 && model.connection.kind === "failed" && (
-                        <div
-                            className={`${chatSessionMessageColumnClassName} flex min-h-full items-center justify-center`}
-                        >
-                            <div className="grid w-full max-w-lg justify-items-center gap-4 text-center">
-                                <SessionLoadFailure message={model.connection.message} />
-                                <Button
-                                    onClick={() => run(async (signal) => await pane.store.getState().connect(signal))}
-                                    variant="outline"
-                                >
-                                    Reconnect
-                                </Button>
-                            </div>
-                        </div>
-                    )}
-                    {!sessionMessagesLoading &&
-                        initialMessage === null &&
-                        model.messages.length === 0 &&
-                        model.connection.kind === "ready" &&
-                        model.activity.kind === "idle" &&
-                        !model.historyLoading && (
-                            <div className={chatSessionMessageColumnClassName}>
-                                <p className="text-center text-sm text-muted-foreground" role="status">
-                                    No message history is available for this session.
-                                </p>
-                            </div>
-                        )}
-                    {!sessionMessagesLoading && model.historyLoading && <OlderHistorySkeleton />}
-                    {!sessionMessagesLoading && (
-                        <div className={chatSessionMessageColumnClassName}>
-                            {initialMessage !== null && (
-                                <div className={chatSessionMessageItemClassName}>
-                                    <UserPromptMessage
-                                        text={initialMessage.content}
-                                        images={initialMessage.attachments.flatMap((attachment) =>
-                                            attachment.kind === "image" ? [attachment.image] : [],
-                                        )}
-                                        resources={initialMessage.attachments.flatMap((attachment) =>
-                                            attachment.kind === "resource" ? [attachment.resource] : [],
-                                        )}
-                                    />
+        <DesktopChatLayout>
+            {(desktop) => (
+                <>
+                    <section className={chatSessionPaneSectionClassName} ref={pane.onAttach}>
+                        {desktop ? (
+                            <header className={chatSessionExecutionHeaderClassName}>
+                                <div className="min-w-0 flex-1">
+                                    <SessionConversationTitleBar {...titleBarProps} centered={false} />
                                 </div>
-                            )}
-                            {(() => {
-                                let flatIndex = 0;
-                                return renderGroups.map((group) => {
-                                    if (group.kind === "user") {
-                                        const active =
-                                            model.activity.kind === "working" && flatIndex === lastRenderItemIndex;
-                                        const item = group.item;
-                                        flatIndex += 1;
-                                        return (
-                                            <div key={group.id} className={chatSessionMessageItemClassName}>
-                                                <SessionRenderItemContent
-                                                    active={active}
-                                                    machineName={executionContext.machine}
-                                                    item={item}
-                                                    onRemoveUnknownDelivery={
-                                                        pane.store.getState().removeUnknownDelivery
-                                                    }
-                                                    onRetryUnknownDelivery={() =>
-                                                        run(pane.store.getState().retryUnknownDelivery)
-                                                    }
-                                                    openLocalFile={openLocalFile}
-                                                    pane={pane}
-                                                    presentation={presentation}
-                                                />
-                                            </div>
-                                        );
-                                    }
-                                    return (
-                                        <div key={group.id} className={chatSessionAgentReplyGroupClassName}>
-                                            {group.items.map((item) => {
+                                {sessionMessagesLoading ? (
+                                    <WorkingDirectorySkeleton />
+                                ) : (
+                                    <ReadonlyWorkingDirectory
+                                        className="shrink-0"
+                                        directoryLabel={workingDirectoryLabel}
+                                        tooltipSide="bottom"
+                                    />
+                                )}
+                            </header>
+                        ) : null}
+                        <FollowLatestScrollArea
+                            role="log"
+                            followThreshold={80}
+                            followRevision={model.followRevision}
+                            showTopFade
+                            aria-label="Messages"
+                            className={chatSessionMessageScrollClassName}
+                            loadOlder={{
+                                hasMore: model.hasOlderHistory,
+                                loading: model.historyLoading,
+                                onLoadMore: (signal) => pane.store.getState().loadOlderMessages(signal),
+                                revision: model.historyRevision,
+                            }}
+                        >
+                            {sessionMessagesLoading && <SessionMessageListSkeleton />}
+                            {!sessionMessagesLoading &&
+                                model.messages.length === 0 &&
+                                model.connection.kind === "failed" && (
+                                    <div
+                                        className={`${chatSessionMessageColumnClassName} flex min-h-full items-center justify-center`}
+                                    >
+                                        <div className="grid w-full max-w-lg justify-items-center gap-4 text-center">
+                                            <SessionLoadFailure message={model.connection.message} />
+                                            <Button
+                                                onClick={() =>
+                                                    run(async (signal) => await pane.store.getState().connect(signal))
+                                                }
+                                                variant="outline"
+                                            >
+                                                Reconnect
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+                            {!sessionMessagesLoading &&
+                                initialMessage === null &&
+                                model.messages.length === 0 &&
+                                model.connection.kind === "ready" &&
+                                model.activity.kind === "idle" &&
+                                !model.historyLoading && (
+                                    <div className={chatSessionMessageColumnClassName}>
+                                        <p className="text-center text-sm text-muted-foreground" role="status">
+                                            No message history is available for this session.
+                                        </p>
+                                    </div>
+                                )}
+                            {!sessionMessagesLoading && model.historyLoading && <OlderHistorySkeleton />}
+                            {!sessionMessagesLoading && (
+                                <div className={chatSessionMessageColumnClassName}>
+                                    {initialMessage !== null && (
+                                        <div className={chatSessionMessageItemClassName}>
+                                            <UserPromptMessage
+                                                text={initialMessage.content}
+                                                images={initialMessage.attachments.flatMap((attachment) =>
+                                                    attachment.kind === "image" ? [attachment.image] : [],
+                                                )}
+                                                resources={initialMessage.attachments.flatMap((attachment) =>
+                                                    attachment.kind === "resource" ? [attachment.resource] : [],
+                                                )}
+                                            />
+                                        </div>
+                                    )}
+                                    {(() => {
+                                        let flatIndex = 0;
+                                        return renderGroups.map((group, groupIndex) => {
+                                            if (group.kind === "user") {
                                                 const active =
                                                     model.activity.kind === "working" &&
                                                     flatIndex === lastRenderItemIndex;
+                                                const item = group.item;
                                                 flatIndex += 1;
                                                 return (
-                                                    <div key={sessionRenderItemId(item)}>
+                                                    <div key={group.id} className={chatSessionMessageItemClassName}>
                                                         <SessionRenderItemContent
                                                             active={active}
-                                                            machineName={executionContext.machine}
                                                             item={item}
                                                             onRemoveUnknownDelivery={
                                                                 pane.store.getState().removeUnknownDelivery
@@ -732,182 +724,219 @@ function MobiusSessionPaneLayout({
                                                         />
                                                     </div>
                                                 );
-                                            })}
+                                            }
+                                            const showWorkingInGroup =
+                                                workingIndicatorFollowsReply &&
+                                                workingStartedAt !== null &&
+                                                groupIndex === renderGroups.length - 1;
+                                            const replyItems = group.items.map((item) => {
+                                                const active =
+                                                    model.activity.kind === "working" &&
+                                                    flatIndex === lastRenderItemIndex;
+                                                flatIndex += 1;
+                                                return (
+                                                    <div key={sessionRenderItemId(item)}>
+                                                        <SessionRenderItemContent
+                                                            active={active}
+                                                            item={item}
+                                                            onRemoveUnknownDelivery={
+                                                                pane.store.getState().removeUnknownDelivery
+                                                            }
+                                                            onRetryUnknownDelivery={() =>
+                                                                run(pane.store.getState().retryUnknownDelivery)
+                                                            }
+                                                            openLocalFile={openLocalFile}
+                                                            pane={pane}
+                                                            presentation={presentation}
+                                                        />
+                                                    </div>
+                                                );
+                                            });
+                                            if (showWorkingInGroup && workingStartedAt !== null) {
+                                                return (
+                                                    <div
+                                                        key={group.id}
+                                                        className={cn(chatSessionMessageItemClassName, "pb-8")}
+                                                    >
+                                                        <div className="space-y-4">{replyItems}</div>
+                                                        <div className="mt-3">
+                                                            <WorkingIndicator startedAt={workingStartedAt} />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+                                            return (
+                                                <div key={group.id} className={chatSessionAgentReplyGroupClassName}>
+                                                    {replyItems}
+                                                </div>
+                                            );
+                                        });
+                                    })()}
+                                    {presentation.unconfirmedDelivery !== null && (
+                                        <UnconfirmedDeliveryCard
+                                            delivery={presentation.unconfirmedDelivery}
+                                            onRemove={() => pane.store.getState().removeUnknownDelivery()}
+                                            onRetry={() => run(pane.store.getState().retryUnknownDelivery)}
+                                        />
+                                    )}
+                                    {workingStartedAt !== null && !workingIndicatorFollowsReply && (
+                                        <div className="mt-3">
+                                            <WorkingIndicator startedAt={workingStartedAt} />
                                         </div>
-                                    );
-                                });
-                            })()}
-                            {authenticationRecovery !== null && presentation.authenticationFailure !== null && (
-                                <div className={chatSessionMessageItemClassName}>
-                                    <AuthenticationNotice
-                                        guidance={authenticationRecovery}
-                                        code={presentation.authenticationFailure.code}
-                                        message={presentation.authenticationFailure.message}
-                                    />
+                                    )}
                                 </div>
                             )}
-                            {presentation.unconfirmedDelivery !== null && (
-                                <UnconfirmedDeliveryCard
-                                    delivery={presentation.unconfirmedDelivery}
-                                    onRemove={() => pane.store.getState().removeUnknownDelivery()}
-                                    onRetry={() => run(pane.store.getState().retryUnknownDelivery)}
-                                />
-                            )}
-                            {presentation.workingIndicatorVisible &&
-                                presentation.outputState !== "idle" &&
-                                model.activity.kind === "working" && (
-                                    <div className="mt-6">
-                                        <WorkingIndicator startedAt={model.activity.startedAt} />
-                                    </div>
-                                )}
-                            {welcome.kind === "visible" && model.connection.kind === "ready" && (
-                                <SessionWelcome
-                                    canSuggestProgress={presentation.canSuggestProgress}
-                                    onDismiss={pane.welcome.getState().dismiss}
-                                    onSuggestProgress={pane.welcome.getState().suggestProgress}
-                                />
-                            )}
-                        </div>
-                    )}
-                </FollowLatestScrollArea>
-                <ChatMessageQueue
-                    messages={messageQueue.messages}
-                    steeringSupported={taskControls.steeringSupported}
-                    onDelete={(commandId) =>
-                        run(async (signal) => await pane.store.getState().deleteQueued(commandId, signal))
-                    }
-                    onSteer={(commandId) =>
-                        runAndFollow(async (signal) => await pane.store.getState().steerQueued(commandId, signal))
-                    }
-                />
-                {(interactions.elicitations.length > 0 || interactions.permissions.length > 0) && (
-                    <ScrollEdgeFade
-                        fadeFromClassName="from-card"
-                        fadeToClassName="to-card/0"
-                        frameClassName={`${chatSessionColumnClassName} mt-4 shrink-0 sm:mt-5`}
-                        className="max-h-[50vh] overflow-y-auto [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]"
-                    >
-                        <SessionInteractionCards
-                            elicitations={interactions.elicitations}
-                            permissions={interactions.permissions}
-                            busyInteractionIds={interactions.busyInteractionIds}
-                            error={interactions.error}
-                            onElicitationResponse={respondToElicitation}
-                            onPermissionResponse={respondToPermission}
-                            onStop={() => run(pane.store.getState().stop)}
+                        </FollowLatestScrollArea>
+                        <ChatMessageQueue
+                            messages={messageQueue.messages}
+                            steeringSupported={taskControls.steeringSupported}
+                            onDelete={(commandId) =>
+                                run(async (signal) => await pane.store.getState().deleteQueued(commandId, signal))
+                            }
+                            onSteer={(commandId) =>
+                                runAndFollow(
+                                    async (signal) => await pane.store.getState().steerQueued(commandId, signal),
+                                )
+                            }
                         />
-                    </ScrollEdgeFade>
-                )}
-                <BotChatComposer
-                    attachmentModel={attachmentModel}
-                    attachmentSignal={pane.operationsSignal()}
-                    disabled={presentation.composerInputDisabled}
-                    draft={model.draft}
-                    error={presentation.composerError}
-                    errorStatus={
-                        executionContext.feedback.kind === "hidden" ? undefined : (
-                            <ConnectionNotice
-                                feedback={executionContext.feedback}
-                                onRetryNow={pane.store.getState().retryNow}
-                                onReopen={() => run(pane.store.getState().reopen)}
+                        {(interactions.elicitations.length > 0 || interactions.permissions.length > 0) && (
+                            <ScrollEdgeFade
+                                fadeFromClassName="from-card"
+                                fadeToClassName="to-card/0"
+                                frameClassName={`${chatSessionColumnClassName} mt-4 shrink-0 sm:mt-5`}
+                                className="max-h-[50vh] overflow-y-auto [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]"
+                            >
+                                <SessionInteractionCards
+                                    elicitations={interactions.elicitations}
+                                    permissions={interactions.permissions}
+                                    busyInteractionIds={interactions.busyInteractionIds}
+                                    error={interactions.error}
+                                    onElicitationResponse={respondToElicitation}
+                                    onPermissionResponse={respondToPermission}
+                                    onStop={() => run(pane.store.getState().stop)}
+                                />
+                            </ScrollEdgeFade>
+                        )}
+                        <BotChatComposer
+                            attachmentModel={attachmentModel}
+                            attachmentSignal={pane.operationsSignal()}
+                            disabled={presentation.composerInputDisabled}
+                            draft={model.connection.kind === "session-loading-after-create" ? "" : model.draft}
+                            error={presentation.composerError}
+                            errorStatus={
+                                executionContext.feedback.kind === "hidden" ? undefined : (
+                                    <ConnectionNotice
+                                        feedback={executionContext.feedback}
+                                        onRetryNow={pane.store.getState().retryNow}
+                                        onReopen={() => run(pane.store.getState().reopen)}
+                                    />
+                                )
+                            }
+                            onDraftChange={pane.store.getState().setDraft}
+                            onStop={() => run(pane.store.getState().stop)}
+                            onSubmit={() =>
+                                runAndFollow(
+                                    presentation.shouldQueueOnSubmit
+                                        ? pane.store.getState().queueDraft
+                                        : pane.store.getState().send,
+                                )
+                            }
+                            outputState={presentation.outputState}
+                            submitDisabled={presentation.submitDisabled}
+                        >
+                            <ChatConfigurationMenu
+                                controls={[
+                                    {
+                                        disabled: true,
+                                        harnessLockedLabel: "The harness cannot be changed for an existing session.",
+                                        id: "harness",
+                                        kind: "select" as const,
+                                        label: "Harness",
+                                        locked: true,
+                                        onValueChange: () => {},
+                                        options: harnesses.some(
+                                            (harness) => harness.value.split(":").at(-1) === pane.agentRef,
+                                        )
+                                            ? harnesses
+                                            : [
+                                                  ...harnesses,
+                                                  {
+                                                      agentRef: pane.agentRef,
+                                                      label: pane.agentRef,
+                                                      value: pane.agentRef,
+                                                  },
+                                              ],
+                                        value:
+                                            harnesses.find(
+                                                (harness) => harness.value.split(":").at(-1) === pane.agentRef,
+                                            )?.value ?? pane.agentRef,
+                                    },
+                                    ...settingsModel.options.map((option) =>
+                                        option.type === "boolean"
+                                            ? {
+                                                  checked: option.booleanValue,
+                                                  disabled: presentation.busy,
+                                                  id: option.id,
+                                                  kind: "boolean" as const,
+                                                  label: option.name,
+                                                  onCheckedChange: () => configure(option, "", !option.booleanValue),
+                                                  testId: dataTestId.agentSetting(option.id),
+                                              }
+                                            : {
+                                                  disabled: presentation.busy,
+                                                  id: option.id,
+                                                  kind: "select" as const,
+                                                  label: option.name,
+                                                  onValueChange: (value: string) => configure(option, value, false),
+                                                  options: option.values.map((value) => ({
+                                                      value: value.value,
+                                                      label: value.name,
+                                                  })),
+                                                  searchable: option.category === "model",
+                                                  testId: dataTestId.agentSetting(option.id),
+                                                  value: option.currentValue,
+                                              },
+                                    ),
+                                ]}
+                                settingsLoading={model.operation.kind === "configuring"}
                             />
-                        )
-                    }
-                    onDraftChange={pane.store.getState().setDraft}
-                    onStop={() => run(pane.store.getState().stop)}
-                    onSubmit={() =>
-                        runAndFollow(
-                            presentation.shouldQueueOnSubmit
-                                ? pane.store.getState().queueDraft
-                                : pane.store.getState().send,
-                        )
-                    }
-                    outputState={presentation.outputState}
-                    submitDisabled={presentation.submitDisabled}
-                    stopDisabled={presentation.stopDisabled}
-                >
-                    <ChatConfigurationMenu
-                        controls={[
-                            {
-                                disabled: true,
-                                harnessLockedLabel: "The harness cannot be changed for an existing session.",
-                                id: "harness",
-                                kind: "select" as const,
-                                label: "Harness",
-                                locked: true,
-                                onValueChange: () => {},
-                                options: harnesses.some((harness) => harness.value.split(":").at(-1) === pane.agentRef)
-                                    ? harnesses
-                                    : [
-                                          ...harnesses,
-                                          {
-                                              agentRef: pane.agentRef,
-                                              // An offline Runtime offers no harnesses, but still names its Agents.
-                                              label:
-                                                  runtimeConfiguration?.runtime.agents.find(
-                                                      (agent) => agent.agentRef === pane.agentRef,
-                                                  )?.label ?? pane.agentRef,
-                                              value: pane.agentRef,
-                                          },
-                                      ],
-                                value:
-                                    harnesses.find((harness) => harness.value.split(":").at(-1) === pane.agentRef)
-                                        ?.value ?? pane.agentRef,
-                            },
-                            ...settingsModel.options.map((option) =>
-                                option.type === "boolean"
-                                    ? {
-                                          checked: option.booleanValue,
-                                          disabled: presentation.busy,
-                                          id: option.id,
-                                          kind: "boolean" as const,
-                                          label: option.name,
-                                          onCheckedChange: () => configure(option, "", !option.booleanValue),
-                                          testId: dataTestId.agentSetting(option.id),
-                                      }
-                                    : {
-                                          disabled: presentation.busy,
-                                          id: option.id,
-                                          kind: "select" as const,
-                                          label: option.name,
-                                          onValueChange: (value: string) => configure(option, value, false),
-                                          options: option.values.map((value) => ({
-                                              value: value.value,
-                                              label: value.name,
-                                          })),
-                                          searchable: option.category === "model",
-                                          testId: dataTestId.agentSetting(option.id),
-                                          value: option.currentValue,
-                                      },
-                            ),
-                        ]}
-                        settingsLoading={model.operation.kind === "configuring"}
-                    />
-                    <ReadonlyWorkingDirectory
-                        directoryLabel={executionContext.directory ?? executionContext.directoryPlaceholder}
-                    />
-                    {model.operation.kind === "configuring" && (
-                        <span role="status" className="sr-only">
-                            Updating agent settings…
-                        </span>
+                            {model.operation.kind === "configuring" && (
+                                <span role="status" className="sr-only">
+                                    Updating agent settings…
+                                </span>
+                            )}
+                        </BotChatComposer>
+                    </section>
+                    {desktop ? null : (
+                        <MobileSessionTitlePortal>
+                            <div className="mt-1 flex min-w-0 w-full flex-col items-center">
+                                <SessionConversationTitleBar {...titleBarProps} centered />
+                                {sessionMessagesLoading ? (
+                                    <WorkingDirectorySkeleton className="mt-0.5 h-5 max-w-full" />
+                                ) : (
+                                    <ReadonlyWorkingDirectory
+                                        className="-mb-1.5 min-h-0 max-w-full gap-1 py-0 text-[11px] font-normal text-morty-text-3"
+                                        clip="end"
+                                        directoryLabel={workingDirectoryLabel}
+                                        iconClassName="size-3"
+                                        tooltipSide="bottom"
+                                    />
+                                )}
+                            </div>
+                        </MobileSessionTitlePortal>
                     )}
-                </BotChatComposer>
-            </section>
-            {desktop ? null : (
-                <MobileSessionTitlePortal>
-                    <SessionConversationTitleBar {...titleBarProps} centered={false} />
-                </MobileSessionTitlePortal>
+                    <FilePreview
+                        onClose={preview.close}
+                        layout={preview.layout}
+                        onPanelAttach={preview.onPanelAttach}
+                        onToggleExpanded={preview.toggleExpanded}
+                        onHtmlAttach={preview.onHtmlAttach}
+                        onHtmlView={preview.showHtml}
+                        onReload={reloadLocalFile}
+                        state={preview.state}
+                    />
+                </>
             )}
-            <FilePreview
-                onClose={preview.close}
-                layout={preview.layout}
-                onPanelAttach={preview.onPanelAttach}
-                onToggleExpanded={preview.toggleExpanded}
-                onHtmlAttach={preview.onHtmlAttach}
-                onHtmlView={preview.showHtml}
-                onReload={reloadLocalFile}
-                state={preview.state}
-            />
-        </>
+        </DesktopChatLayout>
     );
 }

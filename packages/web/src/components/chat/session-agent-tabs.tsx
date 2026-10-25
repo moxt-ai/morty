@@ -3,8 +3,21 @@ import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
 import { HarnessMark } from "./harness-mark.tsx";
 
-const sessionAgentTabTriggerClassName =
-    "group relative flex w-10 min-w-0 shrink-0 grow-0 items-center justify-center gap-1.5 rounded-full px-1.5 text-[13px] text-copy-secondary outline-none transition-[flex-grow,background-color,color,box-shadow] duration-200 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:hover:bg-transparent data-[state=inactive]:hover:bg-morty-fill-opacity-3 data-[state=active]:grow data-[state=active]:shrink data-[state=active]:bg-background data-[state=active]:px-2.5 data-[state=active]:font-medium data-[state=active]:text-foreground data-[state=active]:shadow-sm motion-reduce:transition-none";
+export const sessionAgentTabsListClassName = "flex h-9 min-w-0 gap-0.5 rounded-full bg-morty-fill-opacity-2 p-0.5";
+
+/** Icon-only tab footprint; keep in sync with `SessionAgentTabs` loading skeleton. */
+export const sessionAgentTabInactiveLayoutClassName =
+    "box-border flex h-full w-10 min-w-0 shrink-0 grow-0 items-center justify-center px-1.5";
+
+/** Selected tab footprint; keep in sync with `SessionAgentTabs` loading skeleton. */
+export const sessionAgentTabActiveLayoutClassName =
+    "box-border flex h-full min-w-0 flex-1 shrink grow items-center justify-center px-2.5";
+
+const sessionAgentTabTriggerClassName = cn(
+    "group relative gap-1.5 rounded-full border border-transparent text-[13px] text-copy-secondary outline-none transition-[flex-grow,background-color,color,border-color] duration-200 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:hover:bg-transparent data-[state=inactive]:hover:bg-morty-fill-opacity-3 data-[state=active]:border-white data-[state=active]:bg-card data-[state=active]:font-medium data-[state=active]:text-foreground motion-reduce:transition-none",
+    sessionAgentTabInactiveLayoutClassName,
+    "data-[state=active]:min-w-0 data-[state=active]:flex-1 data-[state=active]:shrink data-[state=active]:grow data-[state=active]:px-2.5",
+);
 
 export function SessionAgentTabs({
     agents,
@@ -29,10 +42,7 @@ export function SessionAgentTabs({
 }) {
     return (
         <Tabs.Root className={className} onValueChange={onValueChange} value={value}>
-            <Tabs.List
-                aria-label="Session agent"
-                className="flex h-9 min-w-0 gap-0.5 rounded-full bg-morty-fill-opacity-2 p-0.5"
-            >
+            <Tabs.List aria-label="Session agent" className={sessionAgentTabsListClassName}>
                 {agents.map((agent) => {
                     const optionValue = `${agent.runtimeId}:${agent.agentRef}`;
                     const installed = agent.installed !== false;

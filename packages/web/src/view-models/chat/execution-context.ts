@@ -1,4 +1,5 @@
 import type { ExecutionContext } from "../../components/chat/execution-context.ts";
+import type { BotRuntimeConfiguration } from "../../services/chat/bot-chat-api.ts";
 import type { BotChatHomeStore } from "./bot-chat-home-store.ts";
 import { connectionPresentation } from "./connection-presentation.ts";
 import { directoryName } from "./directory-name.ts";
@@ -49,19 +50,42 @@ export function pendingExecutionContext(
     }
 }
 
+function sessionHarnessIdentity(
+    session: OpenMobiusSession,
+    configuration: BotRuntimeConfiguration | null,
+): { readonly agentRef: string; readonly agent: string } {
+    const agent = configuration?.runtime.agents.find((candidate) => candidate.agentRef === session.agentRef);
+    return {
+        agentRef: session.agentRef,
+        agent: agent?.label.trim() || session.result.ready.agentName.trim() || "Unknown",
+    };
+}
+
+export function activeHarnessMark(
+    home: BotChatHomeStore,
+    settings: DraftControlsStore["settings"],
+): { readonly agentRef: string; readonly label: string } {
+    if (home.selection.kind === "ready") {
+        const identity = sessionHarnessIdentity(home.selection.session, home.runtimeConfiguration);
+        return { agentRef: identity.agentRef, label: identity.agent };
+    }
+    const context = pendingExecutionContext(home, settings);
+    return { agentRef: context.agentRef, label: context.agent };
+}
+
 export function sessionExecutionContext(
     session: OpenMobiusSession,
     home: BotChatHomeStore,
     connection: SessionConnection,
 ): ExecutionContext {
     const configuration = home.runtimeConfiguration;
-    const agent = configuration?.runtime.agents.find((candidate) => candidate.agentRef === session.agentRef);
+    const identity = sessionHarnessIdentity(session, configuration);
 
     return {
         ...connectionPresentation(home, connection),
-        agentRef: session.agentRef,
+        agentRef: identity.agentRef,
         machine: configuration?.runtime.machineName.trim() || "Unknown",
-        agent: agent?.label.trim() || session.result.ready.agentName.trim() || "Unknown",
+        agent: identity.agent,
         directory: session.result.ready.directoryLabel,
         directoryName: directoryName(session.result.ready.directoryLabel),
         directoryPlaceholder: "Unknown",

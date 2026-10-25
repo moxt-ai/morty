@@ -65,7 +65,7 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
-    --radius-overlay: 1.75rem;
+    --radius-overlay: 1.5rem;
 
     /* module surfaces (chat pane, setup card, …) */
     --morty-shadow-module: 0 6px 56px rgba(0, 0, 0, 0.06);
@@ -83,6 +83,19 @@
             opacity: 1;
         }
     }
+    --animate-reconnect-ellipsis: reconnect-ellipsis 1.2s step-end infinite;
+    @keyframes reconnect-ellipsis {
+        0% {
+            clip-path: inset(0 66.6667% 0 0);
+        }
+        33.3333% {
+            clip-path: inset(0 33.3333% 0 0);
+        }
+        66.6667%,
+        100% {
+            clip-path: inset(0 0 0 0);
+        }
+    }
     /* radius */
     --radius: 1.25rem;
     --radius-xs: calc(var(--radius) * 0.4);
@@ -93,7 +106,7 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
-    --radius-overlay: 1.75rem;
+    --radius-overlay: 1.5rem;
     --color-background: var(--background);
     --color-foreground: var(--foreground);
     --color-card: var(--card);
@@ -146,6 +159,12 @@
     input,
     textarea {
         font-family: var(--font-sans);
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+        color: var(--morty-text-3);
+        opacity: 1;
     }
 
     code {

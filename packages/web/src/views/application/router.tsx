@@ -3,6 +3,7 @@ import { createRootRoute, createRoute, createRouter, Outlet, useRouter } from "@
 import { CircleAlert } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
+import { describePageFailure } from "../../view-models/format-error.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 
 export interface ApplicationShellProps {
@@ -42,6 +43,7 @@ function getRouteFailureDetails(error: Error): RouteFailureDetails {
 function RouteFailure({ error, reset }: { readonly error: Error; readonly reset: () => void }) {
     const router = useRouter();
     const details = getRouteFailureDetails(error);
+    const copy = describePageFailure(details.message, "Something went wrong");
     return (
         <div className="grid min-h-dvh place-items-center p-4">
             <section className="grid w-full min-w-0 max-w-[400px] gap-4" role="alert">
@@ -50,7 +52,12 @@ function RouteFailure({ error, reset }: { readonly error: Error; readonly reset:
                         <CircleAlert aria-hidden="true" className="size-6 shrink-0 text-destructive" />
                     </span>
                     <div className="grid min-w-0 gap-2">
-                        <p className="text-sm leading-5">{details.message}</p>
+                        <h1 className="text-[18px] leading-6 font-semibold tracking-[-0.025em] [overflow-wrap:anywhere]">
+                            {copy.title}
+                        </h1>
+                        <p className="text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere]">
+                            {copy.content}
+                        </p>
                         {details.kind === "message-with-url" && (
                             <code className="block select-text rounded-2xl bg-muted/70 px-3.5 py-3 font-mono text-xs leading-5 text-foreground [overflow-wrap:anywhere]">
                                 {details.url}

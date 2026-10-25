@@ -1,5 +1,6 @@
 import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
+import { overlaySurfaceRadiusClassName } from "../../components/ui/overlay-surface.ts";
 
 const setupPageBackgroundClassName = "bg-[radial-gradient(circle_at_top,_#f6f7f9_0%,_#f0f1f4_48%)]";
 
@@ -9,8 +10,7 @@ export const setupSectionClassName = "mx-auto w-full max-w-[480px]";
 
 const setupSectionWideClassName = `${setupSectionClassName} md:max-w-[960px]`;
 
-const setupCardClassName =
-    "overflow-hidden rounded-3xl border-[1px] border-white bg-card/90 px-8 py-6 shadow-module backdrop-blur sm:px-12";
+const setupCardClassName = `overflow-hidden ${overlaySurfaceRadiusClassName} border-[1px] border-white bg-card/90 px-8 py-6 shadow-module backdrop-blur sm:px-12`;
 
 const setupCardCenteredClassName = `${setupCardClassName} flex flex-col items-center text-center`;
 
@@ -88,20 +88,6 @@ export function SetupCardDescription({
     readonly className?: string;
 }) {
     return <p className={`mt-2 max-w-xl text-16 leading-[26px] text-muted-foreground ${className}`}>{children}</p>;
-}
-
-export function SetupCardAlert({
-    children,
-    className = "",
-}: {
-    readonly children: ReactNode;
-    readonly className?: string;
-}) {
-    return (
-        <p role="alert" className={`mt-2 max-w-xl text-16 leading-[26px] text-destructive ${className}`}>
-            {children}
-        </p>
-    );
 }
 
 export function SetupCardSection({

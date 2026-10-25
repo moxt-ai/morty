@@ -3,12 +3,22 @@ import { Tooltip } from "radix-ui";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
-import { CwdSelector } from "../../components/chat/cwd-selector.tsx";
 import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.tsx";
-import { Spinner } from "../../components/ui/spinner.tsx";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { harnessOptions } from "../../view-models/chat/native-session-agents.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
+
+function DraftChatControlsSkeleton() {
+    return (
+        <div aria-label="Loading harness and model settings" className="flex min-w-0 items-center gap-1" role="status">
+            <span className="sr-only">Loading harness and model settings</span>
+            <div
+                aria-hidden="true"
+                className="h-9 w-[200px] max-w-full shrink-0 animate-pulse rounded-lg bg-morty-fill-opacity-3 motion-reduce:animate-none"
+            />
+        </div>
+    );
+}
 
 export function DraftChatControls({
     workspace,
@@ -26,7 +36,7 @@ export function DraftChatControls({
         workspace.retryDraftControls();
     };
     if (settings.kind === "loading") {
-        return <Spinner label="Loading harness and model settings" />;
+        return <DraftChatControlsSkeleton />;
     }
     if (settings.kind === "failed") {
         return (
@@ -113,7 +123,6 @@ export function DraftChatControls({
                 ]}
                 settingsLoading={settingsLoading}
             />
-            <CwdSelector disabled={disabled || settingsLoading} signal={signal} viewModel={viewModel} />
             {!switching && model === undefined && (
                 <span className="sr-only">This harness has not reported any model choices.</span>
             )}

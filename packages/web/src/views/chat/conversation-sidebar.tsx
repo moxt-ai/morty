@@ -1,16 +1,29 @@
-import { Laptop, List, LoaderCircle, LogOut, MessageSquare, RefreshCw, Share2, SquarePen, Wifi, X } from "lucide-react";
+import {
+    Laptop,
+    List,
+    LoaderCircle,
+    LogOut,
+    type LucideIcon,
+    MessageSquare,
+    MessageSquarePlus,
+    RefreshCw,
+    Share2,
+    Wifi,
+    X,
+} from "lucide-react";
 import { ContextMenu, Tooltip } from "radix-ui";
 import type { MouseEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
 import { mortyThinScrollbarClassName } from "../../components/chat/chat-session-layout.ts";
-import { type PanelMotion, PanelPresence } from "../../components/chat/panel-presence.tsx";
+import { PanelPresence } from "../../components/chat/panel-presence.tsx";
 import { panelMotionClassName } from "../../components/chat/sidebar-panel-presence.ts";
 import { SidebarUserMenu } from "../../components/chat/sidebar-user-menu.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { MortyAlert } from "../../components/ui/morty-alert.tsx";
 import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.tsx";
+import { type OverlayContentOpenAutoFocus, preventOverlayOpenAutoFocus } from "../../components/ui/overlay-surface.ts";
 import { DesktopChatLayout } from "../../components/utils/desktop-chat-layout.tsx";
 import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { dataTestId } from "../../data-testid.ts";
@@ -23,7 +36,12 @@ import type { ConversationListStatus } from "../../view-models/chat/conversation
 import { nativeSessionAgentTabs } from "../../view-models/chat/native-session-agents.ts";
 import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
-import { WorkspaceComputerSwitcher } from "./computer-switcher.tsx";
+import {
+    ComputerSwitcher,
+    mobileDrawerCardClassName,
+    mobileDrawerCardRowClassName,
+    mobileDrawerOptionDividerClassName,
+} from "./computer-switcher.tsx";
 import { IdentitySharing } from "./identity-sharing.tsx";
 import { NativeSessionDialog } from "./native-session-dialog.tsx";
 
@@ -34,35 +52,40 @@ function blurAfterPointerClick(event: MouseEvent<HTMLButtonElement>): void {
     }
 }
 
+const mobileHeaderIconButtonClassName =
+    "size-10! rounded-full! border-transparent! bg-surface-subtle px-0 text-copy-secondary shadow-[0_2px_6px_rgba(23,30,36,0.08),0_10px_28px_rgba(23,30,36,0.14),inset_0_0_0_1px_#fff] transition-[transform,filter,background-color] duration-200 ease-out hover:bg-surface-subtle hover:text-foreground active:bg-morty-fill-opacity-3";
+
 function SidebarSessionOption({
     label,
     icon: Icon,
     onClick,
     testId,
     disabled = false,
-    destructive = false,
+    variant = "nav",
 }: {
     readonly label: string;
-    readonly icon: typeof SquarePen;
+    readonly icon: LucideIcon;
     readonly onClick: () => void;
     readonly testId?: string;
     readonly disabled?: boolean;
-    readonly destructive?: boolean;
+    readonly variant?: "nav" | "card";
 }) {
     return (
         <button
             type="button"
-            className={cn(
-                "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium outline-none transition-[background-color,color] duration-150 focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50",
-                destructive
-                    ? "text-destructive hover:bg-destructive/10 active:bg-destructive/15"
-                    : "text-copy-secondary hover:bg-morty-fill-opacity-2 hover:text-foreground active:bg-morty-fill-opacity-3 active:text-foreground disabled:hover:text-copy-secondary disabled:active:text-copy-secondary",
-            )}
+            className={
+                variant === "card"
+                    ? mobileDrawerCardRowClassName
+                    : "flex w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 active:bg-morty-fill-opacity-3 active:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-copy-secondary disabled:active:text-copy-secondary motion-reduce:transition-none"
+            }
             data-testid={testId}
             disabled={disabled}
             onClick={onClick}
         >
-            <Icon aria-hidden="true" className="size-4 shrink-0" />
+            <Icon
+                aria-hidden="true"
+                className={variant === "card" ? "size-5 shrink-0 text-copy-secondary" : "size-4 shrink-0"}
+            />
             {label}
         </button>
     );
@@ -210,7 +233,7 @@ function ManagedSessionDirectoryList({
                                 aria-current={activeId === session.id ? "page" : undefined}
                                 disabled={connectionStatus.kind !== "connected"}
                                 onClick={() => onOpen(session)}
-                                className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-2.5 py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 aria-[current=page]:hover:text-foreground aria-[current=page]:disabled:hover:text-foreground motion-reduce:transition-none"
+                                className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-4 py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 aria-[current=page]:hover:text-foreground aria-[current=page]:disabled:hover:text-foreground motion-reduce:transition-none sm:px-2.5"
                             >
                                 <span className="min-w-0 truncate">{session.title}</span>
                                 {(sessionStatuses.get(session.id) ?? session.status).kind === "working" ? (
@@ -272,7 +295,12 @@ function ManagedSessionDirectoryList({
                                 <ContextMenu.Root>
                                     {sessionTrigger}
                                     <ContextMenu.Portal>
-                                        <ContextMenu.Content className="z-[110] min-w-40 rounded-lg border border-border bg-background p-1 text-sm text-foreground shadow-lg">
+                                        <ContextMenu.Content
+                                            className="z-[110] min-w-40 rounded-lg border border-border bg-background p-1 text-sm text-foreground shadow-lg"
+                                            {...({
+                                                onOpenAutoFocus: preventOverlayOpenAutoFocus,
+                                            } satisfies OverlayContentOpenAutoFocus)}
+                                        >
                                             <ContextMenu.Item
                                                 className="cursor-pointer rounded-md px-3 py-2 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-accent"
                                                 data-testid={dataTestId.archiveConversation}
@@ -322,7 +350,16 @@ function ConnectionStatus({
     );
 }
 
-type ConversationSidebarProps = {
+export function ConversationSidebar({
+    botId,
+    connectionStatus,
+    workspace,
+    onConnectAgent,
+    requests,
+    activeId,
+    onOpen,
+    onNewConversation,
+}: {
     readonly botId: string;
     readonly connectionStatus: BotConnectionStatus;
     readonly workspace: ChatWorkspace;
@@ -330,6 +367,7 @@ type ConversationSidebarProps = {
     readonly requests: Pick<
         BotChatApi,
         | "archiveManagedSession"
+        | "runtimeConfiguration"
         | "nativeSessions"
         | "nativeSession"
         | "managedSessions"
@@ -339,66 +377,21 @@ type ConversationSidebarProps = {
     readonly activeId: string;
     readonly onOpen: (session: ManagedChatSession) => void;
     readonly onNewConversation: () => void;
-};
-
-/**
- * The sidebar renders its layout for the viewport and the motion of its mobile panels, which components own; the
- * view only subscribes to the stores.
- */
-export function ConversationSidebar(props: ConversationSidebarProps) {
-    const dialogState = useStore(props.workspace.sidebar.dialogs);
-    return (
-        <PanelPresence open={dialogState.mobileNavOpen}>
-            {(navigationMotion) => (
-                <PanelPresence open={dialogState.mobileSessionsOpen}>
-                    {(sessionsMotion) => (
-                        <DesktopChatLayout>
-                            {(desktop) => (
-                                <ConversationSidebarLayout
-                                    {...props}
-                                    desktop={desktop}
-                                    navigationMotion={navigationMotion}
-                                    sessionsMotion={sessionsMotion}
-                                />
-                            )}
-                        </DesktopChatLayout>
-                    )}
-                </PanelPresence>
-            )}
-        </PanelPresence>
-    );
-}
-
-function ConversationSidebarLayout({
-    botId,
-    connectionStatus,
-    workspace,
-    onConnectAgent,
-    requests,
-    activeId,
-    onOpen,
-    onNewConversation,
-    desktop,
-    navigationMotion,
-    sessionsMotion,
-}: ConversationSidebarProps & {
-    readonly desktop: boolean;
-    readonly navigationMotion: PanelMotion;
-    readonly sessionsMotion: PanelMotion;
 }) {
     // The workspace owns the sidebar's dialog, remote-access, and diagnostic
     // stores outside React; the view only subscribes.
     const dialogs = workspace.sidebar.dialogs;
+    const runtime = useStore(workspace.home, (state) => state.runtimeConfiguration?.runtime ?? null);
+    const computerName = runtime?.machineName ?? "";
+    const nativeAgents = runtime === null ? [] : nativeSessionAgentTabs(runtime);
     const directory = useStore(workspace.directory, (state) => state.state);
     const archive = useStore(workspace.directory, (state) => state.archive);
 
     const sessionStatuses = useStore(workspace.statuses, (state) => state.statuses);
     const dialogState = useStore(dialogs);
     const mobileNavOpen = dialogState.mobileNavOpen;
+    const mobileSessionsOpen = dialogState.mobileSessionsOpen;
     const dialogStore = dialogState.nativeDialog;
-    // Open Session offers the agents of the Runtime configuration the page follows.
-    const runtime = useStore(workspace.home, (state) => state.runtimeConfiguration?.runtime ?? null);
-    const nativeAgents = runtime === null ? [] : nativeSessionAgentTabs(runtime);
     const sharingStore = dialogState.sharing;
     const openMobileRecentSessions = dialogs.getState().openMobileRecentSessions;
     const closeMobileRecentSessions = dialogs.getState().closeMobileRecentSessions;
@@ -442,505 +435,646 @@ function ConversationSidebarLayout({
         operationsSignal: workspace.operationsSignal,
     };
     return (
-        <>
-            {navigationMotion.present ? (
-                <button
-                    type="button"
-                    aria-label="Close navigation"
-                    className={cn(
-                        "fixed inset-0 z-[120] bg-black/30 sm:hidden",
-                        navigationMotion.animate && panelMotionClassName,
-                        navigationMotion.shown ? "opacity-100" : "opacity-0",
-                    )}
-                    onClick={dialogs.getState().closeMobileNav}
-                />
-            ) : null}
-            <aside
-                ref={dialogs.getState().onAttach}
-                id="conversation-sidebar-mobile-panel"
-                aria-label="Morty navigation"
-                className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-card/90 px-3 pt-0 max-sm:overflow-visible sm:w-[264px] sm:gap-0 sm:bg-sidebar sm:pt-2 sm:pb-4"
-            >
-                <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-2 py-1 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:bg-card/90">
-                    <div className="relative z-[1] flex w-fit shrink-0 items-center gap-3">
-                        <button
-                            type="button"
-                            aria-controls="conversation-sidebar-mobile-drawer"
-                            aria-expanded={mobileNavOpen}
-                            aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
-                            className="flex size-11 shrink-0 items-center justify-center rounded-lg text-copy-secondary outline-none transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-ring/60 sm:hidden"
-                            onClick={() => {
-                                mobileNavOpen
-                                    ? dialogs.getState().closeMobileNav()
-                                    : dialogs.getState().openMobileNav();
-                                dialogs.getState().closeMobileRecentSessions();
-                            }}
-                        >
-                            <MessageSquare className="size-4" aria-hidden="true" />
-                        </button>
-                        <span className="hidden size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_4px_12px_rgba(34,123,78,0.18)] sm:flex">
-                            <MessageSquare className="size-4" aria-hidden="true" />
-                        </span>
-                        <span className="hidden min-w-0 sm:block">
-                            <h1 className="truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">Morty</h1>
-                        </span>
-                    </div>
-                    <div
-                        id={dataTestId.mobileSessionTitleSlot}
-                        className="pointer-events-none flex min-w-0 flex-1 items-center justify-start overflow-hidden sm:hidden"
-                    />
-                    <div className="flex shrink-0 items-center justify-end gap-0.5">
-                        {!desktop && <WorkspaceComputerSwitcher workspace={workspace} compact />}
-                        {workspace.computers === null && (
-                            <ConnectionStatus
-                                className="max-sm:hidden pr-[10px]"
-                                status={connectionStatus}
-                                testId={dataTestId.botConnectionStatus}
-                            />
-                        )}
-                    </div>
-                </header>
-                {desktop && <WorkspaceComputerSwitcher workspace={workspace} compact={false} />}
-                <div
-                    id="conversation-sidebar-mobile-drawer"
-                    className={cn(
-                        "min-h-0 flex-1 flex-col gap-0",
-                        navigationMotion.present
-                            ? cn(
-                                  "fixed inset-y-0 left-0 z-[130] flex w-[85vw] max-w-[85vw] border-r border-border/80 bg-sidebar px-3 pt-0 pb-3 shadow-xl sm:static sm:z-auto sm:w-auto sm:max-w-none sm:translate-x-0 sm:border-0 sm:bg-transparent sm:px-0 sm:pt-0 sm:pb-0 sm:shadow-none sm:transition-none",
-                                  navigationMotion.animate &&
-                                      "max-sm:motion-safe:transition-transform max-sm:motion-safe:duration-[280ms] max-sm:motion-safe:ease-[cubic-bezier(0.32,0.72,0,1)]",
-                                  navigationMotion.shown ? "max-sm:translate-x-0" : "max-sm:-translate-x-full",
-                              )
-                            : "hidden sm:flex",
-                    )}
-                    onTransitionEnd={navigationMotion.onTransitionEnd}
-                >
-                    <div className="flex h-14 shrink-0 items-center gap-3 sm:hidden">
-                        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_4px_12px_rgba(34,123,78,0.18)]">
-                            <MessageSquare className="size-4" aria-hidden="true" />
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">
-                            Morty
-                        </span>
-                    </div>
-                    <nav
-                        aria-label="Session actions"
-                        className="box-border flex min-w-0 w-full shrink-0 flex-col gap-0.5 mt-2 mb-3"
-                    >
-                        <SidebarSessionOption
-                            icon={SquarePen}
-                            label="New Session"
-                            testId={dataTestId.newConversation}
-                            onClick={() => {
-                                onNewConversation();
-                                dialogs.getState().closeMobileNav();
-                            }}
-                        />
-                        <SidebarSessionOption
-                            icon={Laptop}
-                            label="Open Session"
-                            onClick={() => {
-                                dialogs.getState().closeMobileNav();
-                                dialogs.getState().openNativeDialog();
-                            }}
-                        />
-                        {!desktop && (
-                            <SidebarSessionOption
-                                icon={List}
-                                label="Recent sessions"
-                                onClick={() => {
-                                    dialogs.getState().closeMobileNav();
-                                    openMobileRecentSessions();
-                                }}
-                            />
-                        )}
-                    </nav>
-                    {desktop && (
-                        <div className="hidden min-h-0 flex-1 sm:flex sm:min-h-0 sm:flex-col sm:gap-0">
-                            <Tooltip.Provider delayDuration={150}>
-                                <div className="flex min-w-0 items-center justify-between gap-2 pl-2 sm:mb-0 sm:w-full">
-                                    <h2 className="font-inter text-13 font-semibold tracking-normal text-foreground">
-                                        Recent sessions
-                                    </h2>
-                                    <SidebarActionTooltip
-                                        label={refreshing ? "Refreshing sessions" : "Refresh sessions"}
+        <DesktopChatLayout>
+            {(desktop) => (
+                <PanelPresence open={mobileNavOpen}>
+                    {(navigationMotion) => (
+                        <PanelPresence open={mobileSessionsOpen}>
+                            {(sessionsMotion) => (
+                                <>
+                                    {/* Desktop isolate keeps sticky group labels under the session pane shadow. */}
+                                    <aside
+                                        ref={dialogs.getState().onAttach}
+                                        id="conversation-sidebar-mobile-panel"
+                                        aria-label="Morty navigation"
+                                        className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-card/90 px-3 pt-0 max-sm:overflow-visible sm:isolate sm:w-[264px] sm:gap-0 sm:bg-sidebar sm:pt-2 sm:pb-4"
                                     >
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="size-8! min-h-8! shrink-0 rounded-lg text-morty-text-3 hover:text-foreground"
-                                            aria-label={refreshing ? "Refreshing sessions" : "Refresh sessions"}
-                                            aria-busy={refreshing}
-                                            disabled={refreshing}
-                                            onClick={(event) => {
-                                                blurAfterPointerClick(event);
-                                                workspace.refreshDirectory();
-                                            }}
+                                        <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-4 py-3 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:bg-card/90 sm:gap-3">
+                                            <div className="relative z-[1] flex w-fit shrink-0 items-center gap-2 sm:gap-3">
+                                                <button
+                                                    type="button"
+                                                    aria-controls="conversation-sidebar-mobile-drawer"
+                                                    aria-expanded={mobileNavOpen}
+                                                    aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
+                                                    className={cn(
+                                                        "inline-flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring/60 sm:hidden",
+                                                        mobileHeaderIconButtonClassName,
+                                                    )}
+                                                    onClick={() => {
+                                                        if (mobileNavOpen) {
+                                                            dialogs.getState().closeMobileNav();
+                                                        } else {
+                                                            dialogs.getState().openMobileNav();
+                                                            if (workspace.computers !== null) {
+                                                                void workspace.computers.refresh();
+                                                            }
+                                                        }
+                                                        dialogs.getState().closeMobileRecentSessions();
+                                                    }}
+                                                >
+                                                    <span className="flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_4px_12px_rgba(34,123,78,0.18)]">
+                                                        <MessageSquare className="size-3.5" aria-hidden="true" />
+                                                    </span>
+                                                </button>
+                                                <span className="hidden size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_4px_12px_rgba(34,123,78,0.18)] sm:flex">
+                                                    <MessageSquare className="size-4" aria-hidden="true" />
+                                                </span>
+                                                <span className="hidden min-w-0 sm:block">
+                                                    <h1 className="truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">
+                                                        Morty
+                                                    </h1>
+                                                </span>
+                                                <Button
+                                                    variant="ghost"
+                                                    className={cn(mobileHeaderIconButtonClassName, "sm:hidden")}
+                                                    aria-label="Recent sessions"
+                                                    aria-expanded={mobileSessionsOpen}
+                                                    aria-controls="chat-conversations-mobile-sheet"
+                                                    onClick={(event) => {
+                                                        event.preventDefault();
+                                                        event.stopPropagation();
+                                                        if (mobileSessionsOpen) {
+                                                            closeMobileRecentSessions();
+                                                            return;
+                                                        }
+                                                        openMobileRecentSessions();
+                                                    }}
+                                                >
+                                                    <List aria-hidden="true" className="size-5" />
+                                                </Button>
+                                            </div>
+                                            <div
+                                                id={dataTestId.mobileSessionTitleSlot}
+                                                className="pointer-events-none flex min-w-0 flex-1 items-center justify-center overflow-visible sm:hidden"
+                                            />
+                                            <div className="flex min-w-0 shrink items-center justify-end gap-0.5">
+                                                <Tooltip.Provider delayDuration={150}>
+                                                    {!desktop && (
+                                                        <div className="flex items-center gap-2 sm:hidden">
+                                                            <SidebarActionTooltip label="New Session">
+                                                                <Button
+                                                                    aria-label="New Session"
+                                                                    className={mobileHeaderIconButtonClassName}
+                                                                    data-testid={dataTestId.newConversation}
+                                                                    onClick={onNewConversation}
+                                                                    size="icon"
+                                                                    variant="ghost"
+                                                                >
+                                                                    <MessageSquarePlus
+                                                                        aria-hidden="true"
+                                                                        className="size-5"
+                                                                    />
+                                                                </Button>
+                                                            </SidebarActionTooltip>
+                                                            <SidebarActionTooltip label="Open Session">
+                                                                <Button
+                                                                    aria-label="Open Session"
+                                                                    className={mobileHeaderIconButtonClassName}
+                                                                    onClick={dialogs.getState().openNativeDialog}
+                                                                    size="icon"
+                                                                    variant="ghost"
+                                                                >
+                                                                    <Laptop aria-hidden="true" className="size-5" />
+                                                                </Button>
+                                                            </SidebarActionTooltip>
+                                                        </div>
+                                                    )}
+                                                </Tooltip.Provider>
+                                                {workspace.computers === null && (
+                                                    <ConnectionStatus
+                                                        className="max-sm:hidden pr-[10px]"
+                                                        status={connectionStatus}
+                                                        testId={dataTestId.botConnectionStatus}
+                                                    />
+                                                )}
+                                                {desktop && workspace.computers !== null ? (
+                                                    <ComputerSwitcher
+                                                        layout="header"
+                                                        model={workspace.computers}
+                                                        name={computerName}
+                                                        status={connectionStatus}
+                                                    />
+                                                ) : null}
+                                            </div>
+                                        </header>
+                                        {navigationMotion.present ? (
+                                            <button
+                                                type="button"
+                                                aria-label="Close navigation"
+                                                className={cn(
+                                                    "fixed inset-0 z-[130] bg-black/30 sm:hidden",
+                                                    navigationMotion.animate && panelMotionClassName,
+                                                    navigationMotion.shown ? "opacity-100" : "opacity-0",
+                                                )}
+                                                onClick={dialogs.getState().closeMobileNav}
+                                            />
+                                        ) : null}
+                                        <div
+                                            id="conversation-sidebar-mobile-drawer"
+                                            className={cn(
+                                                "min-h-0 flex-1 flex-col gap-0",
+                                                navigationMotion.present
+                                                    ? cn(
+                                                          "fixed inset-y-0 left-0 z-[131] flex w-[85vw] max-w-[85vw] border-r border-border/80 bg-sidebar px-3 py-3 shadow-xl sm:static sm:z-auto sm:w-auto sm:max-w-none sm:translate-x-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:shadow-none sm:transition-none",
+                                                          navigationMotion.animate &&
+                                                              "max-sm:motion-safe:transition-transform max-sm:motion-safe:duration-[280ms] max-sm:motion-safe:ease-[cubic-bezier(0.32,0.72,0,1)]",
+                                                          navigationMotion.shown
+                                                              ? "max-sm:translate-x-0"
+                                                              : "max-sm:-translate-x-full",
+                                                      )
+                                                    : "hidden sm:flex",
+                                            )}
+                                            onTransitionEnd={navigationMotion.onTransitionEnd}
                                         >
-                                            <RefreshCw
-                                                className={`size-3.5 ${refreshing ? "animate-spin motion-reduce:animate-none" : ""}`}
+                                            <div className="flex shrink-0 items-center gap-3 py-4 pl-2 sm:hidden">
+                                                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_4px_12px_rgba(34,123,78,0.18)]">
+                                                    <MessageSquare className="size-4" aria-hidden="true" />
+                                                </span>
+                                                <span className="min-w-0 flex-1 truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">
+                                                    Morty
+                                                </span>
+                                            </div>
+                                            {desktop && (
+                                                <nav
+                                                    aria-label="Session actions"
+                                                    className="box-border hidden min-w-0 w-full shrink-0 flex-col gap-0.5 sm:mt-2 sm:mb-3 sm:flex"
+                                                >
+                                                    <SidebarSessionOption
+                                                        icon={MessageSquarePlus}
+                                                        label="New Session"
+                                                        testId={dataTestId.newConversation}
+                                                        onClick={onNewConversation}
+                                                    />
+                                                    <SidebarSessionOption
+                                                        icon={Laptop}
+                                                        label="Open Session"
+                                                        onClick={dialogs.getState().openNativeDialog}
+                                                    />
+                                                </nav>
+                                            )}
+                                            {desktop && (
+                                                <div className="hidden min-h-0 flex-1 sm:flex sm:min-h-0 sm:flex-col sm:gap-0">
+                                                    <Tooltip.Provider delayDuration={150}>
+                                                        <div className="flex min-w-0 items-center justify-between gap-2 pl-2 sm:mb-0 sm:w-full">
+                                                            <h2 className="font-inter text-13 font-semibold tracking-normal text-foreground">
+                                                                Recent sessions
+                                                            </h2>
+                                                            <SidebarActionTooltip
+                                                                label={
+                                                                    refreshing
+                                                                        ? "Refreshing sessions"
+                                                                        : "Refresh sessions"
+                                                                }
+                                                            >
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="size-8! min-h-8! shrink-0 rounded-lg text-morty-text-3 hover:text-foreground"
+                                                                    aria-label={
+                                                                        refreshing
+                                                                            ? "Refreshing sessions"
+                                                                            : "Refresh sessions"
+                                                                    }
+                                                                    aria-busy={refreshing}
+                                                                    disabled={refreshing}
+                                                                    onClick={(event) => {
+                                                                        blurAfterPointerClick(event);
+                                                                        workspace.refreshDirectory();
+                                                                    }}
+                                                                >
+                                                                    <RefreshCw
+                                                                        className={`size-3.5 ${refreshing ? "animate-spin motion-reduce:animate-none" : ""}`}
+                                                                    />
+                                                                </Button>
+                                                            </SidebarActionTooltip>
+                                                        </div>
+                                                        <ScrollEdgeFade
+                                                            id="chat-conversations"
+                                                            fadeClassName="right-2"
+                                                            fadeFromClassName="from-sidebar"
+                                                            fadeToClassName="to-sidebar/0"
+                                                            topFadeClassName="top-6 h-6"
+                                                            frameClassName="col-span-2 -ml-3 -mr-3 box-border flex min-h-0 min-w-0 w-[calc(100%+24px)] max-w-none flex-1 flex-col max-sm:row-start-2"
+                                                            className={cn(
+                                                                "min-h-0 flex-1 space-y-0 overflow-y-auto px-3",
+                                                                mortyThinScrollbarClassName,
+                                                            )}
+                                                        >
+                                                            <ManagedSessionDirectoryList {...sessionListProps} />
+                                                        </ScrollEdgeFade>
+                                                    </Tooltip.Provider>
+                                                </div>
+                                            )}
+                                            <Tooltip.Provider delayDuration={150} disableHoverableContent>
+                                                <div className="col-span-2 flex w-full min-w-0 flex-col gap-0 overflow-y-auto pt-1 max-sm:min-h-0 max-sm:flex-1 sm:mt-auto sm:shrink-0 sm:flex-row sm:items-center sm:justify-between sm:gap-1 sm:overflow-visible sm:pt-3">
+                                                    {!desktop && workspace.computers !== null ? (
+                                                        <div className={mobileDrawerCardClassName}>
+                                                            <ComputerSwitcher
+                                                                layout="list"
+                                                                model={workspace.computers}
+                                                                name={computerName}
+                                                                status={connectionStatus}
+                                                            />
+                                                        </div>
+                                                    ) : null}
+                                                    {!desktop && (
+                                                        <nav
+                                                            aria-label="Account actions"
+                                                            className={cn(
+                                                                mobileDrawerCardClassName,
+                                                                mobileDrawerOptionDividerClassName,
+                                                                "sm:hidden",
+                                                                workspace.computers !== null && "mt-4",
+                                                            )}
+                                                        >
+                                                            <SidebarSessionOption
+                                                                icon={Share2}
+                                                                label="Continue on another device"
+                                                                variant="card"
+                                                                onClick={dialogs.getState().openSharing}
+                                                            />
+                                                            <BugReportButton
+                                                                appearance="card"
+                                                                daemonSource={sessionDiagnostics}
+                                                                dialog={workspace.bugReportDialog}
+                                                            />
+                                                        </nav>
+                                                    )}
+                                                    {!desktop && access.state.kind !== "ended" ? (
+                                                        <nav
+                                                            aria-label="Connection actions"
+                                                            className={cn(
+                                                                mobileDrawerCardClassName,
+                                                                mobileDrawerOptionDividerClassName,
+                                                                "mt-4 sm:hidden",
+                                                            )}
+                                                        >
+                                                            <SidebarSessionOption
+                                                                disabled={access.state.kind === "loading"}
+                                                                icon={Wifi}
+                                                                label="Network latency"
+                                                                variant="card"
+                                                                onClick={measureNetwork}
+                                                            />
+                                                            <SidebarSessionOption
+                                                                disabled={
+                                                                    access.state.kind === "loading" ||
+                                                                    access.state.kind === "ending"
+                                                                }
+                                                                icon={LogOut}
+                                                                label="End current access"
+                                                                variant="card"
+                                                                onClick={() => {
+                                                                    void access.requestEnd(
+                                                                        workspace.operationsSignal(),
+                                                                    );
+                                                                }}
+                                                            />
+                                                        </nav>
+                                                    ) : null}
+                                                    {desktop && access.state.kind !== "ended" ? (
+                                                        <SidebarUserMenu
+                                                            disabled={access.state.kind === "loading"}
+                                                            endAccessDisabled={
+                                                                access.state.kind === "loading" ||
+                                                                access.state.kind === "ending"
+                                                            }
+                                                            onEndAccess={() => {
+                                                                void access.requestEnd(workspace.operationsSignal());
+                                                            }}
+                                                            onMeasureNetwork={measureNetwork}
+                                                        />
+                                                    ) : null}
+                                                    {desktop ? (
+                                                        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                                                            <SidebarActionTooltip
+                                                                label="Continue on another device"
+                                                                side="top"
+                                                            >
+                                                                <Button
+                                                                    aria-label="Continue on another device"
+                                                                    className="size-8! min-h-8! shrink-0 justify-center rounded-lg px-0"
+                                                                    data-testid={dataTestId.shareIdentity}
+                                                                    onClick={(event) => {
+                                                                        blurAfterPointerClick(event);
+                                                                        dialogs.getState().openSharing();
+                                                                    }}
+                                                                    size="icon"
+                                                                    variant="ghost"
+                                                                >
+                                                                    <Share2 aria-hidden="true" className="size-4" />
+                                                                </Button>
+                                                            </SidebarActionTooltip>
+                                                            <BugReportButton
+                                                                appearance="icon"
+                                                                daemonSource={sessionDiagnostics}
+                                                                dialog={workspace.bugReportDialog}
+                                                            />
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            </Tooltip.Provider>
+                                        </div>
+                                        {dialogStore !== null && (
+                                            <NativeSessionDialog
+                                                store={dialogStore}
+                                                agents={nativeAgents}
+                                                onClose={dialogs.getState().closeNativeDialog}
+                                                bugReportDialog={workspace.bugReportDialog}
+                                                daemonSource={sessionDiagnostics}
                                             />
-                                        </Button>
-                                    </SidebarActionTooltip>
-                                </div>
-                                <ScrollEdgeFade
-                                    id="chat-conversations"
-                                    fadeClassName="right-2"
-                                    fadeFromClassName="from-sidebar"
-                                    fadeToClassName="to-sidebar/0"
-                                    topFadeClassName="top-6 h-6"
-                                    frameClassName="col-span-2 -ml-3 -mr-3 box-border flex min-h-0 min-w-0 w-[calc(100%+24px)] max-w-none flex-1 flex-col max-sm:row-start-2"
-                                    className={cn(
-                                        "min-h-0 flex-1 space-y-0 overflow-y-auto px-3",
-                                        mortyThinScrollbarClassName,
-                                    )}
-                                >
-                                    <ManagedSessionDirectoryList {...sessionListProps} />
-                                </ScrollEdgeFade>
-                            </Tooltip.Provider>
-                        </div>
-                    )}
-                    <Tooltip.Provider delayDuration={150} disableHoverableContent>
-                        <div className="col-span-2 flex w-full min-w-0 shrink-0 flex-col gap-0.5 pt-3 sm:mt-auto sm:flex-row sm:items-center sm:justify-between sm:gap-1">
-                            {!desktop && (
-                                <nav aria-label="Account actions" className="flex flex-col gap-0.5 sm:hidden">
-                                    <SidebarSessionOption
-                                        icon={Share2}
-                                        label="Continue on another device"
-                                        onClick={dialogs.getState().openSharing}
-                                    />
-                                    <BugReportButton
-                                        appearance="option"
-                                        daemonSource={sessionDiagnostics}
-                                        dialog={workspace.bugReportDialog}
-                                    />
-                                    {access.state.kind !== "ended" ? (
-                                        <>
-                                            <div aria-hidden="true" className="my-2 h-px bg-black/[0.06]" />
-                                            <SidebarSessionOption
-                                                disabled={access.state.kind === "loading"}
-                                                icon={Wifi}
-                                                label="Network latency"
-                                                onClick={measureNetwork}
-                                            />
-                                            <SidebarSessionOption
-                                                destructive
-                                                disabled={
-                                                    access.state.kind === "loading" || access.state.kind === "ending"
+                                        )}
+                                        {sharingStore !== null && (
+                                            <Dialog
+                                                title="Continue on another device"
+                                                description={
+                                                    <>
+                                                        <span className="block">
+                                                            Anyone with this link can use your current Morty identity to
+                                                            view and control sessions in this project, not just the
+                                                            current conversation.
+                                                        </span>
+                                                        <span className="mt-2 block">
+                                                            New devices can join for 24 hours after the link is created.
+                                                            Access already granted does not end when the link expires.
+                                                        </span>
+                                                    </>
                                                 }
-                                                icon={LogOut}
-                                                label="End current access"
-                                                onClick={() => {
-                                                    void access.requestEnd(workspace.operationsSignal());
-                                                }}
-                                            />
-                                        </>
-                                    ) : null}
-                                </nav>
+                                                onClose={dialogs.getState().closeSharing}
+                                            >
+                                                <IdentitySharing store={sharingStore} />
+                                            </Dialog>
+                                        )}
+                                        {diagnostic.state.kind !== "closed" && (
+                                            <Dialog
+                                                title="Network latency"
+                                                description={
+                                                    <>
+                                                        <span className="block">
+                                                            Round-trip latency for this browser and its connected
+                                                            Runtime.
+                                                        </span>
+                                                        <span className="mt-1 block">
+                                                            Mobius location:{" "}
+                                                            {projectLocationLabel(workspace.projectId ?? "")}
+                                                        </span>
+                                                    </>
+                                                }
+                                                headerAction={
+                                                    <Button
+                                                        aria-label="Refresh network latency"
+                                                        disabled={diagnostic.state.kind === "measuring"}
+                                                        onClick={measureNetwork}
+                                                        size="icon"
+                                                        title="Refresh network latency"
+                                                        variant="ghost"
+                                                    >
+                                                        <RefreshCw
+                                                            aria-hidden="true"
+                                                            className={`size-4 ${diagnostic.state.kind === "measuring" ? "animate-spin" : ""}`}
+                                                        />
+                                                    </Button>
+                                                }
+                                                onClose={diagnostic.close}
+                                            >
+                                                {diagnostic.state.kind === "measuring" ? (
+                                                    <div
+                                                        aria-label="Measuring network latency"
+                                                        className="flex items-center gap-2 text-muted-foreground"
+                                                        role="status"
+                                                    >
+                                                        <LoaderCircle
+                                                            aria-hidden="true"
+                                                            className="size-4 animate-spin"
+                                                        />
+                                                        Measuring network latency…
+                                                    </div>
+                                                ) : diagnostic.state.kind === "failed" ? (
+                                                    <div className="space-y-4">
+                                                        <p className="text-destructive" role="alert">
+                                                            {diagnostic.state.message}
+                                                        </p>
+                                                        <Button onClick={measureNetwork} variant="outline">
+                                                            Try again
+                                                        </Button>
+                                                    </div>
+                                                ) : (
+                                                    <dl className="divide-y divide-border rounded-lg border border-border">
+                                                        <div className="flex items-center justify-between gap-4 px-4 py-3">
+                                                            <dt>Browser ↔ Morty</dt>
+                                                            <dd
+                                                                aria-label="Browser to Morty latency"
+                                                                className="font-mono font-medium"
+                                                                role="status"
+                                                            >
+                                                                {diagnostic.state.browserMortyLatencyMs} ms
+                                                            </dd>
+                                                        </div>
+                                                        <div className="flex items-center justify-between gap-4 px-4 py-3">
+                                                            <dt>Browser ↔ Mobius</dt>
+                                                            <dd
+                                                                aria-label="Browser to Mobius latency"
+                                                                className="font-mono font-medium"
+                                                                role="status"
+                                                            >
+                                                                {diagnostic.state.browserMobiusLatencyMs} ms
+                                                            </dd>
+                                                        </div>
+                                                        <div className="flex items-center justify-between gap-4 px-4 py-3">
+                                                            <dt>Morty ↔ Mobius</dt>
+                                                            <dd
+                                                                aria-label="Morty to Mobius latency"
+                                                                className="font-mono font-medium"
+                                                                role="status"
+                                                            >
+                                                                {diagnostic.state.mortyMobiusLatencyMs} ms
+                                                            </dd>
+                                                        </div>
+                                                        <div className="flex items-center justify-between gap-4 px-4 py-3">
+                                                            <dt>Mobius ↔ Daemon</dt>
+                                                            <dd
+                                                                aria-label="Mobius to daemon latency"
+                                                                className="font-mono font-medium"
+                                                                role="status"
+                                                            >
+                                                                {diagnostic.state.mobiusDaemonLatencyMs} ms
+                                                            </dd>
+                                                        </div>
+                                                    </dl>
+                                                )}
+                                            </Dialog>
+                                        )}
+                                        {(access.state.kind === "loading" ||
+                                            access.state.kind === "unavailable" ||
+                                            access.state.kind === "confirming-end" ||
+                                            access.state.kind === "ending" ||
+                                            access.state.kind === "failed") && (
+                                            <Dialog
+                                                busy={access.state.kind === "loading" || access.state.kind === "ending"}
+                                                title="End current access?"
+                                                description={
+                                                    <>
+                                                        <span className="block">
+                                                            End access in this browser. If you joined through a link,
+                                                            that link and the browser access it granted will also be
+                                                            revoked.
+                                                        </span>
+                                                        <span className="mt-2 block">
+                                                            Other sharing links and recovery access stay active.
+                                                            Already-open sessions elsewhere may keep working until their
+                                                            access expires.
+                                                        </span>
+                                                        <span className="mt-3 block font-medium text-foreground">
+                                                            Your local agent and tasks keep running.
+                                                        </span>
+                                                    </>
+                                                }
+                                                testId={dataTestId.endRemoteAccessDialog}
+                                                onClose={access.cancel}
+                                            >
+                                                {access.state.kind === "loading" && (
+                                                    <p role="status">Preparing current access…</p>
+                                                )}
+                                                {(access.state.kind === "failed" ||
+                                                    access.state.kind === "unavailable") && (
+                                                    <p className="mt-3 text-sm text-destructive" role="alert">
+                                                        {access.state.message}
+                                                    </p>
+                                                )}
+                                                <div className="mt-5 flex justify-end gap-2">
+                                                    <Button
+                                                        disabled={
+                                                            access.state.kind === "loading" ||
+                                                            access.state.kind === "ending"
+                                                        }
+                                                        onClick={access.cancel}
+                                                        variant="ghost"
+                                                    >
+                                                        Cancel
+                                                    </Button>
+                                                    <Button
+                                                        disabled={
+                                                            access.state.kind === "loading" ||
+                                                            access.state.kind === "ending"
+                                                        }
+                                                        onClick={() => {
+                                                            if (access.state.kind === "unavailable") {
+                                                                void access.requestEnd(workspace.operationsSignal());
+                                                            } else {
+                                                                void access.end(workspace.operationsSignal());
+                                                            }
+                                                        }}
+                                                        variant="primary"
+                                                    >
+                                                        {access.state.kind === "ending"
+                                                            ? "Ending…"
+                                                            : access.state.kind === "failed" ||
+                                                                access.state.kind === "unavailable"
+                                                              ? "Try again"
+                                                              : "End current access"}
+                                                    </Button>
+                                                </div>
+                                            </Dialog>
+                                        )}
+                                    </aside>
+                                    {sessionsMotion.present && typeof document !== "undefined"
+                                        ? createPortal(
+                                              <>
+                                                  <button
+                                                      type="button"
+                                                      aria-label="Close recent sessions"
+                                                      className={cn(
+                                                          "fixed inset-0 z-[120] bg-black/30 sm:hidden",
+                                                          sessionsMotion.animate && panelMotionClassName,
+                                                          sessionsMotion.shown ? "opacity-100" : "opacity-0",
+                                                      )}
+                                                      onClick={() => dialogs.getState().dismissMobileRecentSessions()}
+                                                  />
+                                                  <div
+                                                      id="chat-conversations-mobile-sheet"
+                                                      data-testid={dataTestId.mobileRecentSessionsSheet}
+                                                      role="dialog"
+                                                      aria-modal="true"
+                                                      aria-labelledby="mobile-recent-sessions-title"
+                                                      className={cn(
+                                                          "pointer-events-auto fixed inset-x-0 bottom-0 z-[121] flex h-[80dvh] max-h-[80dvh] flex-col rounded-t-[24px] border-t border-border/80 bg-card shadow-[0_-8px_32px_rgba(17,24,20,0.12)] sm:hidden",
+                                                          sessionsMotion.animate && panelMotionClassName,
+                                                          sessionsMotion.shown ? "translate-y-0" : "translate-y-full",
+                                                      )}
+                                                      style={{
+                                                          paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))",
+                                                      }}
+                                                      onTransitionEnd={sessionsMotion.onTransitionEnd}
+                                                  >
+                                                      <header className="flex shrink-0 items-center justify-between gap-2 px-3 pb-2 pt-4">
+                                                          <h2
+                                                              id="mobile-recent-sessions-title"
+                                                              className="font-inter text-13 font-semibold tracking-normal text-morty-text-2"
+                                                          >
+                                                              Recent sessions
+                                                          </h2>
+                                                          <div className="flex shrink-0 items-center">
+                                                              <Button
+                                                                  variant="ghost"
+                                                                  size="icon"
+                                                                  className="size-8 shrink-0 rounded-lg text-morty-text-3 hover:text-foreground"
+                                                                  aria-label={
+                                                                      refreshing
+                                                                          ? "Refreshing sessions"
+                                                                          : "Refresh sessions"
+                                                                  }
+                                                                  aria-busy={refreshing}
+                                                                  disabled={refreshing}
+                                                                  title={
+                                                                      refreshing
+                                                                          ? "Refreshing sessions"
+                                                                          : "Refresh sessions"
+                                                                  }
+                                                                  onClick={(event) => {
+                                                                      blurAfterPointerClick(event);
+                                                                      workspace.refreshDirectory();
+                                                                  }}
+                                                              >
+                                                                  <RefreshCw
+                                                                      className={`size-3.5 ${refreshing ? "animate-spin motion-reduce:animate-none" : ""}`}
+                                                                  />
+                                                              </Button>
+                                                              <Button
+                                                                  variant="ghost"
+                                                                  size="icon"
+                                                                  className="size-8 shrink-0 rounded-lg text-morty-text-3 hover:text-foreground"
+                                                                  aria-label="Close recent sessions"
+                                                                  onClick={closeMobileRecentSessions}
+                                                              >
+                                                                  <X aria-hidden="true" className="size-3.5" />
+                                                              </Button>
+                                                          </div>
+                                                      </header>
+                                                      <ScrollEdgeFade
+                                                          id="chat-conversations-mobile"
+                                                          fadeClassName="right-2"
+                                                          fadeFromClassName="from-card"
+                                                          fadeToClassName="to-card/0"
+                                                          topFadeClassName="top-6 h-6"
+                                                          frameClassName="flex min-h-0 flex-1 flex-col"
+                                                          className={cn(
+                                                              "min-h-0 flex-1 space-y-0 overflow-y-auto overscroll-contain px-2 pb-2",
+                                                              mortyThinScrollbarClassName,
+                                                          )}
+                                                      >
+                                                          <ManagedSessionDirectoryList {...sessionListProps} />
+                                                      </ScrollEdgeFade>
+                                                  </div>
+                                              </>,
+                                              document.body,
+                                          )
+                                        : null}
+                                </>
                             )}
-                            {desktop && access.state.kind !== "ended" ? (
-                                <SidebarUserMenu
-                                    disabled={access.state.kind === "loading"}
-                                    endAccessDisabled={
-                                        access.state.kind === "loading" || access.state.kind === "ending"
-                                    }
-                                    onEndAccess={() => {
-                                        void access.requestEnd(workspace.operationsSignal());
-                                    }}
-                                    onMeasureNetwork={measureNetwork}
-                                />
-                            ) : null}
-                            {desktop ? (
-                                <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                                    <SidebarActionTooltip label="Continue on another device" side="top">
-                                        <Button
-                                            aria-label="Continue on another device"
-                                            className="size-8! min-h-8! shrink-0 justify-center rounded-lg px-0"
-                                            data-testid={dataTestId.shareIdentity}
-                                            onClick={(event) => {
-                                                blurAfterPointerClick(event);
-                                                dialogs.getState().openSharing();
-                                            }}
-                                            size="icon"
-                                            variant="ghost"
-                                        >
-                                            <Share2 aria-hidden="true" className="size-4" />
-                                        </Button>
-                                    </SidebarActionTooltip>
-                                    <BugReportButton
-                                        appearance="icon"
-                                        daemonSource={sessionDiagnostics}
-                                        dialog={workspace.bugReportDialog}
-                                    />
-                                </div>
-                            ) : null}
-                        </div>
-                    </Tooltip.Provider>
-                </div>
-                {dialogStore !== null && (
-                    <NativeSessionDialog
-                        store={dialogStore}
-                        agents={nativeAgents}
-                        onClose={dialogs.getState().closeNativeDialog}
-                        bugReportDialog={workspace.bugReportDialog}
-                        daemonSource={sessionDiagnostics}
-                    />
-                )}
-                {sharingStore !== null && (
-                    <Dialog
-                        title="Continue on another device"
-                        description={
-                            <>
-                                <span className="block">
-                                    Anyone with this link can use your current Morty identity to view and control
-                                    sessions in this project, not just the current conversation.
-                                </span>
-                                <span className="mt-2 block">
-                                    New devices can join for 24 hours after the link is created. Access already granted
-                                    does not end when the link expires.
-                                </span>
-                            </>
-                        }
-                        onClose={dialogs.getState().closeSharing}
-                    >
-                        <IdentitySharing store={sharingStore} />
-                    </Dialog>
-                )}
-                {diagnostic.state.kind !== "closed" && (
-                    <Dialog
-                        title="Network latency"
-                        description={
-                            <>
-                                <span className="block">
-                                    Round-trip latency for this browser and its connected Runtime.
-                                </span>
-                                <span className="mt-1 block">
-                                    Mobius location: {projectLocationLabel(workspace.projectId ?? "")}
-                                </span>
-                            </>
-                        }
-                        headerAction={
-                            <Button
-                                aria-label="Refresh network latency"
-                                disabled={diagnostic.state.kind === "measuring"}
-                                onClick={measureNetwork}
-                                size="icon"
-                                title="Refresh network latency"
-                                variant="ghost"
-                            >
-                                <RefreshCw
-                                    aria-hidden="true"
-                                    className={`size-4 ${diagnostic.state.kind === "measuring" ? "animate-spin" : ""}`}
-                                />
-                            </Button>
-                        }
-                        onClose={diagnostic.close}
-                    >
-                        {diagnostic.state.kind === "measuring" ? (
-                            <div
-                                aria-label="Measuring network latency"
-                                className="flex items-center gap-2 text-muted-foreground"
-                                role="status"
-                            >
-                                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-                                Measuring network latency…
-                            </div>
-                        ) : diagnostic.state.kind === "failed" ? (
-                            <div className="space-y-4">
-                                <p className="text-destructive" role="alert">
-                                    {diagnostic.state.message}
-                                </p>
-                                <Button onClick={measureNetwork} variant="outline">
-                                    Try again
-                                </Button>
-                            </div>
-                        ) : (
-                            <dl className="divide-y divide-border rounded-lg border border-border">
-                                <div className="flex items-center justify-between gap-4 px-4 py-3">
-                                    <dt>Browser ↔ Morty</dt>
-                                    <dd
-                                        aria-label="Browser to Morty latency"
-                                        className="font-mono font-medium"
-                                        role="status"
-                                    >
-                                        {diagnostic.state.browserMortyLatencyMs} ms
-                                    </dd>
-                                </div>
-                                <div className="flex items-center justify-between gap-4 px-4 py-3">
-                                    <dt>Browser ↔ Mobius</dt>
-                                    <dd
-                                        aria-label="Browser to Mobius latency"
-                                        className="font-mono font-medium"
-                                        role="status"
-                                    >
-                                        {diagnostic.state.browserMobiusLatencyMs} ms
-                                    </dd>
-                                </div>
-                                <div className="flex items-center justify-between gap-4 px-4 py-3">
-                                    <dt>Morty ↔ Mobius</dt>
-                                    <dd
-                                        aria-label="Morty to Mobius latency"
-                                        className="font-mono font-medium"
-                                        role="status"
-                                    >
-                                        {diagnostic.state.mortyMobiusLatencyMs} ms
-                                    </dd>
-                                </div>
-                                <div className="flex items-center justify-between gap-4 px-4 py-3">
-                                    <dt>Mobius ↔ Daemon</dt>
-                                    <dd
-                                        aria-label="Mobius to daemon latency"
-                                        className="font-mono font-medium"
-                                        role="status"
-                                    >
-                                        {diagnostic.state.mobiusDaemonLatencyMs} ms
-                                    </dd>
-                                </div>
-                            </dl>
-                        )}
-                    </Dialog>
-                )}
-                {(access.state.kind === "loading" ||
-                    access.state.kind === "unavailable" ||
-                    access.state.kind === "confirming-end" ||
-                    access.state.kind === "ending" ||
-                    access.state.kind === "failed") && (
-                    <Dialog
-                        busy={access.state.kind === "loading" || access.state.kind === "ending"}
-                        title="End current access?"
-                        description={
-                            <>
-                                <span className="block">
-                                    End access in this browser. If you joined through a link, that link and the browser
-                                    access it granted will also be revoked.
-                                </span>
-                                <span className="mt-2 block">
-                                    Other sharing links and recovery access stay active. Already-open sessions elsewhere
-                                    may keep working until their access expires.
-                                </span>
-                                <span className="mt-3 block font-medium text-foreground">
-                                    Your local agent and tasks keep running.
-                                </span>
-                            </>
-                        }
-                        testId={dataTestId.endRemoteAccessDialog}
-                        onClose={access.cancel}
-                    >
-                        {access.state.kind === "loading" && <p role="status">Preparing current access…</p>}
-                        {(access.state.kind === "failed" || access.state.kind === "unavailable") && (
-                            <p className="mt-3 text-sm text-destructive" role="alert">
-                                {access.state.message}
-                            </p>
-                        )}
-                        <div className="mt-5 flex justify-end gap-2">
-                            <Button
-                                disabled={access.state.kind === "loading" || access.state.kind === "ending"}
-                                onClick={access.cancel}
-                                variant="ghost"
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                disabled={access.state.kind === "loading" || access.state.kind === "ending"}
-                                onClick={() => {
-                                    if (access.state.kind === "unavailable") {
-                                        void access.requestEnd(workspace.operationsSignal());
-                                    } else {
-                                        void access.end(workspace.operationsSignal());
-                                    }
-                                }}
-                                variant="destructive"
-                            >
-                                {access.state.kind === "ending"
-                                    ? "Ending…"
-                                    : access.state.kind === "failed" || access.state.kind === "unavailable"
-                                      ? "Try again"
-                                      : "End current access"}
-                            </Button>
-                        </div>
-                    </Dialog>
-                )}
-            </aside>
-            {sessionsMotion.present && typeof document !== "undefined"
-                ? createPortal(
-                      <>
-                          <button
-                              type="button"
-                              aria-label="Close recent sessions"
-                              className={cn(
-                                  "fixed inset-0 z-[120] bg-black/30 sm:hidden",
-                                  sessionsMotion.animate && panelMotionClassName,
-                                  sessionsMotion.shown ? "opacity-100" : "opacity-0",
-                              )}
-                              onClick={() => dialogs.getState().dismissMobileRecentSessions()}
-                          />
-                          <div
-                              id="chat-conversations-mobile-sheet"
-                              data-testid={dataTestId.mobileRecentSessionsSheet}
-                              role="dialog"
-                              aria-modal="true"
-                              aria-labelledby="mobile-recent-sessions-title"
-                              className={cn(
-                                  "pointer-events-auto fixed inset-x-0 bottom-0 z-[121] flex h-[80dvh] max-h-[80dvh] flex-col rounded-t-[24px] border-t border-border/80 bg-card shadow-[0_-8px_32px_rgba(17,24,20,0.12)] sm:hidden",
-                                  sessionsMotion.animate && panelMotionClassName,
-                                  sessionsMotion.shown ? "translate-y-0" : "translate-y-full",
-                              )}
-                              style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
-                              onTransitionEnd={sessionsMotion.onTransitionEnd}
-                          >
-                              <header className="flex shrink-0 items-center justify-between gap-2 px-3 pb-2 pt-4">
-                                  <h2
-                                      id="mobile-recent-sessions-title"
-                                      className="font-inter text-13 font-semibold tracking-normal text-morty-text-2"
-                                  >
-                                      Recent sessions
-                                  </h2>
-                                  <div className="flex shrink-0 items-center">
-                                      <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="size-8 shrink-0 rounded-lg text-morty-text-3 hover:text-foreground"
-                                          aria-label={refreshing ? "Refreshing sessions" : "Refresh sessions"}
-                                          aria-busy={refreshing}
-                                          disabled={refreshing}
-                                          title={refreshing ? "Refreshing sessions" : "Refresh sessions"}
-                                          onClick={() => workspace.refreshDirectory()}
-                                      >
-                                          <RefreshCw
-                                              className={`size-3.5 ${refreshing ? "animate-spin motion-reduce:animate-none" : ""}`}
-                                          />
-                                      </Button>
-                                      <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="size-8 shrink-0 rounded-lg text-morty-text-3 hover:text-foreground"
-                                          aria-label="Close recent sessions"
-                                          onClick={closeMobileRecentSessions}
-                                      >
-                                          <X aria-hidden="true" className="size-3.5" />
-                                      </Button>
-                                  </div>
-                              </header>
-                              <ScrollEdgeFade
-                                  id="chat-conversations-mobile"
-                                  fadeClassName="right-2"
-                                  fadeFromClassName="from-card"
-                                  fadeToClassName="to-card/0"
-                                  topFadeClassName="top-6 h-6"
-                                  frameClassName="flex min-h-0 flex-1 flex-col"
-                                  className={cn(
-                                      "min-h-0 flex-1 space-y-0 overflow-y-auto overscroll-contain px-2 pb-2",
-                                      mortyThinScrollbarClassName,
-                                  )}
-                              >
-                                  <ManagedSessionDirectoryList {...sessionListProps} />
-                              </ScrollEdgeFade>
-                          </div>
-                      </>,
-                      document.body,
-                  )
-                : null}
-        </>
+                        </PanelPresence>
+                    )}
+                </PanelPresence>
+            )}
+        </DesktopChatLayout>
     );
 }

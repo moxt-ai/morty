@@ -1,8 +1,21 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
-/** Clips overflowing text from the start while keeping the leaf visible. */
-export function StartClippedLabel({ value }: { readonly value: string }) {
+/** Clips overflowing text from the start while keeping the leaf visible, or from the end with an ellipsis. */
+export function StartClippedLabel({
+    value,
+    clip = "start",
+}: {
+    readonly value: string;
+    readonly clip?: "start" | "end";
+}) {
+    if (clip === "end") {
+        return <span className="min-w-0 truncate">{value}</span>;
+    }
+    return <StartOverflowLabel value={value} />;
+}
+
+function StartOverflowLabel({ value }: { readonly value: string }) {
     const containerRef = useRef<HTMLSpanElement>(null);
     const [clipsStart, setClipsStart] = useState(false);
 

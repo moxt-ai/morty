@@ -3,6 +3,7 @@ import { Dialog as Primitive } from "radix-ui";
 import { type ReactNode, useState } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import { Button } from "./cloud-button.tsx";
+import { overlaySurfaceRadiusClassName } from "./overlay-surface.ts";
 
 export function Dialog({
     title,
@@ -87,10 +88,10 @@ export function Dialog({
                     }}
                     className={
                         setup
-                            ? "max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-[560px] overflow-hidden rounded-3xl border-[1px] border-white bg-card/90 p-8 shadow-module backdrop-blur sm:p-12 fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 overflow-y-auto outline-none motion-safe:animate-cloud-enter"
+                            ? `max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-[560px] overflow-hidden ${overlaySurfaceRadiusClassName} border-[1px] border-white bg-card/90 p-8 shadow-module backdrop-blur sm:p-12 fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 overflow-y-auto outline-none motion-safe:animate-cloud-enter`
                             : surface
-                              ? `fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] ${wide ? "max-w-5xl" : "max-w-lg"} -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[32px] border border-white bg-card/90 p-2 font-inter text-13 text-foreground shadow-module backdrop-blur outline-none motion-safe:animate-cloud-enter`
-                              : `fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] ${wide ? "max-w-5xl" : "max-w-lg"} -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-border bg-card p-6 text-[13px] leading-5 text-foreground shadow-lg outline-none motion-safe:animate-cloud-enter`
+                              ? `fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] ${wide ? "max-w-5xl" : "max-w-lg"} -translate-x-1/2 -translate-y-1/2 overflow-y-auto ${overlaySurfaceRadiusClassName} border-[1px] border-white bg-card/90 p-2 font-inter text-13 text-foreground shadow-module backdrop-blur outline-none motion-safe:animate-cloud-enter`
+                              : `fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] ${wide ? "max-w-5xl" : "max-w-lg"} -translate-x-1/2 -translate-y-1/2 overflow-y-auto ${overlaySurfaceRadiusClassName} border border-border bg-card p-6 text-[13px] leading-5 text-foreground shadow-lg outline-none motion-safe:animate-cloud-enter`
                     }
                 >
                     {headerAction !== undefined && <div className="absolute right-14 top-3">{headerAction}</div>}

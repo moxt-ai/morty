@@ -5,7 +5,6 @@ import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-s
 import { PairingInstruction } from "../chat/pairing-instruction.tsx";
 import { BugReportButton, BugReportDialogHost } from "../diagnostics/bug-report-button.tsx";
 import {
-    SetupCardAlert,
     SetupCardDescription,
     SetupCardFailureIcon,
     SetupCardSection,
@@ -132,9 +131,19 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
             );
         case "invalid-link":
             return (
-                <SetupCardShell titleId="invalid-link-title">
-                    <SetupCardTitle id="invalid-link-title">This link is no longer valid</SetupCardTitle>
-                    <SetupCardAlert>Ask for a new link. Morty has not switched to another computer.</SetupCardAlert>
+                <SetupCardShell
+                    cardLeading={<SetupCardFailureIcon />}
+                    contentAlignment="center"
+                    titleId="invalid-link-title"
+                >
+                    <div role="alert">
+                        <SetupCardTitle id="invalid-link-title" size="compact">
+                            This link is no longer valid
+                        </SetupCardTitle>
+                        <SetupCardDescription>
+                            Ask for a new link. Morty has not switched to another computer.
+                        </SetupCardDescription>
+                    </div>
                     {state.continueHref !== null && (
                         <Button asChild variant="outline" className={`${setupPrimaryButtonClassName} mt-5 text-center`}>
                             <a href={state.continueHref}>Continue on your last computer</a>

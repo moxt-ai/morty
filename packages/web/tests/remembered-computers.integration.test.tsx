@@ -63,6 +63,9 @@ test("Given two remembered computers, When I return and then switch, Then the la
     const directory = getByTitle(firstLink, /\/workspace$/u);
     expect(directory?.textContent).toBe("workspace");
     expect(directory?.getAttribute("title")).toMatch(/\/workspace$/u);
+    const computers = getAllByRole(document.body, "menuitem").filter((item) => item.getAttribute("href") !== "/setup");
+    expect(computers[0]?.getAttribute("aria-current")).toBe("true");
+    expect(computers[0]?.querySelector(".sr-only")?.textContent).toBe("Online");
     window.location.href = firstLink.href;
     const switched = await returned.reload();
     await switched.waitForView(() =>

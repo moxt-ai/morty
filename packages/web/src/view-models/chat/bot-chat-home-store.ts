@@ -520,6 +520,16 @@ export const createBotChatHomeStore = (
                     signal.throwIfAborted();
                     observeConfiguration(configuration, { kind: "read" });
                     const currentSelection = get().selection;
+                    if (currentSelection.kind === "ready") {
+                        set((current) => ({
+                            view: { kind: "active", botId },
+                            ...(current.notices.pairing.kind === "visible"
+                                ? { notices: { ...current.notices, pairing: { kind: "hidden" as const } } }
+                                : {}),
+                        }));
+                        await watchRuntimeConfigurationChanges();
+                        return;
+                    }
                     const currentTarget = currentSelection.kind === "draft" ? null : currentSelection.target;
                     if (currentTarget?.kind === "continue") {
                         const session = await requests.continueNativeSession(

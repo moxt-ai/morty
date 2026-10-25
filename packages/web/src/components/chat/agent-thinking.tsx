@@ -6,6 +6,7 @@ import { dataTestId } from "../../data-testid.ts";
 import { AgentRichContent } from "../agents/agent-rich-content.tsx";
 import type { SessionResourceStoreFactory } from "../agents/resource-reader.ts";
 import { FollowLatestScrollArea } from "../utils/follow-latest-scroll-area.tsx";
+import { useScrollClippedEdges } from "../utils/use-scroll-clipped-edges.ts";
 import {
     agentThinkStepChevronClassName,
     agentThinkStepExpandedPanelClassName,
@@ -34,20 +35,44 @@ type TimelineEntry =
     | { readonly entry: ReasoningEntry; readonly kind: "reasoning" }
     | { readonly entry: SessionToolPresentation; readonly kind: "tool" };
 
+const clippedEdgeThresholdPx = 4;
+
 function ReasoningContent({ entry }: { readonly entry: ReasoningEntry }) {
     const content = useRef<HTMLDivElement>(null);
+    const clipped = useScrollClippedEdges(content, clippedEdgeThresholdPx);
     return (
-        <FollowLatestScrollArea
-            className="overscroll-contain [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]"
-            container={content}
-            followThreshold={24}
-            followRevision={null}
-            style={{ maxHeight: "10.5rem", overflowY: "auto" }}
-        >
-            <pre className="m-0 whitespace-pre-wrap font-sans text-15 leading-[1.75] text-muted-foreground">
-                {entry.text}
-            </pre>
-        </FollowLatestScrollArea>
+        <div className="relative mb-1 ml-2 min-h-0">
+            <FollowLatestScrollArea
+                className={agentThinkStepExpandedPanelClassName}
+                container={content}
+                followThreshold={24}
+                followRevision={null}
+            >
+                <section className="grid min-w-0 gap-2">
+                    {entry.truncated && (
+                        <p className="m-0 text-xs leading-5 text-copy-secondary">
+                            Earlier reasoning was truncated to the most recent 16K characters.
+                        </p>
+                    )}
+                    {entry.omitted && (
+                        <p className="m-0 text-xs leading-5 text-copy-secondary">(Reasoning details were omitted.)</p>
+                    )}
+                    {entry.text.trim().length > 0 && (
+                        <pre className="m-0 whitespace-pre-wrap font-sans text-[13px] leading-[1.75] text-muted-foreground">
+                            {entry.text}
+                        </pre>
+                    )}
+                </section>
+            </FollowLatestScrollArea>
+            <div
+                aria-hidden="true"
+                className={`pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-card to-card/0 transition-opacity duration-150 motion-reduce:transition-none ${clipped.top ? "opacity-100" : "opacity-0"}`}
+            />
+            <div
+                aria-hidden="true"
+                className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 h-8 bg-gradient-to-t from-card to-card/0 transition-opacity duration-150 motion-reduce:transition-none ${clipped.bottom ? "opacity-100" : "opacity-0"}`}
+            />
+        </div>
     );
 }
 
@@ -97,23 +122,7 @@ function ReasoningDisclosure({ active, entry }: { readonly active: boolean; read
                     />
                 </span>
             </summary>
-            {contentVisible && (
-                <div className={agentThinkStepExpandedPanelClassName}>
-                    <section className="grid min-w-0 gap-2">
-                        {entry.truncated && (
-                            <p className="m-0 text-xs leading-5 text-copy-secondary">
-                                Earlier reasoning was truncated to the most recent 16K characters.
-                            </p>
-                        )}
-                        {entry.omitted && (
-                            <p className="m-0 text-xs leading-5 text-copy-secondary">
-                                (Reasoning details were omitted.)
-                            </p>
-                        )}
-                        {entry.text.trim().length > 0 && <ReasoningContent entry={entry} />}
-                    </section>
-                </div>
-            )}
+            {contentVisible && <ReasoningContent entry={entry} />}
         </details>
     );
 }

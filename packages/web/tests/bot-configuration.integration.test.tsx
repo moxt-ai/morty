@@ -2,7 +2,15 @@ import { getAllByRole, getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { openAgentModelPicker, sendPrompt } from "./infra/application-scenario.ts";
-import { createTestApp } from "./infra/test-app.tsx";
+import { createTestApp, type TestApp } from "./infra/test-app.tsx";
+
+async function waitForConnection(app: TestApp, status: string): Promise<void> {
+    await app.waitForView(() => {
+        const statuses = app.elementsByTestId(dataTestId.botConnectionStatus);
+        expect(statuses.length).toBeGreaterThan(0);
+        expect(statuses.every((element) => element.getAttribute("data-connection-status") === status)).toBe(true);
+    });
+}
 
 test("Given Morty has no paired agent, When the setup page opens, Then it offers the current-origin setup instruction without a data region selector", {
     timeout: 30_000,
@@ -93,21 +101,16 @@ test("Given multiple Runtimes share a Project, When a user configures a paired B
         },
     });
     const failure = created.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
-    await Promise.race([
-        created.queryElementByTestId(
-            dataTestId.botConnectionStatus,
-            (element) => element.getAttribute("data-connection-status") === "connected",
-        ),
-        failure,
-    ]);
+    await Promise.race([waitForConnection(created, "connected"), failure]);
 
     await created.user.click(await created.queryElementByTestId(dataTestId.agentConfiguration));
     const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
 
-    expect(getAllByRole(configuration, "tab", { name: "Codex" })).toHaveLength(1);
-    expect(getAllByRole(configuration, "tab", { name: "Pi" })).toHaveLength(1);
-    expect(getAllByRole(configuration, "tab")).toHaveLength(2);
-    expect(getByRole(configuration, "tab", { name: "Pi" })).toHaveProperty("disabled", true);
+    const harnesses = getByRole(configuration, "radiogroup", { name: "Harness" });
+    expect(getAllByRole(harnesses, "radio", { name: "Codex" })).toHaveLength(1);
+    expect(getAllByRole(harnesses, "radio", { name: "Pi" })).toHaveLength(1);
+    expect(getAllByRole(harnesses, "radio")).toHaveLength(2);
+    expect(getByRole(harnesses, "radio", { name: "Pi" }).getAttribute("aria-disabled")).toBe("true");
 });
 
 test("Given a Bot has a recent directory from another harness, When its Runtime configuration loads, Then the directory remains available", {
@@ -202,14 +205,11 @@ test("Given the working directory browser is open, When the user edits the path,
     ]);
 });
 
-test("Given a Bot paired with the Claude harness, When the user opens its settings, Then the Claude brand mark labels the harness tab and the trigger", {
+test("Given a Bot paired with the Claude harness, When the user opens its settings, Then the Claude brand mark labels the harness field and the trigger", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true, agent: { id: "claude", label: "Claude Code" } });
-    await app.queryElementByTestId(
-        dataTestId.botConnectionStatus,
-        (element) => element.getAttribute("data-connection-status") === "connected",
-    );
+    await waitForConnection(app, "connected");
 
     const triggerMark = await app.queryElementByTestId(
         dataTestId.harnessTriggerMark,
@@ -220,11 +220,12 @@ test("Given a Bot paired with the Claude harness, When the user opens its settin
 
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
     const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
-    const tab = getByRole(configuration, "tab", { name: "Claude Code" });
-    const tabMark = app.elementByTestId(dataTestId.harnessMark, tab);
-    expect(tabMark.getAttribute("data-harness-product")).toBe("claude");
-    expect(tabMark.getAttribute("aria-hidden")).toBe("true");
-    expect(tabMark.tagName === "svg" || tabMark.querySelector("svg")).toBeTruthy();
+    const harness = getByRole(configuration, "radio", { name: "Claude Code", checked: true });
+    expect(harness.textContent).toContain("Claude Code");
+    const harnessMark = app.elementByTestId(dataTestId.harnessMark, harness);
+    expect(harnessMark.getAttribute("data-harness-product")).toBe("claude");
+    expect(harnessMark.getAttribute("aria-hidden")).toBe("true");
+    expect(harnessMark.tagName === "svg" || harnessMark.querySelector("svg")).toBeTruthy();
 });
 
 test("Given a paired Bot, When the composer controls are visible, Then the configuration trigger shows its harness mark without repeating the harness or machine name", {
@@ -244,14 +245,11 @@ test("Given a paired Bot, When the composer controls are visible, Then the confi
     expect(app.elementByTestId(dataTestId.harnessTriggerMark, configurationTrigger)).toBeDefined();
 });
 
-test("Given a Bot paired with an unlisted harness, When the user opens its settings, Then a generic mark labels the harness tab without renaming it", {
+test("Given a Bot paired with an unlisted harness, When the user opens its settings, Then a generic mark labels the harness field without renaming it", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true, agent: { id: "unlisted-agent", label: "Unlisted Agent" } });
-    await app.queryElementByTestId(
-        dataTestId.botConnectionStatus,
-        (element) => element.getAttribute("data-connection-status") === "connected",
-    );
+    await waitForConnection(app, "connected");
 
     const triggerMark = await app.queryElementByTestId(
         dataTestId.harnessTriggerMark,
@@ -261,23 +259,22 @@ test("Given a Bot paired with an unlisted harness, When the user opens its setti
 
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
     const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
-    const tab = getByRole(configuration, "tab", { name: "Unlisted Agent" });
-    expect(app.elementByTestId(dataTestId.harnessMark, tab).getAttribute("data-harness-product")).toBe("generic");
-    expect(getAllByRole(configuration, "tab", { name: "Unlisted Agent" })).toHaveLength(1);
-    expect(getByRole(configuration, "tab", { name: "Pi" })).toHaveProperty("disabled", true);
+    const harness = getByRole(configuration, "radio", { name: "Unlisted Agent", checked: true });
+    expect(harness.textContent).toContain("Unlisted Agent");
+    expect(app.elementByTestId(dataTestId.harnessMark, harness).getAttribute("data-harness-product")).toBe("generic");
+    const harnesses = getByRole(configuration, "radiogroup", { name: "Harness" });
+    expect(getAllByRole(harnesses, "radio", { name: "Unlisted Agent" })).toHaveLength(1);
+    expect(getByRole(harnesses, "radio", { name: "Pi" }).getAttribute("aria-disabled")).toBe("true");
 });
 
 test("Given a Bot paired with Pi, When the user opens its settings and sends a prompt, Then Pi and its streamed reply are visible", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true, agent: { id: "pi", label: "Pi" } });
-    await app.queryElementByTestId(
-        dataTestId.botConnectionStatus,
-        (element) => element.getAttribute("data-connection-status") === "connected",
-    );
+    await waitForConnection(app, "connected");
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
     const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
-    expect(getByRole(configuration, "tab", { name: "Pi", selected: true })).toBeDefined();
+    expect(getByRole(configuration, "radio", { name: "Pi", checked: true }).textContent).toContain("Pi");
     await app.user.keyboard("{Escape}");
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {

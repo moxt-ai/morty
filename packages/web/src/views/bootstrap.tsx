@@ -1,4 +1,5 @@
 import { ErrorBoundary, reactErrorHandler } from "@sentry/react";
+import { CircleAlert } from "lucide-react";
 import { createRoot } from "react-dom/client";
 import { ToastProvider } from "../components/ui/toast.tsx";
 import type { WebSocketApiTransport } from "../services/api/websocket-api-transport.ts";
@@ -45,7 +46,18 @@ export function assembleMorty(options: {
                 <ErrorBoundary
                     fallback={
                         <Page>
-                            <p role="alert">Morty encountered an error. Please reload to try again.</p>
+                            <section
+                                className="mx-auto grid w-full min-w-0 max-w-[400px] justify-items-center gap-3 text-center"
+                                role="alert"
+                            >
+                                <span className="flex size-12 items-center justify-center rounded-full bg-destructive/5">
+                                    <CircleAlert aria-hidden="true" className="size-6 shrink-0 text-destructive" />
+                                </span>
+                                <h1 className="text-[18px] leading-6 font-semibold tracking-[-0.025em]">
+                                    Morty encountered an error
+                                </h1>
+                                <p className="text-sm leading-6 text-muted-foreground">Please reload to try again.</p>
+                            </section>
                             <BugReportButton dialog={application.bugReportDialog} />
                             <BugReportDialogHost dialog={application.bugReportDialog} />
                         </Page>

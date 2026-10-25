@@ -188,7 +188,7 @@ function AgentRichContentItem({
                 <div className="border-b-[0.5px] border-black/7 px-3 pt-2">
                     <ContentHeader content={content} />
                 </div>
-                <div className="grid max-h-96 overflow-auto font-mono text-[11px] leading-[18px] md:grid-cols-2">
+                <div className="grid font-mono text-[11px] leading-[18px] md:grid-cols-2">
                     <ToolTextPreview
                         className="max-h-none rounded-none bg-[#fff4f2] p-3 text-[#8f2f35]"
                         text={content.oldText}
@@ -229,7 +229,7 @@ function AgentRichContentItem({
                     <ContentHeader content={content} />
                 </div>
                 <ToolTextPreview
-                    className="max-h-80 bg-transparent px-3 pb-3 font-mono text-[11px] leading-[18px]"
+                    className="bg-transparent px-3 pb-3 font-mono text-[11px] leading-[18px]"
                     text={content.terminalId}
                 />
             </section>
@@ -247,7 +247,7 @@ function AgentRichContentItem({
             <ContentHeader content={content} />
             {content.text.length > 0 && (
                 <ToolTextPreview
-                    className="max-h-80 bg-transparent p-0 font-mono text-[11px] leading-[18px] text-[#555c68]"
+                    className="bg-transparent p-0 font-mono text-[11px] leading-[18px] text-[#555c68]"
                     text={content.text}
                 />
             )}

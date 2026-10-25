@@ -108,7 +108,8 @@ export function HarnessMark({
         <span
             aria-hidden="true"
             className={cn(
-                "inline-flex size-5 shrink-0 items-center justify-center rounded-[6px] text-muted-foreground",
+                "inline-flex size-5 shrink-0 items-center justify-center rounded-[6px]",
+                appearance === "line" ? "text-current" : "text-muted-foreground",
                 MARK_BACKGROUNDS[product],
                 className,
             )}
