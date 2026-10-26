@@ -8,9 +8,9 @@ metadata:
 
 # Contributing to Morty
 
-Read this guide before opening an issue or pull request. It covers contribution,
-development, and operational requirements. See
-[AGENTS.md](AGENTS.md) for engineering rules and [TESTING.md](TESTING.md) for verification.
+This guide is for developing Morty itself. To connect your Agent and use Morty,
+start with the [README](../README.md) and [usage guide](GUIDE.md). See
+[AGENTS.md](../AGENTS.md) for engineering rules and [TESTING.md](TESTING.md) for verification.
 
 ## Issues and pull requests
 
@@ -31,7 +31,7 @@ Read this guide before opening an issue or pull request.
 
 ## Local development
 
-Use the Node and pnpm versions pinned in [package.json](package.json), then install
+Use the Node and pnpm versions pinned in [package.json](../package.json), then install
 the workspace and sync the Mobius submodule:
 
 ```sh
@@ -40,10 +40,10 @@ pnpm sync:submodules
 pnpm local-dev --help
 ```
 
-Use [the local-stack skill](.agents/skills/chat-local-full-dev/SKILL.md) for isolated
+Use [the local-stack skill](../.agents/skills/chat-local-full-dev/SKILL.md) for isolated
 Chat and Platform startup and cleanup. Protocol and SDK workspace dependencies come
 from the Mobius submodule; sync it before repository work.
-Runtime configuration is described in [deployment](docs/deployment.md).
+Runtime configuration is described in [deployment](deployment.md).
 
 ## Build and artifact operations
 

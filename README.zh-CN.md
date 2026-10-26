@@ -16,7 +16,7 @@ metadata:
 
 在任意浏览器中，继续与 Codex、Claude Code 和 Pi 对话。
 
-[打开 Morty →](https://morty.build) · [开始连接](#一条提示词然后拿起手机) · [参与贡献](CONTRIBUTING.md)
+[打开 Morty →](https://morty.build) · [开始连接](#一条提示词然后拿起手机) · [参与贡献](docs/CONTRIBUTING.md)
 
 <img src="https://raw.githubusercontent.com/moxt-ai/mobius/362efa275790e55e34ecd2462e716c177cdf831a/docs/assets/readme-accent.svg" width="320" height="40" alt="" />
 
@@ -54,4 +54,4 @@ Complete setup without asking questions.
 基于 [**Mobius**](https://github.com/moxt-ai/mobius) 构建。
 Mobius 为开发者提供远程连接编程 Agent 的 SDK 和基础设施，Morty 则是开箱即用的浏览器应用。
 
-[参与贡献](CONTRIBUTING.md) · [测试指南](TESTING.md) · [产品说明](docs/product.md) · [部署说明](docs/deployment.md)
+[参与贡献](docs/CONTRIBUTING.md) · [测试指南](docs/TESTING.md) · [使用指南](docs/GUIDE.md) · [部署说明](docs/deployment.md)

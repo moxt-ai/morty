@@ -6,9 +6,19 @@ metadata:
     and approval. The recommended reviewer is taowen-paraflow.
 ---
 
-# Product intent and recovery
+# Using Morty
 
-## Why Morty exists
+This guide covers connecting your coding Agent, continuing conversations from a
+browser, and understanding history and recovery. For the product overview, see the
+[README](../README.md). To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Get connected
+
+Open [morty.build](https://morty.build) and copy the setup prompt into the coding
+Agent on your computer. Open the link it returns, or scan its QR code on your phone.
+Keep the connected machine awake and online; the Agent runs in that environment.
+
+## Conversations across screens
 
 An Agent may be working on your computer while you are somewhere else. You need a
 convenient place to check its progress, answer a question, give the next instruction
@@ -32,8 +42,12 @@ can focus on their work without building a client themselves. Available operatio
 depend on the Agent and configuration, and unavailable capabilities or history must
 be clear to the user.
 
+## Data ownership and recovery
+
 Live output favors responsiveness over guaranteed delivery. Disconnects and restarts
 can leave gaps; catch-up depends on the current turn, native Agent history or available
 cloud recordings. Optional Recording must not slow the conversation and is not a
 lossless archive. See Mobius's [data ownership and recovery](https://github.com/moxt-ai/mobius/blob/main/docs/GUIDE.md#data-ownership-and-recovery)
 for where retained data lives.
+
+For hosting and runtime configuration, see [deployment](deployment.md).
