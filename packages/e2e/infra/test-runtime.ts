@@ -166,6 +166,9 @@ export async function createTestRuntime(
                 workspace?: string,
             ) => {
                 const url = new URL(instructionUrl, stack.chatOrigin);
+                if (sessionId !== undefined && agentId !== "claude") {
+                    throw new Error(`No harness session variable is modeled for the ${agentId} agent`);
+                }
                 setupClockTime = setupClockStart;
                 const result = await followSetupInstructions({
                     instructionUrl: url.href,
@@ -188,7 +191,8 @@ export async function createTestRuntime(
                         },
                     },
                     runtime,
-                    ...(sessionId === undefined ? {} : { sessionId }),
+                    // A Claude Code shell exposes its current session; the controlled peer stands in for Claude Code.
+                    agentEnvironment: sessionId === undefined ? {} : { CLAUDE_CODE_SESSION_ID: sessionId },
                 });
                 return {
                     botId: text(result.ready["botId"], "ready Bot"),
