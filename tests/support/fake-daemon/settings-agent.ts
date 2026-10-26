@@ -120,20 +120,30 @@ export function createSettingsAgent<Definition>(define: DefineInProcessAgent<Def
     );
 }
 
-/** An Agent that is installed but signed out: like a real harness, it refuses to open a session until sign-in. */
-export function createSignedOutAgent() {
+/** How an installed Agent fails to open a session: signed out like a real harness, or broken. */
+export type UnavailableAgentFailure = "signed-out" | "broken";
+
+/** An installed Agent that refuses every new session, as a real harness does when it cannot start. */
+export function createUnavailableAgent(id: string, name: string, failure: UnavailableAgentFailure) {
     const createEndpoint = (): InProcessAcpEndpoint => {
         const termination = Promise.withResolvers<AcpEndpointTermination>();
         const app = acp
-            .agent({ name: "morty-signed-out-agent" })
+            .agent({ name: "morty-unavailable-agent" })
             .onRequest(acp.methods.agent.initialize, () => ({
                 agentCapabilities: { loadSession: true, sessionCapabilities: { close: {}, list: {}, resume: {} } },
-                agentInfo: { name: "Signed-out Agent", version: "controlled-harness" },
+                agentInfo: { name, version: "controlled-harness" },
                 authMethods: [],
                 protocolVersion: acp.PROTOCOL_VERSION,
             }))
             .onRequest(acp.methods.agent.session.new, () => {
-                throw acp.RequestError.authRequired();
+                switch (failure) {
+                    case "signed-out":
+                        throw acp.RequestError.authRequired();
+                    case "broken":
+                        throw acp.RequestError.internalError();
+                    default:
+                        return failure satisfies never;
+                }
             })
             .onRequest(acp.methods.agent.session.list, () => ({ sessions: [] }));
         return {
@@ -144,8 +154,8 @@ export function createSignedOutAgent() {
         };
     };
     return defineCurrentAgent(
-        "signed-out-test",
-        "Signed-out Agent",
+        id,
+        name,
         process.execPath,
         createEndpoint,
         {},

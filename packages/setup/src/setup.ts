@@ -189,7 +189,21 @@ class RemoteError extends Error {
     }
 }
 
-/** The service or the chosen harness rejected binding the Machine; the harness is the usual cause. */
+/** What the agent should do after binding failed, chosen by the failure's code rather than its message. */
+function bindingNextStep(code: string, harness: string): string {
+    switch (code) {
+        case "authentication_required":
+            return `Ask the user to sign in to ${harness} on this computer; you cannot sign in for them. When they confirm, rerun setup; it reuses this computer's Machine.`;
+        case "TIMEOUT":
+        case "PLATFORM_TIMEOUT":
+        case "PLATFORM_UNAVAILABLE":
+            return `Rerun setup without changing anything; it reuses this computer's Machine. The Morty service or ${harness} may have been briefly unavailable. If it fails the same way again, confirm ${harness} answers a prompt in the working directory.`;
+        default:
+            return `Confirm ${harness} answers a prompt in the working directory and fix what stops it, then rerun setup; it reuses this computer's Machine. If ${harness} answers and setup fails the same way again, report error.code to the user.`;
+    }
+}
+
+/** Setup could not bind the Machine to the chosen harness. */
 class AgentBindingError extends Error {
     readonly code: string;
     readonly harness: string;
@@ -200,7 +214,7 @@ class AgentBindingError extends Error {
         this.name = "AgentBindingError";
         this.code = code;
         this.harness = harness;
-        this.nextStep = `Run ${harness} in the working directory and confirm it answers a prompt with its configured model. Fix its sign-in or model configuration, update ${harness} and @moxt-ai/mobius to their latest releases, then rerun setup; it reuses this computer's Machine.`;
+        this.nextStep = bindingNextStep(code, harness);
     }
 
     readonly diagnostic = () => ({ harness: this.harness, nextStep: this.nextStep });
@@ -527,7 +541,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             headers,
             redirect: "error",
             ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-            signal: AbortSignal.any([signal, AbortSignal.timeout(45000)]),
+            signal: AbortSignal.any([signal, deadline(45000)]),
         });
         const value = object(await response.json());
         if (!response.ok) {
@@ -1113,8 +1127,15 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 },
             );
         } catch (cause) {
+            // Cancellation and the setup budget keep their own codes.
+            if (signal.aborted || !(cause instanceof Error)) {
+                throw cause;
+            }
+            if (cause.name === "TimeoutError") {
+                throw new AgentBindingError("TIMEOUT", harness, cause);
+            }
             const code = errorCode(cause);
-            if (cause instanceof Error && cause.cause instanceof RemoteError && typeof code === "string") {
+            if (cause.cause instanceof RemoteError && typeof code === "string") {
                 throw new AgentBindingError(code, harness, cause);
             }
             throw cause;

@@ -13,7 +13,7 @@ import {
 } from "@moxt-ai/mobius-test-support/fake-daemon";
 import * as v from "valibot";
 import { createInteractionAgent } from "./interaction-agent.ts";
-import { createSettingsAgent, createSignedOutAgent, defineCurrentAgent } from "./settings-agent.ts";
+import { createSettingsAgent, createUnavailableAgent, defineCurrentAgent } from "./settings-agent.ts";
 import { createToolLifecycleAgent } from "./tool-lifecycle-agent.ts";
 
 type TestServerApp = { readonly request: (request: Request) => Response | Promise<Response> };
@@ -155,7 +155,10 @@ export function createMortyFakeDaemon(behavior: ControlledAgentBehavior, workspa
         return { ...harness, agents: [createSettingsAgent(defineCurrentAgent)] };
     }
     if (behavior.agentId === "signed-out-test") {
-        return { ...harness, agents: [createSignedOutAgent()] };
+        return { ...harness, agents: [createUnavailableAgent("signed-out-test", "Signed-out Agent", "signed-out")] };
+    }
+    if (behavior.agentId === "broken-test") {
+        return { ...harness, agents: [createUnavailableAgent("broken-test", "Broken Agent", "broken")] };
     }
     return harness;
 }
