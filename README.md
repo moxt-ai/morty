@@ -2,7 +2,7 @@
 
 # Morty
 
-**English** · [Simplified Chinese](README.zh-CN.md)
+**English** · [简体中文](README.zh-CN.md)
 
 ### Step away from your desk. Keep work moving.
 
@@ -10,7 +10,7 @@ Continue Codex, Claude Code, and Pi conversations from any browser.
 
 [Open Morty →](https://morty.build) · [Get connected](#one-prompt-then-pick-up-your-phone) · [Contribute](docs/CONTRIBUTING.md)
 
-<img src="https://raw.githubusercontent.com/moxt-ai/mobius/362efa275790e55e34ecd2462e716c177cdf831a/docs/assets/readme-accent.svg" width="320" height="40" alt="" />
+<img src="docs/assets/readme-accent.svg" width="320" height="40" alt="" />
 
 </div>
 

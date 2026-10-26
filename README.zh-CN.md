@@ -10,7 +10,7 @@
 
 [打开 Morty →](https://morty.build) · [开始连接](#一条提示词然后拿起手机) · [参与贡献](docs/CONTRIBUTING.md)
 
-<img src="https://raw.githubusercontent.com/moxt-ai/mobius/362efa275790e55e34ecd2462e716c177cdf831a/docs/assets/readme-accent.svg" width="320" height="40" alt="" />
+<img src="docs/assets/readme-accent.svg" width="320" height="40" alt="" />
 
 </div>
 
