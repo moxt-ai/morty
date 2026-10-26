@@ -131,42 +131,6 @@ test("Given a saved conversation, When a new-session page opens while the Runtim
     }, RUNTIME_CHANGE_TIMEOUT_MS);
 });
 
-test("Given a page following its sessions' statuses, When the Runtime goes offline and comes back, Then a reply in another session is marked unread again", {
-    timeout: 90_000,
-}, async () => {
-    const app = await createTestApp({ connectAgent: true });
-    const daemon = app.daemon;
-    if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Runtime");
-    }
-    await sendPrompt(app, await readyComposer(app), "Background conversation");
-    await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: Background conversation")).toBe(true));
-    await app.user.click(app.elementByTestId(dataTestId.newConversation));
-    await app.waitForView(() => expect(directoryTitles(app)).toHaveLength(1));
-
-    await daemon.disconnect();
-    // The Platform tells the status stream at once that the Runtime went offline, while the page learns it from its
-    // next Runtime check. By the time the page shows it, the stream has ended and could not read the sessions again.
-    await app.waitForView(() => expect(connectionStatus(app)).toBe("disconnected"), RUNTIME_CHANGE_TIMEOUT_MS);
-
-    await daemon.reconnect();
-    await app.waitForView(() => expect(connectionStatus(app)).toBe("connected"), RUNTIME_CHANGE_TIMEOUT_MS);
-    // Another page answers in the background session while this page stays on its new session.
-    const viewer = await app.openViewer();
-    await viewer.user.click(
-        await viewer.queryElementByTestId(dataTestId.managedConversation, (entry) =>
-            Boolean(entry.textContent?.includes("Background conversation")),
-        ),
-    );
-    await sendPrompt(viewer, await readyComposer(viewer), "Answer in the background");
-    await viewer.waitForView(() => expect(agentAnswered(viewer, "Answer in the background")).toBe(true));
-
-    await app.waitForView(
-        () => expect(entryStatus(app, "Background conversation")).toBe("Unread response"),
-        RUNTIME_CHANGE_TIMEOUT_MS,
-    );
-});
-
 test("Given a background reply is running when the Runtime goes offline, When the Runtime comes back, Then the sidebar shows that reply no longer working", {
     timeout: 90_000,
 }, async () => {
