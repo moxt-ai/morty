@@ -86,9 +86,16 @@ interface VerifiedIdentity {
     readonly expectedRuntimeId: string | null;
 }
 
+/**
+ * What setup did to this computer's Project. `replaced` ended every link and browser from the previous
+ * Project, so the agent must tell the user.
+ */
+type ProjectOutcome = "created" | "reused" | "replaced";
+
 interface SetupIdentity {
     readonly kind: "setup";
     readonly context: Context;
+    readonly project: Exclude<ProjectOutcome, "replaced">;
 }
 
 interface SetupOptions {
@@ -573,7 +580,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function prepareIdentity(context: Context): Promise<SetupIdentity> {
         if (context.config["user_token"] !== undefined) {
             progress("identity", "Reusing the saved identity.");
-            return { kind: "setup", context };
+            return { kind: "setup", context, project: "reused" };
         }
         progress("identity", "Creating the standalone identity and Machine.");
         const identity = await request(context, "/identity/anonymous-users", {}, false);
@@ -584,7 +591,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             project_id: identifier(identity["projectId"]),
             entry: "setup",
         });
-        return { kind: "setup", context: saved };
+        return { kind: "setup", context: saved, project: "created" };
     }
 
     async function verifyIdentityAndBot(context: Context): Promise<VerifiedIdentity> {
@@ -774,7 +781,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         context: Context,
         cwd: string,
         expectedRuntimeId: string | null,
-    ): Promise<{ readonly context: Context; readonly runtime: RuntimeSelection }> {
+        outcome: SetupIdentity["project"],
+    ): Promise<{ readonly context: Context; readonly runtime: RuntimeSelection; readonly project: ProjectOutcome }> {
         progress("pairing", "Preparing the Runtime connection.");
         const project = await request(context, "/management/project");
         const appId = identifier(project["appId"]);
@@ -794,12 +802,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (expectedRuntimeId !== null) {
             const existing = await reusable(expectedRuntimeId);
             if (existing !== undefined) {
-                return { context, runtime: { kind: "existing", ...existing, bound: true } };
+                return { context, runtime: { kind: "existing", ...existing, bound: true }, project: outcome };
             }
             // The saved Machine's Runtime is not managed here anymore: keep the user, but
             // continue on a fresh Project with a fresh Machine and a new Runtime pairing.
             const replaced = await replaceProject(context);
-            return await pairRuntime(replaced, appId);
+            return { ...(await pairRuntime(replaced, appId)), project: "replaced" };
         }
         // The Machine is unbound. A Runtime an earlier run paired for it still holds one of the Project's Runtime
         // slots, so continue on it while this machine still manages its connection.
@@ -807,10 +815,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (typeof pairing === "string") {
             const existing = await reusable(pairing);
             if (existing !== undefined) {
-                return { context, runtime: { kind: "existing", ...existing, bound: false } };
+                return { context, runtime: { kind: "existing", ...existing, bound: false }, project: outcome };
             }
         }
-        return await pairRuntime(context, appId);
+        return { ...(await pairRuntime(context, appId)), project: outcome };
     }
 
     /**
@@ -1103,7 +1111,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return qrPath;
     }
 
-    async function finishSetup(context: Context, runtime: RuntimeSelection, options: SetupOptions) {
+    async function finishSetup(
+        context: Context,
+        runtime: RuntimeSelection,
+        options: SetupOptions,
+        project: ProjectOutcome,
+    ) {
         await waitForReadiness(context, runtime);
         const botId = context.config["bot_id"];
         const workingDirectory = text(context.config["workspace"]);
@@ -1148,6 +1161,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             url: handoffUrl,
             workspace: workingDirectory,
             qrPath: qr.kind === "available" ? qr.path : null,
+            project,
             message:
                 qr.kind === "available"
                     ? "Open the link or scan the QR code to chat. Keep the Runtime online."
@@ -1236,7 +1250,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const verified = await verifyIdentityAndBot(context);
         context = verified.context;
         emit({ status: "identity_ready", userId: context.config["user_id"], botId: context.config["bot_id"] });
-        const prepared = await prepareRuntime(context, cwd, verified.expectedRuntimeId);
+        const prepared = await prepareRuntime(context, cwd, verified.expectedRuntimeId, identity.project);
         context = prepared.context;
         context = await startRuntime(context, prepared.runtime, cwd, options.harness);
         await waitForRuntime(context, prepared.runtime, options.harness);
@@ -1245,7 +1259,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         // when setup stopped waiting for the upgrade, so wait for it before binding.
         await waitForRuntime(context, prepared.runtime, options.harness);
         context = await bindAgent(context, prepared.runtime, options.harness);
-        await finishSetup(context, prepared.runtime, options);
+        await finishSetup(context, prepared.runtime, options, prepared.project);
     }
 
     try {

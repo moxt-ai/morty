@@ -18,6 +18,8 @@ test("Given a saved setup handoff, When its Runtime reconnects, Then setup retur
     const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     const statuses = connected.events.map((event) => event["status"]);
 
+    expect(original.events).toContainEqual(expect.objectContaining({ status: "ready", project: "created" }));
+    expect(connected.events).toContainEqual(expect.objectContaining({ status: "ready", project: "reused" }));
     expect(connected.botId).toBe(original.botId);
     expect(statuses).not.toContain("prepared");
     expect(statuses).toEqual(
@@ -53,7 +55,8 @@ test("Given a saved Machine whose Runtime the manager no longer manages, When se
     expect(connected.botId).not.toBe(original.botId);
     const statuses = connected.events.map((event) => event["status"]);
     expect(statuses).toContain("prepared");
-    expect(statuses).toContain("ready");
+    // The agent reads this to tell the user that links from the replaced Project stopped working.
+    expect(connected.events).toContainEqual(expect.objectContaining({ status: "ready", project: "replaced" }));
 });
 
 test("Given a browser opened the saved Machine's link, When setup replaces its Project, Then nothing from the previous Project opens Morty and the new link does in the same tab", async ({
