@@ -44,7 +44,12 @@ export function BugReportButton({
             <Button
                 aria-label="Report a bug"
                 className={appearances[appearance]}
-                onClick={() => showBugReport(daemonSource)}
+                onClick={(event) => {
+                    if (event.detail > 0) {
+                        event.currentTarget.blur();
+                    }
+                    showBugReport(daemonSource);
+                }}
                 variant="ghost"
             >
                 {appearance === "icon" ? <Bug aria-hidden="true" className="size-4" /> : "Report a bug"}
