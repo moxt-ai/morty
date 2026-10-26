@@ -312,7 +312,10 @@ async function readSessionHistory(
 ): Promise<SessionEventHistory> {
     let events: readonly SessionEvent[] = newerEvents;
     let nextCursor = initialCursor;
-    let sessionGenerationId = expectedSessionGenerationId;
+    // Loading the newest page can itself restore native history and replace the
+    // generation announced by a preceding live event. That page owns the baseline;
+    // only older pages must match the generation we have already adopted.
+    let sessionGenerationId = initialCursor === null ? null : expectedSessionGenerationId;
     let throughPosition: string | null = null;
     let renderableMessages = sessionReductionMessages(createSessionMessageReduction({ events, nextCursor }));
     do {

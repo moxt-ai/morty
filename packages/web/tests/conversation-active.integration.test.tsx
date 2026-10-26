@@ -6,11 +6,15 @@ import { createTestApp } from "./infra/test-app.tsx";
 
 afterEach(() => vi.useRealTimers());
 
-async function loadAllResponseText(app: Awaited<ReturnType<typeof createTestApp>>) {
+async function loadAllResponseText(app: Awaited<ReturnType<typeof createTestApp>>, complete: () => boolean) {
     while (true) {
-        const buttons = queryAllByRole(document.body, "button", { name: "Load more text" });
-        const button = buttons[0];
-        if (button === undefined) {
+        const button = await app.waitForView(() => {
+            if (complete()) {
+                return null;
+            }
+            return getByRole(document.body, "button", { name: "Load more text" });
+        });
+        if (button === null) {
             return;
         }
         await app.user.click(button);
@@ -41,7 +45,7 @@ test("Given an active turn exceeds one recovery page, When the user leaves and r
     await app.waitForView(() =>
         expect(queryAllByRole(document.body, "button", { name: "Load more text" })).not.toHaveLength(0),
     );
-    await loadAllResponseText(app);
+    await loadAllResponseText(app, () => responseCharacters() === expectedCharacters);
     await app.waitForView(() =>
         expect(responseCharacters(), document.body.textContent?.slice(0, 2000)).toBe(expectedCharacters),
     );

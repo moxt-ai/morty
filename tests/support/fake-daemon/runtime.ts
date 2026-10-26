@@ -73,7 +73,20 @@ function controlledRuntime(
     switch (release) {
         case "current": {
             const config = createRuntimeConfig(connection, agents, new RuntimeLocalContext(directory, process.env));
-            return { start: (onConnectionStatus) => new MobiusRuntimeEngine(config, { onConnectionStatus }) };
+            return {
+                start: (onConnectionStatus) =>
+                    new MobiusRuntimeEngine(
+                        {
+                            ...config,
+                            // Every injected peer speaks ACP, regardless of its catalog label. Use the production
+                            // ACP history adapter rather than a vendor-native reader or an unregistered adapter ID.
+                            // Alias only adapter selection; catalog and session identities stay intact.
+                            adapters: (agent, dependencies) =>
+                                config.adapters({ ...agent, id: "claude" }, dependencies),
+                        },
+                        { onConnectionStatus },
+                    ),
+            };
         }
         case "previous": {
             if (behavior.agentId !== "settings-test") {

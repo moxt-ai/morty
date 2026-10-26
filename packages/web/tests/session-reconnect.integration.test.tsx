@@ -1,4 +1,4 @@
-import { getByLabelText, getByRole, queryAllByText, queryByRole } from "@testing-library/dom";
+import { getByLabelText, getByRole, queryAllByRole, queryAllByText, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
@@ -180,13 +180,14 @@ test("Given a failed Agent turn, When its Runtime disconnects and reconnects, Th
         expect(composer.disabled).toBe(false);
         expect(reconnectStatusText(app)).toBeNull();
     });
-    // Native history need not retain lifecycle failures. The pane keeps one
-    // fallback when the reloaded timeline no longer has that command's card.
-    await app.waitForView(() =>
-        expect(queryAllByText(document.body, "The controlled Agent rejected this turn.", { exact: true })).toHaveLength(
-            1,
-        ),
-    );
+    // The restarted daemon replays its execution receipt with a sanitized failure,
+    // rather than retaining the Agent's original error details in native history.
+    await app.waitForView(() => {
+        expect(
+            queryAllByText(document.body, "The local Agent could not complete the request", { exact: true }),
+        ).toHaveLength(1);
+        expect(queryAllByRole(document.body, "alert")).toHaveLength(1);
+    });
 });
 
 test("Given repeated short-lived recoveries, When the Runtime drops again after automatic or foreground recovery, Then backoff grows until a healthy connection stabilizes", {
