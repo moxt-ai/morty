@@ -5,18 +5,20 @@ import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-s
 import { PairingInstruction } from "../chat/pairing-instruction.tsx";
 import { BugReportButton, BugReportDialogHost } from "../diagnostics/bug-report-button.tsx";
 import {
+    SetupCardAlert,
     SetupCardDescription,
     SetupCardFailureIcon,
     SetupCardSection,
     SetupCardShell,
     SetupCardTitle,
+    SetupConnectionGraphic,
     setupPrimaryButtonClassName,
     setupPrimaryButtonSize,
 } from "../setup/setup-card-shell.tsx";
 
 export type AppState =
     | { readonly kind: "loading" }
-    | { readonly kind: "failed"; readonly retry: () => void }
+    | { readonly kind: "failed"; readonly retry: () => void; readonly retrying: boolean }
     | { readonly kind: "invalid-link"; readonly continueHref: string | null }
     | {
           readonly kind: "setup";
@@ -95,10 +97,8 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
     switch (state.kind) {
         case "loading":
             return (
-                <SetupCardShell contentAlignment="center" titleId="bootstrap-loading">
-                    <SetupCardTitle id="bootstrap-loading" size="compact">
-                        Loading Morty
-                    </SetupCardTitle>
+                <SetupCardShell showPageHeader titleId="bootstrap-loading">
+                    <SetupCardTitle id="bootstrap-loading">Loading Morty</SetupCardTitle>
                     <SetupCardSection className="flex justify-center">
                         <Spinner label="Loading Morty" size="large" />
                     </SetupCardSection>
@@ -106,44 +106,36 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
             );
         case "failed":
             return (
-                <SetupCardShell
-                    cardLeading={<SetupCardFailureIcon />}
-                    contentAlignment="center"
-                    showPageHeader
-                    titleId="bootstrap-failed"
-                >
-                    <SetupCardTitle id="bootstrap-failed" size="compact">
-                        Morty is unavailable
-                    </SetupCardTitle>
+                <SetupCardShell cardLeading={<SetupCardFailureIcon />} showPageHeader titleId="bootstrap-failed">
+                    <SetupCardTitle id="bootstrap-failed">Morty is unavailable</SetupCardTitle>
                     <SetupCardDescription>
                         Check your connection and try again. Your saved computers are still here.
                     </SetupCardDescription>
                     <SetupCardSection>
                         <Button
+                            aria-busy={state.retrying}
                             className={setupPrimaryButtonClassName}
+                            disabled={state.retrying}
                             onClick={state.retry}
                             size={setupPrimaryButtonSize}
                         >
-                            Retry
+                            {state.retrying ? (
+                                <>
+                                    <Spinner label="Retrying" />
+                                    Retrying…
+                                </>
+                            ) : (
+                                "Retry"
+                            )}
                         </Button>
                     </SetupCardSection>
                 </SetupCardShell>
             );
         case "invalid-link":
             return (
-                <SetupCardShell
-                    cardLeading={<SetupCardFailureIcon />}
-                    contentAlignment="center"
-                    titleId="invalid-link-title"
-                >
-                    <div role="alert">
-                        <SetupCardTitle id="invalid-link-title" size="compact">
-                            This link is no longer valid
-                        </SetupCardTitle>
-                        <SetupCardDescription>
-                            Ask for a new link. Morty has not switched to another computer.
-                        </SetupCardDescription>
-                    </div>
+                <SetupCardShell cardLeading={<SetupCardFailureIcon />} showPageHeader titleId="invalid-link-title">
+                    <SetupCardTitle id="invalid-link-title">This link is no longer valid</SetupCardTitle>
+                    <SetupCardAlert>Ask for a new link. Morty has not switched to another computer.</SetupCardAlert>
                     {state.continueHref !== null && (
                         <Button asChild variant="outline" className={`${setupPrimaryButtonClassName} mt-5 text-center`}>
                             <a href={state.continueHref}>Continue on your last computer</a>
@@ -167,16 +159,23 @@ function SetupApplication({
     readonly notice: "access-ended" | "legacy" | "none";
     readonly returnHref: string | null;
 }) {
+    const hasLeadingContent = notice !== "none" || returnHref !== null;
     return (
-        <SetupCardShell cardLeading={null} showPageHeader titleId="setup-title">
+        <SetupCardShell showPageHeader titleId="setup-title">
             {notice === "access-ended" && (
-                <div role="status" className="mb-5 rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 text-sm">
+                <div
+                    role="status"
+                    className="mb-5 w-full rounded-[24px] border border-primary/20 bg-primary/5 px-5 py-4 text-center text-sm"
+                >
                     <p className="font-medium">Current access ended</p>
-                    <p className="mt-1 text-muted-foreground">Your local agent and tasks keep running.</p>
+                    <p className="mt-1 text-morty-text-3">Your local agent and tasks keep running.</p>
                 </div>
             )}
             {notice === "legacy" && (
-                <div className="mb-5 rounded-xl border border-border px-5 py-4 text-sm" role="status">
+                <div
+                    className="mb-5 w-full rounded-[24px] border border-border px-5 py-4 text-center text-sm text-morty-text-2"
+                    role="status"
+                >
                     Already using Morty? Open the link your agent gave you once, and this browser will remember your
                     computer.
                 </div>
@@ -189,20 +188,18 @@ function SetupApplication({
                     ← Back to your last computer
                 </a>
             )}
+            <SetupConnectionGraphic className={hasLeadingContent ? "mt-0" : ""} />
             <SetupCardTitle id="setup-title">
-                {returnHref === null ? "Just one prompt." : "Connect another computer"}
+                {returnHref === null ? "Connect your agent to Morty" : "Connect another computer"}
             </SetupCardTitle>
             <SetupCardDescription>
                 {returnHref === null
-                    ? "Connect your agent. Continue from any browser."
-                    : "Use the agent on the computer you want to add."}
+                    ? "Run one setup prompt in Codex, Claude Code, or Pi."
+                    : "Run one setup prompt on the computer you want to add."}
             </SetupCardDescription>
-            <div className="mt-8">
+            <div className="mt-4 w-full">
                 <PairingInstruction />
             </div>
-            <p className="mt-4 border-t border-border/50 pt-4 text-center text-xs leading-5 text-muted-foreground">
-                Works with Codex, Claude Code, and Pi.
-            </p>
         </SetupCardShell>
     );
 }

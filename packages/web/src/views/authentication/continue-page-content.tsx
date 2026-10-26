@@ -23,11 +23,9 @@ function ContinueError({
     readonly children?: ReactNode;
 }) {
     return (
-        <SetupCardShell cardLeading={<SetupCardFailureIcon />} contentAlignment="center" titleId="continue-title">
+        <SetupCardShell cardLeading={<SetupCardFailureIcon />} titleId="continue-title">
             <div role="alert">
-                <SetupCardTitle id="continue-title" size="compact">
-                    {title}
-                </SetupCardTitle>
+                <SetupCardTitle id="continue-title">{title}</SetupCardTitle>
                 <SetupCardDescription>{content}</SetupCardDescription>
             </div>
             {children}
@@ -59,7 +57,7 @@ export function ContinuePageContent({
                 <SetupCardShell titleId="continue-title">
                     <SetupCardTitle id="continue-title">Continue native session</SetupCardTitle>
                     <SetupCardDescription>Opening the original session in Morty.</SetupCardDescription>
-                    <SetupCardSection className="flex items-center gap-3 space-y-0">
+                    <SetupCardSection className="flex items-center justify-center gap-3 space-y-0">
                         <Spinner label="Opening session" />
                         <span className="text-14 leading-none text-muted-foreground">Opening session…</span>
                     </SetupCardSection>

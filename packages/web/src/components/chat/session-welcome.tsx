@@ -12,7 +12,7 @@ export function SessionWelcome({
     return (
         <section
             aria-label="Continue your work here"
-            className="relative mt-5 rounded-xl border border-primary/15 bg-primary/5 p-4 pr-11"
+            className="relative mt-0 rounded-xl border border-primary/15 bg-primary/5 p-4 pr-11"
         >
             <h2 className="text-sm font-medium text-foreground">Your original session is open.</h2>
             <p className="mt-1 text-sm leading-5 text-muted-foreground">

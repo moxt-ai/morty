@@ -16,6 +16,7 @@ export function CopyToClipboardButton({
     successToast,
     successContent,
     idleContent,
+    copiedContent,
     children,
     className = "",
     size,
@@ -29,6 +30,8 @@ export function CopyToClipboardButton({
     readonly successContent?: ReactNode;
     /** Guidance occupying the same place before the copy succeeds. */
     readonly idleContent?: ReactNode;
+    /** Button contents shown after a successful copy. */
+    readonly copiedContent?: ReactNode;
     readonly children?: ReactNode;
     readonly className?: string;
     readonly size?: ComponentProps<typeof Button>["size"];
@@ -64,7 +67,7 @@ export function CopyToClipboardButton({
                     title={label}
                     variant={variant}
                 >
-                    {copy === "copied" ? "Copied" : children}
+                    {copy === "copied" ? (copiedContent ?? "Copied") : children}
                 </Button>
                 {copy === "copied" ? successContent : idleContent}
             </>

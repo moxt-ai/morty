@@ -70,7 +70,7 @@ export function HarnessMark({
     readonly className?: string;
     readonly label: string;
     readonly loading?: boolean;
-    readonly testId: string;
+    readonly testId?: string;
 }) {
     if (loading) {
         return (

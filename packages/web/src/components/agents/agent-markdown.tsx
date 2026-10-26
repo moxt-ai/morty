@@ -52,7 +52,7 @@ const STREAMDOWN_ICONS = Object.freeze({
 
 const STREAMDOWN_FENCED_CODE_BLOCK_CLASSES = [
     "[&_[data-streamdown=code-block]]:!overflow-hidden",
-    "[&_[data-streamdown=code-block]]:rounded-[20px]",
+    "[&_[data-streamdown=code-block]]:rounded-[16px]",
     "[&_[data-streamdown=code-block]]:!border-0",
     "[&_[data-streamdown=code-block]]:!bg-muted",
     "[&_[data-streamdown=code-block-header]]:!h-6",
