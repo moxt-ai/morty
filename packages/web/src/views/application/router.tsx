@@ -40,13 +40,12 @@ function getRouteFailureDetails(error: Error): RouteFailureDetails {
     };
 }
 
-function RouteFailure({ error, reset }: { readonly error: Error; readonly reset: () => void }) {
-    const router = useRouter();
+function RouteFailureContent({ error, onRetry }: { readonly error: Error; readonly onRetry: () => void }) {
     const details = getRouteFailureDetails(error);
     const copy = describePageFailure(details.message, "Something went wrong");
     return (
         <div className="grid min-h-dvh place-items-center p-4">
-            <section className="grid w-full min-w-0 max-w-[400px] gap-4" role="alert">
+            <section className="grid w-full min-w-0 max-w-[460px] gap-4" role="alert">
                 <div className="grid min-w-0 justify-items-center gap-3 text-center">
                     <span className="flex size-12 items-center justify-center rounded-full bg-destructive/5">
                         <CircleAlert aria-hidden="true" className="size-6 shrink-0 text-destructive" />
@@ -59,23 +58,32 @@ function RouteFailure({ error, reset }: { readonly error: Error; readonly reset:
                             {copy.content}
                         </p>
                         {details.kind === "message-with-url" && (
-                            <code className="block select-text rounded-2xl bg-muted/70 px-3.5 py-3 font-mono text-xs leading-5 text-foreground [overflow-wrap:anywhere]">
-                                {details.url}
-                            </code>
+                            <div className="overflow-hidden rounded-[16px] bg-muted">
+                                <code className="block select-text bg-background p-3 text-left text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]">
+                                    {details.url}
+                                </code>
+                            </div>
                         )}
                     </div>
                 </div>
-                <Button
-                    className="h-10 w-full"
-                    onClick={() => {
-                        reset();
-                        void router.invalidate();
-                    }}
-                >
+                <Button className="h-10 w-full" onClick={onRetry}>
                     Try again
                 </Button>
             </section>
         </div>
+    );
+}
+
+function RouteFailure({ error, reset }: { readonly error: Error; readonly reset: () => void }) {
+    const router = useRouter();
+    return (
+        <RouteFailureContent
+            error={error}
+            onRetry={() => {
+                reset();
+                void router.invalidate();
+            }}
+        />
     );
 }
 

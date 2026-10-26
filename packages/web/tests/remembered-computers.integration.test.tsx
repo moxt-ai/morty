@@ -249,7 +249,7 @@ test("Given only a legacy credential whose access was revoked, When I open its l
     expect(window.location.href).toBe(originalLink);
     window.location.href = `${app.origin}/`;
     const returned = await linked.reload();
-    await returned.waitForView(() => getByRole(document.body, "heading", { name: "Just one prompt." }));
+    await returned.waitForView(() => getByRole(document.body, "heading", { name: "Connect your agent to Morty" }));
     expect(document.body.textContent).not.toContain("Open the link your agent gave you once");
 });
 

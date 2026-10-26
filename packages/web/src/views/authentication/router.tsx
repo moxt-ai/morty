@@ -5,7 +5,12 @@ import { useExternalStore } from "../../view-models/external-store.ts";
 import type { MortyApplication } from "../../view-models/morty-application.ts";
 import { useMortyApplication } from "../application/application-context.tsx";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
-import { setupPageClassName, setupSectionClassName } from "../setup/setup-card-shell.tsx";
+import {
+    SetupCardTitle,
+    SetupPageWithHeader,
+    setupCardClassName,
+    setupSectionClassName,
+} from "../setup/setup-card-shell.tsx";
 import { ContinuePageContent } from "./continue-page-content.tsx";
 import {
     CONTINUE_PREVIEW_STATE_LABELS,
@@ -51,18 +56,18 @@ function ContinuePage() {
 
 function ContinuePreviewIndexPage() {
     return (
-        <main className={setupPageClassName}>
+        <SetupPageWithHeader>
             <section
                 aria-labelledby="continue-preview-index-title"
-                className={`${setupSectionClassName} md:max-w-[640px]`}
+                className={`${setupSectionClassName} md:max-w-[640px] ${setupCardClassName}`}
             >
-                <h1 id="continue-preview-index-title" className="text-24 font-semibold tracking-[-0.03em]">
+                <SetupCardTitle className="w-full" id="continue-preview-index-title">
                     Continue link page preview
-                </h1>
-                <p className="mt-2 text-14 leading-[22px] text-muted-foreground">
+                </SetupCardTitle>
+                <p className="mt-2 text-center text-14 leading-[22px] text-muted-foreground">
                     Temporary routes for tuning Agent handoff / continue UI. Remove before shipping.
                 </p>
-                <ul className="mt-6 grid gap-2">
+                <ul className="mt-6 grid w-full gap-2">
                     {CONTINUE_PREVIEW_STATES.map((id) => (
                         <li key={id}>
                             <Link
@@ -79,7 +84,7 @@ function ContinuePreviewIndexPage() {
                     ))}
                 </ul>
             </section>
-        </main>
+        </SetupPageWithHeader>
     );
 }
 
@@ -87,8 +92,8 @@ function ContinuePreviewStatePage() {
     const { stateId } = useParams({ from: "/continue/preview/$stateId" });
     if (!isContinuePreviewStateId(stateId)) {
         return (
-            <main className={setupPageClassName}>
-                <section className={setupSectionClassName}>
+            <SetupPageWithHeader>
+                <section className={`${setupSectionClassName} ${setupCardClassName}`}>
                     <p role="alert" className="text-destructive">
                         Unknown preview state: {stateId}
                     </p>
@@ -99,7 +104,7 @@ function ContinuePreviewStatePage() {
                         Back to preview index
                     </Link>
                 </section>
-            </main>
+            </SetupPageWithHeader>
         );
     }
     const state = continuePreviewState(stateId);

@@ -32,12 +32,12 @@ type AnonymousSessionState =
       }
     | ActiveAnonymousSession
     | { readonly kind: "invalid-link"; readonly continueHref: string | null }
-    | { readonly kind: "failed" };
+    | { readonly kind: "failed"; readonly retrying: boolean };
 
 export interface AnonymousSessionStore {
     readonly state: AnonymousSessionState;
     readonly authorize: (signal: AbortSignal) => Promise<void>;
-    readonly load: (signal: AbortSignal) => Promise<void>;
+    readonly load: (signal: AbortSignal, options?: { readonly fromFailedRetry?: boolean }) => Promise<void>;
 }
 
 /** The application owns and releases the workspace at these explicit transitions. */
@@ -69,9 +69,14 @@ export const createAnonymousSessionStore = (
                     throw new Error("Anonymous identity changed.");
                 }
             },
-            load: async (signal) => {
-                set({ state: { kind: "loading" } });
-                onIdentityChanged(null);
+            load: async (signal, options) => {
+                const fromFailedRetry = options?.fromFailedRetry === true;
+                if (fromFailedRetry) {
+                    set({ state: { kind: "failed", retrying: true } });
+                } else {
+                    set({ state: { kind: "loading" } });
+                    onIdentityChanged(null);
+                }
                 try {
                     if (window.location.pathname === "/setup" && !hasIdentityScope()) {
                         set({
@@ -135,9 +140,10 @@ export const createAnonymousSessionStore = (
                         },
                     });
                 } catch {
-                    if (!signal.aborted) {
-                        set({ state: { kind: "failed" } });
+                    if (signal.aborted) {
+                        return;
                     }
+                    set({ state: { kind: "failed", retrying: false } });
                 }
             },
         };

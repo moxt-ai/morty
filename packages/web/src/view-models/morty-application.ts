@@ -183,7 +183,10 @@ export function createMortyApplication(options: {
         }
         identityAttempt?.abort(new DOMException("Identity reload replaced", "AbortError"));
         identityAttempt = new AbortController();
-        void anonymousSession.getState().load(AbortSignal.any([lifetime.signal, identityAttempt.signal]));
+        const fromFailedRetry = anonymousSession.getState().state.kind === "failed";
+        void anonymousSession
+            .getState()
+            .load(AbortSignal.any([lifetime.signal, identityAttempt.signal]), { fromFailedRetry });
     };
     // Browser lifecycle signals are hints: probe real connections and let the
     // existing session reconciliation restore history, execution and approvals.

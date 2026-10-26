@@ -65,7 +65,11 @@ export function SessionApplication({
         return (
             <App
                 bugReportDialog={application.bugReportDialog}
-                state={{ kind: "failed", retry: application.reloadIdentity }}
+                state={{
+                    kind: "failed",
+                    retry: application.reloadIdentity,
+                    retrying: state.retrying,
+                }}
             />
         );
     }

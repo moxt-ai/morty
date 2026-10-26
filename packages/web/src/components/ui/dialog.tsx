@@ -46,7 +46,7 @@ export function Dialog({
             <Primitive.Title
                 className={
                     setup
-                        ? "text-32 font-semibold tracking-[-0.035em]"
+                        ? "text-24 font-semibold tracking-[-0.03em]"
                         : surface
                           ? "py-4 font-inter text-16 font-semibold tracking-[-0.015em]"
                           : "text-16 font-semibold tracking-tight"
