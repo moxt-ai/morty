@@ -554,6 +554,9 @@ test("Given more saved messages than one history page, When live output arrives 
             .filter((text) => text.includes("Completed Pagination message")),
     };
     const expectSavedReasoning = async () => {
+        for (const summary of queryAllByRole(document.body, "button", { name: "20 steps", expanded: false })) {
+            await app.user.click(summary);
+        }
         const reasoningItems = app.elementsByTestId(dataTestId.agentReasoning);
         expect(reasoningItems.length).toBeGreaterThan(0);
         for (const reasoning of reasoningItems) {
