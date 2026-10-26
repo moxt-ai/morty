@@ -172,11 +172,12 @@ test("Given the agent sends separate reasoning messages, When the user reads the
     const restoredThinking = await app.queryElementByTestId(dataTestId.agentReasoning);
     await app.user.click(getByText(restoredThinking, "Show Thinking"));
     await app.waitForView(() => {
-        expect(restoredThinking.textContent).toContain("(Reasoning details were omitted.)");
+        expect(restoredThinking.textContent).toContain("**Inspecting** the reported behavior.\n- keep this literal");
+        expect(restoredThinking.textContent).toContain("`Checking` the message boundaries.");
     });
-    expect(restoredThinking.textContent?.endsWith("(Reasoning details were omitted.)")).toBe(true);
-    expect(restoredThinking.textContent).not.toContain("Inspecting");
-    expect(restoredThinking.textContent).not.toContain("Checking");
+    expect(restoredThinking.textContent).not.toContain("(Reasoning details were omitted.)");
+    expect(restoredThinking.querySelector("strong")).toBeNull();
+    expect(restoredThinking.querySelector("code")).toBeNull();
 });
 
 test("Given reasoning exceeds 16K characters, When the user opens the intermediate steps, Then Chat shows the retained tail and a truncation notice", {

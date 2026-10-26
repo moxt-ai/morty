@@ -321,7 +321,6 @@ async function readSessionHistory(
             sessionId,
             new MobiusPageRequest(SESSION_EVENT_PAGE_LIMIT, requestedCursor ?? ""),
             signal,
-            { omit: ["agent-reasoning"] },
         );
         signal.throwIfAborted();
         // Only the newest page defines which live deltas the snapshot covers.
@@ -970,8 +969,7 @@ export function createSessionPaneModel(options: {
             },
             connect: async (signal) => {
                 // Each connect starts from an empty projection: the history
-                // reload re-reads persisted events (reasoning text omitted
-                // server-side), so a re-attached view never renders stale
+                // reload re-reads persisted events, so a re-attached view never renders stale
                 // in-memory content the service no longer returns.
                 projection = createSessionProjection();
                 set({ messages: sessionProjectionMessages(projection) });
