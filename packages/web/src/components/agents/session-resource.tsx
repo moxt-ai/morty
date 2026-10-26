@@ -31,13 +31,21 @@ export function SessionResource({
     const { path, kind } = request;
     const store = useMemo(() => createResourceStore({ path, kind }, read), [createResourceStore, path, kind, read]);
     const model = useStore(store);
+    const retry =
+        model.state.kind === "failed" && (kind === "image" || kind === "raster-image") ? (
+            <button className="ml-2 text-xs underline" onClick={model.retry} type="button">
+                Retry image
+            </button>
+        ) : null;
     return inline ? (
         <span className="contents" ref={model.onAttach}>
             {children(model.state)}
+            {retry}
         </span>
     ) : (
         <div className="contents" ref={model.onAttach}>
             {children(model.state)}
+            {retry}
         </div>
     );
 }

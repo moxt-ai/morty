@@ -7,6 +7,7 @@ import {
     parseMarkdownIntoBlocks,
     Streamdown,
 } from "streamdown";
+import { ImageGallery, PreviewImage } from "../images/image-gallery.tsx";
 import "streamdown/styles.css";
 import { type ComponentProps, createContext, type SVGProps, useContext, useEffect, useMemo, useState } from "react";
 import { dataTestId } from "@/data-testid";
@@ -236,7 +237,7 @@ function AgentMarkdownImage({ alt, className, src, title }: ComponentProps<"img"
     const directSource = typeof src === "string" ? directImageSource(src) : "";
     const requestedSource = typeof src === "string" ? (localFilePath(src) ?? src) : "";
     if (directSource.length > 0) {
-        return <img alt={alt ?? ""} className={className} loading="lazy" src={directSource} title={title} />;
+        return <PreviewImage alt={alt ?? ""} className={className} loading="lazy" src={directSource} title={title} />;
     }
     if (createResourceStore === undefined || readImage === undefined) {
         return <span className="text-xs text-muted-foreground">Image not available</span>;
@@ -255,7 +256,16 @@ function AgentMarkdownImage({ alt, className, src, title }: ComponentProps<"img"
                 if (state.kind !== "media") {
                     return <span className="text-xs text-muted-foreground">Image not available</span>;
                 }
-                return <img alt={alt ?? ""} className={className} loading="lazy" src={state.source} title={title} />;
+                return (
+                    <PreviewImage
+                        alt={alt ?? ""}
+                        className={className}
+                        loading="lazy"
+                        blob={state.blob}
+                        src={state.source}
+                        title={title}
+                    />
+                );
             }}
         </SessionResource>
     );
@@ -340,7 +350,9 @@ export function AgentMarkdownContent({
                 icons={STREAMDOWN_ICONS}
                 isAnimating={streaming}
                 lineNumbers={false}
-                mode={streaming ? "streaming" : "static"}
+                // Keep the same block tree when a turn completes, including between pointer down and click.
+                mode="streaming"
+                parseIncompleteMarkdown={streaming}
                 parseMarkdownIntoBlocksFn={parseStreamingMarkdownIntoBlocks}
                 plugins={plugins}
                 rehypePlugins={STREAMDOWN_REHYPE_PLUGINS}
@@ -356,10 +368,15 @@ export function AgentMarkdownContent({
 
 export function AgentMarkdown(properties: AgentMarkdownProps) {
     const sourceCharacters = properties.sourceCharacters ?? properties.markdown.length;
-    if (sourceCharacters > MAX_MARKDOWN_CHARACTERS || !LATEX_DELIMITER_PATTERN.test(properties.markdown)) {
-        return <AgentMarkdownContent {...properties} />;
-    }
-    return <AgentMarkdownWithLatexWhenReady {...properties} />;
+    return (
+        <ImageGallery>
+            {sourceCharacters > MAX_MARKDOWN_CHARACTERS || !LATEX_DELIMITER_PATTERN.test(properties.markdown) ? (
+                <AgentMarkdownContent {...properties} />
+            ) : (
+                <AgentMarkdownWithLatexWhenReady {...properties} />
+            )}
+        </ImageGallery>
+    );
 }
 
 type LatexRenderer = typeof import("./agent-markdown-with-latex.tsx")["AgentMarkdownWithLatex"];

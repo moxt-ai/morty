@@ -1,6 +1,7 @@
 import { ExternalLink, FileText, Image as ImageIcon, Terminal, Video } from "lucide-react";
 import type { AgentDisplayContent } from "../../components/agents/display-content.ts";
 import { ToolTextPreview } from "../chat/tool-text-preview.tsx";
+import { ImageGallery, PreviewImage } from "../images/image-gallery.tsx";
 import type { MarkdownImageReader } from "./agent-markdown.tsx";
 import { AgentMarkdown } from "./agent-markdown.tsx";
 import type { SessionResourceStoreFactory } from "./resource-reader.ts";
@@ -117,11 +118,12 @@ function LocalImage({
                 return (
                     <figure className="m-0 overflow-hidden rounded-xl border-[0.5px] border-black/9 bg-white p-2">
                         <ContentHeader content={content} />
-                        <img
+                        <PreviewImage
                             alt={content.name.length > 0 ? content.name : "Agent-provided image"}
                             className="max-h-[480px] w-auto max-w-full rounded-lg object-contain"
                             data-testid={mediaTestId}
                             loading="lazy"
+                            blob={state.blob}
                             src={state.source}
                         />
                     </figure>
@@ -172,7 +174,7 @@ function AgentRichContentItem({
         return (
             <figure className="m-0 overflow-hidden rounded-xl border-[0.5px] border-black/9 bg-white p-2">
                 <ContentHeader content={content} />
-                <img
+                <PreviewImage
                     alt={content.name.length > 0 ? content.name : "Agent-provided image"}
                     className="max-h-[480px] w-auto max-w-full rounded-lg object-contain"
                     data-testid={mediaTestId}
@@ -276,17 +278,19 @@ export function AgentRichContent({
         return null;
     }
     return (
-        <div className="mt-2 grid gap-2">
-            {contents.map((content, index) => (
-                <AgentRichContentItem
-                    content={content}
-                    createResourceStore={createResourceStore}
-                    key={displayKey(content, index)}
-                    mediaTestId={mediaTestId}
-                    readImage={readImage}
-                    openLocalFile={openLocalFile}
-                />
-            ))}
-        </div>
+        <ImageGallery>
+            <div className="mt-2 grid gap-2">
+                {contents.map((content, index) => (
+                    <AgentRichContentItem
+                        content={content}
+                        createResourceStore={createResourceStore}
+                        key={displayKey(content, index)}
+                        mediaTestId={mediaTestId}
+                        readImage={readImage}
+                        openLocalFile={openLocalFile}
+                    />
+                ))}
+            </div>
+        </ImageGallery>
     );
 }

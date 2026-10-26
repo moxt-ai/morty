@@ -12,10 +12,11 @@ export type SessionResourceState =
     | { readonly kind: "loading" }
     | { readonly kind: "failed" }
     | { readonly kind: "text"; readonly text: string }
-    | { readonly kind: "media"; readonly source: string };
+    | { readonly kind: "media"; readonly source: string; readonly blob: Blob };
 
 export interface SessionResourceStore {
     readonly state: SessionResourceState;
+    readonly retry: () => void;
     readonly onAttach: (node: HTMLElement | null) => (() => void) | undefined;
 }
 

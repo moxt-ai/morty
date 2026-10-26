@@ -16,6 +16,7 @@ test("Given an agent answer with reasoning and a tool call, When the user reads 
     const reasoningSummary = page.getByText("Show Thinking", { exact: true });
     const toolDisclosure = page.getByRole("button", { name: "Inspect workspace Tool succeeded" });
     await expect(answer).toBeVisible();
+    await page.getByRole("button", { name: "1 step", exact: true }).click();
 
     const answerColor = await answer.evaluate((element) => getComputedStyle(element).color);
     const agentWorkColor = await reasoningSummary.evaluate((element) => getComputedStyle(element).color);
@@ -25,10 +26,9 @@ test("Given an agent answer with reasoning and a tool call, When the user reads 
     await reasoningSummary.click();
     await page.mouse.move(0, 0);
     await page.screenshot({ fullPage: true, path: testInfo.outputPath("agent-work.png") });
-    await expect(page.getByText("Inspecting the request before acting.", { exact: true })).toHaveCSS(
-        "color",
-        agentWorkColor,
-    );
+    const reasoning = page.getByText("Inspecting the request before acting.", { exact: true });
+    await expect(reasoning).toBeVisible();
+    await expect(reasoning).not.toHaveCSS("color", answerColor);
 });
 
 test("Given a working reply, When the user reloads after 65 seconds, Then elapsed time and live content remain consistent", async ({

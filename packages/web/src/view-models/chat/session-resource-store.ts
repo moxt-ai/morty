@@ -20,8 +20,14 @@ export type {
  * only subscribe and render.
  */
 export function createSessionResourceStore(request: SessionResourceRequest, read: SessionResourceReader | undefined) {
-    return createStore<SessionResourceStore>()((set) => ({
+    let retry = () => {};
+    return createStore<SessionResourceStore>()((set, get) => ({
         state: { kind: "loading" },
+        retry: () => {
+            if (get().state.kind === "failed") {
+                retry();
+            }
+        },
         onAttach: (node) => {
             if (node === null) {
                 return;
@@ -46,7 +52,7 @@ export function createSessionResourceStore(request: SessionResourceRequest, read
                         set({ state: { kind: "failed" } });
                     } else {
                         media = createFilePreviewImage(file.bytes, file.mediaType);
-                        set({ state: { kind: "media", source: media.source } });
+                        set({ state: { kind: "media", source: media.source, blob: media.blob } });
                     }
                 } catch {
                     if (!signal.aborted) {
@@ -54,8 +60,12 @@ export function createSessionResourceStore(request: SessionResourceRequest, read
                     }
                 }
             };
+            retry = () => {
+                void load(lifetime.signal);
+            };
             void load(lifetime.signal);
             return () => {
+                retry = () => {};
                 lifetime.abort(new DOMException("The Session resource view detached.", "AbortError"));
                 media?.dispose();
             };

@@ -6,6 +6,7 @@ interface FilePreviewPanel {
 }
 
 interface FilePreviewImage {
+    readonly blob: Blob;
     readonly source: string;
     readonly dispose: () => void;
 }
@@ -59,6 +60,7 @@ export function attachFilePreviewPanel(dialog: HTMLDialogElement): FilePreviewPa
 }
 
 export function createFilePreviewImage(bytes: Uint8Array, mediaType: string): FilePreviewImage {
-    const source = URL.createObjectURL(new Blob([Uint8Array.from(bytes)], { type: mediaType }));
-    return { source, dispose: () => URL.revokeObjectURL(source) };
+    const blob = new Blob([Uint8Array.from(bytes)], { type: mediaType });
+    const source = URL.createObjectURL(blob);
+    return { source, blob, dispose: () => URL.revokeObjectURL(source) };
 }
