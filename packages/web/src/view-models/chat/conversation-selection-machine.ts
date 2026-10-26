@@ -5,7 +5,7 @@ export type SelectedConversationTarget =
     | { readonly kind: "conversation"; readonly conversationId: string }
     | { readonly kind: "session"; readonly sessionId: string };
 
-export type ConversationTarget =
+type ConversationTarget =
     | SelectedConversationTarget
     | {
           readonly kind: "continue";

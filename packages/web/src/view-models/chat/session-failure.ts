@@ -2,7 +2,7 @@ import { MobiusError } from "@moxt-ai/mobius-sdk";
 import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
 
-export type SessionRecoveryAction =
+type SessionRecoveryAction =
     | { readonly kind: "retry"; readonly label: "Reconnect" | "Try again" }
     | { readonly kind: "new-session"; readonly label: "New Session" };
 
