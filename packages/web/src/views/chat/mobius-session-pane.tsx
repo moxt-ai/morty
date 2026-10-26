@@ -216,9 +216,23 @@ function agentReplyLayout(items: readonly SessionRenderItem[], execution: Sessio
         answer,
         kind: "collapsed-work",
         summary: {
-            failed: tools.filter((entry) => entry.state.kind === "failed").length,
+            failed: tools.filter(
+                (entry) =>
+                    entry.state.kind === "failed" ||
+                    (entry.state.kind === "background" && entry.state.status === "failed"),
+            ).length,
+            backgroundRunning: tools.filter(
+                (tool) => tool.state.kind === "background" && tool.state.status === "running",
+            ).length,
+            backgroundUnknown: tools.filter(
+                (tool) => tool.state.kind === "background" && tool.state.status === "unknown",
+            ).length,
             fileEdits: tools.filter(isFileEditToolCall).length,
-            interrupted: tools.filter((entry) => entry.state.kind === "interrupted").length,
+            interrupted: tools.filter(
+                (entry) =>
+                    entry.state.kind === "interrupted" ||
+                    (entry.state.kind === "background" && entry.state.status === "stopped"),
+            ).length,
             steps: tools.length,
         },
         work,

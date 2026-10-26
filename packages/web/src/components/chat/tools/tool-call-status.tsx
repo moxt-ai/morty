@@ -105,6 +105,16 @@ export function ToolCallDisclosure({
 
 export function ToolCallStatus({ state }: { readonly state: ToolCallState }) {
     switch (state.kind) {
+        case "background": {
+            const labels = {
+                running: "Running in background",
+                completed: "Completed",
+                failed: "Failed",
+                stopped: "Stopped",
+                unknown: "Status unknown",
+            };
+            return <span className="ml-1 whitespace-nowrap text-xs text-morty-text-3">{labels[state.status]}</span>;
+        }
         case "running":
             return (
                 <LoaderCircle

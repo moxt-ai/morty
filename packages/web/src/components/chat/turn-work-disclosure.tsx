@@ -4,6 +4,8 @@ import { cn } from "../../lib/utils.ts";
 import { agentThinkStepTriggerClassName } from "./tools/tool-call-status.tsx";
 
 export interface TurnWorkSummary {
+    readonly backgroundRunning: number;
+    readonly backgroundUnknown: number;
     readonly fileEdits: number;
     readonly failed: number;
     readonly interrupted: number;
@@ -30,6 +32,20 @@ export function TurnWorkDisclosure({
     const parts: { readonly key: string; readonly text: string; readonly alert: boolean }[] = [
         { key: "steps", text: counted(summary.steps, "step", "steps"), alert: false },
     ];
+    if (summary.backgroundRunning > 0) {
+        parts.push({
+            key: "background-running",
+            text: `${summary.backgroundRunning.toString()} running in background`,
+            alert: false,
+        });
+    }
+    if (summary.backgroundUnknown > 0) {
+        parts.push({
+            key: "background-unknown",
+            text: `${summary.backgroundUnknown.toString()} status unknown`,
+            alert: false,
+        });
+    }
     if (summary.fileEdits > 0) {
         parts.push({ key: "edits", text: counted(summary.fileEdits, "file edit", "file edits"), alert: false });
     }
