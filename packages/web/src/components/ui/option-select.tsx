@@ -154,7 +154,7 @@ export function Select({
                 <Primitive.Content
                     {...({
                         className: cn(
-                            "z-[60] flex min-h-0 max-h-[var(--radix-select-content-available-height)] animate-cloud-enter flex-col overflow-hidden text-foreground motion-reduce:animate-none",
+                            "z-[130] flex min-h-0 max-h-[var(--radix-select-content-available-height)] animate-cloud-enter flex-col overflow-hidden text-foreground motion-reduce:animate-none sm:z-[60]",
                             overlaySurfacePanelClassName,
                             overlaySurfaceRadiusClassName,
                             truncateOptions

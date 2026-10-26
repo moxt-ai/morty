@@ -40,7 +40,7 @@ export async function sendPrompt(app: TestApp, composer: HTMLElement, prompt: st
 export async function openExecutionDetails(app: TestApp): Promise<HTMLElement> {
     await app.user.click(getByRole(document.body, "button", { name: /Switch computer/ }));
     await app.user.click(
-        await app.waitForView(() => getByRole(document.body, "menuitem", { name: "Execution details" })),
+        await app.waitForView(() => getByRole(document.body, "menuitem", { name: /View execution details/ })),
     );
     return app.waitForView(() => getByRole(document.body, "dialog", { name: "Execution details" }));
 }

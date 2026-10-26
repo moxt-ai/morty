@@ -1,4 +1,4 @@
-import { getAllByRole, getByRole, getByTitle, queryByRole } from "@testing-library/dom";
+import { getAllByRole, getByRole, getByText, getByTitle, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { WebSocketApiTransport } from "../src/services/api/websocket-api-transport.ts";
@@ -47,6 +47,20 @@ test("Given two remembered computers, When I return and then switch, Then the la
     );
     const switcher = await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ }));
     await returned.user.click(switcher);
+    const { currentComputer, currentLabel, otherComputers } = await returned.waitForView(() => {
+        const menu = getByRole(document.body, "menu");
+        return {
+            currentComputer: getByRole(menu, "group", { name: "Current computer" }),
+            currentLabel: getByText(menu, "Current"),
+            otherComputers: getByRole(menu, "group", { name: "Other computers" }),
+        };
+    });
+    expect(currentComputer.previousElementSibling).toBe(currentLabel);
+    expect(currentComputer.classList.contains("bg-morty-fill-opacity-1")).toBe(false);
+    expect(currentComputer.querySelector('[aria-current="true"]')).toBeInstanceOf(HTMLAnchorElement);
+    const detailsTrigger = getByRole(currentComputer, "menuitem", { name: /View execution details/ });
+    expect(detailsTrigger.classList.contains("px-3")).toBe(true);
+    expect(queryByRole(otherComputers, "menuitem", { name: /View execution details/ })).toBeNull();
     const firstLink = await returned.waitForView(() => {
         const item = getAllByRole(document.body, "menuitem").find(
             (item) =>
@@ -76,6 +90,47 @@ test("Given two remembered computers, When I return and then switch, Then the la
         ).toBe(true),
     );
     expect(new URL(window.location.href).searchParams.get("identity")).toBe(firstScope);
+});
+
+test("Given two remembered computers on mobile, When I open navigation, Then execution details belong only to the current computer", {
+    timeout: 30_000,
+}, async () => {
+    const desktopViewport = { height: window.innerHeight, width: window.innerWidth };
+    let first: TestApp | null = null;
+    let current: TestApp | null = null;
+    try {
+        first = await createTestApp({ connectAgent: true });
+        await startConversation(first, "Other mobile computer");
+        await first.close();
+        first = null;
+
+        window.happyDOM.setViewport({ height: 844, width: 413 });
+        current = await createTestApp({ connectAgent: true });
+        await startConversation(current, "Current mobile computer");
+        await current.user.click(getByRole(document.body, "button", { name: "Open navigation" }));
+
+        const computers = await current.waitForView(() =>
+            getByRole(document.body, "navigation", { name: "Computers" }),
+        );
+        const { currentComputer, otherComputers } = await current.waitForView(() => ({
+            currentComputer: getByRole(computers, "region", { name: "Current computer" }),
+            otherComputers: getByRole(computers, "region", { name: "Other computers" }),
+        }));
+        expect(currentComputer.querySelector('[aria-current="true"]')).toBeInstanceOf(HTMLAnchorElement);
+        const detailsTrigger = getByRole(currentComputer, "button", { name: /View execution details/ });
+        expect(detailsTrigger).toBeInstanceOf(HTMLButtonElement);
+        expect(queryByRole(otherComputers, "button", { name: /View execution details/ })).toBeNull();
+        await current.user.click(detailsTrigger);
+        await current.waitForView(() => getByRole(document.body, "dialog", { name: "Execution details" }));
+    } finally {
+        if (first !== null) {
+            await first.close();
+        }
+        if (current !== null) {
+            await current.close();
+        }
+        window.happyDOM.setViewport(desktopViewport);
+    }
 });
 
 test("Given a remembered computer, When I deliberately start a new conversation then return, Then its chat home stays selected", {
@@ -192,6 +247,16 @@ test("Given the last computer is offline and another is online, When I return, T
     await returned.user.click(
         await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ })),
     );
+    const offlineChoice = await returned.waitForView(() => {
+        const currentComputer = getByRole(document.body, "group", { name: "Current computer" });
+        const choice = currentComputer.querySelector('[aria-current="true"]');
+        if (!(choice instanceof HTMLAnchorElement)) {
+            throw new Error("Waiting for the current computer");
+        }
+        return choice;
+    });
+    expect(offlineChoice.textContent).toContain("Offline");
+    expect(offlineChoice.querySelector('[aria-hidden="true"]')?.classList.contains("size-2")).toBe(true);
     const alternative = await returned.waitForView(() => {
         const choice = getAllByRole(document.body, "menuitem").find(
             (item) =>

@@ -1,5 +1,5 @@
-import { ChevronDown } from "lucide-react";
-import { Tooltip } from "radix-ui";
+import { ChevronDown, X } from "lucide-react";
+import { Dialog, Tooltip } from "radix-ui";
 import { useRef, useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,8 @@ import {
     overlayTriggerOffsetPx,
 } from "../ui/overlay-surface.ts";
 import { Popover } from "../ui/popover.tsx";
+import { ScrollEdgeFade } from "../utils/scroll-edge-fade.tsx";
+import { useDesktopChatLayout } from "../utils/use-desktop-chat-layout.ts";
 import { mortyThinScrollbarClassName } from "./chat-session-layout.ts";
 import { HarnessMark } from "./harness-mark.tsx";
 
@@ -218,6 +220,7 @@ export function ChatConfigurationMenu({
 }) {
     const [open, setOpen] = useState(false);
     const retainedSettingsRef = useRef<readonly ChatConfigurationControl[]>([]);
+    const desktop = useDesktopChatLayout();
     const harness = controls.find(
         (control): control is ChatConfigurationSelectControl => control.id === "harness" && control.kind === "select",
     );
@@ -235,33 +238,124 @@ export function ChatConfigurationMenu({
             ? `${control.label}: ${control.checked ? "On" : "Off"}`
             : (control.options.find((option) => option.value === control.value)?.label ?? control.value),
     );
+    const trigger = (
+        <button
+            aria-label="Configure agent"
+            className="group flex h-9 min-w-0 max-w-[200px] items-center gap-1.5 rounded-lg px-3 text-[13px] text-copy-secondary outline-none transition-colors duration-150 hover:bg-accent hover:text-foreground active:bg-accent-active active:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent-active data-[state=open]:text-foreground motion-reduce:transition-none"
+            data-testid={dataTestId.agentConfiguration}
+            title={selections.join(" · ")}
+            type="button"
+        >
+            {selectedHarness !== undefined && (
+                <HarnessMark
+                    agentRef={selectedHarness.agentRef ?? selectedHarness.value}
+                    appearance="line"
+                    label={selectedHarness.label}
+                    testId={dataTestId.harnessTriggerMark}
+                />
+            )}
+            <span className="min-w-0 truncate">{selections.filter((value) => value.length > 0).join(" · ")}</span>
+            <ChevronDown
+                aria-hidden="true"
+                className="size-3.5 shrink-0 text-muted-foreground transition-colors duration-150 group-hover:text-foreground group-active:text-foreground group-data-[state=open]:text-foreground motion-reduce:transition-none"
+            />
+        </button>
+    );
+    const panelContents = (
+        <>
+            {harness !== undefined && selectedHarness !== undefined && harness.locked === true && (
+                <div className="px-4 pt-4">
+                    <Tooltip.Provider delayDuration={150}>
+                        <Tooltip.Root>
+                            <Tooltip.Trigger asChild>
+                                <h3
+                                    className="min-w-0 truncate pr-8 text-16 font-semibold"
+                                    data-testid={dataTestId.agentHarness(selectedHarness.value)}
+                                >
+                                    {selectedHarness.tabLabel ?? selectedHarness.label}
+                                </h3>
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                                <MortyTooltipContent className="max-w-60 leading-5" side="top" sideOffset={6}>
+                                    {harness.harnessLockedLabel ?? selectedHarness.label}
+                                    <Tooltip.Arrow className="fill-foreground" />
+                                </MortyTooltipContent>
+                            </Tooltip.Portal>
+                        </Tooltip.Root>
+                    </Tooltip.Provider>
+                </div>
+            )}
+            <ScrollEdgeFade
+                fadeFromClassName="from-background"
+                fadeToClassName="to-background/0"
+                frameClassName="flex min-h-0 flex-1 flex-col"
+                className={cn(
+                    "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4",
+                    mortyThinScrollbarClassName,
+                )}
+            >
+                {settingsLoading && (
+                    <span className="sr-only" data-testid={dataTestId.agentSettingsLoading} role="status">
+                        Loading harness settings…
+                    </span>
+                )}
+                {harness !== undefined && selectedHarness !== undefined && harness.locked !== true && (
+                    <HarnessSelect harness={harness} mutedWhenDisabled={!settingsLoading} />
+                )}
+                <div className="flex min-w-0 flex-col gap-3">
+                    {settingsLoading && displayedSettings.length === 0 ? (
+                        <SettingsDataSkeleton />
+                    ) : displayedSettings.length === 0 ? (
+                        <p className="text-center text-xs text-muted-foreground">
+                            This harness has no configurable settings.
+                        </p>
+                    ) : (
+                        displayedSettings.map((control) => (
+                            <SettingControl
+                                control={control}
+                                key={control.id}
+                                mutedWhenDisabled={loadingControlId === undefined}
+                                valueLoading={settingsLoading || control.id === loadingControlId}
+                            />
+                        ))
+                    )}
+                </div>
+            </ScrollEdgeFade>
+        </>
+    );
+    if (!desktop) {
+        return (
+            <Dialog.Root onOpenChange={setOpen} open={open}>
+                <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>
+                <Dialog.Portal>
+                    <Dialog.Overlay className="fixed inset-0 z-[120] bg-black/30 motion-safe:animate-cloud-enter" />
+                    <Dialog.Content
+                        className={cn(
+                            "fixed inset-x-0 bottom-0 z-[121] flex h-[70dvh] max-h-[calc(100dvh-1rem)] min-h-0 flex-col overflow-hidden rounded-t-overlay outline-none",
+                            overlaySurfacePanelClassName,
+                        )}
+                    >
+                        <header className="flex h-14 shrink-0 items-center justify-between gap-3 px-4">
+                            <Dialog.Title className="text-16 font-semibold">Agent configuration</Dialog.Title>
+                            <Dialog.Close
+                                aria-label="Close Agent configuration"
+                                className="flex size-10 shrink-0 items-center justify-center rounded-full text-morty-text-3 outline-none transition-colors hover:bg-morty-fill-opacity-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+                            >
+                                <X aria-hidden="true" className="size-4" />
+                            </Dialog.Close>
+                        </header>
+                        <Dialog.Description className="sr-only">
+                            Configure the Agent used for this conversation.
+                        </Dialog.Description>
+                        {panelContents}
+                    </Dialog.Content>
+                </Dialog.Portal>
+            </Dialog.Root>
+        );
+    }
     return (
         <Popover.Root onOpenChange={setOpen} open={open}>
-            <Popover.Trigger asChild>
-                <button
-                    aria-label="Configure agent"
-                    className="group flex h-9 min-w-0 max-w-[200px] items-center gap-1.5 rounded-lg px-3 text-[13px] text-copy-secondary outline-none transition-colors duration-150 hover:bg-accent hover:text-foreground active:bg-accent-active active:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent-active data-[state=open]:text-foreground motion-reduce:transition-none"
-                    data-testid={dataTestId.agentConfiguration}
-                    title={selections.join(" · ")}
-                    type="button"
-                >
-                    {selectedHarness !== undefined && (
-                        <HarnessMark
-                            agentRef={selectedHarness.agentRef ?? selectedHarness.value}
-                            appearance="line"
-                            label={selectedHarness.label}
-                            testId={dataTestId.harnessTriggerMark}
-                        />
-                    )}
-                    <span className="min-w-0 truncate">
-                        {selections.filter((value) => value.length > 0).join(" · ")}
-                    </span>
-                    <ChevronDown
-                        aria-hidden="true"
-                        className="size-3.5 shrink-0 text-muted-foreground transition-colors duration-150 group-hover:text-foreground group-active:text-foreground group-data-[state=open]:text-foreground motion-reduce:transition-none"
-                    />
-                </button>
-            </Popover.Trigger>
+            <Popover.Trigger asChild>{trigger}</Popover.Trigger>
             <Popover.Portal>
                 <Popover.Content
                     align="start"
@@ -275,61 +369,7 @@ export function ChatConfigurationMenu({
                     side="top"
                     sideOffset={overlayTriggerOffsetPx}
                 >
-                    {harness !== undefined && selectedHarness !== undefined && harness.locked === true && (
-                        <div className="px-4 pt-4">
-                            <Tooltip.Provider delayDuration={150}>
-                                <Tooltip.Root>
-                                    <Tooltip.Trigger asChild>
-                                        <h3
-                                            className="min-w-0 truncate pr-8 text-16 font-semibold"
-                                            data-testid={dataTestId.agentHarness(selectedHarness.value)}
-                                        >
-                                            {selectedHarness.tabLabel ?? selectedHarness.label}
-                                        </h3>
-                                    </Tooltip.Trigger>
-                                    <Tooltip.Portal>
-                                        <MortyTooltipContent className="max-w-60 leading-5" side="top" sideOffset={6}>
-                                            {harness.harnessLockedLabel ?? selectedHarness.label}
-                                            <Tooltip.Arrow className="fill-foreground" />
-                                        </MortyTooltipContent>
-                                    </Tooltip.Portal>
-                                </Tooltip.Root>
-                            </Tooltip.Provider>
-                        </div>
-                    )}
-                    <div
-                        aria-busy={settingsLoading}
-                        className={cn(
-                            "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-4 pt-4 pb-4",
-                            mortyThinScrollbarClassName,
-                        )}
-                        {...(settingsLoading
-                            ? { "data-testid": dataTestId.agentSettingsLoading, role: "status" as const }
-                            : {})}
-                    >
-                        {settingsLoading && <span className="sr-only">Loading harness settings…</span>}
-                        {harness !== undefined && selectedHarness !== undefined && harness.locked !== true && (
-                            <HarnessSelect harness={harness} mutedWhenDisabled={!settingsLoading} />
-                        )}
-                        <div className="flex min-w-0 flex-col gap-3">
-                            {settingsLoading && displayedSettings.length === 0 ? (
-                                <SettingsDataSkeleton />
-                            ) : displayedSettings.length === 0 ? (
-                                <p className="text-center text-xs text-muted-foreground">
-                                    This harness has no configurable settings.
-                                </p>
-                            ) : (
-                                displayedSettings.map((control) => (
-                                    <SettingControl
-                                        control={control}
-                                        key={control.id}
-                                        mutedWhenDisabled={loadingControlId === undefined}
-                                        valueLoading={settingsLoading || control.id === loadingControlId}
-                                    />
-                                ))
-                            )}
-                        </div>
-                    </div>
+                    {panelContents}
                 </Popover.Content>
             </Popover.Portal>
         </Popover.Root>

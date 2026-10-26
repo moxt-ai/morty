@@ -12,6 +12,7 @@ export const dataTestId = Object.freeze({
     permissionMode: "chat-permission-mode",
     workingDirectory: "chat-working-directory",
     executionDirectory: "chat-execution-directory",
+    executionDetailsHarnessMark: "chat-execution-details-harness-mark",
     recentWorkingDirectory: "chat-recent-working-directory",
     forgetRecentWorkingDirectory: "chat-forget-recent-working-directory",
     changeWorkingDirectory: "chat-change-working-directory",

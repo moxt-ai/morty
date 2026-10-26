@@ -10,7 +10,7 @@ export function MortyTooltipContent({
     return (
         <Tooltip.Content
             className={cn(
-                "z-[70] rounded-[16px] bg-foreground px-2.5 py-1.5 text-xs text-background shadow-lg",
+                "z-[140] rounded-[16px] bg-foreground px-2.5 py-1.5 text-xs text-background shadow-lg sm:z-[70]",
                 className,
             )}
             {...props}

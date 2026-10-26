@@ -2,6 +2,8 @@ import { CircleAlert, FileText, Inbox, MessageSquare, PackageOpen, Plus, Unplug 
 import { Tooltip } from "radix-ui";
 import { type ComponentType, type ReactNode, useState } from "react";
 import { AttemptFailure } from "../chat/attempt-failure.tsx";
+import type { ExecutionContext } from "../chat/execution-context.ts";
+import { ExecutionDetailsDialog } from "../chat/execution-details-dialog.tsx";
 import { HarnessMark } from "../chat/harness-mark.tsx";
 import { MessageBubble } from "../chat/message-bubble.tsx";
 import { NativeSessionDirectoryPlaceholder } from "../chat/native-session-directory-placeholder.tsx";
@@ -22,7 +24,11 @@ import { MortyAlert } from "../ui/morty-alert.tsx";
 import { MortyTooltipContent } from "../ui/morty-tooltip-content.tsx";
 import { NavigationCardLink } from "../ui/navigation-card-link.tsx";
 import { Select as OptionSelect } from "../ui/option-select.tsx";
-import { overlaySurfaceRadiusClassName, overlayTriggerOffsetPx } from "../ui/overlay-surface.ts";
+import {
+    executionDetailsDialogWidthPx,
+    overlaySurfaceRadiusClassName,
+    overlayTriggerOffsetPx,
+} from "../ui/overlay-surface.ts";
 import { Popover } from "../ui/popover.tsx";
 import {
     Select,
@@ -484,6 +490,38 @@ function NavigationCardGallery() {
     );
 }
 
+const playgroundExecutionContext = {
+    agent: "Codex",
+    agentRef: "codex",
+    available: true,
+    computerStatus: "Online",
+    connection: "Connected",
+    directory: "/Users/jane/projects/morty",
+    directoryName: "morty",
+    directoryPlaceholder: "Working directory unavailable",
+    feedback: { kind: "hidden" },
+    indicator: { kind: "ready", label: "Ready" },
+    lastConfirmed: "Last confirmed 2 min ago",
+    machine: "Jane's MacBook",
+} as const satisfies ExecutionContext;
+
+function ExecutionDetailsDialogGallery() {
+    const [open, setOpen] = useState(false);
+    return (
+        <Specimen title={`Desktop width ${executionDetailsDialogWidthPx}px`}>
+            <Button onClick={() => setOpen(true)} variant="outline">
+                Open execution details
+            </Button>
+            <ExecutionDetailsDialog
+                context={playgroundExecutionContext}
+                open={open}
+                onOpenChange={setOpen}
+                returnFocus={() => undefined}
+            />
+        </Specimen>
+    );
+}
+
 function DialogGallery() {
     const [open, setOpen] = useState<DialogAppearance | null>(null);
     const appearance = open === "wide" || open === "busy" || open === null ? "default" : open;
@@ -789,6 +827,7 @@ const galleries = {
     color: ColorGallery,
     "copy-button": CopyButtonGallery,
     dialog: DialogGallery,
+    "execution-details-dialog": ExecutionDetailsDialogGallery,
     "harness-mark": HarnessMarkGallery,
     input: InputGallery,
     "link-button": LinkButtonGallery,
