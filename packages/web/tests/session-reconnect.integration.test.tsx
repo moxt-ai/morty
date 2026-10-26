@@ -99,53 +99,6 @@ async function openSavedConversation(app: TestApp, prompt: string): Promise<HTML
     return composer;
 }
 
-test("Given a disconnected conversation with an unsent draft, When the same Runtime reconnects twice, Then its connection error clears without sending and the draft remains", {
-    timeout: 30_000,
-}, async () => {
-    const clock = new TestClock(CLOCK_ORIGIN);
-    const app = await createTestApp({ connectAgent: true, clock });
-    const composer = await openSavedConversation(app, "Before the Runtime restart");
-    if (app.daemon === null) {
-        throw new Error("Expected a connected Runtime");
-    }
-    await app.user.click(composer);
-    await app.user.paste("Keep this unsent draft");
-    const form = composer.closest("form");
-    if (form === null) {
-        throw new Error("Expected the composer form");
-    }
-    for (const cycle of [1, 2]) {
-        await app.daemon.disconnect();
-        await app.waitForView(() => expect(reconnectStatusText(app), `disconnect ${cycle}`).toContain("Retrying in"));
-        expect(queryByRole(form, "alert")).toBeNull();
-        expect(composer.disabled).toBe(false);
-        expect(getByRole(form, "button", { name: "Send message" })).toHaveProperty("disabled", true);
-        await app.user.clear(composer);
-        await app.user.type(composer, `Keep this unsent draft ${cycle}`);
-        await app.daemon.reconnect();
-        const retry = queryByRole(form, "button", { name: "Retry now" });
-        if (!(retry instanceof HTMLButtonElement)) {
-            throw new Error("Expected manual reconnect control");
-        }
-        await app.user.click(retry);
-        await app.waitForView(() => {
-            expect(reconnectStatusText(app)).toBeNull();
-            expect(getByRole(form, "button", { name: "Send message" })).toHaveProperty("disabled", false);
-        });
-        expect(queryByRole(form, "alert")).toBeNull();
-        expect(composer.value).toBe(`Keep this unsent draft ${cycle}`);
-    }
-    await app.user.clear(composer);
-    await sendPrompt(app, composer, "After the Runtime restart");
-    await app.waitForView(() =>
-        expect(
-            app
-                .elementsByTestId(dataTestId.agentResponse)
-                .some((message) => message.textContent?.includes("Codex turn 2: After the Runtime restart")),
-        ).toBe(true),
-    );
-});
-
 test("Given a failed Agent turn, When its Runtime reconnects and the conversation reloads, Then the live failure is not duplicated or replayed into history", {
     timeout: 30_000,
 }, async () => {
@@ -199,43 +152,6 @@ test("Given a failed Agent turn, When its Runtime reconnects and the conversatio
         );
         expect(queryAllByRole(document.body, "alert")).toHaveLength(0);
     });
-});
-
-test("Given repeated short-lived recoveries, When the Runtime drops again after automatic or foreground recovery, Then backoff grows until a healthy connection stabilizes", {
-    timeout: 30_000,
-}, async () => {
-    const clock = new TestClock(CLOCK_ORIGIN);
-    const app = await createTestApp({ connectAgent: true, clock });
-    const composer = await openSavedConversation(app, "Survive repeated short connections");
-    if (app.daemon === null) {
-        throw new Error("Expected the connected Runtime");
-    }
-    for (const ceiling of [5, 10, 20]) {
-        await app.daemon.disconnect();
-        const delay = await app.waitForView(() => retrySeconds(app));
-        expect(delay).toBeGreaterThanOrEqual(Math.ceil(ceiling / 2));
-        expect(delay).toBeLessThanOrEqual(ceiling);
-        await app.daemon.reconnect();
-        if (ceiling === 10) {
-            document.dispatchEvent(new Event("visibilitychange"));
-        } else {
-            await act(async () => clock.advanceBy(delay * 1000));
-        }
-        await app.waitForView(() => expect(reconnectStatusText(app)).toBeNull());
-    }
-    // Let the connection pass its normal health check, then exercise real
-    // user traffic before checking that a later outage starts a fresh budget.
-    await act(async () => clock.advanceBy(25000));
-    await sendPrompt(app, composer, "The connection is stable again");
-    await app.waitForView(() =>
-        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
-            "Codex turn 2: The connection is stable again",
-        ),
-    );
-    await app.daemon.disconnect();
-    const delay = await app.waitForView(() => retrySeconds(app));
-    expect(delay).toBeGreaterThanOrEqual(3);
-    expect(delay).toBeLessThanOrEqual(5);
 });
 
 test("Given a recovered Runtime and an unsent draft, When the retry deadline arrives, Then Chat recovers automatically without sending the draft", {

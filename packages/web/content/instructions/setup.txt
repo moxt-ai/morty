@@ -58,7 +58,8 @@ When `project` is `"replaced"`, also tell the user, in their language: **This co
 saved Machine was no longer connected, so setup started a new one, and links and
 browsers from this computer's earlier Morty setup stopped working. Use the new link.**
 
-On failure, use `error.code` and the private Runtime log. Fix installation or
+On failure, use `error.code` and the private Runtime log, and follow the `nextStep`
+in `error.runtime` or `error.binding` when present. Fix installation or
 authentication for the selected harness; do not silently choose another.
 Keep saved credentials private. Do not output tokens, pairing tickets, or private
 configuration; only the ready handoff URL is intended for the user.

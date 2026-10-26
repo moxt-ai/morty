@@ -65,6 +65,11 @@ jobs:
       - name: Install Mobius dependencies
         run: pnpm --dir third-party/mobius install --frozen-lockfile
 
+      # @moxt-ai/mobius resolves its subpath exports from dist, which is gitignored, so a fresh
+      # checkout has to build it before anything imports it (the setup bundle does).
+      - name: Build Mobius CLI and ACP harnesses
+        run: pnpm --dir third-party/mobius --filter @moxt-ai/mobius build
+
       - name: Install Chat dependencies
         run: pnpm install --frozen-lockfile
 

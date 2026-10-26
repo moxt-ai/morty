@@ -392,11 +392,6 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     },
                 ],
             };
-        case "show cwd relative link":
-            return {
-                outcome: "complete",
-                output: [{ kind: "text", text: "[index.html](index.html)" }],
-            };
         case "show interactive result":
             return {
                 outcome: "complete",
@@ -406,11 +401,6 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                         text: "[Open delivery review](file:///workspace/delivery-review.html)",
                     },
                 ],
-            };
-        case "show missing result":
-            return {
-                outcome: "complete",
-                output: [{ kind: "text", text: "[Open missing result](file:///workspace/missing-result.html)" }],
             };
         case "show preview image":
             return {

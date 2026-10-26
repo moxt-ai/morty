@@ -674,6 +674,8 @@ async function setupMachine(
         readonly interruptAt?: string;
         /** Runs before setup's clock moves on, with every event setup reported so far. */
         readonly whileWaiting?: (events: readonly Readonly<Record<string, unknown>>[]) => Promise<void>;
+        /** From this progress stage on, the network stalls and every deadline setup starts has already passed. */
+        readonly stallFromStage?: string;
     } = {},
 ): Promise<{ readonly code: number; readonly events: readonly Readonly<Record<string, unknown>>[] }> {
     const events: Readonly<Record<string, unknown>>[] = [];
@@ -709,7 +711,15 @@ async function setupMachine(
                     await run.whileWaiting?.(events);
                     time += milliseconds;
                 },
-                ...(deadline === undefined ? {} : { deadline }),
+                ...(deadline === undefined && run.stallFromStage === undefined
+                    ? {}
+                    : {
+                          deadline: (milliseconds: number) =>
+                              run.stallFromStage !== undefined &&
+                              events.some((event) => event["stage"] === run.stallFromStage)
+                                  ? AbortSignal.abort(new DOMException("The operation timed out.", "TimeoutError"))
+                                  : (deadline ?? AbortSignal.timeout)(milliseconds),
+                      }),
             },
         },
     );
@@ -718,6 +728,19 @@ async function setupMachine(
         await rm(qrPath, { force: true });
     }
     return { code, events };
+}
+
+/** Setup's daemon upgrade budget. */
+const upgradeBudgetMilliseconds = 180_000;
+
+/** Lets a scenario end setup's upgrade budget early; every other deadline keeps its own time. */
+function upgradeBudget() {
+    const budget = new AbortController();
+    return {
+        deadline: (milliseconds: number) =>
+            milliseconds === upgradeBudgetMilliseconds ? budget.signal : AbortSignal.timeout(milliseconds),
+        elapse: () => budget.abort(new DOMException("The upgrade budget elapsed", "TimeoutError")),
+    };
 }
 
 async function withUpgradeMachine(
@@ -902,6 +925,86 @@ test("Given the chosen harness is not installed, When the user reruns setup with
     });
 });
 
+function machineOf(events: readonly Readonly<Record<string, unknown>>[]) {
+    return events.find((event) => event["status"] === "identity_ready")?.["botId"];
+}
+
+test("Given the chosen agent is installed but signed out, When setup connects it, Then setup asks the user to sign in and finishes on the same Machine afterwards", {
+    timeout: 120_000,
+}, async () => {
+    await withUpgradeMachine(
+        "unavailable",
+        async (runtime, paths) => {
+            await runtime.installAgents({ agentId: "signed-out-test", agentName: "Signed-out Agent" });
+            const failed = await setupMachine(runtime, paths, undefined, { harness: "signed-out-test" });
+            expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
+            expect(failed.events.at(-1)?.["error"]).toMatchObject({
+                code: "authentication_required",
+                binding: {
+                    harness: "signed-out-test",
+                    nextStep: expect.stringContaining(
+                        "Ask the user to sign in to signed-out-test on this computer; you cannot sign in for them.",
+                    ),
+                },
+            });
+
+            // The user signs in, so the same harness now opens sessions.
+            await runtime.installAgents({ agentId: "settings-test", agentName: "Settings Agent" });
+            const finished = await setupMachine(runtime, paths, undefined, { harness: "settings-test" });
+            expect(finished.code, JSON.stringify(finished.events)).toBe(0);
+            expect(machineOf(finished.events)).toBe(machineOf(failed.events));
+            expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "reused" });
+        },
+        "current",
+    );
+});
+
+test("Given the network stalls while setup connects the agent, When the request times out, Then setup tells the agent to rerun unchanged and the rerun finishes on the same Machine", {
+    timeout: 120_000,
+}, async () => {
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        const failed = await setupMachine(runtime, paths, undefined, { stallFromStage: "binding" });
+        expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
+        const failure = failed.events.at(-1)?.["error"];
+        expect(failure).toMatchObject({
+            code: "TIMEOUT",
+            binding: {
+                harness: "settings-test",
+                nextStep: expect.stringContaining("Rerun setup without changing anything"),
+            },
+        });
+        expect(JSON.stringify(failure)).not.toContain("sign in");
+
+        const finished = await setupMachine(runtime, paths);
+        expect(finished.code, JSON.stringify(finished.events)).toBe(0);
+        expect(machineOf(finished.events)).toBe(machineOf(failed.events));
+        expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "reused" });
+    });
+});
+
+test("Given the chosen agent cannot open a session for another reason, When setup connects it, Then setup asks the agent to check the harness instead of guessing a fix", {
+    timeout: 120_000,
+}, async () => {
+    await withUpgradeMachine(
+        "unavailable",
+        async (runtime, paths) => {
+            await runtime.installAgents({ agentId: "broken-test", agentName: "Broken Agent" });
+            const failed = await setupMachine(runtime, paths, undefined, { harness: "broken-test" });
+            expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
+            const failure = failed.events.at(-1)?.["error"];
+            expect(failure).toMatchObject({
+                binding: {
+                    harness: "broken-test",
+                    nextStep: expect.stringContaining("Confirm broken-test answers a prompt in the working directory"),
+                },
+            });
+            expect(failure).not.toMatchObject({ code: "SETUP_FAILED" });
+            expect(JSON.stringify(failure)).not.toMatch(/sign in|update/u);
+        },
+        "current",
+    );
+});
+
 test("Given setup continues on a Runtime that does not offer the chosen harness yet, When the user installs it while setup waits, Then setup finishes once the Runtime publishes it", {
     timeout: 120_000,
 }, async () => {
@@ -982,10 +1085,10 @@ test("Given a daemon upgrade stops responding, When its budget expires, Then set
     timeout: 60_000,
 }, async () => {
     await withUpgradeMachine("unresponsive", async (runtime, paths) => {
-        const budget = new AbortController();
-        const setup = setupMachine(runtime, paths, () => budget.signal);
+        const budget = upgradeBudget();
+        const setup = setupMachine(runtime, paths, budget.deadline);
         await runtime.upgradeRequested;
-        budget.abort(new DOMException("The upgrade budget elapsed", "TimeoutError"));
+        budget.elapse();
         const { code, events } = await setup;
         expect(code, JSON.stringify(events)).toBe(0);
         expect(events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
@@ -1003,10 +1106,10 @@ test("Given a daemon upgrade is still switching releases when its budget expires
     timeout: 60_000,
 }, async () => {
     await withUpgradeMachine("interrupted-switch", async (runtime, paths) => {
-        const budget = new AbortController();
-        const setup = setupMachine(runtime, paths, () => budget.signal);
+        const budget = upgradeBudget();
+        const setup = setupMachine(runtime, paths, budget.deadline);
         await runtime.upgradeRequested;
-        budget.abort(new DOMException("The upgrade budget elapsed", "TimeoutError"));
+        budget.elapse();
         const { code, events } = await setup;
         expect(code, JSON.stringify(events)).toBe(0);
         expect(events).toContainEqual(
