@@ -31,9 +31,19 @@ Read this guide before opening an issue or pull request.
 
 ## Local development
 
+Use the Node and pnpm versions pinned in [package.json](package.json), then install
+the workspace and sync the Mobius submodule:
+
+```sh
+pnpm install
+pnpm sync:submodules
+pnpm local-dev --help
+```
+
 Use [the local-stack skill](.agents/skills/chat-local-full-dev/SKILL.md) for isolated
 Chat and Platform startup and cleanup. Protocol and SDK workspace dependencies come
 from the Mobius submodule; sync it before repository work.
+Runtime configuration is described in [deployment](docs/deployment.md).
 
 ## Build and artifact operations
 
