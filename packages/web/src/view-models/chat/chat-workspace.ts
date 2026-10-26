@@ -206,6 +206,7 @@ export function createChatWorkspace(options: {
     });
     const directory = createConversationDirectoryStore(botId, requests, (sessions) => {
         statuses.getState().directoryLoaded(botId, sessions, statusLifetime.signal);
+        sidebar.dialogs.getState().nativeDialog?.getState().titlesChanged();
     });
     const statuses = createConversationStatusStore(
         requests,
@@ -235,6 +236,21 @@ export function createChatWorkspace(options: {
             botId,
             requests,
             runtime: () => home.getState().runtimeConfiguration?.runtime ?? null,
+            nativeSessionTitle: (entry) => {
+                const current = directory.getState().state;
+                const sessions =
+                    current.kind === "ready" || current.kind === "refreshing" || current.kind === "stale"
+                        ? current.sessions
+                        : [];
+                // Several Morty sessions can link to one native session; prefer the most recently updated title.
+                const linked = sessions
+                    .filter((session) => entry.mobiusSessionIds.includes(session.id) && session.title.trim().length > 0)
+                    .sort(
+                        (left, right) =>
+                            right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id),
+                    );
+                return linked[0]?.title ?? (entry.title || "Untitled session");
+            },
             createTransfer: (signal) => {
                 if (options.createTransfer === undefined) {
                     return Promise.reject(new Error("Identity sharing is unavailable."));
@@ -498,6 +514,7 @@ export function createChatWorkspace(options: {
             onTitleChange: (id, title) => {
                 home.getState().updateConversationTitle(id, title);
                 directory.getState().titleObserved(id, title);
+                sidebar.dialogs.getState().nativeDialog?.getState().titlesChanged();
             },
         });
         paneEntry = { model, session: selection.session };

@@ -1,4 +1,4 @@
-import { queryByRole } from "@testing-library/dom";
+import { getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -62,4 +62,53 @@ test("Given a conversation this page created, When another client renames it, Th
         expect(titles.some((title) => title.includes(renamed))).toBe(true);
         expect(titles.some((title) => title.includes(firstPrompt))).toBe(false);
     });
+});
+
+test("Given a saved title differs from the native session listing, When reopening Chat and selecting it in Open Session, Then the listing and preview use the recent session title", {
+    timeout: 30_000,
+}, async () => {
+    const title = "Agent generated title";
+    const app = await createTestApp({ connectAgent: true, nativeSessionIds: new Set(["title-review"]) });
+    await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: "Open Session" })));
+    const initialDialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
+    await app.user.click(
+        await app.waitForView(() => getByRole(initialDialog, "button", { name: "Native title-review" })),
+    );
+    await app.waitForView(() => getByRole(initialDialog, "heading", { name: "Native title-review" }));
+    await app.user.click(getByRole(initialDialog, "button", { name: "Open" }));
+    await app.waitForView(() => expect(queryByRole(document.body, "dialog", { name: "Open Session" })).toBeNull());
+    await app.waitForView(() => getByRole(document.body, "heading", { name: "Native title-review" }));
+    await sendPrompt(app, await readyComposer(app), "Use the Agent generated title");
+    await app.waitForView(() => {
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
+            "The Agent generated a concise title.",
+        );
+        expect(getByRole(document.body, "heading", { name: title })).toBeDefined();
+    });
+
+    const reopened = await app.reload();
+    await reopened.waitForView(() => expect(directoryTitles(reopened).some((item) => item.includes(title))).toBe(true));
+    await reopened.user.click(getByRole(document.body, "button", { name: "Open Session" }));
+    const dialog = await reopened.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
+    const entry = await reopened.waitForView(() => getByRole(dialog, "button", { name: title }));
+    await reopened.user.click(entry);
+    const preview = getByRole(dialog, "region", { name: "Selected session preview" });
+    await reopened.waitForView(() => getByRole(preview, "heading", { name: title }));
+
+    await reopened.user.click(getByRole(dialog, "button", { name: "Close dialog" }));
+    await reopened.waitForView(() => expect(queryByRole(document.body, "dialog", { name: "Open Session" })).toBeNull());
+    await reopened.user.click(await reopened.waitForView(() => getByRole(document.body, "button", { name: title })));
+    const input = getByRole(document.body, "textbox", { name: "Conversation title" });
+    await reopened.user.clear(input);
+    await reopened.user.type(input, "My renamed session");
+    await reopened.user.click(getByRole(document.body, "button", { name: "Save title" }));
+    await reopened.waitForView(() => getByRole(document.body, "heading", { name: "My renamed session" }));
+    await reopened.user.click(getByRole(document.body, "button", { name: "Open Session" }));
+    const renamedDialog = await reopened.waitForView(() =>
+        getByRole(document.body, "dialog", { name: "Open Session" }),
+    );
+    await reopened.user.click(
+        await reopened.waitForView(() => getByRole(renamedDialog, "button", { name: "My renamed session" })),
+    );
+    await reopened.waitForView(() => getByRole(renamedDialog, "heading", { name: "My renamed session" }));
 });

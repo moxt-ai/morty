@@ -253,7 +253,7 @@ export function NativeSessionDialog({
                                                 options={[
                                                     ...model.directory.entries.map((entry) => ({
                                                         value: entry.entryId,
-                                                        label: `${entry.title || "Untitled session"} · ${entry.directoryLabel}`,
+                                                        label: `${entry.displayTitle} · ${entry.directoryLabel}`,
                                                     })),
                                                     ...(model.directory.nextCursor === null
                                                         ? []
@@ -298,7 +298,7 @@ export function NativeSessionDialog({
                                                     type="button"
                                                     key={entry.entryId}
                                                     data-testid={dataTestId.localSessionEntry}
-                                                    aria-label={entry.title || "Untitled session"}
+                                                    aria-label={entry.displayTitle}
                                                     aria-pressed={
                                                         model.preview.kind !== "empty" &&
                                                         model.preview.entry.entryId === entry.entryId
@@ -312,9 +312,7 @@ export function NativeSessionDialog({
                                                     }
                                                     className="box-border mb-0 grid h-9 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-2.5 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:text-copy-secondary disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-pressed:bg-morty-fill-opacity-3 aria-pressed:text-foreground aria-pressed:hover:bg-morty-fill-opacity-4 aria-pressed:hover:text-foreground aria-pressed:disabled:hover:text-foreground disabled:aria-pressed:text-foreground motion-reduce:transition-none"
                                                 >
-                                                    <span className="min-w-0 truncate">
-                                                        {entry.title || "Untitled session"}
-                                                    </span>
+                                                    <span className="min-w-0 truncate">{entry.displayTitle}</span>
                                                 </button>
                                             ))}
                                             {model.directory.nextCursor !== null && (
@@ -344,11 +342,9 @@ export function NativeSessionDialog({
                                     {model.preview.kind === "ready" && (
                                         <h2
                                             className={nativeSessionPreviewTitleBarClassName}
-                                            title={model.preview.entry.title || "Untitled session"}
+                                            title={model.preview.entry.displayTitle}
                                         >
-                                            <span className="min-w-0 truncate">
-                                                {model.preview.entry.title || "Untitled session"}
-                                            </span>
+                                            <span className="min-w-0 truncate">{model.preview.entry.displayTitle}</span>
                                         </h2>
                                     )}
                                     {model.preview.kind === "loading" && (

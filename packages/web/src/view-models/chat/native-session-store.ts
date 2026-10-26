@@ -6,6 +6,8 @@ import { type NativeSessionAgent, nativeSessionAgentTabs } from "./native-sessio
 import type { OpenMobiusSession } from "./open-session.ts";
 import { type SessionMessage, sessionEventLogPresentation } from "./session-presentation.ts";
 
+type NativeSessionDisplayEntry = NativeSessionEntry & { readonly displayTitle: string };
+
 type NativeSessionDirectory =
     | {
           readonly kind: "loading";
@@ -20,7 +22,7 @@ type NativeSessionDirectory =
           readonly discoveryId: string;
           readonly agentRef: string;
           readonly capabilities: Extract<NativeSessionResult, { readonly action: "list" }>["capabilities"];
-          readonly entries: readonly NativeSessionEntry[];
+          readonly entries: readonly NativeSessionDisplayEntry[];
           readonly nextCursor: string | null;
       }
     | { readonly kind: "failed"; readonly message: string }
@@ -28,16 +30,16 @@ type NativeSessionDirectory =
 
 type NativeSessionPreview =
     | { readonly kind: "empty" }
-    | { readonly kind: "loading"; readonly entry: NativeSessionEntry }
+    | { readonly kind: "loading"; readonly entry: NativeSessionDisplayEntry }
     | {
           readonly kind: "ready";
-          readonly entry: NativeSessionEntry;
+          readonly entry: NativeSessionDisplayEntry;
           readonly content: {
               readonly messages: readonly SessionMessage[];
               readonly truncated: boolean;
           };
       }
-    | { readonly kind: "failed"; readonly entry: NativeSessionEntry; readonly message: string };
+    | { readonly kind: "failed"; readonly entry: NativeSessionDisplayEntry; readonly message: string };
 
 type Operation = "idle" | "more" | "import" | "fork";
 
@@ -57,6 +59,7 @@ export interface NativeSessionStore {
     readonly load: (signal: AbortSignal) => Promise<void>;
     /** The Runtime configuration the page follows changed: the listing follows the agent it now offers. */
     readonly runtimeChanged: () => void;
+    readonly titlesChanged: () => void;
     readonly selectAgent: (value: string) => void;
     readonly select: (entry: NativeSessionEntry, signal: AbortSignal) => Promise<void>;
     readonly open: (action: "import" | "fork", signal: AbortSignal) => Promise<void>;
@@ -85,11 +88,16 @@ export const createNativeSessionStore = (
     requests: Pick<BotChatApi, "nativeSessions" | "nativeSession">,
     /** The Runtime the page follows, the one owner of which agents it offers. */
     runtime: () => ChatRuntime | null,
+    displayTitle: (entry: NativeSessionEntry) => string,
     onOpen: (session: OpenMobiusSession) => void,
 ) => {
     let selection: AbortController | null = null;
     let discovery: AbortController | null = null;
     const lifetime = new AbortController();
+    const present = (entry: NativeSessionEntry): NativeSessionDisplayEntry => ({
+        ...entry,
+        displayTitle: displayTitle(entry),
+    });
     return createStore<NativeSessionStore>()((set, get) => ({
         start: () => {
             void get().load(lifetime.signal);
@@ -165,7 +173,7 @@ export const createNativeSessionStore = (
                         discoveryId: result.sessionId,
                         agentRef: agent.agentRef,
                         capabilities: result.capabilities,
-                        entries: result.entries,
+                        entries: result.entries.map(present),
                         nextCursor: result.nextCursor,
                     },
                 });
@@ -179,6 +187,14 @@ export const createNativeSessionStore = (
                     });
                 }
             }
+        },
+        titlesChanged: () => {
+            const { directory, preview } = get();
+            set({
+                directory:
+                    directory.kind === "ready" ? { ...directory, entries: directory.entries.map(present) } : directory,
+                preview: preview.kind === "empty" ? preview : { ...preview, entry: present(preview.entry) },
+            });
         },
         runtimeChanged: () => {
             const current = runtime();
@@ -214,7 +230,7 @@ export const createNativeSessionStore = (
             selection?.abort();
             selection = new AbortController();
             const signal = AbortSignal.any([selection.signal, lifetimeSignal]);
-            set({ preview: { kind: "loading", entry }, error: "" });
+            set({ preview: { kind: "loading", entry: present(entry) }, error: "" });
             try {
                 const content = await requests.nativeSession(
                     botId,
@@ -233,7 +249,7 @@ export const createNativeSessionStore = (
                 set({
                     preview: {
                         kind: "ready",
-                        entry,
+                        entry: present(entry),
                         content: {
                             messages: sessionEventLogPresentation(events).messages,
                             truncated: content.events.truncated,
@@ -245,7 +261,7 @@ export const createNativeSessionStore = (
                     set({
                         preview: {
                             kind: "failed",
-                            entry,
+                            entry: present(entry),
                             message: formatError(cause, "The preview could not be loaded."),
                         },
                     });
@@ -327,7 +343,7 @@ export const createNativeSessionStore = (
                             ...result.entries.filter(
                                 (entry) => !directory.entries.some((existing) => existing.entryId === entry.entryId),
                             ),
-                        ],
+                        ].map(present),
                         nextCursor: result.nextCursor,
                     },
                 });
