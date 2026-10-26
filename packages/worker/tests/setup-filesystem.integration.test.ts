@@ -18,6 +18,7 @@ interface SetupModule {
         host: {
             readonly state: string;
             readonly documents: string;
+            readonly agentEnvironment?: Readonly<Record<string, string | undefined>>;
             readonly signal: AbortSignal;
             readonly runtime?: ControlledSetupRuntime;
             readonly clock?: {
@@ -146,6 +147,7 @@ test("Given a local workspace and a private state directory, When setup creates 
             {
                 state,
                 documents,
+                agentEnvironment: {},
                 signal: cancellation.signal,
                 emit: (event) => {
                     events.push(event);
@@ -216,6 +218,7 @@ test("Given a junction replaces the private Morty directory, When setup validate
                 {
                     state,
                     documents,
+                    agentEnvironment: {},
                     signal: new AbortController().signal,
                     emit: (event) => events.push(event),
                 },
@@ -549,6 +552,7 @@ test.runIf(process.env["MORTY_VERIFY_SYSTEM_STATE"] === "true" && process.platfo
                 {
                     state: "",
                     documents: "",
+                    agentEnvironment: {},
                     signal: cancellation.signal,
                     emit: (event) => {
                         events.push(event);
@@ -608,6 +612,7 @@ for (const segments of [4, 8]) {
                     {
                         state,
                         documents,
+                        agentEnvironment: {},
                         signal: AbortSignal.timeout(25_000),
                         runtime,
                         emit: (event) => events.push(event),
@@ -661,6 +666,10 @@ async function setupMachine(
     deadline?: (milliseconds: number) => AbortSignal,
     run: {
         readonly harness?: string;
+        /** The `--session-id` the agent passes; `null` passes none. */
+        readonly sessionArgument?: string | null;
+        /** The calling agent's shell environment, where a harness exposes its current session. */
+        readonly agentEnvironment?: Readonly<Record<string, string>>;
         /** The user stops setup as soon as it reports this status. */
         readonly interruptAt?: string;
         /** Runs before setup's clock moves on, with every event setup reported so far. */
@@ -679,12 +688,12 @@ async function setupMachine(
             paths.workspace,
             "--harness",
             run.harness ?? "settings-test",
-            "--session-id",
-            "native-upgrade-project",
+            ...(run.sessionArgument === null ? [] : ["--session-id", run.sessionArgument ?? "native-upgrade-project"]),
         ],
         {
             state: paths.state,
             documents: paths.documents,
+            agentEnvironment: run.agentEnvironment ?? {},
             signal: AbortSignal.any([interrupt.signal, AbortSignal.timeout(55_000)]),
             runtime,
             emit: (event) => {
@@ -799,6 +808,81 @@ test("Given setup replaced the Project and was stopped before it finished, When 
         const again = await setupMachine(runtime, paths);
         expect(again.events.at(-1)).toMatchObject({ status: "ready", project: "reused" });
     });
+});
+
+test("Given the agent's shell exposes its current Pi session, When setup runs without --session-id, Then the link continues that session", {
+    timeout: 120_000,
+}, async () => {
+    await withUpgradeMachine(
+        "unavailable",
+        async (runtime, paths) => {
+            await runtime.installAgents({
+                agentId: "pi",
+                agentName: "Pi",
+                additionalAgents: [{ id: "settings-test", name: "Settings Agent" }],
+            });
+            const finished = await setupMachine(runtime, paths, undefined, {
+                harness: "pi",
+                sessionArgument: null,
+                agentEnvironment: { PI_SESSION_ID: "pi-shell-session" },
+            });
+            expect(finished.code, JSON.stringify(finished.events)).toBe(0);
+            const ready = finished.events.at(-1);
+            expect(ready).toMatchObject({ status: "ready" });
+            expect(new URL(String(ready?.["url"])).searchParams.get("sessionId")).toBe("pi-shell-session");
+        },
+        "current",
+    );
+});
+
+test("Given an agent passes a session ID its shell does not expose, When setup runs, Then the link continues the shell's session and setup reports the mismatch", {
+    timeout: 120_000,
+}, async () => {
+    await withUpgradeMachine(
+        "unavailable",
+        async (runtime, paths) => {
+            await runtime.installAgents({
+                agentId: "pi",
+                agentName: "Pi",
+                additionalAgents: [{ id: "settings-test", name: "Settings Agent" }],
+            });
+            const finished = await setupMachine(runtime, paths, undefined, {
+                harness: "pi",
+                sessionArgument: "agent-guessed-session",
+                agentEnvironment: { PI_SESSION_ID: "pi-shell-session" },
+            });
+            expect(finished.code, JSON.stringify(finished.events)).toBe(0);
+            expect(finished.events).toContainEqual(
+                expect.objectContaining({ status: "session_id_mismatch", harness: "pi", variable: "PI_SESSION_ID" }),
+            );
+            expect(new URL(String(finished.events.at(-1)?.["url"])).searchParams.get("sessionId")).toBe(
+                "pi-shell-session",
+            );
+        },
+        "current",
+    );
+});
+
+test("Given neither the agent's shell nor its arguments name a session, When setup runs, Then it fails before creating an identity and names the variable it looked for", {
+    timeout: 120_000,
+}, async () => {
+    await withUpgradeMachine(
+        "unavailable",
+        async (runtime, paths) => {
+            const failed = await setupMachine(runtime, paths, undefined, {
+                harness: "pi",
+                sessionArgument: null,
+                agentEnvironment: { CLAUDE_CODE_SESSION_ID: "an-outer-claude-session" },
+            });
+            expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
+            expect(failed.events).toContainEqual(
+                expect.objectContaining({ status: "session_unavailable", harness: "pi", variable: "PI_SESSION_ID" }),
+            );
+            expect(failed.events.at(-1)).toMatchObject({ error: { code: "SESSION_ID_REQUIRED" } });
+            expect(failed.events).not.toContainEqual(expect.objectContaining({ status: "identity_ready" }));
+        },
+        "current",
+    );
 });
 
 test("Given the chosen harness is not installed, When the user reruns setup with it, Then each run reports it unavailable and setup finishes once an installed harness is chosen", {
