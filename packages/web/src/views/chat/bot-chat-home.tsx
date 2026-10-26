@@ -29,6 +29,7 @@ import {
 } from "../../view-models/chat/conversation-creation-machine.ts";
 import { selectedConversationId } from "../../view-models/chat/conversation-selection-machine.ts";
 import { pendingExecutionContext } from "../../view-models/chat/execution-context.ts";
+import { pendingConversationPresentation } from "../../view-models/chat/pending-conversation-presentation.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { OnlineComputerAlternative } from "./computer-switcher.tsx";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
@@ -80,6 +81,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
     const creationStatus = conversationCreationStatus(model.creation);
     const queuedInitialMessage = queuedDraftMessage(model.creation);
     const draft = model.draft;
+    const pendingConversation = pendingConversationPresentation(model);
     const setupView = model.view.kind === "setup" ? model.view : null;
     const pairingNotice = model.notices.pairing.kind === "visible" || model.pairingDialogOpen;
 
@@ -144,8 +146,9 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
             <section aria-label="Conversation" className={chatSessionPaneSectionClassName}>
                 {model.selection.kind === "ready" && active !== null ? (
                     <MobiusSessionPane key={model.selection.session.result.ready.sessionId} workspace={workspace} />
-                ) : model.selection.kind === "loading" && active !== null ? (
+                ) : model.selection.kind === "loading" && active !== null && pendingConversation.recovery === null ? (
                     <MobiusSessionPaneLoading
+                        title={pendingConversation.title}
                         footer={
                             <BotChatComposer
                                 attachmentModel={attachmentModel}
@@ -167,11 +170,11 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                     <>
                         {desktop ? (
                             <header className={cn(chatSessionExecutionHeaderClassName, "justify-between")}>
-                                <h2 className="min-w-0 truncate text-sm font-semibold">New session</h2>
+                                <h2 className="min-w-0 truncate text-sm font-semibold">{pendingConversation.title}</h2>
                             </header>
                         ) : (
                             <MobileSessionTitlePortal>
-                                <h2 className="min-w-0 truncate text-sm font-semibold">New session</h2>
+                                <h2 className="min-w-0 truncate text-sm font-semibold">{pendingConversation.title}</h2>
                             </MobileSessionTitlePortal>
                         )}
                         <FollowLatestScrollArea
@@ -182,7 +185,20 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                             aria-label="Messages"
                         >
                             <div className="flex min-h-full flex-col gap-8">
-                                {model.selection.kind === "loading" || model.view.kind === "loading" ? (
+                                {pendingConversation.recovery !== null ? (
+                                    <div className="m-auto grid max-w-lg justify-items-center gap-4 px-6 text-center">
+                                        <div role="status" aria-live="polite" aria-atomic="true">
+                                            <p className="font-medium">{pendingConversation.recovery.title}</p>
+                                            <p className="mt-2 text-sm text-muted-foreground">
+                                                {pendingConversation.recovery.description}
+                                            </p>
+                                            <p className="mt-2 text-sm text-muted-foreground">
+                                                Your unsent draft will be restored with this session.
+                                            </p>
+                                        </div>
+                                        <Button onClick={store.getState().retry}>Reconnect</Button>
+                                    </div>
+                                ) : model.selection.kind === "loading" || model.view.kind === "loading" ? (
                                     <SessionMessageListSkeleton />
                                 ) : model.view.kind === "failed" || model.selection.kind === "failed" ? (
                                     <div className="m-auto grid justify-items-center gap-4 text-center">

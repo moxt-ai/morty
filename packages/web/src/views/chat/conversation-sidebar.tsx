@@ -169,9 +169,14 @@ function ManagedSessionDirectoryList({
 }) {
     return (
         <Tooltip.Provider delayDuration={150}>
-            {(directory.kind === "failed" || directory.kind === "stale") && (
-                <MortyAlert>{directory.message}</MortyAlert>
-            )}
+            {(directory.kind === "failed" || directory.kind === "stale") &&
+                (directory.failure === "connection" ? (
+                    <p role="status" className="py-3 text-xs text-muted-foreground">
+                        {directory.message}
+                    </p>
+                ) : (
+                    <MortyAlert>{directory.message}</MortyAlert>
+                ))}
             {directory.kind === "setup-required" && (
                 <div
                     className="flex flex-col items-center rounded-xl border border-border/70 bg-white/55 px-4 py-5 text-center shadow-[0_1px_3px_rgba(17,24,20,0.04)]"

@@ -419,19 +419,19 @@ function MobiusSessionPaneShell({
     );
 }
 
-export function MobiusSessionPaneLoading({ footer }: { readonly footer?: ReactNode }) {
+export function MobiusSessionPaneLoading({ footer, title }: { readonly footer?: ReactNode; readonly title: string }) {
     return (
         <DesktopChatLayout>
             {(desktop) => (
                 <>
-                    <MobiusSessionPaneShell footer={footer} mobileTitlePortaled={!desktop} titleLoading={desktop}>
+                    <MobiusSessionPaneShell footer={footer} mobileTitlePortaled={!desktop} title={title}>
                         <div aria-label="Messages" className={chatSessionMessageScrollClassName} role="log">
                             <SessionMessageListSkeleton />
                         </div>
                     </MobiusSessionPaneShell>
                     {desktop ? null : (
                         <MobileSessionTitlePortal>
-                            <SessionTitleSkeleton centered />
+                            <h2 className="min-w-0 truncate text-sm font-semibold">{title}</h2>
                         </MobileSessionTitlePortal>
                     )}
                 </>

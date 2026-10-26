@@ -12,6 +12,8 @@ import { CloudApiError, isRuntimeConnectionFailure } from "../../services/manage
 import {
     centralSessionStorage,
     newConversationDraftEntry,
+    type RememberedSession,
+    rememberedSessionEntry,
 } from "../../services/session-storage/central-session-storage.ts";
 import { formatError } from "../format-error.ts";
 import {
@@ -138,6 +140,7 @@ export interface BotChatHomeStore {
     readonly networkAvailable: boolean;
     readonly setNetworkAvailable: (available: boolean) => void;
     readonly selection: ConversationSelectionState;
+    readonly rememberedSession: RememberedSession | null;
     readonly creation: ConversationCreationState;
     /** First messages of created conversations that the service has not accepted yet, whichever is on screen. */
     readonly firstMessages: FirstMessages;
@@ -219,6 +222,7 @@ export const createBotChatHomeStore = (
     >,
     options: {
         readonly botId: string;
+        readonly identityKey: string | null;
         readonly entry?: "address" | "restore";
         /**
          * Announced with every Runtime configuration the page observes, after the view follows it: the owner keeps the
@@ -275,6 +279,14 @@ export const createBotChatHomeStore = (
                 selectedConversationId(selection).length > 0 ? selectedConversationId(selection) : null,
             );
             if (selection.kind === "ready") {
+                const rememberedSession = {
+                    id: selectedConversationId(selection),
+                    title: selection.session.entry.title,
+                };
+                set({ rememberedSession });
+                if (options.identityKey !== null) {
+                    centralSessionStorage.write(rememberedSessionEntry(options.identityKey), rememberedSession);
+                }
                 onSelectionReady(selection);
             }
         };
@@ -303,6 +315,7 @@ export const createBotChatHomeStore = (
                 set({ networkAvailable: available });
             },
             selection,
+            rememberedSession: null,
             creation: { kind: "draft" },
             firstMessages: new Map(),
             revision: 0,
@@ -315,6 +328,10 @@ export const createBotChatHomeStore = (
             notices: { pairing: { kind: "hidden" } },
             dismissNotice: () => set((current) => ({ notices: { ...current.notices, pairing: { kind: "hidden" } } })),
             load: async (signal) => {
+                signal.throwIfAborted();
+                if (options.identityKey !== null) {
+                    set({ rememberedSession: centralSessionStorage.read(rememberedSessionEntry(options.identityKey)) });
+                }
                 set((current) => ({ view: "botId" in current.view ? current.view : { kind: "loading" } }));
                 /**
                  * Which stage of the load is in flight. A bridge failure before
@@ -480,6 +497,7 @@ export const createBotChatHomeStore = (
                                 current.selection.kind === "loading"
                                     ? transitionConversationSelection(current.selection, {
                                           kind: "session-load-failed",
+                                          failure: "unavailable",
                                           message: "Connect your local agent to load this session.",
                                           target: current.selection.target,
                                       })
@@ -592,6 +610,18 @@ export const createBotChatHomeStore = (
                     }
                     const failedTarget = get().selection;
                     if (
+                        cause instanceof CloudApiError &&
+                        ["NOT_FOUND", "SESSION_NOT_FOUND", "FORBIDDEN", "UNAUTHENTICATED"].includes(
+                            cause.code.toUpperCase(),
+                        ) &&
+                        get().rememberedSession?.id === selectedConversationId(failedTarget)
+                    ) {
+                        set({ rememberedSession: null });
+                        if (options.identityKey !== null) {
+                            centralSessionStorage.remove(rememberedSessionEntry(options.identityKey));
+                        }
+                    }
+                    if (
                         restoredSessionId !== null &&
                         failedTarget.kind === "loading" &&
                         failedTarget.target.kind === "session" &&
@@ -626,6 +656,7 @@ export const createBotChatHomeStore = (
                             set({
                                 selection: transitionConversationSelection(current.selection, {
                                     kind: "session-load-failed",
+                                    failure: "connection",
                                     message,
                                     target: current.selection.target,
                                 }),
@@ -644,6 +675,7 @@ export const createBotChatHomeStore = (
                             currentSelection.kind === "loading"
                                 ? transitionConversationSelection(currentSelection, {
                                       kind: "session-load-failed",
+                                      failure: "unavailable",
                                       message: cause.message,
                                       target: currentSelection.target,
                                   })
@@ -671,6 +703,7 @@ export const createBotChatHomeStore = (
                                 failedSelection.kind === "loading"
                                     ? transitionConversationSelection(failedSelection, {
                                           kind: "session-load-failed",
+                                          failure: "connection",
                                           message,
                                           target: failedSelection.target,
                                       })
@@ -685,6 +718,7 @@ export const createBotChatHomeStore = (
                         set({
                             selection: transitionConversationSelection(failedSelection, {
                                 kind: "session-load-failed",
+                                failure: "unavailable",
                                 message,
                                 target: failedSelection.target,
                             }),
@@ -777,14 +811,23 @@ export const createBotChatHomeStore = (
             setDraftSettings: (draftSettings) => set({ draftSettings }),
             showPairingDialog: () => set({ pairingDialogOpen: true }),
             closePairingDialog: () => set({ pairingDialogOpen: false }),
-            updateConversationTitle: (sessionId, title) =>
+            updateConversationTitle: (sessionId, title) => {
                 set((state) => ({
                     selection: transitionConversationSelection(state.selection, {
                         kind: "session-title-updated",
                         sessionId,
                         title,
                     }),
-                })),
+                }));
+                const selection = get().selection;
+                if (selection.kind === "ready" && selection.session.result.ready.sessionId === sessionId) {
+                    const rememberedSession = { id: selectedConversationId(selection), title };
+                    set({ rememberedSession });
+                    if (options.identityKey !== null) {
+                        centralSessionStorage.write(rememberedSessionEntry(options.identityKey), rememberedSession);
+                    }
+                }
+            },
             initialMessageDelivered: (conversationId) =>
                 set((state) => ({
                     firstMessages: transitionFirstMessages(state.firstMessages, { kind: "delivered", conversationId }),

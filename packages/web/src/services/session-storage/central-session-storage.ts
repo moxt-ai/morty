@@ -122,6 +122,32 @@ export const sessionDraftEntry = (sessionId: string): SessionStorageEntry<string
         schema: messageDraftSchema,
     });
 
+const rememberedSessionSchema = v.pipe(
+    v.object({
+        id: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
+        title: v.pipe(v.string(), v.minLength(1), v.maxLength(2_000)),
+    }),
+    v.readonly(),
+);
+
+export type RememberedSession = v.InferOutput<typeof rememberedSessionSchema>;
+
+/** Display-only context for this tab, scoped to the authenticated identity; never grants access. */
+export const rememberedSessionEntry = (identity: string): SessionStorageEntry<RememberedSession> =>
+    customSessionStorageEntry({
+        key: scopedKey("morty:remembered-session:v1:", identity),
+        schema: rememberedSessionSchema,
+        encode: (value) => JSON.stringify(v.parse(rememberedSessionSchema, value)),
+        decode: (raw) => {
+            try {
+                const parsed = v.safeParse(rememberedSessionSchema, JSON.parse(raw));
+                return parsed.success ? parsed.output : null;
+            } catch {
+                return null;
+            }
+        },
+    });
+
 // ---------------------------------------------------------------------------
 // Conversation sidebar layout
 // ---------------------------------------------------------------------------

@@ -238,6 +238,15 @@ export class ControlledSetupRuntime implements SetupRuntime {
         await Promise.all(active.map((daemon) => daemon.reconnect()));
     };
 
+    /** Disconnects the real relay while retaining the daemon's persisted sessions for recovery. */
+    readonly pause = async (): Promise<void> => {
+        await Promise.all(Array.from(this.#active.values(), (daemon) => daemon.disconnect()));
+    };
+
+    readonly resume = async (): Promise<void> => {
+        await Promise.all(Array.from(this.#active.values(), (daemon) => daemon.reconnect()));
+    };
+
     /** Simulates the manager forgetting every saved Runtime connection. */
     readonly forgetConnections = async (): Promise<void> => {
         await this.disconnect();

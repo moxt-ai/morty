@@ -1,8 +1,10 @@
 import type { StoreApi } from "zustand/vanilla";
+import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import type { BotChatApi, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
-import type { IdentityScope } from "../../services/identity/identity-scope-url.ts";
+import { encodeIdentityScope, type IdentityScope } from "../../services/identity/identity-scope-url.ts";
 import { rememberComputerName, rememberComputerVisit } from "../../services/identity/remembered-computers.ts";
+import { isRuntimeConnectionFailure } from "../../services/management/management-api.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import type { BugReportDialogStore } from "../bug-report-dialog-store.ts";
 import { formatError } from "../format-error.ts";
@@ -157,6 +159,7 @@ export function createChatWorkspace(options: {
     };
     const home = createBotChatHomeStore(requests, {
         botId,
+        identityKey: options.rememberedIdentity === undefined ? null : encodeIdentityScope(options.rememberedIdentity),
         now: options.clock.now,
         onRuntimeConfigurationUnavailable: () => options.computers?.invalidateCurrent(),
         onWaitingForRuntime: () => runtimeRecovery.failed(),
@@ -402,6 +405,10 @@ export function createChatWorkspace(options: {
                     home.setState((state) => ({
                         selection: transitionConversationSelection(state.selection, {
                             kind: "session-load-failed",
+                            failure:
+                                isRuntimeConnectionFailure(cause) || isChatBridgeError(cause)
+                                    ? "connection"
+                                    : "unavailable",
                             message: formatError(cause, "The Session could not be loaded."),
                             target: current.target,
                         }),

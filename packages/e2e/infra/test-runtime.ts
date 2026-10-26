@@ -131,6 +131,8 @@ export async function createTestRuntime(
             },
             disconnectRuntime: async () => await runtime.disconnect(),
             restartRuntime: async () => await runtime.restart(),
+            pauseRuntime: runtime.pause,
+            resumeRuntime: runtime.resume,
             forgetRuntimeConnections: async () => await runtime.forgetConnections(),
             connectUnrelatedRuntime: async () => {
                 const unrelated = new ChatApi(stack.chatOrigin, harness.signal);

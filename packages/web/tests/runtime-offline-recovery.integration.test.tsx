@@ -39,7 +39,7 @@ function agentAnswered(app: TestApp, text: string): boolean {
     return app.elementsByTestId(dataTestId.agentResponse).some((message) => message.textContent?.includes(text));
 }
 
-test("Given a saved conversation, When opening it fails because its Runtime is offline and the Runtime comes back, Then the conversation opens without a reload", {
+test("Given a saved conversation, When reloading it while its Runtime is offline, Then its title and saved-history notice remain and reconnect restores history and the unsent draft", {
     timeout: 90_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -54,12 +54,30 @@ test("Given a saved conversation, When opening it fails because its Runtime is o
     await sendPrompt(app, draft, "Keep this conversation");
     await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: Keep this conversation")).toBe(true));
 
+    const composer = await readyComposer(app);
+    await app.user.click(composer);
+    await app.user.paste("Keep this follow-up unsent");
+    await app.user.click(getByRole(document.body, "button", { name: "Keep this conversation" }));
+    const titleInput = getByRole(document.body, "textbox", { name: "Conversation title" });
+    await app.user.clear(titleInput);
+    await app.user.type(titleInput, "Saved offline conversation");
+    await app.user.click(getByRole(document.body, "button", { name: "Save title" }));
+    await app.waitForView(() =>
+        expect(queryByRole(document.body, "heading", { name: "Saved offline conversation" })).not.toBeNull(),
+    );
+
     await daemon.disconnect();
     const reopened = await app.reload();
-    // The conversation cannot open while the Runtime is offline: the page reports the failure and offers to retry.
+    // A failed read must not present an existing conversation as a new, empty one.
     await reopened.waitForView(() => {
         expect(connectionStatus(reopened)).toBe("disconnected");
         expect(queryByRole(document.body, "button", { name: "Reconnect" })).not.toBeNull();
+        expect(queryByRole(document.body, "heading", { name: "Saved offline conversation" })).not.toBeNull();
+        expect(queryByRole(document.body, "heading", { name: "New session" })).toBeNull();
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
+            "Your conversation is saved on your computer. History will load when it reconnects.",
+        );
+        expect(document.body.textContent).not.toContain("Your Mobius is disconnected.");
     }, RUNTIME_CHANGE_TIMEOUT_MS);
 
     await daemon.reconnect();
@@ -68,6 +86,15 @@ test("Given a saved conversation, When opening it fails because its Runtime is o
         expect(agentAnswered(reopened, "Codex turn 1: Keep this conversation")).toBe(true);
         const composer = reopened.elementByTestId(dataTestId.messageComposer);
         expect(composer instanceof HTMLTextAreaElement && !composer.disabled).toBe(true);
+        expect(composer).toHaveProperty("value", "Keep this follow-up unsent");
+        expect(
+            reopened
+                .elementsByTestId(dataTestId.agentResponse)
+                .filter((message) => message.textContent?.includes("Codex turn 1: Keep this conversation")),
+        ).toHaveLength(1);
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain(
+            "Keep this follow-up unsent",
+        );
     }, RUNTIME_CHANGE_TIMEOUT_MS);
 });
 
@@ -89,7 +116,10 @@ test("Given a saved conversation, When a new-session page opens while the Runtim
     // The sessions are read through the Runtime, so the sidebar cannot list them while it is offline.
     await reopened.waitForView(() => {
         expect(connectionStatus(reopened)).toBe("disconnected");
-        expect(sidebarAlerts()).toEqual([expect.stringContaining("Your Mobius is disconnected.")]);
+        expect(sidebarAlerts()).toEqual([]);
+        expect(document.body.textContent).toContain(
+            "Your sessions are saved on your computer and will appear when it reconnects.",
+        );
         expect(directoryTitles(reopened)).toHaveLength(0);
     }, RUNTIME_CHANGE_TIMEOUT_MS);
 
@@ -169,4 +199,77 @@ test("Given a background reply is running when the Runtime goes offline, When th
         () => expect(entryStatus(app, "Background conversation")).not.toBe("Session working"),
         RUNTIME_CHANGE_TIMEOUT_MS,
     );
+});
+
+for (const context of ["missing", "malformed", "different-session", "different-identity"] as const) {
+    test(`Given ${context} remembered context, When an existing conversation reloads offline, Then it uses an honest fallback without leaking a different title`, {
+        timeout: 45_000,
+    }, async () => {
+        const app = await createTestApp({ connectAgent: true });
+        const daemon = app.daemon;
+        if (daemon === null) {
+            throw new Error("Expected a connected Runtime");
+        }
+        await sendPrompt(app, await readyComposer(app), "Private saved conversation");
+        await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: Private saved conversation")).toBe(true));
+        // Browser persistence is an external input. Exercise invalid/absent data through a real page reload.
+        const keys = Object.keys(window.sessionStorage).filter((key) => key.startsWith("morty:remembered-session:v1:"));
+        for (const key of keys) {
+            const saved = window.sessionStorage.getItem(key);
+            window.sessionStorage.removeItem(key);
+            if (context === "malformed") {
+                window.sessionStorage.setItem(key, "{invalid json");
+            } else if (context === "different-session") {
+                window.sessionStorage.setItem(
+                    key,
+                    JSON.stringify({ id: "another-session", title: "Unrelated private title" }),
+                );
+            } else if (context === "different-identity" && saved !== null) {
+                window.sessionStorage.setItem(`${key}-another-identity`, saved);
+            }
+        }
+        await daemon.disconnect();
+        const reopened = await app.reload();
+        await reopened.waitForView(() => {
+            expect(connectionStatus(reopened)).toBe("disconnected");
+            expect(queryByRole(document.body, "heading", { name: "Existing session" })).not.toBeNull();
+            expect(queryByRole(document.body, "heading", { name: "New session" })).toBeNull();
+            expect(document.body.textContent).not.toContain("Private saved conversation");
+            expect(document.body.textContent).not.toContain("Unrelated private title");
+            expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
+                "History is temporarily unavailable. It will load when the connection returns.",
+            );
+        }, RUNTIME_CHANGE_TIMEOUT_MS);
+        await daemon.reconnect();
+        await reopened.waitForView(
+            () => expect(agentAnswered(reopened, "Codex turn 1: Private saved conversation")).toBe(true),
+            RUNTIME_CHANGE_TIMEOUT_MS,
+        );
+    });
+}
+
+test("Given a remembered title for a session that no longer exists, When the server rejects its lookup, Then stale context is discarded and the failure is not described as offline", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await sendPrompt(app, await readyComposer(app), "A saved conversation");
+    await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: A saved conversation")).toBe(true));
+    const unavailableId = "chat_missing_session";
+    for (const key of Object.keys(window.sessionStorage).filter((key) =>
+        key.startsWith("morty:remembered-session:v1:"),
+    )) {
+        window.sessionStorage.setItem(key, JSON.stringify({ id: unavailableId, title: "Stale unavailable title" }));
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.delete("conversationId");
+    url.searchParams.set("sessionId", unavailableId);
+    window.history.replaceState(null, "", url);
+    const reopened = await app.reload();
+    await reopened.waitForView(() => {
+        expect(queryByRole(document.body, "button", { name: "Reconnect" })).not.toBeNull();
+        expect(queryByRole(document.body, "heading", { name: "Existing session" })).not.toBeNull();
+        expect(queryByRole(document.body, "heading", { name: "New session" })).toBeNull();
+        expect(document.body.textContent).not.toContain("Stale unavailable title");
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain("will load when");
+    });
 });
