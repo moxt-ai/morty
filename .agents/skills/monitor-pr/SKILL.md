@@ -1,6 +1,6 @@
 ---
 name: monitor-pr
-description: Monitor a GitHub pull request until it is ready to merge, or follow it through the merge queue until merged. Use when a user asks to watch, monitor, or wait for a PR.
+description: Monitor a GitHub pull request until ready to merge or confirm that it has merged. Use when a user asks to watch, monitor, wait for, or merge a PR, including follow-through after enabling auto-merge or entering the merge queue.
 ---
 
 # Monitor a Pull Request
@@ -10,12 +10,33 @@ merge-queue entry, through the merge queue. This is a read-only operation: do
 not approve, update, rerun, enqueue, dequeue, close, or merge the pull request
 unless the user separately asks for that action.
 
-For an open pull request outside the merge queue, stop successfully when it is
-green, mergeable, and up to date, and report `READY TO MERGE`. Fail immediately
-when GitHub reports that the head branch is behind its base branch. Once a
+For a readiness-only request outside the merge queue, stop successfully when the
+pull request is green, mergeable, and up to date, and report `READY TO MERGE`.
+Fail immediately when GitHub reports that the head branch is behind its base branch. Once a
 non-null `mergeQueueEntry` has been observed, continue until the pull request
 is confirmed merged. `autoMergeRequest` alone does not mean that the pull
 request is in the merge queue.
+
+## Choose the completion goal
+
+Use this skill when the user asks to merge a PR, not only when they explicitly
+say "monitor" or "wait". A merge request includes following through to the
+result; enabling auto-merge or requesting queue entry does not complete it.
+
+- **Readiness:** For a watch or readiness request, use the normal
+  `READY TO MERGE` stopping rule outside the queue. Once a queue entry is
+  observed, continue until merged.
+- **Merge confirmation:** When the user asks to merge, or to wait until merged,
+  continue until GitHub confirms the merge or a terminal failure occurs, even
+  when no queue entry has been observed. Do not stop at `READY TO MERGE` or
+  return a final answer merely saying auto-merge is enabled.
+
+Keep monitoring read-only. Perform a merge, enable auto-merge, or request queue
+entry only under the user's separate authorization for that action, respecting
+repository protections. After the authorized action, immediately begin or resume
+this skill's monitoring loop. If the action is rejected, report the blocker
+rather than bypassing protections or claiming that the PR will merge. A request
+only to watch a PR never authorizes a merge action.
 
 ## Agent-owned monitoring
 
@@ -117,7 +138,7 @@ subsequent interval, even when nothing changed. Include:
 PR CI: <passed>/<total> passed, <pending> pending, <failed> failed (head <short-sha>)
 Merge readiness: <mergeable>/<mergeStateStatus>; review <reviewDecision>; auto-merge <on|off>
 Queue: <not entered|state, position, ETA> [queue head <short-sha>; CI summary]
-Next check: <interval>, including while queued; none if ready to merge, merged, or failed
+Next check: <interval>, including while queued or awaiting merge confirmation; none if the completion goal is reached or monitoring fails
 ```
 
 List pending or failed check names when present. Use GitHub's ETA as reported;
@@ -162,15 +183,17 @@ promptly on user cancellation.
 
 ## Confirm success
 
-Outside the merge queue, success requires fresh API data showing that the pull
-request is not a draft, all current PR-head checks have completed without
+For the readiness goal outside the merge queue, success requires fresh API data
+showing that the pull request is not a draft, all current PR-head checks have completed without
 failure, `mergeable` is `MERGEABLE`, and `mergeStateStatus` is `CLEAN`. Emit
 `READY TO MERGE` with the final PR-head CI summary, then stop.
 
-After observing a non-null `mergeQueueEntry`, success requires fresh API data
-showing `merged: true` or a non-null `mergedAt`. Emit `MERGED` with the merge
+For the merge-confirmation goal, or after observing a non-null `mergeQueueEntry`,
+success requires fresh API data showing `merged: true` or a non-null `mergedAt`.
+Emit `MERGED` with the merge
 timestamp, merge commit SHA when available, final PR-head CI summary, and final
-observed merge-queue state. Then stop monitoring.
+observed merge-queue state (or "not observed" if no entry was seen). Then stop
+monitoring.
 
 Do not report queue entry from auto-merge, labels, comments, or merge readiness.
 Only a non-null `mergeQueueEntry` establishes queue membership.
