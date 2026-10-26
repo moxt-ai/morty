@@ -39,6 +39,10 @@ export function PairingInstruction() {
                 <Copy aria-hidden="true" className="size-4" />
                 Copy setup prompt
             </CopyToClipboardButton>
+            <div className="mt-3 text-center text-xs leading-5 text-muted-foreground">
+                <p>Your agent keeps running on its original computer. Keep it awake and online.</p>
+                <p className="mt-2">Setup may install or update the local connection software.</p>
+            </div>
             <details aria-label="Setup prompt" className="group mt-3 text-xs leading-5 text-muted-foreground">
                 <summary className="flex min-h-11 cursor-pointer list-none items-center justify-center gap-1.5 rounded-lg outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
                     View setup prompt
@@ -53,8 +57,6 @@ export function PairingInstruction() {
                     onFocus={(event) => event.currentTarget.select()}
                     className="mt-2 w-full resize-none rounded-xl border border-border bg-muted/40 px-4 py-3 font-mono text-xs leading-5 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
-                <p className="mt-3">Your agent keeps running on its original computer. Keep it awake and online.</p>
-                <p className="mt-2">Setup may install or update the local connection software.</p>
             </details>
         </div>
     );
