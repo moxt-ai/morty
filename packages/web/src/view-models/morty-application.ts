@@ -92,7 +92,7 @@ export function createMortyApplication(options: {
     );
     const bugReportDialog = createBugReportDialogStore(() => (disposed ? null : transport));
     const sessionWorkspace = createSessionWorkspaceStore();
-    const continuation = createContinueStore(transport.fetch);
+    const continuation = createContinueStore(transport.fetch, options.clock ?? systemClock);
     let workspace: ChatWorkspace | null = null;
     let workspaceRequests: BotChatApi | null = null;
     let disposed = false;
@@ -125,6 +125,7 @@ export function createMortyApplication(options: {
             onAccessEnded: () => window.location.reload(),
         });
         const requests = new BotChatApi({
+            clock: options.clock ?? systemClock,
             fetchRequest: transport.fetch,
             getToken: scope.getToken,
             replacedToken: (rejected, signal) => replacedToken(identity.userId, rejected, signal),
@@ -145,6 +146,7 @@ export function createMortyApplication(options: {
                 fetchRequest: transport.fetch,
                 requests: (saved) =>
                     new BotChatApi({
+                        clock: options.clock ?? systemClock,
                         fetchRequest: transport.fetch,
                         recoverBridge: transport.recover,
                         waitForBridge: transport.waitForBridge,

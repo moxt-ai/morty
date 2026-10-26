@@ -18,7 +18,12 @@ export interface SessionFailure {
 
 /** Recovery follows the typed failure; an Agent's diagnostic text never selects an action. */
 export function sessionFailure(cause: unknown, context: "session" | "chat" = "session"): SessionFailure {
-    const code = cause instanceof CloudApiError || cause instanceof MobiusError ? cause.code : null;
+    const code =
+        cause instanceof CloudApiError || cause instanceof MobiusError
+            ? cause.code
+            : cause instanceof DOMException
+              ? cause.name
+              : null;
     const diagnostic = { code, message: cause instanceof Error ? cause.message : "No further details are available." };
     const present = (title: string, description: string, action: SessionRecoveryAction): SessionFailure => ({
         title,
@@ -69,6 +74,7 @@ export function sessionFailure(cause: unknown, context: "session" | "chat" = "se
             );
         case "platform_timeout":
         case "operation_timeout":
+        case "timeouterror":
             return present("Opening the session timed out", "The request took too long. Try opening it again.", {
                 kind: "retry",
                 label: "Try again",

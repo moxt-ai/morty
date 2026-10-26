@@ -2,9 +2,11 @@ import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getByRole, queryByRole } from "@testing-library/dom";
+import { act, fireEvent } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { createTestApp } from "./infra/test-app.tsx";
+import { TestClock } from "./infra/test-clock.ts";
 
 type TestApp = Awaited<ReturnType<typeof createTestApp>>;
 
@@ -162,6 +164,33 @@ test("Given opening a native session fails, When the user tries again, Then the 
         expect(getByRole(document.body, "alert").textContent).toContain("Session unavailable");
     });
     expect(queryByRole(document.body, "button", { name: "Try again" })).toBeNull();
+});
+
+test("Given retained handoff access and an available native session, When opening exceeds the browser deadline, Then the timeout keeps a working retry", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock("2026-10-26T06:00:00Z");
+    const app = await createTestApp({
+        clock,
+        page: { kind: "continue", harness: "pi", sessionId: "native-timeout-session" },
+    });
+    await app.waitForView(() => getByRole(document.body, "heading", { name: "Agent unavailable" }));
+    await app.connectAgent({ id: "pi", label: "Pi" }, new Set(["native-timeout-session"]));
+
+    act(() => {
+        fireEvent.click(getByRole(document.body, "button", { name: "Try again" }));
+        // Expire the browser deadline before the in-flight request can complete.
+        clock.advanceBy(45_000);
+    });
+    await app.waitForView(() => getByRole(document.body, "heading", { name: "Opening the session timed out" }));
+    await app.user.click(getByRole(document.body, "button", { name: "Try again" }));
+    await app.waitForView(() => {
+        expect(window.location.pathname).toBe("/chat");
+        expect(new URL(window.location.href).searchParams.get("sessionId")).toBeTruthy();
+    });
+    const continued = await app.reload();
+    await continued.queryElementByTestId(dataTestId.messageComposer);
+    expect(queryByRole(document.body, "heading", { name: "Opening the session timed out" })).toBeNull();
 });
 
 test("Given the Morty access was redeemed but the original session is missing, When the user views the failure page, Then it explains how to continue without offering an ineffective retry", {

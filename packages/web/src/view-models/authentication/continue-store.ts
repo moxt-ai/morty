@@ -13,6 +13,7 @@ import {
 import { encodeIdentityScope, hasIdentityScope, readIdentityScope } from "@/services/identity/identity-scope-url";
 import { computerKey, rememberedComputers, replacedToken, storedToken } from "@/services/identity/remembered-computers";
 import { centralSessionStorage, sessionWelcomeEntry } from "@/services/session-storage/central-session-storage";
+import { type Clock, systemClock } from "@/services/time/clock";
 import { formatError } from "@/view-models/format-error";
 import { type SessionFailure, sessionFailure } from "../chat/session-failure.ts";
 
@@ -113,7 +114,10 @@ function identityDestination(path: "/" | "/chat", identity: AnonymousIdentity): 
  * failed redemption falls back to the access this browser still holds for the
  * same Project.
  */
-export const createContinueStore = (fetchRequest: (request: Request) => Promise<Response>) => {
+export const createContinueStore = (
+    fetchRequest: (request: Request) => Promise<Response>,
+    clock: Clock = systemClock,
+) => {
     let attempt: AbortController | null = null;
     const store = createStore<ContinueStore>()((set, get) => {
         const showRetryableFailure = (
@@ -144,6 +148,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 state: { handoff, identity, kind: "session-resuming" },
             });
             const chat = new BotChatApi({
+                clock,
                 fetchRequest,
                 origin: window.location.origin,
                 projectId: identity.projectId,

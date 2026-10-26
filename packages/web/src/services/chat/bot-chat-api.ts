@@ -29,6 +29,7 @@ import * as v from "valibot";
 import type { ApiResponseSnapshot, ApiTransport } from "../api/api-transport.ts";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
+import { type Clock, systemClock } from "../time/clock.ts";
 
 const identifier = v.custom<Identifier>(isIdentifier);
 const accessSchema = v.pipe(
@@ -251,6 +252,7 @@ class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTra
 }
 
 export class BotChatApi {
+    readonly #clock: Clock;
     readonly #fetchRequest: (request: Request) => Promise<Response>;
     readonly #origin: string;
     readonly #projectId: string;
@@ -263,6 +265,7 @@ export class BotChatApi {
     readonly #waitForBridge: ApiTransport["waitForBridge"];
     readonly readBot: ManagementApi["readBot"];
     constructor(options: {
+        readonly clock?: Clock;
         readonly fetchRequest: (request: Request) => Promise<Response>;
         readonly origin: string;
         readonly projectId: string;
@@ -277,6 +280,7 @@ export class BotChatApi {
         readonly recoverBridge: ApiTransport["recover"];
         readonly waitForBridge: ApiTransport["waitForBridge"];
     }) {
+        this.#clock = options.clock ?? systemClock;
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
         this.#projectId = v.parse(identifier, options.projectId);
         this.#fetchRequest = options.fetchRequest;
@@ -635,12 +639,30 @@ export class BotChatApi {
         body: unknown,
         parent: AbortSignal,
     ): Promise<unknown> => {
-        const signal = AbortSignal.any([
-            parent,
-            AbortSignal.timeout(
+        const deadline = new AbortController();
+        const timer = new AbortController();
+        const signal = AbortSignal.any([parent, deadline.signal]);
+        void this.#clock
+            .sleep(
                 operation.startsWith("native-session") || operation === "agent-settings" ? 120000 : 45000,
-            ),
-        ]);
+                timer.signal,
+            )
+            .then(
+                () => deadline.abort(new DOMException("The Chat request timed out", "TimeoutError")),
+                () => undefined,
+            );
+        try {
+            return await this.#sendRequest(botId, operation, body, signal);
+        } finally {
+            timer.abort();
+        }
+    };
+    readonly #sendRequest = async (
+        botId: string | null,
+        operation: string,
+        body: unknown,
+        signal: AbortSignal,
+    ): Promise<unknown> => {
         const requestedBotId = v.parse(identifier, botId);
         const token = await this.#getToken(signal);
         if (token === null) {
