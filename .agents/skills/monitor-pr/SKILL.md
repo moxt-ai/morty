@@ -1,6 +1,6 @@
 ---
 name: monitor-pr
-description: Have the agent monitor a GitHub pull request directly with GitHub CLI until it is ready to merge, or monitor an entered merge-queue entry until the pull request merges. Report a concise status in the conversation at every interval and fail immediately on terminal failures. Use when a user asks to watch, monitor, or wait for a PR.
+description: Monitor a GitHub pull request until it is ready to merge, or follow it through the merge queue until merged. Use when a user asks to watch, monitor, or wait for a PR.
 ---
 
 # Monitor a Pull Request
