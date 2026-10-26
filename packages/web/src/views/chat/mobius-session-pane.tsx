@@ -933,7 +933,7 @@ function MobiusSessionPaneBody({
                     </section>
                     {desktop ? null : (
                         <MobileSessionTitlePortal>
-                            <div className="mt-1 flex min-w-0 w-full flex-col items-center">
+                            <div className="flex min-w-0 w-full flex-col items-center">
                                 <SessionConversationTitleBar {...titleBarProps} centered />
                                 {sessionMessagesLoading ? (
                                     <WorkingDirectorySkeleton className="mt-0.5 h-5 max-w-full" />

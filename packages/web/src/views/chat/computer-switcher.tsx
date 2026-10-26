@@ -358,7 +358,7 @@ export function ComputerSwitcher({
                             data-testid={dataTestId.botConnectionStatus}
                             className={
                                 inHeader
-                                    ? "flex max-w-[120px] min-w-0 items-center gap-0.5 overflow-hidden rounded-lg px-3 py-1.5 text-left text-12 outline-none hover:bg-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-muted-foreground"
+                                    ? "flex max-w-[120px] min-w-0 items-center gap-0.5 overflow-hidden rounded-lg px-3 py-1.5 text-left text-12 outline-none hover:bg-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-muted-foreground max-sm:min-h-11"
                                     : sidebarNavOptionTriggerClassName
                             }
                         >

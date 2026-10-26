@@ -458,7 +458,7 @@ export function ConversationSidebar({
                                         aria-label="Morty navigation"
                                         className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-card/90 px-3 pt-0 max-sm:overflow-visible sm:isolate sm:w-[264px] sm:gap-0 sm:bg-sidebar sm:pt-2 sm:pb-4"
                                     >
-                                        <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-4 py-3 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:bg-card/90 sm:gap-3">
+                                        <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-4 py-3 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:items-start max-sm:bg-card/90 sm:gap-3">
                                             <div className="relative z-[1] flex w-fit shrink-0 items-center gap-2 sm:gap-3">
                                                 <button
                                                     type="button"
@@ -556,7 +556,7 @@ export function ConversationSidebar({
                                                         testId={dataTestId.botConnectionStatus}
                                                     />
                                                 )}
-                                                {desktop && workspace.computers !== null ? (
+                                                {workspace.computers !== null ? (
                                                     <ComputerSwitcher
                                                         context={executionContext}
                                                         layout="header"
