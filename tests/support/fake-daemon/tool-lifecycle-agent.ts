@@ -77,6 +77,40 @@ export function createToolLifecycleAgent() {
                         content,
                     });
                 try {
+                    if (prompt === "start background verification") {
+                        await emit({
+                            sessionUpdate: "tool_call",
+                            toolCallId: `background-${sessionId}`,
+                            title: "Background verification",
+                            kind: "other",
+                            status: "completed",
+                            _meta: { "mobius.backgroundTask": { id: "verification", status: "running" } },
+                            content: [],
+                        });
+                        await emitText("Background verification launched.");
+                        return { stopReason: "end_turn" };
+                    }
+                    const backgroundStatus = prompt.replace("finish background verification ", "");
+                    if (
+                        backgroundStatus === "completed" ||
+                        backgroundStatus === "failed" ||
+                        backgroundStatus === "stopped" ||
+                        backgroundStatus === "unknown"
+                    ) {
+                        await emit({
+                            sessionUpdate: "tool_call_update",
+                            toolCallId: `background-${sessionId}`,
+                            status: backgroundStatus === "completed" ? "completed" : "failed",
+                            _meta: { "mobius.backgroundTask": { id: "verification", status: backgroundStatus } },
+                            content: [
+                                {
+                                    type: "content",
+                                    content: { type: "text", text: `Background verification ${backgroundStatus}` },
+                                },
+                            ],
+                        });
+                        return { stopReason: "end_turn" };
+                    }
                     if (prompt === "answer after verification" || prompt === "answer then hold") {
                         await emitTool("Completed verification", "completed", []);
                         if (prompt === "answer then hold") {

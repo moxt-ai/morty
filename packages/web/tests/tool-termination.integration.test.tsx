@@ -1,4 +1,4 @@
-import { getAllByLabelText, getByLabelText, queryByLabelText } from "@testing-library/dom";
+import { getAllByLabelText, getByLabelText, getByRole, queryByLabelText } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -186,5 +186,51 @@ for (const [reason, notice] of [
         const reloaded = await app.reload();
         await assertSettled(reloaded);
         expect(reloaded.optionalElementByTestId(dataTestId.agentReplyStatus)).toBeNull();
+    });
+}
+
+for (const [status, label] of [
+    ["completed", "Completed"],
+    ["failed", "Failed"],
+    ["stopped", "Stopped"],
+    ["unknown", "Status unknown"],
+]) {
+    test(`Given a background task outlives its reply, When its ${status} notification arrives, Then its original card updates without an extra user message`, {
+        timeout: 30_000,
+    }, async () => {
+        const app = await start("start background verification");
+        const summary = await app.waitForView(() =>
+            getByRole(document.body, "button", { name: "1 step · 1 running in background" }),
+        );
+        await app.user.click(summary);
+        await app.waitForView(() =>
+            expect(readTool(app, "Background verification").textContent).toContain("Running in background"),
+        );
+        expect(queryByLabelText(await tool(app, "Background verification"), "Tool succeeded")).toBeNull();
+        await sendPrompt(
+            app,
+            await app.queryElementByTestId(dataTestId.messageComposer),
+            `finish background verification ${status}`,
+        );
+        await app.waitForView(() => expect(readTool(app, "Background verification").textContent).toContain(label));
+        expect(app.elementsByTestId(dataTestId.agentToolCall)).toHaveLength(1);
+        const reloaded = await app.reload();
+        const restoredSummary = await reloaded.waitForView(() =>
+            getByRole(document.body, "button", { name: /^1 step/ }),
+        );
+        const summarySuffix =
+            status === "failed"
+                ? " · 1 failed"
+                : status === "stopped"
+                  ? " · 1 interrupted"
+                  : status === "unknown"
+                    ? " · 1 status unknown"
+                    : "";
+        expect(restoredSummary.textContent).toBe(`1 step${summarySuffix}`);
+        await reloaded.user.click(restoredSummary);
+        await reloaded.waitForView(() =>
+            expect(readTool(reloaded, "Background verification").textContent).toContain(label),
+        );
+        expect(reloaded.elementsByTestId(dataTestId.agentToolCall)).toHaveLength(1);
     });
 }

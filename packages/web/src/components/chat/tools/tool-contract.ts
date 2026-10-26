@@ -5,6 +5,7 @@ import type { AgentDisplayContent } from "../../agents/display-content.ts";
  * the view-model layer produces it; the tool renderers consume it.
  */
 export type SessionToolCallState =
+    | { readonly kind: "background"; readonly status: "running" | "completed" | "failed" | "stopped" | "unknown" }
     | { readonly kind: "running" }
     | { readonly kind: "succeeded" }
     | { readonly kind: "failed" }

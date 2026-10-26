@@ -238,7 +238,14 @@ function mergeToolPresentation(
         kind: "tool",
         name: update.name === undefined ? (previous?.name ?? "") : (update.name ?? ""),
         output: update.rawOutput === undefined ? (previous?.output ?? "") : encodedJson(update.rawOutput),
-        state: update.status === undefined ? (previous?.state ?? { kind: "unknown" }) : toolState(update.status),
+        state:
+            update.backgroundTask !== undefined
+                ? { kind: "background", status: update.backgroundTask.status }
+                : previous?.state.kind === "background"
+                  ? previous.state
+                  : update.status === undefined
+                    ? (previous?.state ?? { kind: "unknown" })
+                    : toolState(update.status),
         title:
             update.title === undefined ? (previous?.title ?? update.toolCallId) : (update.title ?? update.toolCallId),
     };
