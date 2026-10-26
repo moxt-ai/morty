@@ -72,3 +72,36 @@ for (const width of [320, 390]) {
         await expect(permission).toBeHidden();
     });
 }
+
+test("Given a pending permission on a phone-height screen, When it appears, Then every decision is visible and reachable without scrolling", async ({
+    runtime,
+}, testInfo) => {
+    const { page } = runtime;
+    await page.setViewportSize({ width: 390, height: 664 });
+    await runtime.openPairedChat();
+    await page.getByRole("textbox", { name: "Message" }).fill("Review the verification action");
+    await page.getByRole("button", { name: "Send message" }).click();
+    const permission = page.getByRole("alertdialog", { name: "Agent permission request" });
+    await expect(permission).toContainText("pnpm test -- --reporter=verbose");
+    await page.screenshot({ path: testInfo.outputPath("phone-height-permission.png") });
+    for (const name of ["Allow: Yes", "Deny: No", "Stop turn"]) {
+        const decision = permission.getByRole("button", { name });
+        await expect(decision).toBeInViewport({ ratio: 1 });
+        // Nothing, including an edge fade, may cover the decision the user taps.
+        expect(
+            await decision.evaluate((element) => {
+                const box = element.getBoundingClientRect();
+                const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+                return hit !== null && element.contains(hit);
+            }),
+        ).toBe(true);
+    }
+    await permission.getByRole("button", { name: "Allow: Yes" }).click();
+    const form = page.getByRole("dialog", { name: "Agent information request" });
+    await form.getByRole("textbox", { name: "Branch" }).fill("feature/phone-permission");
+    await form.getByRole("button", { name: "Continue" }).click();
+    await expect(page.getByRole("article", { name: "Agent response" })).toContainText(
+        "Selected branch: feature/phone-permission",
+    );
+    await expect(permission).toBeHidden();
+});
