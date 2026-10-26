@@ -36,6 +36,12 @@ interface ConversationStatusState {
         status: SessionActivityState,
         signal: AbortSignal,
     ) => void;
+    /**
+     * Whether Sessions have statuses but no stream follows them: the last one gave up, as when the Runtime went away.
+     */
+    readonly unfollowed: () => boolean;
+    /** Follows the listed Sessions' statuses again after their stream gave up, from a fresh snapshot. */
+    readonly follow: (signal: AbortSignal) => void;
     readonly close: () => void;
 }
 
@@ -45,6 +51,10 @@ export function createConversationStatusStore(
     requests: ConversationStatusRequests,
     /** Announced when the Runtime closes a Session, with the reason it gives. */
     onSessionClosed: (sessionId: string, reason: string) => void,
+    /** Announced when the stream following the Sessions gives up, as when the Runtime went away. */
+    onUnfollowed: () => void,
+    /** Announced when the stream reaches the Runtime and follows the Sessions again. */
+    onFollowing: () => void,
 ) {
     let watcher: {
         readonly botId: string;
@@ -92,7 +102,16 @@ export function createConversationStatusStore(
             watcher = null;
         };
 
-        const watch = (botId: string, sessionIds: readonly string[], parent: AbortSignal): void => {
+        /**
+         * Follows the Sessions' statuses. The stream reports changes only, so following that resumes after a gap first
+         * reads a snapshot, as every recovery inside the stream does.
+         */
+        const watch = (
+            botId: string,
+            sessionIds: readonly string[],
+            parent: AbortSignal,
+            start: "current" | "after-gap" = "current",
+        ): void => {
             const directoryKey = JSON.stringify([...sessionIds].sort());
             if ((watcher?.botId === botId && watcher.directoryKey === directoryKey) || parent.aborted) {
                 return;
@@ -103,12 +122,24 @@ export function createConversationStatusStore(
             const signal = AbortSignal.any([parent, controller.signal]);
             void (async () => {
                 let recoveries = 0;
+                let snapshotNeeded = start === "after-gap";
                 try {
                     while (!signal.aborted) {
                         try {
+                            if (snapshotNeeded) {
+                                const snapshotStartedAt = changes;
+                                replaceDirectory(await requests.managedSessions(botId, signal), snapshotStartedAt);
+                                snapshotNeeded = false;
+                            }
                             await requests.subscribeManagedSessionStatuses(
                                 botId,
                                 (event) => {
+                                    // Opening the stream shows it works, but only a Session event shows it keeps working,
+                                    // so only that restores the stream's own retries.
+                                    if (event.kind === "managed-session.statuses.following") {
+                                        onFollowing();
+                                        return;
+                                    }
                                     recoveries = 0;
                                     if (event.kind === "session.close.notice") {
                                         onSessionClosed(event.sessionId, event.reason);
@@ -128,8 +159,7 @@ export function createConversationStatusStore(
                                 throw cause;
                             }
                             recoveries += 1;
-                            const snapshotStartedAt = changes;
-                            replaceDirectory(await requests.managedSessions(botId, signal), snapshotStartedAt);
+                            snapshotNeeded = true;
                         }
                     }
                 } catch (cause) {
@@ -139,6 +169,9 @@ export function createConversationStatusStore(
                 } finally {
                     if (watcher?.controller === controller) {
                         watcher = null;
+                        if (!signal.aborted) {
+                            onUnfollowed();
+                        }
                     }
                 }
             })();
@@ -177,6 +210,12 @@ export function createConversationStatusStore(
                 }
                 replaceStatus(sessionId, status);
                 watch(botId, [...get().statuses.keys()], signal);
+            },
+            unfollowed: () => watcher === null && get().statuses.size > 0,
+            follow: (signal) => {
+                if (watcher === null && get().statuses.size > 0) {
+                    watch(activeBotId, [...get().statuses.keys()], signal, "after-gap");
+                }
             },
             close: closeWatcher,
         };

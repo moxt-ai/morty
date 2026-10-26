@@ -1,6 +1,9 @@
 import { createStore } from "zustand/vanilla";
 import type { ApiTransport } from "../services/api/api-transport.ts";
 import { BotChatApi } from "../services/chat/bot-chat-api.ts";
+import { recordBrowserDiagnostic } from "../services/diagnostics/browser-diagnostics.ts";
+import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../services/identity/anonymous-identity-api.ts";
+import { replacedToken, storedToken } from "../services/identity/remembered-computers.ts";
 import { type Clock, systemClock } from "../services/time/clock.ts";
 import { type ActiveAnonymousSession, createAnonymousSessionStore } from "./authentication/anonymous-session-store.ts";
 import { createContinueStore } from "./authentication/continue-store.ts";
@@ -37,7 +40,8 @@ export interface MortyApplication {
     /**
      * The /continue handoff redeem. Created with the application: its store
      * reads the transfer code from the location at creation, and only a real
-     * continuation visit starts network work.
+     * continuation visit starts network work. Another code in the address
+     * reloads the page, so the store always describes the link in it.
      */
     readonly continuation: ReturnType<typeof createContinueStore>;
     /** The signed-in surface; carries the workspace for the active identity. */
@@ -92,7 +96,10 @@ export function createMortyApplication(options: {
     let workspace: ChatWorkspace | null = null;
     let workspaceRequests: BotChatApi | null = null;
     let disposed = false;
+    // The identity this page works as. Its access is the one this browser stores for that user, shared by every tab.
+    let activeUserId: string | null = null;
     const releaseWorkspace = (): void => {
+        activeUserId = null;
         workspace?.dispose();
         // The workspace receives the chat API by injection; the application
         // owns it, so it closes the pooled session transports here.
@@ -102,12 +109,13 @@ export function createMortyApplication(options: {
     };
     const activateWorkspace = (session: ActiveAnonymousSession): void => {
         const identity = session.identity;
+        activeUserId = identity.userId;
         const scope: ChatIdentity = {
             botId: identity.botId,
             projectId: identity.projectId,
             getToken: async (signal) => {
                 signal.throwIfAborted();
-                return identity.token;
+                return storedToken(identity.userId) ?? identity.token;
             },
         };
         const access = createIdentityAccess({
@@ -119,9 +127,12 @@ export function createMortyApplication(options: {
         const requests = new BotChatApi({
             fetchRequest: transport.fetch,
             getToken: scope.getToken,
+            replacedToken: (rejected, signal) => replacedToken(identity.userId, rejected, signal),
             origin: options.origin,
             projectId: identity.projectId,
             subscribe: transport.subscribe,
+            recoverBridge: transport.recover,
+            waitForBridge: transport.waitForBridge,
             waitForChange: transport.waitForChange,
         });
         workspace = createChatWorkspace({
@@ -135,9 +146,11 @@ export function createMortyApplication(options: {
                 requests: (saved) =>
                     new BotChatApi({
                         fetchRequest: transport.fetch,
+                        recoverBridge: transport.recover,
+                        waitForBridge: transport.waitForBridge,
                         getToken: async (signal) => {
                             signal.throwIfAborted();
-                            return saved.token;
+                            return storedToken(saved.userId) ?? saved.token;
                         },
                         origin: options.origin,
                         projectId: saved.projectId,
@@ -172,6 +185,67 @@ export function createMortyApplication(options: {
         identityAttempt = new AbortController();
         void anonymousSession.getState().load(AbortSignal.any([lifetime.signal, identityAttempt.signal]));
     };
+    // Browser lifecycle signals are hints: probe real connections and let the
+    // existing session reconciliation restore history, execution and approvals.
+    let recovery: Promise<void> | null = null;
+    const recover = (event: Event): void => {
+        if (disposed) {
+            return;
+        }
+        recordBrowserDiagnostic({
+            at: new Date().toISOString(),
+            component: "web",
+            operation: `page-${event.type}`,
+            outcome: document.visibilityState,
+            requestId: "",
+            elapsedMs: 0,
+        });
+        if (document.visibilityState === "hidden" || recovery !== null) {
+            return;
+        }
+        recovery = Promise.allSettled([
+            transport.recover(lifetime.signal),
+            workspace?.sessionPane()?.store.getState().recover(lifetime.signal),
+        ])
+            // Both connection owners retain their retry and manual recovery paths.
+            .then(() => undefined)
+            .finally(() => {
+                recovery = null;
+            });
+    };
+    const restored = (event: PageTransitionEvent): void => {
+        if (event.persisted) {
+            recover(event);
+        }
+    };
+    // A continuation link carries its code after "#", and the continuation reads it when the page starts. Opening
+    // another link that differs only there keeps the page, so it starts again for the link now in the address.
+    const linkChanged = (): void => {
+        if (window.location.pathname.startsWith("/continue")) {
+            window.location.reload();
+        }
+    };
+    // Another tab ended this browser's access, or opened a link that replaced it. Every tab uses the stored access,
+    // so a replacement needs nothing; access that is gone ends here too.
+    const accessChanged = (event: StorageEvent): void => {
+        if (event.key !== null && event.key !== ANONYMOUS_CREDENTIAL_KEY_NAME) {
+            return;
+        }
+        if (activeUserId !== null && storedToken(activeUserId) === null) {
+            window.location.reload();
+        }
+    };
+    const networkChanged = (): void => {
+        workspace?.home.getState().setNetworkAvailable(navigator.onLine);
+    };
+    window.addEventListener("offline", networkChanged);
+    window.addEventListener("online", networkChanged);
+    window.addEventListener("online", recover);
+    window.addEventListener("pageshow", restored);
+    window.addEventListener("hashchange", linkChanged);
+    window.addEventListener("storage", accessChanged);
+    document.addEventListener("visibilitychange", recover);
+    document.addEventListener("resume", recover);
     if (!window.location.pathname.startsWith("/continue")) {
         reloadIdentity();
     }
@@ -195,11 +269,19 @@ export function createMortyApplication(options: {
                 return;
             }
             disposed = true;
+            window.removeEventListener("offline", networkChanged);
+            window.removeEventListener("online", networkChanged);
+            window.removeEventListener("online", recover);
+            window.removeEventListener("pageshow", restored);
+            window.removeEventListener("hashchange", linkChanged);
+            window.removeEventListener("storage", accessChanged);
+            document.removeEventListener("visibilitychange", recover);
+            document.removeEventListener("resume", recover);
             lifetime.abort(new DOMException("The Morty application was disposed.", "AbortError"));
             continuation.getState().cancel();
             releaseWorkspace();
             sessionWorkspace.setState({ workspace: null });
-            transport.close();
+            transport.dispose();
         },
     };
 }

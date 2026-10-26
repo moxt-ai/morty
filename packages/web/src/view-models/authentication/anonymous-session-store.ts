@@ -3,10 +3,12 @@ import { type AnonymousIdentity, AnonymousIdentityApi } from "../../services/ide
 import { hasIdentityScope } from "../../services/identity/identity-scope-url.ts";
 import {
     computerAddress,
+    hasStoredAccess,
     rememberComputerVisit,
     rememberedComputers,
+    resumesComputer,
+    settleResumedComputer,
 } from "../../services/identity/remembered-computers.ts";
-import { anonymousCredentialsEntry, centralLocalStorage } from "../../services/local-storage/central-local-storage.ts";
 import {
     accessEndedComputerEntry,
     accessEndedNoticeEntry,
@@ -82,6 +84,9 @@ export const createAnonymousSessionStore = (
                         return;
                     }
                     if (hasIdentityScope()) {
+                        // A place this browser remembered falls back to the computer's home when it is gone; a link
+                        // someone gave the user reports that it no longer opens.
+                        const entry = resumesComputer() ? "restore" : "address";
                         const identity = await api.loadExisting(signal);
                         signal.throwIfAborted();
                         if (identity === null) {
@@ -93,7 +98,8 @@ export const createAnonymousSessionStore = (
                             });
                             return;
                         }
-                        activate(identity, "address", null);
+                        settleResumedComputer();
+                        activate(identity, entry, null);
                         return;
                     }
                     const ended = centralSessionStorage.read(accessEndedNoticeEntry) === "ended";
@@ -121,12 +127,10 @@ export const createAnonymousSessionStore = (
                     }
                     centralSessionStorage.remove(accessEndedNoticeEntry);
                     centralSessionStorage.remove(accessEndedComputerEntry);
-                    const hasLegacyAccess =
-                        Object.keys(centralLocalStorage.read(anonymousCredentialsEntry) ?? {}).length > 0;
                     set({
                         state: {
                             kind: "setup",
-                            notice: ended ? "access-ended" : hasLegacyAccess ? "legacy" : "none",
+                            notice: ended ? "access-ended" : hasStoredAccess() ? "legacy" : "none",
                             returnHref: null,
                         },
                     });

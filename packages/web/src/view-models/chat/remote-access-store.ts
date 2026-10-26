@@ -1,7 +1,12 @@
 import { createStore } from "zustand/vanilla";
 import { AnonymousIdentityApi, IdentityApiError } from "../../services/identity/anonymous-identity-api.ts";
 import { readIdentityScope } from "../../services/identity/identity-scope-url.ts";
-import { computerKey, rememberedComputers } from "../../services/identity/remembered-computers.ts";
+import {
+    computerKey,
+    rememberedComputers,
+    storedTokenForProject,
+    withStoredAccessLock,
+} from "../../services/identity/remembered-computers.ts";
 import {
     accessEndedComputerEntry,
     accessEndedNoticeEntry,
@@ -12,14 +17,15 @@ type RemoteAccessState =
     | { readonly kind: "available" }
     | { readonly kind: "loading" }
     | { readonly kind: "unavailable"; readonly message: string }
-    | { readonly kind: "confirming-end"; readonly accessToken: string }
-    | { readonly kind: "ending"; readonly accessToken: string }
+    | { readonly kind: "confirming-end" }
+    | { readonly kind: "ending" }
     | { readonly kind: "ended" }
-    | { readonly kind: "failed"; readonly accessToken: string; readonly message: string };
+    | { readonly kind: "failed"; readonly message: string };
 
 interface RemoteAccessOperations {
     readonly currentAccessToken: (signal: AbortSignal) => Promise<string>;
-    readonly endRemoteAccess: (token: string, signal: AbortSignal) => Promise<void>;
+    /** Ends the access this browser holds when it runs, while no other tab changes it. */
+    readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
 }
 
 export function createRemoteAccessOperations(options: {
@@ -32,21 +38,29 @@ export function createRemoteAccessOperations(options: {
     readonly onEnded: () => void;
 }): RemoteAccessOperations {
     const api = new AnonymousIdentityApi(options);
+    const currentAccessToken = async (signal: AbortSignal): Promise<string> => {
+        const localIdentity = await api.loadExisting(signal);
+        signal.throwIfAborted();
+        return localIdentity?.projectId === options.identity.projectId
+            ? localIdentity.token
+            : await options.identity.getToken(signal);
+    };
     return {
-        currentAccessToken: async (signal) => {
-            const localIdentity = await api.loadExisting(signal);
-            signal.throwIfAborted();
-            return localIdentity?.projectId === options.identity.projectId
-                ? localIdentity.token
-                : await options.identity.getToken(signal);
-        },
-        endRemoteAccess: async (token, signal) => {
+        currentAccessToken,
+        endRemoteAccess: async (signal) => {
             const scope = readIdentityScope();
             const computer =
                 scope === null
                     ? undefined
                     : rememberedComputers().find((entry) => computerKey(entry.scope) === computerKey(scope));
-            await api.endRemoteAccess(token, signal);
+            // Another tab may have replaced the access while the user confirmed; end the one held now. The Worker
+            // checks it, so it is read without validating it again, which would wait for this same lock.
+            await withStoredAccessLock(signal, async () =>
+                api.endRemoteAccess(
+                    storedTokenForProject(options.identity.projectId) ?? (await options.identity.getToken(signal)),
+                    signal,
+                ),
+            );
             signal.throwIfAborted();
             centralSessionStorage.write(accessEndedNoticeEntry, "ended");
             centralSessionStorage.write(accessEndedComputerEntry, computer?.name || "the previous computer");
@@ -70,9 +84,9 @@ export const createRemoteAccessStore = (operations: RemoteAccessOperations) =>
         requestEnd: async (signal) => {
             set({ state: { kind: "loading" } });
             try {
-                const accessToken = await operations.currentAccessToken(operationSignal(signal));
+                await operations.currentAccessToken(operationSignal(signal));
                 signal.throwIfAborted();
-                set({ state: { kind: "confirming-end", accessToken } });
+                set({ state: { kind: "confirming-end" } });
             } catch {
                 signal.throwIfAborted();
                 set({
@@ -89,9 +103,9 @@ export const createRemoteAccessStore = (operations: RemoteAccessOperations) =>
             if (state.kind !== "confirming-end" && state.kind !== "failed") {
                 return;
             }
-            set({ state: { kind: "ending", accessToken: state.accessToken } });
+            set({ state: { kind: "ending" } });
             try {
-                await operations.endRemoteAccess(state.accessToken, operationSignal(signal));
+                await operations.endRemoteAccess(operationSignal(signal));
                 signal.throwIfAborted();
                 set({ state: { kind: "ended" } });
             } catch (cause) {
@@ -99,7 +113,6 @@ export const createRemoteAccessStore = (operations: RemoteAccessOperations) =>
                 set({
                     state: {
                         kind: "failed",
-                        accessToken: state.accessToken,
                         message:
                             cause instanceof IdentityApiError && cause.code === "UNAUTHENTICATED"
                                 ? "This request was not authorized. Reload Morty to check your current access."

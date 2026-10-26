@@ -166,8 +166,10 @@ under the state directory and `mobius` shimmed to this checkout's CLI (so a
 globally installed CLI cannot speak a different relay protocol than the local
 Platform):
 
-- `DOCUMENT_DIR` is set to `<stateDir>/documents`, so the setup script writes
-  its private configuration there instead of the user's documents directory.
+- `MORTY_STATE_DIRECTORY` is set to `<stateDir>/morty`, so the setup script
+  keeps its private state there instead of this computer's application data
+  directory. `DOCUMENT_DIR` is set to `<stateDir>/documents`, so setup never
+  moves state an earlier release left in the user's Documents folder.
 - Mobius receives `MOBIUS_STATE_DIRECTORY=<stateDir>/mobius`, so every generated
   stack uses an isolated CLI manager and connection state. This prevents another
   checkout with a different CLI version from restarting or replacing its manager.
@@ -243,7 +245,7 @@ Details, inspection commands, and a failure-mode table are in
     The local Platform App is provisioned automatically.
 - `setup --state-dir DIR --harness ID --session-id ID [--workspace DIR]`
   - connect a local agent Runtime through the served setup bundle with
-    `DOCUMENT_DIR`, the Mobius state directory, and the CLI shim isolated under
+    Morty's setup state, `DOCUMENT_DIR`, the Mobius state directory, and the CLI shim isolated under
     the state directory; prints the handoff URL to continue as this user in the
     browser.
 - `status --state-dir DIR` - report process and HTTP health for a stack.

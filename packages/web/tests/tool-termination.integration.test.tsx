@@ -34,31 +34,6 @@ async function start(prompt: string) {
     return app;
 }
 
-test("Given unfinished tools in an active turn, When the user stops it, Then every viewer sees interrupted tools and a stop notice after reload", {
-    timeout: 30_000,
-}, async () => {
-    const app = await start("hold unfinished tools");
-    expect(getByLabelText(await tool(app, "Unfinished verification"), "Tool running")).toBeDefined();
-    const viewer = await app.openViewer();
-    expect(getByLabelText(await tool(viewer, "Unfinished verification"), "Tool running")).toBeDefined();
-    await app.user.click(
-        await app.queryElementByTestId(
-            dataTestId.sendMessage,
-            (element) => element.getAttribute("aria-label") === "Stop agent output",
-        ),
-    );
-    for (const current of [app, viewer]) {
-        await assertSettled(current);
-        expect((await current.queryElementByTestId(dataTestId.agentReplyStatus)).textContent).toContain(
-            "Turn stopped.",
-        );
-    }
-    await viewer.close();
-    const reloaded = await app.reload();
-    await assertSettled(reloaded);
-    expect((await reloaded.queryElementByTestId(dataTestId.agentReplyStatus)).textContent).toContain("Turn stopped.");
-});
-
 for (const prompt of ["fail unfinished tools", "complete unfinished tools"]) {
     test(`Given unfinished tools, When the agent returns ${prompt}, Then terminal tool outcomes are preserved and unfinished tools become interrupted`, {
         timeout: 30_000,

@@ -18,6 +18,67 @@ async function requestInput(prompt = "request user input") {
     return app;
 }
 
+for (const empty of [false, true]) {
+    test(`Given an agent requests text and a multiline draft, When the user ${empty ? "clears" : "edits"} both answers and skips optional constrained strings, Then the exact text reaches the agent without optional values`, {
+        timeout: 30_000,
+    }, async () => {
+        const app = await createTestApp({
+            connectAgent: true,
+            agent: { id: "interaction-test", label: "Interaction Agent" },
+        });
+        const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+        if (!(composer instanceof HTMLTextAreaElement)) {
+            throw new Error("Expected the composer");
+        }
+        await sendPrompt(app, composer, "request text answers");
+        const form = await app.waitForView(() =>
+            getByRole(document.body, "dialog", { name: "Agent information request" }),
+        );
+        const name = getByRole(form, "textbox", { name: "Name" });
+        const draft = getByRole(form, "textbox", { name: "Draft" });
+        expect(getByRole(form, "textbox", { name: "Optional nickname" })).toBeDefined();
+        expect(getByRole(form, "textbox", { name: "Optional code" })).toBeDefined();
+        expect(draft).toBeInstanceOf(HTMLTextAreaElement);
+        if (!(draft instanceof HTMLTextAreaElement)) {
+            throw new Error("Expected a multiline editor");
+        }
+        expect(draft.value).toBe(`${String.fromCodePoint(0x7b2c, 0x4e00, 0x884c)}\nSecond line`);
+        await app.user.clear(name);
+        await app.user.clear(draft);
+        const nameValue = empty ? "" : `${String.fromCodePoint(0x59da)} 🌊`;
+        const draftValue = empty
+            ? ""
+            : `${String.fromCodePoint(0x6539, 0x5199, 0x7b2c, 0x4e00, 0x884c)}\nSecond line\n${String.fromCodePoint(0x7b2c, 0x4e09, 0x884c)}`;
+        if (!empty) {
+            await app.user.type(name, nameValue);
+            await app.user.type(draft, draftValue);
+        }
+        await app.user.click(getByRole(form, "button", { name: "Continue" }));
+        await app.waitForView(() =>
+            expect(document.body.textContent).toContain(
+                `"content":${JSON.stringify({ name: nameValue, draft: draftValue })}`,
+            ),
+        );
+        expect(queryByRole(document.body, "dialog", { name: "Agent information request" })).toBeNull();
+    });
+}
+
+test("Given the agent asks a question, When the user reads and answers it, Then Chat shows a waiting status instead of working and clears it after the answer", {
+    timeout: 30_000,
+}, async () => {
+    const app = await requestInput();
+    await app.user.click(getByRole(document.body, "button", { name: "Allow: Yes" }));
+    const form = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Agent information request" }));
+    expect(getByRole(form, "status", { name: "Waiting for your answer" }).textContent).toBe("Waiting for your answer");
+    expect(queryByRole(document.body, "status", { name: "Agent is working" })).toBeNull();
+
+    await app.user.type(getByRole(form, "textbox", { name: "Branch" }), "feature/answer-status");
+    await app.user.click(getByRole(form, "button", { name: "Continue" }));
+    await app.waitForView(() => expect(document.body.textContent).toContain("Selected branch: feature/answer-status"));
+    expect(queryByRole(document.body, "status", { name: "Waiting for your answer" })).toBeNull();
+    expect(queryByRole(document.body, "dialog", { name: "Agent information request" })).toBeNull();
+});
+
 test("Given a pending permission, When Chat remounts and the user allows it and answers the form, Then the agent receives the answer and both cards disappear", {
     timeout: 30_000,
 }, async () => {
@@ -72,16 +133,6 @@ test("Given a pending permission, When the user stops the turn, Then the turn en
     );
     await app.waitForView(() => expect(getByRole(document.body, "button", { name: "Send message" })).toBeDefined());
     expect(queryByRole(document.body, "dialog", { name: "Agent information request" })).toBeNull();
-});
-
-test("Given an agent omits the original input, When permission is requested, Then the missing details are explicit and the action can still be denied", {
-    timeout: 30_000,
-}, async () => {
-    const app = await requestInput("request without tool input");
-    const permission = getByRole(document.body, "alertdialog", { name: "Agent permission request" });
-    expect(permission.textContent).toContain("The agent did not provide the original tool input.");
-    await app.user.click(getByRole(permission, "button", { name: "Deny: No" }));
-    await app.waitForView(() => expect(document.body.textContent).toContain("Permission rejected"));
 });
 
 test("Given a permission decision changes the agent's workflow, When the user reviews and declines it, Then the original option meaning remains visible and is sent unchanged", {

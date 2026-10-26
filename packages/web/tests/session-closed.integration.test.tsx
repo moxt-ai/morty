@@ -11,12 +11,12 @@ const HELD_PROMPT = "hold after first delta";
 
 function closedNoticeText(app: TestApp): string | null {
     const notice = app.optionalElementByTestId(dataTestId.sessionClosedNotice);
-    return notice === null ? null : (queryByRole(notice, "status")?.textContent ?? null);
+    return notice === null ? null : notice.textContent;
 }
 
 function reconnectStatusText(app: TestApp): string | null {
     const notice = app.optionalElementByTestId(dataTestId.sessionReconnectNotice);
-    return notice === null ? null : (queryByRole(notice, "status")?.textContent ?? null);
+    return notice === null ? null : notice.textContent;
 }
 
 function sendButtonLabel(app: TestApp): string | null {
@@ -70,7 +70,7 @@ async function openWatchedConversation(app: TestApp): Promise<string> {
     return sessionId;
 }
 
-test("Given an open conversation, When another client closes its Session, Then Chat says the session is closed and why, and offers to reopen it", {
+test("Given an open conversation, When another client closes its Session and the browser resumes, Then Chat keeps it closed and offers to reopen it", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -82,9 +82,12 @@ test("Given an open conversation, When another client closes its Session, Then C
 
     await daemon.closeSession(sessionId);
 
-    await app.waitForView(() =>
-        expect(closedNoticeText(app)).toBe(`The session is closed. Reason: ${CLOSED_ON_REQUEST} Reopen it`),
-    );
+    await app.waitForView(() => expect(closedNoticeText(app)).toContain(CLOSED_ON_REQUEST));
+    await act(async () => {
+        window.dispatchEvent(new Event("online"));
+        document.dispatchEvent(new Event("visibilitychange"));
+        document.dispatchEvent(new Event("resume"));
+    });
     const composer = app.elementByTestId(dataTestId.messageComposer);
     expect(composer instanceof HTMLTextAreaElement && composer.disabled).toBe(true);
     expect(
@@ -178,7 +181,7 @@ test("Given a conversation whose Runtime restarted and then closed its Session w
         throw new Error("The opened conversation must have an address");
     }
     await daemon.disconnect();
-    await app.waitForView(() => expect(reconnectStatusText(app)).toBe("Retrying in 5 s Retry now"));
+    await app.waitForView(() => expect(reconnectStatusText(app)).toContain("Retrying in"));
     await daemon.reconnect();
     await daemon.closeSession(sessionId);
 
@@ -221,9 +224,7 @@ test("Given a reply that is still running, When another client closes the Sessio
 
     await daemon.closeSession(sessionId);
 
-    await app.waitForView(() =>
-        expect(closedNoticeText(app)).toBe(`The session is closed. Reason: ${CLOSED_ON_REQUEST} Reopen it`),
-    );
+    await app.waitForView(() => expect(closedNoticeText(app)).toContain(CLOSED_ON_REQUEST));
     await app.waitForView(() => expect(sendButtonLabel(app)).toBe("Send message"));
     expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
     expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();

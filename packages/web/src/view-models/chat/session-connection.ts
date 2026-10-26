@@ -1,9 +1,7 @@
 import { type MobiusClient, MobiusError } from "@moxt-ai/mobius-sdk";
 
-// The Session pane's connection state and its reconnect policy. The Mobius SDK
-// already retries a dropped live stream quickly; this policy is the slower
-// outer layer that reopens the Session after the SDK gives up or the Runtime is
-// unreachable.
+// The Session pane owns live-stream recovery; SDK retries are disabled so
+// connection attempts and reconciliation share one bounded retry policy.
 
 export type SessionConnection =
     | { readonly kind: "loading" }
@@ -29,6 +27,7 @@ export type SessionConnection =
 
 type SessionReconnectRetry =
     | { readonly kind: "scheduled"; readonly remainingSeconds: number }
+    | { readonly kind: "waiting-for-bridge" }
     | { readonly kind: "exhausted" };
 
 const SESSION_RECONNECT_DELAYS_MS = [5_000, 10_000, 20_000] as const;
@@ -87,13 +86,11 @@ export function sessionReconnectAttempt(
     if (consecutiveFailures >= SESSION_AUTO_RECONNECT_ATTEMPTS) {
         return { kind: "exhausted" };
     }
-    return {
-        kind: "scheduled",
-        delayMs: Math.min(
-            SESSION_RECONNECT_DELAYS_MS[consecutiveFailures] ?? SESSION_RECONNECT_DELAY_CAP_MS,
-            SESSION_RECONNECT_DELAY_CAP_MS,
-        ),
-    };
+    const ceiling = Math.min(
+        SESSION_RECONNECT_DELAYS_MS[consecutiveFailures] ?? SESSION_RECONNECT_DELAY_CAP_MS,
+        SESSION_RECONNECT_DELAY_CAP_MS,
+    );
+    return { kind: "scheduled", delayMs: Math.round(ceiling * (0.5 + Math.random() * 0.5)) };
 }
 
 /** The disconnected state while an automatic retry counts down, or after retries are exhausted. */

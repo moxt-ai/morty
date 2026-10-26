@@ -1,13 +1,15 @@
 import type { StoreApi } from "zustand/vanilla";
+import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import type { BotChatApi, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
-import type { IdentityScope } from "../../services/identity/identity-scope-url.ts";
+import { encodeIdentityScope, type IdentityScope } from "../../services/identity/identity-scope-url.ts";
 import { rememberComputerName, rememberComputerVisit } from "../../services/identity/remembered-computers.ts";
+import { isRuntimeConnectionFailure } from "../../services/management/management-api.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import type { BugReportDialogStore } from "../bug-report-dialog-store.ts";
 import { formatError } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
-import { type BotChatHomeStoreApi, createBotChatHomeStore } from "./bot-chat-home-store.ts";
+import { type BotChatHomeStoreApi, createBotChatHomeStore, homeWaitsForRuntime } from "./bot-chat-home-store.ts";
 import type { ComputerSwitcherModel } from "./computer-switcher-store.ts";
 import { type ConversationDirectoryStore, createConversationDirectoryStore } from "./conversation-directory-store.ts";
 import type { ConversationSelectionState, SelectedConversationTarget } from "./conversation-selection-machine.ts";
@@ -17,6 +19,7 @@ import { createDraftControlsStore, type DraftControlsStore } from "./draft-contr
 import { createNetworkDiagnosticStore, type NetworkDiagnosticStore } from "./network-diagnostic-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
+import { createRuntimeRecovery } from "./runtime-recovery.ts";
 import type { SessionActivityState } from "./session-activity-machine.ts";
 import { createSessionPaneModel, type SessionPaneModel } from "./session-pane-store.ts";
 import { createSidebarDialogs, type SidebarDialogs } from "./sidebar-dialogs.ts";
@@ -138,7 +141,7 @@ export function createChatWorkspace(options: {
     readonly url?: string;
     readonly createTransfer?: ((signal: AbortSignal) => Promise<IdentityTransfer>) | undefined;
     readonly currentAccessToken?: ((signal: AbortSignal) => Promise<string>) | undefined;
-    readonly endRemoteAccess?: ((token: string, signal: AbortSignal) => Promise<void>) | undefined;
+    readonly endRemoteAccess?: ((signal: AbortSignal) => Promise<void>) | undefined;
     readonly networkDiagnostics?: {
         readonly measureBrowserMobius: (origin: string, signal: AbortSignal) => Promise<number>;
         readonly measureBrowserMorty: (signal: AbortSignal) => Promise<number>;
@@ -156,11 +159,16 @@ export function createChatWorkspace(options: {
     };
     const home = createBotChatHomeStore(requests, {
         botId,
+        identityKey: options.rememberedIdentity === undefined ? null : encodeIdentityScope(options.rememberedIdentity),
+        now: options.clock.now,
+        onRuntimeConfigurationUnavailable: () => options.computers?.invalidateCurrent(),
+        onWaitingForRuntime: () => runtimeRecovery.failed(),
         createId: () => crypto.randomUUID(),
         navigation: historyNavigation(recordHome),
         entry: options.entry ?? "address",
-        onRuntimeConfiguration: (configuration) => {
+        onRuntimeConfiguration: (configuration, observation) => {
             options.computers?.updateCurrent(configuration);
+            sidebar.dialogs.getState().runtimeChanged();
             void draftControls
                 .getState()
                 .runtimeChanged(configuration, chatLifetime.signal)
@@ -174,6 +182,7 @@ export function createChatWorkspace(options: {
             if (options.rememberedIdentity !== undefined) {
                 rememberComputerName(options.rememberedIdentity, configuration.runtime.machineName);
             }
+            runtimeRecovery.observe(configuration.runtime.online, observation);
         },
         onDraftSelected: () => {
             void draftControls
@@ -188,19 +197,27 @@ export function createChatWorkspace(options: {
         onDirectoryRefreshed: () => startDirectoryLoad(),
         onConversationCreated: (conversationId, title) =>
             directory.getState().conversationCreated(conversationId, title),
-        onSelectionReady: (selection) => replacePane(selection),
+        onSelectionReady: (selection) => {
+            runtimeRecovery.working();
+            replacePane(selection);
+        },
         onSelectionTargeted: (conversationId) => statuses.getState().selectionChanged(conversationId),
         url: options.url ?? window.location.href,
     });
     const directory = createConversationDirectoryStore(botId, requests, (sessions) => {
         statuses.getState().directoryLoaded(botId, sessions, statusLifetime.signal);
     });
-    const statuses = createConversationStatusStore(requests, (sessionId, reason) => {
-        // Only the open pane has something to tell its user; the other Sessions reopen when selected.
-        if (paneEntry?.session.result.ready.sessionId === sessionId) {
-            paneEntry.model.store.getState().sessionClosed(reason);
-        }
-    });
+    const statuses = createConversationStatusStore(
+        requests,
+        (sessionId, reason) => {
+            // Only the open pane has something to tell its user; the other Sessions reopen when selected.
+            if (paneEntry?.session.result.ready.sessionId === sessionId) {
+                paneEntry.model.store.getState().sessionClosed(reason);
+            }
+        },
+        () => runtimeRecovery.failed(),
+        () => runtimeRecovery.working(),
+    );
     const draftControls = createDraftControlsStore(
         botId,
         requests,
@@ -217,6 +234,7 @@ export function createChatWorkspace(options: {
             clock: options.clock,
             botId,
             requests,
+            runtime: () => home.getState().runtimeConfiguration?.runtime ?? null,
             createTransfer: (signal) => {
                 if (options.createTransfer === undefined) {
                     return Promise.reject(new Error("Identity sharing is unavailable."));
@@ -235,11 +253,11 @@ export function createChatWorkspace(options: {
                 }
                 return options.currentAccessToken(signal);
             },
-            endRemoteAccess: (token, signal) => {
+            endRemoteAccess: (signal) => {
                 if (options.endRemoteAccess === undefined) {
                     return Promise.reject(new Error("Remote access is unavailable."));
                 }
-                return options.endRemoteAccess(token, signal);
+                return options.endRemoteAccess(signal);
             },
         }),
         networkDiagnostic: createNetworkDiagnosticStore({
@@ -291,12 +309,47 @@ export function createChatWorkspace(options: {
     const startDirectoryLoad = (): void => {
         directoryLifetime.abort(new Error("Directory loading restarted."));
         directoryLifetime = new AbortController();
+        const signal = directoryLifetime.signal;
         statuses.getState().directoryLoadStarted();
         void directory
             .getState()
-            .load(directoryLifetime.signal)
-            .catch(() => undefined);
+            .load(signal)
+            .catch(() => undefined)
+            .finally(() => {
+                if (signal.aborted) {
+                    return;
+                }
+                if (listWaitsForRuntime()) {
+                    runtimeRecovery.failed();
+                } else {
+                    runtimeRecovery.working();
+                }
+            });
     };
+    const listWaitsForRuntime = (): boolean => {
+        const listed = directory.getState().state.kind;
+        return listed === "failed" || listed === "stale";
+    };
+    /**
+     * Retries everything the page reads through the Runtime that it could not read while the Runtime was unreachable:
+     * the home view, the session list, and the stream that follows their statuses. Each retries only what it lost.
+     * Restarting the home view reloads the list with it, and a list load follows the statuses again.
+     */
+    const runtimeRecovery = createRuntimeRecovery({
+        clock: options.clock,
+        lifetime: operationsLifetime.signal,
+        waiting: () =>
+            homeWaitsForRuntime(home.getState()) || listWaitsForRuntime() || statuses.getState().unfollowed(),
+        retry: () => {
+            if (homeWaitsForRuntime(home.getState())) {
+                home.getState().retry();
+            } else if (listWaitsForRuntime()) {
+                startDirectoryLoad();
+            } else {
+                statuses.getState().follow(statusLifetime.signal);
+            }
+        },
+    });
     const announcedViews = new WeakSet<HTMLElement>();
     const loadSelectedSession = (target: SelectedConversationTarget): void => {
         const sessionId = target.kind === "conversation" ? target.conversationId : target.sessionId;
@@ -352,6 +405,10 @@ export function createChatWorkspace(options: {
                     home.setState((state) => ({
                         selection: transitionConversationSelection(state.selection, {
                             kind: "session-load-failed",
+                            failure:
+                                isRuntimeConnectionFailure(cause) || isChatBridgeError(cause)
+                                    ? "connection"
+                                    : "unavailable",
                             message: formatError(cause, "The Session could not be loaded."),
                             target: current.target,
                         }),
@@ -424,14 +481,14 @@ export function createChatWorkspace(options: {
             );
             rememberedSessionId = sessionId;
         }
-        const creation = home.getState().creation;
+        const firstMessage = home.getState().firstMessages.get(sessionId);
         const model = createSessionPaneModel({
             clock: options.clock,
             session: selection.session,
             botId,
             requests,
-            initialMessage: creation.kind === "initial-message-pending" ? creation.message : undefined,
-            unconfirmedMessage: creation.kind === "initial-message-unconfirmed" ? creation.journal : undefined,
+            initialMessage: firstMessage?.kind === "pending" ? firstMessage.message : undefined,
+            unconfirmedMessage: firstMessage?.kind === "unconfirmed" ? firstMessage.journal : undefined,
             onInitialMessageDelivered: () => home.getState().initialMessageDelivered(sessionId),
             onInitialMessageRecoveryCleared: (commandId) =>
                 home.getState().initialMessageRecoveryCleared(sessionId, commandId),

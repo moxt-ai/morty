@@ -40,7 +40,7 @@ export class AuthenticationService {
         if (userId === null) {
             return null;
         }
-        return await this.identities.createTransfer(userId, Date.now(), signal);
+        return await this.identities.createTransfer(userId, token, Date.now(), signal);
     };
 
     readonly createRecoveryToken = async (token: string | undefined, signal: AbortSignal): Promise<string | null> => {
@@ -51,11 +51,51 @@ export class AuthenticationService {
         if (userId === null) {
             return null;
         }
-        return await this.identities.createRecoveryToken(userId, Date.now(), signal);
+        return await this.identities.createRecoveryToken(userId, token, Date.now(), signal);
     };
 
-    readonly redeemTransfer = async (code: string, signal: AbortSignal): Promise<AnonymousIdentity | null> =>
-        await this.identities.redeemTransfer(code, Date.now(), signal);
+    readonly redeemTransfer = async (
+        code: string,
+        replaces: string | null,
+        signal: AbortSignal,
+    ): Promise<AnonymousIdentity | null> => await this.identities.redeemTransfer(code, replaces, Date.now(), signal);
+
+    /**
+     * The user behind the machine's own local credential. Shared browser and recovery credentials are not local, so
+     * they cannot administer the user's access or Project.
+     */
+    readonly localIdentity = async (
+        token: string | undefined,
+        signal: AbortSignal,
+    ): Promise<
+        | { readonly kind: "local"; readonly userId: string; readonly token: string }
+        | { readonly kind: "unauthenticated" }
+        | { readonly kind: "forbidden" }
+    > => {
+        if (token === undefined) {
+            return { kind: "unauthenticated" };
+        }
+        const userId = await this.identities.authenticateAnonymous(token, signal);
+        if (userId === null) {
+            return { kind: "unauthenticated" };
+        }
+        if (!token.startsWith("mobius_anon_v2_") || !(await this.identities.isLocalCredential(token, userId, signal))) {
+            return { kind: "forbidden" };
+        }
+        return { kind: "local", userId, token };
+    };
+
+    readonly revokeAllAccess = async (
+        token: string | undefined,
+        signal: AbortSignal,
+    ): Promise<{ readonly kind: "revoked" | "unauthenticated" | "forbidden" }> => {
+        const local = await this.localIdentity(token, signal);
+        if (local.kind !== "local") {
+            return local;
+        }
+        await this.identities.revokeOtherAccess(local.userId, local.token, Date.now(), signal);
+        return { kind: "revoked" };
+    };
 
     readonly endRemoteAccess = async (token: string | undefined, signal: AbortSignal) => {
         if (token === undefined) {

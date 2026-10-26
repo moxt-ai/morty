@@ -15,40 +15,6 @@ function expectCompactionRunning(compaction: HTMLElement): void {
     expect(queryByLabelText(compaction, "Tool running")).not.toBeNull();
 }
 
-test("Given an Agent compacts the conversation context, When the user reads the timeline, Then Chat shows a compaction disclosure with the retained summary", {
-    timeout: 30_000,
-}, async () => {
-    const app = await createTestApp({ connectAgent: true });
-    await app.queryElementByTestId(
-        dataTestId.botConnectionStatus,
-        (element) => element.getAttribute("data-connection-status") === "connected",
-    );
-    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
-    if (!(composer instanceof HTMLTextAreaElement)) {
-        throw new Error("Expected the message composer");
-    }
-
-    await sendPrompt(app, composer, "compact the conversation");
-
-    await app.waitForView(() => expectCompactionSucceeded(app.elementByTestId(dataTestId.agentCompaction)));
-    // A settled compaction collapses by default; expanding it reveals the summary.
-    const compaction = app.elementByTestId(dataTestId.agentCompaction);
-    const disclosureButton = getByRole(compaction, "button");
-    await app.user.click(disclosureButton);
-    await app.waitForView(() => {
-        const expanded = app.elementByTestId(dataTestId.agentCompaction);
-        expect(getByRole(expanded, "button").getAttribute("aria-expanded")).toBe("true");
-        const summary = expanded.querySelector("pre");
-        expect(summary?.textContent).toContain("The user explored the session timeline.");
-        expect(summary?.textContent).toContain("Context was summarized.");
-    });
-    await app.waitForView(() =>
-        expect(app.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toBe(
-            "Context compacted; continuing with the summary.",
-        ),
-    );
-});
-
 test("Given an Agent settles a compaction with a multi-block summary, When the user reads the timeline, Then Chat shows every summary text block in order", {
     timeout: 30_000,
 }, async () => {

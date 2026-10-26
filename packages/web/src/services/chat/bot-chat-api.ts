@@ -26,6 +26,7 @@ import {
     type SessionStatusChangedEvent,
 } from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
+import type { ApiResponseSnapshot, ApiTransport } from "../api/api-transport.ts";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 
@@ -68,8 +69,16 @@ const managedSessionSchema = v.pipe(
     v.readonly(),
 );
 export type ManagedChatSession = v.InferOutput<typeof managedSessionSchema>;
-/** What the Chat Worker's Session stream tells this page: a Session's activity changed, or the Runtime closed one. */
-export type ManagedSessionEvent = SessionStatusChangedEvent | SessionCloseNoticeEvent;
+/** The Chat Worker sends this once the status stream reaches the Runtime and follows the Sessions. */
+const MANAGED_SESSION_STATUSES_FOLLOWING_KIND = "managed-session.statuses.following";
+/**
+ * What the Chat Worker's Session stream tells this page: it follows the Sessions, a Session's activity changed, or the
+ * Runtime closed one.
+ */
+export type ManagedSessionEvent =
+    | { readonly kind: typeof MANAGED_SESSION_STATUSES_FOLLOWING_KIND }
+    | SessionStatusChangedEvent
+    | SessionCloseNoticeEvent;
 const chatRuntimeSchema = v.object({
     runtimeId: identifier,
     machineName: v.string(),
@@ -164,7 +173,7 @@ function sessionEndpoint(value: string): string {
 
 class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTransport {
     readonly #http = new HttpTransport();
-    readonly #webSocket = new WsTransport();
+    #webSocket = new WsTransport();
 
     readonly #fetch = async (request: Request): Promise<Response> =>
         await (request.headers.get("accept")?.startsWith("text/event-stream") === true ||
@@ -233,36 +242,59 @@ class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTra
         }
     };
 
+    readonly reset = (): void => {
+        const previous = this.#webSocket;
+        this.#webSocket = new WsTransport();
+        previous.close();
+    };
     readonly close = (): void => this.#webSocket.close();
 }
 
 export class BotChatApi {
-    readonly #agentSettingsCache = new Map<string, AgentSettingsResult>();
     readonly #fetchRequest: (request: Request) => Promise<Response>;
     readonly #origin: string;
     readonly #projectId: string;
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
+    readonly #replacedToken: ((rejected: string, signal: AbortSignal) => Promise<string | null>) | undefined;
     readonly #sessionTransports = new Map<string, BrowserSessionTransport>();
     readonly #subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
-    readonly #waitForChange: (request: Request) => Promise<void>;
+    readonly #waitForChange: ApiTransport["waitForChange"];
+    readonly recoverBridge: ApiTransport["recover"];
+    readonly #waitForBridge: ApiTransport["waitForBridge"];
     readonly readBot: ManagementApi["readBot"];
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
         readonly origin: string;
         readonly projectId: string;
         readonly getToken: (signal: AbortSignal) => Promise<string | null>;
+        /**
+         * The access that replaced `rejected`, once whoever replaces it has finished, or null when nothing did. A
+         * request refused while another tab replaced its access is sent again with the replacement.
+         */
+        readonly replacedToken?: (rejected: string, signal: AbortSignal) => Promise<string | null>;
         readonly subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
-        readonly waitForChange: (request: Request) => Promise<void>;
+        readonly waitForChange: ApiTransport["waitForChange"];
+        readonly recoverBridge: ApiTransport["recover"];
+        readonly waitForBridge: ApiTransport["waitForBridge"];
     }) {
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
         this.#projectId = v.parse(identifier, options.projectId);
         this.#fetchRequest = options.fetchRequest;
         this.#getToken = options.getToken;
+        this.#replacedToken = options.replacedToken;
         this.#subscribe = options.subscribe;
         this.#waitForChange = options.waitForChange;
+        this.#waitForBridge = options.waitForBridge;
+        this.recoverBridge = options.recoverBridge;
         const management = new ManagementApi(options);
         this.readBot = management.readBot;
     }
+    readonly waitForBridge = async (signal: AbortSignal): Promise<void> => await this.#waitForBridge(signal);
+    readonly resetSessionConnections = (): void => {
+        for (const transport of this.#sessionTransports.values()) {
+            transport.reset();
+        }
+    };
     readonly close = (): void => {
         for (const transport of this.#sessionTransports.values()) {
             transport.close();
@@ -353,6 +385,9 @@ export class BotChatApi {
             (data) => {
                 // A newer Chat Worker may send other kinds; this page skips them and keeps its stream.
                 switch (decodeMessageKind(data)) {
+                    case MANAGED_SESSION_STATUSES_FOLLOWING_KIND:
+                        receive({ kind: MANAGED_SESSION_STATUSES_FOLLOWING_KIND });
+                        return;
                     case SESSION_CLOSE_NOTICE_KIND:
                         receive(decodeSessionCloseNoticeEvent(data));
                         return;
@@ -417,21 +452,11 @@ export class BotChatApi {
     readonly agentSettings = async (
         botId: string,
         agentRef: string,
-        refresh: boolean,
         signal: AbortSignal,
     ): Promise<AgentSettingsResult> => {
         signal.throwIfAborted();
         const requestedBotId = v.parse(identifier, botId);
         const requestedAgentRef = v.parse(identifier, agentRef);
-        const cacheKey = JSON.stringify([requestedBotId, requestedAgentRef]);
-        if (refresh) {
-            this.#agentSettingsCache.delete(cacheKey);
-        } else {
-            const cached = this.#agentSettingsCache.get(cacheKey);
-            if (cached !== undefined) {
-                return cached;
-            }
-        }
         const result = v.parse(
             v.object({ settings: v.unknown() }),
             await this.#request(requestedBotId, "agent-settings", { agentRef: requestedAgentRef }, signal),
@@ -446,7 +471,6 @@ export class BotChatApi {
                         : defaultValue,
             })),
         };
-        this.#agentSettingsCache.set(cacheKey, settings);
         return settings;
     };
     readonly runtimeConfiguration = async (botId: string, parent: AbortSignal): Promise<BotRuntimeConfiguration> =>
@@ -459,6 +483,7 @@ export class BotChatApi {
         botId: string,
         resource: "setup/runtimes" | "workspace",
         parent: AbortSignal,
+        onReady?: (snapshot: ApiResponseSnapshot) => void,
     ) => {
         const signal = AbortSignal.any([parent, AbortSignal.timeout(10 * 60 * 1000)]);
         const token = await this.#getToken(signal);
@@ -473,12 +498,27 @@ export class BotChatApi {
                 ),
                 { method: "POST", headers: { authorization: `Bearer ${token}` }, signal },
             ),
+            onReady,
         );
     };
     readonly waitForSetupChange = async (botId: string, parent: AbortSignal): Promise<void> =>
         await this.#waitForBotChange(botId, "setup/runtimes", parent);
-    readonly waitForRuntimeConfigurationChange = async (botId: string, parent: AbortSignal): Promise<void> =>
-        await this.#waitForBotChange(botId, "workspace", parent);
+    readonly waitForRuntimeConfigurationChange = async (
+        botId: string,
+        parent: AbortSignal,
+        onReady?: (configuration: BotRuntimeConfiguration) => void,
+    ): Promise<void> =>
+        await this.#waitForBotChange(
+            botId,
+            "workspace",
+            parent,
+            onReady === undefined
+                ? undefined
+                : (snapshot) => {
+                      const value = this.#readResponse(snapshot, parent);
+                      onReady(v.parse(runtimeConfigurationSchema, value));
+                  },
+        );
     readonly nativeSessions = async (
         botId: string,
         runtimeId: string,
@@ -606,33 +646,53 @@ export class BotChatApi {
         if (token === null) {
             throw new CloudApiError("UNAUTHENTICATED", "Your session is unavailable.");
         }
-        const response = await this.#fetchRequest(
-            new Request(
-                new URL(
-                    `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(requestedBotId)}/${operation}`,
-                    this.#origin,
-                ),
-                {
-                    method: "POST",
-                    signal,
-                    redirect: "error",
-                    headers: {
-                        authorization: `Bearer ${token}`,
-                        "content-type": "application/json",
+        const send = (access: string) =>
+            this.#fetchRequest(
+                new Request(
+                    new URL(
+                        `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(requestedBotId)}/${operation}`,
+                        this.#origin,
+                    ),
+                    {
+                        method: "POST",
+                        signal,
+                        redirect: "error",
+                        headers: {
+                            authorization: `Bearer ${access}`,
+                            "content-type": "application/json",
+                        },
+                        body: body === undefined ? null : JSON.stringify(body),
                     },
-                    body: body === undefined ? null : JSON.stringify(body),
-                },
-            ),
-        );
+                ),
+            );
+        let response = await send(token);
+        if (response.status === 401 && this.#replacedToken !== undefined) {
+            const replacement = await this.#replacedToken(token, signal);
+            if (replacement !== null) {
+                await response.body?.cancel();
+                response = await send(replacement);
+            }
+        }
+        let responseBody: string;
+        try {
+            responseBody = await response.text();
+        } catch {
+            signal.throwIfAborted();
+            throw new CloudApiError("CHAT_UNAVAILABLE", "Chat returned an invalid response.");
+        }
+        return this.#readResponse({ status: response.status, headers: response.headers, body: responseBody }, signal);
+    };
+    readonly #readResponse = (response: ApiResponseSnapshot, signal: AbortSignal): unknown => {
+        signal.throwIfAborted();
         let value: unknown;
         try {
-            value = await response.json();
+            value = JSON.parse(response.body);
         } catch {
             signal.throwIfAborted();
             throw new CloudApiError("CHAT_UNAVAILABLE", "Chat returned an invalid response.");
         }
         signal.throwIfAborted();
-        if (!response.ok) {
+        if (response.status < 200 || response.status >= 300) {
             const parsed = v.safeParse(v.object({ error: v.object({ code: v.string(), message: v.string() }) }), value);
             throw new CloudApiError(
                 parsed.success ? parsed.output.error.code : "CHAT_UNAVAILABLE",

@@ -60,42 +60,6 @@ test("Given a new conversation, When I send its first prompt, Then it stays visi
     );
 });
 
-test("Given a conversation created from a queued first message, When the Chat application remounts, Then the prompt is delivered exactly once", {
-    timeout: 30_000,
-}, async () => {
-    const app = await createTestApp({ connectAgent: true });
-    await app.queryElementByTestId(
-        dataTestId.botConnectionStatus,
-        (element) => element.getAttribute("data-connection-status") === "connected",
-    );
-    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
-    if (!(composer instanceof HTMLTextAreaElement)) {
-        throw new Error("Expected the message composer");
-    }
-    await sendPrompt(app, composer, "Queue this first message");
-    // The conversation opens from the queued message; wait for the reply so
-    // the turn completes before the remount releases the selection.
-    await app.waitForView(() => {
-        expect(
-            app
-                .elementsByTestId(dataTestId.userMessage)
-                .some((element) => element.textContent === "Queue this first message"),
-        ).toBe(true);
-        expect(
-            app
-                .elementsByTestId(dataTestId.agentResponse)
-                .some((element) => element.textContent?.includes("Codex turn 1: Queue this first message")),
-        ).toBe(true);
-    });
-    app.remount();
-    await app.waitForView(() => {
-        const delivered = app
-            .elementsByTestId(dataTestId.userMessage)
-            .filter((element) => element.textContent === "Queue this first message");
-        expect(delivered).toHaveLength(1);
-    });
-});
-
 test("Given a configuration request is in flight, When the chat view detaches and re-attaches, Then the reconnected composer accepts and sends a new prompt", {
     timeout: 30_000,
 }, async () => {

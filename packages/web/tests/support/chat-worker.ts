@@ -4,6 +4,7 @@ import * as v from "valibot";
 import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
 import { createIdentityFixture } from "../../../worker/tests/support/identity-fixture.ts";
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
+import type { Clock } from "../../src/services/time/clock.ts";
 
 export async function createChatWorkerEnvironment() {
     const cloud = await createIdentityFixture({
@@ -13,7 +14,7 @@ export async function createChatWorkerEnvironment() {
         wranglerConfiguration: pathToFileURL(resolve(process.cwd(), "../../wrangler.jsonc")),
     });
     const origin = cloud.origin;
-    const createApplication = async () => {
+    const createApplication = async (clock?: Clock) => {
         const identityResponse = await cloud.dispatchFetch(`${origin}/morty/api/identity/anonymous-users`, {
             method: "POST",
         });
@@ -39,7 +40,7 @@ export async function createChatWorkerEnvironment() {
                 ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             });
         const botId = identity.bot.botId;
-        const transport = new WebSocketApiTransport(origin);
+        const transport = new WebSocketApiTransport(origin, clock);
         transport.open();
         const connect = async (agents: readonly ControlledAgent[], nativeSessionIds?: ReadonlySet<string>) => {
             const runtime = await cloud.connectAgent(identity.projectId, agents, nativeSessionIds);
@@ -113,7 +114,7 @@ export async function createChatWorkerEnvironment() {
             origin,
             transport,
             userId: identity.userId,
-            close: () => transport.close(),
+            close: () => transport.dispose(),
         };
     };
     return {

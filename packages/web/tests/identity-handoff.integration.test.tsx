@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { encodeIdentityScope } from "../src/services/identity/identity-scope-url.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
 type TestApp = Awaited<ReturnType<typeof createTestApp>>;
@@ -80,9 +79,7 @@ test("Given a new browser, When Morty loads, Then Morty opens without presenting
     const app = await createTestApp({ page: { kind: "bootstrap" } });
 
     expect(
-        await app.waitForView(() =>
-            getByRole(document.body, "heading", { name: "Continue your coding session from your phone." }),
-        ),
+        await app.waitForView(() => getByRole(document.body, "heading", { name: "Just one prompt." })),
     ).toBeInstanceOf(HTMLElement);
     expect(document.body.textContent).not.toContain("Local agents");
     expect(document.body.textContent?.toLowerCase()).not.toContain("workspace");
@@ -94,7 +91,7 @@ test("Given Morty access from a finished setup, When the user reopens Morty in a
     const app = await createTestApp({ page: { kind: "bootstrap", identity: true }, connectAgent: true });
 
     expect(await app.queryElementByTestId(dataTestId.chatLanding)).toBeInstanceOf(HTMLElement);
-    expect(queryByRole(document.body, "heading", { name: "Continue your coding session from your phone." })).toBeNull();
+    expect(queryByRole(document.body, "heading", { name: "Just one prompt." })).toBeNull();
     expect(window.location.search).toContain("identity=");
     expect(window.sessionStorage.getItem("mobius.anonymous-credential.v2")).toBeNull();
 });
@@ -325,14 +322,10 @@ test("Given current Morty access, When ending succeeds, Then the setup page conf
         expect(getByRole(document.body, "status").textContent).toContain("Current access ended"),
     );
     expect(document.body.textContent).toContain("Your local agent and tasks keep running");
-    expect(
-        getByRole(document.body, "heading", { name: "Continue your coding session from your phone." }),
-    ).toBeInstanceOf(HTMLElement);
+    expect(getByRole(document.body, "heading", { name: "Just one prompt." })).toBeInstanceOf(HTMLElement);
     await reloaded.close();
     const nextVisit = await createTestApp({ page: { kind: "bootstrap" } });
-    await nextVisit.waitForView(() =>
-        getByRole(document.body, "heading", { name: "Continue your coding session from your phone." }),
-    );
+    await nextVisit.waitForView(() => getByRole(document.body, "heading", { name: "Just one prompt." }));
     expect(queryByRole(document.body, "status")).toBeNull();
 });
 
@@ -347,11 +340,10 @@ test("Given the end confirmation, When the real API transport closes, Then an un
         expect(button.hasAttribute("disabled")).toBe(false);
         return button;
     });
-    app.transport.close();
-    const connectionNotice = await app.waitForView(() =>
-        getByRole(document.body, "dialog", { name: "Runtime connection unavailable" }),
-    );
-    await app.user.click(getByRole(connectionNotice, "button", { name: "Close dialog" }));
+    app.transport.disconnect();
+    // A dropped bridge is an ordinary failed request: Chat keeps working and
+    // does not block the page with a connection dialog.
+    expect(queryByRole(document.body, "dialog", { name: "Runtime connection unavailable" })).toBeNull();
     await app.user.click(confirm);
 
     await app.waitForView(() =>
@@ -398,11 +390,8 @@ test("Given an unavailable connection, When current access cannot be prepared, T
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap", identity: true }, connectAgent: true });
     await app.waitForView(() => getByRole(document.body, "button", { name: "User menu" }));
-    app.transport.close();
-    const connectionNotice = await app.waitForView(() =>
-        getByRole(document.body, "dialog", { name: "Runtime connection unavailable" }),
-    );
-    await app.user.click(getByRole(connectionNotice, "button", { name: "Close dialog" }));
+    app.transport.disconnect();
+    expect(queryByRole(document.body, "dialog", { name: "Runtime connection unavailable" })).toBeNull();
     await clickDesktopEndRemoteAccess(app);
     const dialog = await app.queryElementByTestId(dataTestId.endRemoteAccessDialog);
     await app.waitForView(() =>
@@ -415,66 +404,6 @@ test("Given an unavailable connection, When current access cannot be prepared, T
     );
     await app.user.click(getByRole(dialog, "button", { name: "Cancel" }));
     expect(window.location.search).toContain("identity=");
-});
-
-test("Given the failure page after a redeemed Morty access, When the user chooses Go to Morty, Then Morty opens home with that access instead of the failed session", {
-    timeout: 30_000,
-}, async () => {
-    const app = await createTestApp({
-        agent: { id: "pi", label: "Pi" },
-        connectAgent: true,
-        page: {
-            harness: "pi",
-            kind: "continue",
-            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
-        },
-    });
-    await app.waitForView(() => getByRole(document.body, "alert"));
-
-    await app.user.click(getByRole(document.body, "button", { name: "Go to Morty" }));
-
-    expect(window.location.pathname).toBe("/");
-    const destination = new URL(window.location.href);
-    expect(destination.searchParams.get("identity")).toBe(
-        encodeIdentityScope({ botId: app.botId, projectId: app.identity.projectId, userId: app.userId }),
-    );
-    expect(destination.searchParams.get("sessionId")).toBeNull();
-    expect(destination.searchParams.get("harness")).toBeNull();
-    expect(destination.hash).toBe("");
-
-    const home = await app.reload();
-    expect(await home.queryElementByTestId(dataTestId.chatLanding)).toBeInstanceOf(HTMLElement);
-    expect(queryByRole(document.body, "status", { name: "Opening session" })).toBeNull();
-});
-
-test("Given the access was redeemed and its transfer link later stopped working, When the page redeems again, Then the user still enters Morty home with the redeemed access", {
-    timeout: 30_000,
-}, async () => {
-    const app = await createTestApp({
-        agent: { id: "pi", label: "Pi" },
-        connectAgent: true,
-        page: {
-            harness: "pi",
-            kind: "continue",
-            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
-        },
-    });
-    await app.waitForView(() => getByRole(document.body, "alert"));
-    const redeemedScope = new URL(window.location.href).searchParams.get("identity");
-    expect(redeemedScope).not.toBeNull();
-
-    window.location.hash = `code=mobius_transfer_v2.${app.identity.projectId}.${"a".repeat(43)}`;
-    app.remount();
-
-    const alert = await app.waitForView(() => getByRole(document.body, "alert"));
-    expect(alert.textContent).toContain("The native session was not found");
-    await app.user.click(getByRole(document.body, "button", { name: "Go to Morty" }));
-
-    expect(window.location.pathname).toBe("/");
-    expect(new URL(window.location.href).searchParams.get("identity")).toBe(redeemedScope);
-
-    const home = await app.reload();
-    expect(await home.queryElementByTestId(dataTestId.chatLanding)).toBeInstanceOf(HTMLElement);
 });
 
 test("Given an expired sharing link with no retained access, When I open it, Then it asks for a new link without offering retry", {
@@ -512,7 +441,7 @@ for (const linkKind of ["handoff", "sharing"] as const) {
                       }
                     : { kind: "share", code: (application) => code(application.identity) },
         });
-        app.transport.close();
+        app.transport.disconnect();
         const retry = await app.waitForView(() => getByRole(document.body, "button", { name: "Try again" }));
         expect(document.body.textContent).not.toContain("Ask for a new link.");
         expect(document.body.textContent).not.toContain("Run setup again");

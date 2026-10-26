@@ -70,7 +70,7 @@ export async function createTestApp(
         readonly prepare?: (application: Application) => void | Promise<void>;
     } = {},
 ): Promise<TestApp> {
-    const current = options.application ?? (await (await environment).createApplication());
+    const current = options.application ?? (await (await environment).createApplication(options.clock));
     await options.prepare?.(current);
     const daemon =
         options.connectAgent === true
@@ -168,6 +168,7 @@ export async function createTestApp(
                     let lastFailure: unknown;
                     const cleanup = () => {
                         observer.disconnect();
+                        window.removeEventListener("hashchange", check);
                         clearTimeout(deadline);
                         lifetime.signal.removeEventListener("abort", abort);
                     };
@@ -200,6 +201,9 @@ export async function createTestApp(
                         childList: true,
                         subtree: true,
                     });
+                    // A completed handoff removes the transfer-code hash without
+                    // changing the old document before its navigation is followed.
+                    window.addEventListener("hashchange", check);
                     check();
                 }),
         );
@@ -251,19 +255,19 @@ export async function createTestApp(
             // transport; the reloaded document keeps the live server and
             // Runtime fixtures but replaces the disposed transport so a
             // late close from the old socket cannot reject its requests.
-            const transport = new WebSocketApiTransport(current.origin);
+            const transport = new WebSocketApiTransport(current.origin, options.clock);
             transport.open();
             return await createTestApp({
-                application: { ...current, transport, close: () => transport.close() },
+                application: { ...current, transport, close: () => transport.dispose() },
                 page: { kind: "reload" },
                 ...(options.clock === undefined ? {} : { clock: options.clock }),
             });
         },
         openViewer: async () => {
-            const transport = new WebSocketApiTransport(current.origin);
+            const transport = new WebSocketApiTransport(current.origin, options.clock);
             transport.open();
             return await createTestApp({
-                application: { ...current, transport, close: () => transport.close() },
+                application: { ...current, transport, close: () => transport.dispose() },
                 ...(options.clock === undefined ? {} : { clock: options.clock }),
             });
         },

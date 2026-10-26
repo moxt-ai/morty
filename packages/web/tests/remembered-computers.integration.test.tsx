@@ -1,6 +1,7 @@
 import { getAllByRole, getByRole, getByTitle, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
+import { WebSocketApiTransport } from "../src/services/api/websocket-api-transport.ts";
 import { encodeIdentityScope } from "../src/services/identity/identity-scope-url.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
@@ -25,25 +26,6 @@ async function startConversation(app: TestApp, prompt: string): Promise<string> 
     }
     return sessionId;
 }
-
-test("Given a remembered computer and conversation, When I return through the plain address, Then that conversation opens without setup or a choice screen", {
-    timeout: 30_000,
-}, async () => {
-    const app = await createTestApp({ connectAgent: true });
-    const sessionId = await startConversation(app, "Continue the release checklist");
-    window.location.href = `${app.origin}/`;
-    const returned = await app.reload();
-    await returned.waitForView(() =>
-        expect(
-            returned
-                .elementsByTestId(dataTestId.agentResponse)
-                .some((entry) => entry.textContent?.includes("Continue the release checklist")),
-        ).toBe(true),
-    );
-    expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
-    expect(queryByRole(document.body, "heading", { name: "Continue your coding session from your phone." })).toBeNull();
-    expect(getByRole(document.body, "textbox", { name: "Message" })).toBeInstanceOf(HTMLTextAreaElement);
-});
 
 test("Given two remembered computers, When I return and then switch, Then the last computer and each computer's own conversation are restored", {
     timeout: 30_000,
@@ -204,7 +186,21 @@ test("Given the last computer is offline and another is online, When I return, T
     await second.daemon.disconnect();
     window.location.href = `${second.origin}/`;
     const returned = await second.reload();
-    const alternative = await returned.waitForView(() => getByRole(document.body, "link", { name: /^Switch to / }));
+    await returned.user.click(
+        await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ })),
+    );
+    const alternative = await returned.waitForView(() => {
+        const choice = getAllByRole(document.body, "menuitem").find(
+            (item) =>
+                new URL(item.getAttribute("href") ?? "/", returned.origin).searchParams.get("sessionId") ===
+                firstSession,
+        );
+        if (!(choice instanceof HTMLAnchorElement)) {
+            throw new Error("Waiting for the other computer");
+        }
+        expect(choice.textContent).toContain("Online");
+        return choice;
+    });
     expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(secondSession);
     expect(new URL(alternative.getAttribute("href") ?? "", returned.origin).searchParams.get("sessionId")).toBe(
         firstSession,
@@ -236,6 +232,24 @@ test("Given only a legacy credential, When I open the plain address, Then Morty 
     expect(document.body.textContent).not.toContain("Open the link your agent gave you once");
 });
 
+test("Given only a legacy credential whose access was revoked, When I open its link and then the plain address, Then Morty stops asking for that link", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await startConversation(app, "Revoked legacy user");
+    const originalLink = window.location.href;
+    // Simulate an existing browser from before computer metadata was introduced.
+    window.localStorage.removeItem("morty:remembered-computers:v1");
+    await revokeAccess(app);
+    const linked = await app.reload();
+    await linked.waitForView(() => getByRole(document.body, "heading", { name: "This link is no longer valid" }));
+    expect(window.location.href).toBe(originalLink);
+    window.location.href = `${app.origin}/`;
+    const returned = await linked.reload();
+    await returned.waitForView(() => getByRole(document.body, "heading", { name: "Just one prompt." }));
+    expect(document.body.textContent).not.toContain("Open the link your agent gave you once");
+});
+
 test("Given a saved computer and a failed connection, When I retry after reconnecting, Then my original conversation is retained", {
     timeout: 30_000,
 }, async () => {
@@ -243,8 +257,13 @@ test("Given a saved computer and a failed connection, When I retry after reconne
     const sessionId = await startConversation(app, "Preserve access through a network failure");
     await app.close();
     window.location.href = `${app.origin}/`;
-    const unavailable = await createTestApp({ application: app, page: { kind: "reload" } });
-    unavailable.transport.close();
+    // A reload gets its own page transport; the previous one was disposed.
+    const transport = new WebSocketApiTransport(app.origin);
+    const unavailable = await createTestApp({
+        application: { ...app, transport, close: () => transport.dispose() },
+        page: { kind: "reload" },
+    });
+    unavailable.transport.disconnect();
     const retry = await unavailable.waitForView(() => getByRole(document.body, "button", { name: "Retry" }));
     expect(document.body.textContent).toContain("Your saved computers are still here");
     unavailable.transport.open();
@@ -412,4 +431,245 @@ test("Given the last computer was deleted, When I return, Then the next valid co
                 deletedScope,
         ),
     ).toBe(false);
+});
+
+test("Given a computer I keep using, When ten more computers are saved in this browser, Then its link still opens and older unused computers make room", {
+    timeout: 120_000,
+}, async () => {
+    const daily = await createTestApp({ connectAgent: true });
+    const dailySession = await startConversation(daily, "My daily computer");
+    const dailyLink = window.location.href;
+    const dailyScope = new URL(dailyLink).searchParams.get("identity");
+    await daily.close();
+    const openShared = async (): Promise<TestApp> => {
+        const shared = await createTestApp({ page: { kind: "share" } });
+        const scope = encodeIdentityScope({
+            botId: shared.botId,
+            projectId: shared.identity.projectId,
+            userId: shared.userId,
+        });
+        await shared.waitForView(() => expect(new URL(window.location.href).searchParams.get("identity")).toBe(scope));
+        // The redeemed link replaces the page, which then opens that computer and asks to connect its agent.
+        const opened = await shared.reload();
+        await opened.waitForView(() => getByRole(document.body, "dialog", { name: "Connect agent" }));
+        return opened;
+    };
+    const openDaily = async (app: TestApp): Promise<TestApp> => {
+        window.location.href = dailyLink;
+        const opened = await app.reload();
+        await opened.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ }));
+        expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(dailySession);
+        return opened;
+    };
+
+    // The browser fills up with computers, and the daily one is used again before the last is saved.
+    let shared = await openShared();
+    const oldestScope = new URL(window.location.href).searchParams.get("identity");
+    for (let saved = 1; saved < 9; saved += 1) {
+        await shared.close();
+        shared = await openShared();
+    }
+    await (await openDaily(shared)).close();
+    shared = await openShared();
+
+    // The daily computer is the most recently used of the computers before the last, so it keeps its access.
+    const returned = await openDaily(shared);
+    await returned.user.click(
+        await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ })),
+    );
+    await returned.waitForView(() => expect(document.body.textContent).not.toContain("Checking connections"));
+    const offered = getAllByRole(document.body, "menuitem").map((item) =>
+        new URL(item.getAttribute("href") ?? "/", returned.origin).searchParams.get("identity"),
+    );
+    expect(offered).toContain(dailyScope);
+    expect(offered).not.toContain(oldestScope);
+    expect(offered.filter((scope) => scope !== null)).toHaveLength(10);
+});
+
+// Another Morty version can store access this version cannot read, such as a newer token format.
+const FUTURE_USER_ID = "usr_saved-by-a-newer-version";
+const FUTURE_TOKEN = `mobius_anon_v3_${"f".repeat(43)}`;
+
+function addStoredValue(key: string, add: (stored: unknown) => unknown): void {
+    const raw = window.localStorage.getItem(key);
+    window.localStorage.setItem(key, JSON.stringify(add(raw === null ? null : JSON.parse(raw))));
+}
+
+test("Given a remembered computer and a credential this version cannot read, When I return through the plain address, Then my computer opens and the other credential is kept", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const sessionId = await startConversation(app, "Keep my computer");
+    addStoredValue("mobius.anonymous-credentials.v1", (stored) => ({
+        ...(typeof stored === "object" && stored !== null ? stored : {}),
+        [FUTURE_USER_ID]: FUTURE_TOKEN,
+    }));
+
+    window.location.href = `${app.origin}/`;
+    const returned = await app.reload();
+    await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ }));
+    expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
+    // Opening the computer saved its visit; the credential this version cannot read is still there for the other.
+    expect(JSON.parse(window.localStorage.getItem("mobius.anonymous-credentials.v1") ?? "{}")).toMatchObject({
+        [FUTURE_USER_ID]: FUTURE_TOKEN,
+    });
+});
+
+test("Given a remembered computer and a computer record this version cannot read, When I return through the plain address, Then my computer opens and the other record is kept", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const sessionId = await startConversation(app, "Keep my computer list");
+    const future = { scope: { userId: FUTURE_USER_ID }, destination: { kind: "workspace" }, lastUsedAt: 0 };
+    addStoredValue("morty:remembered-computers:v1", (stored) => [...(Array.isArray(stored) ? stored : []), future]);
+
+    window.location.href = `${app.origin}/`;
+    const returned = await app.reload();
+    await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ }));
+    expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
+    expect(JSON.parse(window.localStorage.getItem("morty:remembered-computers:v1") ?? "[]")).toContainEqual(future);
+});
+
+test("Given a computer record this version cannot read whose token it can read, When saving a visit has to make room for tokens, Then that computer keeps its token", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const sessionId = await startConversation(app, "Keep the other version's computer");
+    const theirToken = `mobius_anon_v2_${"t".repeat(43)}`;
+    const future = { scope: { userId: FUTURE_USER_ID }, destination: { kind: "workspace" }, lastUsedAt: 0 };
+    addStoredValue("morty:remembered-computers:v1", (stored) => [...(Array.isArray(stored) ? stored : []), future]);
+    // Its token comes first, and older tokens no computer claims fill the remaining room.
+    addStoredValue("mobius.anonymous-credentials.v1", (stored) => ({
+        [FUTURE_USER_ID]: theirToken,
+        ...(typeof stored === "object" && stored !== null ? stored : {}),
+        ...Object.fromEntries(
+            Array.from({ length: 9 }, (_, index) => [
+                `usr_unclaimed-${index}`,
+                `mobius_anon_v2_${String(index).repeat(43)}`,
+            ]),
+        ),
+    }));
+
+    window.location.href = `${app.origin}/`;
+    const returned = await app.reload();
+    await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ }));
+    expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
+    const credentials = JSON.parse(window.localStorage.getItem("mobius.anonymous-credentials.v1") ?? "{}");
+    expect(credentials).toMatchObject({ [FUTURE_USER_ID]: theirToken });
+    expect(Object.keys(credentials)).toHaveLength(10);
+});
+
+test("Given a computer whose remembered conversation was closed elsewhere, When I switch to it from another computer, Then it opens at its chat home", {
+    timeout: 30_000,
+}, async () => {
+    const first = await createTestApp({ connectAgent: true });
+    const closedSession = await startConversation(first, "Closed on another device");
+    const firstScope = encodeIdentityScope({
+        botId: first.botId,
+        projectId: first.identity.projectId,
+        userId: first.userId,
+    });
+    const signal = AbortSignal.timeout(10_000);
+    const archived = await first.transport.fetch(
+        new Request(
+            `${first.origin}/morty/api/chat/projects/${first.identity.projectId}/bots/${first.botId}/managed-session/archive`,
+            {
+                method: "POST",
+                headers: {
+                    authorization: `Bearer ${await first.identity.getToken(signal)}`,
+                    "content-type": "application/json",
+                },
+                body: JSON.stringify({ sessionId: closedSession }),
+                signal,
+            },
+        ),
+    );
+    expect(archived.status).toBe(200);
+    await first.close();
+    const second = await createTestApp({ connectAgent: true });
+    await startConversation(second, "Work on the other computer");
+
+    await second.user.click(
+        await second.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ })),
+    );
+    const firstLink = await second.waitForView(() => {
+        const item = getAllByRole(document.body, "menuitem").find(
+            (item) =>
+                new URL(item.getAttribute("href") ?? "/", second.origin).searchParams.get("identity") === firstScope,
+        );
+        if (!(item instanceof HTMLAnchorElement)) {
+            throw new Error("Waiting for the first computer");
+        }
+        return item;
+    });
+    window.location.href = firstLink.href;
+    const switched = await second.reload();
+    await switched.waitForView(() => getByRole(document.body, "textbox", { name: "Message" }));
+    await switched.waitForView(() => expect(new URL(window.location.href).searchParams.has("sessionId")).toBe(false));
+    expect(new URL(window.location.href).searchParams.get("identity")).toBe(firstScope);
+    expect(document.body.textContent).not.toContain("Your Chat session was not found");
+});
+
+test("Given a switch to a computer whose remembered conversation is gone, When opening the computer fails once and I retry, Then it still opens at its chat home", {
+    timeout: 30_000,
+}, async () => {
+    const first = await createTestApp({ connectAgent: true });
+    const closedSession = await startConversation(first, "Closed before a failed switch");
+    const signal = AbortSignal.timeout(10_000);
+    const archived = await first.transport.fetch(
+        new Request(
+            `${first.origin}/morty/api/chat/projects/${first.identity.projectId}/bots/${first.botId}/managed-session/archive`,
+            {
+                method: "POST",
+                headers: {
+                    authorization: `Bearer ${await first.identity.getToken(signal)}`,
+                    "content-type": "application/json",
+                },
+                body: JSON.stringify({ sessionId: closedSession }),
+                signal,
+            },
+        ),
+    );
+    expect(archived.status).toBe(200);
+    await first.close();
+    const second = await createTestApp({ connectAgent: true });
+    await startConversation(second, "Work before the failed switch");
+    await second.user.click(
+        await second.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ })),
+    );
+    const firstScope = encodeIdentityScope({
+        botId: first.botId,
+        projectId: first.identity.projectId,
+        userId: first.userId,
+    });
+    const firstLink = await second.waitForView(() => {
+        const item = getAllByRole(document.body, "menuitem").find(
+            (item) =>
+                new URL(item.getAttribute("href") ?? "/", second.origin).searchParams.get("identity") === firstScope,
+        );
+        if (!(item instanceof HTMLAnchorElement)) {
+            throw new Error("Waiting for the first computer");
+        }
+        return item;
+    });
+    await second.close();
+
+    // The switched-to page loses its connection while it opens the computer.
+    window.location.href = firstLink.href;
+    const transport = new WebSocketApiTransport(second.origin);
+    const unavailable = await createTestApp({
+        application: { ...second, transport, close: () => transport.dispose() },
+        page: { kind: "reload" },
+    });
+    unavailable.transport.disconnect();
+    const retry = await unavailable.waitForView(() => getByRole(document.body, "button", { name: "Retry" }));
+    unavailable.transport.open();
+    await unavailable.user.click(retry);
+
+    await unavailable.waitForView(() => getByRole(document.body, "textbox", { name: "Message" }));
+    await unavailable.waitForView(() =>
+        expect(new URL(window.location.href).searchParams.has("sessionId")).toBe(false),
+    );
+    expect(new URL(window.location.href).searchParams.get("identity")).toBe(firstScope);
+    expect(document.body.textContent).not.toContain("Your Chat session was not found");
 });

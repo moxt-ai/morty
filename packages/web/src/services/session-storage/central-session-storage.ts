@@ -102,6 +102,14 @@ export const accessEndedComputerEntry = stringSessionStorageEntry({
     schema: v.pipe(v.string(), v.maxLength(256)),
 });
 
+/** Carries first-visit guidance from a successful native handoff to its session. */
+export const sessionWelcomeEntry = (botId: string, sessionId: string): SessionStorageEntry<"pending"> => ({
+    key: scopedKey("morty:session-welcome:v1:", botId, sessionId),
+    schema: v.literal("pending"),
+    encode: (value) => v.parse(v.literal("pending"), value),
+    decode: (raw) => (raw === "pending" ? "pending" : null),
+});
+
 export const newConversationDraftEntry = (botId: string): SessionStorageEntry<string> =>
     stringSessionStorageEntry({
         key: scopedKey("morty:message-draft:new:v1:", botId),
@@ -112,6 +120,32 @@ export const sessionDraftEntry = (sessionId: string): SessionStorageEntry<string
     stringSessionStorageEntry({
         key: scopedKey("morty:message-draft:session:v1:", sessionId),
         schema: messageDraftSchema,
+    });
+
+const rememberedSessionSchema = v.pipe(
+    v.object({
+        id: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
+        title: v.pipe(v.string(), v.minLength(1), v.maxLength(2_000)),
+    }),
+    v.readonly(),
+);
+
+export type RememberedSession = v.InferOutput<typeof rememberedSessionSchema>;
+
+/** Display-only context for this tab, scoped to the authenticated identity; never grants access. */
+export const rememberedSessionEntry = (identity: string): SessionStorageEntry<RememberedSession> =>
+    customSessionStorageEntry({
+        key: scopedKey("morty:remembered-session:v1:", identity),
+        schema: rememberedSessionSchema,
+        encode: (value) => JSON.stringify(v.parse(rememberedSessionSchema, value)),
+        decode: (raw) => {
+            try {
+                const parsed = v.safeParse(rememberedSessionSchema, JSON.parse(raw));
+                return parsed.success ? parsed.output : null;
+            } catch {
+                return null;
+            }
+        },
     });
 
 // ---------------------------------------------------------------------------

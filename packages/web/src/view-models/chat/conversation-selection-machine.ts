@@ -21,7 +21,12 @@ export type ConversationSelectionState =
           readonly session: OpenMobiusSession;
           readonly target: SelectedConversationTarget;
       }
-    | { readonly kind: "failed"; readonly message: string; readonly target: ConversationTarget };
+    | {
+          readonly kind: "failed";
+          readonly failure: "connection" | "unavailable";
+          readonly message: string;
+          readonly target: ConversationTarget;
+      };
 
 export type ConversationSelectionEvent =
     | { readonly kind: "draft-selected"; readonly key: string }
@@ -31,7 +36,12 @@ export type ConversationSelectionEvent =
           readonly session: OpenMobiusSession;
           readonly target: SelectedConversationTarget;
       }
-    | { readonly kind: "session-load-failed"; readonly message: string; readonly target: ConversationTarget }
+    | {
+          readonly kind: "session-load-failed";
+          readonly failure: "connection" | "unavailable";
+          readonly message: string;
+          readonly target: ConversationTarget;
+      }
     | { readonly kind: "retry-requested" }
     | { readonly kind: "reload-requested" }
     | { readonly kind: "session-title-updated"; readonly sessionId: string; readonly title: string }
@@ -76,7 +86,7 @@ export function transitionConversationSelection(
                 : state;
         case "session-load-failed":
             return state.kind === "loading" && sameTarget(state.target, event.target)
-                ? { kind: "failed", message: event.message, target: event.target }
+                ? { kind: "failed", failure: event.failure, message: event.message, target: event.target }
                 : state;
         case "retry-requested":
             return state.kind === "failed" ? { kind: "loading", target: state.target } : state;

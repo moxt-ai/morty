@@ -1,3 +1,4 @@
+import { RequestError } from "@agentclientprotocol/sdk";
 import type { HarnessOutput, HarnessReplyPlan } from "@moxt-ai/mobius-test-support/fake-daemon";
 import { interactiveHtml } from "./html-preview.ts";
 
@@ -93,6 +94,8 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
         return manySessionEvents(`Completed ${prompt.slice(eventBurstPrefix.length)}`);
     }
     switch (prompt) {
+        case "require agent authentication":
+            throw RequestError.authRequired();
         case "fail this turn explicitly":
             throw new Error("The controlled Agent rejected this turn.");
         case "draw a deployment diagram":

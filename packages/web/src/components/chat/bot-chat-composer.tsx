@@ -13,9 +13,12 @@ function attachmentName(attachment: ComposerAttachment): string {
 
 function AttachmentPreview({
     attachment,
+    disabled,
     onRemove,
 }: {
     readonly attachment: ComposerAttachment;
+    /** A disabled composer cannot change what it holds, attachments included. */
+    readonly disabled: boolean;
     readonly onRemove: () => void;
 }) {
     const name = attachmentName(attachment);
@@ -37,7 +40,8 @@ function AttachmentPreview({
             </span>
             <button
                 aria-label={`Remove ${name}`}
-                className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-black/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+                className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-black/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-50"
+                disabled={disabled}
                 onClick={onRemove}
                 type="button"
             >
@@ -63,6 +67,7 @@ export function BotChatComposer({
     placeholder = "Ask me anything",
     submitLabel = "Send message",
     submitDisabled,
+    stopDisabled = false,
 }: {
     readonly attachmentModel: ComposerAttachmentStore;
     readonly attachmentSignal: AbortSignal;
@@ -79,6 +84,7 @@ export function BotChatComposer({
     readonly placeholder?: string;
     readonly submitLabel?: string;
     readonly submitDisabled: boolean;
+    readonly stopDisabled?: boolean;
 }) {
     const fileInput = useRef<HTMLInputElement>(null);
     const { attachments, state: attachmentState } = attachmentModel;
@@ -132,9 +138,7 @@ export function BotChatComposer({
     return (
         <form className={chatSessionComposerClassName} onSubmit={submit}>
             {showComposerNotice && (
-                <div
-                    className={`mb-2 flex items-center gap-3 px-1 text-13 ${composerErrorMessage.length > 0 && errorStatus !== undefined ? "justify-between" : errorStatus !== undefined ? "justify-end" : ""}`}
-                >
+                <div className="mb-2 flex flex-col items-start gap-2 px-1 text-13">
                     {composerErrorMessage.length > 0 ? (
                         <p className="min-w-0 text-destructive" role="alert">
                             {composerErrorMessage}
@@ -149,6 +153,7 @@ export function BotChatComposer({
                         {attachments.map((attachment, index) => (
                             <AttachmentPreview
                                 attachment={attachment}
+                                disabled={disabled}
                                 key={`${attachment.kind}:${attachmentName(attachment)}:${index.toString()}`}
                                 onRemove={() => attachmentModel.remove(index)}
                             />
@@ -218,7 +223,8 @@ export function BotChatComposer({
                                 (submitAction && attachmentState.kind === "reading") ||
                                 outputState === "sending" ||
                                 outputState === "stopping" ||
-                                (outputState === "idle" && submitDisabled)
+                                (outputState === "idle" && submitDisabled) ||
+                                (outputState === "running" && stopDisabled)
                             }
                             onClick={outputState === "running" && !submitAction ? onStop : undefined}
                             size="icon"

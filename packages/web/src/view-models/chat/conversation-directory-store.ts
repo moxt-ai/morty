@@ -1,6 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ManagedChatSession } from "@/services/chat/bot-chat-api";
-import { CloudApiError } from "@/services/management/management-api";
+import { CloudApiError, isRuntimeConnectionFailure } from "@/services/management/management-api";
+import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import { formatError } from "../format-error.ts";
 
 type ConversationDirectoryState =
@@ -8,8 +9,13 @@ type ConversationDirectoryState =
     | { readonly kind: "ready"; readonly sessions: readonly ManagedChatSession[] }
     | { readonly kind: "refreshing"; readonly sessions: readonly ManagedChatSession[] }
     | { readonly kind: "setup-required" }
-    | { readonly kind: "stale"; readonly sessions: readonly ManagedChatSession[]; readonly message: string }
-    | { readonly kind: "failed"; readonly message: string };
+    | {
+          readonly kind: "stale";
+          readonly sessions: readonly ManagedChatSession[];
+          readonly message: string;
+          readonly failure: "connection" | "unavailable";
+      }
+    | { readonly kind: "failed"; readonly message: string; readonly failure: "connection" | "unavailable" };
 
 type ArchiveOperation =
     | { readonly kind: "idle" }
@@ -120,6 +126,7 @@ export const createConversationDirectoryStore = (
                                     archive: { kind: "idle" },
                                     state: {
                                         kind: "stale",
+                                        failure: state.failure,
                                         message: state.message,
                                         sessions: state.sessions.filter((session) => session.id !== sessionId),
                                     },
@@ -174,7 +181,15 @@ export const createConversationDirectoryStore = (
                             set({ state: { kind: "setup-required" } });
                             return;
                         }
-                        const message = formatError(cause, "Sessions are unavailable.");
+                        const message = isRuntimeConnectionFailure(cause)
+                            ? "Computer is offline. Your sessions are saved on your computer and will appear when it reconnects."
+                            : isChatBridgeError(cause)
+                              ? "Connection interrupted. Your sessions will appear when the connection returns."
+                              : formatError(cause, "Sessions are unavailable.");
+                        const failure =
+                            isRuntimeConnectionFailure(cause) || isChatBridgeError(cause)
+                                ? ("connection" as const)
+                                : ("unavailable" as const);
                         // Keep the list as it is now, with titles shown while the load ran, rather than the list it
                         // started from.
                         set((current) => {
@@ -183,11 +198,11 @@ export const createConversationDirectoryStore = (
                                 case "ready":
                                 case "refreshing":
                                 case "stale":
-                                    return { state: { kind: "stale", message, sessions: state.sessions } };
+                                    return { state: { kind: "stale", failure, message, sessions: state.sessions } };
                                 case "loading":
                                 case "setup-required":
                                 case "failed":
-                                    return { state: { kind: "failed", message } };
+                                    return { state: { kind: "failed", failure, message } };
                             }
                         });
                     }

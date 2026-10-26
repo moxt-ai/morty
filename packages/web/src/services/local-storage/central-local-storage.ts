@@ -190,17 +190,24 @@ const anonymousTokenSchema = v.pipe(
     ),
 );
 
-/** Maps a user identifier to their anonymous access token, keeping at most ten users. */
-const storedAnonymousCredentialsSchema = v.pipe(
-    v.record(v.pipe(v.string(), v.minLength(8), v.maxLength(128)), anonymousTokenSchema),
-    v.check((credentials) => Object.keys(credentials).length <= 10, "Too many anonymous credentials"),
-    v.readonly(),
-);
+/** How many computers this browser remembers. Each needs its user's token, so the tokens share this limit. */
+export const MAX_REMEMBERED_COMPUTERS = 10;
 
+const credentialUserIdSchema = v.pipe(v.string(), v.minLength(8), v.maxLength(128));
+
+/**
+ * Maps a user identifier to their anonymous access token. Each token is read on its own: another Morty version may
+ * store tokens this one cannot read, and those stay stored. The remembered computers decide which tokens are kept.
+ */
 export const anonymousCredentialsEntry = jsonLocalStorageEntry({
     key: "mobius.anonymous-credentials.v1",
-    schema: storedAnonymousCredentialsSchema,
+    schema: v.pipe(v.record(v.string(), v.unknown()), v.readonly()),
 });
+
+/** A stored token this version can use, or null. */
+export function readableCredential(userId: string, token: unknown): string | null {
+    return v.is(credentialUserIdSchema, userId) && v.is(anonymousTokenSchema, token) ? token : null;
+}
 
 const computerDestinationSchema = v.pipe(
     v.variant("kind", [
@@ -224,8 +231,17 @@ const rememberedComputerSchema = v.pipe(
 export type ComputerDestination = v.InferOutput<typeof computerDestinationSchema>;
 export type RememberedComputer = v.InferOutput<typeof rememberedComputerSchema>;
 
-/** Credentials remain separate; these are only validated navigation preferences. */
+/**
+ * The computers this browser can open, most recently used first. Their tokens are stored by user. Each record is read
+ * on its own, so a record another Morty version stored stays stored even when this version cannot read it.
+ */
 export const rememberedComputersEntry = jsonLocalStorageEntry({
     key: "morty:remembered-computers:v1",
-    schema: v.pipe(v.array(rememberedComputerSchema), v.maxLength(10), v.readonly()),
+    schema: v.pipe(v.array(v.unknown()), v.readonly()),
 });
+
+/** A stored computer record this version can read, or null. */
+export function readableComputer(value: unknown): RememberedComputer | null {
+    const parsed = v.safeParse(rememberedComputerSchema, value);
+    return parsed.success ? parsed.output : null;
+}

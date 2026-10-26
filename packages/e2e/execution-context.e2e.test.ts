@@ -10,65 +10,84 @@ for (const viewport of [
     { width: 390, height: 844 },
     { width: 320, height: 740 },
 ]) {
-    test(`Given a paired chat at ${viewport.width}px, When the user opens a conversation, Then execution context and its full directory remain accessible`, async ({
+    test(`Given a paired chat at ${viewport.width}px, When the user opens and renames a conversation, Then its compact header and full execution details stay accessible`, async ({
         runtime,
     }, testInfo) => {
         const { page } = runtime;
         await page.setViewportSize(viewport);
         await runtime.openPairedChat();
-        const context = page.getByRole("region", { name: "Execution context" });
-        await expect(page.getByRole("button", { name: `Switch computer, ${machineName}` })).toContainText("Online");
-        await expect(context).toContainText("Claude Code");
-        await expect(context.getByRole("status", { name: "Connection" })).toHaveText("Connected");
+        const computer = page.getByRole("button", { name: `Switch computer, ${machineName}` });
+        await expect(computer).toHaveAccessibleDescription("Connection available");
+        await expect(computer).not.toContainText("Online");
         await page.getByRole("textbox", { name: "Message" }).fill("Verify execution context");
         await page.getByRole("button", { name: "Send message" }).click();
         await expect(page.getByRole("article", { name: "Agent response" })).toBeVisible();
-        await expect(context.getByRole("status", { name: "Connection" })).toHaveText("Connected");
-        const box = await context.boundingBox();
-        expect(box).not.toBeNull();
-        if (box === null) {
-            throw new Error("Expected visible execution context");
+        await expect(computer).toHaveAccessibleDescription("Connection available");
+        const title = page.getByRole("button", { name: "Verify execution context", exact: true });
+        if (viewport.width < 640) {
+            const navigation = await page.getByRole("button", { name: "Open navigation", exact: true }).boundingBox();
+            const titleBox = await title.boundingBox();
+            const computerBox = await computer.boundingBox();
+            expect(navigation).not.toBeNull();
+            expect(titleBox?.y).toBe(navigation?.y);
+            expect(computerBox?.y).toBe(navigation?.y);
+            expect(computerBox?.height).toBeGreaterThanOrEqual(44);
         }
-        expect(box.x).toBeGreaterThanOrEqual(0);
-        expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
-        expect(box.height).toBeLessThanOrEqual(48);
-        await expect(context.getByText("workspace", { exact: true })).toBeVisible();
-        const details = context.getByRole("button", { name: "Show execution details" });
-        await expect(details).toHaveAccessibleDescription(/Claude Code.*workspace/);
-        const target = await details.boundingBox();
-        expect(target?.height).toBeGreaterThanOrEqual(44);
+        await page.screenshot({
+            animations: "disabled",
+            path: testInfo.outputPath(`connection-header-${viewport.width}.png`),
+        });
+        await title.click();
+        await page
+            .getByRole("textbox", { name: "Conversation title" })
+            .fill("A renamed conversation with a long descriptive title");
+        await page.screenshot({
+            animations: "disabled",
+            path: testInfo.outputPath(`rename-conversation-${viewport.width}.png`),
+        });
+        await page.getByRole("button", { name: "Save title" }).click();
+        await expect(
+            page.getByRole("button", { name: "A renamed conversation with a long descriptive title", exact: true }),
+        ).toBeVisible();
+        await expect(
+            page.getByRole("button", { name: "A renamed conversation with a long descriptive title", exact: true }),
+        ).toBeFocused();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(viewport.width);
+        await computer.click();
+        const details = page.getByRole("menuitem", { name: "Execution details", exact: true });
+        expect((await details.boundingBox())?.height).toBeGreaterThanOrEqual(44);
         await details.click();
         const dialog = page.getByRole("dialog", { name: "Execution details", exact: true });
         await expect(dialog).toBeVisible();
         await expect(dialog).toContainText(machineName);
+        await expect(dialog).toContainText("Claude Code");
+        await expect(dialog).toContainText("Connected");
+        await expect(dialog).toContainText("Online");
         const fullPath = await dialog.getByTestId(dataTestId.executionDirectory).textContent();
         expect(fullPath).toMatch(/\/workspace$/);
-        const detailBox = await dialog.boundingBox();
-        if (detailBox === null) {
+        const box = await dialog.boundingBox();
+        if (box === null) {
             throw new Error("Expected visible execution details");
         }
-        expect(detailBox.x).toBeGreaterThanOrEqual(0);
-        expect(detailBox.x + detailBox.width).toBeLessThanOrEqual(viewport.width);
+        expect(box.x).toBeGreaterThanOrEqual(0);
+        expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
         if (viewport.width < 640) {
-            expect(detailBox.y + detailBox.height).toBe(viewport.height);
+            expect(box.y + box.height).toBe(viewport.height);
         }
         await page.screenshot({
             animations: "disabled",
-            path: testInfo.outputPath(`execution-directory-${viewport.width}.png`),
+            path: testInfo.outputPath(`execution-details-${viewport.width}.png`),
         });
-        await dialog.getByRole("button", { name: "Close execution details" }).click();
-        await page.reload();
-        await expect(context).toContainText("Claude Code");
-        await expect(context.getByRole("status", { name: "Connection" })).toHaveText("Connected");
-        await page.screenshot({
-            animations: "disabled",
-            path: testInfo.outputPath(`execution-context-${viewport.width}.png`),
-        });
-        await details.click();
-        await expect(dialog.getByTestId(dataTestId.executionDirectory)).toHaveText(fullPath ?? "missing directory");
         await page.keyboard.press("Escape");
         await expect(dialog).toBeHidden();
-        await expect(details).toBeFocused();
+        await expect(computer).toBeFocused();
+        await page.reload();
+        await expect(computer).toHaveAccessibleDescription("Connection available");
+        await computer.click();
+        await details.click();
+        await expect(dialog.getByTestId(dataTestId.executionDirectory)).toHaveText(fullPath ?? "missing directory");
+        await dialog.getByRole("button", { name: "Close execution details" }).click();
+        await expect(computer).toBeFocused();
     });
 }

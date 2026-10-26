@@ -1,20 +1,18 @@
 import { isIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
 import { BotChatApi } from "@/services/chat/bot-chat-api";
-import {
-    readRecentCwdPreferences,
-    saveLastCwdPreference,
-    saveRecentCwdPreference,
-} from "@/services/chat/last-cwd-preference";
+import { saveLastCwdPreference, saveRecentCwdPreference } from "@/services/chat/last-cwd-preference";
 import { pathDirectoryId } from "@/services/chat/workspace-directory-reference";
 import { type DaemonDiagnosticsSource, recordBrowserError } from "@/services/diagnostics/browser-diagnostics";
 import {
     type AnonymousIdentity,
     AnonymousIdentityApi,
     IdentityApiError,
+    transferCodeProject,
 } from "@/services/identity/anonymous-identity-api";
 import { encodeIdentityScope, hasIdentityScope, readIdentityScope } from "@/services/identity/identity-scope-url";
-import { computerKey, rememberedComputers } from "@/services/identity/remembered-computers";
+import { computerKey, rememberedComputers, replacedToken, storedToken } from "@/services/identity/remembered-computers";
+import { centralSessionStorage, sessionWelcomeEntry } from "@/services/session-storage/central-session-storage";
 import { formatError } from "@/view-models/format-error";
 
 export type ContinueStoreApi = ReturnType<typeof createContinueStore>;
@@ -108,16 +106,6 @@ function identityDestination(path: "/" | "/chat", identity: AnonymousIdentity): 
 }
 
 /**
- * The Project a well-formed transfer code names, or null when the code cannot
- * name one. A code that was already redeemed in this browser still names its
- * Project, which is what lets a dead link fall back to the access it issued.
- */
-function transferCodeProject(code: string): string | null {
-    const parts = code.split(".");
-    return parts.length === 3 && parts[0] === "mobius_transfer_v2" ? (parts[1] ?? null) : null;
-}
-
-/**
  * Redeeming a transfer code is the only way to obtain access for a link that
  * was never opened in this browser. Once a link has been redeemed here, its
  * access stays usable even after the link itself expires or is revoked, so a
@@ -158,9 +146,15 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 fetchRequest,
                 origin: window.location.origin,
                 projectId: identity.projectId,
-                getToken: async () => identity.token,
+                // The access this browser holds: another tab may have replaced the one this link issued.
+                getToken: async () => storedToken(identity.userId) ?? identity.token,
+                replacedToken: (rejected, signal) => replacedToken(identity.userId, rejected, signal),
                 subscribe: async () => {
                     throw new Error("Session status updates are unavailable while continuing this session.");
+                },
+                recoverBridge: async (signal) => signal.throwIfAborted(),
+                waitForBridge: async () => {
+                    throw new Error("Bridge updates are unavailable while continuing this session.");
                 },
                 waitForChange: async () => {
                     throw new Error("Runtime updates are unavailable while continuing this session.");
@@ -188,11 +182,10 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                         handoff.harness,
                         directory.directoryId,
                     );
-                    saveRecentCwdPreference(
-                        identity.botId,
-                        { directoryId: directory.directoryId, directoryLabel: directory.directoryLabel },
-                        readRecentCwdPreferences(identity.botId) ?? [],
-                    );
+                    saveRecentCwdPreference(identity.botId, {
+                        directoryId: directory.directoryId,
+                        directoryLabel: directory.directoryLabel,
+                    });
                 }
                 const session = await chat.continueNativeSession(
                     identity.botId,
@@ -202,6 +195,15 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     signal,
                 );
                 signal.throwIfAborted();
+                const visited = rememberedComputers().some(
+                    (computer) => computerKey(computer.scope) === computerKey(identity) && computer.lastUsedAt > 0,
+                );
+                if (!visited) {
+                    centralSessionStorage.write(
+                        sessionWelcomeEntry(identity.botId, session.result.ready.sessionId),
+                        "pending",
+                    );
+                }
                 const destination = identityDestination("/chat", identity);
                 destination.searchParams.set("sessionId", session.result.ready.sessionId);
                 window.location.replace(destination);

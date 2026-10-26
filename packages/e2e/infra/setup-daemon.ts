@@ -28,7 +28,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
     readonly #failed = Promise.withResolvers<never>();
     readonly failure = this.#failed.promise;
 
-    readonly #options: ControlledAgentBehavior;
+    #options: ControlledAgentBehavior;
     readonly #machineName: string;
     #upgrade: ControlledUpgrade;
     #release: NonNullable<ControlledAgentBehavior["runtime"]>;
@@ -51,6 +51,9 @@ export class ControlledSetupRuntime implements SetupRuntime {
     readonly run: SetupRuntime["run"] = async (directory, args, _cwd, signal) => {
         signal.throwIfAborted();
         const result = { pid: process.pid, logPath: join(directory, "controlled-runtime.log") };
+        if (args[0] === "--version") {
+            return result;
+        }
         if (args[0] === "pair" && args[1] === "list") {
             const output = args.find((argument) => argument.startsWith("--output-json="));
             if (output === undefined) {
@@ -112,6 +115,19 @@ export class ControlledSetupRuntime implements SetupRuntime {
         this.#saved.set(connection.connection_id, connection);
         await this.#connect(connection, signal);
         return result;
+    };
+
+    /**
+     * Installs other Agents on the machine. Like the manager after an install, running connections restart and
+     * publish the new catalog once they reconnect; later connections offer the same Agents.
+     */
+    readonly installAgents = async (
+        agents: Pick<ControlledAgentBehavior, "additionalAgents" | "agentId" | "agentName">,
+    ): Promise<void> => {
+        this.#options = { ...this.#options, ...agents };
+        for (const daemon of this.#active.values()) {
+            await daemon.restartWithAgents(agents);
+        }
     };
 
     /** Changes how later `mobius upgrade` runs behave, such as when the registry becomes reachable. */
@@ -179,7 +195,12 @@ export class ControlledSetupRuntime implements SetupRuntime {
         }
     }
 
+    /**
+     * Like the manager's daemon, a connection runs in the background: the command that starts it can be cancelled,
+     * but only `disconnect` stops the daemon once it runs.
+     */
     async #connect(connection: Connection, signal: AbortSignal): Promise<void> {
+        signal.throwIfAborted();
         if (this.#active.has(connection.connection_id)) {
             return;
         }
@@ -190,7 +211,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
                 origin: connection.origin,
                 runtimeCredential: connection.credential,
             },
-            signal,
+            signal: new AbortController().signal,
         });
         this.#active.set(connection.connection_id, daemon);
         void daemon.failure.catch((error: unknown) => {
@@ -215,6 +236,15 @@ export class ControlledSetupRuntime implements SetupRuntime {
         const active = Array.from(this.#active.values());
         await Promise.all(active.map((daemon) => daemon.disconnect()));
         await Promise.all(active.map((daemon) => daemon.reconnect()));
+    };
+
+    /** Disconnects the real relay while retaining the daemon's persisted sessions for recovery. */
+    readonly pause = async (): Promise<void> => {
+        await Promise.all(Array.from(this.#active.values(), (daemon) => daemon.disconnect()));
+    };
+
+    readonly resume = async (): Promise<void> => {
+        await Promise.all(Array.from(this.#active.values(), (daemon) => daemon.reconnect()));
     };
 
     /** Simulates the manager forgetting every saved Runtime connection. */

@@ -463,3 +463,105 @@ test("Given anonymous Morty sessions, When the account endpoint authenticates th
         userId: local.userId,
     });
 });
+
+test("Given a browser that opened one link, When it opens another link for the same user and later ends its access, Then its earlier credential stops at once and both links stop opening Morty", async () => {
+    const environment = fixture.environment();
+    const owner = await fixture.createAnonymousUser();
+    const request = (path: string, token: string, init: RequestInit = {}) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}${path}`, {
+                ...init,
+                headers: { authorization: `Bearer ${token}`, ...init.headers },
+            }),
+            environment,
+        );
+    const share = async () => {
+        const response = await request("/identity/transfers", owner.token, { method: "POST" });
+        expect(response.status).toBe(201);
+        return new URL(v.parse(v.object({ url: v.string() }), await response.json()).url).hash.slice("#code=".length);
+    };
+    const redeem = (code: string, replaces?: string) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code, ...(replaces === undefined ? {} : { replaces }) }),
+            }),
+            environment,
+        );
+    const opened = async (code: string, replaces?: string) => {
+        const response = await redeem(code, replaces);
+        expect(response.status).toBe(200);
+        return v.parse(v.object({ token: v.string() }), await response.json()).token;
+    };
+    const firstLink = await share();
+    const secondLink = await share();
+    const phone = await opened(firstLink);
+    const earlier = await opened(firstLink);
+
+    const later = await opened(secondLink, earlier);
+
+    // The browser keeps one credential: the one it opened the later link with replaces the earlier one.
+    expect((await request("/session", earlier)).status).toBe(401);
+    expect((await request("/session", later)).status).toBe(200);
+    expect((await request("/session", phone)).status).toBe(200);
+
+    expect((await request("/identity/remote-access", later, { method: "DELETE" })).status).toBe(204);
+
+    // Ending this browser's access ends every link it joined through, and what they granted.
+    for (const code of [firstLink, secondLink]) {
+        expect((await redeem(code)).status).toBe(410);
+    }
+    for (const token of [later, phone]) {
+        expect((await request("/session", token)).status).toBe(401);
+    }
+    expect((await request("/session", owner.token)).status).toBe(200);
+});
+
+test("Given two tabs of one browser open new links at once, When the browser later ends its access from either tab, Then every link it joined through stops opening Morty", async () => {
+    const environment = fixture.environment();
+    const owner = await fixture.createAnonymousUser();
+    const request = (path: string, token: string, init: RequestInit = {}) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}${path}`, {
+                ...init,
+                headers: { authorization: `Bearer ${token}`, ...init.headers },
+            }),
+            environment,
+        );
+    const share = async () => {
+        const response = await request("/identity/transfers", owner.token, { method: "POST" });
+        expect(response.status).toBe(201);
+        return new URL(v.parse(v.object({ url: v.string() }), await response.json()).url).hash.slice("#code=".length);
+    };
+    const redeem = (code: string, replaces?: string) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code, ...(replaces === undefined ? {} : { replaces }) }),
+            }),
+            environment,
+        );
+    const token = async (response: Response) => {
+        expect(response.status).toBe(200);
+        return v.parse(v.object({ token: v.string() }), await response.json()).token;
+    };
+    const links = [await share(), await share(), await share()];
+    const held = await token(await redeem(v.parse(v.string(), links[0])));
+
+    // Both tabs read the same held access before either redemption finishes.
+    const [first, second] = await Promise.all([
+        redeem(v.parse(v.string(), links[1]), held).then(token),
+        redeem(v.parse(v.string(), links[2]), held).then(token),
+    ]);
+
+    expect((await request("/session", held)).status).toBe(401);
+    expect((await request("/identity/remote-access", second, { method: "DELETE" })).status).toBe(204);
+    for (const code of links) {
+        expect((await redeem(code)).status).toBe(410);
+    }
+    for (const credential of [first, second]) {
+        expect((await request("/session", credential)).status).toBe(401);
+    }
+});

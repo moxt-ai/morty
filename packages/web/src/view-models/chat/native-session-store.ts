@@ -1,13 +1,18 @@
 import type { NativeSessionEntry, NativeSessionResult } from "@moxt-ai/mobius-sdk/channel";
 import { createStore } from "zustand/vanilla";
-import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi, ChatRuntime } from "../../services/chat/bot-chat-api.ts";
 import { formatError } from "../format-error.ts";
 import { type NativeSessionAgent, nativeSessionAgentTabs } from "./native-session-agents.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { type SessionMessage, sessionEventLogPresentation } from "./session-presentation.ts";
 
 type NativeSessionDirectory =
-    | { readonly kind: "loading"; readonly scope: "initial" | "refresh" }
+    | {
+          readonly kind: "loading";
+          readonly scope: "initial" | "refresh";
+          /** The listing the request in flight is for, or null while the page waits for the Runtime. */
+          readonly listing: string | null;
+      }
     | { readonly kind: "empty" }
     | {
           readonly kind: "ready";
@@ -37,7 +42,7 @@ type NativeSessionPreview =
 type Operation = "idle" | "more" | "import" | "fork";
 
 export interface NativeSessionStore {
-    readonly agents: readonly NativeSessionAgent[];
+    /** The agent tab the user chose, by `runtimeId:agentRef`; the tabs themselves come from the Runtime configuration. */
     readonly selected: string;
     readonly directory: NativeSessionDirectory;
     readonly preview: NativeSessionPreview;
@@ -50,6 +55,8 @@ export interface NativeSessionStore {
     /** Stops discovery and preview requests when the dialog closes. */
     readonly stop: () => void;
     readonly load: (signal: AbortSignal) => Promise<void>;
+    /** The Runtime configuration the page follows changed: the listing follows the agent it now offers. */
+    readonly runtimeChanged: () => void;
     readonly selectAgent: (value: string) => void;
     readonly select: (entry: NativeSessionEntry, signal: AbortSignal) => Promise<void>;
     readonly open: (action: "import" | "fork", signal: AbortSignal) => Promise<void>;
@@ -57,9 +64,27 @@ export interface NativeSessionStore {
     readonly dispose: () => void;
 }
 
+/** The agent tab a listing is for: the chosen tab while the Runtime still offers it, else the first installed one. */
+function chosenAgent(agents: readonly NativeSessionAgent[], selected: string): NativeSessionAgent | undefined {
+    return (
+        agents.find((item) => `${item.runtimeId}:${item.agentRef}` === selected) ??
+        agents.find((item) => item.installed) ??
+        agents[0]
+    );
+}
+
+/** What a listing shows for an agent, to tell whether the Runtime configuration still matches it. */
+function listingFor(agent: NativeSessionAgent | undefined): string {
+    return agent === undefined
+        ? "empty"
+        : `${agent.installed ? "ready" : "agent-unavailable"}:${agent.runtimeId}:${agent.agentRef}`;
+}
+
 export const createNativeSessionStore = (
     botId: string,
-    requests: Pick<BotChatApi, "runtimeConfiguration" | "nativeSessions" | "nativeSession">,
+    requests: Pick<BotChatApi, "nativeSessions" | "nativeSession">,
+    /** The Runtime the page follows, the one owner of which agents it offers. */
+    runtime: () => ChatRuntime | null,
     onOpen: (session: OpenMobiusSession) => void,
 ) => {
     let selection: AbortController | null = null;
@@ -75,43 +100,47 @@ export const createNativeSessionStore = (
             lifetime.abort(new Error("The native session dialog closed."));
             get().dispose();
         },
-        agents: [],
         selected: "",
-        directory: { kind: "loading", scope: "initial" },
+        directory: { kind: "loading", scope: "initial", listing: null },
         preview: { kind: "empty" },
         operation: "idle",
         error: "",
         load: async (parent) => {
+            const current = runtime();
+            const agent = current === null ? undefined : chosenAgent(nativeSessionAgentTabs(current), get().selected);
+            const listing = current === null ? null : listingFor(agent);
+            const before = get().directory;
+            // The Runtime runs one native session operation per agent at a time: a request it is still carrying
+            // out answers for this listing too, and cancelling it to send the same request again would only be
+            // refused as busy.
+            if (listing !== null && before.kind === "loading" && before.listing === listing) {
+                return;
+            }
             const attempt = new AbortController();
             discovery?.abort(new Error("Native session discovery restarted."));
             discovery = attempt;
             const signal = AbortSignal.any([parent, attempt.signal]);
-            const scope = get().agents.length === 0 ? ("initial" as const) : ("refresh" as const);
-            set({ directory: { kind: "loading", scope }, preview: { kind: "empty" }, error: "" });
+            const scope = get().selected === "" ? ("initial" as const) : ("refresh" as const);
+            set({ directory: { kind: "loading", scope, listing }, preview: { kind: "empty" }, error: "" });
+            if (current === null) {
+                // The page has not heard from the Runtime yet; its first configuration starts the listing.
+                return;
+            }
             try {
-                const configuration = await requests.runtimeConfiguration(botId, signal);
-                signal.throwIfAborted();
-                const agents = nativeSessionAgentTabs(configuration.runtime);
-                const priorSelected = get().selected;
-                const agent =
-                    agents.find((item) => `${item.runtimeId}:${item.agentRef}` === priorSelected) ??
-                    agents.find((item) => item.installed) ??
-                    agents[0];
                 if (agent === undefined) {
-                    set({ agents, selected: "", directory: { kind: "empty" } });
+                    set({ directory: { kind: "empty" } });
                     return;
                 }
                 const selected = `${agent.runtimeId}:${agent.agentRef}`;
                 if (!agent.installed) {
                     set({
-                        agents,
                         selected,
                         directory: { kind: "agent-unavailable", agentLabel: agent.label },
                         preview: { kind: "empty" },
                     });
                     return;
                 }
-                set({ agents, selected });
+                set({ selected });
                 const result = await requests.nativeSessions(
                     botId,
                     agent.runtimeId,
@@ -147,9 +176,30 @@ export const createNativeSessionStore = (
                             kind: "failed",
                             message: formatError(cause, "Native sessions are unavailable."),
                         },
-                        error: formatError(cause, "Native sessions are unavailable."),
                     });
                 }
+            }
+        },
+        runtimeChanged: () => {
+            const current = runtime();
+            // An Open, Fork or Load more the user sent keeps running: restarting discovery would cancel a request
+            // the Runtime may already be carrying out. Its end checks the listing against the configuration again.
+            if (current === null || get().operation !== "idle") {
+                return;
+            }
+            const { directory, selected } = get();
+            const shown =
+                directory.kind === "empty"
+                    ? "empty"
+                    : directory.kind === "agent-unavailable"
+                      ? `agent-unavailable:${selected}`
+                      : directory.kind === "ready"
+                        ? `ready:${directory.runtimeId}:${directory.agentRef}`
+                        : directory.kind === "loading"
+                          ? directory.listing
+                          : null;
+            if (shown !== listingFor(chosenAgent(nativeSessionAgentTabs(current), selected))) {
+                void get().load(lifetime.signal);
             }
         },
         selectAgent: (selected) => {
@@ -198,7 +248,6 @@ export const createNativeSessionStore = (
                             entry,
                             message: formatError(cause, "The preview could not be loaded."),
                         },
-                        error: formatError(cause, "The preview could not be loaded."),
                     });
                 }
             }
@@ -242,6 +291,7 @@ export const createNativeSessionStore = (
             } finally {
                 if (!signal.aborted) {
                     set({ operation: "idle" });
+                    get().runtimeChanged();
                 }
             }
         },
@@ -288,6 +338,7 @@ export const createNativeSessionStore = (
             } finally {
                 if (!signal.aborted) {
                     set({ operation: "idle" });
+                    get().runtimeChanged();
                 }
             }
         },

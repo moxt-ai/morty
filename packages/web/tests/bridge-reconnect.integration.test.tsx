@@ -1,0 +1,345 @@
+import { getByRole, queryByRole } from "@testing-library/dom";
+import { act } from "@testing-library/react";
+import { expect, test } from "vitest";
+import { dataTestId } from "../src/data-testid.ts";
+import type { ApiResponseSnapshot } from "../src/services/api/api-transport.ts";
+import { WebSocketApiTransport } from "../src/services/api/websocket-api-transport.ts";
+import { sendPrompt } from "./infra/application-scenario.ts";
+import { createTestApp } from "./infra/test-app.tsx";
+import { TestClock } from "./infra/test-clock.ts";
+
+const CLOCK_ORIGIN = "2026-10-13T08:00:00Z";
+const CONNECTION_DIALOG = "Runtime connection unavailable";
+
+function connectionDialog(): HTMLElement | null {
+    return queryByRole(document.body, "dialog", { name: CONNECTION_DIALOG });
+}
+
+function agentAnswered(app: Awaited<ReturnType<typeof createTestApp>>, text: string): boolean {
+    return app.elementsByTestId(dataTestId.agentResponse).some((message) => message.textContent?.includes(text));
+}
+
+test("Given a workspace read before an Agent change, When its watch starts after the change, Then the watch reports the unseen configuration", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ agents: [{ id: "codex", label: "Codex" }], connectAgent: true, clock });
+    if (app.daemon === null) {
+        throw new Error("Expected a connected Runtime");
+    }
+    // A separate real bridge owns this read/watch pair so the app's background
+    // reads cannot advance its baseline before the watch is registered.
+    const transport = new WebSocketApiTransport(app.origin, clock);
+    transport.open();
+    try {
+        const signal = AbortSignal.timeout(15_000);
+        const token = await app.identity.getToken(signal);
+        const workspace = () =>
+            new Request(`${app.origin}/morty/api/chat/projects/${app.identity.projectId}/bots/${app.botId}/workspace`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${token}` },
+                signal,
+            });
+        const before = await transport.fetch(workspace());
+        expect(before.status).toBe(200);
+        expect(await before.text()).not.toContain('"agentRef":"pi"');
+
+        await app.daemon.replaceAgents([
+            { id: "codex", label: "Codex" },
+            { id: "pi", label: "Pi" },
+        ]);
+
+        // The first sample already includes Pi. It must be compared with the
+        // preceding read, not silently adopted as the new baseline.
+        await transport.waitForChange(workspace());
+        const after = await transport.fetch(workspace());
+        expect(after.status).toBe(200);
+        expect(await after.text()).toContain('"agentRef":"pi"');
+    } finally {
+        transport.dispose();
+    }
+});
+
+test("Given an earlier workspace read, When a snapshot watch starts after an Agent change, Then its snapshot and later notifications use the same current baseline", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ agents: [{ id: "codex", label: "Codex" }], connectAgent: true, clock });
+    if (app.daemon === null) {
+        throw new Error("Expected a connected Runtime");
+    }
+    const transport = new WebSocketApiTransport(app.origin, clock);
+    transport.open();
+    const lifetime = new AbortController();
+    try {
+        const signal = AbortSignal.any([lifetime.signal, AbortSignal.timeout(20_000)]);
+        const token = await app.identity.getToken(signal);
+        const workspace = () =>
+            new Request(`${app.origin}/morty/api/chat/projects/${app.identity.projectId}/bots/${app.botId}/workspace`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${token}` },
+                signal,
+            });
+        const before = await transport.fetch(workspace());
+        expect(await before.text()).not.toContain('"agentRef":"pi"');
+        await app.daemon.replaceAgents([
+            { id: "codex", label: "Codex" },
+            { id: "pi", label: "Pi" },
+        ]);
+
+        const ready = Promise.withResolvers<ApiResponseSnapshot>();
+        const watching = transport.waitForChange(workspace(), ready.resolve);
+        void watching.catch(ready.reject);
+        const snapshot = await ready.promise;
+        expect(snapshot.status).toBe(200);
+        expect(snapshot.body).toContain('"agentRef":"pi"');
+
+        await app.daemon.replaceAgents([{ id: "codex", label: "Codex" }]);
+        await watching;
+        const after = await transport.fetch(workspace());
+        expect(after.status).toBe(200);
+        expect(await after.text()).not.toContain('"agentRef":"pi"');
+    } finally {
+        lifetime.abort();
+        transport.dispose();
+    }
+});
+
+test("Given pairing already completed, When a setup watch starts, Then it immediately reports that setup changed", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const signal = AbortSignal.timeout(10_000);
+    const token = await app.identity.getToken(signal);
+    await app.transport.waitForChange(
+        new Request(
+            `${app.origin}/morty/api/chat/projects/${app.identity.projectId}/bots/${app.botId}/setup/runtimes`,
+            {
+                method: "POST",
+                headers: { authorization: `Bearer ${token}` },
+                signal,
+            },
+        ),
+    );
+    await app.queryElementByTestId(dataTestId.messageComposer);
+});
+
+test("Given an unpaired Machine, When pairing finishes while the bridge is down, Then the recovered draft can send its first message", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ clock });
+    await app.queryElementByTestId(dataTestId.pairingInstruction);
+
+    app.transport.disconnect();
+    await app.connectAgent();
+    await act(async () => {
+        clock.advanceBy(1_000);
+    });
+
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    await sendPrompt(app, composer, "First message after offline pairing");
+    await app.waitForView(() =>
+        expect(agentAnswered(app, "Codex turn 1: First message after offline pairing")).toBe(true),
+    );
+});
+
+test("Given an open conversation, When the Chat WebSocket bridge drops, Then no connection dialog appears and Chat resumes after the bridge reconnects", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const draft = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    await sendPrompt(app, draft, "Before the bridge drop");
+    await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: Before the bridge drop")).toBe(true));
+
+    app.transport.disconnect();
+
+    // The dropped bridge is an ordinary failed call: Chat keeps the
+    // conversation on screen instead of blocking it with a dialog.
+    expect(connectionDialog()).toBeNull();
+    expect(queryByRole(document.body, "alert")?.textContent ?? "").not.toContain("WebSocket to Morty");
+    expect(document.body.textContent).toContain("Before the bridge drop");
+
+    await act(async () => {
+        clock.advanceBy(1_000);
+    });
+
+    // The first backoff attempt really dials: the bridge carries a request
+    // again without waiting for the rest of the retry budget.
+    const token = await app.identity.getToken(new AbortController().signal);
+    const workspace = await app.transport.fetch(
+        new Request(`${app.origin}/morty/api/chat/projects/${app.identity.projectId}/bots/${app.botId}/workspace`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${token}` },
+        }),
+    );
+    expect(workspace.status).toBe(200);
+
+    // The transport reconnected on its own, so the composer accepts messages
+    // again without a manual retry.
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    await sendPrompt(app, composer, "After the bridge returned");
+    await app.waitForView(() => expect(agentAnswered(app, "Codex turn 2: After the bridge returned")).toBe(true));
+    expect(connectionDialog()).toBeNull();
+});
+
+test("Given a dropped bridge that reconnected, When the Runtime changes, Then the page still follows it", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const failure = app.agentFailure ?? Promise.reject(new Error("The test Agent was not started."));
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.getAttribute("data-connection-status") === "connected",
+    );
+    const draft = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    await sendPrompt(app, draft, "Before the dropped watch");
+    await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: Before the dropped watch")).toBe(true));
+
+    // The drop takes every watch with it; the reconnect must re-arm them.
+    app.transport.disconnect();
+    await act(async () => {
+        clock.advanceBy(1_000);
+    });
+    await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+
+    // A Runtime change after the reconnect must still reach this page. Before
+    // the watch was re-armed, this never refreshed and the page stayed
+    // "connected" forever.
+    await app.daemon?.disconnect();
+    await app.waitForView(() => {
+        expect(app.elementByTestId(dataTestId.botConnectionStatus).getAttribute("data-connection-status")).toBe(
+            "disconnected",
+        );
+    });
+    void failure;
+});
+
+test("Given repeated bridge drops on one page, When the Runtime goes offline after each recovery, Then the page still follows it", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    await sendPrompt(app, composer, "Before two drops");
+    await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: Before two drops")).toBe(true));
+
+    // First drop: the watch dies with the socket, and the bridge returns.
+    app.transport.disconnect();
+    await act(async () => {
+        clock.advanceBy(1_000);
+    });
+
+    // The re-armed watch is live: the Runtime going away reaches the page.
+    await app.daemon?.disconnect();
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.botConnectionStatus).getAttribute("data-connection-status")).toBe(
+            "disconnected",
+        ),
+    );
+
+    // Later drops on the same page must each be followed by recovery: the
+    // watch re-armed by the first resume is itself dropped and re-armed again,
+    // and none of them may surface a failure dialog over the conversation.
+    for (const backoff of [2_000, 4_000]) {
+        app.transport.disconnect();
+        await act(async () => {
+            clock.advanceBy(backoff);
+        });
+        await app.waitForView(() =>
+            expect(app.elementByTestId(dataTestId.botConnectionStatus).getAttribute("data-connection-status")).toBe(
+                "disconnected",
+            ),
+        );
+        expect(queryByRole(document.body, "dialog", { name: "Runtime connection unavailable" })).toBeNull();
+    }
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.botConnectionStatus).getAttribute("data-connection-status")).toBe(
+            "disconnected",
+        ),
+    );
+});
+
+test("Given an offline Runtime and a dropped bridge, When the bridge recovers and the Runtime comes back, Then the draft composer becomes usable", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const enabledComposer = async () =>
+        await app.queryElementByTestId(
+            dataTestId.messageComposer,
+            (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+        );
+    await enabledComposer();
+
+    // The Runtime goes offline first: the draft page loses its settings and
+    // offers the ordinary retry surface.
+    await app.daemon?.disconnect();
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "alert").textContent).toContain("Your Mobius is disconnected"),
+    );
+
+    // The bridge drops and returns while the Runtime is still offline. The
+    // recovery re-reads the pairing state and must keep following workspace
+    // changes for this configured Machine.
+    app.transport.disconnect();
+    await act(async () => {
+        clock.advanceBy(1_000);
+    });
+
+    // The Runtime returns: the draft page offers a usable composer again.
+    await app.daemon?.reconnect();
+    await enabledComposer();
+});
+
+test("Given a recovery that loses the bridge again, When the Runtime changes after the final recovery, Then the page still follows it", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    await sendPrompt(app, composer, "Before the interrupted recovery");
+    await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: Before the interrupted recovery")).toBe(true));
+
+    // The bridge returns, and the drop cuts off the recovery read that follows
+    // it. The load must re-enter recovery instead of leaving the page behind.
+    app.transport.disconnect();
+    await act(async () => {
+        clock.advanceBy(1_000);
+    });
+    app.transport.disconnect();
+
+    // The next backoff reconnects and finishes the recovery.
+    await act(async () => {
+        clock.advanceBy(2_000);
+    });
+
+    // A Runtime change after the final recovery must reach the page.
+    await app.daemon?.disconnect();
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.botConnectionStatus).getAttribute("data-connection-status")).toBe(
+            "disconnected",
+        ),
+    );
+});

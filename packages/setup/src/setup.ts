@@ -3,16 +3,16 @@ import { once } from "node:events";
 import { constants } from "node:fs";
 import { mkdir, open, readFile, realpath, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { validateLocalPath } from "@moxt-ai/mobius/filesystem";
-import { executableLaunch, findExecutableOnPath, stopProcessTree } from "@moxt-ai/mobius/process";
+import { executableLaunch, findExecutableOnPath, runBoundedProcess, stopProcessTree } from "@moxt-ai/mobius/process";
 import { decodeIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
 import QRCode from "qrcode";
-import { resolveDocumentsDirectory } from "./platform/index.ts";
+import { resolveDocumentsDirectory, resolveStateDirectory } from "./platform/index.ts";
 
 export interface SetupRuntime {
     readonly run: (
@@ -27,6 +27,12 @@ export interface SetupRuntime {
 }
 
 export interface SetupHost {
+    /**
+     * Where this computer keeps Morty's private state. Empty selects the platform's local application data directory,
+     * which is not synced to the user's other computers.
+     */
+    readonly state: string;
+    /** The Documents directory earlier releases kept that state in, read once to move it. Empty selects the user's. */
     readonly documents: string;
     readonly signal: AbortSignal;
     readonly emit: (value: Readonly<Record<string, unknown>>) => void;
@@ -51,6 +57,12 @@ type RuntimeSelection =
           readonly appId: string;
           readonly connectionId: string;
           readonly runtimeId: string;
+          /**
+           * Whether the Worker binds the Machine to this Runtime. The Worker's binding is the record; the local
+           * `agent_ref` only remembers the harness a finished run bound, and a run that stopped after the Worker
+           * bound the Machine never wrote it.
+           */
+          readonly bound: boolean;
       }
     | {
           readonly kind: "pairing";
@@ -79,11 +91,15 @@ interface SetupIdentity {
     readonly context: Context;
 }
 
-interface Options {
+interface SetupOptions {
     readonly base: string;
     readonly cwd: string;
     readonly harness: string;
     readonly sessionId: string;
+}
+
+interface RevokeAllAccessOptions {
+    readonly base: string | undefined;
 }
 
 function errorCode(cause: unknown): unknown {
@@ -126,6 +142,26 @@ class RuntimeStartError extends Error {
     }
 
     readonly diagnostic = () => ({ termination: this.termination, logPath: this.logPath, nextStep: this.nextStep });
+}
+
+class RuntimePreflightError extends Error {
+    readonly code = "RUNTIME_PREFLIGHT_FAILED";
+    readonly nextStep =
+        "Install Node.js 22.19.0 or newer and npm, reinstall the latest @moxt-ai/mobius using that Node.js, then verify mobius --version in the same terminal and rerun setup.";
+
+    constructor(message: string, cause?: unknown) {
+        super(message, { cause });
+        this.name = "RuntimePreflightError";
+    }
+
+    readonly diagnostic = () => ({
+        nodeVersion: process.versions.node,
+        nodeExecutable: process.execPath,
+        ...(this.cause instanceof RuntimeStartError
+            ? { logPath: this.cause.logPath, termination: this.cause.termination }
+            : {}),
+        nextStep: this.nextStep,
+    });
 }
 
 interface ErrorCause {
@@ -174,6 +210,10 @@ function serializeErrorCause(cause: unknown, seen = new WeakSet<object>()): Erro
 // a typical machine; the rest of setup takes well under the remaining 120 seconds
 // of its 300 second budget.
 const RUNTIME_UPGRADE_BUDGET_MILLISECONDS = 180_000;
+
+// A Runtime comes online while it still republishes its harness catalog, so the catalog an existing Runtime shows
+// right after it starts may predate an install. A new pairing carries the catalog it was redeemed with instead.
+const HARNESS_CATALOG_GRACE_MILLISECONDS = 30_000;
 
 export async function runSetup(args: readonly string[], host: SetupHost): Promise<number> {
     const signal = AbortSignal.any([host.signal, AbortSignal.timeout(300000)]);
@@ -247,42 +287,42 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function prepareDirectory(documents: string) {
-        const requested = text(documents);
-        if (!isAbsolute(requested)) {
-            fail("DOCUMENT_DIR_REQUIRED");
-        }
-        const normalized = resolve(requested);
-        let resolvedDocuments: string;
-        try {
-            await safeLocalPath(normalized, true, false);
-            resolvedDocuments = await realpath(normalized);
-        } catch (cause) {
-            if (errorCode(cause) !== "ENOENT") {
-                throw cause;
-            }
-            const requestedParent = dirname(normalized);
-            await safeLocalPath(requestedParent, true, false);
-            const resolvedParent = await realpath(requestedParent);
-            await safeLocalPath(resolvedParent, true, false);
-            const creatable = join(resolvedParent, basename(normalized));
-            signal.throwIfAborted();
-            try {
-                await mkdir(creatable, { mode: 0o700 });
-            } catch (createCause) {
-                if (errorCode(createCause) !== "EEXIST") {
-                    throw createCause;
-                }
-            }
-            signal.throwIfAborted();
-            await safeLocalPath(creatable, true, false);
-            resolvedDocuments = await realpath(creatable);
-        }
-        await safeLocalPath(resolvedDocuments, true, false);
-        const directory = join(resolvedDocuments, "morty");
+    /** Creates the state directory with private permissions, refusing one that is a link to somewhere else. */
+    async function prepareStateDirectory(requested: string) {
+        const directory = resolve(requested);
         await mkdir(directory, { mode: 0o700, recursive: true });
+        signal.throwIfAborted();
         await safeLocalPath(directory, true, true);
         return directory;
+    }
+
+    /** The directory earlier releases kept this state in, under Documents, or null when it does not exist. */
+    async function earlierStateDirectory() {
+        const documents = resolveDocumentsDirectory(host.documents, signal);
+        if (documents === null) {
+            return null;
+        }
+        const directory = join(resolve(documents), "morty");
+        try {
+            await safeLocalPath(directory, true, false);
+        } catch (cause) {
+            if (errorCode(cause) === "ENOENT") {
+                return null;
+            }
+            throw cause;
+        }
+        return directory;
+    }
+
+    async function readOptionalPrivateJson(path: string) {
+        try {
+            return await readPrivateJson(path);
+        } catch (cause) {
+            if (errorCode(cause) === "ENOENT") {
+                return null;
+            }
+            throw cause;
+        }
     }
 
     async function resolveWorkingDirectory(requested: string) {
@@ -328,6 +368,81 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         await writePrivateFile(path, JSON.stringify(value, null, 2));
     }
 
+    function savedIdentity(config: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
+        return Object.fromEntries(
+            Object.entries(config).filter(([key]) =>
+                [
+                    "user_token",
+                    "user_id",
+                    "project_id",
+                    "bot_id",
+                    "agent_ref",
+                    "agent_config_revision",
+                    "pairing_runtime_id",
+                    "replaced_project_id",
+                    "replaced_user_token",
+                ].includes(key),
+            ),
+        );
+    }
+
+    /**
+     * Moves the state an earlier release kept under Documents into this computer's state directory, but only when its
+     * Machine runs on this computer. Documents may sync to the user's other computers: a copy whose Machine runs
+     * elsewhere is left to that computer, and this one sets up a Machine of its own instead of replacing that one.
+     */
+    async function adoptEarlierState(directory: string, base: string | undefined, cwd: string): Promise<void> {
+        if ((await readOptionalPrivateJson(join(directory, "config.json"))) !== null) {
+            return;
+        }
+        const earlierDirectory = await earlierStateDirectory();
+        const earlierPath = earlierDirectory === null ? null : join(earlierDirectory, "config.json");
+        const earlier = earlierPath === null ? null : await readOptionalPrivateJson(earlierPath);
+        if (earlierPath === null || earlier === null || typeof earlier["base_url"] !== "string") {
+            return;
+        }
+        const context: Context = { directory, base: origin(earlier["base_url"]), config: savedIdentity(earlier) };
+        if ((base !== undefined && context.base !== base) || !(await runsOnThisComputer(context, cwd))) {
+            return;
+        }
+        await saveConfiguration(context, {});
+        await rm(earlierPath, { force: true });
+        progress("identity", "Moved the saved identity out of Documents into this computer's private state.");
+    }
+
+    /** Whether the saved Machine runs here: its bound Runtime, or the one a stopped run paired for it, is managed here. */
+    async function runsOnThisComputer(context: Context, cwd: string): Promise<boolean> {
+        if (context.config["user_token"] === undefined || context.config["project_id"] === undefined) {
+            return false;
+        }
+        let appId: string;
+        let runtimeIds: readonly unknown[];
+        try {
+            appId = identifier((await request(context, "/management/project"))["appId"]);
+            const listed = await request(context, "/management/bots");
+            const bot = (Array.isArray(listed["bots"]) ? listed["bots"] : [])
+                .map(object)
+                .find((item) => context.config["bot_id"] === undefined || item["botId"] === context.config["bot_id"]);
+            const binding =
+                bot === undefined
+                    ? null
+                    : await request(
+                          context,
+                          `/management/bots/${encodeURIComponent(identifier(bot["botId"]))}/runtime-binding`,
+                      );
+            runtimeIds = [binding?.["runtimeId"], context.config["pairing_runtime_id"]];
+        } catch (cause) {
+            // An identity this origin no longer accepts names no Machine on any computer.
+            if (errorCode(cause) === "UNAUTHENTICATED") {
+                return false;
+            }
+            throw cause;
+        }
+        return (await listManagedConnections(context, cwd)).some(
+            (connection) => connection.appId === appId && runtimeIds.includes(connection.runtimeId),
+        );
+    }
+
     async function loadConfiguration(directory: string, base: string): Promise<Context> {
         let config: Readonly<Record<string, unknown>> = {};
         try {
@@ -339,21 +454,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return { directory, base, config };
         }
         // Preserve identity and Bot configuration; resolve Runtime connections through the manager.
-        const identity =
-            config["base_url"] !== undefined && config["base_url"] !== base
-                ? {}
-                : Object.fromEntries(
-                      Object.entries(config).filter(([key]) =>
-                          [
-                              "user_token",
-                              "user_id",
-                              "project_id",
-                              "bot_id",
-                              "agent_ref",
-                              "agent_config_revision",
-                          ].includes(key),
-                      ),
-                  );
+        const identity = config["base_url"] !== undefined && config["base_url"] !== base ? {} : savedIdentity(config);
         return { directory, base, config: identity };
     }
 
@@ -387,21 +488,49 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         });
         const value = object(await response.json());
         if (!response.ok) {
-            const failure = object(value["error"]);
-            const code = text(failure["code"], /^[A-Za-z0-9_-]+$/u);
-            const message =
-                typeof failure["message"] === "string"
-                    ? failure["message"]
-                    : `Request failed with HTTP ${response.status}`;
-            fail(code, Object.assign(new Error(message), { name: "RemoteError" }));
+            remoteFailure(value, response.status);
         }
         return value;
     }
 
-    function readOptions(): Options {
-        const { values, positionals } = parseArgs({
-            args: [...args],
-            allowPositionals: true,
+    function remoteFailure(value: Readonly<Record<string, unknown>>, status: number): never {
+        const failure = object(value["error"]);
+        const code = text(failure["code"], /^[A-Za-z0-9_-]+$/u);
+        const message =
+            typeof failure["message"] === "string" ? failure["message"] : `Request failed with HTTP ${status}`;
+        fail(code, Object.assign(new Error(message), { name: "RemoteError" }));
+    }
+
+    /**
+     * Ends the local identity of a Project this machine replaced. Setup keeps it with the successor's identity until
+     * then, so a run that stops on the way ends it next time instead of leaving a credential that opens the replaced
+     * Project. Nothing else from that Project opens it: its replacement ended everything shared from it.
+     */
+    async function retireReplacedIdentity(context: Context): Promise<Context> {
+        const projectId = context.config["replaced_project_id"];
+        const token = context.config["replaced_user_token"];
+        if (projectId === undefined && token === undefined) {
+            return context;
+        }
+        const response = await fetch(
+            new URL(`/morty/api/projects/${identifier(projectId)}/identity/remote-access`, context.base),
+            {
+                method: "DELETE",
+                headers: { authorization: `Bearer ${credential(token)}` },
+                redirect: "error",
+                signal: AbortSignal.any([signal, AbortSignal.timeout(45000)]),
+            },
+        );
+        // A credential that no longer authenticates was ended by an earlier run that stopped before saving it.
+        if (!response.ok && response.status !== 401) {
+            remoteFailure(object(await response.json()), response.status);
+        }
+        return await saveConfiguration(context, { replaced_project_id: undefined, replaced_user_token: undefined });
+    }
+
+    function readSetupOptions(commandArgs: readonly string[]): SetupOptions {
+        const { values } = parseArgs({
+            args: [...commandArgs],
             options: {
                 token: { type: "string" },
                 cwd: { type: "string" },
@@ -410,28 +539,35 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 "session-id": { type: "string" },
             },
         });
-        if (positionals.length !== 1 || positionals[0] !== "setup") {
-            fail("INVALID_ARGUMENTS");
+        if (values["base-url"] === undefined) {
+            fail("BASE_URL_REQUIRED");
         }
         if (values.harness === undefined) {
             fail("HARNESS_REQUIRED");
         }
-        if (values["base-url"] === undefined) {
-            fail("BASE_URL_REQUIRED");
-        }
         if (values.cwd === undefined) {
             fail("WORKING_DIRECTORY_REQUIRED");
         }
-        const base = origin(values["base-url"]);
-        const cwd = text(values.cwd);
-        const harness = identifier(values.harness);
         if (values.token !== undefined) {
             fail("INVALID_ARGUMENTS");
         }
         if (values["session-id"] === undefined) {
             fail("SESSION_ID_REQUIRED");
         }
-        return { base, cwd, harness, sessionId: identifier(values["session-id"]) };
+        return {
+            base: origin(values["base-url"]),
+            cwd: text(values.cwd),
+            harness: identifier(values.harness),
+            sessionId: identifier(values["session-id"]),
+        };
+    }
+
+    function readRevokeAllAccessOptions(commandArgs: readonly string[]): RevokeAllAccessOptions {
+        const { values } = parseArgs({
+            args: [...commandArgs],
+            options: { "base-url": { type: "string" } },
+        });
+        return { base: values["base-url"] === undefined ? undefined : origin(values["base-url"]) };
     }
 
     async function prepareIdentity(context: Context): Promise<SetupIdentity> {
@@ -625,10 +761,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             // The replacement Machine starts unbound; drop the previous Machine's Agent binding.
             agent_ref: undefined,
             agent_config_revision: undefined,
+            pairing_runtime_id: undefined,
+            replaced_project_id: context.config["project_id"],
+            replaced_user_token: context.config["user_token"],
             entry: "setup",
         });
         emit({ status: "project_replaced", botId: saved.config["bot_id"], projectId: saved.config["project_id"] });
-        return saved;
+        return await retireReplacedIdentity(saved);
     }
 
     async function prepareRuntime(
@@ -639,9 +778,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         progress("pairing", "Preparing the Runtime connection.");
         const project = await request(context, "/management/project");
         const appId = identifier(project["appId"]);
-        if (expectedRuntimeId !== null) {
+        const reusable = async (runtimeId: string) => {
             const existing = (await listManagedConnections(context, cwd)).find(
-                (connection) => connection.appId === appId && connection.runtimeId === expectedRuntimeId,
+                (connection) => connection.appId === appId && connection.runtimeId === runtimeId,
             );
             if (existing !== undefined) {
                 emit({
@@ -649,14 +788,41 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     runtimeId: existing.runtimeId,
                     connectionId: existing.connectionId,
                 });
-                return { context, runtime: { kind: "existing", ...existing } };
+            }
+            return existing;
+        };
+        if (expectedRuntimeId !== null) {
+            const existing = await reusable(expectedRuntimeId);
+            if (existing !== undefined) {
+                return { context, runtime: { kind: "existing", ...existing, bound: true } };
             }
             // The saved Machine's Runtime is not managed here anymore: keep the user, but
             // continue on a fresh Project with a fresh Machine and a new Runtime pairing.
             const replaced = await replaceProject(context);
-            return { context: replaced, runtime: await createRuntimePairing(replaced, appId) };
+            return await pairRuntime(replaced, appId);
         }
-        return { context, runtime: await createRuntimePairing(context, appId) };
+        // The Machine is unbound. A Runtime an earlier run paired for it still holds one of the Project's Runtime
+        // slots, so continue on it while this machine still manages its connection.
+        const pairing = context.config["pairing_runtime_id"];
+        if (typeof pairing === "string") {
+            const existing = await reusable(pairing);
+            if (existing !== undefined) {
+                return { context, runtime: { kind: "existing", ...existing, bound: false } };
+            }
+        }
+        return await pairRuntime(context, appId);
+    }
+
+    /**
+     * Pairs a new Runtime for the unbound Machine. The Runtime is recorded before its code is redeemed, so a run that
+     * stops at any later point leaves the next run a Runtime to continue on rather than another one to pair.
+     */
+    async function pairRuntime(
+        context: Context,
+        appId: string,
+    ): Promise<{ readonly context: Context; readonly runtime: RuntimeSelection }> {
+        const runtime = await createRuntimePairing(context, appId);
+        return { context: await saveConfiguration(context, { pairing_runtime_id: runtime.runtimeId }), runtime };
     }
 
     function runtimeArguments(runtime: RuntimeSelection, cwd: string): readonly string[] {
@@ -762,20 +928,34 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         );
     }
 
-    function setupHasOnlineRuntimeAgent(setup: Record<string, unknown>, runtimeId: string, agentRef: string): boolean {
-        return (
-            Array.isArray(setup["runtimes"]) &&
-            setup["runtimes"].some((runtime) => hasOnlineRuntimeAgent(object(runtime), runtimeId, agentRef))
+    /** The Agents the Runtime offers while it is online, or null while it is not. */
+    async function onlineRuntimeAgents(context: Context, runtime: RuntimeSelection): Promise<readonly string[] | null> {
+        const botPath = `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}`;
+        // A bound Machine's Runtime is read through the Machine; an unbound one is among the setup candidates.
+        const alreadyConfigured = runtime.kind === "existing" && runtime.bound;
+        const state = await request(context, `${botPath}/${alreadyConfigured ? "workspace" : "setup/runtimes"}`, {});
+        const candidates = alreadyConfigured
+            ? [object(state["runtime"])]
+            : Array.isArray(state["runtimes"])
+              ? state["runtimes"].map(object)
+              : [];
+        const current = candidates.find(
+            (candidate) => candidate["runtimeId"] === runtime.runtimeId && candidate["online"] === true,
         );
+        if (current === undefined || !Array.isArray(current["agents"])) {
+            return null;
+        }
+        return current["agents"].map((agent) => identifier(object(agent)["agentRef"]));
     }
 
     async function runtimeIsOnline(context: Context, runtime: RuntimeSelection, harness: string): Promise<boolean> {
-        const botPath = `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}`;
-        const alreadyConfigured = runtime.kind === "existing" && typeof context.config["agent_ref"] === "string";
-        const state = await request(context, `${botPath}/${alreadyConfigured ? "workspace" : "setup/runtimes"}`, {});
-        return alreadyConfigured
-            ? hasOnlineRuntimeAgent(object(state["runtime"]), runtime.runtimeId, harness)
-            : setupHasOnlineRuntimeAgent(state, runtime.runtimeId, harness);
+        return (await onlineRuntimeAgents(context, runtime))?.includes(harness) === true;
+    }
+
+    /** One rule for every Runtime setup waits on: an online Runtime without the chosen harness cannot run it. */
+    function harnessUnavailable(harness: string, available: readonly string[]): never {
+        emit({ status: "harness_unavailable", harness, available });
+        fail("HARNESS_UNAVAILABLE");
     }
 
     async function waitForRuntime(context: Context, runtime: RuntimeSelection, harness: string) {
@@ -799,27 +979,37 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                         emit({ status: "runtime_paired", runtimeId, harness });
                         break;
                     }
-                    emit({
-                        status: "harness_unavailable",
+                    harnessUnavailable(
                         harness,
-                        available: status["agents"].map((agent) => identifier(object(agent)["id"])),
-                    });
-                    fail("HARNESS_UNAVAILABLE");
+                        status["agents"].map((agent) => identifier(object(agent)["id"])),
+                    );
                 }
                 await clock.wait(1000, signal);
             }
         }
 
         attempts = 0;
+        // When the online Runtime was first seen without the harness. Only a catalog that stayed without it through
+        // the grace period means the harness is not installed.
+        let missingSince: number | null = null;
         while (true) {
             signal.throwIfAborted();
-            const online = await runtimeIsOnline(context, runtime, harness);
-            if (online) {
+            const agents = await onlineRuntimeAgents(context, runtime);
+            if (agents?.includes(harness) === true) {
                 if (runtime.kind === "existing") {
                     emit({ status: "runtime_paired", runtimeId, harness });
                 }
                 emit({ status: "runtime_online", runtimeId, harness });
                 return;
+            }
+            if (agents === null) {
+                missingSince = null;
+            } else {
+                const now = clock.now().getTime();
+                missingSince ??= now;
+                if (now - missingSince >= HARNESS_CATALOG_GRACE_MILLISECONDS) {
+                    harnessUnavailable(harness, agents);
+                }
             }
             if (attempts++ % 10 === 0) {
                 progress("runtime", `Waiting for the Runtime and ${harness} to come online.`);
@@ -844,7 +1034,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 agentRef,
             },
         );
-        const saved = await saveConfiguration(context, { agent_ref: agentRef, agent_config_revision: revision });
+        // The Machine now owns its Runtime, so the pairing record is no longer needed.
+        const saved = await saveConfiguration(context, {
+            agent_ref: agentRef,
+            agent_config_revision: revision,
+            pairing_runtime_id: undefined,
+        });
         emit({ status: "binding_activated", botId: context.config["bot_id"], harness });
         return saved;
     }
@@ -908,7 +1103,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return qrPath;
     }
 
-    async function finishSetup(context: Context, runtime: RuntimeSelection, options: Options) {
+    async function finishSetup(context: Context, runtime: RuntimeSelection, options: SetupOptions) {
         await waitForReadiness(context, runtime);
         const botId = context.config["bot_id"];
         const workingDirectory = text(context.config["workspace"]);
@@ -960,12 +1155,82 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         });
     }
 
-    async function main() {
-        const options = readOptions();
-        const base = options.base;
+    async function revokeAllAccess(options: RevokeAllAccessOptions) {
+        const directory = await prepareStateDirectory(resolveStateDirectory(host.state, signal));
+        await adoptEarlierState(directory, options.base, directory);
+        let config: Readonly<Record<string, unknown>>;
+        try {
+            config = await readPrivateJson(join(directory, "config.json"));
+        } catch (cause) {
+            if (errorCode(cause) === "ENOENT") {
+                fail("LOCAL_IDENTITY_REQUIRED");
+            }
+            throw cause;
+        }
+        if (config["user_token"] === undefined || config["project_id"] === undefined) {
+            fail("LOCAL_IDENTITY_REQUIRED");
+        }
+        const base = origin(config["base_url"]);
+        // Never send the saved identity to a different origin, even when explicitly requested.
+        if (options.base !== undefined && options.base !== base) {
+            fail("LOCAL_IDENTITY_REQUIRED");
+        }
+        const context = await retireReplacedIdentity({ directory, base, config });
+        const revoked = await request(context, "/identity/revoke-all-access", {});
+        if (revoked["status"] !== "access_revoked") {
+            fail("INVALID_RESPONSE");
+        }
+        emit({
+            status: "access_revoked",
+            projectId: identifier(context.config["project_id"]),
+            message:
+                "Previous sharing links and other Morty credentials have been revoked. The local identity is retained. Existing session connections may remain usable until their access expires.",
+        });
+    }
+
+    async function preflightRuntime(context: Context, cwd: string) {
+        progress("preflight", "Checking Node.js, npm and the installed Runtime before creating an identity.");
+        const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
+        if (major < 22 || (major === 22 && minor < 19)) {
+            throw new RuntimePreflightError(
+                `Node.js 22.19.0 or newer is required; found ${process.versions.node} at ${process.execPath}.`,
+            );
+        }
+        try {
+            // This uses the same executable resolution as start/pair, including the Node
+            // selected by its launcher. A package's engines field is not proof it starts.
+            await runMobius(context, ["--version"], cwd, AbortSignal.any([signal, deadline(30_000)]), "process-tree");
+            if (host.runtime === undefined) {
+                const npm = await findExecutableOnPath("npm", process.env);
+                if (npm === null) {
+                    throw new Error("npm is required for Runtime upgrades");
+                }
+                await runBoundedProcess({
+                    command: npm.path,
+                    arguments: ["--version"],
+                    cwd,
+                    environment: process.env,
+                    signal,
+                    timeoutMilliseconds: 10_000,
+                    outputLimitBytes: 4096,
+                });
+            }
+        } catch (cause) {
+            signal.throwIfAborted();
+            throw new RuntimePreflightError(
+                "The local Runtime failed its startup check. No remote identity or pairing was created by this run.",
+                cause,
+            );
+        }
+        emit({ status: "runtime_verified", nodeVersion: process.versions.node, nodeExecutable: process.execPath });
+    }
+
+    async function setup(options: SetupOptions) {
         const cwd = await resolveWorkingDirectory(options.cwd);
-        const directory = await prepareDirectory(await resolveDocumentsDirectory(host.documents, signal));
-        let context: Context = await loadConfiguration(directory, base);
+        const directory = await prepareStateDirectory(resolveStateDirectory(host.state, signal));
+        await preflightRuntime({ directory, base: options.base, config: {} }, cwd);
+        await adoptEarlierState(directory, options.base, cwd);
+        let context = await retireReplacedIdentity(await loadConfiguration(directory, options.base));
         const identity = await prepareIdentity(context);
         context = identity.context;
         const verified = await verifyIdentityAndBot(context);
@@ -984,7 +1249,18 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     try {
-        await main();
+        const action = args[0];
+        const commandArgs = args.slice(1);
+        switch (action) {
+            case "setup":
+                await setup(readSetupOptions(commandArgs));
+                break;
+            case "revoke-all-access":
+                await revokeAllAccess(readRevokeAllAccessOptions(commandArgs));
+                break;
+            default:
+                fail("INVALID_ARGUMENTS");
+        }
         return 0;
     } catch (cause) {
         emit({
@@ -999,7 +1275,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                           ? "TIMEOUT"
                           : "SETUP_FAILED",
                 cause: serializeErrorCause(cause),
-                ...(cause instanceof RuntimeStartError ? { runtime: cause.diagnostic() } : {}),
+                ...(cause instanceof RuntimeStartError || cause instanceof RuntimePreflightError
+                    ? { runtime: cause.diagnostic() }
+                    : {}),
             },
         });
         return 1;

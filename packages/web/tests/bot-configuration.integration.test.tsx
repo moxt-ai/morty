@@ -19,8 +19,8 @@ test("Given Morty has no paired agent, When the setup page opens, Then it offers
     expect(queryByRole(document.body, "combobox", { name: "Data region" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Refresh pairing instruction" })).toBeNull();
     const dialog = getByRole(document.body, "dialog", { name: "Connect agent" });
-    expect(getByRole(dialog, "button", { name: "Copy setup instruction" })).toBeInstanceOf(HTMLButtonElement);
-    expect(dialog.textContent).not.toContain("Continue your coding session from your phone.");
+    expect(getByRole(dialog, "button", { name: "Copy setup prompt" })).toBeInstanceOf(HTMLButtonElement);
+    expect(dialog.textContent).not.toContain("Just one prompt.");
     expect(dialog.textContent).not.toContain("Works with Codex, Claude Code, and Pi.");
     expect(dialog.textContent).not.toContain("Local execution. Remote access you can revoke.");
 });
@@ -295,4 +295,39 @@ test("Given a Bot paired with Pi, When the user opens its settings and sends a p
         expect(reply).toBeDefined();
         return reply;
     });
+});
+
+test("Given another tab saved a recent directory, When this tab reopens its directory menu and forgets a directory, Then the other tab's directory is listed and remains", {
+    timeout: 30_000,
+}, async () => {
+    const key = (botId: string) => `mobius:recent-cwd:${encodeURIComponent(botId)}`;
+    const here = { directoryId: "directory-here", directoryLabel: "/project-here" };
+    const there = { directoryId: "directory-there", directoryLabel: "/project-from-another-tab" };
+    const app = await createTestApp({
+        connectAgent: true,
+        prepare: (current) => window.localStorage.setItem(key(current.botId), JSON.stringify([here])),
+    });
+    const recent = (label: string) =>
+        app.elementsByTestId(dataTestId.recentWorkingDirectory).some((item) => item.textContent?.includes(label));
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.workingDirectory));
+    await app.waitForView(() => expect(recent("/project-here")).toBe(true));
+    // Another tab of the same Bot saves a directory through the same storage.
+    window.localStorage.setItem(key(app.botId), JSON.stringify([there, here]));
+    // Reopening the menu shows it, with no change made in this tab.
+    await app.user.keyboard("{Escape}");
+    await app.user.click(await app.queryElementByTestId(dataTestId.workingDirectory));
+    await app.waitForView(() => expect(recent("/project-from-another-tab")).toBe(true));
+    const forget = app
+        .elementsByTestId(dataTestId.forgetRecentWorkingDirectory)
+        .find((element) => element.getAttribute("aria-label")?.includes("/project-here") === true);
+    if (forget === undefined) {
+        throw new Error("Expected to forget /project-here");
+    }
+    await app.user.click(forget);
+    await app.user.keyboard("{Escape}");
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.workingDirectory));
+    await app.waitForView(() => expect(recent("/project-from-another-tab")).toBe(true));
+    expect(recent("/project-here")).toBe(false);
 });

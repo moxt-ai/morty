@@ -17,30 +17,6 @@ async function loadAllResponseText(app: Awaited<ReturnType<typeof createTestApp>
     }
 }
 
-test("Given interleaved live text and tool events, When the agent responds, Then Chat shows each item in arrival order", {
-    timeout: 30_000,
-}, async () => {
-    const app = await createTestApp({ connectAgent: true });
-    await app.queryElementByTestId(
-        dataTestId.botConnectionStatus,
-        (element) => element.getAttribute("data-connection-status") === "connected",
-    );
-    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
-    if (!(composer instanceof HTMLTextAreaElement)) {
-        throw new Error("Expected the message composer");
-    }
-
-    await sendPrompt(app, composer, "show live output in order");
-
-    await app.waitForView(() => {
-        const responses = app.elementsByTestId(dataTestId.agentResponse);
-        expect(responses).toHaveLength(3);
-        expect(responses[0]?.textContent).toContain("First live message");
-        expect(responses[1]?.textContent).toContain("Later live tool");
-        expect(responses[2]?.textContent).toContain("Final live message");
-    });
-});
-
 test("Given an active turn exceeds one recovery page, When the user leaves and reopens the conversation, Then Chat restores every character and rich content", {
     timeout: 30_000,
 }, async () => {

@@ -1,6 +1,5 @@
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import type { ChatAccess } from "../../services/chat/bot-chat-api.ts";
-import type { OpenMobiusSession } from "./open-session.ts";
 import type { UnconfirmedSubmission } from "./session-delivery-store.ts";
 
 export interface QueuedDraftMessage {
@@ -28,30 +27,66 @@ export type ConversationCreationState =
           readonly access: ChatAccess;
           readonly error: string;
           readonly message: QueuedDraftMessage;
-      }
-    | {
-          readonly kind: "initial-message-pending";
-          readonly conversationId: string;
-          readonly message: QueuedDraftMessage;
-          readonly session: OpenMobiusSession;
-      }
-    | {
-          /**
-           * The pane submitted the queued first message but the service never
-           * confirmed it, so the user must retry or discard it. Distinct from
-           * "pending" so a remount never auto-submits an unconfirmed message.
-           */
-          readonly kind: "initial-message-unconfirmed";
-          readonly conversationId: string;
-          /**
-           * The exact submission the previous pane issued. A remount adopts it
-           * as the pane's delivery journal so the user can retry or discard it,
-           * and nothing is resubmitted without that decision.
-           */
-          readonly journal: UnconfirmedSubmission;
-          readonly message: QueuedDraftMessage;
-          readonly session: OpenMobiusSession;
       };
+
+/**
+ * A conversation's first message, from the moment its conversation exists until the service accepts it or the user
+ * discards it. It belongs to that conversation, not to whichever conversation is on screen: leaving the conversation
+ * keeps it, and the conversation's pane delivers it whenever it opens.
+ */
+type FirstMessageDelivery =
+    | { readonly kind: "pending"; readonly message: QueuedDraftMessage }
+    | {
+          /**
+           * The pane submitted the first message but the service never confirmed it, so the user must retry or
+           * discard it. Distinct from "pending" so a later pane never auto-submits an unconfirmed message.
+           */
+          readonly kind: "unconfirmed";
+          readonly message: QueuedDraftMessage;
+          /** The exact submission the previous pane issued, which a later pane adopts as its delivery journal. */
+          readonly journal: UnconfirmedSubmission;
+      };
+
+/** First messages not yet accepted by the service, by conversation id. */
+export type FirstMessages = ReadonlyMap<string, FirstMessageDelivery>;
+
+type FirstMessageEvent =
+    | { readonly kind: "queued"; readonly conversationId: string; readonly message: QueuedDraftMessage }
+    | { readonly kind: "delivered"; readonly conversationId: string }
+    | { readonly kind: "discarded"; readonly conversationId: string; readonly commandId: string }
+    | { readonly kind: "unconfirmed"; readonly conversationId: string; readonly journal: UnconfirmedSubmission };
+
+export function transitionFirstMessages(messages: FirstMessages, event: FirstMessageEvent): FirstMessages {
+    const current = messages.get(event.conversationId);
+    const next = new Map(messages);
+    switch (event.kind) {
+        case "queued":
+            next.set(event.conversationId, { kind: "pending", message: event.message });
+            return next;
+        case "delivered":
+            // The conversation's pane sent the first message; a later pane must not send it again.
+            if (current === undefined) {
+                return messages;
+            }
+            next.delete(event.conversationId);
+            return next;
+        case "discarded":
+            // The user removed the first message after an uncertain delivery, so no later pane may submit it.
+            if (current?.message.commandId !== event.commandId) {
+                return messages;
+            }
+            next.delete(event.conversationId);
+            return next;
+        case "unconfirmed":
+            if (current?.kind !== "pending" || current.message.commandId !== event.journal.commandId) {
+                return messages;
+            }
+            next.set(event.conversationId, { kind: "unconfirmed", message: current.message, journal: event.journal });
+            return next;
+        default:
+            return event satisfies never;
+    }
+}
 
 export type ConversationCreationEvent =
     | { readonly kind: "reset" }
@@ -59,29 +94,13 @@ export type ConversationCreationEvent =
     | { readonly kind: "session-created"; readonly commandId: string; readonly access: ChatAccess }
     | { readonly kind: "session-create-failed"; readonly commandId: string; readonly error: string }
     | { readonly kind: "draft-message-retry-requested"; readonly commandId: string }
-    | { readonly kind: "initial-message-delivered"; readonly conversationId: string }
-    | {
-          readonly kind: "initial-message-discarded";
-          readonly commandId: string;
-          readonly conversationId: string;
-      }
-    | {
-          readonly kind: "initial-message-pending";
-          readonly commandId: string;
-          readonly conversationId: string;
-          readonly session: OpenMobiusSession;
-      }
-    | {
-          readonly kind: "initial-message-unconfirmed";
-          readonly journal: UnconfirmedSubmission;
-      }
+    /** The conversation exists and its first message now belongs to it. */
+    | { readonly kind: "conversation-created"; readonly commandId: string }
     | { readonly kind: "draft-message-send-failed"; readonly commandId: string; readonly error: string };
 
 function isCurrentMessage(state: ConversationCreationState, commandId: string): boolean {
     switch (state.kind) {
         case "draft":
-        case "initial-message-pending":
-        case "initial-message-unconfirmed":
             return false;
         case "session-creating":
         case "session-create-failed":
@@ -106,8 +125,6 @@ export function transitionConversationCreation(
                 case "session-creating":
                 case "draft-message-sending":
                 case "draft-message-send-failed":
-                case "initial-message-pending":
-                case "initial-message-unconfirmed":
                     return state;
             }
             return state;
@@ -123,43 +140,10 @@ export function transitionConversationCreation(
             return state.kind === "draft-message-send-failed" && isCurrentMessage(state, event.commandId)
                 ? { access: state.access, kind: "draft-message-sending", message: state.message }
                 : state;
-        case "initial-message-delivered":
-            // The pane that opened this conversation has sent the queued first
-            // message; a later view must not send it again.
-            return (state.kind === "initial-message-pending" || state.kind === "initial-message-unconfirmed") &&
-                state.conversationId === event.conversationId
-                ? { kind: "draft" }
-                : state;
-        case "initial-message-discarded":
-            // The user removed the queued first message after an uncertain
-            // delivery. Drop the recovery copy so a remount cannot submit a
-            // message the user explicitly discarded; the pane's own discard
-            // already ended its retry path, so both copies must agree.
-            return (state.kind === "initial-message-pending" || state.kind === "initial-message-unconfirmed") &&
-                state.conversationId === event.conversationId &&
-                state.message.commandId === event.commandId
-                ? { kind: "draft" }
-                : state;
-        case "initial-message-pending":
+        case "conversation-created":
+            // The first message now belongs to its conversation; the draft starts over.
             return state.kind === "draft-message-sending" && isCurrentMessage(state, event.commandId)
-                ? {
-                      conversationId: event.conversationId,
-                      kind: "initial-message-pending",
-                      message: state.message,
-                      session: event.session,
-                  }
-                : state;
-        case "initial-message-unconfirmed":
-            // The pane could not confirm the submission. Keep the message so
-            // the user can retry it, but as a state that never auto-sends.
-            return state.kind === "initial-message-pending" && state.message.commandId === event.journal.commandId
-                ? {
-                      conversationId: state.conversationId,
-                      journal: event.journal,
-                      kind: "initial-message-unconfirmed",
-                      message: state.message,
-                      session: state.session,
-                  }
+                ? { kind: "draft" }
                 : state;
         case "draft-message-send-failed":
             return state.kind === "draft-message-sending" && isCurrentMessage(state, event.commandId)
@@ -177,9 +161,6 @@ export function queuedDraftMessage(state: ConversationCreationState): QueuedDraf
     switch (state.kind) {
         case "draft":
             return null;
-        case "initial-message-pending":
-        case "initial-message-unconfirmed":
-            return state.message;
         case "session-creating":
         case "session-create-failed":
         case "draft-message-sending":
@@ -192,10 +173,6 @@ export function conversationCreationStatus(state: ConversationCreationState): st
     switch (state.kind) {
         case "draft":
             return null;
-        case "initial-message-pending":
-            return null;
-        case "initial-message-unconfirmed":
-            return "Message delivery was not confirmed";
         case "session-creating":
             return "Session creating";
         case "session-create-failed":
@@ -215,8 +192,6 @@ export function conversationCreationError(state: ConversationCreationState): str
         case "draft":
         case "session-creating":
         case "draft-message-sending":
-        case "initial-message-pending":
-        case "initial-message-unconfirmed":
             return "";
     }
 }
@@ -229,8 +204,6 @@ export function conversationCreationBusy(state: ConversationCreationState): bool
         case "draft":
         case "session-create-failed":
         case "draft-message-send-failed":
-        case "initial-message-pending":
-        case "initial-message-unconfirmed":
             return false;
     }
 }
@@ -238,8 +211,6 @@ export function conversationCreationBusy(state: ConversationCreationState): bool
 export function conversationComposerLocked(state: ConversationCreationState): boolean {
     switch (state.kind) {
         case "draft":
-        case "initial-message-pending":
-        case "initial-message-unconfirmed":
             return false;
         case "session-creating":
         case "session-create-failed":

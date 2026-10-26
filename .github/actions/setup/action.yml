@@ -44,9 +44,9 @@ runs:
       shell: bash
       run: pnpm --dir third-party/mobius install --frozen-lockfile
 
-    - name: Build Mobius ACP harnesses
+    - name: Build Mobius CLI and ACP harnesses
       shell: bash
-      run: pnpm --dir third-party/mobius --filter @moxt-ai/mobius run prebuild
+      run: pnpm --dir third-party/mobius --filter @moxt-ai/mobius build
 
     - name: Install Chat dependencies
       shell: bash

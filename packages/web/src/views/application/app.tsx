@@ -159,7 +159,7 @@ function SetupApplication({
     readonly returnHref: string | null;
 }) {
     return (
-        <SetupCardShell titleId="setup-title">
+        <SetupCardShell cardLeading={null} showPageHeader titleId="setup-title">
             {notice === "access-ended" && (
                 <div role="status" className="mb-5 rounded-xl border border-primary/20 bg-primary/5 px-5 py-4 text-sm">
                     <p className="font-medium">Current access ended</p>
@@ -180,29 +180,19 @@ function SetupApplication({
                     ← Back to your last computer
                 </a>
             )}
-            <p className="text-sm font-medium text-primary">Morty</p>
             <SetupCardTitle id="setup-title">
-                {returnHref === null ? "Continue your coding session from your phone." : "Connect another computer"}
+                {returnHref === null ? "Just one prompt." : "Connect another computer"}
             </SetupCardTitle>
             <SetupCardDescription>
                 {returnHref === null
-                    ? "Check progress, send instructions, and approve requests while your agent runs on your computer."
-                    : "Use the coding agent on the computer you want to add to get a connection link."}
+                    ? "Connect your agent. Continue from any browser."
+                    : "Use the agent on the computer you want to add."}
             </SetupCardDescription>
-            <p className="mt-2 max-w-xl text-sm text-muted-foreground">Works with Codex, Claude Code, and Pi.</p>
-            <h2 className="mt-10 text-lg font-semibold tracking-tight">
-                {returnHref === null ? "Start on your computer" : "Start on the computer you want to add"}
-            </h2>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                Paste the instruction below into the coding agent session you want to continue. Then open the link it
-                returns on your phone or in another browser.
-            </p>
-            <div className="mt-4">
+            <div className="mt-8">
                 <PairingInstruction />
             </div>
-            <p className="mt-4 text-sm text-muted-foreground">Local execution. Remote access you can revoke.</p>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                Keep your computer awake and online. Setup may install or update the local connection software.
+            <p className="mt-4 border-t border-border/50 pt-4 text-center text-xs leading-5 text-muted-foreground">
+                Works with Codex, Claude Code, and Pi.
             </p>
         </SetupCardShell>
     );

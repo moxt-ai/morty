@@ -1,8 +1,14 @@
 import { mkdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { dirname, isAbsolute, join, relative } from "node:path";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
+
+/** How the Runtime shows a directory: under the user's home directory as `~/…`, elsewhere in full. */
+function directoryLabel(path: string): string {
+    const suffix = relative(homedir(), path);
+    return suffix === "" ? "~" : !isAbsolute(suffix) && !suffix.startsWith("..") ? `~/${suffix}` : path;
+}
 
 test("Given a saved setup handoff, When its Runtime reconnects, Then setup returns a concise QR image reference", async ({
     runtime,
@@ -48,6 +54,35 @@ test("Given a saved Machine whose Runtime the manager no longer manages, When se
     const statuses = connected.events.map((event) => event["status"]);
     expect(statuses).toContain("prepared");
     expect(statuses).toContain("ready");
+});
+
+test("Given a browser opened the saved Machine's link, When setup replaces its Project, Then nothing from the previous Project opens Morty and the new link does in the same tab", async ({
+    runtime,
+}) => {
+    const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const { page } = runtime;
+    await page.goto(original.url);
+    await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
+    const previousToken = original.configuration["user_token"];
+    await runtime.forgetRuntimeConnections();
+
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+
+    expect(connected.identity.projectId).not.toBe(original.identity.projectId);
+    expect(connected.configuration).not.toHaveProperty("replaced_project_id");
+    expect(connected.configuration).not.toHaveProperty("replaced_user_token");
+    const session = await page.request.get(
+        `${runtime.origin}/morty/api/projects/${original.identity.projectId}/session`,
+        { headers: { authorization: `Bearer ${String(previousToken)}` } },
+    );
+    expect(session.status()).toBe(401);
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "This link is no longer valid" })).toBeVisible();
+    await page.goto(original.url);
+    await expect(page.getByRole("heading", { name: "This link is no longer available" })).toBeVisible();
+    // The new link differs only after "#", so the browser keeps the page that showed the previous one.
+    await page.goto(connected.url);
+    await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
 });
 
 test("Given a saved Machine and another same-App connection, When its Runtime reconnects, Then setup reuses the Machine's bound Runtime", async ({
@@ -137,7 +172,10 @@ test("Given setup was previously paired in another directory, When a new project
     await expect(runtime.page.getByRole("article", { name: "Agent response" })).toContainText(
         "Verify the setup project directory",
     );
-    await runtime.page.getByRole("button", { name: "Show execution details" }).click();
-    await expect(runtime.page.getByTestId(dataTestId.executionDirectory)).toHaveText(workspace);
+    // Execution details live in the computer menu.
+    await runtime.page.getByRole("button", { name: /^Switch computer, / }).click();
+    await runtime.page.getByRole("menuitem", { name: "Execution details", exact: true }).click();
+    const details = runtime.page.getByRole("dialog", { name: "Execution details", exact: true });
+    await expect(details.getByTestId(dataTestId.executionDirectory)).toHaveText(directoryLabel(workspace));
     await runtime.page.screenshot({ path: testInfo.outputPath("long-workspace-handoff.png"), fullPage: true });
 });

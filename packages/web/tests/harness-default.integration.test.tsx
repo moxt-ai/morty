@@ -1,4 +1,4 @@
-import { getByRole } from "@testing-library/dom";
+import { getAllByRole, getByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -156,8 +156,9 @@ test("Given an active Pi conversation, When the Runtime is offline while the new
         throw new Error("Expected a connected Runtime");
     }
     await app.daemon.disconnect();
-    await app.waitForView(() =>
-        expect(getByRole(document.body, "status", { name: "Connection" }).textContent).toBe("Disconnected"),
+    await app.queryElementByTestId(
+        dataTestId.sessionReconnectNotice,
+        (element) => element.textContent?.includes("Retry now") === true,
     );
 
     await startNewSession(app);
@@ -166,8 +167,13 @@ test("Given an active Pi conversation, When the Runtime is offline while the new
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
     );
     await app.user.type(composer, "This must not start on the stale harness");
+    // The draft cannot load settings from an offline Runtime: it says so instead of offering the stale ones.
     await app.waitForView(() =>
-        expect(getByRole(document.body, "status", { name: "Loading harness and model settings" })).toBeDefined(),
+        expect(
+            getAllByRole(document.body, "alert").some((alert) =>
+                alert.textContent?.includes("Your Mobius is disconnected"),
+            ),
+        ).toBe(true),
     );
     expect(app.elementByTestId(dataTestId.sendMessage).hasAttribute("disabled")).toBe(true);
 

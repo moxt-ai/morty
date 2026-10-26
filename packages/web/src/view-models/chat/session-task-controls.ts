@@ -1,131 +1,100 @@
-import type { MobiusTurn, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
-import { SessionPromptDisposition } from "@moxt-ai/mobius-sdk";
+import type { MobiusTurn } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
 import { formatError } from "../format-error.ts";
 
-interface ActiveTurn {
+/** The turn the service reports running, as the Session pane's current turn holds it. */
+export interface RunningTurn {
     readonly commandId: string;
     readonly turnId: string;
 }
 
-type TaskControlOperation =
-    | { readonly kind: "idle" }
-    | { readonly kind: "running"; readonly active: ActiveTurn }
-    | { readonly kind: "steering"; readonly active: ActiveTurn }
-    | { readonly kind: "stopping"; readonly active: ActiveTurn };
-
-type TaskControlFeedback = { readonly kind: "none" } | { readonly kind: "failed"; readonly message: string };
+type TaskControlFeedback =
+    | { readonly kind: "none" }
+    | { readonly kind: "failed"; readonly commandId: string; readonly message: string };
 
 interface TaskControlPort {
     readonly cancel: (turnId: string, idempotencyKey: string, signal: AbortSignal) => Promise<MobiusTurn>;
-    readonly submit: (request: SubmitMobiusTurnRequest, signal: AbortSignal) => Promise<{ readonly turnId: string }>;
 }
 
+/**
+ * The stop control. Which turn runs belongs to the pane's current turn; this store keeps only what the user asked of
+ * it: a stop request for a command, and why the last request failed.
+ */
 export interface SessionTaskControlsStore {
     readonly feedback: TaskControlFeedback;
-    readonly operation: TaskControlOperation;
+    /** The command the user asked to stop, while that request is in flight or until its turn ends. */
+    readonly stopRequest: { readonly commandId: string } | null;
     readonly steeringSupported: boolean;
     readonly dismissFailure: () => void;
-    readonly finish: (commandId: string) => void;
-    readonly start: (commandId: string, turnId: string) => void;
-    readonly steer: (
-        content: string,
-        request: Omit<SubmitMobiusTurnRequest, "content" | "disposition" | "idempotencyKey" | "targetCommandId">,
-        onStarted: (commandId: string, prompt: string) => void,
-        signal: AbortSignal,
-    ) => Promise<{ readonly commandId: string } | null>;
+    /** A turn runs. What the user asked of another command no longer applies: its stop failure is retired. */
+    readonly turnRunning: (commandId: string) => void;
     readonly stop: (signal: AbortSignal) => Promise<void>;
+}
+
+/** Whether the user's stop request applies to the running turn. */
+export function stopRequested(
+    tasks: Pick<SessionTaskControlsStore, "stopRequest">,
+    running: RunningTurn | null,
+): boolean {
+    return running !== null && tasks.stopRequest?.commandId === running.commandId;
+}
+
+/** The stop control's failure, which lasts until a different turn runs. */
+export function stopFailure(tasks: Pick<SessionTaskControlsStore, "feedback">): string | null {
+    return tasks.feedback.kind === "failed" ? tasks.feedback.message : null;
 }
 
 export const createSessionTaskControlsStore = (options: {
     readonly port: TaskControlPort;
     readonly steeringSupported: boolean;
+    readonly runningTurn: () => RunningTurn | null;
 }) =>
     createStore<SessionTaskControlsStore>()((set, get) => ({
         feedback: { kind: "none" },
-        operation: { kind: "idle" },
+        stopRequest: null,
         steeringSupported: options.steeringSupported,
         dismissFailure: () => set({ feedback: { kind: "none" } }),
-        finish: (commandId) => {
-            const operation = get().operation;
-            if (
-                (operation.kind === "running" || operation.kind === "steering" || operation.kind === "stopping") &&
-                operation.active.commandId === commandId
-            ) {
-                set({ operation: { kind: "idle" } });
-            }
-        },
-        start: (commandId, turnId) =>
-            set({ feedback: { kind: "none" }, operation: { active: { commandId, turnId }, kind: "running" } }),
-        steer: async (content, request, onStarted, parent) => {
-            const state = get();
-            const prompt = content.trim();
-            if (state.operation.kind !== "running" || !state.steeringSupported || prompt.length === 0) {
-                return null;
-            }
-            const active = state.operation.active;
-            const commandId = crypto.randomUUID();
-            const signal = AbortSignal.any([parent, AbortSignal.timeout(45_000)]);
-            set({ feedback: { kind: "none" }, operation: { active, kind: "steering" } });
-            onStarted(commandId, prompt);
-            try {
-                await options.port.submit(
-                    {
-                        ...request,
-                        content: prompt,
-                        disposition: SessionPromptDisposition.Steer,
-                        idempotencyKey: commandId,
-                        targetCommandId: active.commandId,
-                    },
-                    signal,
-                );
-                signal.throwIfAborted();
-                const operation = get().operation;
-                if (operation.kind === "steering" && operation.active.commandId === active.commandId) {
-                    set({ operation: { active, kind: "running" } });
-                }
-                return { commandId };
-            } catch (cause) {
-                if (parent.aborted) {
-                    throw cause;
-                }
-                // The turn can end while the request is in flight; its failure then has nothing left to restore.
-                const operation = get().operation;
-                if (operation.kind !== "steering" || operation.active.commandId !== active.commandId) {
-                    return null;
-                }
+        turnRunning: (commandId) => {
+            const { feedback, stopRequest } = get();
+            const staleFeedback = feedback.kind === "failed" && feedback.commandId !== commandId;
+            const staleRequest = stopRequest !== null && stopRequest.commandId !== commandId;
+            if (staleFeedback || staleRequest) {
                 set({
-                    feedback: { kind: "failed", message: formatError(cause, "The active task could not be steered.") },
-                    operation: { active, kind: "running" },
+                    ...(staleFeedback ? { feedback: { kind: "none" as const } } : {}),
+                    ...(staleRequest ? { stopRequest: null } : {}),
                 });
-                return null;
             }
         },
         stop: async (parent) => {
-            const state = get();
-            if (state.operation.kind !== "running") {
+            const running = options.runningTurn();
+            if (running === null || stopRequested(get(), running)) {
                 return;
             }
-            const active = state.operation.active;
+            const request = { commandId: running.commandId };
             const signal = AbortSignal.any([parent, AbortSignal.timeout(15_000)]);
-            set({ feedback: { kind: "none" }, operation: { active, kind: "stopping" } });
+            set({ feedback: { kind: "none" }, stopRequest: request });
             try {
-                await options.port.cancel(active.turnId, crypto.randomUUID(), signal);
+                await options.port.cancel(running.turnId, crypto.randomUUID(), signal);
             } catch (cause) {
                 if (signal.aborted && parent.aborted) {
                     throw cause;
                 }
-                // The turn can end while the request is in flight; its failure then has nothing left to restore.
-                const operation = get().operation;
-                if (operation.kind !== "stopping" || operation.active.commandId !== active.commandId) {
+                if (get().stopRequest !== request) {
                     return;
                 }
+                // The turn can end while the request is in flight; its failure then has nothing left to report.
+                const stillRunning = options.runningTurn()?.commandId === running.commandId;
                 set({
-                    feedback: {
-                        kind: "failed",
-                        message: formatError(cause, "The agent output could not be stopped."),
-                    },
-                    operation: { active, kind: "running" },
+                    stopRequest: null,
+                    ...(stillRunning
+                        ? {
+                              feedback: {
+                                  kind: "failed",
+                                  commandId: running.commandId,
+                                  message: formatError(cause, "The agent output could not be stopped."),
+                              },
+                          }
+                        : {}),
                 });
             }
         },

@@ -4,7 +4,8 @@ import { createRemoteAccessOperations } from "../chat/remote-access-store.ts";
 export interface IdentityAccess {
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly currentAccessToken: (signal: AbortSignal) => Promise<string>;
-    readonly endRemoteAccess: (token: string, signal: AbortSignal) => Promise<void>;
+    /** Ends the access this browser holds when it runs. */
+    readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
 }
 
 class IdentitySharingUnavailable extends Error {

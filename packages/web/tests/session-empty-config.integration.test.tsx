@@ -9,7 +9,7 @@ test("Given a configured session, When the Agent removes every configurable opti
     const app = await createTestApp({ connectAgent: true });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
-        (element) => element.textContent?.includes("Online") === true,
+        (element) => element.getAttribute("data-connection-status") === "connected",
     );
     const composer = await app.queryElementByTestId(
         dataTestId.messageComposer,

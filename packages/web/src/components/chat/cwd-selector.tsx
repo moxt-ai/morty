@@ -1,6 +1,5 @@
 import { Check, ChevronRight, Folder, FolderOpen, LoaderCircle, MapPinPlus, X } from "lucide-react";
 import { Tooltip } from "radix-ui";
-import { useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
 import type { DraftControlsStore } from "@/view-models/chat/draft-controls-store";
@@ -51,7 +50,6 @@ export function CwdSelector({
     readonly signal: AbortSignal;
     readonly viewModel: DraftControlsStore;
 }) {
-    const [menuOpen, setMenuOpen] = useState(false);
     const settings = viewModel.settings;
     if (settings.kind !== "ready") {
         return null;
@@ -63,7 +61,7 @@ export function CwdSelector({
     const directoryPending = browser.kind === "loading" || browser.kind === "previewing";
     return (
         <>
-            <Popover.Root onOpenChange={setMenuOpen} open={menuOpen}>
+            <Popover.Root onOpenChange={viewModel.setCwdMenuOpen} open={viewModel.cwdMenuOpen}>
                 <Tooltip.Provider delayDuration={150}>
                     <Tooltip.Root>
                         <Tooltip.Trigger asChild>
@@ -115,7 +113,7 @@ export function CwdSelector({
                                         className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[13px] hover:bg-accent"
                                         data-testid={dataTestId.recentWorkingDirectory}
                                         onClick={() => {
-                                            setMenuOpen(false);
+                                            viewModel.setCwdMenuOpen(false);
                                             void viewModel.selectRecentCwd(recent.directoryId, signal);
                                         }}
                                         role="menuitem"
@@ -147,7 +145,7 @@ export function CwdSelector({
                                 className="flex h-10 w-full items-center gap-2 rounded-xl px-2.5 text-left text-[13px] font-medium hover:bg-accent"
                                 data-testid={dataTestId.changeWorkingDirectory}
                                 onClick={() => {
-                                    setMenuOpen(false);
+                                    viewModel.setCwdMenuOpen(false);
                                     viewModel.openCwd();
                                 }}
                                 role="menuitem"

@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { type BrowserContextOptions, chromium, firefox, webkit } from "playwright-core";
 import { mortyFiles, mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../web/src/services/identity/anonymous-identity-api.ts";
@@ -26,6 +27,9 @@ export async function createTestRuntime(
             agentName,
             files: mortyFiles,
             reply: mortyReply,
+            // Match Web/Worker fixtures: the daemon records the submitted
+            // prompt, so this controlled Agent does not echo it again.
+            echoUserMessage: false,
             nativeSessionIds: new Set(["setup-reconnect-session"]),
         },
         machineName,
@@ -84,6 +88,7 @@ export async function createTestRuntime(
             continueReply: runtime.continueReply,
             writeFiles: runtime.writeFiles,
             page,
+            origin: stack.chatOrigin,
             openChat,
             openPairedChat: async (computerName?: string) => {
                 const computer =
@@ -95,6 +100,7 @@ export async function createTestRuntime(
                                   agentName,
                                   files: mortyFiles,
                                   reply: mortyReply,
+                                  echoUserMessage: false,
                               },
                               computerName,
                           );
@@ -125,6 +131,8 @@ export async function createTestRuntime(
             },
             disconnectRuntime: async () => await runtime.disconnect(),
             restartRuntime: async () => await runtime.restart(),
+            pauseRuntime: runtime.pause,
+            resumeRuntime: runtime.resume,
             forgetRuntimeConnections: async () => await runtime.forgetConnections(),
             connectUnrelatedRuntime: async () => {
                 const unrelated = new ChatApi(stack.chatOrigin, harness.signal);
@@ -163,6 +171,7 @@ export async function createTestRuntime(
                     instructionUrl: url.href,
                     cwd: workspace ?? stack.directories.workspace,
                     documents: harness.workDirectory,
+                    state: join(harness.workDirectory, "morty-state"),
                     harness: agentId,
                     signal: harness.signal,
                     clock: {

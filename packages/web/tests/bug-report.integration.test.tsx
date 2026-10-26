@@ -256,7 +256,7 @@ test("Given Morty cannot load and no daemon is connected, When a user reports a 
         expect(report.network).toMatchObject({
             online: navigator.onLine,
             measurements: {
-                browserMorty: { kind: "unavailable", code: "NETWORK_DIAGNOSTIC_FAILED" },
+                browserMorty: { kind: "unavailable", code: "bridge_unavailable" },
                 browserMobius: { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" },
             },
         });
@@ -383,6 +383,28 @@ test("Given a connected Runtime, When the user reports a bug, Then the report au
             }
             return getByRole(document.body, "button", { name: "Report a bug" });
         });
+        const composer = await app.waitForView(() => {
+            const input = getByRole(document.body, "textbox", { name: "Message" });
+            expect(input.hasAttribute("disabled")).toBe(false);
+            return input;
+        });
+        await app.user.type(composer, "Check recovery diagnostics");
+        await app.user.click(getByRole(document.body, "button", { name: "Send message" }));
+        await app.waitForView(() =>
+            expect(getByRole(document.body, "article", { name: "Agent response" }).textContent).toContain(
+                "Check recovery diagnostics",
+            ),
+        );
+        if (app.daemon === null) {
+            throw new Error("Expected a connected Runtime");
+        }
+        await app.daemon.disconnect();
+        await app.waitForView(() => getByRole(document.body, "button", { name: "Retry now" }));
+        await app.daemon.reconnect();
+        document.dispatchEvent(new Event("visibilitychange"));
+        await app.waitForView(() =>
+            expect(getByRole(document.body, "textbox", { name: "Message" }).hasAttribute("disabled")).toBe(false),
+        );
         await app.user.click(getByRole(document.body, "button", { name: "Report a bug" }));
         const dialog = getByRole(document.body, "dialog", { name: "Report a bug" });
         expect(queryByRole(dialog, "combobox")).toBeNull();
@@ -408,6 +430,16 @@ test("Given a connected Runtime, When the user reports a bug, Then the report au
                 elapsedMs: expect.any(Number),
             }),
         );
+        expect(report.web.entries).toContainEqual(
+            expect.objectContaining({ component: "web", operation: "page-visibilitychange", outcome: "visible" }),
+        );
+        expect(report.web.entries).toContainEqual(
+            expect.objectContaining({ component: "web", operation: "session-interruption", attempt: 1 }),
+        );
+        expect(report.web.entries).toContainEqual(
+            expect.objectContaining({ component: "web", operation: "session-connection", outcome: "ready" }),
+        );
+        expect(JSON.stringify(report.web.entries)).not.toContain("Check recovery diagnostics");
         expect(JSON.stringify(report.network)).not.toContain("http");
         expect(report.network).not.toHaveProperty("vpn");
         expect(report.network).not.toHaveProperty("proxy");
