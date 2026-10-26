@@ -191,6 +191,15 @@ export const createDraftControlsStore = (
         // Set while an explicit harness choice is being loaded. The load selects that harness while the Runtime offers
         // it, and otherwise falls back like any other load.
         let pendingHarness: string | null = null;
+        // The harness that was applied before an in-flight switch; restored if the switch never lands.
+        let revertingHarnessPreference: string | null = null;
+        let harnessSwitchSawOffline = false;
+        const revertHarnessPreference = (): void => {
+            if (revertingHarnessPreference !== null) {
+                saveLastHarnessPreference(botId, revertingHarnessPreference);
+                revertingHarnessPreference = null;
+            }
+        };
         const changedOptionIds = new Set<string>();
         const rememberAgentSettings = (settings: ReadyDraftSettings): void => {
             saveLastAgentSettings(botId, settings.selectedAgent.agentRef, settings.options);
@@ -396,10 +405,17 @@ export const createDraftControlsStore = (
                 const live = runtimeConfiguration();
                 if (live === null || live.runtime.online === false) {
                     pendingHarness = null;
+                    harnessSwitchSawOffline = true;
+                    revertHarnessPreference();
                     awaitRuntime();
                     return;
                 }
-                applyAgentSettings(selected, cwd, result.options, requestedHarness === selected.agentRef);
+                applyAgentSettings(
+                    selected,
+                    cwd,
+                    result.options,
+                    requestedHarness === selected.agentRef && pendingHarness === null,
+                );
             } catch (cause) {
                 if (!lifetimeSignal.aborted && operation.current()) {
                     settleFailure(cause, "Harness settings are unavailable.");
@@ -467,6 +483,8 @@ export const createDraftControlsStore = (
                     if (pendingHarness !== null || get().settings.kind === "switching") {
                         settingsOperation?.abort(new Error("The Runtime went offline."));
                         pendingHarness = null;
+                        harnessSwitchSawOffline = true;
+                        revertHarnessPreference();
                         awaitRuntime();
                     }
                     return;
@@ -612,11 +630,30 @@ export const createDraftControlsStore = (
                 if (agent === undefined) {
                     return;
                 }
+                revertingHarnessPreference = settings.selectedAgent.agentRef;
+                harnessSwitchSawOffline = false;
                 pendingHarness = agent.agentRef;
                 set({ settings: { kind: "switching", selectedHarness: value } });
                 onSettings(null);
+                // Let an immediate Runtime drop run before settings reads start.
+                await Promise.resolve();
                 try {
                     await load(signal);
+                    // A Runtime drop can land after settings apply but before the switch is remembered.
+                    await Promise.resolve();
+                    if (!signal.aborted && !harnessSwitchSawOffline) {
+                        const current = get().settings;
+                        const configuration = runtimeConfiguration();
+                        if (
+                            current.kind === "ready" &&
+                            current.selectedAgent.agentRef === agent.agentRef &&
+                            configuration !== null &&
+                            configuration.runtime.online
+                        ) {
+                            saveLastHarnessPreference(botId, agent.agentRef);
+                            revertingHarnessPreference = null;
+                        }
+                    }
                 } catch (cause) {
                     if (!signal.aborted) {
                         onSettings(null);
@@ -630,6 +667,9 @@ export const createDraftControlsStore = (
                 } finally {
                     if (pendingHarness === agent.agentRef) {
                         pendingHarness = null;
+                    }
+                    if (harnessSwitchSawOffline) {
+                        revertHarnessPreference();
                     }
                 }
             },
