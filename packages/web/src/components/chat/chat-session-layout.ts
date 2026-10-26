@@ -15,11 +15,16 @@ export const chatSessionComposerClassName =
     "relative z-10 mx-auto w-full min-w-0 shrink-0 px-0 sm:mt-0 sm:mb-3 sm:w-[min(920px,calc(100%-24px))]";
 
 /**
+ * Fills the conversation card. Background, radius, and the outer inset stay on
+ * the parent section so they are not painted twice.
+ */
+export const chatSessionPaneFillClassName = "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden";
+
+/**
  * No backdrop-filter here. It would make this pane the backdrop root, and the
  * composer notice could no longer blur the messages scrolling behind it.
  */
-export const chatSessionPaneSectionClassName =
-    "relative z-20 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden mb-2 ml-2 mr-2 mt-0 sm:rounded-t-[20px] sm:rounded-b-[32px] sm:border-[1px] sm:border-white sm:bg-card/90 sm:shadow-module sm:my-2 sm:ml-0 sm:mr-2";
+export const chatSessionPaneSectionClassName = `relative z-20 ${chatSessionPaneFillClassName} mb-2 ml-2 mr-2 mt-0 sm:rounded-t-[20px] sm:rounded-b-[32px] sm:border-[1px] sm:border-white sm:bg-card/90 sm:shadow-module sm:my-2 sm:ml-0 sm:mr-2`;
 
 /** One-time cloud module entrance on the session column; stays mounted across sends within a session. */
 export const chatSessionPaneEnterClassName =

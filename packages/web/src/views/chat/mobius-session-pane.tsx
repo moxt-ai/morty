@@ -15,7 +15,7 @@ import {
     chatSessionMessageColumnClassName,
     chatSessionMessageItemClassName,
     chatSessionMessageScrollClassName,
-    chatSessionPaneSectionClassName,
+    chatSessionPaneFillClassName,
 } from "../../components/chat/chat-session-layout.ts";
 import { ConnectionNotice } from "../../components/chat/connection-notice.tsx";
 import { ReadonlyWorkingDirectory, WorkingDirectorySkeleton } from "../../components/chat/cwd-selector.tsx";
@@ -304,10 +304,40 @@ function SessionConversationTitleBar({
 }) {
     const displayTitle = title || "Untitled session";
     const titleTextClassName = centered ? "text-[14px] leading-5" : "text-sm";
-    const harnessMarkClassName = cn("text-copy-secondary", centered && "size-[18px]");
+    const titleHarnessMark = (loading: boolean) =>
+        centered ? null : (
+            <HarnessMark
+                agentRef={agentRef || agentLabel}
+                appearance="line"
+                className="text-copy-secondary"
+                label={agentLabel}
+                loading={loading}
+                testId={dataTestId.sessionTitleHarnessMark}
+            />
+        );
     if (titleEdit.kind === "closed") {
         if (titleLoading) {
-            return <SessionTitleSkeleton centered={centered} />;
+            return (
+                <h2
+                    className={cn(
+                        "flex min-w-0 items-center font-semibold",
+                        titleTextClassName,
+                        centered ? "w-full max-w-full justify-center gap-1" : "gap-2",
+                    )}
+                >
+                    {titleHarnessMark(true)}
+                    <div aria-label="Loading conversation title" className="min-w-0 max-w-full" role="status">
+                        <span className="sr-only">Loading conversation title</span>
+                        <div
+                            aria-hidden="true"
+                            className={cn(
+                                "max-w-full animate-pulse rounded-full bg-muted motion-reduce:animate-none",
+                                centered ? "h-5 w-28" : "h-4 w-40",
+                            )}
+                        />
+                    </div>
+                </h2>
+            );
         }
         return (
             <h2
@@ -318,13 +348,7 @@ function SessionConversationTitleBar({
                 )}
                 title={displayTitle}
             >
-                <HarnessMark
-                    agentRef={agentRef || agentLabel}
-                    appearance="line"
-                    className={harnessMarkClassName}
-                    label={agentLabel}
-                    testId={dataTestId.sessionTitleHarnessMark}
-                />
+                {titleHarnessMark(false)}
                 <button
                     type="button"
                     aria-label={displayTitle}
@@ -348,13 +372,7 @@ function SessionConversationTitleBar({
                 centered ? "w-max min-w-[14rem] max-w-[70vw] justify-center gap-1" : "min-w-0 flex-1 gap-2",
             )}
         >
-            <HarnessMark
-                agentRef={agentRef || agentLabel}
-                appearance="line"
-                className={harnessMarkClassName}
-                label={agentLabel}
-                testId={dataTestId.sessionTitleHarnessMark}
-            />
+            {titleHarnessMark(false)}
             <AutoFocusInput
                 aria-label="Conversation title"
                 className={cn(
@@ -414,7 +432,7 @@ function MobiusSessionPaneShell({
     readonly footer?: ReactNode;
 }) {
     return (
-        <section className={chatSessionPaneSectionClassName}>
+        <section className={chatSessionPaneFillClassName}>
             <header
                 className={cn(chatSessionExecutionHeaderClassName, mobileTitlePortaled ? "hidden sm:flex" : "flex")}
             >
@@ -530,7 +548,7 @@ export function MobiusSessionPane({ workspace }: { readonly workspace: ChatWorks
     // hooks.
     const pane = workspace.sessionPane();
     if (pane === null) {
-        return <section className={chatSessionPaneSectionClassName} />;
+        return <section className={chatSessionPaneFillClassName} />;
     }
     return <MobiusSessionPaneBody pane={pane} workspace={workspace} />;
 }
@@ -622,7 +640,7 @@ function MobiusSessionPaneBody({
         <DesktopChatLayout>
             {(desktop) => (
                 <>
-                    <section className={chatSessionPaneSectionClassName} ref={pane.onAttach}>
+                    <section className={chatSessionPaneFillClassName} ref={pane.onAttach}>
                         {desktop ? (
                             <header className={chatSessionExecutionHeaderClassName}>
                                 <div className="min-w-0 flex-1">

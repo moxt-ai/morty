@@ -1,6 +1,6 @@
 import { ChevronDown } from "lucide-react";
 import { Tooltip } from "radix-ui";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
 import { MortyTooltipContent } from "../ui/morty-tooltip-content.tsx";
@@ -217,47 +217,26 @@ export function ChatConfigurationMenu({
     readonly settingsLoading?: boolean;
 }) {
     const [open, setOpen] = useState(false);
-    const settingsMeasureRef = useRef<HTMLDivElement>(null);
-    const [peakSettingsHeight, setPeakSettingsHeight] = useState(0);
+    const retainedSettingsRef = useRef<readonly ChatConfigurationControl[]>([]);
     const harness = controls.find(
         (control): control is ChatConfigurationSelectControl => control.id === "harness" && control.kind === "select",
     );
     const settings = controls.filter((control) => control !== harness);
+    if (settings.length > 0) {
+        retainedSettingsRef.current = settings;
+    }
+    // A harness switch clears options immediately. Keep the fields already on
+    // screen until the next settings arrive, so the panel does not resize first.
+    const displayedSettings = settingsLoading && settings.length === 0 ? retainedSettingsRef.current : settings;
     const selectedHarness = harness?.options.find((option) => option.value === harness.value);
-    const selections = settings.map((control) =>
+    const selectionSource = displayedSettings.length > 0 ? displayedSettings : settings;
+    const selections = selectionSource.map((control) =>
         control.kind === "boolean"
             ? `${control.label}: ${control.checked ? "On" : "Off"}`
             : (control.options.find((option) => option.value === control.value)?.label ?? control.value),
     );
-    useEffect(() => {
-        if (!open) {
-            setPeakSettingsHeight(0);
-            return;
-        }
-        const node = settingsMeasureRef.current;
-        if (node === null) {
-            return;
-        }
-        const syncPeak = () => {
-            setPeakSettingsHeight((current) => Math.max(current, node.getBoundingClientRect().height));
-        };
-        syncPeak();
-        const observer = new ResizeObserver(syncPeak);
-        observer.observe(node);
-        return () => {
-            observer.disconnect();
-        };
-    }, [open]);
     return (
-        <Popover.Root
-            onOpenChange={(nextOpen) => {
-                if (!nextOpen) {
-                    setPeakSettingsHeight(0);
-                }
-                setOpen(nextOpen);
-            }}
-            open={open}
-        >
+        <Popover.Root onOpenChange={setOpen} open={open}>
             <Popover.Trigger asChild>
                 <button
                     aria-label="Configure agent"
@@ -288,7 +267,7 @@ export function ChatConfigurationMenu({
                     align="start"
                     aria-label="Agent configuration"
                     className={cn(
-                        "z-50 flex max-h-[min(70dvh,var(--radix-popover-content-available-height,70dvh))] w-[min(calc(100vw-1.5rem),400px)] flex-col overflow-hidden",
+                        "z-50 flex h-[min(70dvh,var(--radix-popover-content-available-height,70dvh))] max-h-[min(70dvh,var(--radix-popover-content-available-height,70dvh))] w-[min(calc(100vw-1.5rem),400px)] min-h-0 flex-col overflow-hidden",
                         overlaySurfacePanelClassName,
                         overlaySurfaceRadiusClassName,
                     )}
@@ -332,28 +311,23 @@ export function ChatConfigurationMenu({
                         {harness !== undefined && selectedHarness !== undefined && harness.locked !== true && (
                             <HarnessSelect harness={harness} mutedWhenDisabled={!settingsLoading} />
                         )}
-                        <div
-                            className="flex min-w-0 flex-col gap-3"
-                            style={peakSettingsHeight > 0 ? { minHeight: peakSettingsHeight } : undefined}
-                        >
-                            <div className="flex flex-col gap-3" ref={settingsMeasureRef}>
-                                {settingsLoading && settings.length === 0 ? (
-                                    <SettingsDataSkeleton />
-                                ) : settings.length === 0 ? (
-                                    <p className="text-center text-xs text-muted-foreground">
-                                        This harness has no configurable settings.
-                                    </p>
-                                ) : (
-                                    settings.map((control) => (
-                                        <SettingControl
-                                            control={control}
-                                            key={control.id}
-                                            mutedWhenDisabled={loadingControlId === undefined}
-                                            valueLoading={settingsLoading || control.id === loadingControlId}
-                                        />
-                                    ))
-                                )}
-                            </div>
+                        <div className="flex min-w-0 flex-col gap-3">
+                            {settingsLoading && displayedSettings.length === 0 ? (
+                                <SettingsDataSkeleton />
+                            ) : displayedSettings.length === 0 ? (
+                                <p className="text-center text-xs text-muted-foreground">
+                                    This harness has no configurable settings.
+                                </p>
+                            ) : (
+                                displayedSettings.map((control) => (
+                                    <SettingControl
+                                        control={control}
+                                        key={control.id}
+                                        mutedWhenDisabled={loadingControlId === undefined}
+                                        valueLoading={settingsLoading || control.id === loadingControlId}
+                                    />
+                                ))
+                            )}
                         </div>
                     </div>
                 </Popover.Content>

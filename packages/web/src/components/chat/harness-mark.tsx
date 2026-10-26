@@ -1,4 +1,4 @@
-import { SquareTerminal } from "lucide-react";
+import { LoaderCircle, SquareTerminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Agent harness products with a distinct brand mark. */
@@ -62,14 +62,29 @@ export function HarnessMark({
     appearance = "badge",
     className,
     label,
+    loading = false,
     testId,
 }: {
     readonly agentRef: string;
     readonly appearance?: "badge" | "line";
     readonly className?: string;
     readonly label: string;
+    readonly loading?: boolean;
     readonly testId: string;
 }) {
+    if (loading) {
+        return (
+            <LoaderCircle
+                aria-hidden="true"
+                className={cn(
+                    "shrink-0 animate-spin motion-reduce:animate-none",
+                    appearance === "line" ? "size-4" : "size-5",
+                    className,
+                )}
+                data-testid={testId}
+            />
+        );
+    }
     const product = identifyHarnessProduct(agentRef, label);
     if (appearance === "line" && product === "codex") {
         return (

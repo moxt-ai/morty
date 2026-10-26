@@ -556,7 +556,7 @@ export function ConversationSidebar({
                                                         testId={dataTestId.botConnectionStatus}
                                                     />
                                                 )}
-                                                {workspace.computers !== null ? (
+                                                {desktop && workspace.computers !== null ? (
                                                     <ComputerSwitcher
                                                         context={executionContext}
                                                         layout="header"

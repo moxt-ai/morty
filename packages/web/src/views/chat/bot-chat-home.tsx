@@ -100,10 +100,12 @@ function NewSessionTitle({
     agentLabel,
     agentRef,
     centered,
+    loading,
 }: {
     readonly agentLabel: string;
     readonly agentRef: string;
     readonly centered: boolean;
+    readonly loading: boolean;
 }) {
     return (
         <h2
@@ -113,13 +115,16 @@ function NewSessionTitle({
             )}
             title="New Session"
         >
-            <HarnessMark
-                agentRef={agentRef || agentLabel}
-                appearance="line"
-                className="text-copy-secondary"
-                label={agentLabel}
-                testId={dataTestId.sessionTitleHarnessMark}
-            />
+            {centered ? null : (
+                <HarnessMark
+                    agentRef={agentRef || agentLabel}
+                    appearance="line"
+                    className="text-copy-secondary"
+                    label={agentLabel}
+                    loading={loading}
+                    testId={dataTestId.sessionTitleHarnessMark}
+                />
+            )}
             <span className={cn("min-w-0 truncate", centered && "text-center")}>New Session</span>
         </h2>
     );
@@ -155,6 +160,8 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
             ? model.view
             : null;
     const newSessionHarness = activeHarnessMark(model, draftControls.settings);
+    const newSessionHarnessLoading =
+        draftControls.settings.kind === "loading" || draftControls.settings.kind === "switching";
     const showNewSessionTitle = model.selection.kind === "draft";
     const activeConversationId = selectedConversationId(model.selection);
     const reportButton = (
@@ -181,6 +188,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
             agentLabel={newSessionHarness.label}
             agentRef={newSessionHarness.agentRef}
             centered={!desktop}
+            loading={newSessionHarnessLoading}
         />
     ) : (
         <h2 className="min-w-0 truncate text-sm font-semibold">{pendingConversation.title}</h2>
