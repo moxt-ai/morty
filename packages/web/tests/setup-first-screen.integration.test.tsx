@@ -38,7 +38,7 @@ test("Given a new visitor, When they copy the instruction, Then the clipboard ho
 
     await app.user.click(copy);
     expect(await navigator.clipboard.readText()).toBe(
-        `Fetch ${window.location.origin}/setup.md and set up Morty for me. Don't ask me anything.`,
+        `Fetch ${window.location.origin}/setup.md and set up Morty for me.`,
     );
     const nextStep = getByRole(document.body, "status", { name: "Setup next step" });
     expect(nextStep.textContent).toContain("Paste into your agent, then open the link it returns.");
@@ -51,7 +51,7 @@ test("Given the first screen, When the user reaches the copy button by keyboard 
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap" } });
-    const instruction = `Fetch ${window.location.origin}/setup.md and set up Morty for me. Don't ask me anything.`;
+    const instruction = `Fetch ${window.location.origin}/setup.md and set up Morty for me.`;
     const copy = await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup prompt" }));
     expect(document.activeElement).not.toBe(copy);
 
@@ -78,9 +78,7 @@ test("Given a user wants to inspect or manually copy setup, When they expand the
     await app.user.click(pairing);
 
     expect(pairing.readOnly).toBe(true);
-    expect(pairing.value).toBe(
-        `Fetch ${window.location.origin}/setup.md and set up Morty for me. Don't ask me anything.`,
-    );
+    expect(pairing.value).toBe(`Fetch ${window.location.origin}/setup.md and set up Morty for me.`);
     expect(pairing.selectionStart).toBe(0);
     expect(pairing.selectionEnd).toBe(pairing.value.length);
     expect(document.body.textContent).toContain(
@@ -93,7 +91,7 @@ test("Given the first screen, When the user clicks Copy again after success, The
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap" } });
-    const instruction = `Fetch ${window.location.origin}/setup.md and set up Morty for me. Don't ask me anything.`;
+    const instruction = `Fetch ${window.location.origin}/setup.md and set up Morty for me.`;
 
     await app.user.click(
         await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup prompt" })),

@@ -12,10 +12,7 @@ test("Given Morty has no paired agent, When the setup page opens, Then it offers
 
     expect(pairing).toBeInstanceOf(HTMLTextAreaElement);
     expect(pairing).toHaveProperty("readOnly", true);
-    expect(pairing).toHaveProperty(
-        "value",
-        `Fetch ${window.location.origin}/setup.md and set up Morty for me. Don't ask me anything.`,
-    );
+    expect(pairing).toHaveProperty("value", `Fetch ${window.location.origin}/setup.md and set up Morty for me.`);
     expect(queryByRole(document.body, "combobox", { name: "Data region" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Refresh pairing instruction" })).toBeNull();
     const dialog = getByRole(document.body, "dialog", { name: "Connect agent" });
