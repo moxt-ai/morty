@@ -88,7 +88,8 @@ interface VerifiedIdentity {
 
 /**
  * What setup did to this computer's Project. `replaced` ended every link and browser from the previous
- * Project, so the agent must tell the user.
+ * Project, so the agent must tell the user; the saved `replacement_notice` keeps that owed until a finished
+ * setup reports it, even when the run that replaced the Project stopped first.
  */
 type ProjectOutcome = "created" | "reused" | "replaced";
 
@@ -388,6 +389,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     "pairing_runtime_id",
                     "replaced_project_id",
                     "replaced_user_token",
+                    "replacement_notice",
                 ].includes(key),
             ),
         );
@@ -771,6 +773,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             pairing_runtime_id: undefined,
             replaced_project_id: context.config["project_id"],
             replaced_user_token: context.config["user_token"],
+            replacement_notice: "pending",
             entry: "setup",
         });
         emit({ status: "project_replaced", botId: saved.config["bot_id"], projectId: saved.config["project_id"] });
@@ -781,8 +784,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         context: Context,
         cwd: string,
         expectedRuntimeId: string | null,
-        outcome: SetupIdentity["project"],
-    ): Promise<{ readonly context: Context; readonly runtime: RuntimeSelection; readonly project: ProjectOutcome }> {
+    ): Promise<{ readonly context: Context; readonly runtime: RuntimeSelection }> {
         progress("pairing", "Preparing the Runtime connection.");
         const project = await request(context, "/management/project");
         const appId = identifier(project["appId"]);
@@ -802,12 +804,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (expectedRuntimeId !== null) {
             const existing = await reusable(expectedRuntimeId);
             if (existing !== undefined) {
-                return { context, runtime: { kind: "existing", ...existing, bound: true }, project: outcome };
+                return { context, runtime: { kind: "existing", ...existing, bound: true } };
             }
             // The saved Machine's Runtime is not managed here anymore: keep the user, but
             // continue on a fresh Project with a fresh Machine and a new Runtime pairing.
             const replaced = await replaceProject(context);
-            return { ...(await pairRuntime(replaced, appId)), project: "replaced" };
+            return await pairRuntime(replaced, appId);
         }
         // The Machine is unbound. A Runtime an earlier run paired for it still holds one of the Project's Runtime
         // slots, so continue on it while this machine still manages its connection.
@@ -815,10 +817,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (typeof pairing === "string") {
             const existing = await reusable(pairing);
             if (existing !== undefined) {
-                return { context, runtime: { kind: "existing", ...existing, bound: false }, project: outcome };
+                return { context, runtime: { kind: "existing", ...existing, bound: false } };
             }
         }
-        return { ...(await pairRuntime(context, appId)), project: outcome };
+        return await pairRuntime(context, appId);
     }
 
     /**
@@ -1115,7 +1117,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         context: Context,
         runtime: RuntimeSelection,
         options: SetupOptions,
-        project: ProjectOutcome,
+        identity: SetupIdentity["project"],
     ) {
         await waitForReadiness(context, runtime);
         const botId = context.config["bot_id"];
@@ -1155,6 +1157,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 message: "The QR image is unavailable. Use the handoff link instead.",
             });
         }
+        const project: ProjectOutcome = context.config["replacement_notice"] === "pending" ? "replaced" : identity;
         emit({
             status: "ready",
             botId,
@@ -1167,6 +1170,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     ? "Open the link or scan the QR code to chat. Keep the Runtime online."
                     : "Open the link to chat. Keep the Runtime online.",
         });
+        if (project === "replaced") {
+            // Cleared only after ready reported it, so a run that stops earlier leaves the notice owed.
+            await saveConfiguration(context, { replacement_notice: undefined });
+        }
     }
 
     async function revokeAllAccess(options: RevokeAllAccessOptions) {
@@ -1250,7 +1257,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const verified = await verifyIdentityAndBot(context);
         context = verified.context;
         emit({ status: "identity_ready", userId: context.config["user_id"], botId: context.config["bot_id"] });
-        const prepared = await prepareRuntime(context, cwd, verified.expectedRuntimeId, identity.project);
+        const prepared = await prepareRuntime(context, cwd, verified.expectedRuntimeId);
         context = prepared.context;
         context = await startRuntime(context, prepared.runtime, cwd, options.harness);
         await waitForRuntime(context, prepared.runtime, options.harness);
@@ -1259,7 +1266,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         // when setup stopped waiting for the upgrade, so wait for it before binding.
         await waitForRuntime(context, prepared.runtime, options.harness);
         context = await bindAgent(context, prepared.runtime, options.harness);
-        await finishSetup(context, prepared.runtime, options, prepared.project);
+        await finishSetup(context, prepared.runtime, options, identity.project);
     }
 
     try {

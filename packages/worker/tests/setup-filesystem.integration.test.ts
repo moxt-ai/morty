@@ -780,6 +780,27 @@ test("Given setup was stopped after pairing its Runtime, When the user runs setu
     });
 });
 
+test("Given setup replaced the Project and was stopped before it finished, When the user runs setup again, Then the finished setup still reports the replacement once", {
+    timeout: 120_000,
+}, async () => {
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        const first = await setupMachine(runtime, paths);
+        expect(first.events.at(-1)).toMatchObject({ status: "ready", project: "created" });
+        await runtime.forgetConnections();
+
+        const stopped = await setupMachine(runtime, paths, undefined, { interruptAt: "project_replaced" });
+        expect(stopped.code, JSON.stringify(stopped.events)).not.toBe(0);
+        expect(stopped.events).not.toContainEqual(expect.objectContaining({ status: "ready" }));
+
+        const finished = await setupMachine(runtime, paths);
+        expect(finished.code, JSON.stringify(finished.events)).toBe(0);
+        expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
+
+        const again = await setupMachine(runtime, paths);
+        expect(again.events.at(-1)).toMatchObject({ status: "ready", project: "reused" });
+    });
+});
+
 test("Given the chosen harness is not installed, When the user reruns setup with it, Then each run reports it unavailable and setup finishes once an installed harness is chosen", {
     timeout: 120_000,
 }, async () => {
