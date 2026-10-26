@@ -1,4 +1,5 @@
 import { type MobiusClient, MobiusError } from "@moxt-ai/mobius-sdk";
+import type { SessionFailure } from "./session-failure.ts";
 
 // The Session pane owns live-stream recovery; SDK retries are disabled so
 // connection attempts and reconciliation share one bounded retry policy.
@@ -23,7 +24,7 @@ export type SessionConnection =
               | { readonly kind: "reopening" }
               | { readonly kind: "failed"; readonly message: string };
       }
-    | { readonly kind: "failed"; readonly message: string };
+    | { readonly kind: "failed"; readonly error: SessionFailure };
 
 type SessionReconnectRetry =
     | { readonly kind: "scheduled"; readonly remainingSeconds: number }
@@ -48,9 +49,10 @@ export function sessionUpdatesEndedError(): MobiusError {
 export function connectionFailure(connection: SessionConnection): string | null {
     switch (connection.kind) {
         case "disconnected":
-        case "failed":
         case "reconnecting":
             return connection.message;
+        case "failed":
+            return `${connection.error.title}. ${connection.error.description}`;
         case "closed":
             return connection.reopen.kind === "failed" ? connection.reopen.message : null;
         case "loading":

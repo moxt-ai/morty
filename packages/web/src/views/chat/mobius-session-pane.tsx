@@ -642,12 +642,16 @@ function MobiusSessionPaneLayout({
                             className={`${chatSessionMessageColumnClassName} flex min-h-full items-center justify-center`}
                         >
                             <div className="grid w-full max-w-lg justify-items-center gap-4 text-center">
-                                <SessionLoadFailure message={model.connection.message} />
+                                <SessionLoadFailure failure={model.connection.error} />
                                 <Button
-                                    onClick={() => run(async (signal) => await pane.store.getState().connect(signal))}
+                                    onClick={
+                                        model.connection.error.action.kind === "new-session"
+                                            ? workspace.home.getState().newConversation
+                                            : () => run(async (signal) => await pane.store.getState().connect(signal))
+                                    }
                                     variant="outline"
                                 >
-                                    Reconnect
+                                    {model.connection.error.action.label}
                                 </Button>
                             </div>
                         </div>
@@ -805,11 +809,13 @@ function MobiusSessionPaneLayout({
                     draft={model.draft}
                     error={presentation.composerError}
                     errorStatus={
-                        executionContext.feedback.kind === "hidden" ? undefined : (
+                        executionContext.feedback.kind === "hidden" ||
+                        (model.connection.kind === "failed" && model.messages.length === 0) ? undefined : (
                             <ConnectionNotice
                                 feedback={executionContext.feedback}
                                 onRetryNow={pane.store.getState().retryNow}
                                 onReopen={() => run(pane.store.getState().reopen)}
+                                onNewSession={workspace.home.getState().newConversation}
                             />
                         )
                     }

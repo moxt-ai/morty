@@ -2,18 +2,34 @@ import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
 import { LinkButton } from "../ui/link-button.tsx";
 import type { ConnectionFeedback } from "./execution-context.ts";
+import { SessionLoadFailure } from "./session-load-failure.tsx";
 
 export function ConnectionNotice({
     feedback,
     onRetryNow,
     onReopen,
+    onNewSession,
 }: {
     readonly feedback: ConnectionFeedback;
     readonly onRetryNow: () => void;
     readonly onReopen: () => void;
+    readonly onNewSession: () => void;
 }) {
     if (feedback.kind === "hidden") {
         return null;
+    }
+    if (feedback.kind === "session-failed") {
+        return (
+            <div className="grid justify-items-center gap-2" data-testid={dataTestId.sessionReconnectNotice}>
+                <SessionLoadFailure failure={feedback.failure} />
+                <LinkButton
+                    className="min-h-11"
+                    onClick={feedback.failure.action.kind === "new-session" ? onNewSession : onRetryNow}
+                >
+                    {feedback.failure.action.label}
+                </LinkButton>
+            </div>
+        );
     }
     const failed = feedback.kind === "failed" || (feedback.kind === "closed" && feedback.reopen === "failed");
     return (

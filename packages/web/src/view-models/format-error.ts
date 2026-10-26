@@ -10,14 +10,6 @@ const runtimeDisconnectedFailure = {
 /** How a failure because the Runtime cannot be reached reads everywhere. */
 export const runtimeDisconnectedMessage = `${runtimeDisconnectedFailure.title} ${runtimeDisconnectedFailure.detail}`;
 
-export function describeSessionFailureMessage(
-    message: string,
-): Readonly<{ readonly title: string; readonly detail?: string }> {
-    if (message === runtimeDisconnectedMessage) {
-        return runtimeDisconnectedFailure;
-    }
-    return { title: message };
-}
 const retryableRuntimeFailureCodes = new Set(["runtime_offline", "service_unavailable"]);
 
 /**

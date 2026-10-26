@@ -51,6 +51,7 @@ import {
 } from "./session-current-turn.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import { createSessionDeliveryStore, type Journal, type SessionDeliveryStore } from "./session-delivery-store.ts";
+import { sessionFailure } from "./session-failure.ts";
 import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
 import { requestedInteraction, type SessionLifecycleFact, sessionLifecycleFact } from "./session-lifecycle.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
@@ -1273,7 +1274,7 @@ export function createSessionPaneModel(options: {
                         setAndSettle({
                             connection: retryable
                                 ? disconnectedConnection(message, retry.kind === "scheduled" ? retry.delayMs : null)
-                                : { kind: "failed", message },
+                                : { kind: "failed", error: sessionFailure(cause) },
                         });
                         countdownInterrupt = new AbortController();
                         const retrySignal = AbortSignal.any([signal, countdownInterrupt.signal]);
@@ -1736,7 +1737,7 @@ export function createSessionPaneModel(options: {
                 return;
             }
             if (current.kind === "failed" || (current.kind === "disconnected" && current.retry.kind === "exhausted")) {
-                throw new MobiusError("session_not_connected", current.message);
+                throw new MobiusError("session_not_connected", connectionFailure(current) ?? "Session unavailable.");
             }
             if (current.kind === "closed") {
                 throw new MobiusError(SESSION_CLOSED_ERROR_CODE, "The session is closed.");

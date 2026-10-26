@@ -1,3 +1,4 @@
+import { SessionLoadFailure } from "../../components/chat/session-load-failure.tsx";
 import { Button, Spinner } from "../../index.ts";
 import type { ContinueState } from "../../view-models/authentication/continue-store.ts";
 import {
@@ -45,16 +46,24 @@ export function ContinuePageContent({
             return (
                 <SetupCardShell titleId="continue-title">
                     <SetupCardTitle id="continue-title">Continue native session</SetupCardTitle>
-                    <SetupCardAlert>{state.message}</SetupCardAlert>
                     <SetupCardSection>
-                        <Button className={setupPrimaryButtonClassName} onClick={retry} size={setupPrimaryButtonSize}>
-                            Try again
-                        </Button>
+                        <SessionLoadFailure failure={state.error} />
+                    </SetupCardSection>
+                    <SetupCardSection>
+                        {state.error.action.kind === "retry" && (
+                            <Button
+                                className={setupPrimaryButtonClassName}
+                                onClick={retry}
+                                size={setupPrimaryButtonSize}
+                            >
+                                {state.error.action.label}
+                            </Button>
+                        )}
                         <Button
                             className={setupPrimaryButtonClassName}
                             onClick={enterMorty}
                             size={setupPrimaryButtonSize}
-                            variant="outline"
+                            variant={state.error.action.kind === "retry" ? "outline" : "primary"}
                         >
                             Go to Morty
                         </Button>

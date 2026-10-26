@@ -1,5 +1,7 @@
 import { decodeIdentifier } from "@moxt-ai/mobius-sdk/protocol";
+import { CloudApiError } from "../../services/management/management-api.ts";
 import type { ContinueState } from "../../view-models/authentication/continue-store.ts";
+import { sessionFailure } from "../../view-models/chat/session-failure.ts";
 
 // TEMP style-tuning preview: remove this module with continue preview routes and query-param branches.
 export const CONTINUE_PREVIEW_STATES = [
@@ -51,7 +53,7 @@ export function continuePreviewState(id: ContinuePreviewStateId): ContinueState 
                     userId: "preview-user",
                 },
                 kind: "session-failed",
-                message: "This native session could not be imported. The Runtime may be offline.",
+                error: sessionFailure(new CloudApiError("runtime_offline", "The Runtime is offline.")),
             };
         case "identity-redeeming":
             return { code: PREVIEW_CODE, kind: "identity-redeeming" };

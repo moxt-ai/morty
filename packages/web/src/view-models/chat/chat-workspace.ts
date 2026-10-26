@@ -7,7 +7,6 @@ import { rememberComputerName, rememberComputerVisit } from "../../services/iden
 import { isRuntimeConnectionFailure } from "../../services/management/management-api.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import type { BugReportDialogStore } from "../bug-report-dialog-store.ts";
-import { formatError } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
 import { type BotChatHomeStoreApi, createBotChatHomeStore, homeWaitsForRuntime } from "./bot-chat-home-store.ts";
 import type { ComputerSwitcherModel } from "./computer-switcher-store.ts";
@@ -21,6 +20,7 @@ import type { OpenMobiusSession } from "./open-session.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
 import { createRuntimeRecovery } from "./runtime-recovery.ts";
 import type { SessionActivityState } from "./session-activity-machine.ts";
+import { sessionFailure } from "./session-failure.ts";
 import { createSessionPaneModel, type SessionPaneModel } from "./session-pane-store.ts";
 import { createSidebarDialogs, type SidebarDialogs } from "./sidebar-dialogs.ts";
 
@@ -106,15 +106,15 @@ function historyNavigation(onDraft: () => void) {
                 url.searchParams.delete("conversation");
                 url.searchParams.delete("conversationId");
                 url.searchParams.delete("sessionId");
+                url.searchParams.delete("harness");
+                url.searchParams.delete("nativeSessionAction");
             });
         },
-        showForkInstead: () =>
-            replace((url) => {
-                url.searchParams.set("nativeSessionAction", "fork");
-            }),
         showManaged: (_isExternal: boolean, id: string) =>
             replace((url) => {
                 url.searchParams.delete("conversationId");
+                url.searchParams.delete("harness");
+                url.searchParams.delete("nativeSessionAction");
                 url.searchParams.set("sessionId", id);
             }),
     };
@@ -415,9 +415,7 @@ export function createChatWorkspace(options: {
                     current.target.kind !== "continue" &&
                     selectedConversationId(current) === sessionId
                 ) {
-                    // Surface the failure so the Reconnect control renders; its
-                    // retry transitions to loading and bumps the revision,
-                    // which restarts the full home load.
+                    // Preserve the typed failure so the selected session offers the matching recovery action.
                     home.setState((state) => ({
                         selection: transitionConversationSelection(state.selection, {
                             kind: "session-load-failed",
@@ -425,7 +423,7 @@ export function createChatWorkspace(options: {
                                 isRuntimeConnectionFailure(cause) || isChatBridgeError(cause)
                                     ? "connection"
                                     : "unavailable",
-                            message: formatError(cause, "The Session could not be loaded."),
+                            error: sessionFailure(cause),
                             target: current.target,
                         }),
                     }));

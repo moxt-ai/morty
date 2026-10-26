@@ -1,3 +1,5 @@
+import type { SessionFailure } from "../../view-models/chat/session-failure.ts";
+
 /**
  * Pure display summary of where a session runs. The view-model derives it;
  * the header, details, and composer render the same connection presentation.
@@ -29,6 +31,7 @@ export interface ExecutionContext {
 
 export type ConnectionFeedback =
     | { readonly kind: "hidden" }
+    | { readonly kind: "session-failed"; readonly failure: SessionFailure }
     | { readonly kind: "waiting"; readonly title: string; readonly description: string }
     | {
           readonly kind: "retrying";

@@ -74,14 +74,19 @@ export function connectionPresentation(
             },
         );
     }
-    if (session?.kind === "failed" || (session?.kind === "disconnected" && session.retry.kind === "exhausted")) {
+    if (session?.kind === "failed") {
+        return present(
+            { kind: "failed", label: "Session unavailable" },
+            { kind: "session-failed", failure: session.error },
+        );
+    }
+    if (session?.kind === "disconnected" && session.retry.kind === "exhausted") {
         return present(
             { kind: "failed", label: "Connection unavailable" },
             {
                 kind: "failed",
-                title: session.kind === "failed" ? "Connection unavailable" : "Couldn’t reconnect",
-                description:
-                    session.kind === "failed" ? session.message : "Automatic retries stopped. Your draft is saved.",
+                title: "Couldn’t reconnect",
+                description: "Automatic retries stopped. Your draft is saved.",
             },
         );
     }

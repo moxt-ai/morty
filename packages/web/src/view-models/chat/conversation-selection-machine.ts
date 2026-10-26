@@ -1,4 +1,5 @@
 import type { OpenMobiusSession } from "./open-session.ts";
+import type { SessionFailure } from "./session-failure.ts";
 
 export type SelectedConversationTarget =
     | { readonly kind: "conversation"; readonly conversationId: string }
@@ -24,7 +25,7 @@ export type ConversationSelectionState =
     | {
           readonly kind: "failed";
           readonly failure: "connection" | "unavailable";
-          readonly message: string;
+          readonly error: SessionFailure;
           readonly target: ConversationTarget;
       };
 
@@ -39,7 +40,7 @@ export type ConversationSelectionEvent =
     | {
           readonly kind: "session-load-failed";
           readonly failure: "connection" | "unavailable";
-          readonly message: string;
+          readonly error: SessionFailure;
           readonly target: ConversationTarget;
       }
     | { readonly kind: "retry-requested" }
@@ -86,7 +87,7 @@ export function transitionConversationSelection(
                 : state;
         case "session-load-failed":
             return state.kind === "loading" && sameTarget(state.target, event.target)
-                ? { kind: "failed", failure: event.failure, message: event.message, target: event.target }
+                ? { kind: "failed", failure: event.failure, error: event.error, target: event.target }
                 : state;
         case "retry-requested":
             return state.kind === "failed" ? { kind: "loading", target: state.target } : state;

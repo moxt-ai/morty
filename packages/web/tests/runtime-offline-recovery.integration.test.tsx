@@ -266,7 +266,10 @@ test("Given a remembered title for a session that no longer exists, When the ser
     window.history.replaceState(null, "", url);
     const reopened = await app.reload();
     await reopened.waitForView(() => {
-        expect(queryByRole(document.body, "button", { name: "Reconnect" })).not.toBeNull();
+        expect(queryByRole(document.body, "button", { name: "Reconnect" })).toBeNull();
+        expect(
+            getByRole(getByRole(document.body, "log", { name: "Messages" }), "button", { name: "New Session" }),
+        ).toBeDefined();
         expect(queryByRole(document.body, "heading", { name: "Existing session" })).not.toBeNull();
         expect(queryByRole(document.body, "heading", { name: "New session" })).toBeNull();
         expect(document.body.textContent).not.toContain("Stale unavailable title");

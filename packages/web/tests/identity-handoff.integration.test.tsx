@@ -133,7 +133,7 @@ test("Given a native session handoff without a matching Agent, When the page loa
     });
 
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
-    expect(alert.textContent).toContain("handoff harness is unavailable");
+    expect(alert.textContent).toContain("Agent unavailable");
     expect(getByRole(document.body, "heading", { name: "Continue native session" })).toBeInstanceOf(HTMLElement);
     expect(queryByRole(document.body, "button", { name: "Fork session" })).toBeNull();
 });
@@ -149,7 +149,7 @@ test("Given opening a native session fails, When the user tries again, Then the 
         },
     });
     await app.waitForView(() => {
-        expect(getByRole(document.body, "alert").textContent).toContain("handoff harness is unavailable");
+        expect(getByRole(document.body, "alert").textContent).toContain("Agent unavailable");
     });
 
     // The retry must reach the open-session step again: once a Runtime answers
@@ -159,12 +159,12 @@ test("Given opening a native session fails, When the user tries again, Then the 
     await app.user.click(getByRole(document.body, "button", { name: "Try again" }));
 
     await app.waitForView(() => {
-        expect(getByRole(document.body, "alert").textContent).toContain("The native session was not found");
+        expect(getByRole(document.body, "alert").textContent).toContain("Session unavailable");
     });
-    expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
+    expect(queryByRole(document.body, "button", { name: "Try again" })).toBeNull();
 });
 
-test("Given the Morty access was redeemed and opening the original session failed, When the user views the failure page, Then they see the reason, retry, and an entry into Morty", {
+test("Given the Morty access was redeemed but the original session is missing, When the user views the failure page, Then it explains how to continue without offering an ineffective retry", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({
@@ -178,17 +178,13 @@ test("Given the Morty access was redeemed and opening the original session faile
     });
 
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
-    expect(alert.textContent).toContain("The native session was not found");
+    expect(alert.textContent).toContain("Session unavailable");
+    expect(alert.textContent).toContain("Open another session or start a new one.");
     expect(getByRole(document.body, "heading", { name: "Continue native session" })).toBeInstanceOf(HTMLElement);
-    expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
+    expect(queryByRole(document.body, "button", { name: "Try again" })).toBeNull();
     expect(getByRole(document.body, "button", { name: "Go to Morty" })).toBeInstanceOf(HTMLButtonElement);
-
-    await app.user.click(getByRole(document.body, "button", { name: "Try again" }));
-
-    await app.waitForView(() => {
-        expect(getByRole(document.body, "alert").textContent).toContain("The native session was not found");
-    });
-    expect(getByRole(document.body, "button", { name: "Go to Morty" })).toBeInstanceOf(HTMLButtonElement);
+    await app.user.click(getByRole(document.body, "button", { name: "Go to Morty" }));
+    await app.waitForView(() => expect(new URL(window.location.href).pathname).toBe("/"));
 });
 
 test("Given an expired handoff with no retained access, When the failure page shows, Then it explains how to get a new link without offering an ineffective retry", {
@@ -211,7 +207,7 @@ test("Given an expired handoff with no retained access, When the failure page sh
     expect(document.body.textContent).toContain("Run setup again on that computer to get a new link.");
 });
 
-test("Given a native session handoff whose Runtime went offline, When the page loads, Then the page reports Mobius is disconnected instead of a transfer-link problem", {
+test("Given a native session handoff whose Runtime went offline, When the page loads, Then it explains which computer to restore and offers reconnect", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({
@@ -227,10 +223,10 @@ test("Given a native session handoff whose Runtime went offline, When the page l
     });
 
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
-    expect(alert.textContent).toContain("Your Mobius is disconnected");
-    expect(alert.textContent).toContain("Start your Mobius");
+    expect(alert.textContent).toContain("Computer is offline");
+    expect(alert.textContent).toContain("Keep the original computer awake and online");
     expect(alert.textContent?.toLowerCase()).not.toContain("transfer link");
-    expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
+    expect(getByRole(document.body, "button", { name: "Reconnect" })).toBeInstanceOf(HTMLButtonElement);
 });
 
 test("Given shared Morty access, When the user opens the user menu, Then replacing the current user is unavailable", {
@@ -482,7 +478,7 @@ for (const segments of [0, 4, 8]) {
                     },
                 });
                 await app.waitForView(() =>
-                    expect(getByRole(document.body, "alert").textContent).toContain("The native session was not found"),
+                    expect(getByRole(document.body, "heading", { name: "Session unavailable" })).toBeDefined(),
                 );
                 await app.user.click(getByRole(document.body, "button", { name: "Go to Morty" }));
                 const continued = await app.reload();
@@ -524,7 +520,10 @@ test("Given a handoff requests a missing directory, When it opens, Then the Runt
         },
     });
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
-    expect(alert.textContent).toContain("This directory is missing or unavailable");
+    expect(getByRole(alert, "heading", { name: "Local access unavailable" })).toBeDefined();
+    expect(alert.textContent).toContain(
+        "Check the requested directory and access permissions on the original computer",
+    );
     expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
     expect(window.location.pathname).toBe("/continue");
 });
@@ -541,6 +540,6 @@ for (const segment of ["a".repeat(220), "\u00e9".repeat(110)]) {
             page: { kind: "continue", harness: "codex", sessionId: "native-directory-session", workspace },
         });
         const alert = await app.waitForView(() => getByRole(document.body, "alert"));
-        expect(alert.textContent).toContain("This directory is missing or unavailable");
+        expect(getByRole(alert, "heading", { name: "Local access unavailable" })).toBeDefined();
     });
 }

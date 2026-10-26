@@ -24,7 +24,6 @@ import {
 } from "./conversation-creation-machine.ts";
 import {
     type ConversationSelectionState,
-    type ConversationTarget,
     selectedConversationId,
     transitionConversationSelection,
 } from "./conversation-selection-machine.ts";
@@ -32,6 +31,7 @@ import { createConversationSessionStore } from "./conversation-session-store.ts"
 import type { OpenMobiusSession } from "./open-session.ts";
 import type { RuntimeObservation } from "./runtime-recovery.ts";
 import type { UnconfirmedSubmission } from "./session-delivery-store.ts";
+import { type SessionFailure, sessionFailure } from "./session-failure.ts";
 
 export type BotChatHomeStoreApi = ReturnType<typeof createBotChatHomeStore>;
 
@@ -48,7 +48,7 @@ type BotChatHomeView =
     | ({ readonly kind: "active" } & BotView)
     | ({ readonly kind: "setup"; readonly reason: SetupReason } & BotView)
     | ({ readonly kind: "runtime-disconnected"; readonly message: string } & BotView)
-    | { readonly kind: "failed"; readonly message: string };
+    | { readonly kind: "failed"; readonly error: SessionFailure };
 
 export type BotConnectionStatus =
     | { readonly kind: "connecting"; readonly label: "Connecting" }
@@ -116,7 +116,6 @@ export interface BotChatNavigation {
     readonly showDraft: () => void;
     readonly showManaged: (isExternal: boolean, id: string) => void;
     readonly showContinuedSession: (sessionId: string) => void;
-    readonly showForkInstead: () => void;
 }
 
 /**
@@ -161,7 +160,6 @@ export interface BotChatHomeStore {
     readonly newConversation: () => void;
     readonly openManaged: (isExternal: boolean, id: string) => void;
     readonly retry: () => void;
-    readonly forkInstead: () => void;
     readonly setDraft: (draft: string) => void;
     readonly setDraftSettings: (settings: ChatDraftConfiguration | null) => void;
     readonly showPairingDialog: () => void;
@@ -498,7 +496,12 @@ export const createBotChatHomeStore = (
                                     ? transitionConversationSelection(current.selection, {
                                           kind: "session-load-failed",
                                           failure: "unavailable",
-                                          message: "Connect your local agent to load this session.",
+                                          error: sessionFailure(
+                                              new CloudApiError(
+                                                  "AGENT_REQUIRED",
+                                                  "Connect your local agent to load this session.",
+                                              ),
+                                          ),
                                           target: current.selection.target,
                                       })
                                     : current.selection,
@@ -647,7 +650,7 @@ export const createBotChatHomeStore = (
                         // so it becomes an operable failure state that keeps its
                         // target.
                         console.error("The Chat WebSocket bridge failed to complete a request.", cause);
-                        const message = formatError(cause, "Chat is unavailable.");
+                        const error = sessionFailure(cause);
                         const current = get();
                         if (current.selection.kind === "loading") {
                             // The selection never completed, so this load is a
@@ -657,10 +660,10 @@ export const createBotChatHomeStore = (
                                 selection: transitionConversationSelection(current.selection, {
                                     kind: "session-load-failed",
                                     failure: "connection",
-                                    message,
+                                    error,
                                     target: current.selection.target,
                                 }),
-                                view: { kind: "failed", message },
+                                view: { kind: "failed", error },
                             });
                             return;
                         }
@@ -676,7 +679,7 @@ export const createBotChatHomeStore = (
                                 ? transitionConversationSelection(currentSelection, {
                                       kind: "session-load-failed",
                                       failure: "unavailable",
-                                      message: cause.message,
+                                      error: sessionFailure(cause),
                                       target: currentSelection.target,
                                   })
                                 : currentSelection;
@@ -694,6 +697,7 @@ export const createBotChatHomeStore = (
                         return;
                     }
                     const message = formatError(cause, "Chat is unavailable.");
+                    const error = sessionFailure(cause);
                     const failedSelection = get().selection;
                     if (isRuntimeConnectionFailure(cause)) {
                         // The Runtime could not be reached. The page keeps following it, and the workspace retries
@@ -704,7 +708,7 @@ export const createBotChatHomeStore = (
                                     ? transitionConversationSelection(failedSelection, {
                                           kind: "session-load-failed",
                                           failure: "connection",
-                                          message,
+                                          error,
                                           target: failedSelection.target,
                                       })
                                     : failedSelection,
@@ -719,14 +723,14 @@ export const createBotChatHomeStore = (
                             selection: transitionConversationSelection(failedSelection, {
                                 kind: "session-load-failed",
                                 failure: "unavailable",
-                                message,
+                                error,
                                 target: failedSelection.target,
                             }),
-                            view: phase === "watch" ? { kind: "active", botId } : { kind: "failed", message },
+                            view: phase === "watch" ? { kind: "active", botId } : { kind: "failed", error },
                         });
                         return;
                     }
-                    set({ view: { kind: "failed", message } });
+                    set({ view: { kind: "failed", error: sessionFailure(cause, "chat") } });
                 }
             },
             newConversation: () => {
@@ -779,22 +783,6 @@ export const createBotChatHomeStore = (
                     revision: current.revision + 1,
                 }));
                 onRestart();
-            },
-            forkInstead: () => {
-                const current = get().selection;
-                if (current.kind === "failed" && current.target.kind === "continue") {
-                    const target: ConversationTarget = { ...current.target, action: "fork" };
-                    options.navigation.showForkInstead();
-                    set((state) => ({
-                        selection: transitionConversationSelection(state.selection, {
-                            kind: "target-selected",
-                            target,
-                        }),
-                        revision: state.revision + 1,
-                    }));
-                    onSelectionTargeted(selectedConversationId(get().selection));
-                    onRestart();
-                }
             },
             setDraft: (draft) => {
                 const current = get();

@@ -14,6 +14,7 @@ import { encodeIdentityScope, hasIdentityScope, readIdentityScope } from "@/serv
 import { computerKey, rememberedComputers, replacedToken, storedToken } from "@/services/identity/remembered-computers";
 import { centralSessionStorage, sessionWelcomeEntry } from "@/services/session-storage/central-session-storage";
 import { formatError } from "@/view-models/format-error";
+import { type SessionFailure, sessionFailure } from "../chat/session-failure.ts";
 
 export type ContinueStoreApi = ReturnType<typeof createContinueStore>;
 
@@ -37,7 +38,7 @@ export type ContinueState =
     | {
           readonly kind: "session-failed";
           readonly handoff: SessionHandoff;
-          readonly message: string;
+          readonly error: SessionFailure;
           /**
            * The redeemed access. Opening the original session failed, but this
            * access still lets the user enter Morty home instead.
@@ -217,7 +218,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                         handoff,
                         identity,
                         kind: "session-failed",
-                        message: formatError(cause, "This transfer link is unavailable."),
+                        error: sessionFailure(cause),
                     },
                 });
             }

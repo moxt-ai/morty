@@ -82,6 +82,12 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
     const queuedInitialMessage = queuedDraftMessage(model.creation);
     const draft = model.draft;
     const pendingConversation = pendingConversationPresentation(model);
+    const loadFailure =
+        model.selection.kind === "failed"
+            ? model.selection.error
+            : model.view.kind === "failed"
+              ? model.view.error
+              : null;
     const setupView = model.view.kind === "setup" ? model.view : null;
     const pairingNotice = model.notices.pairing.kind === "visible" || model.pairingDialogOpen;
 
@@ -198,29 +204,21 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                     </div>
                                 ) : model.selection.kind === "loading" || model.view.kind === "loading" ? (
                                     <SessionMessageListSkeleton />
-                                ) : model.view.kind === "failed" || model.selection.kind === "failed" ? (
+                                ) : loadFailure !== null ? (
                                     <div className="m-auto grid justify-items-center gap-4 text-center">
                                         <div className="flex items-start gap-2">
-                                            <SessionLoadFailure
-                                                message={
-                                                    model.selection.kind === "failed"
-                                                        ? model.selection.message
-                                                        : model.view.kind === "failed"
-                                                          ? model.view.message
-                                                          : "Chat is unavailable."
-                                                }
-                                            />
+                                            <SessionLoadFailure failure={loadFailure} />
                                             {reportButton}
                                         </div>
-                                        {model.selection.kind === "failed" &&
-                                        model.selection.target.kind === "continue" &&
-                                        model.selection.target.action === "import" ? (
-                                            <Button onClick={store.getState().forkInstead}>Fork session instead</Button>
-                                        ) : (
-                                            <div className="flex flex-wrap justify-center gap-2">
-                                                <Button onClick={store.getState().retry}>Reconnect</Button>
-                                            </div>
-                                        )}
+                                        <Button
+                                            onClick={
+                                                loadFailure.action.kind === "new-session"
+                                                    ? newConversation
+                                                    : store.getState().retry
+                                            }
+                                        >
+                                            {loadFailure.action.label}
+                                        </Button>
                                     </div>
                                 ) : queuedInitialMessage !== null && creationStatus !== null ? (
                                     <div className={`${chatSessionColumnClassName} flex flex-col gap-2`}>
@@ -290,6 +288,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                                 feedback={executionContext.feedback}
                                                 onRetryNow={store.getState().retry}
                                                 onReopen={store.getState().retry}
+                                                onNewSession={newConversation}
                                             />
                                             {workspace.computers !== null && (
                                                 <OnlineComputerAlternative model={workspace.computers} />
