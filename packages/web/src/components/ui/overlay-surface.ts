@@ -1,5 +1,4 @@
 /** Corner radius for anchored popovers, dialogs, menus, and similar floating panels (24px). */
-export const overlaySurfaceRadiusPx = 24;
 export const overlaySurfaceRadiusClassName = "rounded-overlay";
 
 /** Gap between an anchored floating panel and its trigger. */

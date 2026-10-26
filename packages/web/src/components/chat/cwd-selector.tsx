@@ -98,7 +98,13 @@ export function CwdSelector({
     const directoryPending = browser.kind === "loading" || browser.kind === "previewing";
     return (
         <>
-            <Popover.Root onOpenChange={setMenuOpen} open={menuOpen}>
+            <Popover.Root
+                onOpenChange={(open) => {
+                    viewModel.setCwdMenuOpen(open);
+                    setMenuOpen(open);
+                }}
+                open={menuOpen}
+            >
                 <Tooltip.Provider delayDuration={150}>
                     <Tooltip.Root>
                         <Tooltip.Trigger asChild>

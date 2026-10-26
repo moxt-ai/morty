@@ -70,6 +70,7 @@ function HarnessSelect({
                         // biome-ignore lint/a11y/useSemanticElements: harness cards use button styling inside a radiogroup.
                         <button
                             aria-checked={selected}
+                            aria-disabled={!installed || harness.disabled}
                             className={cn(
                                 "flex h-9 w-full min-w-0 items-center justify-center gap-2 rounded-lg border px-3 text-center text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none disabled:cursor-not-allowed",
                                 selected

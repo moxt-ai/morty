@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
 import { AgentThinking, type AgentThinkingEntry } from "../../components/chat/agent-thinking.tsx";
+import { AuthenticationNotice } from "../../components/chat/authentication-notice.tsx";
 import { AutoFocusInput } from "../../components/chat/auto-focus-input.tsx";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
@@ -26,6 +27,7 @@ import {
     SessionInteractionCards,
 } from "../../components/chat/session-interactions.tsx";
 import { SessionLoadFailure } from "../../components/chat/session-load-failure.tsx";
+import { SessionWelcome } from "../../components/chat/session-welcome.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -33,6 +35,7 @@ import { DesktopChatLayout } from "../../components/utils/desktop-chat-layout.ts
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { cn } from "../../lib/utils.ts";
+import { authenticationGuidance } from "../../view-models/chat/authentication-guidance.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { harnessOptions } from "../../view-models/chat/native-session-agents.ts";
@@ -176,6 +179,7 @@ function sessionRenderGroups(items: readonly SessionRenderItem[]): readonly Sess
 function SessionRenderItemContent({
     active,
     item,
+    machineName,
     onRetryUnknownDelivery,
     onRemoveUnknownDelivery,
     openLocalFile,
@@ -184,6 +188,7 @@ function SessionRenderItemContent({
 }: {
     readonly active: boolean;
     readonly item: SessionRenderItem;
+    readonly machineName: string;
     readonly onRemoveUnknownDelivery: () => void;
     readonly onRetryUnknownDelivery: () => void;
     readonly openLocalFile: (path: string) => void;
@@ -217,7 +222,9 @@ function SessionRenderItemContent({
         <MobiusSessionMessage
             active={active}
             deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
+            failureAgentRef={pane.agentRef}
             failureApproval={{ botId: pane.botId, kind: "bot-approval" }}
+            failureMachineName={machineName}
             message={item.message}
             onRemoveUnknownDelivery={onRemoveUnknownDelivery}
             onRetryUnknownDelivery={onRetryUnknownDelivery}
@@ -298,7 +305,7 @@ function SessionConversationTitleBar({
     const displayTitle = title || "Untitled session";
     const titleTextClassName = centered ? "text-[14px] leading-5" : "text-sm";
     const harnessMarkClassName = cn("text-copy-secondary", centered && "size-[18px]");
-    if (titleEdit.kind === "closed" || centered) {
+    if (titleEdit.kind === "closed") {
         if (titleLoading) {
             return <SessionTitleSkeleton centered={centered} />;
         }
@@ -318,19 +325,18 @@ function SessionConversationTitleBar({
                     label={agentLabel}
                     testId={dataTestId.sessionTitleHarnessMark}
                 />
-                {centered ? (
-                    <span className="min-w-0 max-w-full truncate text-center">{displayTitle}</span>
-                ) : (
-                    <button
-                        type="button"
-                        aria-label={displayTitle}
-                        className="min-w-0 max-w-full cursor-pointer truncate text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/70"
-                        title="Rename conversation"
-                        onClick={onOpenTitleEdit}
-                    >
-                        {displayTitle}
-                    </button>
-                )}
+                <button
+                    type="button"
+                    aria-label={displayTitle}
+                    className={cn(
+                        "min-w-0 max-w-full cursor-pointer truncate outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/70",
+                        centered ? "text-center" : "text-left",
+                    )}
+                    title="Rename conversation"
+                    onClick={onOpenTitleEdit}
+                >
+                    {displayTitle}
+                </button>
             </h2>
         );
     }
@@ -547,6 +553,7 @@ function MobiusSessionPaneBody({
     const delivery = useStore(pane.delivery);
     const messageQueue = useStore(pane.messageQueue);
     const taskControls = useStore(pane.tasks);
+    const welcome = useStore(pane.welcome, (state) => state.state);
     const harnesses = harnessOptions(runtimeConfiguration?.runtime ?? null);
 
     // The model owns the session connection through the same ref-cleanup
@@ -570,6 +577,7 @@ function MobiusSessionPaneBody({
     const respondToElicitation = (response: ElicitationInteractionResponse): void => {
         interactionModel.respondToElicitation(response, pane.operationsSignal());
     };
+    const executionContext = sessionExecutionContext(pane.session, home, model.connection);
     const presentation = sessionPanePresentation(
         model,
         delivery,
@@ -577,19 +585,15 @@ function MobiusSessionPaneBody({
         messageQueue,
         attachmentModel,
         interactionModel,
+        executionContext.available,
     );
+    const authenticationRecovery =
+        presentation.authenticationFailure === null
+            ? null
+            : authenticationGuidance(presentation.authenticationFailure.code, pane.agentRef, executionContext.machine);
     const renderItems = sessionRenderItems(model.messages);
     const renderGroups = sessionRenderGroups(renderItems);
     const lastRenderItemIndex = renderItems.length - 1;
-    const workingStartedAt =
-        presentation.workingIndicatorVisible && presentation.outputState !== "idle" && model.activity.kind === "working"
-            ? model.activity.startedAt
-            : null;
-    const lastRenderGroup = renderGroups.at(-1);
-    const workingIndicatorFollowsReply =
-        workingStartedAt !== null &&
-        presentation.unconfirmedDelivery === null &&
-        lastRenderGroup?.kind === "agent-reply";
     const sessionMessagesLoading = model.connection.kind === "loading" && model.messages.length === 0;
     const initialMessage = model.pendingInitialMessage;
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
@@ -601,7 +605,6 @@ function MobiusSessionPaneBody({
         void pane.filePreview.getState().reload(pane.operationsSignal());
     };
 
-    const executionContext = sessionExecutionContext(pane.session, home, model.connection);
     const workingDirectoryLabel = executionContext.directory ?? executionContext.directoryPlaceholder;
     const titleBarProps = {
         title: model.title,
@@ -700,7 +703,7 @@ function MobiusSessionPaneBody({
                                     )}
                                     {(() => {
                                         let flatIndex = 0;
-                                        return renderGroups.map((group, groupIndex) => {
+                                        return renderGroups.map((group) => {
                                             if (group.kind === "user") {
                                                 const active =
                                                     model.activity.kind === "working" &&
@@ -712,6 +715,7 @@ function MobiusSessionPaneBody({
                                                         <SessionRenderItemContent
                                                             active={active}
                                                             item={item}
+                                                            machineName={executionContext.machine}
                                                             onRemoveUnknownDelivery={
                                                                 pane.store.getState().removeUnknownDelivery
                                                             }
@@ -722,52 +726,35 @@ function MobiusSessionPaneBody({
                                                             pane={pane}
                                                             presentation={presentation}
                                                         />
-                                                    </div>
-                                                );
-                                            }
-                                            const showWorkingInGroup =
-                                                workingIndicatorFollowsReply &&
-                                                workingStartedAt !== null &&
-                                                groupIndex === renderGroups.length - 1;
-                                            const replyItems = group.items.map((item) => {
-                                                const active =
-                                                    model.activity.kind === "working" &&
-                                                    flatIndex === lastRenderItemIndex;
-                                                flatIndex += 1;
-                                                return (
-                                                    <div key={sessionRenderItemId(item)}>
-                                                        <SessionRenderItemContent
-                                                            active={active}
-                                                            item={item}
-                                                            onRemoveUnknownDelivery={
-                                                                pane.store.getState().removeUnknownDelivery
-                                                            }
-                                                            onRetryUnknownDelivery={() =>
-                                                                run(pane.store.getState().retryUnknownDelivery)
-                                                            }
-                                                            openLocalFile={openLocalFile}
-                                                            pane={pane}
-                                                            presentation={presentation}
-                                                        />
-                                                    </div>
-                                                );
-                                            });
-                                            if (showWorkingInGroup && workingStartedAt !== null) {
-                                                return (
-                                                    <div
-                                                        key={group.id}
-                                                        className={cn(chatSessionMessageItemClassName, "pb-8")}
-                                                    >
-                                                        <div className="space-y-4">{replyItems}</div>
-                                                        <div className="mt-3">
-                                                            <WorkingIndicator startedAt={workingStartedAt} />
-                                                        </div>
                                                     </div>
                                                 );
                                             }
                                             return (
                                                 <div key={group.id} className={chatSessionAgentReplyGroupClassName}>
-                                                    {replyItems}
+                                                    {group.items.map((item) => {
+                                                        const active =
+                                                            model.activity.kind === "working" &&
+                                                            flatIndex === lastRenderItemIndex;
+                                                        flatIndex += 1;
+                                                        return (
+                                                            <div key={sessionRenderItemId(item)}>
+                                                                <SessionRenderItemContent
+                                                                    active={active}
+                                                                    item={item}
+                                                                    machineName={executionContext.machine}
+                                                                    onRemoveUnknownDelivery={
+                                                                        pane.store.getState().removeUnknownDelivery
+                                                                    }
+                                                                    onRetryUnknownDelivery={() =>
+                                                                        run(pane.store.getState().retryUnknownDelivery)
+                                                                    }
+                                                                    openLocalFile={openLocalFile}
+                                                                    pane={pane}
+                                                                    presentation={presentation}
+                                                                />
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             );
                                         });
@@ -779,10 +766,28 @@ function MobiusSessionPaneBody({
                                             onRetry={() => run(pane.store.getState().retryUnknownDelivery)}
                                         />
                                     )}
-                                    {workingStartedAt !== null && !workingIndicatorFollowsReply && (
-                                        <div className="mt-3">
-                                            <WorkingIndicator startedAt={workingStartedAt} />
+                                    {presentation.workingIndicatorVisible &&
+                                        presentation.outputState !== "idle" &&
+                                        model.activity.kind === "working" && (
+                                            <div className="mt-6">
+                                                <WorkingIndicator startedAt={model.activity.startedAt} />
+                                            </div>
+                                        )}
+                                    {authenticationRecovery !== null && presentation.authenticationFailure !== null && (
+                                        <div className={chatSessionMessageItemClassName}>
+                                            <AuthenticationNotice
+                                                code={presentation.authenticationFailure.code}
+                                                guidance={authenticationRecovery}
+                                                message={presentation.authenticationFailure.message}
+                                            />
                                         </div>
+                                    )}
+                                    {welcome.kind === "visible" && model.connection.kind === "ready" && (
+                                        <SessionWelcome
+                                            canSuggestProgress={presentation.canSuggestProgress}
+                                            onDismiss={pane.welcome.getState().dismiss}
+                                            onSuggestProgress={pane.welcome.getState().suggestProgress}
+                                        />
                                     )}
                                 </div>
                             )}
@@ -842,6 +847,7 @@ function MobiusSessionPaneBody({
                                 )
                             }
                             outputState={presentation.outputState}
+                            stopDisabled={presentation.stopDisabled}
                             submitDisabled={presentation.submitDisabled}
                         >
                             <ChatConfigurationMenu

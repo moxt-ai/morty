@@ -1,7 +1,9 @@
-import { Check, ChevronDown, Laptop, LoaderCircle, Plus } from "lucide-react";
+import { Check, ChevronDown, Info, Laptop, LoaderCircle, Plus } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { useStore } from "zustand";
 import { cn } from "@/lib/utils";
+import { ComputerExecutionDetails } from "../../components/chat/computer-execution-details.tsx";
+import type { ExecutionContext } from "../../components/chat/execution-context.ts";
 import {
     type OverlayContentOpenAutoFocus,
     overlayMenuSeparatorClassName,
@@ -14,27 +16,17 @@ import { dataTestId } from "../../data-testid.ts";
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
 import type { ComputerChoice, ComputerSwitcherModel } from "../../view-models/chat/computer-switcher-store.ts";
 
-export function BotConnectionStatusIndicator({
+function BotConnectionStatusIndicator({
     status,
     className,
-    testId,
 }: {
     readonly status: BotConnectionStatus;
     readonly className?: string;
-    readonly testId?: string;
 }) {
     return (
-        <span
-            data-testid={testId}
-            data-connection-status={status.kind}
-            className={cn("flex shrink-0 items-center justify-end gap-1.5", className)}
-            role="status"
-        >
+        <span className={cn("flex shrink-0 items-center justify-end gap-1.5", className)} role="status">
             {status.kind === "connected" ? (
-                <>
-                    <span aria-hidden="true" className="size-2 rounded-full bg-emerald-500" />
-                    <span className="sr-only">Online</span>
-                </>
+                <span aria-hidden="true" className="size-2 rounded-full bg-emerald-500" />
             ) : (
                 <>
                     <span
@@ -279,11 +271,13 @@ function ComputerListChoices({
 }
 
 export function ComputerSwitcher({
+    context,
     model,
     name,
     status,
     layout = "block",
 }: {
+    readonly context: ExecutionContext;
     readonly model: ComputerSwitcherModel;
     readonly name: string;
     readonly status: BotConnectionStatus;
@@ -295,138 +289,169 @@ export function ComputerSwitcher({
     if (layout === "list") {
         const choices = orderedComputerChoices(state.choices, model.activeKey);
         return (
-            <nav aria-label="Computers" className="flex w-full min-w-0 flex-col">
-                <p className="px-4 pt-3 pb-1 text-[13px] font-medium text-morty-text-3">Computers</p>
-                <div className={cn("flex w-full min-w-0 flex-col", mobileDrawerOptionDividerClassName)}>
-                    {state.kind === "loading" && choices.length === 0 ? (
-                        <span className={cn(computerChoiceRowClassName, computerListChoiceClassName)}>
-                            <span className="mt-2 flex size-2 shrink-0 items-center justify-center">
-                                <span
-                                    aria-hidden="true"
-                                    className={cn(
-                                        "rounded-full",
-                                        status.kind === "connected"
-                                            ? "size-2 bg-emerald-500"
-                                            : "size-1.5 bg-muted-foreground/60",
-                                    )}
-                                />
-                                {status.kind === "connected" ? <span className="sr-only">Online</span> : null}
-                            </span>
-                            <span className="min-w-0">
-                                <span className="block truncate text-[15px] font-medium" title={computerName}>
-                                    {computerName}
-                                </span>
-                                {status.kind === "connected" ? null : (
-                                    <span className="block truncate text-xs text-morty-text-3">
-                                        {status.kind === "connecting" ? "Connecting" : "Offline"}
+            <ComputerExecutionDetails context={context}>
+                {({ openDetails }) => (
+                    <nav aria-label="Computers" className="flex w-full min-w-0 flex-col">
+                        <p className="px-4 pt-3 pb-1 text-[13px] font-medium text-morty-text-3">Computers</p>
+                        <div className={cn("flex w-full min-w-0 flex-col", mobileDrawerOptionDividerClassName)}>
+                            {state.kind === "loading" && choices.length === 0 ? (
+                                <span className={cn(computerChoiceRowClassName, computerListChoiceClassName)}>
+                                    <span className="mt-2 flex size-2 shrink-0 items-center justify-center">
+                                        <span
+                                            aria-hidden="true"
+                                            className={cn(
+                                                "rounded-full",
+                                                status.kind === "connected"
+                                                    ? "size-2 bg-emerald-500"
+                                                    : "size-1.5 bg-muted-foreground/60",
+                                            )}
+                                        />
                                     </span>
-                                )}
-                            </span>
-                            <span className="mt-1 flex size-4 items-center justify-center" aria-hidden="true">
-                                <Check className="size-3.5" />
-                            </span>
-                        </span>
-                    ) : (
-                        <ComputerListChoices activeKey={model.activeKey} choices={choices} />
-                    )}
-                    <a href="/setup" className={mobileDrawerCardRowClassName}>
-                        <Plus aria-hidden="true" className="size-5 shrink-0 text-copy-secondary" />
-                        Connect another computer
-                    </a>
-                </div>
-            </nav>
+                                    <span className="min-w-0">
+                                        <span className="block truncate text-[15px] font-medium" title={computerName}>
+                                            {computerName}
+                                        </span>
+                                        {status.kind === "connected" ? null : (
+                                            <span className="block truncate text-xs text-morty-text-3">
+                                                {status.kind === "connecting" ? "Connecting" : "Offline"}
+                                            </span>
+                                        )}
+                                    </span>
+                                    <span className="mt-1 flex size-4 items-center justify-center" aria-hidden="true">
+                                        <Check className="size-3.5" />
+                                    </span>
+                                </span>
+                            ) : (
+                                <ComputerListChoices activeKey={model.activeKey} choices={choices} />
+                            )}
+                            <button className={mobileDrawerCardRowClassName} onClick={openDetails} type="button">
+                                <Info aria-hidden="true" className="size-5 shrink-0 text-copy-secondary" />
+                                Execution details
+                            </button>
+                            <a href="/setup" className={mobileDrawerCardRowClassName}>
+                                <Plus aria-hidden="true" className="size-5 shrink-0 text-copy-secondary" />
+                                Connect another computer
+                            </a>
+                        </div>
+                    </nav>
+                )}
+            </ComputerExecutionDetails>
         );
     }
     const inHeader = layout === "header";
     return (
-        <DropdownMenu.Root
-            onOpenChange={(open) => {
-                if (open) {
-                    void model.refresh();
-                }
-            }}
-        >
-            <DropdownMenu.Trigger asChild>
-                <button
-                    type="button"
-                    aria-label={`Switch computer, ${computerName}`}
-                    className={
-                        inHeader
-                            ? "flex max-w-[120px] min-w-0 items-center gap-0.5 overflow-hidden rounded-lg px-3 py-1.5 text-left text-12 outline-none hover:bg-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-muted-foreground"
-                            : sidebarNavOptionTriggerClassName
-                    }
+        <ComputerExecutionDetails context={context}>
+            {({ open: detailsOpen, openDetails }) => (
+                <DropdownMenu.Root
+                    onOpenChange={(open) => {
+                        if (open) {
+                            void model.refresh();
+                        }
+                    }}
                 >
-                    {inHeader ? (
-                        <>
-                            <span className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5">
-                                <BotConnectionStatusIndicator status={status} testId={dataTestId.botConnectionStatus} />
-                                <span
-                                    className="max-w-[100px] min-w-0 truncate text-12 font-normal"
-                                    title={computerName}
-                                >
-                                    {computerName}
-                                </span>
-                            </span>
-                            <ChevronDown aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />
-                        </>
-                    ) : (
-                        <>
-                            <Laptop aria-hidden="true" className="size-4 shrink-0" />
-                            <span className="min-w-0 flex-1 truncate" title={computerName}>
-                                {computerName}
-                            </span>
-                            <BotConnectionStatusIndicator status={status} testId={dataTestId.botConnectionStatus} />
-                            <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-copy-secondary" />
-                        </>
-                    )}
-                </button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-                <DropdownMenu.Content
-                    align="start"
-                    sideOffset={overlayTriggerOffsetPx}
-                    {...({ onOpenAutoFocus: preventOverlayOpenAutoFocus } satisfies OverlayContentOpenAutoFocus)}
-                    className={cn(
-                        "z-[180] flex max-h-[min(70dvh,520px)] w-[min(calc(100vw-1.5rem),320px)] animate-cloud-enter flex-col overflow-hidden p-1.5 text-sm text-foreground outline-none motion-reduce:animate-none",
-                        overlaySurfacePanelClassName,
-                        overlaySurfaceRadiusClassName,
-                    )}
-                    aria-label="Computers"
-                >
-                    <DropdownMenu.Label className="flex shrink-0 items-center justify-between gap-2 px-3 pt-1 pb-3 text-16 font-semibold text-copy-tertiary">
-                        Computers
-                        {state.kind === "loading" && state.choices.length > 0 ? (
-                            <span className="inline-flex shrink-0" role="status">
-                                <LoaderCircle
-                                    aria-hidden="true"
-                                    className="size-3.5 animate-spin text-copy-tertiary motion-reduce:animate-none"
-                                />
-                                <span className="sr-only">Checking connections…</span>
-                            </span>
-                        ) : null}
-                    </DropdownMenu.Label>
-                    <div className="flex min-h-0 flex-col overflow-y-auto">
-                        {state.kind === "loading" && state.choices.length === 0 ? (
-                            <p className="px-3 py-2 text-copy-tertiary" role="status">
-                                Checking connections…
-                            </p>
-                        ) : (
-                            <ComputerChoiceList activeKey={model.activeKey} choices={state.choices} />
-                        )}
-                    </div>
-                    <DropdownMenu.Separator className={cn("-mx-1.5 my-1.5", overlayMenuSeparatorClassName)} />
-                    <DropdownMenu.Item asChild>
-                        <a
-                            href="/setup"
-                            className="flex h-9 cursor-pointer items-center gap-2 rounded-full px-3 outline-none data-[highlighted]:bg-accent"
+                    <DropdownMenu.Trigger asChild>
+                        <button
+                            type="button"
+                            aria-describedby="computer-connection-description"
+                            aria-label={`Switch computer, ${computerName}`}
+                            data-connection-status={status.kind}
+                            data-testid={dataTestId.botConnectionStatus}
+                            className={
+                                inHeader
+                                    ? "flex max-w-[120px] min-w-0 items-center gap-0.5 overflow-hidden rounded-lg px-3 py-1.5 text-left text-12 outline-none hover:bg-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-muted-foreground"
+                                    : sidebarNavOptionTriggerClassName
+                            }
                         >
-                            <Plus aria-hidden="true" className="size-4" />
-                            Connect another computer
-                        </a>
-                    </DropdownMenu.Item>
-                </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+                            {inHeader ? (
+                                <>
+                                    <span className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5">
+                                        <BotConnectionStatusIndicator status={status} />
+                                        <span
+                                            className="max-w-[100px] min-w-0 truncate text-12 font-normal"
+                                            title={computerName}
+                                        >
+                                            {computerName}
+                                        </span>
+                                    </span>
+                                    <ChevronDown aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />
+                                </>
+                            ) : (
+                                <>
+                                    <Laptop aria-hidden="true" className="size-4 shrink-0" />
+                                    <span className="min-w-0 flex-1 truncate" title={computerName}>
+                                        {computerName}
+                                    </span>
+                                    <BotConnectionStatusIndicator status={status} />
+                                    <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-copy-secondary" />
+                                </>
+                            )}
+                        </button>
+                    </DropdownMenu.Trigger>
+                    <span className="sr-only" id="computer-connection-description">
+                        {context.indicator.label}
+                    </span>
+                    <DropdownMenu.Portal>
+                        <DropdownMenu.Content
+                            align="start"
+                            sideOffset={overlayTriggerOffsetPx}
+                            onCloseAutoFocus={(event) => {
+                                if (detailsOpen) {
+                                    event.preventDefault();
+                                }
+                            }}
+                            {...({
+                                onOpenAutoFocus: preventOverlayOpenAutoFocus,
+                            } satisfies OverlayContentOpenAutoFocus)}
+                            className={cn(
+                                "z-[180] flex max-h-[min(70dvh,520px)] w-[min(calc(100vw-1.5rem),320px)] animate-cloud-enter flex-col overflow-hidden p-1.5 text-sm text-foreground outline-none motion-reduce:animate-none",
+                                overlaySurfacePanelClassName,
+                                overlaySurfaceRadiusClassName,
+                            )}
+                            aria-label="Computers"
+                        >
+                            <DropdownMenu.Label className="flex shrink-0 items-center justify-between gap-2 px-3 pt-1 pb-3 text-16 font-semibold text-copy-tertiary">
+                                Computers
+                                {state.kind === "loading" && state.choices.length > 0 ? (
+                                    <span className="inline-flex shrink-0" role="status">
+                                        <LoaderCircle
+                                            aria-hidden="true"
+                                            className="size-3.5 animate-spin text-copy-tertiary motion-reduce:animate-none"
+                                        />
+                                        <span className="sr-only">Checking connections…</span>
+                                    </span>
+                                ) : null}
+                            </DropdownMenu.Label>
+                            <div className="flex min-h-0 flex-col overflow-y-auto">
+                                {state.kind === "loading" && state.choices.length === 0 ? (
+                                    <p className="px-3 py-2 text-copy-tertiary" role="status">
+                                        Checking connections…
+                                    </p>
+                                ) : (
+                                    <ComputerChoiceList activeKey={model.activeKey} choices={state.choices} />
+                                )}
+                            </div>
+                            <DropdownMenu.Item
+                                className="flex h-9 cursor-pointer items-center gap-2 rounded-full px-3 outline-none data-[highlighted]:bg-accent"
+                                onSelect={() => openDetails()}
+                            >
+                                <Info aria-hidden="true" className="size-4" />
+                                Execution details
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Separator className={cn("-mx-1.5 my-1.5", overlayMenuSeparatorClassName)} />
+                            <DropdownMenu.Item asChild>
+                                <a
+                                    href="/setup"
+                                    className="flex h-9 cursor-pointer items-center gap-2 rounded-full px-3 outline-none data-[highlighted]:bg-accent"
+                                >
+                                    <Plus aria-hidden="true" className="size-4" />
+                                    Connect another computer
+                                </a>
+                            </DropdownMenu.Item>
+                        </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                </DropdownMenu.Root>
+            )}
+        </ComputerExecutionDetails>
     );
 }
 

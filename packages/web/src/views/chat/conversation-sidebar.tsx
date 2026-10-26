@@ -33,6 +33,7 @@ import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-s
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import type { ConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
 import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
+import { pendingExecutionContext, sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { nativeSessionAgentTabs } from "../../view-models/chat/native-session-agents.ts";
 import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
@@ -381,7 +382,15 @@ export function ConversationSidebar({
     // The workspace owns the sidebar's dialog, remote-access, and diagnostic
     // stores outside React; the view only subscribes.
     const dialogs = workspace.sidebar.dialogs;
-    const runtime = useStore(workspace.home, (state) => state.runtimeConfiguration?.runtime ?? null);
+    const home = useStore(workspace.home);
+    const draftSettings = useStore(workspace.draftControls, (state) => state.settings);
+    const pane = workspace.sessionPane();
+    const paneSource = useStore(pane?.store ?? workspace.home);
+    const executionContext =
+        home.selection.kind === "ready" && pane !== null && "connection" in paneSource
+            ? sessionExecutionContext(pane.session, home, paneSource.connection)
+            : pendingExecutionContext(home, draftSettings);
+    const runtime = home.runtimeConfiguration?.runtime ?? null;
     const computerName = runtime?.machineName ?? "";
     const nativeAgents = runtime === null ? [] : nativeSessionAgentTabs(runtime);
     const directory = useStore(workspace.directory, (state) => state.state);
@@ -547,8 +556,9 @@ export function ConversationSidebar({
                                                         testId={dataTestId.botConnectionStatus}
                                                     />
                                                 )}
-                                                {desktop && workspace.computers !== null ? (
+                                                {workspace.computers !== null ? (
                                                     <ComputerSwitcher
+                                                        context={executionContext}
                                                         layout="header"
                                                         model={workspace.computers}
                                                         name={computerName}
@@ -670,6 +680,7 @@ export function ConversationSidebar({
                                                     {!desktop && workspace.computers !== null ? (
                                                         <div className={mobileDrawerCardClassName}>
                                                             <ComputerSwitcher
+                                                                context={executionContext}
                                                                 layout="list"
                                                                 model={workspace.computers}
                                                                 name={computerName}

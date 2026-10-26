@@ -8,7 +8,7 @@ import { TestClock } from "./infra/test-clock.ts";
 async function selectCodexHarness(app: TestApp): Promise<void> {
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
     const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
-    await app.user.click(getByRole(configuration, "tab", { name: "Codex" }));
+    await app.user.click(getByRole(configuration, "radio", { name: "Codex" }));
     await app.user.keyboard("{Escape}");
     expect(queryByRole(document.body, "dialog", { name: "Agent configuration" })).toBeNull();
 }
