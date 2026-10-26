@@ -1,57 +1,56 @@
----
-metadata:
-  change-policy: >-
-    Do not modify this Markdown file together with source code or other non-Markdown
-    files. Submit changes in a separate documentation-only pull request for review
-    and approval. The recommended reviewer is taowen-paraflow.
----
+<div align="center">
 
 # Morty
 
-## Why Morty exists
+**English** · [Simplified Chinese](README.zh-CN.md)
 
-An Agent may be working on your computer while you are somewhere else. You need a
-convenient place to check its progress, answer a question, give the next instruction
-and see the result without returning to the terminal where the work started.
+### Step away from your desk. Keep work moving.
 
-Morty makes that a browser chat experience. A Bot connects you to the machine and
-Agent intended for the task. In its conversations, you can send instructions, queue
-follow-ups, stop work, respond to permission requests and view available history,
-files and generated images. Access to Bots and conversations belongs to the users
-authorized to use them.
+Continue Codex, Claude Code, and Pi conversations from any browser.
 
-You should be able to open the same conversation in another browser, catch up on
-instructions sent elsewhere and continue participating. New output should appear
-promptly even during a long answer. Displaying each update should process the new or
-changed content without repeatedly rebuilding the entire turn; opening or reconnecting
-may require a separate catch-up step.
+[Open Morty →](https://morty.build) · [Get connected](#one-prompt-then-pick-up-your-phone) · [Contribute](docs/CONTRIBUTING.md)
 
-[Mobius](third-party/mobius/README.md#why-mobius-exists) provides remote access to local
-Agents. Morty supplies Bots, conversation access and the browser experience, so users
-can focus on their work without building a client themselves. Available operations
-depend on the Agent and configuration, and unavailable capabilities or history must
-be clear to the user.
+<img src="https://raw.githubusercontent.com/moxt-ai/mobius/362efa275790e55e34ecd2462e716c177cdf831a/docs/assets/readme-accent.svg" width="320" height="40" alt="" />
 
-Live output favors responsiveness over guaranteed delivery. Disconnects and restarts
-can leave gaps; catch-up depends on the current turn, native Agent history or available
-cloud recordings. Optional Recording must not slow the conversation and is not a
-lossless archive. See Mobius's [data ownership and recovery](third-party/mobius/README.md#data-ownership-and-recovery)
-for where retained data lives.
+</div>
 
-## Start here
+Your agent is working on your computer. Morty puts the conversation on your phone,
+tablet, or another screen, so you can check in and give the next instruction wherever
+you are.
 
-```sh
-pnpm install
-pnpm sync:submodules
-pnpm local-dev --help
+## Stay in the loop
+
+- **See work as it happens.** Follow live replies and tool activity, then open files
+  and generated images from the conversation.
+- **Keep things moving.** Send instructions, queue follow-ups, stop a turn, or answer
+  supported approval requests.
+- **Switch screens, keep the context.** Return to your connected conversations from
+  another browser and pick up where you left off.
+
+## Your agent. Your setup.
+
+Your projects, tools, and signed-in agent stay on the connected machine. Morty gives
+you a browser view into that environment. Open your connected conversation from
+another screen. Share access when you want someone else to join, and revoke it
+when you're done.
+
+## One prompt. Then pick up your phone.
+
+Open [morty.build](https://morty.build) and copy the setup prompt, or paste this
+into your coding agent:
+
+```text
+Fetch https://morty.build/setup.md and set up Morty for me.
+You may install missing prerequisites and pair this machine.
+Complete setup without asking questions.
 ```
 
-Use the isolated local-stack instructions in
-[chat-local-full-dev](.agents/skills/chat-local-full-dev/SKILL.md).
-Runtime configuration is described in [deployment](docs/deployment.md).
-Node and pnpm versions are pinned in [package.json](package.json).
+Open the link it returns, or scan the QR code on your phone. No mobile app required.
+Keep the connected machine awake and online.
 
-- [Contributing](CONTRIBUTING.md): issue and PR requirements, development constraints, and build operations.
-- [Testing](TESTING.md): test commands and dependency boundaries.
-- [Engineering rules](AGENTS.md): contribution requirements.
-- [Mobius](third-party/mobius/README.md): CLI, SDK and hosting usage.
+---
+
+Built on [**Mobius**](https://github.com/moxt-ai/mobius), the SDK and infrastructure
+for remote coding-agent access. Morty is the ready-to-use browser application.
+
+[Contributing](docs/CONTRIBUTING.md) · [Testing](docs/TESTING.md) · [Usage guide](docs/GUIDE.md) · [Deployment](docs/deployment.md)

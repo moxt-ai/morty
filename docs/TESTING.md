@@ -33,7 +33,7 @@ the daemon's Agent dependency argument; Chat, Platform, SDKs, daemon behavior, a
 transports remain real. Each fixture owns pairing and cleanup of the resources it
 creates.
 
-Follow [AGENTS.md](AGENTS.md) for scenario and fake-provider rules. Exercise visible
+Follow [AGENTS.md](../AGENTS.md) for scenario and fake-provider rules. Exercise visible
 controls in Web tests and production HTTP/WebSocket boundaries in Worker tests.
 The controlled ACP harness establishes Morty behavior across the production daemon,
 not compatibility with a named Agent. Real Agent compatibility requires the real

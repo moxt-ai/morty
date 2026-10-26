@@ -8,7 +8,7 @@ metadata:
 
 # Engineering Rules
 
-These rules apply to the entire repository. You must read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening an issue or pull request; it defines contribution and implementation requirements. See [TESTING.md](./TESTING.md) for delivery and testing guidance.
+These rules apply to the entire repository. You must read [CONTRIBUTING.md](./docs/CONTRIBUTING.md) before opening an issue or pull request; it defines contribution and implementation requirements. See [TESTING.md](./docs/TESTING.md) for delivery and testing guidance.
 
 ## Repository setup
 
@@ -80,7 +80,7 @@ Make illegal states unrepresentable.
 - Do not add unit tests by default. Add one only when the user explicitly requests unit-level coverage or a repository maintainer documents an exception for an invariant that cannot be exercised through a supported product boundary.
 - Only write end-to-end tests for happy paths. Business logic must be covered by integration tests, while protocols and external boundaries use integration or contract tests. Do not test CI, linting, Git hooks, build tooling, dependency configuration, or other repository scaffolding.
 - Web application integration tests exercise user behavior through visible controls and must not access stores directly. They bootstrap and render the complete application rather than isolated components or views. Prefer accessible roles, names, labels, and visible text; use shared `data-testid.ts` constants when no stable semantic selector exists. Worker integration tests enter through their production HTTP, WebSocket, Durable Object, queue, or storage boundary.
-- Test boundaries follow `TESTING.md`: Morty Web, Worker, and browser tests keep product services, transports, and the production daemon real. They inject a stateful controlled ACP harness only through the daemon's Agent dependency argument. Separate agent-daemon compatibility tests use the real daemon, each real Agent executable, and its production adapter; a fake LLM provider can replace the model service. A controlled ACP harness exercises production daemon behavior but cannot establish Agent compatibility.
+- Test boundaries follow `docs/TESTING.md`: Morty Web, Worker, and browser tests keep product services, transports, and the production daemon real. They inject a stateful controlled ACP harness only through the daemon's Agent dependency argument. Separate agent-daemon compatibility tests use the real daemon, each real Agent executable, and its production adapter; a fake LLM provider can replace the model service. A controlled ACP harness exercises production daemon behavior but cannot establish Agent compatibility.
 - Except for deterministic fake timers, mocks, spies, stubs, monkey patching, module replacement, and canned request interceptors are prohibited. If a real external dependency cannot be used safely or deterministically, inject a stateful fake through its production port.
 - Tests involving time must use fake timers with an explicit system time. Every test is prohibited from using real sleeps, wall-clock time, polling delays, or timing tolerances.
 - Assert externally observable results, not private control flow, collaborator calls, or implementation details.
