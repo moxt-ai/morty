@@ -3,12 +3,18 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { createRuntimeConfig, MobiusRuntimeEngine, RuntimeLocalContext } from "@moxt-ai/mobius/runtime";
+import {
+    createRuntimeConfig,
+    MobiusRuntimeEngine,
+    RuntimeAgentDependencies,
+    RuntimeLocalContext,
+} from "@moxt-ai/mobius/runtime";
 import * as previousRuntime from "@moxt-ai/mobius-previous/runtime";
 import { MobiusClient, StaticMobiusCredentialProvider } from "@moxt-ai/mobius-sdk/server";
 import {
     createFakeDaemon,
     type FakeAgentHarnessOptions,
+    fakeDaemonCapabilities,
     type HarnessReplyPlan,
 } from "@moxt-ai/mobius-test-support/fake-daemon";
 import * as v from "valibot";
@@ -72,7 +78,11 @@ function controlledRuntime(
     const release = behavior.runtime ?? "current";
     switch (release) {
         case "current": {
-            const config = createRuntimeConfig(connection, agents, new RuntimeLocalContext(directory, process.env));
+            const config = createRuntimeConfig(
+                connection,
+                new RuntimeAgentDependencies(agents),
+                new RuntimeLocalContext(directory, process.env),
+            );
             return {
                 start: (onConnectionStatus) =>
                     new MobiusRuntimeEngine(
@@ -94,7 +104,21 @@ function controlledRuntime(
             }
             const config = previousRuntime.createRuntimeConfig(
                 connection,
-                [createSettingsAgent((...options) => new previousRuntime.InProcessAcpAgentDefinition(...options))],
+                [
+                    createSettingsAgent(
+                        (id, label, createEndpoint) =>
+                            new previousRuntime.InProcessAcpAgentDefinition(
+                                id,
+                                label,
+                                process.execPath,
+                                createEndpoint,
+                                {},
+                                "controlled-harness",
+                                undefined,
+                                fakeDaemonCapabilities,
+                            ),
+                    ),
+                ],
                 new previousRuntime.RuntimeLocalContext(directory, process.env),
             );
             return {

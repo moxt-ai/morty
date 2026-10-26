@@ -7,11 +7,22 @@ import {
 import { fakeDaemonCapabilities } from "@moxt-ai/mobius-test-support/fake-daemon";
 
 export type DefineInProcessAgent<Definition> = (
-    ...options: ConstructorParameters<typeof InProcessAcpAgentDefinition>
+    id: string,
+    label: string,
+    createEndpoint: () => InProcessAcpEndpoint,
 ) => Definition;
 
-export const defineCurrentAgent: DefineInProcessAgent<InProcessAcpAgentDefinition> = (...options) =>
-    new InProcessAcpAgentDefinition(...options);
+export const defineCurrentAgent: DefineInProcessAgent<InProcessAcpAgentDefinition> = (id, label, createEndpoint) =>
+    new InProcessAcpAgentDefinition(
+        id,
+        label,
+        process.execPath,
+        createEndpoint,
+        {},
+        "controlled-harness",
+        undefined,
+        fakeDaemonCapabilities,
+    );
 
 /**
  * A stateful Agent with one model setting. Asked to "Remove settings", it removes
@@ -108,16 +119,7 @@ export function createSettingsAgent<Definition>(define: DefineInProcessAgent<Def
             close: async () => termination.resolve({ kind: "closed" }),
         };
     };
-    return define(
-        "settings-test",
-        "Settings Agent",
-        process.execPath,
-        createEndpoint,
-        {},
-        "controlled-harness",
-        undefined,
-        fakeDaemonCapabilities,
-    );
+    return define("settings-test", "Settings Agent", createEndpoint);
 }
 
 /** How an installed Agent fails to open a session: signed out like a real harness, or broken. */
@@ -153,14 +155,5 @@ export function createUnavailableAgent(id: string, name: string, failure: Unavai
             close: async () => termination.resolve({ kind: "closed" }),
         };
     };
-    return defineCurrentAgent(
-        id,
-        name,
-        process.execPath,
-        createEndpoint,
-        {},
-        "controlled-harness",
-        undefined,
-        fakeDaemonCapabilities,
-    );
+    return defineCurrentAgent(id, name, createEndpoint);
 }
