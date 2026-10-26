@@ -216,6 +216,7 @@ test("Given the agent sends many session events, When the response completes, Th
     }
 
     await sendPrompt(app, composer, "many session events");
+    await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: "20 steps" })));
     const thinking = await app.queryElementByTestId(dataTestId.agentReasoning);
     if (!(thinking instanceof HTMLDetailsElement)) {
         throw new Error("Expected reasoning to use a disclosure");

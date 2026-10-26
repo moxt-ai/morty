@@ -21,86 +21,114 @@ import { matchesWorkdirShellCommandToolCall, WorkdirShellCommandToolCall } from 
 
 interface ToolRenderer {
     readonly Component: ComponentType<ToolRendererProps>;
+    /** Whether the matched call changes workspace files. */
+    readonly editsFiles: boolean;
     readonly matches: (entry: ToolThinkingEntry) => boolean;
 }
 
 const TOOL_RENDERERS: readonly ToolRenderer[] = [
     {
         Component: QuestionToolCall,
+        editsFiles: false,
         matches: matchesQuestionToolCall,
     },
     {
         Component: SkillToolCall,
+        editsFiles: false,
         matches: matchesSkillToolCall,
     },
     {
         Component: ImageGenerationToolCall,
+        editsFiles: false,
         matches: matchesImageGenerationToolCall,
     },
     {
         Component: ViewImageToolCall,
+        editsFiles: false,
         matches: matchesViewImageToolCall,
     },
     {
         Component: ChangedFilesEditToolCall,
+        editsFiles: true,
         matches: matchesChangedFilesEditToolCall,
     },
     {
         Component: BrowserJavascriptToolCall,
+        editsFiles: false,
         matches: matchesBrowserJavascriptToolCall,
     },
     {
         Component: PiFileToolCall,
+        editsFiles: true,
         matches: matchesPiFileToolCall,
     },
     {
         Component: FilePathEditToolCall,
+        editsFiles: true,
         matches: matchesFilePathEditToolCall,
     },
     {
         Component: InputDiffEditToolCall,
+        editsFiles: true,
         matches: matchesInputDiffEditToolCall,
     },
     {
         Component: OutputDiffEditToolCall,
+        editsFiles: true,
         matches: matchesOutputDiffEditToolCall,
     },
     {
         Component: PatchEditToolCall,
+        editsFiles: true,
         matches: matchesPatchEditToolCall,
     },
     {
         Component: RichContentEditToolCall,
+        editsFiles: true,
         matches: matchesRichContentEditToolCall,
     },
     {
         Component: CwdShellCommandToolCall,
+        editsFiles: false,
         matches: matchesCwdShellCommandToolCall,
     },
     {
         Component: WorkdirShellCommandToolCall,
+        editsFiles: false,
         matches: matchesWorkdirShellCommandToolCall,
     },
     {
         Component: PathReadToolCall,
+        editsFiles: false,
         matches: matchesPathReadToolCall,
     },
     {
         Component: FilePathReadToolCall,
+        editsFiles: false,
         matches: matchesFilePathReadToolCall,
     },
     {
         Component: GrepToolCall,
+        editsFiles: false,
         matches: matchesGrepToolCall,
     },
     {
         Component: GlobToolCall,
+        editsFiles: false,
         matches: matchesGlobToolCall,
     },
 ];
 
+function registeredRenderer(entry: ToolThinkingEntry): ToolRenderer | undefined {
+    return TOOL_RENDERERS.find((candidate) => candidate.matches(entry));
+}
+
+export function isFileEditToolCall(entry: ToolThinkingEntry): boolean {
+    return registeredRenderer(entry)?.editsFiles === true;
+}
+
 export function renderRegisteredTool(entry: ToolThinkingEntry): ReactNode | null {
-    const renderer = TOOL_RENDERERS.find((candidate) => candidate.matches(entry));
+    const renderer = registeredRenderer(entry);
     if (renderer === undefined) {
         return null;
     }

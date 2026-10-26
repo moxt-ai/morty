@@ -55,7 +55,52 @@ export function createToolLifecycleAgent() {
                 const cancellation = new AbortController();
                 turns.set(sessionId, cancellation);
                 const signal = AbortSignal.any([context.signal, lifetime.signal, cancellation.signal]);
+                const emit = async (update: acp.SessionNotification["update"]) => {
+                    const event: acp.SessionNotification = { sessionId, update };
+                    history.push(event);
+                    await context.client.notify(acp.methods.client.session.update, event);
+                };
+                const emitText = async (text: string) =>
+                    await emit({
+                        sessionUpdate: "agent_message_chunk",
+                        messageId: crypto.randomUUID(),
+                        content: { type: "text", text },
+                    });
+                const emitTool = async (title: string, status: acp.ToolCallStatus, content: acp.ToolCallContent[]) =>
+                    await emit({
+                        sessionUpdate: "tool_call",
+                        toolCallId: crypto.randomUUID(),
+                        title,
+                        status,
+                        kind: "other",
+                        rawInput: { task: title },
+                        content,
+                    });
                 try {
+                    if (prompt === "answer after verification" || prompt === "answer then hold") {
+                        await emitTool("Completed verification", "completed", []);
+                        if (prompt === "answer then hold") {
+                            await emitText("Partial answer before stopping.");
+                            const stopped = Promise.withResolvers<acp.PromptResponse>();
+                            const abort = () => stopped.resolve({ stopReason: "cancelled" });
+                            signal.addEventListener("abort", abort, { once: true });
+                            try {
+                                if (signal.aborted) {
+                                    abort();
+                                }
+                                return await stopped.promise;
+                            } finally {
+                                signal.removeEventListener("abort", abort);
+                            }
+                        }
+                        await emitTool("Update notes", "completed", [
+                            { type: "diff", path: "/workspace/notes.md", oldText: "before\n", newText: "after\n" },
+                        ]);
+                        await emitText("Checking the failed verification.");
+                        await emitTool("Failed verification", "failed", []);
+                        await emitText("Verification finished with one failure.");
+                        return { stopReason: "end_turn" };
+                    }
                     for (const [title, status] of [
                         ["Completed verification", "completed"],
                         ["Failed verification", "failed"],

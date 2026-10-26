@@ -28,6 +28,8 @@ import {
 } from "../../components/chat/session-interactions.tsx";
 import { SessionLoadFailure } from "../../components/chat/session-load-failure.tsx";
 import { SessionWelcome } from "../../components/chat/session-welcome.tsx";
+import { isFileEditToolCall } from "../../components/chat/tools/tool-renderer-registry.tsx";
+import { TurnWorkDisclosure, type TurnWorkSummary } from "../../components/chat/turn-work-disclosure.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -41,7 +43,11 @@ import { sessionExecutionContext } from "../../view-models/chat/execution-contex
 import { harnessOptions } from "../../view-models/chat/native-session-agents.ts";
 import { sessionInteractionPresentation } from "../../view-models/chat/session-interaction-store.ts";
 import { type SessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
-import { type SessionMessage, sessionTextValue } from "../../view-models/chat/session-presentation.ts";
+import {
+    completedTurnNotice,
+    type SessionMessage,
+    sessionTextValue,
+} from "../../view-models/chat/session-presentation.ts";
 import { createSessionResourceStore } from "../../view-models/chat/session-resource-store.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { ChatMessageQueue } from "./chat-message-queue.tsx";
@@ -174,6 +180,55 @@ function sessionRenderGroups(items: readonly SessionRenderItem[]): readonly Sess
     }
     flushReplyGroup();
     return groups;
+}
+
+type AgentReplyLayout =
+    | { readonly kind: "inline" }
+    | {
+          readonly answer: readonly SessionRenderItem[];
+          readonly kind: "collapsed-work";
+          readonly summary: TurnWorkSummary;
+          readonly work: readonly SessionRenderItem[];
+      };
+
+function endedEarly(item: SessionRenderItem): boolean {
+    if (item.kind !== "event" || item.message.role !== "assistant") {
+        return false;
+    }
+    const presentation = item.message.presentation;
+    return (
+        presentation.kind === "failure" ||
+        (presentation.kind === "completed" && completedTurnNotice(presentation.stopReason) !== null)
+    );
+}
+
+/**
+ * A finished reply leads with its answer: everything up to the last tool or
+ * reasoning step collapses into one summary, and everything after it stays
+ * visible. Replies that failed or stopped early, and replies without a final
+ * answer, stay fully expanded so nothing that needs attention is hidden.
+ */
+function agentReplyLayout(items: readonly SessionRenderItem[]): AgentReplyLayout {
+    const lastWorkIndex = items.findLastIndex((item) => item.kind === "thinking");
+    const work = items.slice(0, lastWorkIndex + 1);
+    const answer = items.slice(lastWorkIndex + 1);
+    const tools = work.flatMap((item) =>
+        item.kind === "thinking" ? item.entries.filter((entry) => entry.kind === "tool") : [],
+    );
+    if (tools.length === 0 || !answer.some((item) => item.kind === "assistant-text") || items.some(endedEarly)) {
+        return { kind: "inline" };
+    }
+    return {
+        answer,
+        kind: "collapsed-work",
+        summary: {
+            failed: tools.filter((entry) => entry.state.kind === "failed").length,
+            fileEdits: tools.filter(isFileEditToolCall).length,
+            interrupted: tools.filter((entry) => entry.state.kind === "interrupted").length,
+            steps: tools.length,
+        },
+        work,
+    };
 }
 
 function SessionRenderItemContent({
@@ -747,32 +802,48 @@ function MobiusSessionPaneBody({
                                                     </div>
                                                 );
                                             }
+                                            const firstIndex = flatIndex;
+                                            flatIndex += group.items.length;
+                                            const replyActive =
+                                                model.activity.kind === "working" && flatIndex > lastRenderItemIndex;
+                                            const renderItem = (item: SessionRenderItem) => {
+                                                const active =
+                                                    replyActive &&
+                                                    firstIndex + group.items.indexOf(item) === lastRenderItemIndex;
+                                                return (
+                                                    <div key={sessionRenderItemId(item)}>
+                                                        <SessionRenderItemContent
+                                                            active={active}
+                                                            item={item}
+                                                            machineName={executionContext.machine}
+                                                            onRemoveUnknownDelivery={
+                                                                pane.store.getState().removeUnknownDelivery
+                                                            }
+                                                            onRetryUnknownDelivery={() =>
+                                                                run(pane.store.getState().retryUnknownDelivery)
+                                                            }
+                                                            openLocalFile={openLocalFile}
+                                                            pane={pane}
+                                                            presentation={presentation}
+                                                        />
+                                                    </div>
+                                                );
+                                            };
+                                            const layout: AgentReplyLayout = replyActive
+                                                ? { kind: "inline" }
+                                                : agentReplyLayout(group.items);
                                             return (
                                                 <div key={group.id} className={chatSessionAgentReplyGroupClassName}>
-                                                    {group.items.map((item) => {
-                                                        const active =
-                                                            model.activity.kind === "working" &&
-                                                            flatIndex === lastRenderItemIndex;
-                                                        flatIndex += 1;
-                                                        return (
-                                                            <div key={sessionRenderItemId(item)}>
-                                                                <SessionRenderItemContent
-                                                                    active={active}
-                                                                    item={item}
-                                                                    machineName={executionContext.machine}
-                                                                    onRemoveUnknownDelivery={
-                                                                        pane.store.getState().removeUnknownDelivery
-                                                                    }
-                                                                    onRetryUnknownDelivery={() =>
-                                                                        run(pane.store.getState().retryUnknownDelivery)
-                                                                    }
-                                                                    openLocalFile={openLocalFile}
-                                                                    pane={pane}
-                                                                    presentation={presentation}
-                                                                />
-                                                            </div>
-                                                        );
-                                                    })}
+                                                    {layout.kind === "inline" ? (
+                                                        group.items.map(renderItem)
+                                                    ) : (
+                                                        <>
+                                                            <TurnWorkDisclosure summary={layout.summary}>
+                                                                {layout.work.map(renderItem)}
+                                                            </TurnWorkDisclosure>
+                                                            {layout.answer.map(renderItem)}
+                                                        </>
+                                                    )}
                                                 </div>
                                             );
                                         });
