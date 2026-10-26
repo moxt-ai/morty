@@ -17,7 +17,8 @@ export async function followSetupInstructions(options: {
     readonly harness: string;
     readonly instructionUrl: string;
     readonly runtime: SetupRuntime;
-    readonly sessionId?: string;
+    /** The calling agent's shell environment, where its harness exposes the current session. */
+    readonly agentEnvironment: Readonly<Record<string, string>>;
     readonly signal: AbortSignal;
 }) {
     const url = new URL(options.instructionUrl);
@@ -32,7 +33,6 @@ export async function followSetupInstructions(options: {
             .replaceAll('"', "")
             .replaceAll("<absolute-current-working-directory>", options.cwd)
             .replaceAll("<own-harness-id>", options.harness)
-            .replaceAll("<exact-current-session-id>", options.sessionId ?? "")
             .replaceAll("<one-use-ticket>", url.searchParams.get("token") ?? ""),
     );
     const download = markdown.match(/https?:\/\/[^\s`]+\/setup\.mjs/u)?.[0];
@@ -48,6 +48,7 @@ export async function followSetupInstructions(options: {
         ...(options.clock === undefined ? {} : { clock: options.clock }),
         state: options.state,
         documents: options.documents,
+        agentEnvironment: options.agentEnvironment,
         emit: (event) => events.push(event),
         runtime: options.runtime,
         signal: options.signal,

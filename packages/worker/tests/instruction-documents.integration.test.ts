@@ -72,9 +72,8 @@ test("Given the setup document, When users fetch it from configured and standalo
     expect(document).not.toContain("```powershell");
     expect(document).not.toContain("```sh");
     expect(document).not.toMatch(/\{\{.*\}\}|preview\.example|paradev\.biz|paraflow\.biz|token=ticket/);
-    expect(document).toContain("--session-id <exact-current-session-id>");
     expect(document).toContain("--harness <own-harness-id>");
-    expect(document).toContain("Never guess");
+    expect(document).toContain("never substitute another harness");
 
     for (const origin of ["https://custom.example", "http://localhost:5173"]) {
         const response = await worker.fetch(
@@ -131,4 +130,16 @@ test("Given setup replaced this computer's Project, When an agent follows the se
 
     expect(document).toContain('When `project` is `"replaced"`');
     expect(document).toContain("links and browsers from this computer's earlier Morty setup stopped working");
+});
+
+test("Given the setup document, When an agent follows it, Then it neither passes nor asks the user for a session ID", async () => {
+    const response = await worker.fetch(new Request("https://preview.example/setup.md"), {
+        APP_ORIGIN: "https://chat.example",
+    });
+    const document = await response.text();
+    const command = document.match(/^node <downloaded-setup\.mjs> (.+)$/mu)?.[1];
+
+    expect(command).toContain("--harness <own-harness-id>");
+    expect(command).not.toContain("--session-id");
+    expect(document.replaceAll("\n", " ")).not.toMatch(/ask the user for (it|the session)/u);
 });

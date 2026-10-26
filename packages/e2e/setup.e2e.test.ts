@@ -42,6 +42,15 @@ test("Given a saved setup handoff, When its Runtime reconnects, Then setup retur
     expect(connected.qrPath).toMatch(/morty-handoff-[0-9a-f-]+\.png$/u);
 });
 
+test("Given the agent's shell exposes its Claude Code session, When it follows the published setup instructions, Then the handoff link continues that session", async ({
+    runtime,
+}) => {
+    const connected = await runtime.followInstructions("/setup.md", "claude-shell-session");
+
+    expect(new URL(connected.url).searchParams.get("sessionId")).toBe("claude-shell-session");
+    expect(connected.events).not.toContainEqual(expect.objectContaining({ status: "session_id_mismatch" }));
+});
+
 test("Given a saved Machine whose Runtime the manager no longer manages, When setup reconnects, Then it replaces the Project, pairs a fresh Runtime, and keeps the user", async ({
     runtime,
 }) => {

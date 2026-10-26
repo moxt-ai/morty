@@ -36,6 +36,8 @@ export interface SetupHost {
     readonly documents: string;
     readonly signal: AbortSignal;
     readonly emit: (value: Readonly<Record<string, unknown>>) => void;
+    /** The calling Agent's environment, where its harness exposes the current session. Defaults to this process's. */
+    readonly agentEnvironment?: Readonly<Record<string, string | undefined>>;
     readonly runtime?: SetupRuntime;
     readonly clock?: {
         readonly now: () => Date;
@@ -44,6 +46,13 @@ export interface SetupHost {
         readonly deadline?: (milliseconds: number) => AbortSignal;
     };
 }
+
+/** Where each supported harness exposes its current session to the commands its Agent runs. */
+const harnessSessionVariables: ReadonlyMap<string, string> = new Map([
+    ["claude", "CLAUDE_CODE_SESSION_ID"],
+    ["codex", "CODEX_THREAD_ID"],
+    ["pi", "PI_SESSION_ID"],
+]);
 
 interface Context {
     readonly directory: string;
@@ -560,15 +569,48 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (values.token !== undefined) {
             fail("INVALID_ARGUMENTS");
         }
-        if (values["session-id"] === undefined) {
-            fail("SESSION_ID_REQUIRED");
-        }
+        const harness = identifier(values.harness);
         return {
             base: origin(values["base-url"]),
             cwd: text(values.cwd),
-            harness: identifier(values.harness),
-            sessionId: identifier(values["session-id"]),
+            harness,
+            sessionId: currentSessionId(harness, values["session-id"]),
         };
+    }
+
+    /**
+     * The harness names the Agent's current session in the Agent's own environment. That local value is authoritative
+     * over an ID the Agent passes, which only serves harnesses or runs, such as a manual one, without it. Only the
+     * declared harness's variable is read: nested Agents inherit their outer harness's variable.
+     */
+    function currentSessionId(harness: string, argument: string | undefined): string {
+        const variable = harnessSessionVariables.get(harness) ?? null;
+        const exposed = variable === null ? undefined : (host.agentEnvironment ?? process.env)[variable];
+        if (variable !== null && exposed !== undefined && exposed !== "") {
+            const sessionId = identifier(exposed);
+            if (argument !== undefined && argument !== sessionId) {
+                emit({
+                    status: "session_id_mismatch",
+                    harness,
+                    variable,
+                    message: `Continuing the session named by ${variable} instead of --session-id.`,
+                });
+            }
+            return sessionId;
+        }
+        if (argument === undefined) {
+            emit({
+                status: "session_unavailable",
+                harness,
+                variable,
+                message:
+                    variable === null
+                        ? "This harness does not expose its current session. Pass --session-id."
+                        : `${variable} is not set. Run setup from the Agent's own session, or pass --session-id.`,
+            });
+            fail("SESSION_ID_REQUIRED");
+        }
+        return identifier(argument);
     }
 
     function readRevokeAllAccessOptions(commandArgs: readonly string[]): RevokeAllAccessOptions {
