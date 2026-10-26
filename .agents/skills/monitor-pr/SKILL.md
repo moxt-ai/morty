@@ -1,6 +1,6 @@
 ---
 name: monitor-pr
-description: Monitor a GitHub pull request and its CI checks until it is ready to merge, or monitor an entered merge-queue entry until the pull request merges. Report a concise status at every interval and fail immediately on terminal failures. Use when a user asks to watch, monitor, or wait for a PR.
+description: Have the agent monitor a GitHub pull request directly with GitHub CLI until it is ready to merge, or monitor an entered merge-queue entry until the pull request merges. Report a concise status in the conversation at every interval and fail immediately on terminal failures. Use when a user asks to watch, monitor, or wait for a PR.
 ---
 
 # Monitor a Pull Request
@@ -16,6 +16,29 @@ when GitHub reports that the head branch is behind its base branch. Once a
 non-null `mergeQueueEntry` has been observed, continue until the pull request
 is confirmed merged. `autoMergeRequest` alone does not mean that the pull
 request is in the merge queue.
+
+## Agent-owned monitoring
+
+Execute this skill yourself in the active conversation. Use individual GitHub
+CLI calls to fetch each snapshot, interpret the results, and send each interval
+report to the user as a progress message. Do not run the bundled monitor script,
+write a replacement monitoring loop, or delegate monitoring to a background
+process. Script stdout is not a substitute for a conversational status update.
+
+After resolving the target, repeat this sequence:
+
+1. Fetch a fresh, complete snapshot, including all check pages.
+2. Report the snapshot in the conversation, even if nothing changed.
+3. Evaluate the fail-fast and success rules below. If terminal, send the final
+   result and stop; otherwise continue, including while queued.
+4. Wait for one report interval using a cancellable foreground tool call, then
+   fetch the next snapshot. Never start an unattended polling loop or return a
+   final answer claiming that monitoring will continue in the background.
+
+Keep the observed PR head, queue-entry history, and consecutive failed-sample
+count in the conversation's working context across calls. If the available tools
+cannot wait cancellably, report that limitation rather than silently detaching
+the monitor.
 
 ## Resolve the target and interval
 
@@ -94,7 +117,7 @@ subsequent interval, even when nothing changed. Include:
 PR CI: <passed>/<total> passed, <pending> pending, <failed> failed (head <short-sha>)
 Merge readiness: <mergeable>/<mergeStateStatus>; review <reviewDecision>; auto-merge <on|off>
 Queue: <not entered|state, position, ETA> [queue head <short-sha>; CI summary]
-Next check: <interval>, unless ready to merge, queued, merged, or failed
+Next check: <interval>, including while queued; none if ready to merge, merged, or failed
 ```
 
 List pending or failed check names when present. Use GitHub's ETA as reported;
