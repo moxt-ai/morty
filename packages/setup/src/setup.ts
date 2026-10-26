@@ -220,6 +220,53 @@ class AgentBindingError extends Error {
     readonly diagnostic = () => ({ harness: this.harness, nextStep: this.nextStep });
 }
 
+/** Why the local Agent inventory says the chosen harness cannot run, as `mobius agents` reports it. */
+interface HarnessDiagnosis {
+    readonly status: string;
+    readonly label: string;
+    readonly recoveryCommand: string;
+    readonly minimumSupportedVersion: string;
+}
+
+/** What the agent should do when the Runtime does not offer the chosen harness, chosen by the inventory status. */
+function harnessNextStep(harness: string, diagnosis: HarnessDiagnosis | null): string {
+    const rerun = `then rerun setup with --harness ${harness}; it reuses this computer's Machine.`;
+    switch (diagnosis?.status) {
+        case "authentication_required":
+            return `Ask the user to sign in to ${diagnosis.label} on this computer by running \`${diagnosis.recoveryCommand || harness}\` in a terminal; you cannot sign in for them. When they confirm, ${rerun}`;
+        case "missing_agent":
+            return `Mobius cannot find ${diagnosis.label} on this computer. Make sure \`${harness}\` runs in a new terminal, ${rerun} Do not switch to another harness.`;
+        case "missing_adapter":
+            return diagnosis.recoveryCommand.length > 0
+                ? `Install the ${diagnosis.label} adapter by running \`${diagnosis.recoveryCommand}\`, ${rerun}`
+                : `Install the ${diagnosis.label} adapter, ${rerun}`;
+        case "unsupported_version":
+            return `Update ${diagnosis.label} to ${diagnosis.minimumSupportedVersion || "its latest release"} or newer, ${rerun}`;
+        case "ready":
+            return `${diagnosis.label} is ready now; rerun setup with --harness ${harness}.`;
+        default:
+            return `Confirm \`${harness}\` starts and answers a prompt in a new terminal and fix what stops it, ${rerun} If it answers and setup fails the same way again, report error.code to the user.`;
+    }
+}
+
+/** The Runtime does not offer the chosen harness. */
+class HarnessUnavailableError extends Error {
+    readonly code = "HARNESS_UNAVAILABLE";
+    readonly harness: string;
+    readonly agentStatus: string;
+    readonly nextStep: string;
+
+    constructor(harness: string, diagnosis: HarnessDiagnosis | null) {
+        super(`The Runtime does not offer ${harness}.`);
+        this.name = "HarnessUnavailableError";
+        this.harness = harness;
+        this.agentStatus = diagnosis?.status ?? "unknown";
+        this.nextStep = harnessNextStep(harness, diagnosis);
+    }
+
+    readonly diagnostic = () => ({ harness: this.harness, status: this.agentStatus, nextStep: this.nextStep });
+}
+
 interface ErrorCause {
     readonly name: string;
     readonly message: string;
@@ -1044,12 +1091,62 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     /** One rule for every Runtime setup waits on: an online Runtime without the chosen harness cannot run it. */
-    function harnessUnavailable(harness: string, available: readonly string[]): never {
+    async function harnessUnavailable(
+        context: Context,
+        harness: string,
+        available: readonly string[],
+        cwd: string,
+    ): Promise<never> {
         emit({ status: "harness_unavailable", harness, available });
-        fail("HARNESS_UNAVAILABLE");
+        throw new HarnessUnavailableError(harness, await diagnoseHarness(context, harness, cwd));
     }
 
-    async function waitForRuntime(context: Context, runtime: RuntimeSelection, harness: string) {
+    /**
+     * Asks this computer's Mobius why it does not offer the harness. The published catalog omits unusable Agents, but
+     * the local inventory keeps their status and recovery command. Without an answer, setup still fails as unavailable.
+     */
+    async function diagnoseHarness(context: Context, harness: string, cwd: string): Promise<HarnessDiagnosis | null> {
+        const outputPath = join(tmpdir(), `mobius-agents-${crypto.randomUUID()}.json`);
+        try {
+            await writePrivateFile(outputPath, "");
+            await runMobius(
+                context,
+                ["agents", `--output-json=${outputPath}`],
+                cwd,
+                AbortSignal.any([signal, deadline(60_000)]),
+                "process-tree",
+            );
+            const inventory = object(JSON.parse(await readFile(outputPath, "utf8")));
+            const entry = [inventory["unavailable"], inventory["available"]]
+                .flatMap((agents) => (Array.isArray(agents) ? agents : []))
+                .map(object)
+                .find((agent) => agent["id"] === harness);
+            if (entry === undefined) {
+                return null;
+            }
+            const field = (name: string) => {
+                const value = entry[name];
+                return typeof value === "string" && value.length <= 200 && !/[\r\n]/u.test(value) ? value : "";
+            };
+            return {
+                status: field("status") || "unknown",
+                label: field("label") || harness,
+                recoveryCommand: field("recoveryCommand"),
+                minimumSupportedVersion: field("minimumSupportedVersion"),
+            };
+        } catch (cause) {
+            // Cancellation and the setup budget keep their own codes; any other failure, such as a Mobius release
+            // without `agents --output-json`, leaves the harness unavailable without a diagnosis.
+            if (signal.aborted) {
+                throw cause;
+            }
+            return null;
+        } finally {
+            await rm(outputPath, { force: true });
+        }
+    }
+
+    async function waitForRuntime(context: Context, runtime: RuntimeSelection, harness: string, cwd: string) {
         const runtimeId = runtime.runtimeId;
         let attempts = 0;
         if (runtime.kind === "pairing") {
@@ -1070,9 +1167,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                         emit({ status: "runtime_paired", runtimeId, harness });
                         break;
                     }
-                    harnessUnavailable(
+                    await harnessUnavailable(
+                        context,
                         harness,
                         status["agents"].map((agent) => identifier(object(agent)["id"])),
+                        cwd,
                     );
                 }
                 await clock.wait(1000, signal);
@@ -1099,7 +1198,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 const now = clock.now().getTime();
                 missingSince ??= now;
                 if (now - missingSince >= HARNESS_CATALOG_GRACE_MILLISECONDS) {
-                    harnessUnavailable(harness, agents);
+                    await harnessUnavailable(context, harness, agents, cwd);
                 }
             }
             if (attempts++ % 10 === 0) {
@@ -1356,11 +1455,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const prepared = await prepareRuntime(context, cwd, verified.expectedRuntimeId);
         context = prepared.context;
         context = await startRuntime(context, prepared.runtime, cwd, options.harness);
-        await waitForRuntime(context, prepared.runtime, options.harness);
+        await waitForRuntime(context, prepared.runtime, options.harness, cwd);
         await upgradeRuntime(context, cwd);
         // A release switch reconnects the Runtime, and the manager finishes a switch even
         // when setup stopped waiting for the upgrade, so wait for it before binding.
-        await waitForRuntime(context, prepared.runtime, options.harness);
+        await waitForRuntime(context, prepared.runtime, options.harness, cwd);
         context = await bindAgent(context, prepared.runtime, options.harness);
         await finishSetup(context, prepared.runtime, options, identity.project);
     }
@@ -1396,6 +1495,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     ? { runtime: cause.diagnostic() }
                     : {}),
                 ...(cause instanceof AgentBindingError ? { binding: cause.diagnostic() } : {}),
+                ...(cause instanceof HarnessUnavailableError ? { harness: cause.diagnostic() } : {}),
             },
         });
         return 1;

@@ -18,6 +18,16 @@ type Connection = Readonly<{
     origin: string;
 }>;
 
+/** An installed Agent the machine's Mobius cannot offer, as `mobius agents` reports it. */
+export interface UnavailableAgentReport {
+    readonly id: string;
+    readonly label: string;
+    readonly status: string;
+    readonly code: string;
+    readonly message: string;
+    readonly recoveryCommand: string;
+}
+
 /** How `mobius upgrade` behaves on the controlled machine. */
 type ControlledUpgrade = "available" | "unavailable" | "unresponsive" | "interrupted-switch";
 
@@ -29,6 +39,8 @@ export class ControlledSetupRuntime implements SetupRuntime {
     readonly failure = this.#failed.promise;
 
     #options: ControlledAgentBehavior;
+    /** What `mobius agents --output-json` reports as unavailable; `null` is a release without that option. */
+    #unavailableAgents: readonly UnavailableAgentReport[] | null = null;
     readonly #machineName: string;
     #upgrade: ControlledUpgrade;
     #release: NonNullable<ControlledAgentBehavior["runtime"]>;
@@ -68,6 +80,24 @@ export class ControlledSetupRuntime implements SetupRuntime {
                         runtime_id,
                     })),
                 ),
+            );
+            return result;
+        }
+        if (args[0] === "agents") {
+            const output = args.find((argument) => argument.startsWith("--output-json="));
+            if (output === undefined || this.#unavailableAgents === null) {
+                throw new Error("Unsupported controlled Runtime command: agents");
+            }
+            await writeFile(
+                output.slice("--output-json=".length),
+                JSON.stringify({
+                    available: createMortyFakeDaemon(this.#options).catalog.map(({ id, label }) => ({
+                        id,
+                        label,
+                        status: "ready",
+                    })),
+                    unavailable: this.#unavailableAgents,
+                }),
             );
             return result;
         }
@@ -128,6 +158,11 @@ export class ControlledSetupRuntime implements SetupRuntime {
         for (const daemon of this.#active.values()) {
             await daemon.restartWithAgents(agents);
         }
+    };
+
+    /** Sets the Agents the machine has installed but cannot offer, such as one the user has not signed in to. */
+    readonly reportUnavailableAgents = (agents: readonly UnavailableAgentReport[]): void => {
+        this.#unavailableAgents = agents;
     };
 
     /** Changes how later `mobius upgrade` runs behave, such as when the registry becomes reachable. */

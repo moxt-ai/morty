@@ -918,6 +918,15 @@ test("Given the chosen harness is not installed, When the user reruns setup with
             expect(failed.events).toContainEqual(
                 expect.objectContaining({ status: "harness_unavailable", harness: "pi", available: ["settings-test"] }),
             );
+            // This machine's Mobius cannot report why, so setup still names a next step without guessing a cause.
+            expect(failed.events.at(-1)?.["error"]).toMatchObject({
+                code: "HARNESS_UNAVAILABLE",
+                harness: {
+                    harness: "pi",
+                    status: "unknown",
+                    nextStep: expect.stringContaining("Confirm `pi` starts and answers a prompt in a new terminal"),
+                },
+            });
         }
         const finished = await setupMachine(runtime, paths);
         expect(finished.code, JSON.stringify(finished.events)).toBe(0);
@@ -1000,6 +1009,51 @@ test("Given the chosen agent cannot open a session for another reason, When setu
             });
             expect(failure).not.toMatchObject({ code: "SETUP_FAILED" });
             expect(JSON.stringify(failure)).not.toMatch(/sign in|update/u);
+        },
+        "current",
+    );
+});
+
+test("Given Pi is installed but signed out, so the Runtime does not offer it, When setup runs with Pi, Then setup asks the user to sign in with Pi's own command and finishes on the same Machine afterwards", {
+    timeout: 120_000,
+}, async () => {
+    await withUpgradeMachine(
+        "unavailable",
+        async (runtime, paths) => {
+            runtime.reportUnavailableAgents([
+                {
+                    id: "pi",
+                    label: "Pi",
+                    status: "authentication_required",
+                    code: "authentication_required",
+                    message: "Agent authentication is required",
+                    recoveryCommand: "pi",
+                },
+            ]);
+            const failed = await setupMachine(runtime, paths, undefined, { harness: "pi" });
+            expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
+            expect(failed.events.at(-1)?.["error"]).toMatchObject({
+                code: "HARNESS_UNAVAILABLE",
+                harness: {
+                    harness: "pi",
+                    status: "authentication_required",
+                    nextStep: expect.stringContaining(
+                        "Ask the user to sign in to Pi on this computer by running `pi` in a terminal; you cannot sign in for them.",
+                    ),
+                },
+            });
+
+            // The user signs in, so this computer's Mobius offers Pi again.
+            runtime.reportUnavailableAgents([]);
+            await runtime.installAgents({
+                agentId: "pi",
+                agentName: "Pi",
+                additionalAgents: [{ id: "settings-test", name: "Settings Agent" }],
+            });
+            const finished = await setupMachine(runtime, paths, undefined, { harness: "pi" });
+            expect(finished.code, JSON.stringify(finished.events)).toBe(0);
+            expect(machineOf(finished.events)).toBe(machineOf(failed.events));
+            expect(finished.events.at(-1)).toMatchObject({ status: "ready" });
         },
         "current",
     );
