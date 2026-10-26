@@ -1,4 +1,4 @@
-import { CircleAlert, Inbox, MessageSquare, PackageOpen, Unplug } from "lucide-react";
+import { ChevronDown, CircleAlert, Inbox, MessageSquare, PackageOpen, Unplug } from "lucide-react";
 import type { ReactNode } from "react";
 import type { StoreApi } from "zustand/vanilla";
 import { mortyThinScrollbarClassName } from "../../components/chat/chat-session-layout.ts";
@@ -22,7 +22,7 @@ import { MobiusSessionMessage } from "./mobius-session-message.tsx";
 const loadMoreNativeSessions = "load-more-native-sessions";
 
 const nativeSessionPreviewTitleBarClassName =
-    "flex h-9 min-w-0 shrink-0 items-center px-4 font-inter text-14 font-semibold tracking-[-0.015em] sm:mt-[11px] sm:pr-[59px] sm:pl-6";
+    "flex h-11 min-w-0 shrink-0 items-center px-4 font-inter text-14 font-semibold tracking-[-0.015em] sm:mt-[11px] sm:h-9 sm:pr-[59px] sm:pl-6";
 
 function NativeSessionDirectoryDiscovering() {
     return (
@@ -35,15 +35,21 @@ function NativeSessionDirectoryDiscovering() {
 
 function NativeSessionDirectoryListSkeleton() {
     return (
-        <div aria-hidden="true" className="grid animate-pulse motion-reduce:animate-none">
-            <div className="rounded-[20px] px-2.5 py-2">
-                <div className="h-3.5 w-3/4 rounded-full bg-morty-fill-opacity-3" />
+        <div aria-hidden="true" className="animate-pulse motion-reduce:animate-none">
+            <div className="flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 sm:hidden">
+                <div className="h-3.5 w-3/5 rounded-full bg-morty-fill-opacity-3" />
+                <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
             </div>
-            <div className="rounded-[20px] px-2.5 py-2">
-                <div className="h-3.5 w-2/3 rounded-full bg-morty-fill-opacity-3" />
-            </div>
-            <div className="rounded-[20px] px-2.5 py-2">
-                <div className="h-3.5 w-4/5 rounded-full bg-morty-fill-opacity-3" />
+            <div className="hidden sm:grid">
+                <div className="rounded-[20px] px-2.5 py-2">
+                    <div className="h-3.5 w-3/4 rounded-full bg-morty-fill-opacity-3" />
+                </div>
+                <div className="rounded-[20px] px-2.5 py-2">
+                    <div className="h-3.5 w-2/3 rounded-full bg-morty-fill-opacity-3" />
+                </div>
+                <div className="rounded-[20px] px-2.5 py-2">
+                    <div className="h-3.5 w-4/5 rounded-full bg-morty-fill-opacity-3" />
+                </div>
             </div>
         </div>
     );
@@ -53,7 +59,7 @@ function NativeSessionAgentTabsSkeleton() {
     return (
         <div
             aria-hidden="true"
-            className="mx-2.5 flex h-9 animate-pulse gap-0.5 rounded-full bg-morty-fill-opacity-2 p-0.5 motion-reduce:animate-none"
+            className="flex h-9 animate-pulse gap-0.5 rounded-full bg-morty-fill-opacity-2 p-0.5 motion-reduce:animate-none sm:mx-2.5"
         >
             <div className="h-full w-10 rounded-full bg-morty-fill-opacity-3" />
             <div className="h-full w-10 rounded-full bg-morty-fill-opacity-3" />
@@ -75,15 +81,18 @@ function NativeSessionDialogDiscoveringSkeleton({ title }: { readonly title: Rea
     return (
         <div role="status" aria-label="Discovering native sessions" className="contents">
             <span className="sr-only">Discovering native sessions</span>
-            <div className="grid grid-cols-1 gap-0 sm:h-[min(72dvh,40rem)] sm:grid-cols-[minmax(15rem,16.5rem)_minmax(0,1fr)]">
-                <div className="flex min-h-0 flex-col gap-1 px-4">
+            <div className="grid min-h-0 min-w-0 grid-cols-1 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-y-2 sm:gap-y-0 sm:h-[min(72dvh,40rem)] sm:grid-cols-[minmax(15rem,16.5rem)_minmax(0,1fr)] sm:grid-rows-1">
+                <div className="flex min-h-0 min-w-0 shrink-0 flex-col gap-1 px-4">
                     {title}
-                    <section aria-label="Native sessions" className="-mx-2.5 flex min-h-0 flex-1 flex-col gap-2">
+                    <section
+                        aria-label="Native sessions"
+                        className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 sm:-mx-2.5"
+                    >
                         <NativeSessionAgentTabsSkeleton />
                         <NativeSessionDirectoryListSkeleton />
                     </section>
                 </div>
-                <div className="flex min-h-[18rem] min-w-0 flex-col overflow-hidden rounded-[22px] border border-white bg-card shadow-module sm:min-h-0">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[20px] border border-white bg-card shadow-module sm:flex-none">
                     <section
                         aria-label="Selected session preview"
                         className="flex min-h-0 min-w-0 flex-1 flex-col"
@@ -170,6 +179,7 @@ export function NativeSessionDialog({
             onClose={closeDialog}
             busy={model.operation === "import" || model.operation === "fork"}
             appearance="surface"
+            mobileSheet
             wide
         >
             {(title) => (
@@ -177,17 +187,17 @@ export function NativeSessionDialog({
                     {model.directory.kind === "loading" && model.directory.scope === "initial" ? (
                         <NativeSessionDialogDiscoveringSkeleton title={title} />
                     ) : (
-                        <div className="grid grid-cols-1 gap-0 sm:h-[min(72dvh,40rem)] sm:grid-cols-[minmax(15rem,16.5rem)_minmax(0,1fr)]">
-                            <div className="flex min-h-0 flex-col gap-1 px-4">
+                        <div className="grid min-h-0 min-w-0 grid-cols-1 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-y-2 sm:gap-y-0 sm:h-[min(72dvh,40rem)] sm:grid-cols-[minmax(15rem,16.5rem)_minmax(0,1fr)] sm:grid-rows-1">
+                            <div className="flex min-h-0 min-w-0 flex-col gap-1 px-4">
                                 {title}
                                 <section
                                     aria-label="Native sessions"
-                                    className="-mx-2.5 flex min-h-0 flex-1 flex-col gap-2"
+                                    className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 sm:-mx-2.5"
                                 >
                                     {agents.length > 0 && (
                                         <SessionAgentTabs
                                             agents={agents}
-                                            className="mx-2.5"
+                                            className="sm:mx-2.5"
                                             dimInactive={
                                                 !(
                                                     model.directory.kind === "loading" &&
@@ -237,11 +247,25 @@ export function NativeSessionDialog({
                                         />
                                     )}
                                     {model.directory.kind === "ready" && model.directory.entries.length === 0 && (
-                                        <NativeSessionDirectoryPlaceholder
-                                            icon={Inbox}
-                                            title="No saved sessions"
-                                            description="This agent didn't report any on this machine."
-                                        />
+                                        <>
+                                            <div className="sm:hidden">
+                                                <Select
+                                                    label="Native session"
+                                                    value=""
+                                                    disabled
+                                                    placeholder="No saved sessions"
+                                                    options={[]}
+                                                    onValueChange={() => undefined}
+                                                />
+                                            </div>
+                                            <div className="hidden sm:block">
+                                                <NativeSessionDirectoryPlaceholder
+                                                    icon={Inbox}
+                                                    title="No saved sessions"
+                                                    description="This agent didn't report any on this machine."
+                                                />
+                                            </div>
+                                        </>
                                     )}
                                     {model.directory.kind === "ready" && model.directory.entries.length > 0 && (
                                         <div className="sm:hidden">
@@ -310,7 +334,7 @@ export function NativeSessionDialog({
                                                                 await store.getState().select(entry, signal),
                                                         )
                                                     }
-                                                    className="box-border mb-0 grid h-9 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-2.5 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:text-copy-secondary disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-pressed:bg-morty-fill-opacity-3 aria-pressed:text-foreground aria-pressed:hover:bg-morty-fill-opacity-4 aria-pressed:hover:text-foreground aria-pressed:disabled:hover:text-foreground disabled:aria-pressed:text-foreground motion-reduce:transition-none"
+                                                    className="box-border mb-0 grid h-9 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] pl-4 pr-3 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:text-copy-secondary disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-pressed:bg-morty-fill-opacity-3 aria-pressed:text-foreground aria-pressed:hover:bg-morty-fill-opacity-4 aria-pressed:hover:text-foreground aria-pressed:disabled:hover:text-foreground disabled:aria-pressed:text-foreground motion-reduce:transition-none"
                                                 >
                                                     <span className="min-w-0 truncate">{entry.displayTitle}</span>
                                                 </button>
@@ -334,7 +358,7 @@ export function NativeSessionDialog({
                                     )}
                                 </section>
                             </div>
-                            <div className="flex min-h-[18rem] min-w-0 flex-col overflow-hidden rounded-[22px] border border-white bg-card shadow-module sm:min-h-0">
+                            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[20px] border border-white bg-card shadow-module sm:flex-none">
                                 <section
                                     aria-label="Selected session preview"
                                     className="flex min-h-0 min-w-0 flex-1 flex-col"
