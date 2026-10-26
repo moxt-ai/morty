@@ -44,8 +44,9 @@ import { harnessOptions } from "../../view-models/chat/native-session-agents.ts"
 import { sessionInteractionPresentation } from "../../view-models/chat/session-interaction-store.ts";
 import { type SessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
 import {
-    completedTurnNotice,
+    type SessionExecutionState,
     type SessionMessage,
+    sessionExecutionStates,
     sessionTextValue,
 } from "../../view-models/chat/session-presentation.ts";
 import { createSessionResourceStore } from "../../view-models/chat/session-resource-store.ts";
@@ -191,31 +192,24 @@ type AgentReplyLayout =
           readonly work: readonly SessionRenderItem[];
       };
 
-function endedEarly(item: SessionRenderItem): boolean {
-    if (item.kind !== "event" || item.message.role !== "assistant") {
-        return false;
-    }
-    const presentation = item.message.presentation;
-    return (
-        presentation.kind === "failure" ||
-        (presentation.kind === "completed" && completedTurnNotice(presentation.stopReason) !== null)
-    );
-}
-
 /**
- * A finished reply leads with its answer: everything up to the last tool or
- * reasoning step collapses into one summary, and everything after it stays
- * visible. Replies that failed or stopped early, and replies without a final
- * answer, stay fully expanded so nothing that needs attention is hidden.
+ * A reply whose execution finished leads with its answer: everything up to the
+ * last tool or reasoning step collapses into one summary, and everything after
+ * it stays visible. Replies of executions that are still open, failed, or
+ * stopped early, and replies without a final answer, stay fully expanded so
+ * nothing that needs attention is hidden.
  */
-function agentReplyLayout(items: readonly SessionRenderItem[]): AgentReplyLayout {
+function agentReplyLayout(items: readonly SessionRenderItem[], execution: SessionExecutionState): AgentReplyLayout {
+    if (execution.kind !== "finished") {
+        return { kind: "inline" };
+    }
     const lastWorkIndex = items.findLastIndex((item) => item.kind === "thinking");
     const work = items.slice(0, lastWorkIndex + 1);
     const answer = items.slice(lastWorkIndex + 1);
     const tools = work.flatMap((item) =>
         item.kind === "thinking" ? item.entries.filter((entry) => entry.kind === "tool") : [],
     );
-    if (tools.length === 0 || !answer.some((item) => item.kind === "assistant-text") || items.some(endedEarly)) {
+    if (tools.length === 0 || !answer.some((item) => item.kind === "assistant-text")) {
         return { kind: "inline" };
     }
     return {
@@ -666,6 +660,13 @@ function MobiusSessionPaneBody({
             : authenticationGuidance(presentation.authenticationFailure.code, pane.agentRef, executionContext.machine);
     const renderItems = sessionRenderItems(model.messages);
     const renderGroups = sessionRenderGroups(renderItems);
+    const executionStates = sessionExecutionStates(model.messages, model.activity.kind === "working");
+    const executionStateByItemId = new Map(
+        model.messages.flatMap((message, index) => {
+            const state = executionStates[index];
+            return state === undefined ? [] : [[message.firstEvent.eventId, state] as const];
+        }),
+    );
     const lastRenderItemIndex = renderItems.length - 1;
     const sessionMessagesLoading = model.connection.kind === "loading" && model.messages.length === 0;
     const initialMessage = model.pendingInitialMessage;
@@ -829,9 +830,10 @@ function MobiusSessionPaneBody({
                                                     </div>
                                                 );
                                             };
-                                            const layout: AgentReplyLayout = replyActive
-                                                ? { kind: "inline" }
-                                                : agentReplyLayout(group.items);
+                                            const layout = agentReplyLayout(
+                                                group.items,
+                                                executionStateByItemId.get(group.id) ?? { kind: "open" },
+                                            );
                                             return (
                                                 <div key={group.id} className={chatSessionAgentReplyGroupClassName}>
                                                     {layout.kind === "inline" ? (

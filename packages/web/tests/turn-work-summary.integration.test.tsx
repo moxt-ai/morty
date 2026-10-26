@@ -1,4 +1,4 @@
-import { getByRole, getByText, queryByLabelText, queryByRole, queryByText } from "@testing-library/dom";
+import { getByLabelText, getByRole, getByText, queryByLabelText, queryByRole, queryByText } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -62,4 +62,36 @@ test("Given the agent has answered part of a turn, When the user stops it, Then 
     );
     expect(queryByLabelText(document.body, "Tool: Completed verification")).not.toBeNull();
     expect(queryByRole(document.body, "button", { name: /^1 step/ })).toBeNull();
+});
+
+test("Given the agent has answered part of a turn, When the user steers it and then stops it, Then the steered execution keeps its earlier work visible", {
+    timeout: 30_000,
+}, async () => {
+    const app = await start("answer then hold");
+    await app.waitForView(() => getByText(document.body, "Partial answer before stopping."));
+    const instruction = "Also check the notes";
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), instruction);
+    const queued = await app.queryElementByTestId(
+        dataTestId.queuedMessage,
+        (element) => element.textContent?.includes(instruction) === true,
+    );
+
+    await app.user.click(getByLabelText(queued, `Steer queued message: ${instruction}`));
+
+    await app.waitForView(() => expect(queryByLabelText(document.body, "Tool: Steered verification")).not.toBeNull());
+    expect(queryByLabelText(document.body, "Tool: Completed verification")).not.toBeNull();
+    expect(queryByRole(document.body, "button", { name: /^\d+ steps?/ })).toBeNull();
+
+    await app.user.click(
+        await app.queryElementByTestId(
+            dataTestId.sendMessage,
+            (element) => element.getAttribute("aria-label") === "Stop agent output",
+        ),
+    );
+
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.agentReplyStatus).textContent).toBe("Turn stopped."),
+    );
+    expect(queryByLabelText(document.body, "Tool: Completed verification")).not.toBeNull();
+    expect(queryByRole(document.body, "button", { name: /^\d+ steps?/ })).toBeNull();
 });
