@@ -226,6 +226,7 @@ export function createChatWorkspace(options: {
             home.setState({ draftSettings: settings });
         },
         () => home.getState().runtimeConfiguration,
+        () => runtimeRecovery.failed(),
     );
     // Sidebar stores live with the workspace, outside React: dialogs (native
     // session import, identity sharing, expanded state), remote access, and
@@ -346,6 +347,8 @@ export function createChatWorkspace(options: {
         const listed = directory.getState().state.kind;
         return listed === "failed" || listed === "stale";
     };
+    const draftWaitsForRuntime = (): boolean =>
+        home.getState().selection.kind === "draft" && draftControls.getState().waitsForRuntime();
     /**
      * Retries everything the page reads through the Runtime that it could not read while the Runtime was unreachable:
      * the home view, the session list, and the stream that follows their statuses. Each retries only what it lost.
@@ -355,14 +358,25 @@ export function createChatWorkspace(options: {
         clock: options.clock,
         lifetime: operationsLifetime.signal,
         waiting: () =>
-            homeWaitsForRuntime(home.getState()) || listWaitsForRuntime() || statuses.getState().unfollowed(),
+            homeWaitsForRuntime(home.getState()) ||
+            listWaitsForRuntime() ||
+            statuses.getState().unfollowed() ||
+            draftWaitsForRuntime(),
         retry: () => {
             if (homeWaitsForRuntime(home.getState())) {
                 home.getState().retry();
             } else if (listWaitsForRuntime()) {
                 startDirectoryLoad();
-            } else {
+            } else if (statuses.getState().unfollowed()) {
                 statuses.getState().follow(statusLifetime.signal);
+            }
+            // A late offline response can arrive after the online watch snapshot.
+            // Draft settings need the same bounded recovery as the list and statuses.
+            if (draftWaitsForRuntime()) {
+                void draftControls
+                    .getState()
+                    .load(chatLifetime.signal)
+                    .catch(() => undefined);
             }
         },
     });
