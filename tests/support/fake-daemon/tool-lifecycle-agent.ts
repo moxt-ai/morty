@@ -46,7 +46,7 @@ export function createToolLifecycleAgent() {
                 const prompt = context.params.prompt
                     .flatMap((content) => (content.type === "text" ? [content.text] : []))
                     .join("\n");
-                steeringToolCounts.set(sessionId, prompt === "hold paginated steering" ? 27 : 1);
+                steeringToolCounts.set(sessionId, prompt === "hold paginated steering" ? 32 : 1);
                 if (prompt === "hold steering acknowledgement") {
                     heldSteering.add(sessionId);
                 } else {

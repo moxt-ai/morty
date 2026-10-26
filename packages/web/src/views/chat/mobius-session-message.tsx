@@ -62,33 +62,28 @@ function MessageContentBlock({
     readonly speaker: "assistant" | "user";
 }) {
     switch (content.type) {
-        case "text":
-            return (
-                <MessageBubble
-                    copyText={content.text}
-                    speaker={speaker}
-                    data-testid={speaker === "user" ? dataTestId.userMessage : undefined}
-                >
-                    <AgentMarkdown
-                        className="[&_p]:my-0"
-                        createResourceStore={createResourceStore}
-                        markdown={content.text}
-                        openLocalFile={openLocalFile}
-                        readImage={readImage}
-                        streaming={false}
-                    />
-                </MessageBubble>
+        case "text": {
+            const markdown = (
+                <AgentMarkdown
+                    className="[&_p]:my-0"
+                    createResourceStore={createResourceStore}
+                    markdown={content.text}
+                    openLocalFile={openLocalFile}
+                    readImage={readImage}
+                    streaming={false}
+                />
             );
+            return speaker === "user" ? markdown : <MessageBubble speaker="assistant">{markdown}</MessageBubble>;
+        }
         case "image":
             return isDisplayableImageType(content.mimeType) && content.data.length > 0 ? (
                 speaker === "user" ? (
-                    <MessageBubble speaker="user" data-testid={dataTestId.userMessageImage}>
-                        <img
-                            alt="Your attachment"
-                            className="h-auto max-h-56 max-w-full rounded-lg object-contain object-left"
-                            src={`data:${content.mimeType};base64,${content.data}`}
-                        />
-                    </MessageBubble>
+                    <img
+                        alt="Your attachment"
+                        className="h-auto max-h-56 max-w-full rounded-lg object-contain object-left"
+                        data-testid={dataTestId.userMessageImage}
+                        src={`data:${content.mimeType};base64,${content.data}`}
+                    />
                 ) : (
                     <img
                         alt="Agent-provided content"
@@ -157,19 +152,28 @@ function UserMessage({
     readonly readImage?: MarkdownImageReader | undefined;
 }) {
     const deliveryUnknown = deliveryUnknownUserMessageId !== null && message.commandId === deliveryUnknownUserMessageId;
+    const copyText = message.contents
+        .flatMap((content) => (content.type === "text" ? [content.text] : []))
+        .join("\n\n");
     return (
         <div className="min-w-0 space-y-2">
             <UserMessageShell>
-                {message.contents.map((content, index) => (
-                    <MessageContentBlock
-                        content={content}
-                        createResourceStore={createResourceStore}
-                        key={`${message.firstEvent.eventId}:${index.toString()}`}
-                        openLocalFile={openLocalFile}
-                        readImage={readImage}
-                        speaker="user"
-                    />
-                ))}
+                <MessageBubble
+                    {...(copyText.length === 0 ? {} : { copyText })}
+                    data-testid={dataTestId.userMessage}
+                    speaker="user"
+                >
+                    {message.contents.map((content, index) => (
+                        <MessageContentBlock
+                            content={content}
+                            createResourceStore={createResourceStore}
+                            key={`${message.firstEvent.eventId}:${index.toString()}`}
+                            openLocalFile={openLocalFile}
+                            readImage={readImage}
+                            speaker="user"
+                        />
+                    ))}
+                </MessageBubble>
             </UserMessageShell>
             {deliveryUnknown && (
                 <div

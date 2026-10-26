@@ -146,13 +146,16 @@ test("Given another viewer opens a history page beginning with steering already 
         (element) => element.textContent?.includes(instruction) === true,
     );
     await app.user.click(getByLabelText(queued, `Steer queued message: ${instruction}`));
-    await tool(app, "Steered verification 27");
+    await tool(app, "Steered verification 32");
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
     const viewer = await app.openViewer();
-    await tool(viewer, "Steered verification 27");
+    await tool(viewer, "Steered verification 32");
     // Enough visible tools fill the latest history page without the steering request.
-    expect(viewer.elementsByTestId(dataTestId.agentToolCall)).toHaveLength(27);
-    expect(getByLabelText(await tool(viewer, "Steered verification 1"), "Tool running")).toBeDefined();
+    expect(viewer.elementsByTestId(dataTestId.agentToolCall)).toHaveLength(30);
+    expect(getByLabelText(await tool(viewer, "Steered verification 3"), "Tool running")).toBeDefined();
+    expect(viewer.elementsByTestId(dataTestId.userMessage).some((message) => message.textContent === instruction)).toBe(
+        false,
+    );
     await app.user.click(
         await app.queryElementByTestId(
             dataTestId.sendMessage,
@@ -164,7 +167,7 @@ test("Given another viewer opens a history page beginning with steering already 
             viewer
                 .elementsByTestId(dataTestId.agentToolCall)
                 .filter((entry) => queryByLabelText(entry, "Tool interrupted") !== null),
-        ).toHaveLength(27),
+        ).toHaveLength(30),
     );
     await viewer.close();
 });
@@ -174,7 +177,7 @@ for (const [reason, notice] of [
     ["max_turn_requests", "The agent reached its request limit for this turn."],
     ["refusal", "The agent declined this request."],
 ] as const) {
-    test(`Given a turn ends with ${reason}, When I view it and reload, Then the reason is explained in plain language and its tools are settled`, {
+    test(`Given a turn ends with ${reason}, When I view it and reload, Then the reason is live-only and its tools stay settled`, {
         timeout: 30_000,
     }, async () => {
         const app = await start(`stop with ${reason}`);
@@ -182,6 +185,6 @@ for (const [reason, notice] of [
         expect((await app.queryElementByTestId(dataTestId.agentReplyStatus)).textContent).toBe(notice);
         const reloaded = await app.reload();
         await assertSettled(reloaded);
-        expect((await reloaded.queryElementByTestId(dataTestId.agentReplyStatus)).textContent).toBe(notice);
+        expect(reloaded.optionalElementByTestId(dataTestId.agentReplyStatus)).toBeNull();
     });
 }

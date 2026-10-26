@@ -575,6 +575,9 @@ test("Given the daemon emits reasoning, a tool, and text, When the user observes
     );
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     app.remount();
+    await app.user.click(
+        await app.waitForView(() => getByRole(document.body, "button", { name: "1 step", expanded: false })),
+    );
     const restoredThinking = await app.queryElementByTestId(dataTestId.agentReasoning);
     if (!(restoredThinking instanceof HTMLDetailsElement)) {
         throw new Error("Expected restored reasoning to use a disclosure");

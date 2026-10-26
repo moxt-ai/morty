@@ -1,9 +1,68 @@
-import { fireEvent, getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
+import { fireEvent, getAllByRole, getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
+
+test("Given text and two images in one user message, When the conversation reloads, Then its chunks remain one message and later prompts stay separate", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    const image = (data: string, name: string) =>
+        new File([Uint8Array.from(atob(data), (character) => character.charCodeAt(0))], name, { type: "image/png" });
+    await app.user.upload(getByLabelText(document.body, "Choose attachments"), [
+        image(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4oKAAAAM0ATE4/UtcAAAAAElFTkSuQmCC",
+            "red.png",
+        ),
+        image(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQcPgAAAHUAVE//8MXAAAAAElFTkSuQmCC",
+            "blue.png",
+        ),
+    ]);
+    const prompt = "Keep these images together";
+    await sendPrompt(app, composer, prompt);
+    const sources = await app.waitForView(() => {
+        expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
+        expect(getAllByRole(document.body, "article", { name: "Your message" })).toHaveLength(1);
+        const message = getByRole(document.body, "article", { name: "Your message" });
+        expect(message.textContent).toContain(prompt);
+        const images = getAllByRole(message, "img", { name: "Your attachment" });
+        expect(images).toHaveLength(2);
+        const sources = images.map((image) => image.getAttribute("src"));
+        expect(sources.every((source) => source !== null)).toBe(true);
+        expect(new Set(sources).size).toBe(2);
+        return sources;
+    });
+
+    const reloaded = await app.reload();
+    await reloaded.waitForView(() => {
+        expect(getAllByRole(document.body, "article", { name: "Your message" })).toHaveLength(1);
+        const message = getByRole(document.body, "article", { name: "Your message" });
+        expect(message.textContent).toContain(prompt);
+        expect(
+            getAllByRole(message, "img", { name: "Your attachment" }).map((image) => image.getAttribute("src")),
+        ).toEqual(sources);
+    });
+    const followUp = "A separate message";
+    await sendPrompt(reloaded, await reloaded.queryElementByTestId(dataTestId.messageComposer), followUp);
+    await reloaded.waitForView(() => expect(document.body.textContent).toContain(`Codex turn 2: ${followUp}`));
+    const reopened = await reloaded.reload();
+    await reopened.waitForView(() => {
+        const messages = getAllByRole(document.body, "article", { name: "Your message" });
+        expect(messages).toHaveLength(2);
+        expect(messages[0]?.textContent).toContain(prompt);
+        expect(messages[1]?.textContent).toContain(followUp);
+        expect(
+            getAllByRole(messages[0] ?? document.body, "img", { name: "Your attachment" }).map((image) =>
+                image.getAttribute("src"),
+            ),
+        ).toEqual(sources);
+        expect(queryByRole(messages[1] ?? document.body, "img", { name: "Your attachment" })).toBeNull();
+    });
+});
 
 test("Given the message composer, When the user clicks Add attachment and selects a file, Then the picker opens directly and the attachment appears", {
     timeout: 30_000,

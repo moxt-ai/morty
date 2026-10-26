@@ -146,7 +146,7 @@ test("Given a disconnected conversation with an unsent draft, When the same Runt
     );
 });
 
-test("Given a failed Agent turn, When its Runtime disconnects and reconnects, Then its failure stays visible once", {
+test("Given a failed Agent turn, When its Runtime reconnects and the conversation reloads, Then the live failure is not duplicated or replayed into history", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
@@ -180,13 +180,24 @@ test("Given a failed Agent turn, When its Runtime disconnects and reconnects, Th
         expect(composer.disabled).toBe(false);
         expect(reconnectStatusText(app)).toBeNull();
     });
-    // The restarted daemon replays its execution receipt with a sanitized failure,
-    // rather than retaining the Agent's original error details in native history.
+    // Execution receipts remain available to the daemon, but lifecycle failures
+    // are not replayed into projected conversation history.
     await app.waitForView(() => {
         expect(
             queryAllByText(document.body, "The local Agent could not complete the request", { exact: true }),
-        ).toHaveLength(1);
+        ).toHaveLength(0);
+        expect(queryAllByText(document.body, "The controlled Agent rejected this turn.", { exact: true })).toHaveLength(
+            1,
+        );
         expect(queryAllByRole(document.body, "alert")).toHaveLength(1);
+    });
+    const reloaded = await app.reload();
+    await reloaded.queryElementByTestId(dataTestId.messageComposer);
+    await reloaded.waitForView(() => {
+        expect(queryAllByText(document.body, "The controlled Agent rejected this turn.", { exact: true })).toHaveLength(
+            0,
+        );
+        expect(queryAllByRole(document.body, "alert")).toHaveLength(0);
     });
 });
 

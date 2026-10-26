@@ -563,12 +563,48 @@ function consumeSessionEvent(
         if (message === null) {
             return { kind: "skipped" };
         }
+        if (message.role === "user" && update.sessionUpdate === "user_message_chunk" && update.messageId != null) {
+            const existingIndex = entries.findIndex((entry) => {
+                if (entry.kind !== "message" || entry.message.role !== "user") {
+                    return false;
+                }
+                const first = entry.message.firstEvent;
+                return (
+                    first.sessionGenerationId === event.sessionGenerationId &&
+                    (first.type === "acp"
+                        ? first.payload.sessionUpdate === "user_message_chunk" &&
+                          first.payload.messageId === update.messageId
+                        : first.payload.kind === "prompt.requested" && first.eventId === update.messageId)
+                );
+            });
+            const existing = entries[existingIndex];
+            if (existing?.kind === "message" && existing.message.role === "user") {
+                return {
+                    index: existingIndex,
+                    kind: "consumed",
+                    // A live request already contains all its projected content blocks.
+                    message:
+                        existing.message.firstEvent.type === "lifecycle-metadata"
+                            ? existing.message
+                            : { ...existing.message, contents: [...existing.message.contents, ...message.contents] },
+                };
+            }
+        }
         const previousIndex = entries.length - 1;
         const previous = entries[previousIndex];
         const merged = mergeAdjacentText(previous?.kind === "message" ? previous.message : undefined, message);
         return merged === null
             ? {
-                  firstEvent: entries.length === 0 ? leadingEvent : "known",
+                  firstEvent:
+                      message.role === "user" &&
+                      update.sessionUpdate === "user_message_chunk" &&
+                      update.messageId != null &&
+                      entries.length === 0 &&
+                      leadingEvent !== "known"
+                          ? "possibly-before-page-visible"
+                          : entries.length === 0
+                            ? leadingEvent
+                            : "known",
                   kind: "constructed",
                   message,
               }
