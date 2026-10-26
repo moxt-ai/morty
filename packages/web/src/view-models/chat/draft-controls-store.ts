@@ -388,9 +388,18 @@ export const createDraftControlsStore = (
                         operation.signal.throwIfAborted();
                     }
                 }
-                if (operation.current()) {
-                    applyAgentSettings(selected, cwd, result.options, requestedHarness === selected.agentRef);
+                if (!operation.current()) {
+                    return;
                 }
+                // The Runtime can drop while these reads are in flight. A switch
+                // that never lands must not become the remembered harness.
+                const live = runtimeConfiguration();
+                if (live === null || live.runtime.online === false) {
+                    pendingHarness = null;
+                    awaitRuntime();
+                    return;
+                }
+                applyAgentSettings(selected, cwd, result.options, requestedHarness === selected.agentRef);
             } catch (cause) {
                 if (!lifetimeSignal.aborted && operation.current()) {
                     settleFailure(cause, "Harness settings are unavailable.");
@@ -453,7 +462,16 @@ export const createDraftControlsStore = (
                     agentSettings.clear();
                 }
                 // An offline Runtime offers nothing for now, which says nothing about whether the Agent was removed.
-                if (!configuration.runtime.online || (!changed && !waitingForRuntime)) {
+                // A harness switch still in flight has to stop here, or its late response would be remembered.
+                if (!configuration.runtime.online) {
+                    if (pendingHarness !== null || get().settings.kind === "switching") {
+                        settingsOperation?.abort(new Error("The Runtime went offline."));
+                        pendingHarness = null;
+                        awaitRuntime();
+                    }
+                    return;
+                }
+                if (!changed && !waitingForRuntime) {
                     return;
                 }
                 // Reconcile with this configuration. The new operation supersedes any read still in flight.
