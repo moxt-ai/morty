@@ -39,6 +39,19 @@ test("Given a new visitor, When the setup page opens, Then it presents one clear
     expect(queryByRole(document.body, "status", { name: "Setup next step" })).toBeNull();
 });
 
+test("Given a new visitor whose agent is busy, When the setup page opens, Then it warns before copying that setup interrupts the agent's current task", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ page: { kind: "bootstrap" } });
+    await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup prompt" }));
+
+    const warning = getByText(
+        document.body,
+        "Setup interrupts the agent's current task. Continue it in your browser afterwards.",
+    );
+    expect(getByRole(document.body, "group", { name: "Setup details" }).contains(warning)).toBe(false);
+});
+
 test("Given a new visitor, When they copy the instruction, Then the clipboard holds setup and a persistent next step explains where to paste it", {
     timeout: 30_000,
 }, async () => {

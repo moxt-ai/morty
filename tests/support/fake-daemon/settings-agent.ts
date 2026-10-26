@@ -119,3 +119,38 @@ export function createSettingsAgent<Definition>(define: DefineInProcessAgent<Def
         fakeDaemonCapabilities,
     );
 }
+
+/** An Agent that is installed but signed out: like a real harness, it refuses to open a session until sign-in. */
+export function createSignedOutAgent() {
+    const createEndpoint = (): InProcessAcpEndpoint => {
+        const termination = Promise.withResolvers<AcpEndpointTermination>();
+        const app = acp
+            .agent({ name: "morty-signed-out-agent" })
+            .onRequest(acp.methods.agent.initialize, () => ({
+                agentCapabilities: { loadSession: true, sessionCapabilities: { close: {}, list: {}, resume: {} } },
+                agentInfo: { name: "Signed-out Agent", version: "controlled-harness" },
+                authMethods: [],
+                protocolVersion: acp.PROTOCOL_VERSION,
+            }))
+            .onRequest(acp.methods.agent.session.new, () => {
+                throw acp.RequestError.authRequired();
+            })
+            .onRequest(acp.methods.agent.session.list, () => ({ sessions: [] }));
+        return {
+            app: () => app,
+            terminated: termination.promise,
+            initialize: async (signal) => signal.throwIfAborted(),
+            close: async () => termination.resolve({ kind: "closed" }),
+        };
+    };
+    return defineCurrentAgent(
+        "signed-out-test",
+        "Signed-out Agent",
+        process.execPath,
+        createEndpoint,
+        {},
+        "controlled-harness",
+        undefined,
+        fakeDaemonCapabilities,
+    );
+}

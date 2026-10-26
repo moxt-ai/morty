@@ -181,6 +181,31 @@ class RuntimePreflightError extends Error {
     });
 }
 
+/** A failure the Morty service reported with its own error code. */
+class RemoteError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "RemoteError";
+    }
+}
+
+/** The service or the chosen harness rejected binding the Machine; the harness is the usual cause. */
+class AgentBindingError extends Error {
+    readonly code: string;
+    readonly harness: string;
+    readonly nextStep: string;
+
+    constructor(code: string, harness: string, cause: unknown) {
+        super(`Setup could not connect ${harness} on this computer.`, { cause });
+        this.name = "AgentBindingError";
+        this.code = code;
+        this.harness = harness;
+        this.nextStep = `Run ${harness} in the working directory and confirm it answers a prompt with its configured model. Fix its sign-in or model configuration, update ${harness} and @moxt-ai/mobius to their latest releases, then rerun setup; it reuses this computer's Machine.`;
+    }
+
+    readonly diagnostic = () => ({ harness: this.harness, nextStep: this.nextStep });
+}
+
 interface ErrorCause {
     readonly name: string;
     readonly message: string;
@@ -516,7 +541,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const code = text(failure["code"], /^[A-Za-z0-9_-]+$/u);
         const message =
             typeof failure["message"] === "string" ? failure["message"] : `Request failed with HTTP ${status}`;
-        fail(code, Object.assign(new Error(message), { name: "RemoteError" }));
+        fail(code, new RemoteError(message));
     }
 
     /**
@@ -1078,14 +1103,22 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 1) {
             fail("AGENT_REVISION_REQUIRED");
         }
-        await request(
-            context,
-            `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}/setup`,
-            {
-                runtimeId,
-                agentRef,
-            },
-        );
+        try {
+            await request(
+                context,
+                `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}/setup`,
+                {
+                    runtimeId,
+                    agentRef,
+                },
+            );
+        } catch (cause) {
+            const code = errorCode(cause);
+            if (cause instanceof Error && cause.cause instanceof RemoteError && typeof code === "string") {
+                throw new AgentBindingError(code, harness, cause);
+            }
+            throw cause;
+        }
         // The Machine now owns its Runtime, so the pairing record is no longer needed.
         const saved = await saveConfiguration(context, {
             agent_ref: agentRef,
@@ -1341,6 +1374,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 ...(cause instanceof RuntimeStartError || cause instanceof RuntimePreflightError
                     ? { runtime: cause.diagnostic() }
                     : {}),
+                ...(cause instanceof AgentBindingError ? { binding: cause.diagnostic() } : {}),
             },
         });
         return 1;

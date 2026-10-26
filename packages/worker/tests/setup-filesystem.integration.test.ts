@@ -902,6 +902,37 @@ test("Given the chosen harness is not installed, When the user reruns setup with
     });
 });
 
+test("Given the chosen agent is installed but signed out, When setup connects it, Then setup reports the agent's failure with a next step and finishes on the same Machine after sign-in", {
+    timeout: 120_000,
+}, async () => {
+    await withUpgradeMachine(
+        "unavailable",
+        async (runtime, paths) => {
+            await runtime.installAgents({ agentId: "signed-out-test", agentName: "Signed-out Agent" });
+            const failed = await setupMachine(runtime, paths, undefined, { harness: "signed-out-test" });
+            expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
+            expect(failed.events).toContainEqual(expect.objectContaining({ status: "progress", stage: "binding" }));
+            const failure = failed.events.at(-1)?.["error"];
+            expect(failure).toMatchObject({
+                binding: {
+                    harness: "signed-out-test",
+                    nextStep: expect.stringContaining("signed-out-test"),
+                },
+            });
+            expect(failure).not.toMatchObject({ code: "SETUP_FAILED" });
+
+            await runtime.installAgents({ agentId: "settings-test", agentName: "Settings Agent" });
+            const finished = await setupMachine(runtime, paths, undefined, { harness: "settings-test" });
+            expect(finished.code, JSON.stringify(finished.events)).toBe(0);
+            const machine = (events: readonly Readonly<Record<string, unknown>>[]) =>
+                events.find((event) => event["status"] === "identity_ready")?.["botId"];
+            expect(machine(finished.events)).toBe(machine(failed.events));
+            expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "reused" });
+        },
+        "current",
+    );
+});
+
 test("Given setup continues on a Runtime that does not offer the chosen harness yet, When the user installs it while setup waits, Then setup finishes once the Runtime publishes it", {
     timeout: 120_000,
 }, async () => {
