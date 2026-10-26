@@ -344,8 +344,8 @@ function SessionConversationTitleBar({
     return (
         <div
             className={cn(
-                "flex min-w-0 items-center",
-                centered ? "w-full max-w-full justify-center gap-1" : "flex-1 gap-2",
+                "flex items-center",
+                centered ? "w-max min-w-[14rem] max-w-[70vw] justify-center gap-1" : "min-w-0 flex-1 gap-2",
             )}
         >
             <HarnessMark
@@ -358,9 +358,9 @@ function SessionConversationTitleBar({
             <AutoFocusInput
                 aria-label="Conversation title"
                 className={cn(
-                    "min-w-0 flex-1 appearance-none rounded-none border-0 bg-transparent px-0 py-0 font-semibold shadow-none outline-none ring-0 focus:ring-0 focus-visible:ring-0",
+                    "appearance-none rounded-none border-0 bg-transparent px-0 py-0 font-semibold shadow-none outline-none ring-0 focus:ring-0 focus-visible:ring-0",
                     titleTextClassName,
-                    centered && "text-center",
+                    centered ? "w-[10rem] min-w-[8rem] shrink text-center" : "min-w-0 flex-1",
                 )}
                 disabled={saving}
                 maxLength={500}
