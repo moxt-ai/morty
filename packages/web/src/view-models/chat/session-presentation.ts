@@ -599,6 +599,7 @@ function consumeSessionEvent(
                       message.role === "user" &&
                       update.sessionUpdate === "user_message_chunk" &&
                       update.messageId != null &&
+                      entries.length === 0 &&
                       leadingEvent !== "known"
                           ? "possibly-before-page-visible"
                           : entries.length === 0
