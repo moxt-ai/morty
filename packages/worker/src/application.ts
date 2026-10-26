@@ -7,6 +7,7 @@ import { createApplicationDependencies } from "./composition/application-context
 import { cloudRoutes, publicCloudRoutes } from "./composition/cloud-http.ts";
 import { createCloudWebSocketHandlers } from "./composition/cloud-websocket.ts";
 import { setupArtifact } from "./gateway/setup-artifact.ts";
+import { webPages } from "./gateway/web-pages.ts";
 import type { CloudBindings } from "./infra/cloud-bindings.ts";
 import { RequestError } from "./infra/request-error.ts";
 import { createWebSocketApiBridge } from "./infra/websocket-api-bridge.ts";
@@ -79,6 +80,7 @@ const publicApplication = new Hono<{ readonly Bindings: CloudBindings }>()
         ),
     )
     .use("/morty/api/*", bodyLimit({ maxSize: MAXIMUM_REQUEST_BODY_BYTES }))
+    .route("/", webPages)
     .route("/", instructionDocumentRoutes)
     .route("/", setupArtifact)
     .get("/morty/ws", (context) => application.fetch(context.req.raw, context.env))
