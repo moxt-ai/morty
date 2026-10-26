@@ -1,8 +1,10 @@
 import { getAllByRole, getByRole } from "@testing-library/dom";
+import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
+import { TestClock } from "./infra/test-clock.ts";
 
 function harnessProduct(app: TestApp): string | null {
     return app
@@ -138,7 +140,9 @@ test("Given a Pi conversation is active, When the user starts a New Session, The
 test("Given an active Pi conversation, When the Runtime is offline while the new draft loads, Then the stale Codex settings cannot be submitted and the draft settles on Pi after reconnection", {
     timeout: 60_000,
 }, async () => {
+    const clock = new TestClock("2026-10-26T08:00:00Z");
     const app = await createTestApp({
+        clock,
         agents: [
             { id: "codex", label: "Codex" },
             { id: "pi", label: "Pi" },
@@ -190,6 +194,9 @@ test("Given an active Pi conversation, When the Runtime is offline while the new
     expect(app.elementByTestId(dataTestId.sendMessage).hasAttribute("disabled")).toBe(true);
 
     await app.daemon.reconnect();
+    // A brief outage can fall entirely between configuration-watch samples.
+    // Recovery must retry the failed settings read even without a changed snapshot.
+    await act(async () => clock.advanceBy(1_000));
     await waitForHarness(app, "pi");
     await app.waitForView(() =>
         expect(app.elementByTestId(dataTestId.sendMessage).hasAttribute("disabled")).toBe(false),

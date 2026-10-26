@@ -8,7 +8,7 @@ import {
     Streamdown,
 } from "streamdown";
 import "streamdown/styles.css";
-import { type ComponentProps, type SVGProps, useEffect, useMemo, useState } from "react";
+import { type ComponentProps, createContext, type SVGProps, useContext, useEffect, useMemo, useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
 import { boundedCodeHighlighter } from "../../components/agents/bounded-code-highlighter.ts";
@@ -186,11 +186,12 @@ function remarkLocalMarkdownTargets() {
 
 const STREAMDOWN_REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), remarkLocalMarkdownTargets];
 
-function AgentMarkdownLink({
-    children,
-    href,
-    openLocalFile,
-}: ComponentProps<"a"> & { readonly openLocalFile?: ((path: string) => void) | undefined }) {
+const MarkdownResources = createContext<
+    Pick<AgentMarkdownProps, "openLocalFile" | "createResourceStore" | "readImage">
+>({});
+
+function AgentMarkdownLink({ children, href }: ComponentProps<"a">) {
+    const { openLocalFile } = useContext(MarkdownResources);
     const path = href === undefined ? null : localFilePath(href);
     if (path !== null && openLocalFile !== undefined) {
         return (
@@ -230,17 +231,8 @@ function directImageSource(value: string): string {
     return "";
 }
 
-function AgentMarkdownImage({
-    alt,
-    className,
-    createResourceStore,
-    readImage,
-    src,
-    title,
-}: ComponentProps<"img"> & {
-    readonly createResourceStore?: SessionResourceStoreFactory | undefined;
-    readonly readImage?: MarkdownImageReader | undefined;
-}) {
+function AgentMarkdownImage({ alt, className, src, title }: ComponentProps<"img">) {
+    const { createResourceStore, readImage } = useContext(MarkdownResources);
     const directSource = typeof src === "string" ? directImageSource(src) : "";
     const requestedSource = typeof src === "string" ? (localFilePath(src) ?? src) : "";
     if (directSource.length > 0) {
@@ -280,6 +272,10 @@ export interface AgentMarkdownProps {
     readonly streaming: boolean;
 }
 
+// Renderer identities must survive parent updates, including updates between
+// pointer-down and click. Context supplies the latest callbacks without remounts.
+const STREAMDOWN_COMPONENTS = { a: AgentMarkdownLink, img: AgentMarkdownImage };
+
 interface AgentMarkdownContentProps extends AgentMarkdownProps {
     readonly mathPlugin?: MathPlugin | undefined;
 }
@@ -302,13 +298,8 @@ export function AgentMarkdownContent({
         ];
         return [completion, ...STREAMDOWN_REMARK_PLUGINS];
     }, [streaming]);
-    const components = useMemo(
-        () => ({
-            a: (properties: ComponentProps<"a">) => <AgentMarkdownLink {...properties} openLocalFile={openLocalFile} />,
-            img: (properties: ComponentProps<"img">) => (
-                <AgentMarkdownImage {...properties} createResourceStore={createResourceStore} readImage={readImage} />
-            ),
-        }),
+    const resources = useMemo(
+        () => ({ openLocalFile, readImage, createResourceStore }),
         [openLocalFile, readImage, createResourceStore],
     );
     const plugins = useMemo(
@@ -325,39 +316,41 @@ export function AgentMarkdownContent({
             {markdown}
         </pre>
     ) : (
-        <Streamdown
-            className={cn(
-                "agent-markdown min-w-0 text-base leading-6 text-foreground [overflow-wrap:anywhere]",
-                "[&_p]:my-2 [&_p]:whitespace-pre-line",
-                "[&_h1]:mt-6 [&_h1]:mb-3 [&_h1]:text-[21px] [&_h1]:leading-7 [&_h1]:font-semibold md:[&_h1]:mt-7 md:[&_h1]:text-2xl md:[&_h1]:leading-8",
-                "[&_h2]:mt-5 [&_h2]:mb-3 [&_h2]:text-lg [&_h2]:leading-7 [&_h2]:font-semibold md:[&_h2]:mt-6 md:[&_h2]:text-xl",
-                "[&_h3]:mt-5 [&_h3]:mb-2 [&_h3]:text-base [&_h3]:leading-6 [&_h3]:font-semibold",
-                "[&_h4]:mt-4 [&_h4]:mb-2 [&_h4]:font-semibold",
-                "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5",
-                "[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-5",
-                "[&_li>p]:my-0",
-                "[&_blockquote]:my-3 [&_blockquote]:border-l-[3px] [&_blockquote]:border-black/12 [&_blockquote]:pl-3 [&_blockquote]:text-[#454959]",
-                "[&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:decoration-primary/35 [&_a]:underline-offset-2 hover:[&_a]:decoration-primary",
-                "[&_code]:font-mono",
-                "[&_table]:text-sm",
-                STREAMDOWN_FENCED_CODE_BLOCK_CLASSES,
-                className,
-            )}
-            components={components}
-            controls={STREAMDOWN_CONTROLS}
-            icons={STREAMDOWN_ICONS}
-            isAnimating={streaming}
-            lineNumbers={false}
-            mode={streaming ? "streaming" : "static"}
-            parseMarkdownIntoBlocksFn={parseStreamingMarkdownIntoBlocks}
-            plugins={plugins}
-            rehypePlugins={STREAMDOWN_REHYPE_PLUGINS}
-            remarkPlugins={remarkPlugins}
-            remend={STREAMDOWN_REMEND}
-            translations={STREAMDOWN_TRANSLATIONS}
-        >
-            {markdown}
-        </Streamdown>
+        <MarkdownResources value={resources}>
+            <Streamdown
+                className={cn(
+                    "agent-markdown min-w-0 text-base leading-6 text-foreground [overflow-wrap:anywhere]",
+                    "[&_p]:my-2 [&_p]:whitespace-pre-line",
+                    "[&_h1]:mt-6 [&_h1]:mb-3 [&_h1]:text-[21px] [&_h1]:leading-7 [&_h1]:font-semibold md:[&_h1]:mt-7 md:[&_h1]:text-2xl md:[&_h1]:leading-8",
+                    "[&_h2]:mt-5 [&_h2]:mb-3 [&_h2]:text-lg [&_h2]:leading-7 [&_h2]:font-semibold md:[&_h2]:mt-6 md:[&_h2]:text-xl",
+                    "[&_h3]:mt-5 [&_h3]:mb-2 [&_h3]:text-base [&_h3]:leading-6 [&_h3]:font-semibold",
+                    "[&_h4]:mt-4 [&_h4]:mb-2 [&_h4]:font-semibold",
+                    "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5",
+                    "[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-5",
+                    "[&_li>p]:my-0",
+                    "[&_blockquote]:my-3 [&_blockquote]:border-l-[3px] [&_blockquote]:border-black/12 [&_blockquote]:pl-3 [&_blockquote]:text-[#454959]",
+                    "[&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:decoration-primary/35 [&_a]:underline-offset-2 hover:[&_a]:decoration-primary",
+                    "[&_code]:font-mono",
+                    "[&_table]:text-sm",
+                    STREAMDOWN_FENCED_CODE_BLOCK_CLASSES,
+                    className,
+                )}
+                components={STREAMDOWN_COMPONENTS}
+                controls={STREAMDOWN_CONTROLS}
+                icons={STREAMDOWN_ICONS}
+                isAnimating={streaming}
+                lineNumbers={false}
+                mode={streaming ? "streaming" : "static"}
+                parseMarkdownIntoBlocksFn={parseStreamingMarkdownIntoBlocks}
+                plugins={plugins}
+                rehypePlugins={STREAMDOWN_REHYPE_PLUGINS}
+                remarkPlugins={remarkPlugins}
+                remend={STREAMDOWN_REMEND}
+                translations={STREAMDOWN_TRANSLATIONS}
+            >
+                {markdown}
+            </Streamdown>
+        </MarkdownResources>
     );
 }
 
