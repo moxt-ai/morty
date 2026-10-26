@@ -213,7 +213,9 @@ function PermissionCard({
                         </section>
                     )}
                     <p className="mt-2 break-all text-sm leading-6 text-muted-foreground">{permission.title}</p>
-                    <div className="mt-2.5 flex flex-wrap gap-2">
+                    {/* Pinned to the bottom of the bounded interaction scroller, above its edge fade, so long
+                        details scroll behind the decisions instead of pushing them out of view on short screens. */}
+                    <div className="sticky bottom-0 z-20 flex flex-wrap gap-2 bg-white pt-2.5">
                         {presentation.options.map((option) => (
                             <Button
                                 className="h-auto min-h-11 max-w-full whitespace-normal break-all py-2 md:min-h-10"
