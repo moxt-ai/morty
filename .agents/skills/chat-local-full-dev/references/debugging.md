@@ -81,7 +81,6 @@ part of the live state.
 | Platform Worker process exits after `Can't call WebSocket send() after close()` | Relay sent to a replaced/closing daemon socket without a readyState guard | `platformLog`; the uncaught TypeError is a relay bug - fix it in `third-party/mobius` rather than retrying |
 | `PLATFORM_UNAVAILABLE` (502) on first request | Platform D1 schema is older than the code | `platformLog`; re-run `prepare --force` to recreate the state directory |
 | `SETUP_ARTIFACT_UNAVAILABLE` (503) on `/setup.mjs` | R2 seed missing in this state directory | Re-run `prepare --force`; confirm the seed step logged success |
-| Startup reports that `CHAT_LOCAL_CLERK_PUBLISHABLE_KEY` is required or invalid | The local browser needs a real Clerk publishable configuration | Set `CHAT_LOCAL_CLERK_PUBLISHABLE_KEY` to a valid `pk_test_...` before `prepare` |
 | `INVALID_REQUEST` (400) with a generic message | Schema validation rejected the body | Find the logged typed error and its validation issue path in `chatLog` |
 | `NOT_FOUND` on a Session or Conversation | Wrong Project, or the record lives in another state directory | Inspect `chat_managed_session` and the stack's `appId` |
 | Process exited but the port stays bound | A previous stack was not removed | `status` then `remove --state-dir` the old stack |

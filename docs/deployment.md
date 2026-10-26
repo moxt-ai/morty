@@ -24,8 +24,6 @@ Configure these **GitHub Environment variables** individually:
 
 - `APP_ORIGIN` — canonical Chat origin, without a trailing slash.
 - `AUTHENTICATION_BASE_URL` — application authentication base URL.
-- `CLERK_PUBLISHABLE_KEY` — environment-specific Clerk publishable key.
-- `CLERK_JWT_KEY` — multiline PEM **public verification key**, not a private key.
 - `MOBIUS_BASE_URL` — Platform origin.
 - `MOBIUS_APP_ID` — environment-specific Platform App ID.
 
@@ -39,24 +37,17 @@ Retain the deployment secrets `CLOUDFLARE_API_TOKEN`, `MOBIUS_READ_TOKEN`, and
 
 CD assembles a private temporary JSON file from the individual runtime secrets
 and uploads it with the Worker version using Wrangler's `--secrets-file`. The
-file is removed when the deployment step exits. Multiline values are encoded by
-the script; enter actual multiline PEM values into GitHub.
+file is removed when the deployment step exits.
 
 The `production` GitHub Environment uses a one-minute deployment wait timer.
 
 ## Mobius Platform
 
-Configure these **GitHub Environment variables** individually:
-
-- `MOBIUS_PLATFORM_ALLOWED_ORIGINS` — JSON-encoded origin array.
-- `MOBIUS_PLATFORM_OIDC_PROVIDERS` — JSON-encoded provider array.
-- `MOBIUS_PLATFORM_OPERATOR_SUBJECTS` — JSON-encoded subject array.
-- `SESSION_ACTIVE_SESSIONS_PER_PROJECT` — for example `1000`.
-- `CLERK_PUBLISHABLE_KEY` — environment-specific frontend build key.
-- `CLOUDFLARE_ACCOUNT_ID` — deployment account.
-
-See the [Mobius workflows](../third-party/mobius/.github/workflows/) for the
-current deployment and migration token requirements. Resource bindings and database
+Configure Platform independently using the
+[Mobius workflows](../third-party/mobius/.github/workflows/) for its current
+runtime, frontend, deployment, and migration requirements. Chat's anonymous
+identity flow does not configure Platform developer authentication.
+Resource bindings and database
 names are defined in each Worker's Wrangler configuration.
 
 ## Updating settings

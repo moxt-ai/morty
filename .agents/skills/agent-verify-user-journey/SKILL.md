@@ -45,13 +45,6 @@ Resolve the repository directory from which the user invoked the skill and
 retain it as `<original-cwd>`. Confirm it is a compatible Morty checkout as
 required by `chat-local-full-dev`, and preserve all existing changes.
 
-If neither Clerk publishable-key environment variable is available, use the
-staging-compatible key already committed for the local E2E stack in
-`packages/e2e/infra/local-stack.ts`. Extract the `CLERK_PUBLISHABLE_KEY` string
-into `CHAT_LOCAL_CLERK_PUBLISHABLE_KEY` for the local-stack command without
-printing it or copying it into another file. Stop if that source is absent,
-ambiguous, or does not contain a valid Clerk publishable key.
-
 Create these locations without overwriting existing content:
 
 - App workspace: a randomized directory under `~/Documents/tmp/`. Create the
