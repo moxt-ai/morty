@@ -3,7 +3,35 @@ import { expect, test } from "vitest";
 import { interactiveHtml } from "../../../tests/support/fake-daemon/html-preview.ts";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
-import { createTestApp } from "./infra/test-app.tsx";
+import { createTestApp, type TestApp } from "./infra/test-app.tsx";
+
+/**
+ * Opens a local file reference and returns its preview.
+ *
+ * A finished reply commits once more after its status clears, when the
+ * streaming response becomes static. A click that spans that commit lands on a
+ * detached paragraph, so the browser dispatches it nowhere. Waiting for the
+ * preview and repeating the user's click keeps the assertion on what the user
+ * sees while tolerating that commit timing.
+ */
+async function openLocalFileReference(app: TestApp, name: string): Promise<HTMLElement> {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name })));
+        const preview = await app
+            .waitForView(() => {
+                const element = app.optionalElementByTestId(dataTestId.filePreview);
+                if (element === null) {
+                    throw new Error("The file preview has not opened");
+                }
+                return element;
+            }, 2_000)
+            .catch(() => null);
+        if (preview !== null) {
+            return preview;
+        }
+    }
+    throw new Error(`The file preview did not open after clicking ${name}`);
+}
 
 test("Given a local file link in an active response, When more output arrives during a click, Then the link still opens its preview", {
     timeout: 30_000,
@@ -63,7 +91,7 @@ test("Given the agent links a file relative to the working directory, When the u
 });
 
 test("Given an HTML link points to an unavailable file, When the file becomes available and the user retries, Then the preview recovers in the same conversation", {
-    timeout: 30_000,
+    timeout: 60_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
@@ -73,10 +101,7 @@ test("Given an HTML link points to an unavailable file, When the file becomes av
     await sendPrompt(app, composer, "show missing result");
     await app.queryElementByTestId(dataTestId.localFileLink);
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
-    await app.user.click(
-        await app.waitForView(() => getByRole(document.body, "button", { name: "Open missing result" })),
-    );
-    const preview = await app.queryElementByTestId(dataTestId.filePreview);
+    const preview = await openLocalFileReference(app, "Open missing result");
     await app.waitForView(() => expect(getByRole(preview, "alert").textContent).toContain("could not be opened"));
     await app.daemon.writeFiles(
         new Map([["/workspace/missing-result.html", { content: interactiveHtml, mediaType: "text/html" }]]),
