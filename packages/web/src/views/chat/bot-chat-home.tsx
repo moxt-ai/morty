@@ -123,18 +123,16 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
             onKeyDownCapture={workspace.recordUserActivity}
             onInputCapture={workspace.recordUserActivity}
         >
-            {active !== null && (
-                <ConversationSidebar
-                    botId={active.botId}
-                    workspace={workspace}
-                    activeId={activeConversationId}
-                    connectionStatus={connectionStatus}
-                    onConnectAgent={setupView?.reason === "unconfigured" ? store.getState().showPairingDialog : null}
-                    requests={requests}
-                    onOpen={(session) => openManaged(session.isExternal, session.id)}
-                    onNewConversation={newConversation}
-                />
-            )}
+            <ConversationSidebar
+                botId={workspace.botId}
+                workspace={workspace}
+                activeId={activeConversationId}
+                connectionStatus={connectionStatus}
+                onConnectAgent={setupView?.reason === "unconfigured" ? store.getState().showPairingDialog : null}
+                requests={requests}
+                onOpen={(session) => openManaged(session.isExternal, session.id)}
+                onNewConversation={newConversation}
+            />
             {workspace.accessNotice !== null && (
                 <div
                     role="status"

@@ -15,7 +15,18 @@ test("Given a new visitor, When the setup page opens, Then it explains working w
     expect(getByText(document.body, "Paste the prompt into the agent on your computer.")).toBeInstanceOf(HTMLElement);
     expect(queryByRole(document.body, "figure")).toBeNull();
     expect(queryByRole(document.body, "list", { name: "Connect your session" })).toBeNull();
-    expect(getByRole(document.body, "group", { name: "Setup prompt" })).toHaveProperty("open", false);
+    const collapsedPrompt = getByRole(document.body, "group", { name: "Setup prompt" });
+    expect(collapsedPrompt).toHaveProperty("open", false);
+    expect(
+        collapsedPrompt.contains(
+            getByText(document.body, "Your agent keeps running on its original computer. Keep it awake and online."),
+        ),
+    ).toBe(false);
+    expect(
+        collapsedPrompt.contains(
+            getByText(document.body, "Setup may install or update the local connection software."),
+        ),
+    ).toBe(false);
     expect(queryByRole(document.body, "status", { name: "Setup next step" })).toBeNull();
 });
 
