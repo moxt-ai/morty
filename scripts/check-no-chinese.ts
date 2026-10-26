@@ -63,6 +63,10 @@ export function findChineseTextViolations(root: string, paths: readonly string[]
             continue;
         }
 
+        if (path === "README.zh-CN.md") {
+            continue;
+        }
+
         const content = readFileSync(absolutePath);
         if (content.includes(NULL_BYTE)) {
             continue;
