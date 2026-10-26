@@ -16,7 +16,7 @@ metadata:
 
 Continue Codex, Claude Code, and Pi conversations from any browser.
 
-[Open Morty →](https://morty.build) · [Get connected](#one-prompt-then-pick-up-your-phone) · [Contribute](CONTRIBUTING.md)
+[Open Morty →](https://morty.build) · [Get connected](#one-prompt-then-pick-up-your-phone) · [Contribute](docs/CONTRIBUTING.md)
 
 <img src="https://raw.githubusercontent.com/moxt-ai/mobius/362efa275790e55e34ecd2462e716c177cdf831a/docs/assets/readme-accent.svg" width="320" height="40" alt="" />
 
@@ -61,4 +61,4 @@ Keep the connected machine awake and online.
 Built on [**Mobius**](https://github.com/moxt-ai/mobius), the SDK and infrastructure
 for remote coding-agent access. Morty is the ready-to-use browser application.
 
-[Contributing](CONTRIBUTING.md) · [Testing](TESTING.md) · [Product notes](docs/product.md) · [Deployment](docs/deployment.md)
+[Contributing](docs/CONTRIBUTING.md) · [Testing](docs/TESTING.md) · [Usage guide](docs/GUIDE.md) · [Deployment](docs/deployment.md)
