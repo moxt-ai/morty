@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Info, Laptop, LoaderCircle, Plus } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Laptop, LoaderCircle, Plus } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { useStore } from "zustand";
 import { cn } from "@/lib/utils";
@@ -52,66 +52,57 @@ function BotConnectionStatusIndicator({
 
 const openedDate = new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short" });
 
-const computerMenuLabelClassName = "px-3 pb-1 text-xs font-medium text-copy-tertiary";
+const computerMenuLabelClassName = "px-3 pt-1 pb-1 text-xs font-normal text-morty-text-3";
 
-type ComputerMenuEntries =
-    | { readonly kind: "flat"; readonly choices: readonly ComputerChoice[] }
-    | {
-          readonly kind: "grouped";
-          readonly available: readonly ComputerChoice[];
-          readonly unavailable: readonly ComputerChoice[];
-      };
+interface ComputerSections {
+    readonly current: ComputerChoice | null;
+    readonly others: readonly ComputerChoice[];
+}
 
-function computerMenuEntries(choices: readonly ComputerChoice[], activeKey: string): ComputerMenuEntries {
-    const current = choices.find((choice) => choice.key === activeKey);
+function computerSections(choices: readonly ComputerChoice[], activeKey: string): ComputerSections {
+    const current = choices.find((choice) => choice.key === activeKey) ?? null;
     const others = choices.filter((choice) => choice.key !== activeKey);
-    const available = [
-        ...(current?.status === "online" ? [current] : []),
-        ...others.filter((choice) => choice.status === "online"),
-    ];
-    const unavailable = [
-        ...(current !== undefined && current.status !== "online" ? [current] : []),
-        ...others.filter((choice) => choice.status !== "online"),
-    ];
-    if (choices.length > 1 && available.length > 0 && unavailable.length > 0) {
-        return { kind: "grouped", available, unavailable };
-    }
     return {
-        kind: "flat",
-        choices: [
-            ...(current === undefined ? [] : [current]),
+        current,
+        others: [
             ...others.filter((choice) => choice.status === "online"),
             ...others.filter((choice) => choice.status !== "online"),
         ],
     };
 }
 
-function ComputerChoiceDetail({ choice }: { readonly choice: ComputerChoice }) {
+const computerChoiceDetailClassName = "block truncate text-xs text-morty-text-3";
+
+const computerListChoiceDetailClassName = "block truncate text-[13px] text-morty-text-3";
+
+function ComputerChoiceDetail({
+    choice,
+    className = computerChoiceDetailClassName,
+}: {
+    readonly choice: ComputerChoice;
+    readonly className?: string;
+}) {
     const directory = choice.directoryName;
     const directoryTitle = choice.directory ?? undefined;
     if (choice.status === "online") {
         if (directory !== null) {
             return (
-                <span className="block truncate text-xs text-morty-text-3" title={directoryTitle}>
+                <span className={className} title={directoryTitle}>
                     {directory}
                 </span>
             );
         }
         if (choice.lastUsedAt > 0) {
-            return (
-                <span className="block truncate text-xs text-morty-text-3">
-                    {`Last opened ${openedDate.format(new Date(choice.lastUsedAt))}`}
-                </span>
-            );
+            return <span className={className}>{`Last opened ${openedDate.format(new Date(choice.lastUsedAt))}`}</span>;
         }
         return null;
     }
     const statusLabel = choice.status === "offline" ? "Offline" : "Unavailable";
     if (directory === null) {
-        return <span className="block truncate text-xs text-morty-text-3">{statusLabel}</span>;
+        return <span className={className}>{statusLabel}</span>;
     }
     return (
-        <span className="block truncate text-xs text-morty-text-3">
+        <span className={className}>
             {statusLabel}
             {" · "}
             <span title={directoryTitle}>{directory}</span>
@@ -121,16 +112,53 @@ function ComputerChoiceDetail({ choice }: { readonly choice: ComputerChoice }) {
 
 const computerChoiceRowClassName = "grid grid-cols-[0.5rem_minmax(0,1fr)_1rem] items-start outline-none";
 
-const computerListChoiceClassName =
-    "gap-x-4 py-2.5 pr-4 pl-6 hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60";
+const computerListChoiceInteractiveClassName =
+    "hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring/60";
+
+const computerListChoiceClassName = cn(
+    "gap-x-4 py-2.5 pr-4 pl-6 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60",
+    computerListChoiceInteractiveClassName,
+);
+
+const computerListCurrentChoiceShellClassName = cn("outline-none", computerListChoiceInteractiveClassName);
+
+const computerListChoiceLinkClassName =
+    "gap-x-4 py-2.5 pr-4 pl-6 hover:bg-transparent active:bg-transparent focus-visible:ring-0";
+
+const computerListDetailsTextButtonClassName =
+    "inline-flex items-center gap-1 rounded-md text-[13px] font-medium text-copy-secondary outline-none transition-colors hover:bg-transparent hover:text-foreground active:bg-transparent active:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60 motion-reduce:transition-none";
+
+function ComputerListDetailsButton({
+    computerName,
+    onOpenDetails,
+}: {
+    readonly computerName: string;
+    readonly onOpenDetails: () => void;
+}) {
+    return (
+        <div className="pb-2.5 pl-12 pr-4 pt-1">
+            <button
+                aria-label={`View execution details for ${computerName}`}
+                className={computerListDetailsTextButtonClassName}
+                onClick={onOpenDetails}
+                type="button"
+            >
+                View execution details
+                <ChevronRight aria-hidden="true" className="size-3 shrink-0" />
+            </button>
+        </div>
+    );
+}
 
 function ComputerChoiceContent({
     choice,
     current,
+    detailClassName,
     titleClassName = "text-14",
 }: {
     readonly choice: ComputerChoice;
     readonly current: boolean;
+    readonly detailClassName?: string;
     readonly titleClassName?: string;
 }) {
     return (
@@ -139,17 +167,21 @@ function ComputerChoiceContent({
                 <span
                     aria-hidden="true"
                     className={cn(
-                        "rounded-full",
-                        choice.status === "online" ? "size-2 bg-emerald-500" : "size-1.5 bg-muted-foreground/60",
+                        "size-2 rounded-full",
+                        choice.status === "online" ? "bg-emerald-500" : "bg-muted-foreground/60",
                     )}
                 />
                 {choice.status === "online" ? <span className="sr-only">Online</span> : null}
             </span>
-            <span className="min-w-0">
+            <span className="flex min-w-0 flex-col gap-1">
                 <span className={cn("block truncate font-medium", titleClassName)} title={choice.name}>
                     {choice.name}
                 </span>
-                <ComputerChoiceDetail choice={choice} />
+                {detailClassName === undefined ? (
+                    <ComputerChoiceDetail choice={choice} />
+                ) : (
+                    <ComputerChoiceDetail choice={choice} className={detailClassName} />
+                )}
             </span>
             <span className="mt-1 flex size-4 items-center justify-center" aria-hidden="true">
                 {current ? <Check className="size-3.5" /> : null}
@@ -179,32 +211,49 @@ function ComputerChoiceItem({ activeKey, choice }: { readonly activeKey: string;
 function ComputerChoiceList({
     activeKey,
     choices,
+    computerName,
+    loading,
+    openDetails,
 }: {
     readonly activeKey: string;
     readonly choices: readonly ComputerChoice[];
+    readonly computerName: string;
+    readonly loading: boolean;
+    readonly openDetails: () => void;
 }) {
-    const entries = computerMenuEntries(choices, activeKey);
-    if (entries.kind === "grouped") {
-        return (
-            <>
-                <DropdownMenu.Group>
-                    <DropdownMenu.Label className={computerMenuLabelClassName}>Available</DropdownMenu.Label>
-                    {entries.available.map((choice) => (
+    const sections = computerSections(choices, activeKey);
+    return (
+        <>
+            <DropdownMenu.Label className={computerMenuLabelClassName}>Current</DropdownMenu.Label>
+            <DropdownMenu.Group aria-label="Current computer" className="rounded-lg pb-1">
+                {sections.current === null ? (
+                    <p className="px-3 py-2 text-copy-tertiary" role={loading ? "status" : undefined}>
+                        {loading ? "Checking connections…" : computerName}
+                    </p>
+                ) : (
+                    <ComputerChoiceItem activeKey={activeKey} choice={sections.current} />
+                )}
+                <div className="pb-1 pl-[42px] pr-3">
+                    <DropdownMenu.Item
+                        aria-label={`View execution details for ${computerName}`}
+                        className="inline-flex h-8 w-fit cursor-pointer items-center gap-1 rounded-md px-3 text-xs font-medium text-copy-secondary outline-none data-[highlighted]:bg-morty-fill-opacity-2 data-[highlighted]:text-foreground"
+                        onSelect={openDetails}
+                    >
+                        View execution details
+                        <ChevronRight aria-hidden="true" className="size-3 shrink-0" />
+                    </DropdownMenu.Item>
+                </div>
+            </DropdownMenu.Group>
+            {sections.others.length > 0 ? (
+                <DropdownMenu.Group aria-label="Other computers" className="mt-2">
+                    <DropdownMenu.Label className={computerMenuLabelClassName}>Other computers</DropdownMenu.Label>
+                    {sections.others.map((choice) => (
                         <ComputerChoiceItem activeKey={activeKey} choice={choice} key={choice.key} />
                     ))}
                 </DropdownMenu.Group>
-                <DropdownMenu.Group>
-                    <DropdownMenu.Label className={computerMenuLabelClassName}>Unavailable</DropdownMenu.Label>
-                    {entries.unavailable.map((choice) => (
-                        <ComputerChoiceItem activeKey={activeKey} choice={choice} key={choice.key} />
-                    ))}
-                </DropdownMenu.Group>
-            </>
-        );
-    }
-    return entries.choices.map((choice) => (
-        <ComputerChoiceItem activeKey={activeKey} choice={choice} key={choice.key} />
-    ));
+            ) : null}
+        </>
+    );
 }
 
 const sidebarNavOptionTriggerClassName =
@@ -217,56 +266,130 @@ export const mobileDrawerOptionDividerClassName = "[&>*+*]:border-t-[0.5px] [&>*
 export const mobileDrawerCardRowClassName =
     "flex h-12 w-full items-center gap-3 px-4 text-left text-[15px] font-medium text-foreground outline-none transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none";
 
-function orderedComputerChoices(choices: readonly ComputerChoice[], activeKey: string): readonly ComputerChoice[] {
-    const entries = computerMenuEntries(choices, activeKey);
-    return entries.kind === "grouped" ? [...entries.available, ...entries.unavailable] : entries.choices;
-}
+const mobileComputersSectionTitleClassName =
+    "px-4 pt-3 pb-1 text-[15px] font-semibold leading-5 tracking-[-0.015em] text-foreground";
 
-function ComputerListChoice({ activeKey, choice }: { readonly activeKey: string; readonly choice: ComputerChoice }) {
+const mobileComputersSectionLabelClassName = "px-4 pt-1 pb-1 text-xs font-normal text-morty-text-3";
+
+const mobileComputersOtherSectionLabelClassName = "px-4 pt-3 pb-1 text-xs font-normal text-morty-text-3";
+
+function ComputerListChoice({
+    activeKey,
+    choice,
+    computerNameForDetails,
+    openDetails,
+}: {
+    readonly activeKey: string;
+    readonly choice: ComputerChoice;
+    readonly computerNameForDetails?: string;
+    readonly openDetails?: () => void;
+}) {
     const current = choice.key === activeKey;
+    const showDetails = current && openDetails !== undefined;
+    if (!showDetails) {
+        return (
+            <a
+                href={choice.href}
+                aria-current={current ? "true" : undefined}
+                className={cn(computerChoiceRowClassName, computerListChoiceClassName)}
+            >
+                <ComputerChoiceContent
+                    choice={choice}
+                    current={current}
+                    detailClassName={computerListChoiceDetailClassName}
+                    titleClassName="text-[15px]"
+                />
+            </a>
+        );
+    }
+    const detailsName = computerNameForDetails ?? choice.name;
     return (
-        <a
-            href={choice.href}
-            aria-current={current ? "true" : undefined}
-            className={cn(computerChoiceRowClassName, computerListChoiceClassName)}
-        >
-            <ComputerChoiceContent choice={choice} current={current} titleClassName="text-[15px]" />
-        </a>
+        <div className={computerListCurrentChoiceShellClassName}>
+            <a
+                href={choice.href}
+                aria-current="true"
+                className={cn(computerChoiceRowClassName, computerListChoiceLinkClassName, "pb-0")}
+            >
+                <ComputerChoiceContent
+                    choice={choice}
+                    current={current}
+                    detailClassName={computerListChoiceDetailClassName}
+                    titleClassName="text-[15px]"
+                />
+            </a>
+            <ComputerListDetailsButton computerName={detailsName} onOpenDetails={openDetails} />
+        </div>
     );
 }
 
 function ComputerListChoices({
     activeKey,
     choices,
+    computerName,
+    openDetails,
+    status,
 }: {
     readonly activeKey: string;
     readonly choices: readonly ComputerChoice[];
+    readonly computerName: string;
+    readonly openDetails: () => void;
+    readonly status: BotConnectionStatus;
 }) {
-    const entries = computerMenuEntries(choices, activeKey);
-    if (entries.kind === "grouped") {
-        return (
-            <div className="flex flex-col">
-                <p className="px-4 pt-2 pb-1 text-xs font-medium text-copy-tertiary">Available</p>
-                <div className={mobileDrawerOptionDividerClassName}>
-                    {entries.available.map((choice) => (
-                        <ComputerListChoice activeKey={activeKey} choice={choice} key={choice.key} />
-                    ))}
-                </div>
-                <p className="px-4 pt-2 pb-1 text-xs font-medium text-copy-tertiary">Unavailable</p>
-                <div className={mobileDrawerOptionDividerClassName}>
-                    {entries.unavailable.map((choice) => (
-                        <ComputerListChoice activeKey={activeKey} choice={choice} key={choice.key} />
-                    ))}
-                </div>
-            </div>
-        );
-    }
+    const sections = computerSections(choices, activeKey);
     return (
-        <div className={mobileDrawerOptionDividerClassName}>
-            {entries.choices.map((choice) => (
-                <ComputerListChoice activeKey={activeKey} choice={choice} key={choice.key} />
-            ))}
-        </div>
+        <>
+            <section aria-label="Current computer">
+                <p className={mobileComputersSectionLabelClassName}>Current</p>
+                {sections.current === null ? (
+                    <div className={computerListCurrentChoiceShellClassName}>
+                        <span className={cn(computerChoiceRowClassName, computerListChoiceLinkClassName, "pb-0")}>
+                            <span className="mt-2 flex size-2 shrink-0 items-center justify-center">
+                                <span
+                                    aria-hidden="true"
+                                    className={cn(
+                                        "rounded-full",
+                                        status.kind === "connected"
+                                            ? "size-2 bg-emerald-500"
+                                            : "size-1.5 bg-muted-foreground/60",
+                                    )}
+                                />
+                            </span>
+                            <span className="flex min-w-0 flex-col gap-1">
+                                <span className="block truncate text-[15px] font-medium" title={computerName}>
+                                    {computerName}
+                                </span>
+                                {status.kind === "connected" ? null : (
+                                    <span className={computerListChoiceDetailClassName}>
+                                        {status.kind === "connecting" ? "Connecting" : "Offline"}
+                                    </span>
+                                )}
+                            </span>
+                            <span className="mt-1 flex size-4 items-center justify-center" aria-hidden="true">
+                                <Check className="size-3.5" />
+                            </span>
+                        </span>
+                        <ComputerListDetailsButton computerName={computerName} onOpenDetails={openDetails} />
+                    </div>
+                ) : (
+                    <ComputerListChoice
+                        activeKey={activeKey}
+                        choice={sections.current}
+                        computerNameForDetails={computerName}
+                        openDetails={openDetails}
+                    />
+                )}
+            </section>
+            {sections.others.length > 0 ? (
+                <section aria-label="Other computers">
+                    <p className={mobileComputersOtherSectionLabelClassName}>Other computers</p>
+                    <div className={mobileDrawerOptionDividerClassName}>
+                        {sections.others.map((choice) => (
+                            <ComputerListChoice activeKey={activeKey} choice={choice} key={choice.key} />
+                        ))}
+                    </div>
+                </section>
+            ) : null}
+        </>
     );
 }
 
@@ -284,51 +407,32 @@ export function ComputerSwitcher({
     readonly layout?: "block" | "header" | "list";
 }) {
     const state = useStore(model.store);
-    const active = state.choices.find((choice) => choice.key === model.activeKey);
+    const choices = state.choices;
+    const activeKey = model.activeKey;
+    const listLoading = state.kind === "loading";
+    const active = choices.find((choice) => choice.key === activeKey);
     const computerName = name || active?.name || "Computer";
     if (layout === "list") {
-        const choices = orderedComputerChoices(state.choices, model.activeKey);
         return (
             <ComputerExecutionDetails context={context}>
                 {({ openDetails }) => (
                     <nav aria-label="Computers" className="flex w-full min-w-0 flex-col">
-                        <p className="px-4 pt-3 pb-1 text-[13px] font-medium text-morty-text-3">Computers</p>
-                        <div className={cn("flex w-full min-w-0 flex-col", mobileDrawerOptionDividerClassName)}>
-                            {state.kind === "loading" && choices.length === 0 ? (
-                                <span className={cn(computerChoiceRowClassName, computerListChoiceClassName)}>
-                                    <span className="mt-2 flex size-2 shrink-0 items-center justify-center">
-                                        <span
-                                            aria-hidden="true"
-                                            className={cn(
-                                                "rounded-full",
-                                                status.kind === "connected"
-                                                    ? "size-2 bg-emerald-500"
-                                                    : "size-1.5 bg-muted-foreground/60",
-                                            )}
-                                        />
-                                    </span>
-                                    <span className="min-w-0">
-                                        <span className="block truncate text-[15px] font-medium" title={computerName}>
-                                            {computerName}
-                                        </span>
-                                        {status.kind === "connected" ? null : (
-                                            <span className="block truncate text-xs text-morty-text-3">
-                                                {status.kind === "connecting" ? "Connecting" : "Offline"}
-                                            </span>
-                                        )}
-                                    </span>
-                                    <span className="mt-1 flex size-4 items-center justify-center" aria-hidden="true">
-                                        <Check className="size-3.5" />
-                                    </span>
-                                </span>
-                            ) : (
-                                <ComputerListChoices activeKey={model.activeKey} choices={choices} />
-                            )}
-                            <button className={mobileDrawerCardRowClassName} onClick={openDetails} type="button">
-                                <Info aria-hidden="true" className="size-5 shrink-0 text-copy-secondary" />
-                                Execution details
-                            </button>
-                            <a href="/setup" className={mobileDrawerCardRowClassName}>
+                        <p className={mobileComputersSectionTitleClassName}>Computers</p>
+                        <div className="flex w-full min-w-0 flex-col">
+                            <ComputerListChoices
+                                activeKey={activeKey}
+                                choices={choices}
+                                computerName={computerName}
+                                openDetails={openDetails}
+                                status={status}
+                            />
+                            <a
+                                href="/setup"
+                                className={cn(
+                                    mobileDrawerCardRowClassName,
+                                    "mt-2 border-t-[0.5px] border-black/[0.06]",
+                                )}
+                            >
                                 <Plus aria-hidden="true" className="size-5 shrink-0 text-copy-secondary" />
                                 Connect another computer
                             </a>
@@ -411,7 +515,7 @@ export function ComputerSwitcher({
                         >
                             <DropdownMenu.Label className="flex shrink-0 items-center justify-between gap-2 px-3 pt-1 pb-3 text-16 font-semibold text-copy-tertiary">
                                 Computers
-                                {state.kind === "loading" && state.choices.length > 0 ? (
+                                {listLoading ? (
                                     <span className="inline-flex shrink-0" role="status">
                                         <LoaderCircle
                                             aria-hidden="true"
@@ -422,21 +526,14 @@ export function ComputerSwitcher({
                                 ) : null}
                             </DropdownMenu.Label>
                             <div className="flex min-h-0 flex-col overflow-y-auto">
-                                {state.kind === "loading" && state.choices.length === 0 ? (
-                                    <p className="px-3 py-2 text-copy-tertiary" role="status">
-                                        Checking connections…
-                                    </p>
-                                ) : (
-                                    <ComputerChoiceList activeKey={model.activeKey} choices={state.choices} />
-                                )}
+                                <ComputerChoiceList
+                                    activeKey={activeKey}
+                                    choices={choices}
+                                    computerName={computerName}
+                                    loading={listLoading}
+                                    openDetails={openDetails}
+                                />
                             </div>
-                            <DropdownMenu.Item
-                                className="flex h-9 cursor-pointer items-center gap-2 rounded-full px-3 outline-none data-[highlighted]:bg-accent"
-                                onSelect={() => openDetails()}
-                            >
-                                <Info aria-hidden="true" className="size-4" />
-                                Execution details
-                            </DropdownMenu.Item>
                             <DropdownMenu.Separator className={cn("-mx-1.5 my-1.5", overlayMenuSeparatorClassName)} />
                             <DropdownMenu.Item asChild>
                                 <a

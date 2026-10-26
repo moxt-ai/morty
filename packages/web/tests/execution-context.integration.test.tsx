@@ -1,9 +1,16 @@
 import { getByRole, queryByRole } from "@testing-library/dom";
+import type { DetachedWindowAPI } from "happy-dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { openExecutionDetails, sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
+
+declare global {
+    interface Window {
+        readonly happyDOM: DetachedWindowAPI;
+    }
+}
 
 async function selectCodexHarness(app: TestApp): Promise<void> {
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
@@ -38,6 +45,37 @@ test("Given a connected computer, When the user views a conversation, Then its h
     expect(details.textContent).toContain("Online");
     expect(details.textContent).toContain("Session connection");
     expect(details.textContent).toContain("Not started");
+});
+
+test("Given a connected computer on mobile, When the user views the conversation, Then computer information stays in navigation instead of the header", {
+    timeout: 30_000,
+}, async () => {
+    const desktopViewport = { height: window.innerHeight, width: window.innerWidth };
+    window.happyDOM.setViewport({ height: 844, width: 413 });
+    let app: TestApp | null = null;
+    try {
+        app = await createTestApp({ connectAgent: true });
+        await app.queryElementByTestId(
+            dataTestId.messageComposer,
+            (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+        );
+        const newSession = getByRole(document.body, "button", { name: "New Session" });
+        const header = newSession.closest("header");
+        expect(header).not.toBeNull();
+        if (header === null) {
+            throw new Error("Expected the mobile New Session action in the header");
+        }
+        expect(queryByRole(header, "button", { name: /Switch computer/ })).toBeNull();
+
+        await app.user.click(getByRole(header, "button", { name: "Open navigation" }));
+        const computers = await app.waitForView(() => getByRole(document.body, "navigation", { name: "Computers" }));
+        expect(computers.textContent).toContain("Controlled Agent Runtime");
+    } finally {
+        if (app !== null) {
+            await app.close();
+        }
+        window.happyDOM.setViewport(desktopViewport);
+    }
 });
 
 test("Given a connected Runtime, When a saved conversation disconnects and recovers, Then its shared connection indicator and details follow the session without losing its directory", {

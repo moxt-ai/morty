@@ -117,6 +117,13 @@ export const PLAYGROUND_ENTRIES = [
     },
     {
         group: "Overlays",
+        id: "execution-details-dialog",
+        source: "components/chat/execution-details-dialog.tsx",
+        summary: "Session execution summary. Desktop width is 480px; mobile is a bottom sheet.",
+        title: "Execution details dialog",
+    },
+    {
+        group: "Overlays",
         id: "popover",
         source: "components/ui/popover.tsx",
         summary: "Unstyled popover primitives. Callers supply the surface; use overlaySurfaceRadiusClassName (24px).",

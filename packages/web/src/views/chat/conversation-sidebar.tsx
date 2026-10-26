@@ -222,7 +222,7 @@ function ManagedSessionDirectoryList({
             )}
             {conversationGroups?.map((group) => (
                 <section className="mb-3 min-w-0 w-full space-y-0 last:mb-0" key={group.label}>
-                    <h3 className="sticky top-0 z-[1] -mx-2 mb-0 bg-card px-[22px] pb-1 pt-1 text-11 font-normal text-morty-text-3 sm:-mx-3 sm:bg-sidebar">
+                    <h3 className="sticky top-0 z-[1] -mx-2 mb-0 bg-card px-[22px] pb-1 pt-1 text-13 font-normal text-morty-text-3 sm:-mx-3 sm:bg-sidebar sm:text-11">
                         {group.label}
                     </h3>
                     {group.sessions.map((session) => {
@@ -234,7 +234,7 @@ function ManagedSessionDirectoryList({
                                 aria-current={activeId === session.id ? "page" : undefined}
                                 disabled={connectionStatus.kind !== "connected"}
                                 onClick={() => onOpen(session)}
-                                className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-4 py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 aria-[current=page]:hover:text-foreground aria-[current=page]:disabled:hover:text-foreground motion-reduce:transition-none sm:px-2.5"
+                                className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-4 py-2 text-left text-15 font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 aria-[current=page]:hover:text-foreground aria-[current=page]:disabled:hover:text-foreground motion-reduce:transition-none sm:px-2.5 sm:text-13"
                             >
                                 <span className="min-w-0 truncate">{session.title}</span>
                                 {(sessionStatuses.get(session.id) ?? session.status).kind === "working" ? (
@@ -458,7 +458,7 @@ export function ConversationSidebar({
                                         aria-label="Morty navigation"
                                         className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-card/90 px-3 pt-0 max-sm:overflow-visible sm:isolate sm:w-[264px] sm:gap-0 sm:bg-sidebar sm:pt-2 sm:pb-4"
                                     >
-                                        <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-4 py-3 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:items-start max-sm:bg-card/90 sm:gap-3">
+                                        <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-4 py-3 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:bg-card/90 sm:gap-3">
                                             <div className="relative z-[1] flex w-fit shrink-0 items-center gap-2 sm:gap-3">
                                                 <button
                                                     type="button"
@@ -556,7 +556,7 @@ export function ConversationSidebar({
                                                         testId={dataTestId.botConnectionStatus}
                                                     />
                                                 )}
-                                                {workspace.computers !== null ? (
+                                                {desktop && workspace.computers !== null ? (
                                                     <ComputerSwitcher
                                                         context={executionContext}
                                                         layout="header"
@@ -1008,27 +1008,24 @@ export function ConversationSidebar({
                                                       aria-modal="true"
                                                       aria-labelledby="mobile-recent-sessions-title"
                                                       className={cn(
-                                                          "pointer-events-auto fixed inset-x-0 bottom-0 z-[121] flex h-[80dvh] max-h-[80dvh] flex-col rounded-t-[24px] border-t border-border/80 bg-card shadow-[0_-8px_32px_rgba(17,24,20,0.12)] sm:hidden",
+                                                          "pointer-events-auto fixed inset-x-0 bottom-0 z-[121] flex h-[80dvh] max-h-[80dvh] flex-col rounded-t-[24px] bg-card shadow-[0_-8px_32px_rgba(17,24,20,0.12)] sm:hidden",
                                                           sessionsMotion.animate && panelMotionClassName,
                                                           sessionsMotion.shown ? "translate-y-0" : "translate-y-full",
                                                       )}
-                                                      style={{
-                                                          paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))",
-                                                      }}
                                                       onTransitionEnd={sessionsMotion.onTransitionEnd}
                                                   >
-                                                      <header className="flex shrink-0 items-center justify-between gap-2 px-3 pb-2 pt-4">
+                                                      <header className="flex shrink-0 items-center justify-between gap-2 pt-4 pr-3 pb-2 pl-5">
                                                           <h2
                                                               id="mobile-recent-sessions-title"
-                                                              className="font-inter text-13 font-semibold tracking-normal text-morty-text-2"
+                                                              className="font-inter text-16 font-semibold tracking-normal text-morty-text-2"
                                                           >
                                                               Recent sessions
                                                           </h2>
-                                                          <div className="flex shrink-0 items-center">
+                                                          <div className="flex shrink-0 items-center gap-2">
                                                               <Button
                                                                   variant="ghost"
                                                                   size="icon"
-                                                                  className="size-8 shrink-0 rounded-lg text-morty-text-3 hover:text-foreground"
+                                                                  className={mobileHeaderIconButtonClassName}
                                                                   aria-label={
                                                                       refreshing
                                                                           ? "Refreshing sessions"
@@ -1047,17 +1044,18 @@ export function ConversationSidebar({
                                                                   }}
                                                               >
                                                                   <RefreshCw
-                                                                      className={`size-3.5 ${refreshing ? "animate-spin motion-reduce:animate-none" : ""}`}
+                                                                      aria-hidden="true"
+                                                                      className={`size-5 ${refreshing ? "animate-spin motion-reduce:animate-none" : ""}`}
                                                                   />
                                                               </Button>
                                                               <Button
                                                                   variant="ghost"
                                                                   size="icon"
-                                                                  className="size-8 shrink-0 rounded-lg text-morty-text-3 hover:text-foreground"
+                                                                  className={mobileHeaderIconButtonClassName}
                                                                   aria-label="Close recent sessions"
                                                                   onClick={closeMobileRecentSessions}
                                                               >
-                                                                  <X aria-hidden="true" className="size-3.5" />
+                                                                  <X aria-hidden="true" className="size-5" />
                                                               </Button>
                                                           </div>
                                                       </header>
@@ -1066,10 +1064,10 @@ export function ConversationSidebar({
                                                           fadeClassName="right-2"
                                                           fadeFromClassName="from-card"
                                                           fadeToClassName="to-card/0"
-                                                          topFadeClassName="top-6 h-6"
+                                                          topFadeClassName="top-0 h-8"
                                                           frameClassName="flex min-h-0 flex-1 flex-col"
                                                           className={cn(
-                                                              "min-h-0 flex-1 space-y-0 overflow-y-auto overscroll-contain px-2 pb-2",
+                                                              "min-h-0 flex-1 space-y-0 overflow-y-auto overscroll-contain px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]",
                                                               mortyThinScrollbarClassName,
                                                           )}
                                                       >

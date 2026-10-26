@@ -1,8 +1,15 @@
 import { getAllByRole, getByRole, queryByRole } from "@testing-library/dom";
+import type { DetachedWindowAPI } from "happy-dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { openAgentModelPicker, sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
+
+declare global {
+    interface Window {
+        readonly happyDOM: DetachedWindowAPI;
+    }
+}
 
 async function waitForConnection(app: TestApp, status: string): Promise<void> {
     await app.waitForView(() => {
@@ -226,6 +233,35 @@ test("Given a Bot paired with the Claude harness, When the user opens its settin
     expect(harnessMark.getAttribute("data-harness-product")).toBe("claude");
     expect(harnessMark.getAttribute("aria-hidden")).toBe("true");
     expect(harnessMark.tagName === "svg" || harnessMark.querySelector("svg")).toBeTruthy();
+});
+
+test("Given a paired Bot on mobile, When the user opens Agent configuration, Then a bottom sheet presents the settings with an explicit close control", {
+    timeout: 30_000,
+}, async () => {
+    const desktopViewport = { height: window.innerHeight, width: window.innerWidth };
+    window.happyDOM.setViewport({ height: 844, width: 413 });
+    let app: TestApp | null = null;
+    try {
+        app = await createTestApp({ connectAgent: true });
+        await app.queryElementByTestId(
+            dataTestId.messageComposer,
+            (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+        );
+
+        await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
+        const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
+        await openAgentModelPicker(app);
+        expect(await app.queryElementByTestId(dataTestId.modelSearch)).toBeDefined();
+        await app.user.keyboard("{Escape}");
+        const close = getByRole(configuration, "button", { name: "Close Agent configuration" });
+        await app.user.click(close);
+        expect(queryByRole(document.body, "dialog", { name: "Agent configuration" })).toBeNull();
+    } finally {
+        if (app !== null) {
+            await app.close();
+        }
+        window.happyDOM.setViewport(desktopViewport);
+    }
 });
 
 test("Given a paired Bot, When the composer controls are visible, Then the configuration trigger shows its harness mark without repeating the harness or machine name", {
