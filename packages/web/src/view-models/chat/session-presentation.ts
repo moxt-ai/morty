@@ -38,6 +38,12 @@ export type SessionMessage =
           readonly firstEvent: SessionEvent;
           readonly commandId: string | null;
           readonly contents: readonly ContentBlock[];
+          /**
+           * Whether this message starts an execution or steers the one already
+           * running. Messages reported by the Agent itself carry no lifecycle and
+           * are `unknown`.
+           */
+          readonly execution: "starts" | "steers" | "unknown";
       }
     | {
           readonly role: "assistant";
@@ -331,6 +337,7 @@ function messageFromAcpUpdate(event: SessionEvent, update: AcpSessionUpdate): Se
             return {
                 commandId: null,
                 contents: [userDisplayContent(update.content)],
+                execution: "unknown",
                 firstEvent: event,
                 role: "user",
             };
@@ -503,6 +510,7 @@ function consumeSessionEvent(
                         : {
                               commandId: lifecycle.commandId,
                               contents,
+                              execution: lifecycle.disposition === "steer" ? "steers" : "starts",
                               firstEvent: event,
                               role: "user",
                           },
@@ -869,6 +877,82 @@ export function sessionEventCommandIds(events: readonly SessionEvent[]): readonl
         commandIds.push(update.messageId);
     }
     return commandIds;
+}
+
+/**
+ * The outcome of the execution a message belongs to. Steering adds user
+ * messages to a running execution without starting a new one, so an execution
+ * can span several user messages.
+ */
+export type SessionExecutionState =
+    /** Still running, or has not reported an outcome yet. */
+    | { readonly kind: "open" }
+    | { readonly kind: "finished" }
+    /** Failed, or stopped before completing (for example cancelled or at a limit). */
+    | { readonly kind: "ended-early" };
+
+function terminalExecutionState(message: SessionMessage): SessionExecutionState | null {
+    if (message.role !== "assistant") {
+        return null;
+    }
+    const presentation = message.presentation;
+    if (presentation.kind === "failure") {
+        return { kind: "ended-early" };
+    }
+    if (presentation.kind !== "completed" || presentation.stopReason === "steered") {
+        return null;
+    }
+    return completedTurnNotice(presentation.stopReason) === null ? { kind: "finished" } : { kind: "ended-early" };
+}
+
+/** Returns, for each message, the state of the execution that owns it. */
+export function sessionExecutionStates(
+    messages: readonly SessionMessage[],
+    sessionWorking: boolean,
+): readonly SessionExecutionState[] {
+    interface Span {
+        readonly start: number;
+        managed: boolean;
+        terminal: SessionExecutionState | null;
+    }
+    const spans: Span[] = [];
+    let current: Span = { start: 0, managed: false, terminal: null };
+    for (const [index, message] of messages.entries()) {
+        if (index > 0 && message.role === "user") {
+            const starts =
+                message.execution === "starts" ||
+                // An Agent-reported user message cannot interrupt an execution Morty
+                // is still waiting on; it may be the Agent echoing a steering message.
+                (message.execution === "unknown" && !(current.managed && current.terminal === null));
+            if (starts) {
+                spans.push(current);
+                current = { start: index, managed: false, terminal: null };
+            }
+        }
+        if (message.role === "user" && message.execution !== "unknown") {
+            current.managed = true;
+        }
+        current.terminal = terminalExecutionState(message) ?? current.terminal;
+    }
+    spans.push(current);
+    const states: SessionExecutionState[] = [];
+    for (const [spanIndex, span] of spans.entries()) {
+        const end = spans[spanIndex + 1]?.start ?? messages.length;
+        let state: SessionExecutionState;
+        if (span.terminal !== null) {
+            state = span.terminal;
+        } else if (end < messages.length || (!sessionWorking && !span.managed)) {
+            // A later execution started, or the conversation is idle and Morty never
+            // ran this one: history imported from the Agent carries no lifecycle outcome.
+            state = { kind: "finished" };
+        } else {
+            state = { kind: "open" };
+        }
+        for (let index = span.start; index < end; index += 1) {
+            states.push(state);
+        }
+    }
+    return states;
 }
 
 export function completedTurnNotice(stopReason: string): string | null {

@@ -12,10 +12,9 @@ Chat origin: {{BASE_URL}}
    do not mix its executables or paths with native Windows ones.
 2. Ensure Node.js 22.19.0 or newer, npm, and the latest `@moxt-ai/mobius` are installed.
    Choose your own harness: Codex = `codex`, Claude Code = `claude`, Pi = `pi`.
-   Honor an explicit user choice.
-   Use that harness's exact current session ID from its session metadata.
-   Never guess, use the latest saved session, or substitute another harness.
-   If the current ID is unavailable, ask the user for it before running setup.
+   Honor an explicit user choice; never substitute another harness.
+   Setup reads the current session from the harness itself; do not look up or ask
+   for a session ID.
 3. Download {{BASE_URL}}/setup.mjs to a private temporary directory, with a finite
    timeout and no redirects. Inspect it before running. Use commands appropriate
    to the current shell; stop if installation or download fails.
@@ -24,7 +23,7 @@ Chat origin: {{BASE_URL}}
    Use the original absolute working directory, not the download directory.
 
 ```text
-node <downloaded-setup.mjs> setup --base-url {{BASE_URL}} --cwd <absolute-current-working-directory> --harness <own-harness-id> --session-id <exact-current-session-id>
+node <downloaded-setup.mjs> setup --base-url {{BASE_URL}} --cwd <absolute-current-working-directory> --harness <own-harness-id>
 ```
 
 The script keeps this computer's Morty identity in the operating system's local

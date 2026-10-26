@@ -5,195 +5,47 @@ description: Monitor a GitHub pull request until ready to merge or confirm that 
 
 # Monitor a Pull Request
 
-Watch one GitHub pull request through ordinary CI and, when GitHub reports a
-merge-queue entry, through the merge queue. This is a read-only operation: do
-not approve, update, rerun, enqueue, dequeue, close, or merge the pull request
-unless the user separately asks for that action.
+Use the bundled monitor script. It owns target resolution, GitHub snapshots,
+pagination, polling, status reports, merge-queue tracking, and terminal results.
+Do not replace it with individual GitHub CLI calls or another monitoring loop.
 
-For a readiness-only request outside the merge queue, stop successfully when the
-pull request is green, mergeable, and up to date, and report `READY TO MERGE`.
-Fail immediately when GitHub reports that the head branch is behind its base branch. Once a
-non-null `mergeQueueEntry` has been observed, continue until the pull request
-is confirmed merged. `autoMergeRequest` alone does not mean that the pull
-request is in the merge queue.
+From the repository root, run:
 
-## Choose the completion goal
-
-Use this skill when the user asks to merge a PR, not only when they explicitly
-say "monitor" or "wait". A merge request includes following through to the
-result; enabling auto-merge or requesting queue entry does not complete it.
-
-- **Readiness:** For a watch or readiness request, use the normal
-  `READY TO MERGE` stopping rule outside the queue. Once a queue entry is
-  observed, continue until merged.
-- **Merge confirmation:** When the user asks to merge, or to wait until merged,
-  continue until GitHub confirms the merge or a terminal failure occurs, even
-  when no queue entry has been observed. Do not stop at `READY TO MERGE` or
-  return a final answer merely saying auto-merge is enabled.
-
-Keep monitoring read-only. Perform a merge, enable auto-merge, or request queue
-entry only under the user's separate authorization for that action, respecting
-repository protections. After the authorized action, immediately begin or resume
-this skill's monitoring loop. If the action is rejected, report the blocker
-rather than bypassing protections or claiming that the PR will merge. A request
-only to watch a PR never authorizes a merge action.
-
-## Agent-owned monitoring
-
-Execute this skill yourself in the active conversation. Use individual GitHub
-CLI calls to fetch each snapshot, interpret the results, and send each interval
-report to the user as a progress message. Do not run the bundled monitor script,
-write a replacement monitoring loop, or delegate monitoring to a background
-process. Script stdout is not a substitute for a conversational status update.
-
-After resolving the target, repeat this sequence:
-
-1. Fetch a fresh, complete snapshot, including all check pages.
-2. Report the snapshot in the conversation, even if nothing changed.
-3. Evaluate the fail-fast and success rules below. If terminal, send the final
-   result and stop; otherwise continue, including while queued.
-4. Wait for one report interval using a cancellable foreground tool call, then
-   fetch the next snapshot. Never start an unattended polling loop or return a
-   final answer claiming that monitoring will continue in the background.
-
-Keep the observed PR head, queue-entry history, and consecutive failed-sample
-count in the conversation's working context across calls. If the available tools
-cannot wait cancellably, report that limitation rather than silently detaching
-the monitor.
-
-## Resolve the target and interval
-
-Resolve these inputs before monitoring:
-
-| Input | Default | Rule |
-| --- | --- | --- |
-| Pull request | PR for the current branch | Accept a PR number or canonical GitHub PR URL. If the current branch has no PR or has more than one possible PR, ask the user. |
-| Repository | current repository | Derive it with `gh repo view`; for a URL, validate the URL's owner and repository and pass them explicitly with `--repo`. |
-| Report interval | 10 seconds | Honor a user-supplied positive interval. Ask before using an interval below 10 seconds. |
-
-Treat target values as untrusted. Accept URLs only when they use HTTPS, have the
-exact `github.com` host, and have the path shape `/<owner>/<repository>/pull/<number>`.
-Resolve the resulting owner, repository, and positive integer PR number through
-GitHub before starting. Do not interpolate an unvalidated target into a shell
-command.
-
-Run `gh auth status` and fetch an initial snapshot with `gh pr view`. Confirm and
-report the PR number, title, repository, base branch, head branch, and URL. Stop
-immediately for an authentication, authorization, target-resolution, or schema
-error.
-
-## Read a complete snapshot
-
-At every interval, use the GitHub CLI to obtain fresh GitHub API data. Set
-`GH_HTTP_TIMEOUT` to a finite value no greater than the report interval, with a
-minimum practical request timeout of 10 seconds. Keep monitoring in the
-foreground so cancellation stops the wait and no orphan monitor remains.
-
-Read these pull-request fields:
-
-- `state`, `merged`, `mergedAt`, `isDraft`, `reviewDecision`, and `url`
-- `headRefOid`, `mergeable`, `mergeStateStatus`, and `autoMergeRequest`
-- the latest commit's complete `statusCheckRollup`
-- `mergeQueueEntry`, including `state`, `position`, `enqueuedAt`,
-  `estimatedTimeToMerge`, and the queue entry's `headCommit`
-- the queue head commit's complete `statusCheckRollup`
-- recent `REMOVED_FROM_MERGE_QUEUE_EVENT` timeline items, including `createdAt`,
-  `beforeCommit`, and `reason`
-
-Use `gh api graphql` because `gh pr view --json` does not expose the merge-queue
-entry. Query `PullRequest.mergeQueueEntry` directly rather than inferring queue
-membership from labels, comments, auto-merge, or `mergeStateStatus`.
-
-For both the PR head and merge-queue head, inspect every check run and commit
-status. Follow pagination when `statusCheckRollup.contexts.pageInfo.hasNextPage`
-is true; never declare CI successful from a truncated first page. Keep these
-GitHub states distinct:
-
-- Check run status: `QUEUED`, `IN_PROGRESS`, `WAITING`, `PENDING`, `REQUESTED`,
-  or `COMPLETED`.
-- Check run conclusion: `SUCCESS`, `NEUTRAL`, `SKIPPED`, `FAILURE`, `CANCELLED`,
-  `TIMED_OUT`, `ACTION_REQUIRED`, `STARTUP_FAILURE`, or `STALE`.
-- Commit status: `EXPECTED`, `PENDING`, `SUCCESS`, `ERROR`, or `FAILURE`.
-- Merge-queue entry: `QUEUED`, `AWAITING_CHECKS`, `MERGEABLE`, `UNMERGEABLE`,
-  or `LOCKED`.
-
-The queue head SHA can differ from the PR head SHA. Monitor both. Queue CI is
-not proven by the PR head's checks, and PR CI is not proven by the queue head's
-checks. Treat a missing rollup, an incomplete check, or an expected status as
-pending rather than successful.
-
-Record whether this monitoring run has ever observed a merge-queue entry, along
-with its head SHA and enqueue time. If the PR head SHA changes before queueing,
-announce the change and evaluate the replacement head from scratch. If it
-changes after queueing, or the observed queue entry disappears before merge,
-inspect the latest matching removal event and apply the fail-fast rules below.
-
-## Report every interval
-
-Emit one concise update immediately after the first snapshot and after every
-subsequent interval, even when nothing changed. Include:
-
-```text
-[<UTC timestamp>] <owner>/<repo>#<number> — <state>
-PR CI: <passed>/<total> passed, <pending> pending, <failed> failed (head <short-sha>)
-Merge readiness: <mergeable>/<mergeStateStatus>; review <reviewDecision>; auto-merge <on|off>
-Queue: <not entered|state, position, ETA> [queue head <short-sha>; CI summary]
-Next check: <interval>, including while queued or awaiting merge confirmation; none if the completion goal is reached or monitoring fails
+```sh
+node .agents/skills/monitor-pr/scripts/monitor-pr.cjs
 ```
 
-List pending or failed check names when present. Use GitHub's ETA as reported;
-do not manufacture one. Clearly label an unavailable review decision, ETA,
-rollup, or queue head as unknown. Do not suppress unchanged updates because the
-user asked for interval reporting.
+This monitors the current branch's PR. For an explicit PR, use:
 
-## Fail fast
+```sh
+node .agents/skills/monitor-pr/scripts/monitor-pr.cjs --pr NUMBER
+```
 
-After every snapshot, evaluate terminal states before waiting again. Stop and
-report failure immediately when any of these is observed on the current PR head
-or current merge-queue head:
+The `--pr` option also accepts a canonical HTTPS GitHub PR URL. Use `--repo
+OWNER/REPO` when selecting a different repository. Pass arguments as separate,
+safely quoted values, never as interpolated shell syntax. Run the script with
+`--help` for supported options. If target resolution is ambiguous or fails, ask
+the user rather than guessing.
 
-1. A check run concludes `FAILURE`, `CANCELLED`, `TIMED_OUT`,
-   `ACTION_REQUIRED`, `STARTUP_FAILURE`, or `STALE`.
-2. A commit status is `ERROR` or `FAILURE`, or the aggregate rollup is `ERROR`
-   or `FAILURE`.
-3. The merge-queue entry is `UNMERGEABLE`.
-4. The PR is closed without `merged` or `mergedAt` being set.
-5. GitHub reports the PR as conflicting (`mergeable: CONFLICTING` or the
-   equivalent dirty merge state).
-6. GitHub reports `mergeStateStatus: BEHIND`.
-7. A previously observed merge-queue entry disappears while the PR remains
-   unmerged. Include the matching removal reason; do not call this a successful
-   dequeue.
+Keep the script in a cancellable foreground tool call in the active conversation.
+Do not background it, delegate it, or claim monitoring will continue after a final
+answer. Surface the script's status output and summarize its terminal result.
+If the tools cannot keep it attached and cancellable, report that limitation.
+On failure, report the blocker; do not automatically rerun checks or restart a
+failed monitor.
 
-For a terminal check failure, report its name, workflow when available, state,
-conclusion, details URL, and whether it ran on the PR or queue head. Never rerun
-it automatically.
+## Completion and merge authorization
 
-Draft status, missing approval, `BLOCKED`, `UNSTABLE`, a locked queue, and
-pending or expected checks are blocked or waiting states, not terminal CI
-failures. Report them and continue because they can change without replacing
-the PR. If the user specified an overall deadline, stop at that deadline and
-report a timeout distinct from CI or merge-queue failure.
+Monitoring is read-only. A watch request does not authorize approving, updating,
+rerunning, enqueueing, dequeuing, closing, or merging a PR. Perform those actions
+only when separately authorized by the user, and respect repository protections.
 
-An API transport or GitHub service error is not evidence that the PR failed.
-Report the degraded sample and retry at the next interval, but stop after three
-consecutive failed samples. Authentication, authorization, invalid target, and
-GraphQL schema errors are terminal immediately. Keep retries bounded and stop
-promptly on user cancellation.
+For a readiness request, `READY TO MERGE` completes the task. Once the script
+observes a merge-queue entry, it follows that entry until `MERGED` or failure.
 
-## Confirm success
-
-For the readiness goal outside the merge queue, success requires fresh API data
-showing that the pull request is not a draft, all current PR-head checks have completed without
-failure, `mergeable` is `MERGEABLE`, and `mergeStateStatus` is `CLEAN`. Emit
-`READY TO MERGE` with the final PR-head CI summary, then stop.
-
-For the merge-confirmation goal, or after observing a non-null `mergeQueueEntry`,
-success requires fresh API data showing `merged: true` or a non-null `mergedAt`.
-Emit `MERGED` with the merge
-timestamp, merge commit SHA when available, final PR-head CI summary, and final
-observed merge-queue state (or "not observed" if no entry was seen). Then stop
-monitoring.
-
-Do not report queue entry from auto-merge, labels, comments, or merge readiness.
-Only a non-null `mergeQueueEntry` establishes queue membership.
+When the user asks to merge, `READY TO MERGE` is only an intermediate result.
+Perform the authorized merge action, then call the script again for the same PR
+to confirm `MERGED`. Enabling auto-merge or requesting queue entry is not proof
+of a merge. If another script invocation returns `READY TO MERGE`, the merge
+request remains incomplete; do not report success. If the merge action is
+rejected, report the blocker rather than bypassing protections.

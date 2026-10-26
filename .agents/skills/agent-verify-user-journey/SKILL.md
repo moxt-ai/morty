@@ -1,14 +1,14 @@
 ---
 name: agent-verify-user-journey
-description: Run Morty's complete local Chat and Platform stack, pair a selected agent harness as a Runtime, ask it through the browser UI to build a disposable web app, then verify the app's user journey with a selected browser and retain screenshots. Use for prompts such as "use Codex, GPT 5.5, and agent-browser to verify a todo app."
+description: Start Morty's local Chat and Platform stack with --mode=initial|paired|todolist (default todolist). Open the unpaired setup page, pair a selected harness and open its handoff, or run the complete browser-driven app verification. Use for prompts such as "use Codex, GPT 5.5, and agent-browser to verify a todo app."
 ---
 
 # Agent User-Journey Verification
 
-Verify the real Morty product boundary. Start the local Chat Worker and local
-Platform, pair the selected harness as a Runtime, and ask the agent to build the
-app through Morty's browser UI. Then run the generated app and exercise it with
-a real browser.
+Verify the real Morty product boundary at the requested stopping point. Start
+the local Chat Worker and local Platform in every mode. Depending on `--mode`,
+open the initial setup page, pair a Runtime and open its handoff, or continue
+through app generation and browser verification.
 
 **Never invoke the selected harness directly.** In particular, do not use
 `codex exec`, `claude`, or another harness CLI to generate the app. The harness
@@ -26,15 +26,37 @@ Resolve these inputs before starting:
 
 | Input | Default | Selection rule |
 | --- | --- | --- |
+| Mode | `todolist` | Accept `--mode=initial`, `--mode=paired`, or `--mode=todolist`. Reject other values before starting services. |
 | Harness | `codex` | Use the harness the user names; otherwise use `codex`. |
-| Native session ID | none, required | Read the exact current session ID from the selected harness's own session metadata. Never guess, reuse a default, or substitute another harness's session. |
+| Native session ID | none, required for `paired` and `todolist` | Read the exact current session ID from the selected harness's own session metadata. Never guess, reuse a default, or substitute another harness's session. |
 | Model | `gpt 6.1 sol` | Use the model the user names; otherwise use `gpt 6.1 sol`. |
 | Browser | session-attached browser, then headed `agent-browser` CLI | Honor a user-specified browser first. Otherwise use the browser attached to the current session when one exists; fall back to an installed `agent-browser` CLI running in the foreground. |
 | App | to-do-list web app | Preserve any app or journey requirements supplied by the user. |
 
+### Mode boundaries
+
+`--mode` is an argument to this skill, not a flag to `local-dev.cjs`.
+
+- `initial`: prepare and health-check the local stack without pairing a Runtime,
+  then open `<chatOrigin>/setup` in the selected browser. Stop at the visible
+  initial setup page. Do not run `local-dev.cjs setup`, resolve a native session,
+  select a model, or generate an app.
+- `paired`: prepare and health-check the local stack, pair the selected harness
+  with `local-dev.cjs setup`, then open its returned `handoffUrl` in the selected
+  browser. Let the Continue flow finish and confirm the paired session opens.
+  Stop there; do not select a model, start a new conversation, or generate an app.
+- `todolist` (also when `--mode` is omitted): run the complete existing journey,
+  including pairing, model selection, app generation, queue/steer/delete controls,
+  and generated-app verification.
+
+For `initial`, only resolve the mode and browser. For `paired`, also resolve the
+harness and native session. Model and app inputs apply only to `todolist`.
+Setup-only modes intentionally leave the healthy stack and browser open for the
+user; see Cleanup for failure handling and explicit teardown requests.
+
 Treat names in example requests as parameters, not fixed requirements. Do not
 silently substitute a different harness, model, or explicitly requested
-browser. Confirm that the selected browser is available. Resolve and select the
+browser. Confirm that the selected browser is available. In `todolist`, resolve and select the
 requested model through Morty's visible Session configuration controls; do not
 probe it by running the harness directly. If the requested model cannot be
 selected unambiguously in Morty, stop and ask the user rather than guessing.
@@ -47,7 +69,7 @@ required by `chat-local-full-dev`, and preserve all existing changes.
 
 Create these locations without overwriting existing content:
 
-- App workspace: a randomized directory under `~/Documents/tmp/`. Create the
+- App workspace (`paired` and `todolist` only): a randomized directory under `~/Documents/tmp/`. Create the
   parent directory if needed, then use
   `mktemp -d "$HOME/Documents/tmp/agent-verify-user-journey.XXXXXX"`.
 - Local-stack state: a separate randomized directory under the approved system
@@ -69,7 +91,9 @@ Use `chat-local-full-dev` to:
    Platform fixture. Read `chatOrigin`, `platformOrigin`, and `stateDir` from
    the ready/status record; do not assume ports.
 3. Check stack health before opening the browser.
-4. Connect the selected harness as a Runtime with the required harness and
+4. For `initial`, open `<chatOrigin>/setup` using the browser procedure below,
+   confirm the initial setup page is visible, then report the result. Do not pair.
+5. For `paired` and `todolist`, connect the selected harness as a Runtime with the required harness and
    session identifiers:
 
    ```sh
@@ -88,20 +112,36 @@ Use `chat-local-full-dev` to:
    the Chat page. Resolve it from the selected harness's own current session
    metadata; do not ask the user for it, guess, or reuse a default.
 
-5. Capture the setup result to a protected temporary file rather than printing
+6. Capture the setup result to a protected temporary file rather than printing
    it into the conversation. `handoffUrl` carries a one-time transfer code, so
    treat it as a secret.
 
 Connecting the harness launches it as a Runtime; it does not authorize calling
 the harness CLI directly for generation.
 
-## Ask the agent through Morty
+## Open Morty in the selected browser
 
-Open `handoffUrl` from the setup result in the selected browser; never preview
+Use browser precedence exactly as resolved above. For an attached browser, use
+an explicit tab ID for every operation. For `agent-browser`, load its installed
+core skill/help first, create a dedicated named session, launch its first `open`
+command with `--headed`, and reuse that same visible foreground session for
+every command. Do not run any mode in a headless browser.
+
+In `initial`, open `<chatOrigin>/setup`, confirm the initial setup page, and stop.
+Use a fresh browser context without an existing Morty identity; do not clear a
+user's existing browser state.
+
+In `paired` and `todolist`, open `handoffUrl` from the setup result; never preview
 or redeem it from the setup side. The Continue page redeems the transfer code,
 keeps the identity, and opens the native session named by `sessionId` in Morty,
 so do not seed storage or use browser internals to manipulate application state
 after setup.
+
+In `paired`, confirm the paired Runtime and imported session are visible, then
+stop and report the result. The remaining generation and app-verification
+sections apply only to `todolist`.
+
+## Ask the agent through Morty (`todolist` only)
 
 Through visible Morty controls:
 
@@ -151,7 +191,7 @@ stack logs using `chat-local-full-dev`. Report the failure; do not repair the
 app unless the user explicitly requests a repair attempt. Keep initial-failure
 evidence distinct from any later repaired result.
 
-## Start and inspect the generated app
+## Start and inspect the generated app (`todolist` only)
 
 Inspect the generated files only after the Morty turn completes. Validate the
 agent-provided commands before running them: they must be local development
@@ -166,13 +206,9 @@ cancellation.
 If the app cannot install, build, or start, report that as the verification
 result without changing its source.
 
-## Verify with the selected browser
+## Verify the generated app (`todolist` only)
 
-Use browser precedence exactly as resolved above. For an attached browser, use
-an explicit tab ID for every operation. For `agent-browser`, load its installed
-core skill/help first, create a dedicated named session, launch its first `open`
-command with `--headed`, and reuse that same visible foreground session for
-every command. Do not run the verification journey in a headless browser.
+Reuse the selected browser and dedicated session or tab opened above.
 
 Open the generated app's loopback URL and exercise it only through visible
 controls, labels, and text. Do not call app internals, mutate storage directly,
@@ -210,7 +246,13 @@ links, or private configuration.
 
 ## Cleanup
 
-Unless the user explicitly asks to leave services running:
+On successful `initial` or `paired` completion, leave the local stack and
+dedicated browser open unless the user explicitly requests teardown. Report the
+state directory and exact removal command so the user can stop it later.
+
+On failure or cancellation in any mode, clean up owned resources. On successful
+`todolist` completion, clean up unless the user explicitly asks to leave services
+running:
 
 1. Stop the generated app server.
 2. Close the dedicated browser session or tab.
@@ -224,18 +266,23 @@ remove `test-results/`.
 
 Return:
 
-1. Selected harness, exact model identifier shown in Morty, and browser.
+1. Selected mode and browser; for paired modes, the selected harness; for
+   `todolist`, the exact model identifier shown in Morty.
 2. Local Chat and Platform origins, whether the paired Runtime connected, and
    whether the stack was stopped or intentionally left running. Never report
    identity tokens or handoff links.
-3. Randomized app workspace path and validated install/start commands.
-4. Pass or fail for the Morty generation turn, queue, steer, queued-message
-   deletion, and every app journey step.
+3. State directory and removal command when left running; randomized workspace
+   path if created; validated install/start commands only for `todolist`.
+4. Pass or fail for the requested stopping point: initial setup page for
+   `initial`, paired session for `paired`, or the Morty generation turn, queue,
+   steer, queued-message deletion, and every app journey step for `todolist`.
+   Mark skipped stages as not run, never passed.
 5. Repository-relative screenshot paths.
 6. Any generation, Worker, Platform, Runtime, install, server, browser, or app
    failure, including relevant typed error codes when available.
 
-Do not call the journey verified unless the task traveled through Morty's local
+Setup-only success is not full journey verification. Do not call the journey
+verified unless the task traveled through Morty's local
 browser UI and paired Runtime, the visible turn completed with the requested
 model, queue/steer/delete were visibly exercised during the active turn, and the
 selected browser completed every requested app interaction.

@@ -64,6 +64,7 @@ export interface DraftControlsStore {
     readonly closeCwd: () => void;
     readonly forgetRecentCwd: (directoryId: string) => void;
     readonly load: (signal: AbortSignal) => Promise<void>;
+    readonly waitsForRuntime: () => boolean;
     /**
      * The Runtime's Agents changed. A draft whose Agent the Runtime no longer offers loads again, which settles on an
      * offered Agent and withdraws the settings published for the removed one.
@@ -110,6 +111,7 @@ export const createDraftControlsStore = (
     onSettings: (settings: ChatDraftConfiguration | null) => void,
     /** The Runtime configuration the workspace keeps current. */
     runtimeConfiguration: () => BotRuntimeConfiguration | null,
+    onWaitingForRuntime: () => void,
 ) =>
     createStore<DraftControlsStore>()((set, get) => {
         let cwdOperation: AbortController | null = null;
@@ -173,6 +175,7 @@ export const createDraftControlsStore = (
             waitingForRuntime = true;
             onSettings(null);
             set({ settings: { kind: "failed", message: runtimeDisconnectedMessage } });
+            onWaitingForRuntime();
         };
         /** Waits for the Runtime to offer an Agent, settling any switch in progress so `runtimeChanged` can resume. */
         const awaitAgent = (): void => {
@@ -472,6 +475,7 @@ export const createDraftControlsStore = (
                 set({ recentCwds: forgetRecentCwdPreference(botId, directoryId) });
             },
             load,
+            waitsForRuntime: () => waitingForRuntime && get().settings.kind === "failed",
             runtimeChanged: async (configuration, signal) => {
                 // Agent settings follow the Runtime configuration: a different one drops those read before it.
                 const runtime = JSON.stringify(configuration.runtime);

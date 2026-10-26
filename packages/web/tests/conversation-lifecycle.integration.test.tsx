@@ -553,7 +553,10 @@ test("Given more saved messages than one history page, When live output arrives 
             .map((element) => element.textContent ?? "")
             .filter((text) => text.includes("Completed Pagination message")),
     };
-    const expectOmittedReasoning = async () => {
+    const expectSavedReasoning = async () => {
+        for (const summary of queryAllByRole(document.body, "button", { name: "20 steps", expanded: false })) {
+            await app.user.click(summary);
+        }
         const reasoningItems = app.elementsByTestId(dataTestId.agentReasoning);
         expect(reasoningItems.length).toBeGreaterThan(0);
         for (const reasoning of reasoningItems) {
@@ -563,13 +566,15 @@ test("Given more saved messages than one history page, When live output arrives 
         }
         await app.waitForView(() => {
             expect(
-                reasoningItems.every(
+                reasoningItems.some(
                     (reasoning) =>
-                        reasoning.textContent?.includes("(Reasoning details were omitted.)") === true &&
-                        !reasoning.textContent.includes("Reasoning step 000.") &&
-                        !reasoning.textContent.includes("Reasoning step 039."),
+                        reasoning.textContent?.includes("Reasoning step 000.") === true &&
+                        reasoning.textContent.includes("Reasoning step 039."),
                 ),
             ).toBe(true);
+            for (const reasoning of reasoningItems) {
+                expect(reasoning.textContent).not.toContain("(Reasoning details were omitted.)");
+            }
         });
     };
     expect(page.prompts).not.toContain(prompts[0]);
@@ -582,7 +587,7 @@ test("Given more saved messages than one history page, When live output arrives 
         ),
     ).toBe(false);
     expect(page.responses.at(-1)).toContain(`Completed Pagination message ${prompts.length.toString()}`);
-    await expectOmittedReasoning();
+    await expectSavedReasoning();
     await app.waitForView(() =>
         expect(getByRole(document.body, "textbox", { name: "Message" }).hasAttribute("disabled")).toBe(false),
     );
@@ -645,7 +650,7 @@ test("Given more saved messages than one history page, When live output arrives 
     expect(loadedResponses.some((response) => response.includes("Live completion while older messages load"))).toBe(
         true,
     );
-    await expectOmittedReasoning();
+    await expectSavedReasoning();
 });
 
 test("Given more saved messages than one history page, When older messages load, Then a skeleton placeholder stands in for them instead of a text label", {
