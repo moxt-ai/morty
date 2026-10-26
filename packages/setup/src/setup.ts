@@ -181,6 +181,45 @@ class RuntimePreflightError extends Error {
     });
 }
 
+/** A failure the Morty service reported with its own error code. */
+class RemoteError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "RemoteError";
+    }
+}
+
+/** What the agent should do after binding failed, chosen by the failure's code rather than its message. */
+function bindingNextStep(code: string, harness: string): string {
+    switch (code) {
+        case "authentication_required":
+            return `Ask the user to sign in to ${harness} on this computer; you cannot sign in for them. When they confirm, rerun setup; it reuses this computer's Machine.`;
+        case "TIMEOUT":
+        case "PLATFORM_TIMEOUT":
+        case "PLATFORM_UNAVAILABLE":
+            return `Rerun setup without changing anything; it reuses this computer's Machine. The Morty service or ${harness} may have been briefly unavailable. If it fails the same way again, confirm ${harness} answers a prompt in the working directory.`;
+        default:
+            return `Confirm ${harness} answers a prompt in the working directory and fix what stops it, then rerun setup; it reuses this computer's Machine. If ${harness} answers and setup fails the same way again, report error.code to the user.`;
+    }
+}
+
+/** Setup could not bind the Machine to the chosen harness. */
+class AgentBindingError extends Error {
+    readonly code: string;
+    readonly harness: string;
+    readonly nextStep: string;
+
+    constructor(code: string, harness: string, cause: unknown) {
+        super(`Setup could not connect ${harness} on this computer.`, { cause });
+        this.name = "AgentBindingError";
+        this.code = code;
+        this.harness = harness;
+        this.nextStep = bindingNextStep(code, harness);
+    }
+
+    readonly diagnostic = () => ({ harness: this.harness, nextStep: this.nextStep });
+}
+
 interface ErrorCause {
     readonly name: string;
     readonly message: string;
@@ -502,7 +541,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             headers,
             redirect: "error",
             ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-            signal: AbortSignal.any([signal, AbortSignal.timeout(45000)]),
+            signal: AbortSignal.any([signal, deadline(45000)]),
         });
         const value = object(await response.json());
         if (!response.ok) {
@@ -516,7 +555,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const code = text(failure["code"], /^[A-Za-z0-9_-]+$/u);
         const message =
             typeof failure["message"] === "string" ? failure["message"] : `Request failed with HTTP ${status}`;
-        fail(code, Object.assign(new Error(message), { name: "RemoteError" }));
+        fail(code, new RemoteError(message));
     }
 
     /**
@@ -1078,14 +1117,29 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 1) {
             fail("AGENT_REVISION_REQUIRED");
         }
-        await request(
-            context,
-            `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}/setup`,
-            {
-                runtimeId,
-                agentRef,
-            },
-        );
+        try {
+            await request(
+                context,
+                `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}/setup`,
+                {
+                    runtimeId,
+                    agentRef,
+                },
+            );
+        } catch (cause) {
+            // Cancellation and the setup budget keep their own codes.
+            if (signal.aborted || !(cause instanceof Error)) {
+                throw cause;
+            }
+            if (cause.name === "TimeoutError") {
+                throw new AgentBindingError("TIMEOUT", harness, cause);
+            }
+            const code = errorCode(cause);
+            if (cause.cause instanceof RemoteError && typeof code === "string") {
+                throw new AgentBindingError(code, harness, cause);
+            }
+            throw cause;
+        }
         // The Machine now owns its Runtime, so the pairing record is no longer needed.
         const saved = await saveConfiguration(context, {
             agent_ref: agentRef,
@@ -1341,6 +1395,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 ...(cause instanceof RuntimeStartError || cause instanceof RuntimePreflightError
                     ? { runtime: cause.diagnostic() }
                     : {}),
+                ...(cause instanceof AgentBindingError ? { binding: cause.diagnostic() } : {}),
             },
         });
         return 1;

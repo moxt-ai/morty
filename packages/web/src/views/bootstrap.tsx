@@ -1,9 +1,12 @@
 import { ErrorBoundary, reactErrorHandler } from "@sentry/react";
 import { CircleAlert } from "lucide-react";
 import { createRoot } from "react-dom/client";
+import { ImageDownloadProvider } from "../components/images/image-download.tsx";
+import { ImageViewerProvider } from "../components/images/image-gallery.tsx";
 import { ToastProvider } from "../components/ui/toast.tsx";
 import type { WebSocketApiTransport } from "../services/api/websocket-api-transport.ts";
 import type { Clock } from "../services/time/clock.ts";
+import { createImageDownloadStore } from "../view-models/chat/image-download-store.ts";
 import { createMortyApplication, type MortyApplication } from "../view-models/morty-application.ts";
 import { Page } from "./application/app.tsx";
 import { MortyApplicationProvider } from "./application/application-context.tsx";
@@ -42,34 +45,40 @@ export function assembleMorty(options: {
     const continuationRouter = createContinuationRouter();
     const element = (
         <MortyApplicationProvider application={application}>
-            <ToastProvider>
-                <ErrorBoundary
-                    fallback={
-                        <Page>
-                            <section
-                                className="mx-auto grid w-full min-w-0 max-w-[400px] justify-items-center gap-3 text-center"
-                                role="alert"
-                            >
-                                <span className="flex size-12 items-center justify-center rounded-full bg-destructive/5">
-                                    <CircleAlert aria-hidden="true" className="size-6 shrink-0 text-destructive" />
-                                </span>
-                                <h1 className="text-[18px] leading-6 font-semibold tracking-[-0.025em]">
-                                    Morty encountered an error
-                                </h1>
-                                <p className="text-sm leading-6 text-muted-foreground">Please reload to try again.</p>
-                            </section>
-                            <BugReportButton dialog={application.bugReportDialog} />
-                            <BugReportDialogHost dialog={application.bugReportDialog} />
-                        </Page>
-                    }
-                >
-                    <SessionApplication
-                        application={application}
-                        signedInRouter={signedInRouter}
-                        continuationRouter={continuationRouter}
-                    />
-                </ErrorBoundary>
-            </ToastProvider>
+            <ImageDownloadProvider createStore={createImageDownloadStore}>
+                <ToastProvider>
+                    <ErrorBoundary
+                        fallback={
+                            <Page>
+                                <section
+                                    className="mx-auto grid w-full min-w-0 max-w-[400px] justify-items-center gap-3 text-center"
+                                    role="alert"
+                                >
+                                    <span className="flex size-12 items-center justify-center rounded-full bg-destructive/5">
+                                        <CircleAlert aria-hidden="true" className="size-6 shrink-0 text-destructive" />
+                                    </span>
+                                    <h1 className="text-[18px] leading-6 font-semibold tracking-[-0.025em]">
+                                        Morty encountered an error
+                                    </h1>
+                                    <p className="text-sm leading-6 text-muted-foreground">
+                                        Please reload to try again.
+                                    </p>
+                                </section>
+                                <BugReportButton dialog={application.bugReportDialog} />
+                                <BugReportDialogHost dialog={application.bugReportDialog} />
+                            </Page>
+                        }
+                    >
+                        <ImageViewerProvider>
+                            <SessionApplication
+                                application={application}
+                                signedInRouter={signedInRouter}
+                                continuationRouter={continuationRouter}
+                            />
+                        </ImageViewerProvider>
+                    </ErrorBoundary>
+                </ToastProvider>
+            </ImageDownloadProvider>
         </MortyApplicationProvider>
     );
     return { application, element };

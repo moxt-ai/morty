@@ -12,6 +12,7 @@ import { AuthenticationNotice } from "../../components/chat/authentication-notic
 import { CompactionDisclosure } from "../../components/chat/compaction-disclosure.tsx";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { UserMessageShell } from "../../components/chat/user-message-shell.tsx";
+import { ImageGallery, PreviewImage } from "../../components/images/image-gallery.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { authenticationGuidance } from "../../view-models/chat/authentication-guidance.ts";
 import {
@@ -78,14 +79,14 @@ function MessageContentBlock({
         case "image":
             return isDisplayableImageType(content.mimeType) && content.data.length > 0 ? (
                 speaker === "user" ? (
-                    <img
+                    <PreviewImage
                         alt="Your attachment"
                         className="h-auto max-h-56 max-w-full rounded-lg object-contain object-left"
                         data-testid={dataTestId.userMessageImage}
                         src={`data:${content.mimeType};base64,${content.data}`}
                     />
                 ) : (
-                    <img
+                    <PreviewImage
                         alt="Agent-provided content"
                         className="max-h-[480px] w-auto max-w-full rounded-xl border border-border object-contain"
                         src={`data:${content.mimeType};base64,${content.data}`}
@@ -157,24 +158,26 @@ function UserMessage({
         .join("\n\n");
     return (
         <div className="min-w-0 space-y-2">
-            <UserMessageShell>
-                <MessageBubble
-                    {...(copyText.length === 0 ? {} : { copyText })}
-                    data-testid={dataTestId.userMessage}
-                    speaker="user"
-                >
-                    {message.contents.map((content, index) => (
-                        <MessageContentBlock
-                            content={content}
-                            createResourceStore={createResourceStore}
-                            key={`${message.firstEvent.eventId}:${index.toString()}`}
-                            openLocalFile={openLocalFile}
-                            readImage={readImage}
-                            speaker="user"
-                        />
-                    ))}
-                </MessageBubble>
-            </UserMessageShell>
+            <ImageGallery>
+                <UserMessageShell>
+                    <MessageBubble
+                        {...(copyText.length === 0 ? {} : { copyText })}
+                        data-testid={dataTestId.userMessage}
+                        speaker="user"
+                    >
+                        {message.contents.map((content, index) => (
+                            <MessageContentBlock
+                                content={content}
+                                createResourceStore={createResourceStore}
+                                key={`${message.firstEvent.eventId}:${index.toString()}`}
+                                openLocalFile={openLocalFile}
+                                readImage={readImage}
+                                speaker="user"
+                            />
+                        ))}
+                    </MessageBubble>
+                </UserMessageShell>
+            </ImageGallery>
             {deliveryUnknown && (
                 <div
                     className="ml-auto flex max-w-[85%] items-center gap-3 rounded-lg border border-destructive/15 bg-destructive/5 py-2 pr-2 pl-3 text-xs leading-5 text-destructive max-md:max-w-[94%]"

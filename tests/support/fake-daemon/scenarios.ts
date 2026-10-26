@@ -298,6 +298,21 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     }),
                 ),
             };
+        case "show image gallery":
+            return {
+                outcome: "hold",
+                output: [
+                    {
+                        kind: "text",
+                        text: "![First picture](file:///workspace/generated-picture.png)\n\n![Second picture](file:///workspace/generated-picture.png)",
+                    },
+                ],
+            };
+        case "show missing image":
+            return {
+                outcome: "complete",
+                output: [{ kind: "text", text: "![Recovered picture](file:///workspace/recovered.png)" }],
+            };
         case "show generated picture":
             return {
                 outcome: "complete",
@@ -322,9 +337,10 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                 ],
             };
         }
+        case "hold image tool":
         case "generate an image":
             return {
-                outcome: "complete",
+                outcome: prompt === "hold image tool" ? "hold" : "complete",
                 output: [
                     {
                         kind: "activity",

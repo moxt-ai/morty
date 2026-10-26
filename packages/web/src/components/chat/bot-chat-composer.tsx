@@ -1,6 +1,7 @@
 import { ArrowUp, FileText, LoaderCircle, Plus, Square, X } from "lucide-react";
 import { type ClipboardEvent, type FormEvent, type KeyboardEvent, type ReactNode, useRef } from "react";
 import { dataTestId } from "../../data-testid.ts";
+import { ImageGallery, PreviewImage } from "../images/image-gallery.tsx";
 import { Button } from "../ui/cloud-button.tsx";
 import { MortyAlert } from "../ui/morty-alert.tsx";
 import { Textarea } from "../ui/textarea.tsx";
@@ -27,9 +28,9 @@ function AttachmentPreview({
     return (
         <li className="group/attachment relative flex h-[60px] max-w-52 items-center gap-2 rounded-md border border-border bg-surface-subtle p-2 pr-8 text-xs text-copy-secondary">
             {attachment.kind === "image" ? (
-                <img
-                    alt=""
-                    className="size-11 rounded-lg object-cover"
+                <PreviewImage
+                    alt={name}
+                    className="size-11 rounded-lg object-contain"
                     src={`data:${attachment.image.mimeType};base64,${attachment.image.data}`}
                 />
             ) : (
@@ -152,16 +153,18 @@ export function BotChatComposer({
             )}
             <div className="rounded-[24px] border-[0.5px] border-border bg-surface-elevated px-3 pt-3 pb-2.5 shadow-[0_8px_28px_rgba(23,30,36,0.06)] sm:min-h-[128px] sm:pb-3">
                 {attachments.length > 0 && (
-                    <ul aria-label="Attachments" className="mb-2 flex list-none flex-wrap gap-2 p-0">
-                        {attachments.map((attachment, index) => (
-                            <AttachmentPreview
-                                attachment={attachment}
-                                disabled={disabled}
-                                key={`${attachment.kind}:${attachmentName(attachment)}:${index.toString()}`}
-                                onRemove={() => attachmentModel.remove(index)}
-                            />
-                        ))}
-                    </ul>
+                    <ImageGallery>
+                        <ul aria-label="Attachments" className="mb-2 flex list-none flex-wrap gap-2 p-0">
+                            {attachments.map((attachment, index) => (
+                                <AttachmentPreview
+                                    attachment={attachment}
+                                    disabled={disabled}
+                                    key={`${attachment.kind}:${attachmentName(attachment)}:${index.toString()}`}
+                                    onRemove={() => attachmentModel.remove(index)}
+                                />
+                            ))}
+                        </ul>
+                    </ImageGallery>
                 )}
                 <Textarea
                     aria-describedby="chat-composer-keyboard-hint"

@@ -119,3 +119,48 @@ export function createSettingsAgent<Definition>(define: DefineInProcessAgent<Def
         fakeDaemonCapabilities,
     );
 }
+
+/** How an installed Agent fails to open a session: signed out like a real harness, or broken. */
+export type UnavailableAgentFailure = "signed-out" | "broken";
+
+/** An installed Agent that refuses every new session, as a real harness does when it cannot start. */
+export function createUnavailableAgent(id: string, name: string, failure: UnavailableAgentFailure) {
+    const createEndpoint = (): InProcessAcpEndpoint => {
+        const termination = Promise.withResolvers<AcpEndpointTermination>();
+        const app = acp
+            .agent({ name: "morty-unavailable-agent" })
+            .onRequest(acp.methods.agent.initialize, () => ({
+                agentCapabilities: { loadSession: true, sessionCapabilities: { close: {}, list: {}, resume: {} } },
+                agentInfo: { name, version: "controlled-harness" },
+                authMethods: [],
+                protocolVersion: acp.PROTOCOL_VERSION,
+            }))
+            .onRequest(acp.methods.agent.session.new, () => {
+                switch (failure) {
+                    case "signed-out":
+                        throw acp.RequestError.authRequired();
+                    case "broken":
+                        throw acp.RequestError.internalError();
+                    default:
+                        return failure satisfies never;
+                }
+            })
+            .onRequest(acp.methods.agent.session.list, () => ({ sessions: [] }));
+        return {
+            app: () => app,
+            terminated: termination.promise,
+            initialize: async (signal) => signal.throwIfAborted(),
+            close: async () => termination.resolve({ kind: "closed" }),
+        };
+    };
+    return defineCurrentAgent(
+        id,
+        name,
+        process.execPath,
+        createEndpoint,
+        {},
+        "controlled-harness",
+        undefined,
+        fakeDaemonCapabilities,
+    );
+}

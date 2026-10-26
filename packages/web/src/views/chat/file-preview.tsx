@@ -2,6 +2,7 @@ import { FileText, LoaderCircle, Maximize2, Minimize2, RotateCw, X } from "lucid
 import { cn } from "@/lib/utils";
 import { HighlightedCode, languageForPath } from "../../components/chat/highlighted-code.tsx";
 import { HtmlPreview } from "../../components/chat/html-preview.tsx";
+import { ImageCanvas } from "../../components/images/image-canvas.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { FilePreviewLayout, FilePreviewState } from "../../view-models/chat/file-preview-store.ts";
 import { describePageFailure } from "../../view-models/format-error.ts";
@@ -73,11 +74,10 @@ function PreviewContent({
             return <PreviewSource name={state.name} text={state.text} />;
         case "image":
             return (
-                <img
-                    alt={state.name}
-                    className="max-h-full max-w-full object-contain"
-                    data-testid={dataTestId.filePreviewContent}
-                    src={state.source}
+                <ImageCanvas
+                    image={{ name: state.name, src: state.source, blob: state.blob }}
+                    key={state.source}
+                    testId={dataTestId.filePreviewContent}
                 />
             );
         case "html":
@@ -200,7 +200,7 @@ export function FilePreview({
             <div
                 className={cn(
                     "flex min-h-0 flex-1",
-                    state.kind === "text" || state.kind === "html"
+                    state.kind === "text" || state.kind === "html" || state.kind === "image"
                         ? "items-stretch justify-stretch overflow-hidden bg-white"
                         : "items-center justify-center overflow-auto bg-surface-subtle p-5",
                 )}

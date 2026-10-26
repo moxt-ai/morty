@@ -80,6 +80,7 @@ export type FilePreviewState =
     | {
           readonly kind: "image";
           readonly source: string;
+          readonly blob: Blob;
           readonly name: string;
           readonly path: string;
       }
@@ -329,6 +330,7 @@ function createFilePreviewStore(
                         state: {
                             kind: "image",
                             source: image.source,
+                            blob: image.blob,
                             name: file.name,
                             path,
                         },

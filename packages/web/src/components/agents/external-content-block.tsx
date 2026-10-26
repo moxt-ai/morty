@@ -1,6 +1,7 @@
 import { externalContentPath, type MobiusExternalContentBlock } from "@moxt-ai/mobius-sdk";
 import { type ReactNode, useMemo } from "react";
 import { dataTestId } from "../../data-testid.ts";
+import { PreviewImage } from "../images/image-gallery.tsx";
 import type { MarkdownImageReader } from "./agent-markdown.tsx";
 import { isDisplayableImageType } from "./displayable-image-type.ts";
 import type { SessionResourceRequest, SessionResourceState, SessionResourceStoreFactory } from "./resource-reader.ts";
@@ -64,10 +65,11 @@ function renderContent(
     switch (content.type) {
         case "external_image":
             return isDisplayableImageType(content.mimeType) && state.kind === "media" ? (
-                <img
+                <PreviewImage
                     alt="Agent-provided content"
                     className="max-h-[480px] w-auto max-w-full rounded-xl border border-border object-contain"
                     data-testid={speaker === "user" ? dataTestId.userMessageImage : undefined}
+                    blob={state.blob}
                     src={state.source}
                 />
             ) : (
