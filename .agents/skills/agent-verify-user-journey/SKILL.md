@@ -10,8 +10,10 @@ the local Chat Worker and local Platform in every mode. Depending on `--mode`,
 open the initial setup page, pair a Runtime and open its handoff, or continue
 through app generation and browser verification.
 
-**Never invoke the selected harness directly.** In particular, do not use
-`codex exec`, `claude`, or another harness CLI to generate the app. The harness
+**Invoke the selected harness directly only for setup and pairing.** Ask Codex,
+Claude Code, or Pi to run the isolated local setup command below from its own
+native session. Do not use `codex exec`, `claude`, or another harness CLI to
+generate the app. The harness
 must receive the task through the paired Runtime and Morty Session flow so this
 journey verifies the local Workers, Platform relay, live events, and UI as well
 as the agent itself.
@@ -28,8 +30,8 @@ Resolve these inputs before starting:
 | --- | --- | --- |
 | Mode | `todolist` | Accept `--mode=initial`, `--mode=paired`, or `--mode=todolist`. Reject other values before starting services. |
 | Harness | `codex` | Use the harness the user names; otherwise use `codex`. |
-| Native session ID | none, required for `paired` and `todolist` | Read the exact current session ID from the selected harness's own session metadata. Never guess, reuse a default, or substitute another harness's session. |
-| Model | `gpt 6.1 sol` | Use the model the user names; otherwise use `gpt 6.1 sol`. |
+| Native session ID | resolved by the selected harness during pairing | Ask the selected harness to use its own current session metadata or session environment variable. Never guess, reuse a default, or substitute the verification agent's session. |
+| Model | `gpt 5.6 terra`, fallback `deepseek v4.1 flash` | Honor an explicit user choice without substitution. Otherwise select `gpt 5.6 terra`; if unavailable in Morty, select `deepseek v4.1 flash`. |
 | Browser | session-attached browser, then headed `agent-browser` CLI | Honor a user-specified browser first. Otherwise use the browser attached to the current session when one exists; fall back to an installed `agent-browser` CLI running in the foreground. |
 | App | to-do-list web app | Preserve any app or journey requirements supplied by the user. |
 
@@ -50,7 +52,7 @@ Resolve these inputs before starting:
   and generated-app verification.
 
 For `initial`, only resolve the mode and browser. For `paired`, also resolve the
-harness and native session. Model and app inputs apply only to `todolist`.
+harness; that harness resolves its native session during pairing. Model and app inputs apply only to `todolist`.
 Setup-only modes intentionally leave the healthy stack and browser open for the
 user; see Cleanup for failure handling and explicit teardown requests.
 
@@ -58,8 +60,10 @@ Treat names in example requests as parameters, not fixed requirements. Do not
 silently substitute a different harness, model, or explicitly requested
 browser. Confirm that the selected browser is available. In `todolist`, resolve and select the
 requested model through Morty's visible Session configuration controls; do not
-probe it by running the harness directly. If the requested model cannot be
-selected unambiguously in Morty, stop and ask the user rather than guessing.
+probe it by running the harness directly. Use the fallback only when no model
+was explicitly requested and the default is unavailable. If neither default nor
+fallback, or an explicitly requested model, can be selected unambiguously in
+Morty, stop and ask the user rather than guessing. Report the exact model selected.
 
 ## Prepare isolated paths
 
@@ -93,8 +97,56 @@ Use `chat-local-full-dev` to:
 3. Check stack health before opening the browser.
 4. For `initial`, open `<chatOrigin>/setup` using the browser procedure below,
    confirm the initial setup page is visible, then report the result. Do not pair.
-5. For `paired` and `todolist`, connect the selected harness as a Runtime with the required harness and
-   session identifiers:
+5. For `paired` and `todolist`, launch the selected harness in its own native
+   session and ask it to run the following command from `<original-cwd>`.
+   Give it the actual state directory, app workspace, and a private output-file
+   path under the state directory. Its task is setup and pairing only, not app
+   generation or repository changes:
+
+   Launch the harness with its working directory set to `<original-cwd>`, not
+   the disposable app workspace. Send this exact prompt after replacing the
+   placeholders with the resolved absolute paths and selected harness identifier:
+
+   Save the substituted prompt below as `<private-setup-prompt-file>` under the
+   state directory with owner-only permissions. Use the selected harness's full
+   command below. These commands bypass its permission prompts and sandbox for
+   this bounded local setup task, so inspect the prompt first and never use them
+   for unrelated work. An enclosing execution boundary must still authorize the
+   operation; these flags do not override that boundary. Check the installed
+   harness's help before running; stop if its listed option is unsupported.
+
+   ```sh
+   # Codex
+   codex exec --cd <original-cwd> --dangerously-bypass-approvals-and-sandbox "$(cat <private-setup-prompt-file>)"
+
+   # Claude Code
+   # Run with the command runner's working directory set to <original-cwd>.
+   claude --dangerously-skip-permissions -p "$(cat <private-setup-prompt-file>)"
+
+   # Pi
+   # Run with the command runner's working directory set to <original-cwd>.
+   pi -p "$(cat <private-setup-prompt-file>)"
+   ```
+
+   Pi's standard CLI runs tools without a separate approval/sandbox bypass flag;
+   do not invent one. Use shell-appropriate quoting for every substituted path.
+   Do not use ephemeral sessions: Continue must be able to import this native
+   session. Bound the invocation with a timeout that allows setup's five-minute
+   readiness deadline, retain its output privately, and stop the owned harness
+   process on failure or cancellation. Do not add a restrictive harness sandbox
+   that prevents access to the already-running local stack or its process checks.
+
+   ```text
+   From <original-cwd>, pair your current <selected-harness> session with Morty.
+   Use your own native session ID; do not guess. Run with shell-appropriate quoting:
+
+   node scripts/local-dev.cjs setup --state-dir <stateDir> --harness <selected-harness> --session-id <your-exact-native-session-id> --workspace <app-workspace>
+
+   Save stdout privately to <private-setup-result-file> without overwriting it.
+   Wait for completion and leave the Runtime running. Do not open or reveal the
+   handoff link. Report only completion or a sanitized error. Do not build an app
+   or change repository files.
+   ```
 
    ```sh
    node scripts/local-dev.cjs setup \
@@ -109,12 +161,24 @@ Use `chat-local-full-dev` to:
    and never substitute another harness. `--session-id` must name a native
    session that already exists for that harness, because the Continue page opens
    it by importing it; a fabricated identifier fails there instead of opening
-   the Chat page. Resolve it from the selected harness's own current session
-   metadata; do not ask the user for it, guess, or reuse a default.
+   the Chat page. Have the selected harness resolve it inside its own session:
+   Codex uses `CODEX_THREAD_ID`, Claude Code uses `CLAUDE_CODE_SESSION_ID`, and
+   Pi uses `PI_SESSION_ID`. Use its own session metadata if its variable is
+   unavailable; stop if the exact current identifier cannot be resolved. Do not
+   ask the user for it, guess, use an unrelated saved session, or substitute the
+   verification agent's session. The setup bundle prefers the selected harness's
+   environment variable, so the explicit argument must match it.
 
-6. Capture the setup result to a protected temporary file rather than printing
-   it into the conversation. `handoffUrl` carries a one-time transfer code, so
-   treat it as a secret.
+6. Have the harness capture the setup result to the protected temporary file
+   rather than printing it into its response or the conversation. Require private
+   filesystem permissions, wait for setup to finish, and read the result privately.
+   Ask it to report only completion or sanitized failure, never the handoff URL.
+   `handoffUrl` carries a one-time transfer code, so treat it as a secret. Keep
+   ownership of the setup harness process and release it on completion, failure,
+   or cancellation without stopping the paired Runtime before verification.
+
+This local flow uses Morty's anonymous identity handoff. Clerk sign-in and Clerk
+publishable keys are not required; do not restore the obsolete Clerk prerequisites.
 
 Connecting the harness launches it as a Runtime; it does not authorize calling
 the harness CLI directly for generation.
