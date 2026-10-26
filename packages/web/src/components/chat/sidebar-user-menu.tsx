@@ -2,8 +2,17 @@ import { LoaderCircle, LogOut, UserRound, Wifi } from "lucide-react";
 import { DropdownMenu, Tooltip } from "radix-ui";
 import { useRef } from "react";
 import { dataTestId } from "../../data-testid.ts";
+import { cn } from "../../lib/utils.ts";
 import { Button } from "../ui/cloud-button.tsx";
 import { MortyTooltipContent } from "../ui/morty-tooltip-content.tsx";
+import {
+    type OverlayContentOpenAutoFocus,
+    overlayMenuSeparatorClassName,
+    overlaySurfacePanelClassName,
+    overlaySurfaceRadiusClassName,
+    overlayTriggerOffsetPx,
+    preventOverlayOpenAutoFocus,
+} from "../ui/overlay-surface.ts";
 
 /**
  * The sidebar account menu. A menu opened by a pointer does not hand focus back
@@ -28,7 +37,7 @@ export function SidebarUserMenu({
                     <DropdownMenu.Trigger asChild>
                         <Button
                             aria-label="User menu"
-                            className="shrink-0 rounded-full border border-white bg-black/[0.08] text-copy-secondary hover:bg-black/[0.12] active:bg-black/[0.16] data-[state=open]:bg-black/[0.16]"
+                            className="shrink-0 rounded-full border-[1px] border-white bg-black/[0.08] text-copy-secondary hover:bg-black/[0.12] active:bg-black/[0.16] data-[state=open]:bg-black/[0.16]"
                             data-testid={dataTestId.userMenu}
                             disabled={disabled}
                             onPointerDown={() => {
@@ -55,7 +64,14 @@ export function SidebarUserMenu({
             <DropdownMenu.Portal>
                 <DropdownMenu.Content
                     align="start"
-                    className="z-[110] min-w-52 rounded-lg border border-border bg-background p-1 text-sm text-foreground shadow-lg"
+                    {...({
+                        onOpenAutoFocus: preventOverlayOpenAutoFocus,
+                    } satisfies OverlayContentOpenAutoFocus)}
+                    className={cn(
+                        "z-[110] min-w-52 animate-cloud-enter p-1.5 text-sm text-foreground outline-none motion-reduce:animate-none",
+                        overlaySurfacePanelClassName,
+                        overlaySurfaceRadiusClassName,
+                    )}
                     onCloseAutoFocus={(event) => {
                         if (openedByPointer.current) {
                             event.preventDefault();
@@ -63,18 +79,18 @@ export function SidebarUserMenu({
                         openedByPointer.current = false;
                     }}
                     side="top"
-                    sideOffset={6}
+                    sideOffset={overlayTriggerOffsetPx}
                 >
                     <DropdownMenu.Item
-                        className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 outline-none data-[highlighted]:bg-accent"
+                        className="flex h-9 cursor-pointer items-center gap-2 rounded-full px-3 outline-none data-[highlighted]:bg-accent"
                         onSelect={onMeasureNetwork}
                     >
                         <Wifi aria-hidden="true" className="size-4" />
                         Network latency
                     </DropdownMenu.Item>
-                    <DropdownMenu.Separator className="my-1 h-px bg-black/[0.06]" />
+                    <DropdownMenu.Separator className={cn("-mx-1.5 my-1.5", overlayMenuSeparatorClassName)} />
                     <DropdownMenu.Item
-                        className="flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-destructive outline-none data-[highlighted]:bg-destructive/10"
+                        className="flex h-9 cursor-pointer items-center gap-2 rounded-full px-3 outline-none data-[highlighted]:bg-accent"
                         data-testid={dataTestId.endRemoteAccess}
                         disabled={endAccessDisabled}
                         onSelect={onEndAccess}

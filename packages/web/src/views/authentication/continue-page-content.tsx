@@ -59,9 +59,9 @@ export function ContinuePageContent({
                 <SetupCardShell titleId="continue-title">
                     <SetupCardTitle id="continue-title">Continue native session</SetupCardTitle>
                     <SetupCardDescription>Opening the original session in Morty.</SetupCardDescription>
-                    <SetupCardSection className="flex items-center gap-3">
+                    <SetupCardSection className="flex items-center gap-3 space-y-0">
                         <Spinner label="Opening session" />
-                        <span className="text-14 text-muted-foreground">Opening session…</span>
+                        <span className="text-14 leading-none text-muted-foreground">Opening session…</span>
                     </SetupCardSection>
                 </SetupCardShell>
             );

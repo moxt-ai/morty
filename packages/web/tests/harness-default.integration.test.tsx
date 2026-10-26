@@ -21,13 +21,17 @@ async function waitForHarness(app: TestApp, product: string): Promise<void> {
     await app.waitForView(() => expect(harnessProduct(app)).toBe(product));
 }
 
-async function selectHarness(app: TestApp, name: string): Promise<void> {
+async function selectHarness(app: TestApp, name: string, product: string): Promise<void> {
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
     const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
     await app.user.click(getByRole(configuration, "radio", { name }));
-    // The field only reflects the optimistic switch; wait for the target
-    // harness's settings so callers act after the choice is applied.
-    await app.waitForView(() => expect(getByRole(configuration, "combobox", { name: "Model" })).toBeDefined());
+    // The harness mark changes optimistically while the old fields remain on screen. Wait until the target mark is
+    // visible and the loading status is gone so callers act only after the target settings have actually landed.
+    await app.waitForView(() => {
+        expect(harnessProduct(app)).toBe(product);
+        expect(app.optionalElementByTestId(dataTestId.agentSettingsLoading)).toBeNull();
+        expect(getByRole(configuration, "combobox", { name: "Model" })).toBeDefined();
+    });
     await app.user.keyboard("{Escape}");
 }
 
@@ -74,7 +78,7 @@ test("Given a Pi conversation is active, When the user starts a New Session, The
     // The Runtime lists Codex first, so an unremembered draft starts there.
     await waitForHarness(app, "codex");
 
-    await selectHarness(app, "Pi");
+    await selectHarness(app, "Pi", "pi");
     await waitForHarness(app, "pi");
     await sendPrompt(app, app.elementByTestId(dataTestId.messageComposer), "Work through Pi");
     await app.waitForView(() =>
@@ -97,7 +101,7 @@ test("Given a Pi conversation is active, When the user starts a New Session, The
 
     // Choosing another harness for the draft must not override the harness of
     // the conversation the user then opens.
-    await selectHarness(app, "Codex");
+    await selectHarness(app, "Codex", "codex");
     await waitForHarness(app, "codex");
     const piConversation = await app.waitForView(() => {
         const conversation = app.elementsByTestId(dataTestId.managedConversation)[0];
@@ -143,7 +147,7 @@ test("Given an active Pi conversation, When the Runtime is offline while the new
     });
     await waitForComposer(app);
     await waitForHarness(app, "codex");
-    await selectHarness(app, "Pi");
+    await selectHarness(app, "Pi", "pi");
     await waitForHarness(app, "pi");
     await sendPrompt(app, app.elementByTestId(dataTestId.messageComposer), "Work through Pi");
     await app.waitForView(() =>
@@ -154,7 +158,7 @@ test("Given an active Pi conversation, When the Runtime is offline while the new
     // Leave Codex as the cached draft while the Pi conversation is active.
     await startNewSession(app);
     await waitForHarness(app, "pi");
-    await selectHarness(app, "Codex");
+    await selectHarness(app, "Codex", "codex");
     await waitForHarness(app, "codex");
     await openOnlyConversation(app);
     await waitForComposer(app);
@@ -205,7 +209,7 @@ test("Given a Pi draft, When a Codex switch cannot finish because the Runtime go
     });
     await waitForComposer(app);
     await waitForHarness(app, "codex");
-    await selectHarness(app, "Pi");
+    await selectHarness(app, "Pi", "pi");
     await waitForHarness(app, "pi");
 
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));

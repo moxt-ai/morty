@@ -365,6 +365,7 @@ export const createDraftControlsStore = (
             waitingForRuntime = false;
             try {
                 const requestedHarness = pendingHarness ?? readLastHarnessPreference(botId);
+                const refreshSelectedAgent = pendingHarness !== null;
                 const configuration = runtimeConfiguration();
                 if (configuration?.runtime.online === false) {
                     awaitRuntime();
@@ -383,7 +384,9 @@ export const createDraftControlsStore = (
                     return;
                 }
                 const [result, defaultCwd] = await Promise.all([
-                    readAgentSettings(selected.agentRef, false, operation),
+                    // A deliberate Agent switch must be acknowledged by the live Runtime, not satisfied by settings
+                    // cached before the user made the choice.
+                    readAgentSettings(selected.agentRef, refreshSelectedAgent, operation),
                     requests.directory(botId, "default", operation.signal),
                 ]);
                 operation.signal.throwIfAborted();
@@ -647,8 +650,7 @@ export const createDraftControlsStore = (
                         if (
                             current.kind === "ready" &&
                             current.selectedAgent.agentRef === agent.agentRef &&
-                            configuration !== null &&
-                            configuration.runtime.online
+                            configuration?.runtime.online === true
                         ) {
                             saveLastHarnessPreference(botId, agent.agentRef);
                             revertingHarnessPreference = null;

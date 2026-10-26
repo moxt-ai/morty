@@ -932,7 +932,7 @@ function MobiusSessionPaneBody({
                         </BotChatComposer>
                     </section>
                     {desktop ? null : (
-                        <MobileSessionTitlePortal>
+                        <MobileSessionTitlePortal variant={model.titleEdit.kind === "closed" ? "default" : "editing"}>
                             <div className="flex min-w-0 w-full flex-col items-center">
                                 <SessionConversationTitleBar {...titleBarProps} centered />
                                 {sessionMessagesLoading ? (

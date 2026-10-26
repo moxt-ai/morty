@@ -40,7 +40,12 @@ export function BugReportButton({
                         ? mobileDrawerCardRowClassName
                         : "flex w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transition-none"
                 }
-                onClick={() => showBugReport(daemonSource)}
+                onClick={(event) => {
+                    if (event.detail > 0) {
+                        event.currentTarget.blur();
+                    }
+                    showBugReport(daemonSource);
+                }}
             >
                 <Bug
                     aria-hidden="true"
