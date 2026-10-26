@@ -6,16 +6,29 @@ export const mortyThinScrollbarClassName = "[scrollbar-color:#d4d7db_transparent
 
 export const chatSessionColumnClassName = `mx-auto w-full min-w-0 max-w-[920px] ${chatSessionContentInsetClassName}`;
 
-export const chatSessionMessageScrollClassName = `min-h-0 flex-1 overflow-y-auto pt-6 pb-[72px] -mb-4 ${mortyThinScrollbarClassName} sm:pt-10`;
+export const chatSessionMessageScrollClassName = `min-h-0 flex-1 overflow-y-auto pt-6 pb-[calc(72px+var(--composer-overlay-block,0px))] -mb-4 ${mortyThinScrollbarClassName} sm:pt-10`;
 
 export const chatSessionMessageColumnClassName = `${chatSessionColumnClassName} font-inter text-foreground`;
 
-/** Composer uses horizontal margin (not padding) so the input card stays centered with 12px side gutters. */
+/** Desktop composer keeps 12px side gutters. Mobile is full width. */
 export const chatSessionComposerClassName =
-    "relative z-10 mx-auto w-[min(920px,calc(100%-24px))] min-w-0 shrink-0 px-0 sm:mt-0 sm:mb-3";
+    "relative z-10 mx-auto w-full min-w-0 shrink-0 px-0 sm:mt-0 sm:mb-3 sm:w-[min(920px,calc(100%-24px))]";
 
-export const chatSessionPaneSectionClassName =
-    "relative z-20 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden mb-2 ml-2 mr-2 mt-0 motion-reduce:animate-none sm:animate-cloud-enter sm:rounded-t-md sm:rounded-b-[32px] sm:border sm:border-white sm:bg-card/90 sm:shadow-module sm:backdrop-blur sm:my-2 sm:ml-0 sm:mr-2";
+/**
+ * Fills the conversation card. Background, radius, and the outer inset stay on
+ * the parent section so they are not painted twice.
+ */
+export const chatSessionPaneFillClassName = "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden";
+
+/**
+ * No backdrop-filter here. It would make this pane the backdrop root, and the
+ * composer notice could no longer blur the messages scrolling behind it.
+ */
+export const chatSessionPaneSectionClassName = `relative z-20 ${chatSessionPaneFillClassName} mb-2 ml-2 mr-2 mt-0 sm:rounded-t-[20px] sm:rounded-b-[32px] sm:border-[1px] sm:border-white sm:bg-card/90 sm:shadow-module sm:my-2 sm:ml-0 sm:mr-2`;
+
+/** One-time cloud module entrance on the session column; stays mounted across sends within a session. */
+export const chatSessionPaneEnterClassName =
+    "flex min-h-0 min-w-0 flex-1 flex-col motion-reduce:animate-none sm:animate-cloud-enter";
 
 /** Session pane top bar: title on the left, execution controls on the right. */
 export const chatSessionExecutionHeaderClassName = "flex h-12 shrink-0 items-center gap-4 px-4";

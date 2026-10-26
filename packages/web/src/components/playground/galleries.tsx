@@ -22,7 +22,7 @@ import { MortyAlert } from "../ui/morty-alert.tsx";
 import { MortyTooltipContent } from "../ui/morty-tooltip-content.tsx";
 import { NavigationCardLink } from "../ui/navigation-card-link.tsx";
 import { Select as OptionSelect } from "../ui/option-select.tsx";
-import { overlaySurfaceRadiusClassName } from "../ui/overlay-surface.ts";
+import { overlaySurfaceRadiusClassName, overlayTriggerOffsetPx } from "../ui/overlay-surface.ts";
 import { Popover } from "../ui/popover.tsx";
 import {
     Select,
@@ -96,7 +96,7 @@ const radii = [
     { className: "rounded-2xl", name: "2xl" },
     { className: "rounded-3xl", name: "3xl" },
     { className: "rounded-4xl", name: "4xl" },
-    { className: overlaySurfaceRadiusClassName, name: "overlay · 28px" },
+    { className: overlaySurfaceRadiusClassName, name: "overlay · 24px" },
 ] as const;
 
 const cloudVariants = ["primary", "outline", "ghost", "destructive"] as const;
@@ -441,11 +441,32 @@ function CardGallery() {
 
 function AlertGallery() {
     return (
-        <Specimen title="Error">
-            <div className="w-full max-w-lg">
-                <MortyAlert>The agent could not reach your computer. Check that it is awake and online.</MortyAlert>
-            </div>
-        </Specimen>
+        <div className="grid max-w-xl gap-6">
+            <Specimen layout="stack" title="Error">
+                <MortyAlert>
+                    The live session event stream could not recover. Cause: The live session event stream disconnected
+                </MortyAlert>
+                <MortyAlert description="Mobius is reconnecting…">
+                    The live session event stream could not recover. Cause: The live session event stream disconnected
+                </MortyAlert>
+            </Specimen>
+            <Specimen layout="stack" title="Warning">
+                <MortyAlert tone="warning">
+                    This computer has been asleep. The agent may take a moment to respond.
+                </MortyAlert>
+            </Specimen>
+            <Specimen layout="stack" title="Success">
+                <MortyAlert tone="success">Your computer is online and ready for a new session.</MortyAlert>
+            </Specimen>
+            <Specimen layout="stack" title="Info">
+                <MortyAlert tone="info">
+                    Messages stay on this computer. Morty only relays them while you are here.
+                </MortyAlert>
+            </Specimen>
+            <Specimen layout="stack" title="Neutral">
+                <MortyAlert tone="neutral">Mobius is reconnecting…</MortyAlert>
+            </Specimen>
+        </div>
     );
 }
 
@@ -518,9 +539,9 @@ function PopoverGallery() {
                 <Popover.Portal>
                     <Popover.Content
                         className={`z-50 w-64 border border-border bg-popover p-4 text-13 text-popover-foreground shadow-lg outline-none ${overlaySurfaceRadiusClassName}`}
-                        sideOffset={8}
+                        sideOffset={overlayTriggerOffsetPx}
                     >
-                        Anchored floating surfaces use {overlaySurfaceRadiusClassName} (28px).
+                        Anchored floating surfaces use {overlaySurfaceRadiusClassName} (24px).
                         <Popover.Arrow className="fill-popover" />
                     </Popover.Content>
                 </Popover.Portal>

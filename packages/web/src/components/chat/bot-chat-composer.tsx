@@ -2,7 +2,9 @@ import { ArrowUp, FileText, LoaderCircle, Plus, Square, X } from "lucide-react";
 import { type ClipboardEvent, type FormEvent, type KeyboardEvent, type ReactNode, useRef } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import { Button } from "../ui/cloud-button.tsx";
+import { MortyAlert } from "../ui/morty-alert.tsx";
 import { Textarea } from "../ui/textarea.tsx";
+import { useComposerNoticeLayout } from "../utils/use-composer-notice-layout.ts";
 import { chatSessionComposerClassName } from "./chat-session-layout.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 import { type ComposerAttachmentStore, canAddAttachments } from "./composer-attachment-store.ts";
@@ -87,6 +89,7 @@ export function BotChatComposer({
     readonly stopDisabled?: boolean;
 }) {
     const fileInput = useRef<HTMLInputElement>(null);
+    const notice = useRef<HTMLDivElement>(null);
     const { attachments, state: attachmentState } = attachmentModel;
     const canAttach = canAddAttachments(attachmentModel);
 
@@ -134,17 +137,17 @@ export function BotChatComposer({
     const composerErrorMessage =
         error.length > 0 ? error : attachmentState.kind === "failed" ? attachmentState.message : "";
     const showComposerNotice = composerErrorMessage.length > 0 || errorStatus !== undefined;
+    useComposerNoticeLayout(notice, showComposerNotice);
 
     return (
         <form className={chatSessionComposerClassName} onSubmit={submit}>
             {showComposerNotice && (
-                <div className="mb-2 flex flex-col items-start gap-2 px-1 text-13">
+                <div className="absolute inset-x-0 bottom-[calc(100%+8px)] z-10" ref={notice}>
                     {composerErrorMessage.length > 0 ? (
-                        <p className="min-w-0 text-destructive" role="alert">
-                            {composerErrorMessage}
-                        </p>
-                    ) : null}
-                    {errorStatus}
+                        <MortyAlert description={errorStatus}>{composerErrorMessage}</MortyAlert>
+                    ) : (
+                        <MortyAlert tone="neutral">{errorStatus}</MortyAlert>
+                    )}
                 </div>
             )}
             <div className="rounded-[24px] border-[0.5px] border-border bg-surface-elevated px-3 pt-3 pb-2.5 shadow-[0_8px_28px_rgba(23,30,36,0.06)] sm:min-h-[128px] sm:pb-3">

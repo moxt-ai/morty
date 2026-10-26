@@ -4,6 +4,7 @@ import { HighlightedCode, languageForPath } from "../../components/chat/highligh
 import { HtmlPreview } from "../../components/chat/html-preview.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { FilePreviewLayout, FilePreviewState } from "../../view-models/chat/file-preview-store.ts";
+import { describePageFailure } from "../../view-models/format-error.ts";
 
 function CodeLineNumbers({ code }: { readonly code: string }) {
     const lineCount = code.split("\n").length;
@@ -57,12 +58,17 @@ function PreviewContent({
                     <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> Loading file…
                 </div>
             );
-        case "failed":
+        case "failed": {
+            const copy = describePageFailure(state.message, "Couldn't open this file");
             return (
-                <p className="text-sm text-destructive" role="alert">
-                    {state.message}
-                </p>
+                <div className="grid max-w-sm justify-items-center gap-2 text-center" role="alert">
+                    <p className="text-[18px] leading-6 font-semibold tracking-[-0.025em] [overflow-wrap:anywhere]">
+                        {copy.title}
+                    </p>
+                    <p className="text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere]">{copy.content}</p>
+                </div>
             );
+        }
         case "text":
             return <PreviewSource name={state.name} text={state.text} />;
         case "image":

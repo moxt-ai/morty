@@ -16,12 +16,7 @@ export function ToolTextPreview({ className, text }: { readonly className?: stri
 
     return (
         <div className="min-w-0">
-            <pre
-                className={cn(
-                    "m-0 max-h-96 overflow-auto rounded-lg bg-black/[0.035] p-2 whitespace-pre-wrap",
-                    className,
-                )}
-            >
+            <pre className={cn("m-0 rounded-lg bg-black/[0.035] p-2 whitespace-pre-wrap", className)}>
                 {text.slice(0, beginningEnd)}
                 {omittedCharacters > 0 && (
                     <span className="block py-2 text-copy-tertiary">

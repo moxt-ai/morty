@@ -55,6 +55,9 @@ Also tell the user, in their language: **If you want to revoke these sharing lin
 later, come back and tell me: "Revoke all links I previously shared from this machine."
 I can do that for you.** Include this reminder whenever you deliver a new sharing
 link; knowing the command yourself does not replace telling the user.
+When `project` is `"replaced"`, also tell the user, in their language: **This computer's
+saved Machine was no longer connected, so setup started a new one, and links and
+browsers from this computer's earlier Morty setup stopped working. Use the new link.**
 
 On failure, use `error.code` and the private Runtime log. Fix installation or
 authentication for the selected harness; do not silently choose another.

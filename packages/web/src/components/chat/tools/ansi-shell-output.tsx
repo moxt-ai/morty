@@ -44,7 +44,7 @@ export function AnsiShellOutput({ output }: { readonly output: string }) {
     return (
         <div className="group/code relative min-w-0">
             <pre
-                className="m-0 max-h-96 overflow-auto p-4 pr-10 font-mono text-xs leading-relaxed whitespace-pre-wrap"
+                className="m-0 p-4 pr-10 font-mono text-xs leading-relaxed whitespace-pre-wrap"
                 data-testid={dataTestId.ansiShellOutput}
                 ref={content}
             >

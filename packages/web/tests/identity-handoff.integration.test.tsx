@@ -134,7 +134,7 @@ test("Given a native session handoff without a matching Agent, When the page loa
 
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
     expect(alert.textContent).toContain("handoff harness is unavailable");
-    expect(getByRole(document.body, "heading", { name: "Continue native session" })).toBeInstanceOf(HTMLElement);
+    expect(getByRole(document.body, "heading", { name: "Couldn't open this session" })).toBeInstanceOf(HTMLElement);
     expect(queryByRole(document.body, "button", { name: "Fork session" })).toBeNull();
 });
 
@@ -179,7 +179,9 @@ test("Given the Morty access was redeemed and opening the original session faile
 
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
     expect(alert.textContent).toContain("The native session was not found");
-    expect(getByRole(document.body, "heading", { name: "Continue native session" })).toBeInstanceOf(HTMLElement);
+    expect(getByRole(document.body, "heading", { name: "Platform could not complete Runtime setup" })).toBeInstanceOf(
+        HTMLElement,
+    );
     expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
     expect(getByRole(document.body, "button", { name: "Go to Morty" })).toBeInstanceOf(HTMLButtonElement);
 

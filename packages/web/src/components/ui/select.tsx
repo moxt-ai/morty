@@ -3,6 +3,11 @@ import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import type { ComponentProps } from "react";
 
 import { cn } from "@/lib/utils";
+import {
+    type OverlayContentOpenAutoFocus,
+    overlayMenuSeparatorClassName,
+    overlayTriggerOffsetPx,
+} from "./overlay-surface.ts";
 
 export function Select(props: ComponentProps<typeof SelectPrimitive.Root>) {
     return <SelectPrimitive.Root data-slot="select" {...props} />;
@@ -50,21 +55,28 @@ export function SelectTrigger({ className, children, ...props }: ComponentProps<
 export function SelectContent({
     className,
     children,
+    onOpenAutoFocus,
     position = "popper",
+    sideOffset = overlayTriggerOffsetPx,
     ...props
-}: ComponentProps<typeof SelectPrimitive.Content>) {
+}: ComponentProps<typeof SelectPrimitive.Content> & OverlayContentOpenAutoFocus) {
     return (
         <SelectPrimitive.Portal>
             <SelectPrimitive.Content
-                className={cn(
-                    "relative z-50 max-h-72 min-w-[9rem] overflow-hidden rounded-[10px] border-[0.5px] border-black/10 bg-white text-foreground shadow-[0_10px_32px_rgba(0,0,0,0.12)]",
-                    position === "popper" &&
-                        "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
-                    className,
-                )}
                 data-slot="select-content"
-                position={position}
-                {...props}
+                {...({
+                    ...props,
+                    className: cn(
+                        "relative z-50 max-h-72 min-w-[9rem] overflow-hidden rounded-[10px] border-[0.5px] border-black/10 bg-white text-foreground shadow-[0_10px_32px_rgba(0,0,0,0.12)]",
+                        className,
+                    ),
+                    onOpenAutoFocus: (event: Event) => {
+                        event.preventDefault();
+                        onOpenAutoFocus?.(event);
+                    },
+                    position,
+                    sideOffset,
+                } satisfies ComponentProps<typeof SelectPrimitive.Content> & OverlayContentOpenAutoFocus)}
             >
                 <SelectPrimitive.ScrollUpButton className="flex h-6 cursor-default items-center justify-center bg-white">
                     <ChevronUp className="size-3.5" />
@@ -109,7 +121,7 @@ export function SelectItem({ className, children, ...props }: ComponentProps<typ
 export function SelectSeparator({ className, ...props }: ComponentProps<typeof SelectPrimitive.Separator>) {
     return (
         <SelectPrimitive.Separator
-            className={cn("my-1 h-px bg-black/[0.07]", className)}
+            className={cn("my-1", overlayMenuSeparatorClassName, className)}
             data-slot="select-separator"
             {...props}
         />

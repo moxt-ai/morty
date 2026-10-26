@@ -98,7 +98,7 @@ export const PLAYGROUND_ENTRIES = [
         group: "Surfaces",
         id: "alert",
         source: "components/ui/morty-alert.tsx",
-        summary: "Inline error alert.",
+        summary: "Frosted notice for error, warning, success, info, and a neutral status.",
         title: "Alert",
     },
     {
@@ -119,7 +119,7 @@ export const PLAYGROUND_ENTRIES = [
         group: "Overlays",
         id: "popover",
         source: "components/ui/popover.tsx",
-        summary: "Unstyled popover primitives. Callers supply the surface; use overlaySurfaceRadiusClassName (28px).",
+        summary: "Unstyled popover primitives. Callers supply the surface; use overlaySurfaceRadiusClassName (24px).",
         title: "Popover",
     },
     {

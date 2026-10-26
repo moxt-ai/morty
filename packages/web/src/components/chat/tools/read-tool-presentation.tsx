@@ -11,7 +11,7 @@ export interface NumberedCodeLine {
 
 export function NumberedCodeLines({ lines }: { readonly lines: readonly NumberedCodeLine[] }) {
     return (
-        <div className="max-h-96 overflow-auto rounded-lg bg-black/[0.035] p-2 font-mono text-xs leading-5">
+        <div className="rounded-lg bg-black/[0.035] p-2 font-mono text-xs leading-5">
             {lines.map((line) => (
                 <div className="grid min-w-max grid-cols-[max-content_minmax(0,1fr)] gap-3" key={line.lineNumber}>
                     <span className="select-none text-right text-copy-tertiary">{line.lineNumber}</span>

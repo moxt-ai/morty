@@ -32,7 +32,7 @@ export function FileDiffList({ diffs }: { readonly diffs: readonly FileDiffValue
             <div className="truncate border-b border-black/7 bg-black/[0.025] px-2.5 py-1.5 font-mono text-copy-secondary">
                 {diff.path}
             </div>
-            <div className="grid max-h-96 overflow-auto font-mono text-[11px] leading-[18px] md:grid-cols-2">
+            <div className="grid font-mono text-[11px] leading-[18px] md:grid-cols-2">
                 <div className="min-w-0 bg-[#fff4f2] text-[#8f2f35]">
                     <HighlightedCode code={diff.oldText ?? ""} language={languageForPath(diff.path)} />
                 </div>

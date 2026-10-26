@@ -18,6 +18,37 @@ export function describeSessionFailureMessage(
     }
     return { title: message };
 }
+
+const failureTitleLimit = 80;
+
+function splitFailureMessage(
+    message: string,
+): Readonly<{ readonly title: string; readonly content: string }> | undefined {
+    const match = /^(.+?[.!?])\s+(\S[\s\S]*)$/u.exec(message.trim());
+    const sentence = match?.[1];
+    const content = match?.[2]?.trim();
+    if (
+        sentence === undefined ||
+        content === undefined ||
+        content.length === 0 ||
+        sentence.length > failureTitleLimit
+    ) {
+        return undefined;
+    }
+    return { title: sentence.replace(/[.!?]$/u, ""), content };
+}
+
+export function describePageFailure(
+    message: string,
+    title: string,
+): Readonly<{ readonly title: string; readonly content: string }> {
+    const described = describeSessionFailureMessage(message);
+    if (described.detail !== undefined) {
+        return { title: described.title, content: described.detail };
+    }
+    return splitFailureMessage(message) ?? { title, content: message };
+}
+
 const retryableRuntimeFailureCodes = new Set(["runtime_offline", "service_unavailable"]);
 
 /**

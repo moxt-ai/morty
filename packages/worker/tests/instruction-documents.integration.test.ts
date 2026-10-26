@@ -122,3 +122,13 @@ test("Given rendered setup instructions at the edge, When users fetch different 
         await runtime.dispose();
     }
 });
+
+test("Given setup replaced this computer's Project, When an agent follows the setup document, Then it tells the user that earlier links stopped working", async () => {
+    const response = await worker.fetch(new Request("https://preview.example/setup.md"), {
+        APP_ORIGIN: "https://chat.example",
+    });
+    const document = (await response.text()).replaceAll("\n", " ");
+
+    expect(document).toContain('When `project` is `"replaced"`');
+    expect(document).toContain("links and browsers from this computer's earlier Morty setup stopped working");
+});

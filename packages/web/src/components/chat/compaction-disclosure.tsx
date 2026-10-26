@@ -3,8 +3,8 @@ import { useState } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
 import {
+    AgentThinkStepExpandedPanel,
     agentThinkStepChevronClassName,
-    agentThinkStepExpandedPanelClassName,
     agentThinkStepTitleClassName,
     agentThinkStepTriggerClassName,
     ToolCallStatus,
@@ -79,7 +79,7 @@ export function CompactionDisclosure({
                 </span>
             </button>
             {open && (
-                <div className={agentThinkStepExpandedPanelClassName}>
+                <AgentThinkStepExpandedPanel>
                     <section className="grid min-w-0 gap-2">
                         {error !== null && error.length > 0 && (
                             <p className="m-0 text-xs text-destructive" role="alert">
@@ -87,12 +87,12 @@ export function CompactionDisclosure({
                             </p>
                         )}
                         {summary.trim().length > 0 && (
-                            <pre className="m-0 max-h-64 overflow-y-auto whitespace-pre-wrap font-sans text-xs leading-5 text-copy-secondary [overflow-wrap:anywhere]">
+                            <pre className="m-0 whitespace-pre-wrap font-sans text-xs leading-5 text-copy-secondary [overflow-wrap:anywhere]">
                                 {summary}
                             </pre>
                         )}
                     </section>
-                </div>
+                </AgentThinkStepExpandedPanel>
             )}
         </fieldset>
     );

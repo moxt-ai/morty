@@ -86,9 +86,17 @@ interface VerifiedIdentity {
     readonly expectedRuntimeId: string | null;
 }
 
+/**
+ * What setup did to this computer's Project. `replaced` ended every link and browser from the previous
+ * Project, so the agent must tell the user; the saved `replacement_notice` keeps that owed until a finished
+ * setup reports it, even when the run that replaced the Project stopped first.
+ */
+type ProjectOutcome = "created" | "reused" | "replaced";
+
 interface SetupIdentity {
     readonly kind: "setup";
     readonly context: Context;
+    readonly project: Exclude<ProjectOutcome, "replaced">;
 }
 
 interface SetupOptions {
@@ -381,6 +389,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     "pairing_runtime_id",
                     "replaced_project_id",
                     "replaced_user_token",
+                    "replacement_notice",
                 ].includes(key),
             ),
         );
@@ -573,7 +582,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function prepareIdentity(context: Context): Promise<SetupIdentity> {
         if (context.config["user_token"] !== undefined) {
             progress("identity", "Reusing the saved identity.");
-            return { kind: "setup", context };
+            return { kind: "setup", context, project: "reused" };
         }
         progress("identity", "Creating the standalone identity and Machine.");
         const identity = await request(context, "/identity/anonymous-users", {}, false);
@@ -584,7 +593,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             project_id: identifier(identity["projectId"]),
             entry: "setup",
         });
-        return { kind: "setup", context: saved };
+        return { kind: "setup", context: saved, project: "created" };
     }
 
     async function verifyIdentityAndBot(context: Context): Promise<VerifiedIdentity> {
@@ -764,6 +773,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             pairing_runtime_id: undefined,
             replaced_project_id: context.config["project_id"],
             replaced_user_token: context.config["user_token"],
+            replacement_notice: "pending",
             entry: "setup",
         });
         emit({ status: "project_replaced", botId: saved.config["bot_id"], projectId: saved.config["project_id"] });
@@ -1103,7 +1113,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return qrPath;
     }
 
-    async function finishSetup(context: Context, runtime: RuntimeSelection, options: SetupOptions) {
+    async function finishSetup(
+        context: Context,
+        runtime: RuntimeSelection,
+        options: SetupOptions,
+        identity: SetupIdentity["project"],
+    ) {
         await waitForReadiness(context, runtime);
         const botId = context.config["bot_id"];
         const workingDirectory = text(context.config["workspace"]);
@@ -1142,17 +1157,23 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 message: "The QR image is unavailable. Use the handoff link instead.",
             });
         }
+        const project: ProjectOutcome = context.config["replacement_notice"] === "pending" ? "replaced" : identity;
         emit({
             status: "ready",
             botId,
             url: handoffUrl,
             workspace: workingDirectory,
             qrPath: qr.kind === "available" ? qr.path : null,
+            project,
             message:
                 qr.kind === "available"
                     ? "Open the link or scan the QR code to chat. Keep the Runtime online."
                     : "Open the link to chat. Keep the Runtime online.",
         });
+        if (project === "replaced") {
+            // Cleared only after ready reported it, so a run that stops earlier leaves the notice owed.
+            await saveConfiguration(context, { replacement_notice: undefined });
+        }
     }
 
     async function revokeAllAccess(options: RevokeAllAccessOptions) {
@@ -1245,7 +1266,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         // when setup stopped waiting for the upgrade, so wait for it before binding.
         await waitForRuntime(context, prepared.runtime, options.harness);
         context = await bindAgent(context, prepared.runtime, options.harness);
-        await finishSetup(context, prepared.runtime, options);
+        await finishSetup(context, prepared.runtime, options, identity.project);
     }
 
     try {

@@ -12,6 +12,7 @@ import {
     bugReportImageAccept,
 } from "../../view-models/bug-report-store.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
+import { mobileDrawerCardRowClassName } from "../chat/computer-switcher.tsx";
 
 const appearances = {
     floating: "fixed bottom-2 right-2 z-40 bg-background/90 text-xs",
@@ -24,20 +25,32 @@ export function BugReportButton({
     daemonSource = null,
     dialog,
 }: {
-    readonly appearance?: keyof typeof appearances | "option";
+    readonly appearance?: keyof typeof appearances | "option" | "card";
     readonly daemonSource?: DaemonDiagnosticsSource | null;
     readonly dialog: BugReportDialogStore;
 }) {
     const showBugReport = dialog.getState().show;
     const trigger =
-        appearance === "option" ? (
+        appearance === "option" || appearance === "card" ? (
             <button
                 type="button"
                 aria-label="Report a bug"
-                className="flex w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transition-none"
-                onClick={() => showBugReport(daemonSource)}
+                className={
+                    appearance === "card"
+                        ? mobileDrawerCardRowClassName
+                        : "flex w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transition-none"
+                }
+                onClick={(event) => {
+                    if (event.detail > 0) {
+                        event.currentTarget.blur();
+                    }
+                    showBugReport(daemonSource);
+                }}
             >
-                <Bug aria-hidden="true" className="size-4 shrink-0" />
+                <Bug
+                    aria-hidden="true"
+                    className={appearance === "card" ? "size-5 shrink-0 text-copy-secondary" : "size-4 shrink-0"}
+                />
                 Report a bug
             </button>
         ) : (

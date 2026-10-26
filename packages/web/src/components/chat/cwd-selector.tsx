@@ -1,37 +1,73 @@
 import { Check, ChevronRight, Folder, FolderOpen, LoaderCircle, MapPinPlus, X } from "lucide-react";
 import { Tooltip } from "radix-ui";
+import { useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
 import type { DraftControlsStore } from "@/view-models/chat/draft-controls-store";
 import { Button } from "../ui/cloud-button.tsx";
 import { Dialog } from "../ui/dialog.tsx";
 import { MortyTooltipContent } from "../ui/morty-tooltip-content.tsx";
-import { overlaySurfaceRadiusClassName } from "../ui/overlay-surface.ts";
+import {
+    overlayMenuSeparatorClassName,
+    overlaySurfacePanelClassName,
+    overlaySurfaceRadiusClassName,
+    overlayTriggerOffsetPx,
+} from "../ui/overlay-surface.ts";
 import { Popover } from "../ui/popover.tsx";
 import { ScrollEdgeFade } from "../utils/scroll-edge-fade.tsx";
 import { StartClippedLabel } from "../utils/start-clipped-label.tsx";
 
-const workingDirectoryTriggerBaseClassName =
-    "flex h-9 min-w-0 max-w-[200px] items-center gap-2 rounded-lg px-2 text-[13px] text-copy-secondary outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:transition-none";
+const workingDirectoryLabelClassName =
+    "inline-flex min-h-9 min-w-0 max-w-[200px] shrink-0 items-center justify-center gap-2 rounded-lg border border-transparent px-1 py-1.5 text-[13px] font-medium text-muted-foreground outline-none";
 
-const workingDirectoryTriggerInteractiveClassName = `${workingDirectoryTriggerBaseClassName} hover:bg-accent data-[state=open]:bg-accent disabled:cursor-not-allowed disabled:opacity-50`;
+export function WorkingDirectorySkeleton({ className }: { readonly className?: string }) {
+    return (
+        <div
+            aria-label="Loading working directory"
+            className={cn("flex h-9 w-40 max-w-[200px] shrink-0 items-center", className)}
+            role="status"
+        >
+            <span className="sr-only">Loading working directory</span>
+            <div
+                aria-hidden="true"
+                className="h-4 w-full animate-pulse rounded-full bg-muted motion-reduce:animate-none"
+            />
+        </div>
+    );
+}
 
-export function ReadonlyWorkingDirectory({ directoryLabel }: { readonly directoryLabel: string }) {
+export function ReadonlyWorkingDirectory({
+    className,
+    clip = "start",
+    directoryLabel,
+    iconClassName = "size-3.5",
+    tooltipSide = "top",
+}: {
+    readonly className?: string;
+    readonly clip?: "start" | "end";
+    readonly directoryLabel: string;
+    readonly iconClassName?: string;
+    readonly tooltipSide?: "top" | "bottom";
+}) {
     return (
         <Tooltip.Provider delayDuration={150}>
             <Tooltip.Root>
                 <Tooltip.Trigger asChild>
                     <span
-                        className={workingDirectoryTriggerBaseClassName}
+                        className={cn(workingDirectoryLabelClassName, className)}
                         data-testid={dataTestId.workingDirectory}
                         title={directoryLabel}
                     >
-                        <FolderOpen aria-hidden="true" className="size-3.5 shrink-0" />
-                        <StartClippedLabel value={directoryLabel} />
+                        <FolderOpen aria-hidden="true" className={cn("shrink-0", iconClassName)} />
+                        <StartClippedLabel clip={clip} value={directoryLabel} />
                     </span>
                 </Tooltip.Trigger>
                 <Tooltip.Portal>
-                    <MortyTooltipContent className="max-w-80 break-all px-3 py-2 leading-5" side="top" sideOffset={8}>
+                    <MortyTooltipContent
+                        className="max-w-80 break-all px-3 py-2 leading-5"
+                        side={tooltipSide}
+                        sideOffset={8}
+                    >
                         {directoryLabel}
                         <Tooltip.Arrow className="fill-foreground" />
                     </MortyTooltipContent>
@@ -50,6 +86,7 @@ export function CwdSelector({
     readonly signal: AbortSignal;
     readonly viewModel: DraftControlsStore;
 }) {
+    const [menuOpen, setMenuOpen] = useState(false);
     const settings = viewModel.settings;
     if (settings.kind !== "ready") {
         return null;
@@ -61,21 +98,27 @@ export function CwdSelector({
     const directoryPending = browser.kind === "loading" || browser.kind === "previewing";
     return (
         <>
-            <Popover.Root onOpenChange={viewModel.setCwdMenuOpen} open={viewModel.cwdMenuOpen}>
+            <Popover.Root
+                onOpenChange={(open) => {
+                    viewModel.setCwdMenuOpen(open);
+                    setMenuOpen(open);
+                }}
+                open={menuOpen}
+            >
                 <Tooltip.Provider delayDuration={150}>
                     <Tooltip.Root>
                         <Tooltip.Trigger asChild>
                             <Popover.Trigger asChild>
-                                <button
+                                <Button
                                     aria-label={`Working directory: ${workingDirectory}`}
-                                    className={workingDirectoryTriggerInteractiveClassName}
+                                    className="min-w-0 max-w-[200px] bg-morty-fill-opacity-2 hover:bg-morty-fill-opacity-3! data-[state=open]:bg-morty-fill-opacity-3 data-[state=open]:text-foreground"
                                     data-testid={dataTestId.workingDirectory}
                                     disabled={disabled}
-                                    type="button"
+                                    variant="ghost"
                                 >
                                     <FolderOpen aria-hidden="true" className="size-3.5 shrink-0" />
                                     <StartClippedLabel value={workingDirectory} />
-                                </button>
+                                </Button>
                             </Popover.Trigger>
                         </Tooltip.Trigger>
                         <Tooltip.Portal>
@@ -95,66 +138,91 @@ export function CwdSelector({
                         align="start"
                         aria-label="Working directory menu"
                         className={cn(
-                            "z-50 w-80 overflow-hidden border border-[#d5d9dc] bg-white p-1.5 shadow-[0_16px_42px_rgba(0,0,0,0.14)]",
+                            "z-50 flex max-h-[min(70dvh,520px)] w-[min(calc(100vw-1.5rem),320px)] animate-cloud-enter flex-col overflow-hidden p-1.5 text-sm text-foreground outline-none motion-reduce:animate-none",
+                            overlaySurfacePanelClassName,
                             overlaySurfaceRadiusClassName,
                         )}
                         role="menu"
                         side="top"
-                        sideOffset={10}
+                        sideOffset={overlayTriggerOffsetPx}
                     >
-                        <ScrollEdgeFade
-                            fadeFromClassName="from-white"
-                            fadeToClassName="to-white/0"
-                            className="max-h-80 overflow-y-auto"
-                        >
-                            {viewModel.recentCwds.map((recent) => (
-                                <div className="flex items-center gap-0.5" key={recent.directoryId}>
-                                    <button
-                                        className="flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[13px] hover:bg-accent"
-                                        data-testid={dataTestId.recentWorkingDirectory}
-                                        onClick={() => {
-                                            viewModel.setCwdMenuOpen(false);
-                                            void viewModel.selectRecentCwd(recent.directoryId, signal);
-                                        }}
-                                        role="menuitem"
-                                        title={recent.directoryLabel}
-                                        type="button"
-                                    >
-                                        <Folder aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-                                        <StartClippedLabel value={recent.directoryLabel} />
-                                        {recent.directoryId === settings.cwd.directoryId && (
-                                            <Check aria-hidden="true" className="size-4 shrink-0" />
-                                        )}
-                                    </button>
-                                    <button
-                                        aria-label={`Forget recent working directory ${recent.directoryLabel}`}
-                                        className="flex size-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground hover:bg-accent hover:text-copy-primary"
-                                        data-testid={dataTestId.forgetRecentWorkingDirectory}
-                                        onClick={() => viewModel.forgetRecentCwd(recent.directoryId)}
-                                        role="menuitem"
-                                        title="Forget recent location"
-                                        type="button"
-                                    >
-                                        <X aria-hidden="true" className="size-4" />
-                                    </button>
-                                </div>
-                            ))}
-                        </ScrollEdgeFade>
-                        <div className="mt-1 border-t border-border pt-1">
+                        <Tooltip.Provider delayDuration={150}>
+                            <ScrollEdgeFade
+                                className="max-h-80 overflow-y-auto"
+                                edgeStroke={{ className: "border-white/80", placement: "inside" }}
+                                revealSurface
+                            >
+                                {viewModel.recentCwds.map((recent) => {
+                                    const selected = recent.directoryId === settings.cwd.directoryId;
+                                    return (
+                                        <div
+                                            className="group/recent relative flex h-9 items-center rounded-md hover:bg-accent focus-within:bg-accent"
+                                            key={recent.directoryId}
+                                        >
+                                            <button
+                                                className={cn(
+                                                    "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+                                                    selected && "pr-7",
+                                                )}
+                                                data-testid={dataTestId.recentWorkingDirectory}
+                                                onClick={() => {
+                                                    setMenuOpen(false);
+                                                    void viewModel.selectRecentCwd(recent.directoryId, signal);
+                                                }}
+                                                role="menuitem"
+                                                title={recent.directoryLabel}
+                                                type="button"
+                                            >
+                                                <Folder aria-hidden="true" className="size-4 shrink-0" />
+                                                <StartClippedLabel value={recent.directoryLabel} />
+                                            </button>
+                                            {selected ? (
+                                                <Check
+                                                    aria-hidden="true"
+                                                    className="pointer-events-none absolute top-1/2 right-2 size-4 -translate-y-1/2 text-foreground group-hover/recent:-translate-x-7 group-focus-within/recent:-translate-x-7"
+                                                />
+                                            ) : null}
+                                            <Tooltip.Root>
+                                                <Tooltip.Trigger asChild>
+                                                    <button
+                                                        aria-label={`Forget recent working directory ${recent.directoryLabel}`}
+                                                        className="absolute top-1/2 right-1 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 outline-none transition-opacity hover:bg-accent hover:text-copy-primary focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/60 group-hover/recent:opacity-100 group-focus-within/recent:opacity-100 motion-reduce:transition-none"
+                                                        data-testid={dataTestId.forgetRecentWorkingDirectory}
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            viewModel.forgetRecentCwd(recent.directoryId);
+                                                        }}
+                                                        type="button"
+                                                    >
+                                                        <X aria-hidden="true" className="size-4" />
+                                                    </button>
+                                                </Tooltip.Trigger>
+                                                <Tooltip.Portal>
+                                                    <MortyTooltipContent side="top" sideOffset={overlayTriggerOffsetPx}>
+                                                        Forget recent location
+                                                        <Tooltip.Arrow className="fill-foreground" />
+                                                    </MortyTooltipContent>
+                                                </Tooltip.Portal>
+                                            </Tooltip.Root>
+                                        </div>
+                                    );
+                                })}
+                            </ScrollEdgeFade>
+                            <hr className={cn("-mx-1.5 my-1.5 border-0", overlayMenuSeparatorClassName)} />
                             <button
-                                className="flex h-10 w-full items-center gap-2 rounded-xl px-2.5 text-left text-[13px] font-medium hover:bg-accent"
+                                className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-full px-3 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
                                 data-testid={dataTestId.changeWorkingDirectory}
                                 onClick={() => {
-                                    viewModel.setCwdMenuOpen(false);
+                                    setMenuOpen(false);
                                     viewModel.openCwd();
                                 }}
                                 role="menuitem"
                                 type="button"
                             >
-                                <MapPinPlus aria-hidden="true" className="size-4 text-muted-foreground" />
+                                <MapPinPlus aria-hidden="true" className="size-4" />
                                 Change to a new location
                             </button>
-                        </div>
+                        </Tooltip.Provider>
                     </Popover.Content>
                 </Popover.Portal>
             </Popover.Root>
@@ -179,7 +247,7 @@ export function CwdSelector({
                             aria-busy={directoryPending}
                             aria-disabled={directoryNavigationDisabled}
                             aria-label={directory === null ? undefined : `Folders in ${directory.directoryLabel}`}
-                            className="min-h-56 overflow-hidden rounded-xl border border-border bg-surface-subtle/50"
+                            className="min-h-56 overflow-hidden rounded-lg border border-border bg-surface-subtle/50"
                             data-testid={dataTestId.workingDirectoryPreview}
                         >
                             {browser.kind === "loading" ? (

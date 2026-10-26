@@ -245,8 +245,10 @@ test("Given a recovered Runtime and an unsent draft, When the retry deadline arr
     expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true);
     expect(reconnectStatusText(app)).toContain("Retrying in 1 s");
     await act(async () => clock.advanceBy(1000));
-    await app.waitForView(() => expect(reconnectStatusText(app)).toBeNull());
-    expect(composer.disabled).toBe(false);
+    await app.waitForView(() => {
+        expect(reconnectStatusText(app)).toBeNull();
+        expect(composer.disabled).toBe(false);
+    });
     expect(queryByRole(composer.closest("form") ?? document.body, "alert")).toBeNull();
     expect(composer.value).toBe("Still unsent");
     expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain("Still unsent");

@@ -1,13 +1,14 @@
 import { Check, ChevronDown, CircleMinus, LoaderCircle, X } from "lucide-react";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { cn } from "../../../lib/utils.ts";
+import { ScrollEdgeFade } from "../../utils/scroll-edge-fade.tsx";
 import type { ToolCallState } from "./tool-renderer.ts";
 
 export const ToolCallSupplementalContent = createContext<ReactNode>(null);
 
 /** Shared trigger row for intermediate agent steps (thinking rail + tool calls). */
 export const agentThinkStepTriggerClassName =
-    "flex w-full min-w-0 cursor-pointer items-start gap-2 rounded-md px-0.5 py-1 text-[13px] leading-[22px] text-muted-foreground outline-none hover:text-copy-secondary focus-visible:ring-2 focus-visible:ring-ring/60";
+    "flex w-full min-w-0 cursor-pointer items-start gap-2 rounded-md px-0.5 py-1 text-[13px] leading-[22px] text-morty-text-3 outline-none hover:text-copy-secondary active:text-copy-secondary focus-visible:ring-2 focus-visible:ring-ring/60";
 
 export const agentThinkStepTitleClassName = "min-w-0 truncate text-left";
 
@@ -18,7 +19,21 @@ export const agentThinkStepChevronClassName =
     "mt-0.5 hidden size-3.5 shrink-0 -rotate-90 transition-transform motion-reduce:transition-none";
 
 export const agentThinkStepExpandedPanelClassName =
-    "mb-1 ml-2 grid min-w-0 gap-2 border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere]";
+    "grid max-h-[280px] min-w-0 gap-2 overflow-y-auto overscroll-contain border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere] [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]";
+
+/** Scrollport for a collapsed step. Fades only the edge that still clips content. */
+export function AgentThinkStepExpandedPanel({ children }: { readonly children: ReactNode }) {
+    return (
+        <ScrollEdgeFade
+            className={agentThinkStepExpandedPanelClassName}
+            fadeFromClassName="from-card"
+            fadeToClassName="to-card/0"
+            frameClassName="mb-1 ml-2 min-w-0"
+        >
+            {children}
+        </ScrollEdgeFade>
+    );
+}
 
 const toolCallStatusIconClassName = "block shrink-0";
 
@@ -79,10 +94,10 @@ export function ToolCallDisclosure({
                 </span>
             </button>
             {open && (
-                <div className={agentThinkStepExpandedPanelClassName}>
+                <AgentThinkStepExpandedPanel>
                     {children}
                     {supplementalContent}
-                </div>
+                </AgentThinkStepExpandedPanel>
             )}
         </fieldset>
     );
@@ -121,7 +136,7 @@ export function ToolCallStatus({ state }: { readonly state: ToolCallState }) {
             return (
                 <CircleMinus
                     aria-label="Tool interrupted"
-                    className={cn(toolCallStatusIconClassName, "size-3 text-muted-foreground")}
+                    className={cn(toolCallStatusIconClassName, "size-3")}
                     strokeWidth={toolCallStatusStrokeWidthAt12Px}
                 />
             );
