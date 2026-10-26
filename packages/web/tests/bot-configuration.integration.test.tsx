@@ -14,7 +14,7 @@ test("Given Morty has no paired agent, When the setup page opens, Then it offers
     expect(pairing).toHaveProperty("readOnly", true);
     expect(pairing).toHaveProperty(
         "value",
-        `Fetch ${window.location.origin}/setup.md and set up Morty for me. Don't ask me anything.`,
+        `Fetch ${window.location.origin}/setup.md and set up Morty for me. You may install missing prerequisites and pair this machine. Complete setup without asking questions.`,
     );
     expect(queryByRole(document.body, "combobox", { name: "Data region" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Refresh pairing instruction" })).toBeNull();

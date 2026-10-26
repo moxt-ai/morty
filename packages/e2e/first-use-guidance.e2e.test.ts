@@ -36,7 +36,7 @@ for (const viewport of [
             await copy.click();
             const instruction = await page.evaluate(() => navigator.clipboard.readText());
             expect(instruction).toBe(
-                `Fetch ${runtime.origin}/setup.md and set up Morty for me. Don't ask me anything.`,
+                `Fetch ${runtime.origin}/setup.md and set up Morty for me. You may install missing prerequisites and pair this machine. Complete setup without asking questions.`,
             );
             await expect(page.getByRole("status", { name: "Setup next step" })).toContainText(
                 "Paste into your agent, then open the link it returns.",

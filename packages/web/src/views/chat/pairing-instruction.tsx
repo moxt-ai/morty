@@ -4,7 +4,7 @@ import { dataTestId } from "../../data-testid.ts";
 import { setupPrimaryButtonClassName, setupPrimaryButtonSize } from "../setup/setup-card-shell.tsx";
 
 export function PairingInstruction() {
-    const setupInstruction = `Fetch ${window.location.origin}/setup.md and set up Morty for me. Don't ask me anything.`;
+    const setupInstruction = `Fetch ${window.location.origin}/setup.md and set up Morty for me. You may install missing prerequisites and pair this machine. Complete setup without asking questions.`;
     return (
         <div>
             <CopyToClipboardButton
