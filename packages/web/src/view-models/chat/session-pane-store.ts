@@ -920,13 +920,22 @@ export function createSessionPaneModel(options: {
                 announceActivity();
             } catch (cause) {
                 signal.throwIfAborted();
-                const message = formatError(cause, "The agent could not complete the message.");
+                // Preparation can fail before delivery owns a frozen request. Keep that unsent message editable.
+                if (draftRevision === submittedDraftRevision) {
+                    set({ draft: message.content });
+                    composerAttachments.getState().restore(attachments);
+                    centralSessionStorage.write(draftEntry, message.content);
+                }
+                if (queued) {
+                    options.onInitialMessageRecoveryCleared?.(commandId);
+                }
+                const failureMessage = formatError(cause, "The agent could not complete the message.");
                 updateTurn({
                     kind: "submission-ended",
                     commandId,
-                    failure: { code: cause instanceof MobiusError ? cause.code : "", message },
+                    failure: { code: cause instanceof MobiusError ? cause.code : "", message: failureMessage },
                 });
-                set({ pendingInitialMessage: null, operation: { kind: "failed", message } });
+                set({ pendingInitialMessage: null, operation: { kind: "failed", message: failureMessage } });
                 announceActivity();
             }
         };

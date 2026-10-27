@@ -65,3 +65,33 @@ test("Given a first prompt with an attachment, When it creates the conversation,
     expect(removableWhileSending).toBe(false);
     expect(document.querySelector(REMOVE_ATTACHMENT)).toBeNull();
 });
+
+test("Given an attachment upload is rejected before turn submission, When I send my first message, Then my unsent text and attachment remain editable", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    const name = `${"notes".repeat(101)}.json`;
+    await app.user.upload(
+        getByLabelText(document.body, "Choose attachments"),
+        new File(["Attachment contents"], name, { type: "text/plain" }),
+    );
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "list", { name: "Attachments" }).textContent).toContain(name),
+    );
+    await sendPrompt(app, composer, "Keep this unsent message");
+    await app.waitForView(() => {
+        expect(getByRole(document.body, "alert").textContent).not.toBe("");
+        const draft = app.elementByTestId(dataTestId.messageComposer);
+        expect(draft).toBeInstanceOf(HTMLTextAreaElement);
+        if (!(draft instanceof HTMLTextAreaElement)) {
+            throw new Error("Expected an editable composer");
+        }
+        expect(draft.disabled).toBe(false);
+        expect(draft.value).toBe("Keep this unsent message");
+        expect(getByRole(document.body, "button", { name: `Remove ${name}` }).hasAttribute("disabled")).toBe(false);
+    });
+});
