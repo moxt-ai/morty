@@ -47,6 +47,7 @@ export interface TestApp extends Application {
 export async function createTestApp(
     options: {
         readonly application?: Application;
+        readonly environment?: Environment;
         readonly connectAgent?: boolean;
         readonly clock?: Clock;
         readonly agent?: ControlledAgent;
@@ -70,7 +71,8 @@ export async function createTestApp(
         readonly prepare?: (application: Application) => void | Promise<void>;
     } = {},
 ): Promise<TestApp> {
-    const current = options.application ?? (await (await environment).createApplication(options.clock));
+    const current =
+        options.application ?? (await (options.environment ?? (await environment)).createApplication(options.clock));
     await options.prepare?.(current);
     const daemon =
         options.connectAgent === true

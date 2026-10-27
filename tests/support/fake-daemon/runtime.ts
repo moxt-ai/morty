@@ -124,7 +124,7 @@ function controlledRuntime(
                                 id,
                                 label,
                                 process.execPath,
-                                createEndpoint,
+                                () => createEndpoint(),
                                 {},
                                 "controlled-harness",
                                 undefined,

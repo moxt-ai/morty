@@ -6,9 +6,10 @@ import { createIdentityFixture } from "../../../worker/tests/support/identity-fi
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 import type { Clock } from "../../src/services/time/clock.ts";
 
-export async function createChatWorkerEnvironment() {
+export async function createChatWorkerEnvironment(loseTurnResponses = false) {
     const cloud = await createIdentityFixture({
         listenOnLoopback: true,
+        ...(loseTurnResponses ? { loseTurnResponses: true as const } : {}),
         platformAllowedOrigins: new Set(["*"]),
         workerEntryPoint: resolve(process.cwd(), "../worker/src/index.ts"),
         wranglerConfiguration: pathToFileURL(resolve(process.cwd(), "../../wrangler.jsonc")),
@@ -58,6 +59,30 @@ export async function createChatWorkerEnvironment() {
                 closeSession: async (sessionId: string): Promise<void> => {
                     await runtime.client.sessions.close(runtime.runtimeId, sessionId, new AbortController().signal);
                 },
+                /** Applies another client's explicit model edit through the public Platform contract. */
+                selectModel: async (sessionId: string, value: string): Promise<void> => {
+                    const signal = AbortSignal.timeout(30_000);
+                    const snapshot = await runtime.client.sessions.readConfiguration(
+                        runtime.runtimeId,
+                        sessionId,
+                        signal,
+                    );
+                    await runtime.client.sessions.updateConfiguration(
+                        runtime.runtimeId,
+                        sessionId,
+                        {
+                            additionalDirectoryIds: [],
+                            agentId: agents[0]?.id ?? "codex",
+                            booleanValue: false,
+                            configId: "model",
+                            directoryId: "default",
+                            expectedConfigurationRevision: snapshot.configurationRevision,
+                            value,
+                            valueType: "select",
+                        },
+                        signal,
+                    );
+                },
                 /** Restarts the Runtime offering these Agents, as when the user installs or removes one. */
                 replaceAgents: async (replacement: readonly ControlledAgent[]): Promise<void> => {
                     const [first, ...others] = replacement;
@@ -86,6 +111,7 @@ export async function createChatWorkerEnvironment() {
         };
         return {
             botId,
+            network: cloud.network,
             connectAgent: async (
                 agent: ControlledAgent = { id: "claude", label: "Codex" },
                 nativeSessionIds?: ReadonlySet<string>,

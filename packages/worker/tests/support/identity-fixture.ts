@@ -1,6 +1,7 @@
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import { miniflareDurableObjects } from "@moxt-ai/mobius-test/cloudflare";
+import { createResponseLossProxy } from "@moxt-ai/mobius-test/response-loss-proxy";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as v from "valibot";
@@ -51,6 +52,7 @@ export async function createIdentityFixture(
     options: {
         /** Serve the Chat Worker on a free loopback port and use that origin as APP_ORIGIN. */
         readonly listenOnLoopback?: true;
+        readonly loseTurnResponses?: true;
         readonly platformAllowedOrigins?: ReadonlySet<string>;
         readonly workerEntryPoint?: string;
         readonly wranglerConfiguration?: URL;
@@ -59,6 +61,7 @@ export async function createIdentityFixture(
     const platform = await startTestPlatform(
         options.platformAllowedOrigins === undefined ? {} : { allowedOrigins: options.platformAllowedOrigins },
     );
+    const network = options.loseTurnResponses === true ? await createResponseLossProxy(platform.baseUrl) : null;
     try {
         const bundle = await build({
             entryPoints: [options.workerEntryPoint ?? fileURLToPath(new URL("../../src/index.ts", import.meta.url))],
@@ -84,7 +87,7 @@ export async function createIdentityFixture(
                     AUTHENTICATION_BASE_URL: "https://identity.test",
                     MOBIUS_APP_ID: platform.appId,
                     MOBIUS_APP_SECRET: platform.appCredential,
-                    MOBIUS_BASE_URL: platform.baseUrl,
+                    MOBIUS_BASE_URL: network?.origin ?? platform.baseUrl,
                 };
                 const runtime = new Miniflare(
                     convertV4MiniflareOptions({
@@ -169,6 +172,7 @@ export async function createIdentityFixture(
             };
             return {
                 baseConfiguration,
+                network,
                 connectAgent: platform.connectAgent,
                 platformRequest: platform.app.request,
                 createAnonymousUser,
@@ -177,6 +181,7 @@ export async function createIdentityFixture(
                 origin: ready.origin,
                 close: async () => {
                     try {
+                        await network?.close();
                         await platform.close();
                     } finally {
                         await cloudflare.dispose();
@@ -188,6 +193,7 @@ export async function createIdentityFixture(
             throw cause;
         }
     } catch (cause) {
+        await network?.close();
         await platform.close();
         throw cause;
     }

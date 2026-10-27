@@ -1,11 +1,16 @@
 import * as acp from "@agentclientprotocol/sdk";
 import { AcpAgentDefinition, type AcpEndpointTermination, type InProcessAcpEndpoint } from "@moxt-ai/mobius/runtime";
-import { ControlledEndpointConnection, fakeDaemonCapabilities } from "@moxt-ai/mobius-test-support/fake-daemon";
+import {
+    ControlledEndpointConnection,
+    type ControlledSessionUpdate,
+    controlledSessionUpdates,
+    fakeDaemonCapabilities,
+} from "@moxt-ai/mobius-test-support/fake-daemon";
 
 export type DefineInProcessAgent<Definition> = (
     id: string,
     label: string,
-    createEndpoint: () => InProcessAcpEndpoint,
+    createEndpoint: (onSessionUpdate?: ControlledSessionUpdate) => InProcessAcpEndpoint,
 ) => Definition;
 
 export const defineCurrentAgent: DefineInProcessAgent<AcpAgentDefinition> = (id, label, createEndpoint) =>
@@ -13,7 +18,8 @@ export const defineCurrentAgent: DefineInProcessAgent<AcpAgentDefinition> = (id,
         id,
         label,
         process.execPath,
-        (options) => new ControlledEndpointConnection(createEndpoint(), options.client),
+        (options) =>
+            new ControlledEndpointConnection(createEndpoint(controlledSessionUpdates(options.client)), options.client),
         {},
         "controlled-harness",
         undefined,
@@ -30,6 +36,7 @@ export function createSettingsAgent<Definition>(
     profile: "model" | "full" = "model",
 ) {
     const sessions = new Map<string, acp.SessionConfigOption[]>();
+    const histories = new Map<string, acp.SessionUpdate[]>();
     const configuration = (sessionId: string): acp.SessionConfigOption[] => {
         const options = sessions.get(sessionId);
         if (options === undefined) {
@@ -37,7 +44,7 @@ export function createSettingsAgent<Definition>(
         }
         return options;
     };
-    const createEndpoint = (): InProcessAcpEndpoint => {
+    const createEndpoint = (onSessionUpdate?: ControlledSessionUpdate): InProcessAcpEndpoint => {
         const termination = Promise.withResolvers<AcpEndpointTermination>();
         const app = acp
             .agent({ name: "morty-settings-agent" })
@@ -49,6 +56,7 @@ export function createSettingsAgent<Definition>(
             }))
             .onRequest(acp.methods.agent.session.new, () => {
                 const sessionId = crypto.randomUUID();
+                histories.set(sessionId, []);
                 sessions.set(sessionId, [
                     {
                         id: "model",
@@ -96,9 +104,17 @@ export function createSettingsAgent<Definition>(
                 }
                 return { sessionId, configOptions: configuration(sessionId) };
             })
-            .onRequest(acp.methods.agent.session.load, (context) => ({
-                configOptions: configuration(context.params.sessionId),
-            }))
+            .onRequest(acp.methods.agent.session.load, async (context) => {
+                const sessionId = context.params.sessionId;
+                for (const update of histories.get(sessionId) ?? []) {
+                    if (onSessionUpdate === undefined) {
+                        await context.client.notify(acp.methods.client.session.update, { sessionId, update });
+                    } else {
+                        await onSessionUpdate({ sessionId, update });
+                    }
+                }
+                return { configOptions: configuration(sessionId) };
+            })
             .onRequest(acp.methods.agent.session.resume, (context) => ({
                 configOptions: configuration(context.params.sessionId),
             }))
@@ -132,28 +148,52 @@ export function createSettingsAgent<Definition>(
                 const sessionId = context.params.sessionId;
                 configuration(sessionId);
                 const prompt = context.params.prompt.map((block) => (block.type === "text" ? block.text : "")).join("");
+                const history = histories.get(sessionId);
+                if (history === undefined) {
+                    throw new Error("Unknown controlled settings history");
+                }
+                history.push({
+                    sessionUpdate: "user_message_chunk",
+                    messageId: crypto.randomUUID(),
+                    content: { type: "text", text: prompt },
+                });
                 if (prompt !== "Remove settings") {
-                    await context.client.notify(acp.methods.client.session.update, {
-                        sessionId,
-                        update: {
-                            sessionUpdate: "agent_message_chunk",
-                            content: { type: "text", text: `Settings Agent: ${prompt}` },
+                    const update: acp.SessionUpdate = {
+                        sessionUpdate: "agent_message_chunk",
+                        messageId: crypto.randomUUID(),
+                        content: {
+                            type: "text",
+                            text:
+                                prompt === "Report current model"
+                                    ? `Current model: ${configuration(sessionId).find((option) => option.id === "model")?.currentValue}`
+                                    : `Settings Agent: ${prompt}`,
                         },
-                    });
+                    };
+                    history.push(update);
+                    if (onSessionUpdate === undefined) {
+                        await context.client.notify(acp.methods.client.session.update, { sessionId, update });
+                    } else {
+                        await onSessionUpdate({ sessionId, update });
+                    }
                     return { stopReason: "end_turn" };
                 }
                 sessions.set(sessionId, []);
-                await context.client.notify(acp.methods.client.session.update, {
-                    sessionId,
-                    update: { sessionUpdate: "config_option_update", configOptions: [] },
-                });
-                await context.client.notify(acp.methods.client.session.update, {
-                    sessionId,
-                    update: {
+                const updates: acp.SessionUpdate[] = [
+                    { sessionUpdate: "config_option_update", configOptions: [] },
+                    {
                         sessionUpdate: "agent_message_chunk",
+                        messageId: crypto.randomUUID(),
                         content: { type: "text", text: "Settings removed" },
                     },
-                });
+                ];
+                history.push(...updates);
+                for (const update of updates) {
+                    if (onSessionUpdate === undefined) {
+                        await context.client.notify(acp.methods.client.session.update, { sessionId, update });
+                    } else {
+                        await onSessionUpdate({ sessionId, update });
+                    }
+                }
                 return { stopReason: "end_turn" };
             })
             .onRequest(acp.methods.agent.session.close, () => ({}));

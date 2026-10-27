@@ -81,14 +81,8 @@ export const createSessionDeliveryStore = (options: {
         try {
             const accepted = await options.submit(
                 {
-                    additionalDirectoryIds: journal.request.additionalDirectoryIds,
-                    content: journal.request.content,
-                    attachments: journal.request.attachments,
+                    ...journal.request,
                     idempotencyKey: journal.commandId,
-                    ...(journal.request.disposition === undefined ? {} : { disposition: journal.request.disposition }),
-                    ...(journal.request.targetCommandId === undefined
-                        ? {}
-                        : { targetCommandId: journal.request.targetCommandId }),
                 },
                 signal,
             );

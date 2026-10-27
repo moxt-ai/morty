@@ -1,4 +1,5 @@
 import {
+    MobiusApiError,
     type MobiusClient,
     MobiusElicitationResponseRequest,
     MobiusError,
@@ -355,16 +356,6 @@ async function readSessionHistory(
     return { events, nextCursor, sessionGenerationId, throughPosition };
 }
 
-/** The settings a turn submission carries, read from the options the pane shows. */
-function sessionConfigurations(configOptions: readonly SessionConfigOption[]) {
-    return configOptions.map((option) => ({
-        booleanValue: option.type === "boolean" ? option.booleanValue : false,
-        configId: option.id,
-        value: option.type === "select" ? option.currentValue : "",
-        valueType: option.type,
-    }));
-}
-
 function mergeSessionEvents(
     current: readonly SessionEvent[],
     incoming: readonly SessionEvent[],
@@ -417,7 +408,7 @@ export function createSessionPaneModel(options: {
     const settings = createSessionSettingsStore({
         botId,
         agentRef: session.agentRef,
-        initial: session.result.ready.configOptions,
+        initial: session.result.ready,
     });
     const fallbackStartedAt = Date.now();
     // The one record of the current turn. `updateTurn` moves it together with the activity and the stop control.
@@ -504,19 +495,7 @@ export function createSessionPaneModel(options: {
             if (client === null) {
                 throw new Error("The Session is not connected.");
             }
-            return await client.turns.submit(
-                sessionId,
-                await withInstructions(
-                    {
-                        ...request,
-                        agentId: session.agentRef,
-                        directoryId: session.result.ready.directoryId,
-                        sessionConfigurations: sessionConfigurations(settings.getState().options),
-                    },
-                    signal,
-                ),
-                signal,
-            );
+            return await client.turns.submit(sessionId, request, signal);
         }),
         initialUnknown: options.unconfirmedMessage,
         onDelivered: (commandId) => {
@@ -726,9 +705,6 @@ export function createSessionPaneModel(options: {
                 if (effect.kind !== "adopted") {
                     continue;
                 }
-                if (effect.config !== undefined) {
-                    settings.getState().adopt(effect.config);
-                }
                 if (effect.title !== undefined) {
                     set({ title: effect.title });
                     options.onTitleChange(sessionId, effect.title);
@@ -790,6 +766,13 @@ export function createSessionPaneModel(options: {
             for (const effect of effects) {
                 if (effect.kind === "load-history") {
                     await loadProjectionHistory(effect, connected, signal);
+                } else if (effect.kind === "read-settings") {
+                    settings
+                        .getState()
+                        .readInBackground(
+                            (readSignal) => connected.sessions.readConfiguration(sessionId, readSignal),
+                            signal,
+                        );
                 }
             }
         };
@@ -876,11 +859,17 @@ export function createSessionPaneModel(options: {
                     attachments,
                     signal,
                 );
-                const submission = {
-                    ...request,
-                    attachments: uploadedAttachments,
-                    content: prompt,
-                };
+                // Freeze semantic intent before delivery owns retries, including instructions and identity.
+                const submission = await withInstructions(
+                    {
+                        ...request,
+                        agentId: session.agentRef,
+                        directoryId: session.result.ready.directoryId,
+                        attachments: uploadedAttachments,
+                        content: prompt,
+                    },
+                    signal,
+                );
                 const outcome = await delivery
                     .getState()
                     .submit(commandId, displayPrompt, submission, attachments, signal);
@@ -1178,6 +1167,14 @@ export function createSessionPaneModel(options: {
                                 for (const effect of effects) {
                                     if (effect.kind === "load-history") {
                                         historyLoads.push(loadProjectionHistory(effect, connected, signal));
+                                    } else if (effect.kind === "read-settings") {
+                                        settings
+                                            .getState()
+                                            .readInBackground(
+                                                (readSignal) =>
+                                                    connected.sessions.readConfiguration(sessionId, readSignal),
+                                                signal,
+                                            );
                                     }
                                 }
                                 if (event.type !== "acp") {
@@ -1626,6 +1623,7 @@ export function createSessionPaneModel(options: {
                 if (client === null || get().connection.kind !== "ready") {
                     return;
                 }
+                const connected = client;
                 set({ operation: { kind: "configuring" } });
                 const reopeningsAtStart = reopenings;
                 try {
@@ -1638,6 +1636,12 @@ export function createSessionPaneModel(options: {
                             agentId: session.agentRef,
                             booleanValue,
                             configId: option.id,
+                            // Older Runtimes omit this token and retain explicit last-write-wins edits.
+                            ...(settings.getState().configurationRevision === undefined
+                                ? {}
+                                : {
+                                      expectedConfigurationRevision: settings.getState().configurationRevision,
+                                  }),
                             directoryId: session.result.ready.directoryId,
                             value,
                             valueType: option.type,
@@ -1645,7 +1649,7 @@ export function createSessionPaneModel(options: {
                         AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
                     );
                     signal.throwIfAborted();
-                    settings.getState().adopt(result.configOptions);
+                    settings.getState().adopt(result);
                     set({ operation: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();
@@ -1653,6 +1657,14 @@ export function createSessionPaneModel(options: {
                         set({ operation: { kind: "idle" } });
                         get().sessionClosed(null);
                         return;
+                    }
+                    if (cause instanceof MobiusApiError && cause.code === "session_configuration_conflict") {
+                        settings
+                            .getState()
+                            .readInBackground(
+                                (readSignal) => connected.sessions.readConfiguration(sessionId, readSignal),
+                                signal,
+                            );
                     }
                     set({
                         operation: {

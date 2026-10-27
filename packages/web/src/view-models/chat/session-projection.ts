@@ -1,5 +1,4 @@
-import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
-import type { AcpSessionUpdate, SessionEvent, SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
+import type { SessionEvent, SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
 import {
     appendSessionMessageEvent,
     createSessionMessageReduction,
@@ -46,7 +45,6 @@ export type SessionProjectionInput =
 export type SessionProjectionEffect =
     | { readonly generation: string | null; readonly kind: "load-history" }
     | {
-          readonly config?: readonly SessionConfigOption[] | undefined;
           readonly kind: "adopted";
           readonly title?: string | undefined;
       }
@@ -66,58 +64,12 @@ export function createSessionProjection(): SessionProjection {
     return { kind: "pristine", pending: null, revision: 0 };
 }
 
-function sessionConfigOptionsFromAcp(
-    update: Extract<AcpSessionUpdate, { readonly sessionUpdate: "config_option_update" }>,
-): readonly SessionConfigOption[] {
-    return update.configOptions.map((option) => ({
-        booleanValue: option.type === "boolean" ? option.currentValue : false,
-        category: option.category ?? "",
-        currentValue: option.type === "select" ? option.currentValue : "",
-        description: option.description ?? "",
-        id: option.id,
-        name: option.name,
-        type: option.type,
-        values:
-            option.type === "boolean"
-                ? []
-                : option.options.flatMap((item) =>
-                      "group" in item
-                          ? item.options.map((value) => ({
-                                description: value.description ?? "",
-                                groupId: item.group,
-                                groupName: item.name,
-                                name: value.name,
-                                value: value.value,
-                            }))
-                          : [
-                                {
-                                    description: item.description ?? "",
-                                    groupId: "",
-                                    groupName: "",
-                                    name: item.name,
-                                    value: item.value,
-                                },
-                            ],
-                  ),
-    }));
-}
-
 function mergeSessionEvents(first: readonly SessionEvent[], second: readonly SessionEvent[]): readonly SessionEvent[] {
     const events = new Map(first.map((event) => [event.eventId, event]));
     for (const event of second) {
         events.set(event.eventId, event);
     }
     return [...events.values()];
-}
-
-function newestConfig(events: readonly SessionEvent[]): readonly SessionConfigOption[] | null {
-    for (let index = events.length - 1; index >= 0; index -= 1) {
-        const event = events[index];
-        if (event?.type === "acp" && event.payload.sessionUpdate === "config_option_update") {
-            return sessionConfigOptionsFromAcp(event.payload);
-        }
-    }
-    return null;
 }
 
 function newestTitle(events: readonly SessionEvent[]): string | undefined {
@@ -136,20 +88,18 @@ function newestTitle(events: readonly SessionEvent[]): string | undefined {
     return undefined;
 }
 
-/** What events the page sees as they happen change: the settings and title they report become current. */
+/** Live settings updates invalidate the display; only a Runtime read establishes current settings. */
 function adoptionEffect(events: readonly SessionEvent[]): readonly SessionProjectionEffect[] {
-    const config = newestConfig(events);
     const title = newestTitle(events);
-    if (config === null && title === undefined) {
-        return [];
-    }
+    const configurationChanged = events.some(
+        (event) =>
+            event.type === "acp" &&
+            (event.payload.sessionUpdate === "config_option_update" ||
+                event.payload.sessionUpdate === "current_mode_update"),
+    );
     return [
-        {
-            // Only an explicit config update, including an empty one, can replace current settings.
-            ...(config === null ? {} : { config }),
-            kind: "adopted",
-            ...(title === undefined ? {} : { title }),
-        },
+        ...(title === undefined ? [] : [{ kind: "adopted" as const, title }]),
+        ...(configurationChanged ? [{ kind: "read-settings" as const }] : []),
     ];
 }
 
@@ -161,7 +111,7 @@ function baselineEffects(events: readonly SessionEvent[]): readonly SessionProje
 
 /** Events a reload found after the ones the page saw apply as they would have live; the Runtime then confirms. */
 function catchUpEffects(events: readonly SessionEvent[]): readonly SessionProjectionEffect[] {
-    return [...adoptionEffect(events), { kind: "read-settings" }];
+    return baselineEffects(events);
 }
 
 function adoptGeneration(

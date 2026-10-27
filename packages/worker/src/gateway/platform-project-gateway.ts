@@ -6,7 +6,7 @@ import {
     MobiusPlatformAppClient,
     MobiusTimeoutError,
 } from "@moxt-ai/mobius-sdk/platform";
-import { decodeRuntimeDiagnosticsResult } from "@moxt-ai/mobius-sdk/protocol";
+import { decodeRuntimeDiagnosticsResult, type SessionReadyEvent } from "@moxt-ai/mobius-sdk/protocol";
 import { AGENT_DEFAULT_EXECUTION_SETTING, MobiusClient, MobiusRuntimePairingRequest } from "@moxt-ai/mobius-sdk/server";
 import * as v from "valibot";
 import {
@@ -406,10 +406,12 @@ export class PlatformProjectGateway {
                         502,
                     );
                 }
-                let configOptions = ready.configOptions;
+                let configuration: Pick<SessionReadyEvent, "configOptions" | "configurationRevision"> = ready;
                 if (input.kind === "new" && "configurations" in input) {
                     for (const selection of input.configurations) {
-                        const option = configOptions.find((candidate) => candidate.id === selection.configId);
+                        const option = configuration.configOptions.find(
+                            (candidate) => candidate.id === selection.configId,
+                        );
                         if (
                             option === undefined ||
                             option.type !== selection.valueType ||
@@ -424,23 +426,23 @@ export class PlatformProjectGateway {
                         if (option.type === "select" && option.currentValue === selection.value) {
                             continue;
                         }
-                        configOptions = (
-                            await client.sessions.updateConfiguration(
-                                input.runtimeId,
-                                sessionId,
-                                {
-                                    ...selection,
-                                    agentId: input.agentRef,
-                                    directoryId: input.workspaceRef,
-                                    additionalDirectoryIds,
-                                },
-                                signal,
-                            )
-                        ).configOptions;
+                        configuration = await client.sessions.updateConfiguration(
+                            input.runtimeId,
+                            sessionId,
+                            {
+                                ...selection,
+                                agentId: input.agentRef,
+                                directoryId: input.workspaceRef,
+                                additionalDirectoryIds,
+                            },
+                            signal,
+                        );
                     }
                 } else if (input.kind === "new" && "configuration" in input) {
                     if (input.permissionMode !== AGENT_DEFAULT_EXECUTION_SETTING) {
-                        const permission = configOptions.find((option) => option.id === "permission_mode");
+                        const permission = configuration.configOptions.find(
+                            (option) => option.id === "permission_mode",
+                        );
                         if (
                             permission === undefined ||
                             permission.type !== "select" ||
@@ -453,25 +455,25 @@ export class PlatformProjectGateway {
                             );
                         }
                         if (permission.currentValue !== input.permissionMode) {
-                            configOptions = (
-                                await client.sessions.updateConfiguration(
-                                    input.runtimeId,
-                                    sessionId,
-                                    {
-                                        agentId: input.agentRef,
-                                        directoryId: input.workspaceRef,
-                                        additionalDirectoryIds,
-                                        configId: permission.id,
-                                        value: input.permissionMode,
-                                        booleanValue: false,
-                                        valueType: "select",
-                                    },
-                                    signal,
-                                )
-                            ).configOptions;
+                            configuration = await client.sessions.updateConfiguration(
+                                input.runtimeId,
+                                sessionId,
+                                {
+                                    agentId: input.agentRef,
+                                    directoryId: input.workspaceRef,
+                                    additionalDirectoryIds,
+                                    configId: permission.id,
+                                    value: input.permissionMode,
+                                    booleanValue: false,
+                                    valueType: "select",
+                                },
+                                signal,
+                            );
                         }
                     }
-                    const option = configOptions.find((candidate) => candidate.id === input.configuration.configId);
+                    const option = configuration.configOptions.find(
+                        (candidate) => candidate.id === input.configuration.configId,
+                    );
                     if (
                         option === undefined ||
                         option.type !== input.configuration.valueType ||
@@ -484,22 +486,20 @@ export class PlatformProjectGateway {
                             409,
                         );
                     }
-                    configOptions = (
-                        await client.sessions.updateConfiguration(
-                            input.runtimeId,
-                            sessionId,
-                            {
-                                agentId: input.agentRef,
-                                directoryId: input.workspaceRef,
-                                additionalDirectoryIds,
-                                configId: input.configuration.configId,
-                                value: input.configuration.value,
-                                booleanValue: input.configuration.booleanValue,
-                                valueType: input.configuration.valueType,
-                            },
-                            signal,
-                        )
-                    ).configOptions;
+                    configuration = await client.sessions.updateConfiguration(
+                        input.runtimeId,
+                        sessionId,
+                        {
+                            agentId: input.agentRef,
+                            directoryId: input.workspaceRef,
+                            additionalDirectoryIds,
+                            configId: input.configuration.configId,
+                            value: input.configuration.value,
+                            booleanValue: input.configuration.booleanValue,
+                            valueType: input.configuration.valueType,
+                        },
+                        signal,
+                    );
                 }
                 const access = await client.sessions.createAccess(input.runtimeId, sessionId, 900, signal);
                 return {
@@ -509,7 +509,11 @@ export class PlatformProjectGateway {
                     sessionId,
                     credential: access.credential,
                     expiresAt: access.expiresAt,
-                    ready: { ...ready, configOptions },
+                    ready: {
+                        ...ready,
+                        configOptions: configuration.configOptions,
+                        configurationRevision: configuration.configurationRevision,
+                    },
                     agentRef: input.agentRef,
                     workspaceRef: input.workspaceRef,
                 };
