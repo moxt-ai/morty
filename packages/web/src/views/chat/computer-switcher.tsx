@@ -278,7 +278,7 @@ export function ComputerSwitcher({
                             aria-label={`Switch computer, ${computerName}, ${statusLabel}`}
                             data-connection-status={status.kind}
                             data-testid={dataTestId.botConnectionStatus}
-                            className="group -mx-1 flex h-[50px] w-[calc(100%+0.5rem)] min-w-0 items-center gap-2.5 rounded-[16px] py-1.5 pr-3 pl-0.5 text-left outline-none transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 data-[state=open]:bg-morty-fill-opacity-3 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 motion-reduce:transition-none"
+                            className="group -mr-1 -ml-1.5 flex h-[50px] w-[calc(100%+0.625rem)] min-w-0 items-center gap-2 rounded-[16px] py-1.5 pr-3 pl-0.5 text-left outline-none transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 data-[state=open]:bg-morty-fill-opacity-3 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 motion-reduce:transition-none"
                         >
                             <MortyLogoMark className="ml-2" size={30} />
                             <span className="flex min-w-0 flex-1 flex-col">
