@@ -22,6 +22,7 @@ export function Select({
     searchable = false,
     disabled = false,
     leading,
+    placeholder,
     truncateOptions = false,
     testId,
     mutedWhenDisabled = true,
@@ -38,6 +39,8 @@ export function Select({
     }[];
     /** Shown in the closed field, beside the selected label. */
     readonly leading?: ReactNode;
+    /** Closed-field text when no value is selected. Defaults to "Select <label>". */
+    readonly placeholder?: string;
     readonly searchable?: boolean | undefined;
     readonly disabled?: boolean;
     readonly compact?: boolean;
@@ -142,7 +145,7 @@ export function Select({
                                 className="block h-3.5 w-24 max-w-full animate-pulse rounded-full bg-morty-fill-opacity-3 motion-reduce:animate-none"
                             />
                         ) : (
-                            <Primitive.Value placeholder={`Select ${label.toLowerCase()}`} />
+                            <Primitive.Value placeholder={placeholder ?? `Select ${label.toLowerCase()}`} />
                         )}
                     </span>
                 </span>
