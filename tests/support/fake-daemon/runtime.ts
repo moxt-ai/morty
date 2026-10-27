@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+    AcpAgentDefinition,
     createRuntimeConfig,
     MobiusRuntimeEngine,
     RuntimeAgentDependencies,
@@ -92,7 +93,19 @@ function controlledRuntime(
                             // ACP history adapter rather than a vendor-native reader or an unregistered adapter ID.
                             // Alias only adapter selection; catalog and session identities stay intact.
                             adapters: (agent, dependencies) =>
-                                config.adapters({ ...agent, id: "claude" }, dependencies),
+                                config.adapters(
+                                    new AcpAgentDefinition(
+                                        "claude",
+                                        agent.label,
+                                        agent.command,
+                                        (options) => agent.createConnection(options),
+                                        agent.environment,
+                                        agent.agentVersion,
+                                        agent.agentIdentity,
+                                        agent.capabilities,
+                                    ),
+                                    dependencies,
+                                ),
                         },
                         { onConnectionStatus },
                     ),
