@@ -20,6 +20,7 @@ import addManagedBotAgentRef from "../../migrations/project-do/0019_grey_clea.sq
 import addLocalSessionDirectories from "../../migrations/project-do/0020_minor_vision.sql?raw";
 import migration0021 from "../../migrations/project-do/0021_black_hairball.sql?raw";
 import migration0022 from "../../migrations/project-do/0022_eminent_wiccan.sql?raw";
+import removeManagedSessionArchive from "../../migrations/project-do/0023_smiling_zaladane.sql?raw";
 import removeLocalSessionMetadata from "../../migrations/project-do/0024_fair_blizzard.sql?raw";
 import removeIntegrationTables from "../../migrations/project-do/0025_misty_scarlet_witch.sql?raw";
 import removeManagedBotAgentRef from "../../migrations/project-do/0026_slimy_ink.sql?raw";
@@ -33,41 +34,52 @@ import credentialBrowser from "../../migrations/project-do/0032_lively_arachne.s
 import platformProjectIdentity from "../../migrations/project-do/0033_platform_project_identity.sql?raw";
 import anonymousCredentialRevocation from "../../migrations/project-do/0034_anonymous_credential_revocation.sql?raw";
 
+/** Generated Project Durable Object migrations, in order. The ledger records each by its tag. */
 const migrations = [
-    management,
-    anonymousIdentity,
-    platformProject,
-    platformOrigin,
-    agentPairing,
-    managedSession,
-    transferRedemptions,
-    remoteAccess,
-    managedSessionImport,
-    chatOwnedBot,
-    migration0011,
-    removeLegacyBotMigration,
-    pairingExpectedRuntime,
-    managedSessionArchive,
-    removeLegacyManagedBotColumns,
-    migration0016,
-    migration0017,
-    replaceManagedSessionMetadata,
-    addManagedBotAgentRef,
-    addLocalSessionDirectories,
-    migration0021,
-    migration0022,
-    removeLocalSessionMetadata,
-    removeIntegrationTables,
-    removeManagedBotAgentRef,
-    removeIdentityTransferExpiry,
-    restoreContinueLinkExpiry,
-    removeContinueLinkUsageLimit,
-    deferredAgentPairing,
-    removeClerkUserBinding,
-    credentialBrowser,
-    platformProjectIdentity,
-    anonymousCredentialRevocation,
+    { tag: "0001_initial", sql: management },
+    { tag: "0002_anonymous_identity", sql: anonymousIdentity },
+    { tag: "0003_platform_project", sql: platformProject },
+    { tag: "0004_platform_origin", sql: platformOrigin },
+    { tag: "0005_agent_pairing", sql: agentPairing },
+    { tag: "0006_chat_managed_session", sql: managedSession },
+    { tag: "0007_identity_transfer_redemptions", sql: transferRedemptions },
+    { tag: "0008_remote_access", sql: remoteAccess },
+    { tag: "0009_chat_managed_import", sql: managedSessionImport },
+    { tag: "0010_chat_owned_bot", sql: chatOwnedBot },
+    { tag: "0011_slack_chat_bot_binding", sql: migration0011 },
+    { tag: "0012_remove_legacy_bot_migration", sql: removeLegacyBotMigration },
+    { tag: "0013_volatile_colossus", sql: pairingExpectedRuntime },
+    { tag: "0014_bouncy_may_parker", sql: managedSessionArchive },
+    { tag: "0015_red_forge", sql: removeLegacyManagedBotColumns },
+    { tag: "0016_damp_fat_cobra", sql: migration0016 },
+    { tag: "0017_smooth_abomination", sql: migration0017 },
+    { tag: "0018_bumpy_ares", sql: replaceManagedSessionMetadata },
+    { tag: "0019_grey_clea", sql: addManagedBotAgentRef },
+    { tag: "0020_minor_vision", sql: addLocalSessionDirectories },
+    { tag: "0021_black_hairball", sql: migration0021 },
+    { tag: "0022_eminent_wiccan", sql: migration0022 },
+    { tag: "0023_smiling_zaladane", sql: removeManagedSessionArchive },
+    { tag: "0024_fair_blizzard", sql: removeLocalSessionMetadata },
+    { tag: "0025_misty_scarlet_witch", sql: removeIntegrationTables },
+    { tag: "0026_slimy_ink", sql: removeManagedBotAgentRef },
+    { tag: "0027_dazzling_grim_reaper", sql: removeIdentityTransferExpiry },
+    { tag: "0028_lovely_harpoon", sql: restoreContinueLinkExpiry },
+    { tag: "0029_late_hammerhead", sql: removeContinueLinkUsageLimit },
+    { tag: "0030_tough_speedball", sql: deferredAgentPairing },
+    { tag: "0031_wealthy_silver_centurion", sql: removeClerkUserBinding },
+    { tag: "0032_lively_arachne", sql: credentialBrowser },
+    { tag: "0033_platform_project_identity", sql: platformProjectIdentity },
+    { tag: "0034_anonymous_credential_revocation", sql: anonymousCredentialRevocation },
 ];
+
+/**
+ * Earlier Workers recorded a migration's position in their list, which never included 0023. Those positions are
+ * history: they say which migrations an existing ledger applied, and a rolled-back Worker still reads them.
+ */
+const positionLedger = migrations
+    .map((migration) => migration.tag)
+    .filter((tag) => tag !== "0023_smiling_zaladane")
+    .slice(0, 33);
 
 type BoundValue = ArrayBuffer | string | number | null;
 
@@ -139,19 +151,35 @@ export class DurableObjectDatabase {
             this.#storage.sql.exec(
                 "CREATE TABLE IF NOT EXISTS _chat_schema_migration (version INTEGER PRIMARY KEY NOT NULL)",
             );
+            this.#storage.sql.exec(
+                "CREATE TABLE IF NOT EXISTS _project_schema_migration (tag TEXT PRIMARY KEY NOT NULL)",
+            );
+            const positions = this.#storage.sql
+                .exec<{ version: number }>("SELECT version FROM _chat_schema_migration")
+                .toArray()
+                .map((row) => positionLedger[row.version - 1]);
+            for (const tag of positions) {
+                if (tag !== undefined) {
+                    this.#storage.sql.exec("INSERT OR IGNORE INTO _project_schema_migration (tag) VALUES (?)", tag);
+                }
+            }
             const applied = new Set(
                 this.#storage.sql
-                    .exec<{ version: number }>("SELECT version FROM _chat_schema_migration")
+                    .exec<{ tag: string }>("SELECT tag FROM _project_schema_migration")
                     .toArray()
-                    .map((row) => row.version),
+                    .map((row) => row.tag),
             );
-            migrations.forEach((migration, index) => {
-                const version = index + 1;
-                if (!applied.has(version)) {
-                    this.#storage.sql.exec(migration);
-                    this.#storage.sql.exec("INSERT INTO _chat_schema_migration (version) VALUES (?)", version);
+            for (const migration of migrations) {
+                if (!applied.has(migration.tag)) {
+                    this.#storage.sql.exec(migration.sql);
+                    this.#storage.sql.exec("INSERT INTO _project_schema_migration (tag) VALUES (?)", migration.tag);
+                    // A rolled-back Worker reads only positions; without them it would replay applied migrations.
+                    const position = positionLedger.indexOf(migration.tag);
+                    if (position >= 0) {
+                        this.#storage.sql.exec("INSERT INTO _chat_schema_migration (version) VALUES (?)", position + 1);
+                    }
                 }
-            });
+            }
         });
     };
 }
