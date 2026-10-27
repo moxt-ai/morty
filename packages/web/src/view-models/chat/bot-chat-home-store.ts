@@ -179,7 +179,16 @@ function initialSelection(urlValue: string, createId: () => string): Conversatio
             return requestedAction === null || requestedAction === "fork" || requestedAction === "import"
                 ? {
                       kind: "loading",
-                      target: { kind: "continue", action: requestedAction ?? "fork", harness, sessionId },
+                      target:
+                          requestedAction === "import"
+                              ? { kind: "continue", action: "import", harness, sessionId }
+                              : {
+                                    kind: "continue",
+                                    action: "fork",
+                                    harness,
+                                    sessionId,
+                                    operation: { id: createId(), contract: "undecided" },
+                                },
                   }
                 : { kind: "draft", key: createId() };
         }
@@ -523,14 +532,27 @@ export const createBotChatHomeStore = (
                         await watchRuntimeConfigurationChanges();
                         return;
                     }
-                    const currentTarget = currentSelection.kind === "draft" ? null : currentSelection.target;
+                    let currentTarget = currentSelection.kind === "draft" ? null : currentSelection.target;
                     if (currentTarget?.kind === "continue") {
+                        if (currentTarget.action === "fork" && currentTarget.operation.contract === "undecided") {
+                            currentTarget = {
+                                ...currentTarget,
+                                operation: {
+                                    id: currentTarget.operation.id,
+                                    contract: configuration.runtime.nativeForkRecovery ? "recoverable" : "legacy",
+                                },
+                            };
+                            set({ selection: { kind: "loading", target: currentTarget } });
+                        }
                         const session = await requests.continueNativeSession(
                             botId,
                             currentTarget.harness,
                             currentTarget.sessionId,
                             currentTarget.action,
                             signal,
+                            currentTarget.action === "fork" && currentTarget.operation.contract === "recoverable"
+                                ? currentTarget.operation.id
+                                : undefined,
                         );
                         signal.throwIfAborted();
                         options.navigation.showContinuedSession(session.result.ready.sessionId);
@@ -784,7 +806,11 @@ export const createBotChatHomeStore = (
             forkInstead: () => {
                 const current = get().selection;
                 if (current.kind === "failed" && current.target.kind === "continue") {
-                    const target: ConversationTarget = { ...current.target, action: "fork" };
+                    const target: ConversationTarget = {
+                        ...current.target,
+                        action: "fork",
+                        operation: { id: options.createId(), contract: "undecided" },
+                    };
                     options.navigation.showForkInstead();
                     set((state) => ({
                         selection: transitionConversationSelection(state.selection, {

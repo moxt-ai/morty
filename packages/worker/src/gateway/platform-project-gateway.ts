@@ -63,6 +63,7 @@ export type ChatConversationInput =
       };
 
 const discoveredRuntimeSchema = v.object({
+    nativeForkRecovery: v.optional(v.boolean(), false),
     agents: v.array(
         v.object({
             id: platformIdentifier,
@@ -168,6 +169,7 @@ export class PlatformProjectGateway {
             }
             return {
                 runtimeId: runtime.runtimeId,
+                nativeForkRecovery: runtime.nativeForkRecovery,
                 machineName: runtime.machineName,
                 online: runtime.online,
                 agents: runtime.agents.map((agent) => ({ agentRef: agent.id, label: agent.label })),
@@ -598,6 +600,20 @@ export class PlatformProjectGateway {
             async (client) => {
                 return await client.runtimes.nativeSessions(runtimeId, request, signal);
             },
+            120000,
+        );
+
+    readonly forkNativeSession = async (
+        projectId: string,
+        runtimeId: string,
+        operationId: string,
+        input: Parameters<MobiusClient["runtimes"]["forkNativeSession"]>[2],
+        signal: AbortSignal,
+    ) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) => await client.runtimes.forkNativeSession(runtimeId, operationId, input, signal),
             120000,
         );
 

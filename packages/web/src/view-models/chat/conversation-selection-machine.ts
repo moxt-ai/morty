@@ -6,12 +6,17 @@ export type SelectedConversationTarget =
 
 export type ConversationTarget =
     | SelectedConversationTarget
-    | {
+    | ({
           readonly kind: "continue";
-          readonly action: "fork" | "import";
           readonly harness: string;
           readonly sessionId: string;
-      };
+      } & (
+          | { readonly action: "import" }
+          | {
+                readonly action: "fork";
+                readonly operation: { readonly id: string; readonly contract: "undecided" | "legacy" | "recoverable" };
+            }
+      ));
 
 export type ConversationSelectionState =
     | { readonly kind: "draft"; readonly key: string }
