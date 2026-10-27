@@ -161,7 +161,7 @@ export function CwdSelector({
                                         >
                                             <button
                                                 className={cn(
-                                                    "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+                                                    "flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-3 text-left outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60",
                                                     selected && "pr-7",
                                                 )}
                                                 data-testid={dataTestId.recentWorkingDirectory}
@@ -186,7 +186,7 @@ export function CwdSelector({
                                                 <Tooltip.Trigger asChild>
                                                     <button
                                                         aria-label={`Forget recent working directory ${recent.directoryLabel}`}
-                                                        className="absolute top-1/2 right-1 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 outline-none transition-opacity hover:bg-accent hover:text-copy-primary focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/60 group-hover/recent:opacity-100 group-focus-within/recent:opacity-100 motion-reduce:transition-none"
+                                                        className="absolute top-1/2 right-1 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 outline-none transition-opacity hover:bg-accent hover:text-copy-primary focus-visible:opacity-100 keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 group-hover/recent:opacity-100 group-focus-within/recent:opacity-100 motion-reduce:transition-none"
                                                         data-testid={dataTestId.forgetRecentWorkingDirectory}
                                                         onClick={(event) => {
                                                             event.stopPropagation();
@@ -210,7 +210,7 @@ export function CwdSelector({
                             </ScrollEdgeFade>
                             <hr className={cn("-mx-1.5 my-1.5 border-0", overlayMenuSeparatorClassName)} />
                             <button
-                                className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-full px-3 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
+                                className="flex h-9 w-full cursor-pointer items-center gap-2 rounded-full px-3 text-left outline-none hover:bg-accent keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60"
                                 data-testid={dataTestId.changeWorkingDirectory}
                                 onClick={() => {
                                     setMenuOpen(false);
@@ -237,7 +237,7 @@ export function CwdSelector({
                             <span className="text-xs font-medium text-copy-tertiary">Working directory path</span>
                             <input
                                 aria-label="Working directory path"
-                                className="h-10 rounded-lg border border-border bg-white px-3 text-[13px] outline-none focus:border-ring focus:ring-2 focus:ring-ring/15"
+                                className="h-10 rounded-lg border border-border bg-white px-3 text-[13px] outline-none keyboard-focus:focus:border-ring keyboard-focus:focus:ring-2 keyboard-focus:focus:ring-ring/15"
                                 data-testid={dataTestId.workingDirectoryPath}
                                 onChange={(event) => viewModel.setCwdPath(event.currentTarget.value, signal)}
                                 value={browser.path}

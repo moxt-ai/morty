@@ -1,5 +1,5 @@
-import { CloudOff, MessageSquare } from "lucide-react";
 import { useStore } from "zustand";
+import { MortyLogoMark } from "../../components/brand/morty-logo.tsx";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import {
     chatSessionColumnClassName,
@@ -8,6 +8,7 @@ import {
     chatSessionPaneEnterClassName,
     chatSessionPaneSectionClassName,
 } from "../../components/chat/chat-session-layout.ts";
+import { ComputerOfflineIcon } from "../../components/chat/computer-offline-icon.tsx";
 import { ConnectionNotice } from "../../components/chat/connection-notice.tsx";
 import { CwdSelector } from "../../components/chat/cwd-selector.tsx";
 import { HarnessMark } from "../../components/chat/harness-mark.tsx";
@@ -266,9 +267,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                             <div className="flex min-h-full flex-col gap-8">
                                 {pendingConversation.recovery !== null ? (
                                     <div className="m-auto grid max-w-lg justify-items-center gap-4 px-6 text-center">
-                                        <span className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                                            <CloudOff aria-hidden="true" className="size-5" />
-                                        </span>
+                                        <ComputerOfflineIcon />
                                         <div role="status" aria-live="polite" aria-atomic="true">
                                             <p className="font-medium">{pendingConversation.recovery.title}</p>
                                             <p className="mt-2 text-sm text-muted-foreground">
@@ -336,9 +335,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                 ) : active === null ? null : (
                                     <div className="m-auto flex max-w-lg flex-col items-center px-6">
                                         <div className="text-center" data-testid={dataTestId.chatLanding}>
-                                            <span className="mx-auto mb-5 flex size-14 items-center justify-center rounded-[18px] bg-primary-subtle text-primary shadow-[inset_0_0_0_1px_rgba(34,123,78,0.08)]">
-                                                <MessageSquare className="size-6" aria-hidden="true" />
-                                            </span>
+                                            <MortyLogoMark className="mx-auto mb-5 block" size={56} />
                                             <h1 className="text-[18px] leading-6 font-semibold tracking-[-0.025em]">
                                                 Morty
                                             </h1>

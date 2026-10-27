@@ -59,7 +59,7 @@ function ExecutionDetails({ context }: { readonly context: ExecutionContext }) {
                 <dt className={executionDetailsTermClassName}>Working directory</dt>
                 <dd
                     data-testid={dataTestId.executionDirectory}
-                    className="select-text rounded-xl bg-muted/70 px-3.5 py-3 font-mono text-xs leading-5 text-foreground [overflow-wrap:anywhere]"
+                    className="select-text rounded-[16px] bg-muted/70 px-3.5 py-3 font-mono text-xs leading-5 text-foreground [overflow-wrap:anywhere]"
                 >
                     {context.directory ?? context.directoryPlaceholder}
                 </dd>
@@ -103,7 +103,7 @@ export function ExecutionDetailsDialog({
                             </Dialog.Description>
                         </div>
                         <Dialog.Close
-                            className="mt-2.5 mr-2.5 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50"
+                            className="mt-2.5 mr-2.5 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-muted keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/50"
                             aria-label="Close execution details"
                         >
                             <X aria-hidden="true" className="size-4" />

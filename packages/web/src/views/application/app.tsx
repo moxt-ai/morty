@@ -89,7 +89,7 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
                         >
                             {state.retrying ? (
                                 <>
-                                    <Spinner className="text-primary-foreground" label="Retrying" />
+                                    <Spinner className="text-background" label="Retrying" />
                                     Retrying…
                                 </>
                             ) : (

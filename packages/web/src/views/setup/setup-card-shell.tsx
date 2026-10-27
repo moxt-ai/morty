@@ -1,5 +1,6 @@
 import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
+import { MortyLogoMark } from "@/components/brand/morty-logo";
 import { HarnessMark } from "@/components/chat/harness-mark";
 import { cn } from "@/lib/utils";
 import { overlaySurfaceRadiusClassName } from "../../components/ui/overlay-surface.ts";
@@ -25,22 +26,8 @@ export const setupPrimaryButtonSize = "lg" as const;
 /** Primary heading on setup card surfaces (`SetupPageWithHeader`, `SetupCardShell` with page header). */
 const setupCardTitleClassName = "max-w-md text-24 font-semibold tracking-[-0.03em]";
 
-const mortyLogoMarkClassName = "flex items-center justify-center bg-primary text-xl font-bold text-primary-foreground";
-
-function MortyLogoMark({ layout }: { readonly layout: "header" | "card" }) {
-    if (layout === "header") {
-        return (
-            <span aria-hidden="true" className={`${mortyLogoMarkClassName} size-9 rounded-lg`}>
-                M
-            </span>
-        );
-    }
-
-    return <div className={`${mortyLogoMarkClassName} mb-6 size-14 rounded-[16px]`}>M</div>;
-}
-
 function SetupCardLogo() {
-    return <MortyLogoMark layout="card" />;
+    return <MortyLogoMark className="mb-6" size={56} />;
 }
 
 export function SetupConnectionGraphic({ className = "" }: { readonly className?: string }) {
@@ -94,9 +81,9 @@ export function SetupConnectionGraphic({ className = "" }: { readonly className?
             </span>
             <span
                 aria-hidden="true"
-                className={`${mortyLogoMarkClassName} absolute top-[84px] left-1/2 size-14 -translate-x-1/2 rounded-[18px] shadow-[0_8px_24px_rgba(47,184,114,0.22)] ring-4 ring-white`}
+                className="absolute top-[84px] left-1/2 -translate-x-1/2 rounded-[18px] ring-4 ring-white"
             >
-                M
+                <MortyLogoMark size={56} />
             </span>
         </figure>
     );
@@ -107,7 +94,7 @@ function SetupPageHeader() {
         <header className="w-full shrink-0">
             <div className="mx-auto flex min-h-16 max-w-6xl items-center px-4 py-3 sm:px-6">
                 <a className="flex items-center gap-3 font-semibold tracking-tight" href="/" aria-label="Morty home">
-                    <MortyLogoMark layout="header" />
+                    <MortyLogoMark size={36} />
                     Morty
                 </a>
             </div>

@@ -20,8 +20,8 @@ const buttonVariants = cva(
             variant: {
                 default: "bg-foreground text-background shadow-xs hover:bg-foreground/85",
                 ghost: "hover:bg-accent hover:text-accent-foreground",
-                outline: "border border-border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground",
-                secondary: "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
+                outline: "border border-border bg-background hover:bg-accent hover:text-accent-foreground",
+                secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
             },
         },
     },

@@ -417,7 +417,7 @@ function SessionConversationTitleBar({
                     type="button"
                     aria-label={displayTitle}
                     className={cn(
-                        "min-w-0 max-w-full cursor-pointer truncate outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/70",
+                        "min-w-0 max-w-full cursor-pointer truncate outline-none hover:text-primary keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70",
                         centered ? "text-center" : "text-left",
                     )}
                     title="Rename conversation"
@@ -440,7 +440,7 @@ function SessionConversationTitleBar({
             <AutoFocusInput
                 aria-label="Conversation title"
                 className={cn(
-                    "appearance-none rounded-none border-0 bg-transparent px-0 py-0 font-semibold shadow-none outline-none ring-0 focus:ring-0 focus-visible:ring-0",
+                    "appearance-none rounded-none border-0 bg-transparent px-0 py-0 font-semibold shadow-none outline-none ring-0 keyboard-focus:focus:ring-0 keyboard-focus:focus-visible:ring-0",
                     titleTextClassName,
                     centered ? "w-[10rem] min-w-[8rem] shrink text-center" : "min-w-0 flex-1",
                 )}

@@ -106,20 +106,20 @@ function ComputerChoiceDetail({
 const computerChoiceRowClassName = "grid grid-cols-[1rem_minmax(0,1fr)_1rem] items-center outline-none";
 
 const computerListChoiceInteractiveClassName =
-    "hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring/60";
+    "hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 keyboard-focus:focus-within:ring-2 keyboard-focus:focus-within:ring-inset keyboard-focus:focus-within:ring-ring/60";
 
 const computerListChoiceClassName = cn(
-    "gap-x-4 py-2.5 pr-4 pl-6 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60",
+    "gap-x-4 py-2.5 pr-4 pl-6 keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-inset keyboard-focus:focus-visible:ring-ring/60",
     computerListChoiceInteractiveClassName,
 );
 
 const computerListCurrentChoiceShellClassName = "outline-none";
 
 const computerListChoiceLinkClassName =
-    "gap-x-4 py-2.5 pr-4 pl-6 hover:bg-transparent active:bg-transparent focus-visible:ring-0";
+    "gap-x-4 py-2.5 pr-4 pl-6 hover:bg-transparent active:bg-transparent keyboard-focus:focus-visible:ring-0";
 
 const computerListDetailsTextButtonClassName =
-    "inline-flex items-center gap-1 rounded-md text-[13px] font-medium text-copy-secondary outline-none transition-colors hover:bg-transparent hover:text-foreground active:bg-transparent active:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60 motion-reduce:transition-none";
+    "inline-flex items-center gap-1 rounded-md text-[13px] font-medium text-copy-secondary outline-none transition-colors hover:bg-transparent hover:text-foreground active:bg-transparent active:text-foreground keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-inset keyboard-focus:focus-visible:ring-ring/60 motion-reduce:transition-none";
 
 function ComputerListDetailsButton({
     computerName,
@@ -176,7 +176,7 @@ function ComputerChoiceContent({
                     <ComputerChoiceDetail choice={choice} className={detailClassName} />
                 )}
             </span>
-            <span className="flex size-4 items-center justify-center" aria-hidden="true">
+            <span className="flex h-[22px] w-4 shrink-0 self-start items-center justify-center" aria-hidden="true">
                 {current ? <Check className="size-3.5" /> : null}
             </span>
         </>
@@ -197,7 +197,6 @@ function ComputerChoiceItem({ activeKey, choice }: { readonly activeKey: string;
                         : "transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 data-[highlighted]:bg-accent motion-reduce:transition-none",
                 )}
                 aria-current={current ? "true" : undefined}
-                data-current-computer={current ? "true" : undefined}
             >
                 <ComputerChoiceContent choice={choice} current={current} />
             </a>
@@ -230,10 +229,10 @@ function ComputerChoiceList({
                 ) : (
                     <ComputerChoiceItem activeKey={activeKey} choice={sections.current} />
                 )}
-                <div className="-mt-1 pb-1 pl-9 pr-3">
+                <div className="pb-1 pl-9 pr-3">
                     <DropdownMenu.Item
                         aria-label={`View execution details for ${computerName}`}
-                        className="-mx-3 inline-flex h-8 w-fit cursor-pointer items-center gap-1 rounded-md px-3 text-xs font-medium text-copy-secondary outline-none data-[highlighted]:bg-morty-fill-opacity-2 data-[highlighted]:text-foreground"
+                        className="-mx-3 -mt-1 inline-flex h-8 w-fit cursor-pointer items-center gap-1 rounded-md px-3 text-xs font-medium text-copy-secondary outline-none data-[highlighted]:bg-morty-fill-opacity-2 data-[highlighted]:text-foreground"
                         onSelect={openDetails}
                     >
                         View execution details
@@ -254,14 +253,14 @@ function ComputerChoiceList({
 }
 
 const sidebarNavOptionTriggerClassName =
-    "flex w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 active:bg-morty-fill-opacity-3 active:text-foreground motion-reduce:transition-none";
+    "flex w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 active:bg-morty-fill-opacity-3 active:text-foreground motion-reduce:transition-none";
 
 export const mobileDrawerCardClassName = "flex flex-col overflow-hidden rounded-lg bg-morty-fill-white text-foreground";
 
 export const mobileDrawerOptionDividerClassName = "[&>*+*]:border-t-[0.5px] [&>*+*]:border-black/[0.06]";
 
 export const mobileDrawerCardRowClassName =
-    "flex h-12 w-full items-center gap-3 px-4 text-left text-[15px] font-medium text-foreground outline-none transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none";
+    "flex h-12 w-full items-center gap-3 px-4 text-left text-[15px] font-medium text-foreground outline-none transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-inset keyboard-focus:focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none";
 
 const mobileComputersSectionTitleClassName =
     "px-4 pt-3 pb-1 text-[15px] font-semibold leading-5 tracking-[-0.015em] text-foreground";
@@ -510,7 +509,7 @@ export function ComputerSwitcher({
                             )}
                             aria-label="Computers"
                         >
-                            <DropdownMenu.Label className="flex shrink-0 items-center justify-between gap-2 px-3 pt-1 pb-3 text-16 font-semibold text-copy-tertiary">
+                            <DropdownMenu.Label className="flex shrink-0 items-center justify-between gap-2 px-3 pt-2 pb-3 text-16 font-semibold text-copy-tertiary">
                                 Computers
                                 {listLoading ? (
                                     <span className="inline-flex shrink-0" role="status">

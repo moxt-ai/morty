@@ -28,7 +28,7 @@ export function ResponseCopyButton({
         <div className="mt-2 flex flex-wrap items-center gap-x-3" ref={model.onAttach}>
             <button
                 aria-label={copy === "copied" ? "Copied" : "Copy response"}
-                className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transition-none"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 motion-reduce:transition-none"
                 aria-disabled={copy === "copying"}
                 onClick={model.copy}
                 title="Copy response as Markdown"

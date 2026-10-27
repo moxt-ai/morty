@@ -5,6 +5,8 @@
 @source "../node_modules/@streamdown/math/dist/*.js";
 @source "../node_modules/@streamdown/mermaid/dist/*.js";
 
+@custom-variant keyboard-focus (&:where(html[data-input-modality="keyboard"] *));
+
 .agent-mermaid [aria-label="Mermaid chart"] {
     padding: 1rem 1rem 1rem 3.25rem;
 }
@@ -200,20 +202,19 @@
     }
 }
 
-:where(a, button, input, select, textarea, summary, [role="menuitem"], [tabindex]):focus-visible {
+:where(
+    a,
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    [role="menuitem"],
+    [tabindex]:not([role="menu"])
+):focus-visible:where(html[data-input-modality="keyboard"] *) {
     outline: 0.5px solid var(--ring);
     outline-offset: 0;
     box-shadow: var(--focus-ring-shadow);
-}
-
-[data-current-computer="true"]:focus-visible {
-    outline: none;
-    box-shadow: none;
-}
-
-[data-state="open"]:where(button[aria-expanded="true"]):focus-visible {
-    outline: none;
-    box-shadow: none;
 }
 
 .pairing-card {

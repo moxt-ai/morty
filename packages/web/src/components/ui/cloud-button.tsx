@@ -2,7 +2,7 @@ import { Slot } from "radix-ui";
 import type { ComponentProps } from "react";
 
 const variants = {
-    primary: "border-transparent bg-primary text-primary-foreground hover:bg-primary/90",
+    primary: "border-transparent bg-foreground text-background hover:bg-foreground/85",
     outline: "border-border bg-background text-foreground hover:bg-accent",
     ghost: "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
     destructive: "border-transparent bg-destructive text-white hover:bg-destructive/90",

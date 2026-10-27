@@ -327,6 +327,7 @@ async function closeTestEnvironment(): Promise<void> {
 afterEach(async () => {
     await closeTestApps();
     document.body.replaceChildren();
+    document.documentElement.removeAttribute("data-input-modality");
     window.sessionStorage.clear();
     window.localStorage.clear();
     window.history.replaceState(null, "", "/");

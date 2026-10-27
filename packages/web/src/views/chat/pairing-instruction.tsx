@@ -51,7 +51,7 @@ export function PairingInstruction() {
                 <p>Keep that computer awake and online while using Morty.</p>
             </div>
             <details aria-label="Setup details" className="group w-full text-xs leading-5 text-morty-text-3">
-                <summary className="mt-4 flex h-6 cursor-pointer list-none items-center justify-center gap-1.5 rounded-lg outline-none hover:text-morty-text-2 focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                <summary className="mt-4 flex h-6 cursor-pointer list-none items-center justify-center gap-1.5 rounded-lg outline-none hover:text-morty-text-2 keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
                     Review setup details
                     <ChevronDown aria-hidden="true" className="size-3.5 group-open:rotate-180" />
                 </summary>

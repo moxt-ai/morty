@@ -54,7 +54,7 @@ export function ToastProvider({ children }: { readonly children: ReactNode }) {
                         </div>
                         <Primitive.Close
                             aria-label="Dismiss notification"
-                            className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/70"
+                            className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70"
                         >
                             <X aria-hidden="true" className="size-3.5" />
                         </Primitive.Close>

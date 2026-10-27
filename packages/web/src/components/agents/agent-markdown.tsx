@@ -79,8 +79,8 @@ const STREAMDOWN_FENCED_CODE_BLOCK_CLASSES = [
     "[&_[data-streamdown=code-block-copy-button]]:transition-opacity",
     "[&_[data-streamdown=code-block-copy-button]]:hover:bg-black/[0.045]",
     "[&_[data-streamdown=code-block-copy-button]]:hover:text-foreground",
-    "[&_[data-streamdown=code-block-copy-button]]:focus-visible:ring-2",
-    "[&_[data-streamdown=code-block-copy-button]]:focus-visible:ring-ring/60",
+    "[&_[data-streamdown=code-block-copy-button]]:keyboard-focus:focus-visible:ring-2",
+    "[&_[data-streamdown=code-block-copy-button]]:keyboard-focus:focus-visible:ring-ring/60",
     "[&_[data-streamdown=code-block-copy-button]_svg]:size-3.5",
     "[&_[data-streamdown=inline-code]]:text-[13px] [&_[data-streamdown=inline-code]]:text-copy-secondary",
 ].join(" ");

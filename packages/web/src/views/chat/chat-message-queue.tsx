@@ -17,7 +17,7 @@ function QueueAction({
     return (
         <button
             aria-label={label}
-            className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full text-morty-text-3 outline-none transition-colors hover:bg-transparent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full text-morty-text-3 outline-none transition-colors hover:bg-transparent hover:text-foreground keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={disabled}
             onClick={onClick}
             title={label}

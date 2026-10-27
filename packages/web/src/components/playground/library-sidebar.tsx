@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
+import { MortyLogoMark } from "../brand/morty-logo.tsx";
 import { Input } from "../ui/input.tsx";
 import { PLAYGROUND_ENTRIES, type PlaygroundEntry, playgroundGroups } from "./catalog.ts";
 
@@ -21,15 +22,10 @@ export function LibrarySidebar() {
         <aside className="flex max-h-72 shrink-0 flex-col border-b border-border bg-sidebar md:max-h-none md:w-[248px] md:border-r md:border-b-0">
             <div className="px-4 pt-5 pb-3">
                 <Link
-                    className="flex items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                    className="flex items-center gap-2.5 rounded-lg outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70"
                     to="/playground"
                 >
-                    <span
-                        aria-hidden="true"
-                        className="flex size-8 items-center justify-center rounded-lg bg-primary text-lg text-primary-foreground"
-                    >
-                        ∞
-                    </span>
+                    <MortyLogoMark size={32} />
                     <span>
                         <span className="block text-14 font-semibold tracking-tight">Morty</span>
                         <span className="block text-12 text-muted-foreground">Component library</span>
@@ -65,7 +61,7 @@ export function LibrarySidebar() {
                                             <li key={entry.id}>
                                                 <Link
                                                     aria-current={active ? "page" : undefined}
-                                                    className={`block rounded-lg px-2 py-1.5 text-13 outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${
+                                                    className={`block rounded-lg px-2 py-1.5 text-13 outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70 ${
                                                         active
                                                             ? "bg-accent-active font-medium text-foreground"
                                                             : "text-muted-foreground hover:bg-accent hover:text-foreground"

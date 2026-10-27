@@ -28,7 +28,7 @@ function PreviewSource({ name, text }: { readonly name: string; readonly text: s
     return (
         <section
             aria-label="File contents"
-            className="h-full min-h-0 w-full overflow-auto bg-white [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring [&_pre]:!max-h-none"
+            className="h-full min-h-0 w-full overflow-auto bg-white [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin] keyboard-focus:focus-visible:outline-2 keyboard-focus:focus-visible:outline-offset-[-2px] keyboard-focus:focus-visible:outline-ring [&_pre]:!max-h-none"
             data-testid={dataTestId.filePreviewContent}
             // biome-ignore lint/a11y/noNoninteractiveTabindex: the scroll region must be keyboard reachable
             tabIndex={0}
@@ -153,7 +153,7 @@ export function FilePreview({
                 <button
                     aria-label={expanded ? "Collapse preview" : "Expand preview"}
                     className={cn(
-                        "size-9 items-center justify-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/70",
+                        "size-9 items-center justify-center rounded-md hover:bg-muted keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70",
                         sidePanelLayout ? "inline-flex" : "hidden",
                     )}
                     onClick={onToggleExpanded}
@@ -167,7 +167,7 @@ export function FilePreview({
                 </button>
                 <button
                     aria-label="Close file preview"
-                    className="inline-flex size-9 items-center justify-center rounded-md hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/70"
+                    className="inline-flex size-9 items-center justify-center rounded-md hover:bg-muted keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70"
                     data-testid={dataTestId.closeFilePreview}
                     onClick={onClose}
                     data-preview-initial-focus=""
@@ -180,7 +180,7 @@ export function FilePreview({
                 {state.kind === "html" ? (
                     <button
                         aria-label={state.view.kind === "preview" ? "View source" : "Show preview"}
-                        className="rounded-md px-3 py-2 text-sm hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/70"
+                        className="rounded-md px-3 py-2 text-sm hover:bg-muted keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70"
                         onClick={() => onHtmlView(state.view.kind === "preview" ? "source" : "preview")}
                         type="button"
                     >
@@ -189,7 +189,7 @@ export function FilePreview({
                 ) : null}
                 <button
                     aria-label="Reload file"
-                    className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/70 disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70 disabled:opacity-50"
                     disabled={state.kind === "loading"}
                     onClick={onReload}
                     type="button"
