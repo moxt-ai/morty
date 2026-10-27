@@ -95,11 +95,15 @@ test("Given the agent sends separate adjacent messages, When the user reads the 
     await sendPrompt(app, composer, "separate response paragraphs");
     await app.waitForView(() => {
         const responses = app.elementsByTestId(dataTestId.agentResponse);
-        expect(responses.map((response) => response.textContent)).toEqual([
+        const paragraphs = [
             "Auto-merge is armed on the rebased head.",
             "Policy, title, and Worker-config checks are green.",
             "Static checks are green now; only the test job remains.",
-        ]);
+        ];
+        expect(responses).toHaveLength(paragraphs.length);
+        for (const [index, response] of responses.entries()) {
+            expect(getByText(response, paragraphs[index] ?? "", { exact: true })).toBeDefined();
+        }
     });
 });
 

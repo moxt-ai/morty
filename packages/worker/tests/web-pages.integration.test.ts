@@ -54,30 +54,90 @@ afterAll(async () => {
     await rm(directory, { recursive: true, force: true });
 });
 
-for (const navigation of [false, true]) {
-    const headers = navigation ? { "Sec-Fetch-Mode": "navigate" } : {};
-    test(`Given an unknown URL, When ${navigation ? "a browser navigates to" : "an agent fetches"} it, Then the server returns a real 404`, async () => {
-        for (const path of [
-            "/setpu.md",
-            "/privacy",
-            "/docs",
-            "/sitemap.xml",
-            "/unknown-page",
-            "/assets/missing.js",
-            "/chat/unknown",
-            "/chatty",
-            "/continue/unknown",
-            "/continue/preview/ready/extra",
-            "/playground/buttons/extra",
-            "/morty/api/unknown",
-        ]) {
+const unknownPaths = [
+    "/setpu.md",
+    "/privacy",
+    "/docs",
+    "/sitemap.xml",
+    "/unknown-page",
+    "/assets/missing.js",
+    "/chat/unknown",
+    "/chatty",
+    "/continue/unknown",
+    "/continue/preview/ready/extra",
+    "/playground/buttons/extra",
+];
+
+const browserNavigation = {
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+};
+
+test("Given an unknown URL, When an agent fetches it, Then the server returns the structured JSON 404", async () => {
+    for (const headers of [{}, { Accept: "*/*" }, { Accept: "application/json" }]) {
+        for (const path of [...unknownPaths, "/morty/api/unknown"]) {
             const response = await runtime.dispatchFetch(`https://morty.example${path}`, { headers });
             expect(response.status, path).toBe(404);
             expect(response.headers.get("content-type"), path).not.toContain("text/html");
             expect(await response.json(), path).toMatchObject({ error: { code: "NOT_FOUND" } });
         }
-    });
+    }
+});
 
+test("Given an unknown URL, When a browser navigates to it, Then it shows a not-found page that links back home", async () => {
+    for (const headers of [browserNavigation, { "Sec-Fetch-Dest": "document" }, { Accept: "text/html" }]) {
+        for (const path of unknownPaths) {
+            const response = await runtime.dispatchFetch(`https://morty.example${path}?token=private-token`, {
+                headers,
+                redirect: "manual",
+            });
+            expect(response.status, path).toBe(404);
+            expect(response.headers.get("content-type"), path).toContain("text/html");
+            expect(response.headers.get("x-robots-tag"), path).toBe("noindex");
+            expect(response.headers.get("cache-control"), path).toBe("no-store");
+            expect(response.headers.get("vary"), path).toMatch(/Accept/);
+            expect(response.headers.get("location"), path).toBeNull();
+            const html = await response.text();
+            expect(html, path).toContain('<html lang="en">');
+            expect(html, path).toContain("<title>Page not found · Morty</title>");
+            expect(html, path).toContain("<h1>Page not found</h1>");
+            expect(html, path).toMatch(/<a [^>]*href="\/"[^>]*>Go to Morty home<\/a>/);
+            expect(html, path).not.toMatch(/private-token|<script/);
+            expect(html, path).not.toContain(path);
+        }
+    }
+});
+
+test("Given a browser, When a script, API call or form submission misses, Then it keeps the JSON 404", async () => {
+    const script = await runtime.dispatchFetch("https://morty.example/privacy", {
+        headers: { ...browserNavigation, "Sec-Fetch-Dest": "empty" },
+    });
+    expect(script.status).toBe(404);
+    expect(await script.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
+    const api = await runtime.dispatchFetch("https://morty.example/morty/api/unknown", { headers: browserNavigation });
+    expect(api.status).toBe(404);
+    expect(await api.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
+    const post = await runtime.dispatchFetch("https://morty.example/privacy", {
+        method: "POST",
+        headers: browserNavigation,
+    });
+    expect(post.status).toBe(404);
+    expect(await post.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
+});
+
+test("Given an unknown URL, When a browser sends HEAD, Then it receives the not-found page headers without a body", async () => {
+    const head = await runtime.dispatchFetch("https://morty.example/privacy", {
+        method: "HEAD",
+        headers: browserNavigation,
+    });
+    expect(head.status).toBe(404);
+    expect(head.headers.get("content-type")).toContain("text/html");
+    expect(await head.text()).toBe("");
+});
+
+for (const navigation of [false, true]) {
+    const headers = navigation ? { "Sec-Fetch-Mode": "navigate" } : {};
     test(`Given an existing application route, When ${navigation ? "a browser opens" : "a client fetches"} it, Then its HTML loads without redirecting or exposing session data`, async () => {
         for (const path of [
             "/chat",
