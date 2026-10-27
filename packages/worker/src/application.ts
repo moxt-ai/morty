@@ -7,7 +7,7 @@ import { createApplicationDependencies } from "./composition/application-context
 import { cloudRoutes, publicCloudRoutes } from "./composition/cloud-http.ts";
 import { createCloudWebSocketHandlers } from "./composition/cloud-websocket.ts";
 import { setupArtifact } from "./gateway/setup-artifact.ts";
-import { webPages } from "./gateway/web-pages.ts";
+import { notFoundPage, webPages } from "./gateway/web-pages.ts";
 import type { CloudBindings } from "./infra/cloud-bindings.ts";
 import { RequestError } from "./infra/request-error.ts";
 import { createWebSocketApiBridge } from "./infra/websocket-api-bridge.ts";
@@ -85,7 +85,7 @@ const publicApplication = new Hono<{ readonly Bindings: CloudBindings }>()
     .route("/", setupArtifact)
     .get("/morty/ws", (context) => application.fetch(context.req.raw, context.env))
     .route("/morty/api", publicCloudRoutes)
-    .notFound(notFound);
+    .notFound((context) => notFoundPage(context.req.raw) ?? notFound());
 
 export async function fetchPublicApplication(
     request: Request,

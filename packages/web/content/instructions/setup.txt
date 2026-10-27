@@ -31,12 +31,21 @@ application data directory for the current user, which is not synced to other
 computers, and protects it using filesystem permissions. Each computer has its own.
 Do not copy it to a repository, a synced folder, or another computer.
 The script reuses the saved identity and Machine for this origin and reconnects an
-active managed connection when possible. When the saved Machine's Runtime is no
-longer managed here, it keeps the user, replaces the Project and Machine, and pairs
-a new Runtime. Links and browsers from the replaced Project stop working; the new
-link replaces them.
+active managed connection when possible. If the saved Machine's Runtime is no
+longer managed here, setup stops with `PROJECT_REPLACEMENT_REQUIRED` before replacing
+anything. Explain in the user's language: **I cannot find this computer's original
+connection configuration. Setting up a new connection will invalidate earlier
+sharing links and browser access, and you will need to share a new link. Continue?**
+Wait for explicit approval unless the user already authorized both the reset and
+revoking earlier shared access. Merely asking to run setup or reconnect is not approval.
+After approval, rerun the same command with `--replace-project <projectId>`, using
+the exact `projectId` from `error.replacement`. Approval applies only to that Project.
+Do not retry with this option automatically, delete local state, or create another
+identity to bypass confirmation. If the user declines, stop and keep the saved state.
+Approved replacement keeps the user, replaces the Project and Machine, and pairs a
+new Runtime. Links and browsers from the replaced Project stop working.
 Mobius owns Runtime connection state and identifiers; do not save or back them up yourself.
-No registration, separate bind command, or replacement confirmation is needed.
+Normal setup and reconnection need no registration, separate bind command, or confirmation.
 
 ## Finish
 
@@ -55,8 +64,19 @@ later, come back and tell me: "Revoke all links I previously shared from this ma
 I can do that for you.** Include this reminder whenever you deliver a new sharing
 link; knowing the command yourself does not replace telling the user.
 When `project` is `"replaced"`, also tell the user, in their language: **This computer's
-saved Machine was no longer connected, so setup started a new one, and links and
+original connection configuration was missing, so setup started a new connection with your approval, and links and
 browsers from this computer's earlier Morty setup stopped working. Use the new link.**
+
+On `status: "replacement_access_revoked"`, immediately tell the user that earlier
+sharing links and browser access have been revoked and the new connection is still
+being set up. Do not wait for ready to report this access change.
+On failure, also report `error.replacementAccess.message` when present. A `kind` of
+`"unknown"` means the request may have revoked earlier access even though its reply
+was not received; never say the old links are still valid. A `kind` of `"revoked"`
+with `setupReady: false` means earlier access was revoked but the new setup is unfinished.
+Keep the saved identity and continue recovery using the same approved Project when
+approval is still required. Do not request a second approval for the same previously
+authorized replacement, and never carry approval over to a different Project.
 
 On failure, use `error.code` and the private Runtime log, and follow the `nextStep`
 in `error.runtime`, `error.harness` or `error.binding` when present. Fix installation or
