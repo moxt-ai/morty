@@ -17,6 +17,8 @@ export async function followSetupInstructions(options: {
     readonly harness: string;
     readonly instructionUrl: string;
     readonly runtime: SetupRuntime;
+    /** The user explicitly approved replacing this Project and revoking its shared access. */
+    readonly replaceProject?: string;
     /** The calling agent's shell environment, where its harness exposes the current session. */
     readonly agentEnvironment: Readonly<Record<string, string>>;
     readonly signal: AbortSignal;
@@ -44,15 +46,18 @@ export async function followSetupInstructions(options: {
     const bundle: unknown = await import(pathToFileURL(script).href);
     assert.ok(isSetupModule(bundle));
     const events: Readonly<Record<string, unknown>>[] = [];
-    const exitCode = await bundle.runSetup(args, {
-        ...(options.clock === undefined ? {} : { clock: options.clock }),
-        state: options.state,
-        documents: options.documents,
-        agentEnvironment: options.agentEnvironment,
-        emit: (event) => events.push(event),
-        runtime: options.runtime,
-        signal: options.signal,
-    });
+    const exitCode = await bundle.runSetup(
+        [...args, ...(options.replaceProject === undefined ? [] : ["--replace-project", options.replaceProject])],
+        {
+            ...(options.clock === undefined ? {} : { clock: options.clock }),
+            state: options.state,
+            documents: options.documents,
+            agentEnvironment: options.agentEnvironment,
+            emit: (event) => events.push(event),
+            runtime: options.runtime,
+            signal: options.signal,
+        },
+    );
     assert.equal(exitCode, 0, JSON.stringify(events));
     const ready = events.find((event) => event["status"] === "ready");
     assert.ok(ready);

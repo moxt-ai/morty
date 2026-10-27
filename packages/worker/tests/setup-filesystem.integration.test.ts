@@ -42,6 +42,124 @@ if (!isSetupModule(setupModule)) {
 }
 const { runSetup } = setupModule;
 
+test.each(["fresh", "unknown", "revoked"] as const)(
+    "Given an invalid Mobius state root and %s replacement state, When setup stops at preflight, Then it preserves the identity and accurately reports earlier shared access",
+    {
+        timeout: 30_000,
+    },
+    async (replacementState) => {
+        const directory = await mkdtemp(join(tmpdir(), "morty-setup-state-root-"));
+        const state = join(directory, "state");
+        const bin = join(directory, "bin");
+        await mkdir(bin);
+        const fixture = await createIdentityFixture({ listenOnLoopback: true });
+        try {
+            if (replacementState !== "fresh") {
+                const previous = await fixture.createAnonymousUser();
+                const current =
+                    replacementState === "unknown"
+                        ? previous
+                        : v.parse(
+                              v.object({ projectId: v.string(), token: v.string() }),
+                              await (
+                                  await worker.fetch(
+                                      new Request(
+                                          `${fixture.origin}/morty/api/projects/${previous.projectId}/management/project/replacement`,
+                                          { method: "POST", headers: { authorization: `Bearer ${previous.token}` } },
+                                      ),
+                                      fixture.environment(fixture.origin),
+                                  )
+                              ).json(),
+                          );
+                await mkdir(state, { mode: 0o700 });
+                await writeFile(
+                    join(state, "config.json"),
+                    JSON.stringify({
+                        base_url: fixture.origin,
+                        project_id: current.projectId,
+                        user_token: current.token,
+                        ...(replacementState === "revoked" ? { replacement_notice: "pending" } : {}),
+                        replacement_access:
+                            replacementState === "unknown"
+                                ? { kind: "unknown", previousProjectId: previous.projectId }
+                                : {
+                                      kind: "revoked",
+                                      previousProjectId: previous.projectId,
+                                      projectId: current.projectId,
+                                  },
+                    }),
+                    { mode: 0o600 },
+                );
+            }
+            const saved = replacementState === "fresh" ? null : await readFile(join(state, "config.json"), "utf8");
+            // Mobius 0.0.315 and later refuse another root's installation data with EX_CONFIG.
+            const refusal =
+                "MOBIUS_STATE_DIRECTORY is Mobius installation data, not a state root. Use the state root that owns it: MOBIUS_STATE_DIRECTORY=/owning-root";
+            await writeFile(
+                join(bin, process.platform === "win32" ? "mobius.cmd" : "mobius"),
+                process.platform === "win32"
+                    ? `@echo off\r\necho ${refusal} 1>&2\r\nexit /b 78\r\n`
+                    : `#!${process.execPath}\nprocess.stderr.write(${JSON.stringify(`${refusal}\n`)});\nprocess.exit(78);\n`,
+                { mode: 0o700 },
+            );
+            let output = "";
+            const child = spawn(
+                process.execPath,
+                [
+                    fileURLToPath(new URL("../../setup/src/cli.ts", import.meta.url)),
+                    "setup",
+                    "--base-url",
+                    fixture.origin,
+                    "--cwd",
+                    directory,
+                    "--harness",
+                    "codex",
+                    "--session-id",
+                    "state-root-test",
+                ],
+                {
+                    env: {
+                        ...process.env,
+                        PATH: bin,
+                        MOBIUS_STATE_DIRECTORY: join(directory, "inherited-installation-data"),
+                        MORTY_STATE_DIRECTORY: state,
+                        DOCUMENT_DIR: directory,
+                    },
+                    stdio: ["ignore", "pipe", "pipe"],
+                    signal: AbortSignal.timeout(20000),
+                    windowsHide: true,
+                },
+            );
+            child.stdout.on("data", (chunk: Buffer) => {
+                output += chunk.toString();
+            });
+            child.stderr.on("data", (chunk: Buffer) => {
+                output += chunk.toString();
+            });
+            const [code] = await once(child, "close");
+            expect(code, output).toBe(1);
+            expect(output).toContain('"code":"MOBIUS_STATE_ROOT_INVALID"');
+            expect(output).toContain(
+                "Rerun setup with MOBIUS_STATE_DIRECTORY set to the state root that the Runtime log names",
+            );
+            expect(output).not.toContain("RUNTIME_PREFLIGHT_FAILED");
+            expect(output).not.toContain('"status":"identity_ready"');
+            if (saved === null) {
+                await expect(readFile(join(state, "config.json"))).rejects.toMatchObject({ code: "ENOENT" });
+                expect(output).toContain("existing Morty links keep working");
+            } else {
+                expect(await readFile(join(state, "config.json"), "utf8")).toBe(saved);
+                expect(output).toContain(`"kind":"${replacementState}"`);
+                expect(output).not.toContain("existing Morty links keep working");
+                expect(output).toContain('"setupReady":false');
+            }
+        } finally {
+            await fixture.close();
+            await rm(directory, { recursive: true, force: true });
+        }
+    },
+);
+
 test.each(["missing", "unlaunchable", "npm-missing", "npm-unlaunchable"] as const)(
     "Given a %s local dependency, When setup checks the Mobius executable, Then it fails before creating an identity and reports recovery instructions",
     async (failure) => {
@@ -666,6 +784,8 @@ async function setupMachine(
     deadline?: (milliseconds: number) => AbortSignal,
     run: {
         readonly harness?: string;
+        /** The Project whose replacement the user explicitly approved. */
+        readonly replaceProject?: string;
         /** The `--session-id` the agent passes; `null` passes none. */
         readonly sessionArgument?: string | null;
         /** The calling agent's shell environment, where a harness exposes its current session. */
@@ -690,6 +810,7 @@ async function setupMachine(
             paths.workspace,
             "--harness",
             run.harness ?? "settings-test",
+            ...(run.replaceProject === undefined ? [] : ["--replace-project", run.replaceProject]),
             ...(run.sessionArgument === null ? [] : ["--session-id", run.sessionArgument ?? "native-upgrade-project"]),
         ],
         {
@@ -752,6 +873,7 @@ async function withUpgradeMachine(
             readonly documents: string;
             readonly state: string;
             readonly workspace: string;
+            readonly dispatch: (request: Request) => Promise<Response>;
         },
     ) => Promise<void>,
     /** The daemon release the machine runs before setup. Only the current release can run Agents other than settings. */
@@ -772,6 +894,7 @@ async function withUpgradeMachine(
             documents: join(root, "Documents"),
             state: join(root, "state"),
             workspace,
+            dispatch: async (request) => await worker.fetch(request, fixture.environment(fixture.origin)),
         });
     } finally {
         await runtime.disconnect();
@@ -812,26 +935,177 @@ test("Given setup was stopped after pairing its Runtime, When the user runs setu
     });
 });
 
-test("Given setup replaced the Project and was stopped before it finished, When the user runs setup again, Then the finished setup still reports the replacement once", {
+test("Given a shared Machine whose local pairing was removed, When setup has no matching replacement approval, Then shared access stays valid until the user approves that Project", {
     timeout: 120_000,
 }, async () => {
     await withUpgradeMachine("unavailable", async (runtime, paths) => {
         const first = await setupMachine(runtime, paths);
-        expect(first.events.at(-1)).toMatchObject({ status: "ready", project: "created" });
+        expect(first.code, JSON.stringify(first.events)).toBe(0);
+        const config = v.parse(
+            v.object({ project_id: v.string(), user_token: v.string() }),
+            JSON.parse(await readFile(join(paths.state, "config.json"), "utf8")),
+        );
+        const url = v.parse(v.string(), first.events.at(-1)?.["url"]);
+        const redeem = async () =>
+            await paths.dispatch(
+                new Request(`${paths.origin}/morty/api/identity/transfers/redeem`, {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ code: new URLSearchParams(new URL(url).hash.slice(1)).get("code") }),
+                    signal: AbortSignal.timeout(10000),
+                }),
+            );
+        const redeemed = await redeem();
+        expect(redeemed.status).toBe(200);
+        const browser = v.parse(v.object({ token: v.string() }), await redeemed.json());
+        const session = async () =>
+            await fetch(`${paths.origin}/morty/api/projects/${config.project_id}/session`, {
+                headers: { authorization: `Bearer ${browser.token}` },
+                signal: AbortSignal.timeout(10000),
+            });
         await runtime.forgetConnections();
 
-        const stopped = await setupMachine(runtime, paths, undefined, { interruptAt: "project_replaced" });
-        expect(stopped.code, JSON.stringify(stopped.events)).not.toBe(0);
-        expect(stopped.events).not.toContainEqual(expect.objectContaining({ status: "ready" }));
+        for (const replaceProject of [undefined, "another-project"]) {
+            const blocked = await setupMachine(runtime, paths, undefined, {
+                ...(replaceProject === undefined ? {} : { replaceProject }),
+            });
+            expect(blocked.code).toBe(1);
+            expect(blocked.events.at(-1)).toMatchObject({
+                error: {
+                    code: "PROJECT_REPLACEMENT_REQUIRED",
+                    replacement: { projectId: config.project_id, reason: "managed_runtime_missing" },
+                },
+            });
+            expect((await session()).status).toBe(200);
+            expect((await redeem()).status).toBe(200);
+            expect(JSON.parse(await readFile(join(paths.state, "config.json"), "utf8"))).toMatchObject(config);
+        }
 
-        const finished = await setupMachine(runtime, paths);
-        expect(finished.code, JSON.stringify(finished.events)).toBe(0);
-        expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
+        const approved = await setupMachine(runtime, paths, undefined, { replaceProject: config.project_id });
+        expect(approved.code, JSON.stringify(approved.events)).toBe(0);
+        expect(approved.events).toContainEqual(
+            expect.objectContaining({ status: "replacement_access_revoked", previousProjectId: config.project_id }),
+        );
+        expect(approved.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
+        expect((await session()).status).toBe(401);
+        expect((await redeem()).status).toBe(410);
+        const current = v.parse(
+            v.object({ project_id: v.string() }),
+            JSON.parse(await readFile(join(paths.state, "config.json"), "utf8")),
+        );
+        expect(current.project_id).not.toBe(config.project_id);
+        const diagnostics = approved.events.filter((event) => event["status"] !== "ready");
+        expect(JSON.stringify(diagnostics)).not.toContain(config.user_token);
+        expect(JSON.stringify(diagnostics)).not.toContain(browser.token);
+        expect(JSON.stringify(diagnostics)).not.toContain(url);
 
-        const again = await setupMachine(runtime, paths);
-        expect(again.events.at(-1)).toMatchObject({ status: "ready", project: "reused" });
+        await runtime.forgetConnections();
+        const stale = await setupMachine(runtime, paths, undefined, { replaceProject: config.project_id });
+        expect(stale.code).toBe(1);
+        expect(stale.events.at(-1)).toMatchObject({
+            error: { code: "PROJECT_REPLACEMENT_REQUIRED", replacement: { projectId: current.project_id } },
+        });
     });
 });
+
+test("Given an approved replacement request times out, When setup is retried without approval, Then it reports the uncertain access state and does not silently replace the Project", {
+    timeout: 120_000,
+}, async () => {
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        const first = await setupMachine(runtime, paths);
+        expect(first.code).toBe(0);
+        const config = v.parse(
+            v.object({ project_id: v.string() }),
+            JSON.parse(await readFile(join(paths.state, "config.json"), "utf8")),
+        );
+        await runtime.forgetConnections();
+        const uncertain = await setupMachine(runtime, paths, undefined, {
+            replaceProject: config.project_id,
+            stallFromStage: "replacement",
+        });
+        expect(uncertain.code).toBe(1);
+        expect(uncertain.events.at(-1)).toMatchObject({
+            error: { replacementAccess: { kind: "unknown", previousProjectId: config.project_id } },
+        });
+        const retry = await setupMachine(runtime, paths);
+        expect(retry.events.at(-1)).toMatchObject({
+            error: {
+                code: "PROJECT_REPLACEMENT_REQUIRED",
+                replacementAccess: { kind: "unknown", previousProjectId: config.project_id },
+            },
+        });
+        const finished = await setupMachine(runtime, paths, undefined, { replaceProject: config.project_id });
+        expect(finished.code, JSON.stringify(finished.events)).toBe(0);
+    });
+});
+
+test("Given a saved uncertain replacement and a restored local pairing, When setup runs without approval, Then it does not hide the uncertain access state behind a successful reconnection", {
+    timeout: 120_000,
+}, async () => {
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        expect((await setupMachine(runtime, paths)).code).toBe(0);
+        const configPath = join(paths.state, "config.json");
+        const config = v.parse(v.record(v.string(), v.unknown()), JSON.parse(await readFile(configPath, "utf8")));
+        const projectId = v.parse(v.string(), config["project_id"]);
+        // A previous run recorded its intent, but was interrupted before it could record the response.
+        await writeFile(
+            configPath,
+            JSON.stringify({
+                ...config,
+                replacement_access: { kind: "unknown", previousProjectId: projectId },
+            }),
+            { mode: 0o600 },
+        );
+        const blocked = await setupMachine(runtime, paths);
+        expect(blocked.code).toBe(1);
+        expect(blocked.events.at(-1)).toMatchObject({
+            error: {
+                code: "PROJECT_REPLACEMENT_REQUIRED",
+                replacement: { projectId, reason: "replacement_result_unknown" },
+                replacementAccess: { kind: "unknown" },
+            },
+        });
+        expect(blocked.events).not.toContainEqual(expect.objectContaining({ status: "ready" }));
+        expect((await setupMachine(runtime, paths, undefined, { replaceProject: projectId })).code).toBe(0);
+    });
+});
+
+test.each(["replacement_access_revoked", "project_replaced"])(
+    "Given an approved replacement was stopped at %s, When the user retries with the same approval, Then both the failure and the finished setup report that earlier access was revoked",
+    {
+        timeout: 120_000,
+    },
+    async (interruptAt) => {
+        await withUpgradeMachine("unavailable", async (runtime, paths) => {
+            const first = await setupMachine(runtime, paths);
+            expect(first.events.at(-1)).toMatchObject({ status: "ready", project: "created" });
+            const config = v.parse(
+                v.object({ project_id: v.string() }),
+                JSON.parse(await readFile(join(paths.state, "config.json"), "utf8")),
+            );
+            await runtime.forgetConnections();
+
+            const stopped = await setupMachine(runtime, paths, undefined, {
+                replaceProject: config.project_id,
+                interruptAt,
+            });
+            expect(stopped.code, JSON.stringify(stopped.events)).not.toBe(0);
+            expect(stopped.events).not.toContainEqual(expect.objectContaining({ status: "ready" }));
+            expect(stopped.events.at(-1)).toMatchObject({
+                error: {
+                    replacementAccess: { kind: "revoked", previousProjectId: config.project_id, setupReady: false },
+                },
+            });
+
+            const finished = await setupMachine(runtime, paths, undefined, { replaceProject: config.project_id });
+            expect(finished.code, JSON.stringify(finished.events)).toBe(0);
+            expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
+
+            const again = await setupMachine(runtime, paths);
+            expect(again.events.at(-1)).toMatchObject({ status: "ready", project: "reused" });
+        });
+    },
+);
 
 test("Given the agent's shell exposes its current Pi session, When setup runs without --session-id, Then the link continues that session", {
     timeout: 120_000,

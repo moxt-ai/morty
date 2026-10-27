@@ -51,12 +51,18 @@ test("Given the agent's shell exposes its Claude Code session, When it follows t
     expect(connected.events).not.toContainEqual(expect.objectContaining({ status: "session_id_mismatch" }));
 });
 
-test("Given a saved Machine whose Runtime the manager no longer manages, When setup reconnects, Then it replaces the Project, pairs a fresh Runtime, and keeps the user", async ({
+test("Given a saved Machine whose Runtime the manager no longer manages, When the user approves its replacement, Then setup pairs a fresh Runtime and keeps the user", async ({
     runtime,
 }) => {
     const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     await runtime.forgetRuntimeConnections();
-    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const connected = await runtime.followInstructions(
+        "/setup.md",
+        "setup-reconnect-session",
+        undefined,
+        undefined,
+        original.identity.projectId,
+    );
 
     expect(connected.events).not.toContainEqual(expect.objectContaining({ status: "runtime_reused" }));
     expect(connected.identity.userId).toBe(original.identity.userId);
@@ -68,7 +74,7 @@ test("Given a saved Machine whose Runtime the manager no longer manages, When se
     expect(connected.events).toContainEqual(expect.objectContaining({ status: "ready", project: "replaced" }));
 });
 
-test("Given a browser opened the saved Machine's link, When setup replaces its Project, Then nothing from the previous Project opens Morty and the new link does in the same tab", async ({
+test("Given a browser opened the saved Machine's link, When the user approves replacing its Project, Then earlier access ends and the new link works in the same tab", async ({
     runtime,
 }) => {
     const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
@@ -78,7 +84,13 @@ test("Given a browser opened the saved Machine's link, When setup replaces its P
     const previousToken = original.configuration["user_token"];
     await runtime.forgetRuntimeConnections();
 
-    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const connected = await runtime.followInstructions(
+        "/setup.md",
+        "setup-reconnect-session",
+        undefined,
+        undefined,
+        original.identity.projectId,
+    );
 
     expect(connected.identity.projectId).not.toBe(original.identity.projectId);
     expect(connected.configuration).not.toHaveProperty("replaced_project_id");
@@ -186,7 +198,7 @@ test("Given setup was previously paired in another directory, When a new project
     );
     // Execution details live in the computer menu.
     await runtime.page.getByRole("button", { name: /^Switch computer, / }).click();
-    await runtime.page.getByRole("menuitem", { name: "Execution details", exact: true }).click();
+    await runtime.page.getByRole("menuitem", { name: /View execution details/ }).click();
     const details = runtime.page.getByRole("dialog", { name: "Execution details", exact: true });
     await expect(details.getByTestId(dataTestId.executionDirectory)).toHaveText(directoryLabel(workspace));
     await runtime.page.screenshot({ path: testInfo.outputPath("long-workspace-handoff.png"), fullPage: true });

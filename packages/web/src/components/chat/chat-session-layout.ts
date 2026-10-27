@@ -12,7 +12,7 @@ export const chatSessionMessageColumnClassName = `${chatSessionColumnClassName} 
 
 /** Desktop composer keeps 12px side gutters. Mobile is full width. */
 export const chatSessionComposerClassName =
-    "relative z-10 mx-auto w-full min-w-0 shrink-0 px-0 sm:mt-0 sm:mb-3 sm:w-[min(920px,calc(100%-24px))]";
+    "relative z-10 mx-auto w-full min-w-0 shrink-0 px-0 mb-3 sm:mt-0 sm:w-[min(920px,calc(100%-24px))]";
 
 /**
  * Fills the conversation card. Background, radius, and the outer inset stay on
