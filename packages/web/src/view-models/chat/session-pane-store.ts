@@ -116,6 +116,8 @@ export interface SessionPaneStore {
     readonly historyRevision: number;
     readonly hasOlderHistory: boolean;
     readonly draft: string;
+    /** The composer holds an edited queued message whose files the Runtime did not report, so they were not restored. */
+    readonly queuedFilesNotice: boolean;
     /**
      * Bumped after a user-submitted action that appends content (send, queue,
      * steer) so the message surface re-arms following the latest message.
@@ -143,6 +145,8 @@ export interface SessionPaneStore {
     readonly queueDraft: (signal: AbortSignal) => Promise<void>;
     readonly steerQueued: (commandId: string, signal: AbortSignal) => Promise<void>;
     readonly deleteQueued: (commandId: string, signal: AbortSignal) => Promise<void>;
+    /** Takes a queued message out of the queue and back into the composer, ahead of any draft, for editing. */
+    readonly editQueued: (commandId: string, signal: AbortSignal) => Promise<void>;
     readonly configure: (
         option: SessionConfigOption,
         value: string,
@@ -844,7 +848,7 @@ export function createSessionPaneModel(options: {
                 // The draft leaves the composer for the submission.
                 centralSessionStorage.remove(draftEntry);
                 composerAttachments.getState().clear();
-                set({ draft: "" });
+                set({ draft: "", queuedFilesNotice: false });
             }
             const submittedDraftRevision = draftRevision;
             updateTurn({ kind: "submitting", commandId, startedAt: sent.sentAt });
@@ -927,6 +931,7 @@ export function createSessionPaneModel(options: {
             historyRevision: 0,
             hasOlderHistory: false,
             draft: centralSessionStorage.read(draftEntry) ?? "",
+            queuedFilesNotice: false,
             followRevision: 0,
             operation: { kind: "idle" },
             activity: turnActivity(currentTurn),
@@ -1451,7 +1456,7 @@ export function createSessionPaneModel(options: {
                 } else {
                     centralSessionStorage.write(draftEntry, draft);
                 }
-                set({ draft });
+                set(draft === "" ? { draft, queuedFilesNotice: false } : { draft });
             },
             send: async (signal) => {
                 const { attachments, state: attachmentState } = composerAttachments.getState();
@@ -1565,7 +1570,7 @@ export function createSessionPaneModel(options: {
                     void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
                     centralSessionStorage.remove(draftEntry);
                     composerAttachments.getState().clear();
-                    set({ draft: "", followRevision: get().followRevision + 1 });
+                    set({ draft: "", followRevision: get().followRevision + 1, queuedFilesNotice: false });
                 }
             },
             steerQueued: async (commandId, signal) => {
@@ -1578,6 +1583,30 @@ export function createSessionPaneModel(options: {
             },
             deleteQueued: async (commandId, signal) => {
                 await messageQueue.getState().deleteMessage(commandId, signal);
+            },
+            editQueued: async (commandId, signal) => {
+                const removed = await messageQueue.getState().deleteMessage(commandId, signal);
+                signal.throwIfAborted();
+                if (removed === null) {
+                    return;
+                }
+                // The queued message was written first, so it goes ahead of a draft the user started since.
+                const current = get().draft;
+                get().setDraft(
+                    current.trim() === ""
+                        ? removed.prompt
+                        : removed.prompt === ""
+                          ? current
+                          : `${removed.prompt}\n\n${current}`,
+                );
+                const restored: ComposerAttachment[] = [
+                    ...removed.images.map((image) => ({ kind: "image" as const, image })),
+                    ...(removed.files.kind === "reported"
+                        ? removed.files.resources.map((resource) => ({ kind: "resource" as const, resource }))
+                        : []),
+                ];
+                composerAttachments.getState().restore([...restored, ...composerAttachments.getState().attachments]);
+                set({ queuedFilesNotice: removed.files.kind === "unreported" });
             },
             configure: async (option, value, booleanValue, signal) => {
                 if (client === null || get().connection.kind !== "ready") {

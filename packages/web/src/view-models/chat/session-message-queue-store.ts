@@ -1,12 +1,19 @@
-import type { MobiusTurn, PromptImage, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
+import type { MobiusTurn, PromptImage, PromptResource, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
 import { SessionPromptDisposition } from "@moxt-ai/mobius-sdk";
 import type { NativeSessionResult } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
 import { formatError } from "../format-error.ts";
 
+/** A queued prompt's files, as the Session snapshot reports them; Runtimes that predate the report omit them. */
+type QueuedMessageFiles =
+    | { readonly kind: "reported"; readonly resources: readonly PromptResource[] }
+    | { readonly kind: "unreported" };
+
 interface QueuedMessageValue {
     readonly commandId: string;
+    readonly files: QueuedMessageFiles;
     readonly images: readonly PromptImage[];
+    readonly prompt: string;
     readonly summary: string;
     readonly turnId: string;
 }
@@ -108,8 +115,10 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                 signal.throwIfAborted();
                 const message: ChatQueuedMessage = {
                     commandId,
+                    files: { kind: "reported", resources: request.resources },
                     images: request.images,
                     kind: "queued",
+                    prompt: request.content,
                     summary,
                     turnId: accepted.turnId,
                 };
@@ -164,7 +173,12 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                     commandId: message.commandId,
                     turnId: message.commandId,
                     summary: message.prompt,
+                    prompt: message.prompt,
                     images: message.images,
+                    files:
+                        message.resources === undefined
+                            ? { kind: "unreported" }
+                            : { kind: "reported", resources: message.resources },
                     kind: state.messages.find((current) => current.commandId === message.commandId)?.kind ?? "queued",
                 })),
             })),
