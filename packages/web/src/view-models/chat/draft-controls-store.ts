@@ -38,9 +38,30 @@ type DraftSettingsState =
           readonly selectedAgent: ChatAgentSelection;
           readonly cwd: WorkspaceEntriesEvent;
           readonly options: readonly SessionConfigOption[];
+          /** Explicit or restored choices must be sent even when their values equal the Agent defaults. */
+          readonly changedOptionIds: ReadonlySet<string>;
       };
 
 type ReadyDraftSettings = Extract<DraftSettingsState, { readonly kind: "ready" }>;
+
+export function draftConfiguration(settings: DraftSettingsState): ChatDraftConfiguration | null {
+    if (settings.kind !== "ready") {
+        return null;
+    }
+    return {
+        agentRef: settings.selectedAgent.agentRef,
+        workspaceRef: settings.cwd.directoryId,
+        workspaceLabel: settings.cwd.directoryLabel,
+        configurations: settings.options
+            .filter((option) => option.category === "model" || settings.changedOptionIds.has(option.id))
+            .map((option) => ({
+                booleanValue: option.type === "boolean" ? option.booleanValue : false,
+                configId: option.id,
+                value: option.type === "select" ? option.currentValue : "",
+                valueType: option.type,
+            })),
+    };
+}
 
 type CwdBrowserState =
     | { readonly kind: "closed" }
@@ -67,7 +88,7 @@ export interface DraftControlsStore {
     readonly waitsForRuntime: () => boolean;
     /**
      * The Runtime's Agents changed. A draft whose Agent the Runtime no longer offers loads again, which settles on an
-     * offered Agent and withdraws the settings published for the removed one.
+     * offered Agent and drops the settings for the removed one.
      */
     readonly runtimeChanged: (configuration: BotRuntimeConfiguration, signal: AbortSignal) => Promise<void>;
     readonly openCwd: () => void;
@@ -108,7 +129,6 @@ function waitForCwdPreview(signal: AbortSignal): Promise<void> {
 export const createDraftControlsStore = (
     botId: string,
     requests: Pick<BotChatApi, "directory" | "agentSettings">,
-    onSettings: (settings: ChatDraftConfiguration | null) => void,
     /** The Runtime configuration the workspace keeps current. */
     runtimeConfiguration: () => BotRuntimeConfiguration | null,
     onWaitingForRuntime: () => void,
@@ -173,14 +193,12 @@ export const createDraftControlsStore = (
          */
         const awaitRuntime = (): void => {
             waitingForRuntime = true;
-            onSettings(null);
             set({ settings: { kind: "failed", message: runtimeDisconnectedMessage } });
             onWaitingForRuntime();
         };
         /** Waits for the Runtime to offer an Agent, settling any switch in progress so `runtimeChanged` can resume. */
         const awaitAgent = (): void => {
             waitingForRuntime = true;
-            onSettings(null);
             set({ settings: { kind: "loading" } });
         };
         const settleFailure = (cause: unknown, message: string): void => {
@@ -188,7 +206,6 @@ export const createDraftControlsStore = (
                 awaitRuntime();
                 return;
             }
-            onSettings(null);
             set({ settings: { kind: "failed", message: formatError(cause, message) } });
         };
         // Set while an explicit harness choice is being loaded. The load selects that harness while the Runtime offers
@@ -203,24 +220,8 @@ export const createDraftControlsStore = (
                 revertingHarnessPreference = null;
             }
         };
-        const changedOptionIds = new Set<string>();
         const rememberAgentSettings = (settings: ReadyDraftSettings): void => {
             saveLastAgentSettings(botId, settings.selectedAgent.agentRef, settings.options);
-        };
-        const publishSettings = (settings: ReadyDraftSettings): void => {
-            onSettings({
-                agentRef: settings.selectedAgent.agentRef,
-                workspaceRef: settings.cwd.directoryId,
-                workspaceLabel: settings.cwd.directoryLabel,
-                configurations: settings.options
-                    .filter((option) => option.category === "model" || changedOptionIds.has(option.id))
-                    .map((option) => ({
-                        booleanValue: option.type === "boolean" ? option.booleanValue : false,
-                        configId: option.id,
-                        value: option.type === "select" ? option.currentValue : "",
-                        valueType: option.type,
-                    })),
-            });
         };
         const rememberDirectory = (
             settings: ReadyDraftSettings,
@@ -237,7 +238,6 @@ export const createDraftControlsStore = (
             const ready = { ...settings, cwd: directory };
             const recentCwds = rememberDirectory(ready, directory);
             set({ settings: ready, cwdBrowser: { kind: "closed" }, recentCwds });
-            publishSettings(ready);
         };
         const applyAgentSettings = (
             selectedAgent: ChatAgentSelection,
@@ -251,11 +251,8 @@ export const createDraftControlsStore = (
                 selectedAgent,
                 cwd,
                 options: restoredSettings.options,
+                changedOptionIds: restoredSettings.restoredIds,
             };
-            changedOptionIds.clear();
-            for (const configId of restoredSettings.restoredIds) {
-                changedOptionIds.add(configId);
-            }
             // A harness becomes the remembered default only once its settings
             // are actually applied. A fallback to another connected Agent, or
             // a load that fails, must leave the user's choice in place.
@@ -272,7 +269,6 @@ export const createDraftControlsStore = (
                       })
                     : existingRecentCwds;
             set({ settings: ready, recentCwds });
-            publishSettings(ready);
         };
         const browseCwd = async (directoryId: string, lifetimeSignal: AbortSignal): Promise<void> => {
             const settings = get().settings;
@@ -364,7 +360,6 @@ export const createDraftControlsStore = (
             if (currentSettings.kind !== "switching") {
                 set({ settings: { kind: "loading" } });
             }
-            onSettings(null);
             waitingForRuntime = false;
             try {
                 const requestedHarness = pendingHarness ?? readLastHarnessPreference(botId);
@@ -441,7 +436,6 @@ export const createDraftControlsStore = (
                     cwd: settings.cwd,
                 },
             });
-            onSettings(null);
             try {
                 const result = await readAgentSettings(settings.selectedAgent.agentRef, true, operation);
                 operation.signal.throwIfAborted();
@@ -641,7 +635,6 @@ export const createDraftControlsStore = (
                 harnessSwitchSawOffline = false;
                 pendingHarness = agent.agentRef;
                 set({ settings: { kind: "switching", selectedHarness: value } });
-                onSettings(null);
                 // Let an immediate Runtime drop run before settings reads start.
                 await Promise.resolve();
                 try {
@@ -662,7 +655,6 @@ export const createDraftControlsStore = (
                     }
                 } catch (cause) {
                     if (!signal.aborted) {
-                        onSettings(null);
                         set({
                             settings: {
                                 kind: "failed",
@@ -686,14 +678,13 @@ export const createDraftControlsStore = (
                 }
                 const ready = {
                     ...settings,
+                    changedOptionIds: new Set([...settings.changedOptionIds, configId]),
                     options: settings.options.map((option) =>
                         option.id === configId ? { ...option, currentValue: value } : option,
                     ),
                 };
-                changedOptionIds.add(configId);
                 rememberAgentSettings(ready);
                 set({ settings: ready });
-                publishSettings(ready);
             },
             toggleOption: (configId) => {
                 const settings = get().settings;
@@ -702,16 +693,15 @@ export const createDraftControlsStore = (
                 }
                 const ready = {
                     ...settings,
+                    changedOptionIds: new Set([...settings.changedOptionIds, configId]),
                     options: settings.options.map((option) =>
                         option.id === configId && option.type === "boolean"
                             ? { ...option, booleanValue: !option.booleanValue }
                             : option,
                     ),
                 };
-                changedOptionIds.add(configId);
                 rememberAgentSettings(ready);
                 set({ settings: ready });
-                publishSettings(ready);
             },
             setCwdPath: (path, signal) => {
                 const browser = get().cwdBrowser;

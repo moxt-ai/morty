@@ -391,7 +391,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                     model.view.kind !== "active" ||
                                     creationBusy ||
                                     (draft.trim().length === 0 && attachmentModel.attachments.length === 0) ||
-                                    model.draftSettings === null
+                                    draftControls.settings.kind !== "ready"
                                 }
                             >
                                 <DraftChatControls

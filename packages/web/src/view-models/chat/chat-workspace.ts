@@ -1,7 +1,7 @@
 import type { StoreApi } from "zustand/vanilla";
 import { createComposerAttachmentStore } from "../../components/chat/composer-attachment-store.ts";
 import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
-import type { BotChatApi, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope, type IdentityScope } from "../../services/identity/identity-scope-url.ts";
 import { rememberComputerName, rememberComputerVisit } from "../../services/identity/remembered-computers.ts";
@@ -16,7 +16,7 @@ import { type ConversationDirectoryStore, createConversationDirectoryStore } fro
 import type { ConversationSelectionState, SelectedConversationTarget } from "./conversation-selection-machine.ts";
 import { selectedConversationId, transitionConversationSelection } from "./conversation-selection-machine.ts";
 import { type ConversationStatusStoreApi, createConversationStatusStore } from "./conversation-status-store.ts";
-import { createDraftControlsStore, type DraftControlsStore } from "./draft-controls-store.ts";
+import { createDraftControlsStore, type DraftControlsStore, draftConfiguration } from "./draft-controls-store.ts";
 import { createNetworkDiagnosticStore, type NetworkDiagnosticStore } from "./network-diagnostic-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
@@ -162,6 +162,7 @@ export function createChatWorkspace(options: {
     const home = createBotChatHomeStore(requests, {
         botId,
         identityKey: options.rememberedIdentity === undefined ? null : encodeIdentityScope(options.rememberedIdentity),
+        draftConfiguration: () => draftConfiguration(draftControls.getState().settings),
         now: options.clock.now,
         onRuntimeConfigurationUnavailable: () => options.computers?.invalidateCurrent(),
         onWaitingForRuntime: () => runtimeRecovery.failed(),
@@ -224,9 +225,6 @@ export function createChatWorkspace(options: {
     const draftControls = createDraftControlsStore(
         botId,
         requests,
-        (settings: ChatDraftConfiguration | null) => {
-            home.setState({ draftSettings: settings });
-        },
         () => home.getState().runtimeConfiguration,
         () => runtimeRecovery.failed(),
     );

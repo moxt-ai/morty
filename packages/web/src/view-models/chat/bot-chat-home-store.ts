@@ -148,7 +148,6 @@ export interface BotChatHomeStore {
     readonly draft: string;
     /** The draft the composer text belongs to. Only starting a new draft changes it. */
     readonly draftKey: string;
-    readonly draftSettings: ChatDraftConfiguration | null;
     /** Bumped whenever the message list should re-arm following the latest message. */
     readonly scrollFollowRevision: number;
     /** The pairing dialog the user opened manually from the sidebar. */
@@ -162,7 +161,6 @@ export interface BotChatHomeStore {
     readonly retry: () => void;
     readonly forkInstead: () => void;
     readonly setDraft: (draft: string) => void;
-    readonly setDraftSettings: (settings: ChatDraftConfiguration | null) => void;
     readonly showPairingDialog: () => void;
     readonly closePairingDialog: () => void;
     readonly updateConversationTitle: (sessionId: string, title: string) => void;
@@ -218,6 +216,7 @@ export const createBotChatHomeStore = (
     options: {
         readonly botId: string;
         readonly identityKey: string | null;
+        readonly draftConfiguration: () => ChatDraftConfiguration | null;
         readonly entry?: "address" | "restore";
         /**
          * Announced with every Runtime configuration the page observes, after the view follows it: the owner keeps the
@@ -317,7 +316,6 @@ export const createBotChatHomeStore = (
             directoryRevision: 0,
             draft: "",
             draftKey: selection.kind === "draft" ? selection.key : options.createId(),
-            draftSettings: null,
             scrollFollowRevision: 0,
             pairingDialogOpen: false,
             notices: { pairing: { kind: "hidden" } },
@@ -751,7 +749,6 @@ export const createBotChatHomeStore = (
                     creation: transitionConversationCreation(state.creation, { kind: "reset" }),
                     draft: "",
                     draftKey,
-                    draftSettings: null,
                     scrollFollowRevision: state.scrollFollowRevision + 1,
                     revision: state.view.kind === "active" ? state.revision : state.revision + 1,
                 }));
@@ -771,7 +768,6 @@ export const createBotChatHomeStore = (
                         target: { kind: "session", sessionId: id },
                     }),
                     creation: transitionConversationCreation(current.creation, { kind: "reset" }),
-                    draftSettings: null,
                     scrollFollowRevision: current.scrollFollowRevision + 1,
                     revision: current.revision + 1,
                 }));
@@ -813,7 +809,6 @@ export const createBotChatHomeStore = (
                 }
                 set({ draft });
             },
-            setDraftSettings: (draftSettings) => set({ draftSettings }),
             showPairingDialog: () => set({ pairingDialogOpen: true }),
             closePairingDialog: () => set({ pairingDialogOpen: false }),
             updateConversationTitle: (sessionId, title) => {
@@ -845,17 +840,17 @@ export const createBotChatHomeStore = (
                 const current = get();
                 const { attachments, state: attachmentState } = composerAttachments.getState();
                 const draft = current.draft;
+                const settings = options.draftConfiguration();
                 if (
                     attachmentState.kind === "reading" ||
                     current.view.kind !== "active" ||
                     current.selection.kind !== "draft" ||
-                    current.draftSettings === null
+                    settings === null
                 ) {
                     return false;
                 }
                 const activeBotId = current.view.botId;
                 const commandId = current.selection.key;
-                const settings = current.draftSettings;
                 const content = draft.trim();
                 const title = (content || attachments.map((attachment) => attachment.name).join(", ")).slice(0, 500);
                 const queuedMessage = {

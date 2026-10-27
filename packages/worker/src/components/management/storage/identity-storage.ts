@@ -52,7 +52,6 @@ export class IdentityStorage {
                 id: credentialId,
                 userId,
                 tokenHash: await digest(token),
-                status: "active",
                 createdAt: now,
             }),
         ]);
@@ -74,7 +73,7 @@ export class IdentityStorage {
             .where(
                 and(
                     eq(anonymousCredential.tokenHash, await digest(parsed.output)),
-                    eq(anonymousCredential.status, "active"),
+                    isNull(anonymousCredential.revokedAt),
                     eq(platformProjectMapping.projectId, this.#projectId),
                     or(isNull(anonymousCredential.remoteTransferId), isNull(continueLink.revokedAt)),
                 ),
@@ -94,7 +93,7 @@ export class IdentityStorage {
                 and(
                     eq(anonymousCredential.tokenHash, await digest(token)),
                     eq(anonymousCredential.userId, userId),
-                    eq(anonymousCredential.status, "active"),
+                    isNull(anonymousCredential.revokedAt),
                     isNull(anonymousCredential.remoteTransferId),
                 ),
             )
@@ -119,12 +118,12 @@ export class IdentityStorage {
                 .where(and(eq(continueLink.userId, userId), isNull(continueLink.revokedAt))),
             database
                 .update(anonymousCredential)
-                .set({ status: "revoked", revokedAt: now })
+                .set({ revokedAt: now })
                 .where(
                     and(
                         eq(anonymousCredential.userId, userId),
                         ne(anonymousCredential.tokenHash, tokenHash),
-                        eq(anonymousCredential.status, "active"),
+                        isNull(anonymousCredential.revokedAt),
                     ),
                 ),
         ]);
@@ -160,7 +159,7 @@ export class IdentityStorage {
                         and(
                             eq(anonymousCredential.userId, userId),
                             eq(anonymousCredential.tokenHash, await digest(parentToken)),
-                            eq(anonymousCredential.status, "active"),
+                            isNull(anonymousCredential.revokedAt),
                         ),
                     ),
             )
@@ -186,7 +185,6 @@ export class IdentityStorage {
                         id: sql<string>`${`cred_${crypto.randomUUID()}`}`.as("id"),
                         userId: anonymousCredential.userId,
                         tokenHash: sql<string>`${await digest(token)}`.as("token_hash"),
-                        status: sql<"active">`'active'`.as("status"),
                         createdAt: sql<number>`${now}`.as("created_at"),
                         revokedAt: sql<null>`null`.as("revoked_at"),
                         remoteTransferId: sql<null>`null`.as("remote_transfer_id"),
@@ -197,7 +195,7 @@ export class IdentityStorage {
                         and(
                             eq(anonymousCredential.userId, userId),
                             eq(anonymousCredential.tokenHash, await digest(parentToken)),
-                            eq(anonymousCredential.status, "active"),
+                            isNull(anonymousCredential.revokedAt),
                         ),
                     ),
             )
@@ -264,7 +262,6 @@ export class IdentityStorage {
                     id: sql<string>`${credentialId}`.as("id"),
                     userId: continueLink.userId,
                     tokenHash: sql<string>`${await digest(token)}`.as("token_hash"),
-                    status: sql<"active">`'active'`.as("status"),
                     createdAt: sql<number>`${now}`.as("created_at"),
                     revokedAt: sql<null>`null`.as("revoked_at"),
                     remoteTransferId: continueLink.id,
@@ -283,8 +280,8 @@ export class IdentityStorage {
                       issue,
                       database
                           .update(anonymousCredential)
-                          .set({ status: "revoked", revokedAt: now })
-                          .where(and(replaced, eq(anonymousCredential.status, "active"))),
+                          .set({ revokedAt: now })
+                          .where(and(replaced, isNull(anonymousCredential.revokedAt))),
                   ]);
         signal.throwIfAborted();
         if (results[0]?.meta.changes !== 1) {
@@ -323,7 +320,7 @@ export class IdentityStorage {
             .where(
                 and(
                     eq(anonymousCredential.tokenHash, await digest(parsed.output)),
-                    eq(anonymousCredential.status, "active"),
+                    isNull(anonymousCredential.revokedAt),
                     eq(platformProjectMapping.projectId, this.#projectId),
                     or(isNull(anonymousCredential.remoteTransferId), isNull(continueLink.revokedAt)),
                 ),
@@ -336,12 +333,12 @@ export class IdentityStorage {
         if (credential.transferId === null) {
             const revoked = await database
                 .update(anonymousCredential)
-                .set({ status: "revoked", revokedAt: now })
+                .set({ revokedAt: now })
                 .where(
                     and(
                         eq(anonymousCredential.id, credential.credentialId),
                         eq(anonymousCredential.userId, credential.userId),
-                        eq(anonymousCredential.status, "active"),
+                        isNull(anonymousCredential.revokedAt),
                     ),
                 )
                 .run();
@@ -396,11 +393,11 @@ export class IdentityStorage {
                 ),
             database
                 .update(anonymousCredential)
-                .set({ status: "revoked", revokedAt: now })
+                .set({ revokedAt: now })
                 .where(
                     and(
                         inArray(anonymousCredential.remoteTransferId, transferIds),
-                        eq(anonymousCredential.status, "active"),
+                        isNull(anonymousCredential.revokedAt),
                     ),
                 ),
         ]);
