@@ -122,7 +122,9 @@ test("Given a failed Agent turn, When its Runtime reconnects and the conversatio
     });
     await app.daemon.disconnect();
     await app.waitForView(() => expect(reconnectStatusText(app)).toContain("Retrying in"));
-    expect(queryAllByText(document.body, "The controlled Agent rejected this turn.", { exact: true })).toHaveLength(1);
+    expect(
+        queryAllByText(document.body, "Internal error: The controlled Agent rejected this turn.", { exact: true }),
+    ).toHaveLength(1);
     await app.daemon.reconnect();
     const retry = queryByRole(form, "button", { name: "Retry now" });
     if (!(retry instanceof HTMLButtonElement)) {
@@ -139,17 +141,17 @@ test("Given a failed Agent turn, When its Runtime reconnects and the conversatio
         expect(
             queryAllByText(document.body, "The local Agent could not complete the request", { exact: true }),
         ).toHaveLength(0);
-        expect(queryAllByText(document.body, "The controlled Agent rejected this turn.", { exact: true })).toHaveLength(
-            1,
-        );
+        expect(
+            queryAllByText(document.body, "Internal error: The controlled Agent rejected this turn.", { exact: true }),
+        ).toHaveLength(1);
         expect(queryAllByRole(document.body, "alert")).toHaveLength(1);
     });
     const reloaded = await app.reload();
     await reloaded.queryElementByTestId(dataTestId.messageComposer);
     await reloaded.waitForView(() => {
-        expect(queryAllByText(document.body, "The controlled Agent rejected this turn.", { exact: true })).toHaveLength(
-            0,
-        );
+        expect(
+            queryAllByText(document.body, "Internal error: The controlled Agent rejected this turn.", { exact: true }),
+        ).toHaveLength(0);
         expect(queryAllByRole(document.body, "alert")).toHaveLength(0);
     });
 });
