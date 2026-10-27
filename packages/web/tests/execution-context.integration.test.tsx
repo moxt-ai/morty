@@ -38,7 +38,8 @@ test("Given a connected computer, When the user views a conversation, Then its h
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
     );
     const computer = getByRole(document.body, "button", { name: /Switch computer/ });
-    expect(computer.textContent).not.toContain("Online");
+    // The computer heads the sidebar with its status in words, not only as a colored dot.
+    expect(computer.getAttribute("aria-label")).toMatch(/, Online$/u);
     expect(queryByRole(document.body, "status", { name: "Connection" })).toBeNull();
     const details = await openExecutionDetails(app);
     expect(details.textContent).toContain("Computer status");
