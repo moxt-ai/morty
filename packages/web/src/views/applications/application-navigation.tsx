@@ -30,7 +30,7 @@ export function MobiusApplications({
                                 to="/chat"
                                 search={{}}
                                 label="Open Chat"
-                                className="group p-5 transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+                                className="group p-5 transition-colors hover:bg-accent keyboard-focus:focus-visible:outline-2 keyboard-focus:focus-visible:outline-ring"
                             >
                                 {(pending) => (
                                     <>

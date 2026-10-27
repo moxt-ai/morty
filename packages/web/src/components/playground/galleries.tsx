@@ -43,39 +43,8 @@ import { Spinner } from "../ui/spinner.tsx";
 import { Textarea } from "../ui/textarea.tsx";
 import { useToast } from "../ui/toast.tsx";
 import type { PlaygroundEntryId } from "./catalog.ts";
+import { COLOR_SECTIONS, type ColorToken } from "./color-tokens.ts";
 import { Specimen } from "./specimen.tsx";
-
-const colorSwatches = [
-    { className: "bg-background", name: "background" },
-    { className: "bg-foreground", name: "foreground" },
-    { className: "bg-card", name: "card" },
-    { className: "bg-popover", name: "popover" },
-    { className: "bg-primary", name: "primary" },
-    { className: "bg-primary-foreground", name: "primary-foreground" },
-    { className: "bg-secondary", name: "secondary" },
-    { className: "bg-muted", name: "muted" },
-    { className: "bg-accent", name: "accent" },
-    { className: "bg-accent-active", name: "accent-active" },
-    { className: "bg-destructive", name: "destructive" },
-    { className: "bg-border", name: "border" },
-    { className: "bg-ring", name: "ring" },
-    { className: "bg-success", name: "success" },
-    { className: "bg-surface-subtle", name: "surface-subtle" },
-    { className: "bg-surface-dialog-composite", name: "dialog-composite" },
-    { className: "bg-user-message-surface", name: "user-message" },
-    { className: "bg-sidebar", name: "sidebar" },
-    { className: "bg-primary-subtle", name: "primary-subtle" },
-    { className: "bg-morty-brand-1", name: "brand-1" },
-    { className: "bg-morty-brand-6", name: "brand-6" },
-    { className: "bg-morty-brand-7", name: "brand-7" },
-    { className: "bg-morty-text-2", name: "text-2" },
-    { className: "bg-morty-text-3", name: "text-3" },
-    { className: "bg-morty-text-4", name: "text-4" },
-    { className: "bg-morty-fill-opacity-1", name: "fill-1" },
-    { className: "bg-morty-fill-opacity-2", name: "fill-2" },
-    { className: "bg-morty-fill-opacity-3", name: "fill-3" },
-    { className: "bg-morty-fill-opacity-4", name: "fill-4" },
-] as const;
 
 const typeSamples = [
     { className: "text-10", name: "text-10" },
@@ -167,14 +136,34 @@ function ChoiceRow<T extends string>({
 
 function ColorGallery() {
     return (
-        <Specimen title="Tokens">
-            {colorSwatches.map((swatch) => (
-                <div className="w-28" key={swatch.name}>
-                    <div className={`h-14 rounded-lg border border-border ${swatch.className}`} />
-                    <p className="mt-2 text-12 font-medium">{swatch.name}</p>
-                </div>
+        <div className="grid gap-6">
+            {COLOR_SECTIONS.map((section) => (
+                <Specimen key={section.group} layout="stack" title={section.group}>
+                    {section.tokens.map((token) => (
+                        <ColorTokenRow key={token.variable} token={token} />
+                    ))}
+                </Specimen>
             ))}
-        </Specimen>
+        </div>
+    );
+}
+
+/** Shows one variable's swatch, utility, name, and the value the document resolves it to. */
+function ColorTokenRow({ token }: { readonly token: ColorToken }) {
+    const value = getComputedStyle(document.documentElement).getPropertyValue(token.variable).trim();
+    return (
+        <div className="flex items-center gap-3">
+            <div
+                className="size-10 shrink-0 rounded-md border border-border"
+                style={{ backgroundColor: `var(${token.variable})` }}
+            />
+            <dl className="grid min-w-0 gap-0.5">
+                <dt className="font-mono text-12 font-medium">{token.utility}</dt>
+                <dd className="font-mono text-11 break-all text-muted-foreground">
+                    {[token.variable, value].filter((part) => part !== "").join(" · ")}
+                </dd>
+            </dl>
+        </div>
     );
 }
 
@@ -342,7 +331,7 @@ function AutoSelectInputGallery() {
         <Specimen layout="stack" title="Selects its text on mount">
             <AutoSelectInput
                 aria-label="Rename session"
-                className="h-9 max-w-sm rounded-md border border-border bg-background px-3 text-13 outline-none focus-visible:ring-2 focus-visible:ring-ring/20"
+                className="h-9 max-w-sm rounded-md border border-border bg-background px-3 text-13 outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/20"
                 defaultValue="Rename this session"
             />
         </Specimen>

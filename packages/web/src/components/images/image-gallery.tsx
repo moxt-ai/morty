@@ -153,7 +153,7 @@ function ImageTrigger({
     return (
         <button
             aria-label={`View image: ${name}`}
-            className="inline-flex max-w-full cursor-zoom-in items-center justify-center rounded-lg align-middle outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex max-w-full cursor-zoom-in items-center justify-center rounded-lg align-middle outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring"
             onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();

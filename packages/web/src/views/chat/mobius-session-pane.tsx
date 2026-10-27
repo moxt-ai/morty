@@ -417,7 +417,7 @@ function SessionConversationTitleBar({
                     type="button"
                     aria-label={displayTitle}
                     className={cn(
-                        "min-w-0 max-w-full cursor-pointer truncate outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring/70",
+                        "min-w-0 max-w-full cursor-pointer truncate outline-none hover:text-primary keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70",
                         centered ? "text-center" : "text-left",
                     )}
                     title="Rename conversation"
@@ -440,7 +440,7 @@ function SessionConversationTitleBar({
             <AutoFocusInput
                 aria-label="Conversation title"
                 className={cn(
-                    "appearance-none rounded-none border-0 bg-transparent px-0 py-0 font-semibold shadow-none outline-none ring-0 focus:ring-0 focus-visible:ring-0",
+                    "appearance-none rounded-none border-0 bg-transparent px-0 py-0 font-semibold shadow-none outline-none ring-0 keyboard-focus:focus:ring-0 keyboard-focus:focus-visible:ring-0",
                     titleTextClassName,
                     centered ? "w-[10rem] min-w-[8rem] shrink text-center" : "min-w-0 flex-1",
                 )}
@@ -674,7 +674,7 @@ function MobiusSessionPaneBody({
             : authenticationGuidance(presentation.authenticationFailure.code, pane.agentRef, executionContext.machine);
     const renderItems = sessionRenderItems(model.messages);
     const renderGroups = sessionRenderGroups(renderItems);
-    const executionStates = sessionExecutionStates(model.messages, model.activity.kind === "working");
+    const executionStates = sessionExecutionStates(model.messages, presentation.activity.kind === "working");
     const executionStateByItemId = new Map(
         model.messages.flatMap((message, index) => {
             const state = executionStates[index];
@@ -765,7 +765,7 @@ function MobiusSessionPaneBody({
                                 initialMessage === null &&
                                 model.messages.length === 0 &&
                                 model.connection.kind === "ready" &&
-                                model.activity.kind === "idle" &&
+                                presentation.activity.kind === "idle" &&
                                 !model.historyLoading && (
                                     <div className={chatSessionMessageColumnClassName}>
                                         <p className="text-center text-sm text-muted-foreground" role="status">
@@ -789,7 +789,7 @@ function MobiusSessionPaneBody({
                                         return renderGroups.map((group) => {
                                             if (group.kind === "user") {
                                                 const active =
-                                                    model.activity.kind === "working" &&
+                                                    presentation.activity.kind === "working" &&
                                                     flatIndex === lastRenderItemIndex;
                                                 const item = group.item;
                                                 flatIndex += 1;
@@ -815,7 +815,8 @@ function MobiusSessionPaneBody({
                                             const firstIndex = flatIndex;
                                             flatIndex += group.items.length;
                                             const replyActive =
-                                                model.activity.kind === "working" && flatIndex > lastRenderItemIndex;
+                                                presentation.activity.kind === "working" &&
+                                                flatIndex > lastRenderItemIndex;
                                             const renderItem = (item: SessionRenderItem) => {
                                                 const active =
                                                     replyActive &&
@@ -868,9 +869,9 @@ function MobiusSessionPaneBody({
                                     )}
                                     {presentation.workingIndicatorVisible &&
                                         presentation.outputState !== "idle" &&
-                                        model.activity.kind === "working" && (
+                                        presentation.activity.kind === "working" && (
                                             <div className="mt-6">
-                                                <WorkingIndicator startedAt={model.activity.startedAt} />
+                                                <WorkingIndicator startedAt={presentation.activity.startedAt} />
                                             </div>
                                         )}
                                     {authenticationRecovery !== null && presentation.authenticationFailure !== null && (

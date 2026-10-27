@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { ImageDownloadProvider } from "../components/images/image-download.tsx";
 import { ImageViewerProvider } from "../components/images/image-gallery.tsx";
 import { ToastProvider } from "../components/ui/toast.tsx";
+import { installInputModalityTracking } from "../input-modality.ts";
 import type { WebSocketApiTransport } from "../services/api/websocket-api-transport.ts";
 import type { Clock } from "../services/time/clock.ts";
 import { createImageDownloadStore } from "../view-models/chat/image-download-store.ts";
@@ -27,6 +28,7 @@ export function assembleMorty(options: {
     readonly application: MortyApplication;
     readonly element: React.ReactElement;
 } {
+    installInputModalityTracking();
     // Application-scoped workflows — the Chat API transport and the anonymous
     // identity session — are owned outside React's mount and unmount cycle.
     // They start with the page and end with it, so no component effect

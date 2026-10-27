@@ -38,7 +38,7 @@ export function BugReportButton({
                 className={
                     appearance === "card"
                         ? mobileDrawerCardRowClassName
-                        : "flex w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transition-none"
+                        : "flex w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 motion-reduce:transition-none"
                 }
                 onClick={(event) => {
                     if (event.detail > 0) {
@@ -118,7 +118,7 @@ function ReportImage({
             </span>
             <button
                 aria-label={`Remove ${image.file.name}`}
-                className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-black/[0.06] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50"
+                className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-black/[0.06] hover:text-foreground keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 disabled:opacity-50"
                 disabled={disabled}
                 onClick={onRemove}
                 type="button"

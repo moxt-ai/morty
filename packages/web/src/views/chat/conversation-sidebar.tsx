@@ -15,7 +15,9 @@ import { ContextMenu, Tooltip } from "radix-ui";
 import type { MouseEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
+import { MortyLogoMark } from "../../components/brand/morty-logo.tsx";
 import { mortyThinScrollbarClassName } from "../../components/chat/chat-session-layout.ts";
+import { ComputerOfflineIcon } from "../../components/chat/computer-offline-icon.tsx";
 import { PanelPresence } from "../../components/chat/panel-presence.tsx";
 import { panelMotionClassName } from "../../components/chat/sidebar-panel-presence.ts";
 import { SidebarUserMenu } from "../../components/chat/sidebar-user-menu.tsx";
@@ -77,7 +79,7 @@ function SidebarSessionOption({
             className={
                 variant === "card"
                     ? mobileDrawerCardRowClassName
-                    : "flex w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 active:bg-morty-fill-opacity-3 active:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-copy-secondary disabled:active:text-copy-secondary motion-reduce:transition-none"
+                    : "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 active:bg-morty-fill-opacity-3 active:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-copy-secondary disabled:active:text-copy-secondary motion-reduce:transition-none"
             }
             data-testid={testId}
             disabled={disabled}
@@ -191,9 +193,13 @@ function ManagedSessionDirectoryList({
         <Tooltip.Provider delayDuration={150}>
             {(directory.kind === "failed" || directory.kind === "stale") &&
                 (directory.failure === "connection" ? (
-                    <p role="status" className="py-3 text-xs text-muted-foreground">
-                        {directory.message}
-                    </p>
+                    <div
+                        role="status"
+                        className="flex flex-col items-start gap-2 px-2 py-3 text-xs text-muted-foreground"
+                    >
+                        <ComputerOfflineIcon />
+                        <p>{directory.message}</p>
+                    </div>
                 ) : (
                     <MortyAlert>{directory.message}</MortyAlert>
                 ))}
@@ -234,7 +240,7 @@ function ManagedSessionDirectoryList({
                                 aria-current={activeId === session.id ? "page" : undefined}
                                 disabled={connectionStatus.kind !== "connected"}
                                 onClick={() => onOpen(session)}
-                                className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-4 py-2 text-left text-15 font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 aria-[current=page]:hover:text-foreground aria-[current=page]:disabled:hover:text-foreground motion-reduce:transition-none sm:px-2.5 sm:text-13"
+                                className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-4 py-2 text-left text-15 font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 aria-[current=page]:hover:text-foreground aria-[current=page]:disabled:hover:text-foreground motion-reduce:transition-none sm:px-3 sm:text-13"
                             >
                                 <span className="min-w-0 truncate">{session.title}</span>
                                 {(sessionStatuses.get(session.id) ?? session.status).kind === "working" ? (
@@ -459,14 +465,14 @@ export function ConversationSidebar({
                                         className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-card/90 px-3 pt-0 max-sm:overflow-visible sm:isolate sm:w-[264px] sm:gap-0 sm:bg-sidebar sm:pt-2 sm:pb-4"
                                     >
                                         <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-4 py-3 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:bg-card/90 sm:gap-3">
-                                            <div className="relative z-[1] flex w-fit shrink-0 items-center gap-2 sm:gap-3">
+                                            <div className="relative z-[1] flex w-fit shrink-0 items-center gap-2 sm:pl-1">
                                                 <button
                                                     type="button"
                                                     aria-controls="conversation-sidebar-mobile-drawer"
                                                     aria-expanded={mobileNavOpen}
                                                     aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
                                                     className={cn(
-                                                        "inline-flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring/60 sm:hidden",
+                                                        "inline-flex items-center justify-center outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 sm:hidden",
                                                         mobileHeaderIconButtonClassName,
                                                     )}
                                                     onClick={() => {
@@ -481,15 +487,11 @@ export function ConversationSidebar({
                                                         dialogs.getState().closeMobileRecentSessions();
                                                     }}
                                                 >
-                                                    <span className="flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_4px_12px_rgba(34,123,78,0.18)]">
-                                                        <MessageSquare className="size-3.5" aria-hidden="true" />
-                                                    </span>
+                                                    <MortyLogoMark size={28} />
                                                 </button>
-                                                <span className="hidden size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_4px_12px_rgba(34,123,78,0.18)] sm:flex">
-                                                    <MessageSquare className="size-4" aria-hidden="true" />
-                                                </span>
+                                                <MortyLogoMark className="hidden sm:block" size={28} />
                                                 <span className="hidden min-w-0 sm:block">
-                                                    <h1 className="truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">
+                                                    <h1 className="truncate font-inter text-16 leading-5 font-semibold tracking-[-0.015em] text-foreground/90">
                                                         Morty
                                                     </h1>
                                                 </span>
@@ -597,9 +599,7 @@ export function ConversationSidebar({
                                             onTransitionEnd={navigationMotion.onTransitionEnd}
                                         >
                                             <div className="flex shrink-0 items-center gap-3 py-4 pl-2 sm:hidden">
-                                                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_4px_12px_rgba(34,123,78,0.18)]">
-                                                    <MessageSquare className="size-4" aria-hidden="true" />
-                                                </span>
+                                                <MortyLogoMark size={36} />
                                                 <span className="min-w-0 flex-1 truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">
                                                     Morty
                                                 </span>
@@ -625,7 +625,7 @@ export function ConversationSidebar({
                                             {desktop && (
                                                 <div className="hidden min-h-0 flex-1 sm:flex sm:min-h-0 sm:flex-col sm:gap-0">
                                                     <Tooltip.Provider delayDuration={150}>
-                                                        <div className="flex min-w-0 items-center justify-between gap-2 pl-2 sm:mb-0 sm:w-full">
+                                                        <div className="flex min-w-0 items-center justify-between gap-2.5 pl-2.5 sm:mb-0 sm:w-full">
                                                             <h2 className="font-inter text-13 font-semibold tracking-normal text-foreground">
                                                                 Recent sessions
                                                             </h2>

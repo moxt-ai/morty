@@ -38,7 +38,7 @@ export function SelectTrigger({ className, children, ...props }: ComponentProps<
     return (
         <SelectPrimitive.Trigger
             className={cn(
-                "inline-flex h-9 min-w-[136px] items-center justify-between gap-2 rounded-lg border-[0.5px] border-black/10 bg-white px-2.5 text-xs font-medium text-copy-secondary outline-none transition-colors duration-150 motion-reduce:transition-none hover:bg-background focus-visible:ring-2 focus-visible:ring-ring/70 disabled:cursor-not-allowed disabled:opacity-50",
+                "inline-flex h-9 min-w-[136px] items-center justify-between gap-2 rounded-lg border-[0.5px] border-black/10 bg-white px-2.5 text-xs font-medium text-copy-secondary outline-none transition-colors duration-150 motion-reduce:transition-none hover:bg-background keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70 disabled:cursor-not-allowed disabled:opacity-50",
                 className,
             )}
             data-slot="select-trigger"

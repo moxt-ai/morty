@@ -89,28 +89,27 @@ export async function createIdentityFixture(
                     MOBIUS_APP_SECRET: platform.appCredential,
                     MOBIUS_BASE_URL: network?.origin ?? platform.baseUrl,
                 };
-                const runtime = new Miniflare(
-                    convertV4MiniflareOptions({
-                        ...(options.listenOnLoopback === true
-                            ? { host: listener.hostname, port: Number.parseInt(listener.port, 10) }
-                            : {}),
-                        bindings: baseConfiguration,
-                        compatibilityDate: "2026-09-07",
-                        compatibilityFlags: ["nodejs_compat"],
-                        durableObjects: miniflareDurableObjects(
-                            options.wranglerConfiguration ?? new URL("../../../../wrangler.jsonc", import.meta.url),
-                        ),
-                        modules: true,
-                        r2Buckets: ["CHAT_ATTACHMENTS_APAC"],
-                        script: output.text,
-                    }),
-                );
+                const runtimeOptions = {
+                    ...(options.listenOnLoopback === true
+                        ? { host: listener.hostname, port: Number.parseInt(listener.port, 10) }
+                        : {}),
+                    bindings: baseConfiguration,
+                    compatibilityDate: "2026-09-07",
+                    compatibilityFlags: ["nodejs_compat"],
+                    durableObjects: miniflareDurableObjects(
+                        options.wranglerConfiguration ?? new URL("../../../../wrangler.jsonc", import.meta.url),
+                    ),
+                    modules: true,
+                    r2Buckets: ["CHAT_ATTACHMENTS_APAC"],
+                    script: output.text,
+                } satisfies Parameters<typeof convertV4MiniflareOptions>[0];
+                const runtime = new Miniflare(convertV4MiniflareOptions(runtimeOptions));
                 try {
                     const ready = await runtime.ready;
                     if (options.listenOnLoopback === true && ready.origin !== listener.origin) {
                         throw new Error(`Chat Worker started at ${ready.origin} instead of ${listener.origin}`);
                     }
-                    return { baseConfiguration, cloudflare: runtime, ready };
+                    return { baseConfiguration, cloudflare: runtime, ready, runtimeOptions };
                 } catch (cause) {
                     await disposeFailedRuntime(runtime);
                     if (
@@ -123,10 +122,10 @@ export async function createIdentityFixture(
                 }
             }
         };
-        const { baseConfiguration, cloudflare, ready } = await startChatWorker();
+        const { baseConfiguration, cloudflare, ready, runtimeOptions } = await startChatWorker();
         try {
-            const cloudBindings = await cloudflare.getBindings();
-            const projectObjects = await cloudflare.getDurableObjectNamespace("CHAT_PROJECTS");
+            let cloudBindings = await cloudflare.getBindings();
+            let projectObjects = await cloudflare.getDurableObjectNamespace("CHAT_PROJECTS");
             const chatProjects = {
                 idFromName: (name: string) => projectObjects.idFromName(name),
                 get: (
@@ -179,6 +178,14 @@ export async function createIdentityFixture(
                 dispatchFetch: cloudflare.dispatchFetch.bind(cloudflare),
                 environment,
                 origin: ready.origin,
+                changePlatformOrigin: async (origin: string) => {
+                    baseConfiguration.MOBIUS_BASE_URL = origin;
+                    await cloudflare.setOptions(
+                        convertV4MiniflareOptions({ ...runtimeOptions, bindings: baseConfiguration }),
+                    );
+                    cloudBindings = await cloudflare.getBindings();
+                    projectObjects = await cloudflare.getDurableObjectNamespace("CHAT_PROJECTS");
+                },
                 close: async () => {
                     try {
                         await network?.close();

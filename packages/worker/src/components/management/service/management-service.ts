@@ -41,8 +41,8 @@ export class ManagementService {
 
     readonly initializeAnonymousUser = async (userId: string, project: PlatformProject, signal: AbortSignal) => {
         const identity = await this.#authentication.createAnonymous(userId, project.projectId, signal);
-        const { origin, appId } = this.#platform.configuration();
-        await this.#platformProjects.save(userId, origin, appId, project, signal);
+        const { appId } = this.#platform.configuration();
+        await this.#platformProjects.save(userId, appId, project, signal);
         const bot = await this.provisionUserBot(identity.userId, undefined, signal);
         return { ...identity, bot };
     };
@@ -52,11 +52,11 @@ export class ManagementService {
         if (existing !== undefined) {
             return existing;
         }
-        const { origin, appId } = this.#platform.configuration();
+        const { appId } = this.#platform.configuration();
         const project =
-            (await this.#platformProjects.read(userId, origin, appId, signal)) ??
+            (await this.#platformProjects.read(userId, appId, signal)) ??
             (await this.#platform.create(userId, "Morty", signal, location));
-        await this.#platformProjects.save(userId, origin, appId, project, signal);
+        await this.#platformProjects.save(userId, appId, project, signal);
         signal.throwIfAborted();
         const bot = { botId: `bot_${crypto.randomUUID()}`, displayName: "My Machine" };
         await this.#managedBots.saveClaim(userId, bot, Date.now(), signal);
@@ -121,8 +121,8 @@ export class ManagementService {
     };
 
     readonly readProject = async (userId: string, signal: AbortSignal) => {
-        const { origin, appId } = this.#platform.configuration();
-        return await this.#platformProjects.read(userId, origin, appId, signal);
+        const { appId } = this.#platform.configuration();
+        return await this.#platformProjects.read(userId, appId, signal);
     };
 
     readonly createProject = async (
@@ -131,21 +131,21 @@ export class ManagementService {
         location: LocationHint,
         signal: AbortSignal,
     ) => {
-        const { origin, appId } = this.#platform.configuration();
-        const existing = await this.#platformProjects.read(userId, origin, appId, signal);
+        const { appId } = this.#platform.configuration();
+        const existing = await this.#platformProjects.read(userId, appId, signal);
         if (existing !== null) {
             return existing;
         }
         const project = await this.#platform.create(userId, displayName, signal, location);
         const scoped = await this.#scopeProject(project.projectId, signal);
-        await scoped.#platformProjects.save(userId, origin, appId, project, signal);
-        return (await scoped.#platformProjects.read(userId, origin, appId, signal)) ?? project;
+        await scoped.#platformProjects.save(userId, appId, project, signal);
+        return (await scoped.#platformProjects.read(userId, appId, signal)) ?? project;
     };
 
     /** Creates the successor Project for a user whose Project must be replaced, keeping the user. */
     readonly replaceProject = async (userId: string, signal: AbortSignal) => {
-        const { origin, appId } = this.#platform.configuration();
-        const previous = await this.#platformProjects.read(userId, origin, appId, signal);
+        const { appId } = this.#platform.configuration();
+        const previous = await this.#platformProjects.read(userId, appId, signal);
         if (previous === null) {
             throw new PlatformProjectError("PROJECT_REQUIRED", "Finish Morty setup before replacing.", 409);
         }

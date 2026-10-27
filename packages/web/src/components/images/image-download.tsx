@@ -29,7 +29,7 @@ export function ImageDownloadProvider({
 }
 
 export const imageControlClass =
-    "inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-lg px-3 text-sm hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-40 aria-disabled:opacity-40";
+    "inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-lg px-3 text-sm hover:bg-muted keyboard-focus:focus-visible:outline-2 keyboard-focus:focus-visible:outline-ring disabled:opacity-40 aria-disabled:opacity-40";
 
 export function ImageDownload({ image }: { readonly image: ViewerImage }) {
     const factory = useContext(DownloadContext);

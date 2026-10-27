@@ -2,7 +2,7 @@ import { Slot } from "radix-ui";
 import type { ComponentProps } from "react";
 
 const variants = {
-    primary: "border-transparent bg-primary text-primary-foreground hover:bg-primary/90",
+    primary: "border-transparent bg-foreground text-background hover:bg-foreground/85",
     outline: "border-border bg-background text-foreground hover:bg-accent",
     ghost: "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
     destructive: "border-transparent bg-destructive text-white hover:bg-destructive/90",
@@ -31,7 +31,7 @@ export function Button({
         <Component
             {...props}
             {...(asChild ? {} : { type })}
-            className={`inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg border font-medium outline-none transition-colors duration-150 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 focus-visible:ring-offset-background [&_svg]:pointer-events-none [&_svg]:shrink-0 ${variants[variant]} ${sizes[size]} ${className}`}
+            className={`inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg border font-medium outline-none transition-colors duration-150 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 ${variants[variant]} ${sizes[size]} ${className}`}
         />
     );
 }

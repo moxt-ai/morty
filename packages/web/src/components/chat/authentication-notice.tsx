@@ -26,7 +26,7 @@ export function AuthenticationNotice({
             </div>
             <p className="mt-2 leading-relaxed text-muted-foreground">{guidance.description}</p>
             <details className="mt-3">
-                <summary className="cursor-pointer py-2 font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <summary className="cursor-pointer py-2 font-medium outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring">
                     View steps
                 </summary>
                 <ol className="mt-2 list-decimal space-y-2 pl-5 leading-relaxed">
@@ -37,7 +37,7 @@ export function AuthenticationNotice({
                 <p className="mt-3 text-muted-foreground">Your draft stays here. Nothing will be sent automatically.</p>
             </details>
             <details className="mt-2 border-t border-amber-500/15 pt-2 text-xs text-muted-foreground">
-                <summary className="cursor-pointer py-2 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <summary className="cursor-pointer py-2 outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring">
                     Technical details
                 </summary>
                 <p className="mt-2 whitespace-pre-wrap">{message}</p>

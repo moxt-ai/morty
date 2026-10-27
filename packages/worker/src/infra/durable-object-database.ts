@@ -30,6 +30,7 @@ import removeContinueLinkUsageLimit from "../../migrations/project-do/0029_late_
 import deferredAgentPairing from "../../migrations/project-do/0030_tough_speedball.sql?raw";
 import removeClerkUserBinding from "../../migrations/project-do/0031_wealthy_silver_centurion.sql?raw";
 import credentialBrowser from "../../migrations/project-do/0032_lively_arachne.sql?raw";
+import platformProjectIdentity from "../../migrations/project-do/0033_platform_project_identity.sql?raw";
 
 const migrations = [
     management,
@@ -63,6 +64,7 @@ const migrations = [
     deferredAgentPairing,
     removeClerkUserBinding,
     credentialBrowser,
+    platformProjectIdentity,
 ];
 
 type BoundValue = ArrayBuffer | string | number | null;

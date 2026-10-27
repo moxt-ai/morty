@@ -5,6 +5,8 @@
 @source "../node_modules/@streamdown/math/dist/*.js";
 @source "../node_modules/@streamdown/mermaid/dist/*.js";
 
+@custom-variant keyboard-focus (&:where(html[data-input-modality="keyboard"] *));
+
 .agent-mermaid [aria-label="Mermaid chart"] {
     padding: 1rem 1rem 1rem 3.25rem;
 }
@@ -30,6 +32,7 @@
     --border: #c8cdd1;
     --input: #c8cdd1;
     --ring: #2fb872;
+    --focus-ring-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 20%, transparent);
 
     /* Morty interaction layer */
     --morty-brand-1: #eefaf3;
@@ -197,6 +200,21 @@
     code {
         font-family: var(--font-mono);
     }
+}
+
+:where(
+    a,
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    [role="menuitem"],
+    [tabindex]:not([role="menu"])
+):focus-visible:where(html[data-input-modality="keyboard"] *) {
+    outline: 0.5px solid var(--ring);
+    outline-offset: 0;
+    box-shadow: var(--focus-ring-shadow);
 }
 
 .pairing-card {

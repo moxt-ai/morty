@@ -55,7 +55,7 @@ const notFoundDocument = `<!doctype html>
       a:focus-visible { outline: 2px solid #279a60; outline-offset: 3px; }
       header { width: 100%; max-width: 1104px; margin: 0 auto; padding: 14px 24px; }
       .brand { display: inline-flex; align-items: center; gap: 12px; font-weight: 600; text-decoration: none; border-radius: 8px; }
-      .mark { display: flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 8px; background: #2fb872; color: #fff; font-size: 20px; font-weight: 700; }
+      .mark { display: block; width: 36px; height: 36px; }
       main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 48px 24px; }
       section { width: 100%; max-width: 460px; padding: 40px 32px 32px; text-align: center; border: 1px solid #fff; border-radius: 20px; background: rgba(250, 250, 251, 0.9); box-shadow: 0 8px 32px rgba(11, 26, 57, 0.06); }
       .code { margin: 0 0 8px; color: #828a99; font-size: 14px; font-weight: 600; letter-spacing: 0.08em; }
@@ -67,7 +67,7 @@ const notFoundDocument = `<!doctype html>
   </head>
   <body>
     <header>
-      <a class="brand" href="/" aria-label="Morty home"><span class="mark" aria-hidden="true">M</span>Morty</a>
+      <a class="brand" href="/" aria-label="Morty home"><img class="mark" src="/morty-logo.svg" alt="" width="36" height="36">Morty</a>
     </header>
     <main>
       <section>
