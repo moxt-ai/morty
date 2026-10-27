@@ -674,7 +674,7 @@ function MobiusSessionPaneBody({
             : authenticationGuidance(presentation.authenticationFailure.code, pane.agentRef, executionContext.machine);
     const renderItems = sessionRenderItems(model.messages);
     const renderGroups = sessionRenderGroups(renderItems);
-    const executionStates = sessionExecutionStates(model.messages, model.activity.kind === "working");
+    const executionStates = sessionExecutionStates(model.messages, presentation.activity.kind === "working");
     const executionStateByItemId = new Map(
         model.messages.flatMap((message, index) => {
             const state = executionStates[index];
@@ -765,7 +765,7 @@ function MobiusSessionPaneBody({
                                 initialMessage === null &&
                                 model.messages.length === 0 &&
                                 model.connection.kind === "ready" &&
-                                model.activity.kind === "idle" &&
+                                presentation.activity.kind === "idle" &&
                                 !model.historyLoading && (
                                     <div className={chatSessionMessageColumnClassName}>
                                         <p className="text-center text-sm text-muted-foreground" role="status">
@@ -789,7 +789,7 @@ function MobiusSessionPaneBody({
                                         return renderGroups.map((group) => {
                                             if (group.kind === "user") {
                                                 const active =
-                                                    model.activity.kind === "working" &&
+                                                    presentation.activity.kind === "working" &&
                                                     flatIndex === lastRenderItemIndex;
                                                 const item = group.item;
                                                 flatIndex += 1;
@@ -815,7 +815,8 @@ function MobiusSessionPaneBody({
                                             const firstIndex = flatIndex;
                                             flatIndex += group.items.length;
                                             const replyActive =
-                                                model.activity.kind === "working" && flatIndex > lastRenderItemIndex;
+                                                presentation.activity.kind === "working" &&
+                                                flatIndex > lastRenderItemIndex;
                                             const renderItem = (item: SessionRenderItem) => {
                                                 const active =
                                                     replyActive &&
@@ -868,9 +869,9 @@ function MobiusSessionPaneBody({
                                     )}
                                     {presentation.workingIndicatorVisible &&
                                         presentation.outputState !== "idle" &&
-                                        model.activity.kind === "working" && (
+                                        presentation.activity.kind === "working" && (
                                             <div className="mt-6">
-                                                <WorkingIndicator startedAt={model.activity.startedAt} />
+                                                <WorkingIndicator startedAt={presentation.activity.startedAt} />
                                             </div>
                                         )}
                                     {authenticationRecovery !== null && presentation.authenticationFailure !== null && (
