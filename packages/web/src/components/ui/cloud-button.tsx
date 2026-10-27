@@ -31,7 +31,7 @@ export function Button({
         <Component
             {...props}
             {...(asChild ? {} : { type })}
-            className={`inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg border font-medium outline-none transition-colors duration-150 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 focus-visible:ring-offset-background [&_svg]:pointer-events-none [&_svg]:shrink-0 ${variants[variant]} ${sizes[size]} ${className}`}
+            className={`inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg border font-medium outline-none transition-colors duration-150 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 ${variants[variant]} ${sizes[size]} ${className}`}
         />
     );
 }

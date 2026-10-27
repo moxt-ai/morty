@@ -1,4 +1,4 @@
-import { MessageSquare } from "lucide-react";
+import { CloudOff, MessageSquare } from "lucide-react";
 import { useStore } from "zustand";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
 import {
@@ -266,6 +266,9 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                             <div className="flex min-h-full flex-col gap-8">
                                 {pendingConversation.recovery !== null ? (
                                     <div className="m-auto grid max-w-lg justify-items-center gap-4 px-6 text-center">
+                                        <span className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                                            <CloudOff aria-hidden="true" className="size-5" />
+                                        </span>
                                         <div role="status" aria-live="polite" aria-atomic="true">
                                             <p className="font-medium">{pendingConversation.recovery.title}</p>
                                             <p className="mt-2 text-sm text-muted-foreground">

@@ -191,7 +191,7 @@ function ManagedSessionDirectoryList({
         <Tooltip.Provider delayDuration={150}>
             {(directory.kind === "failed" || directory.kind === "stale") &&
                 (directory.failure === "connection" ? (
-                    <p role="status" className="py-3 text-xs text-muted-foreground">
+                    <p role="status" className="px-2 py-3 text-xs text-muted-foreground">
                         {directory.message}
                     </p>
                 ) : (

@@ -30,6 +30,7 @@
     --border: #c8cdd1;
     --input: #c8cdd1;
     --ring: #2fb872;
+    --focus-ring-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 20%, transparent);
 
     /* Morty interaction layer */
     --morty-brand-1: #eefaf3;
@@ -197,6 +198,22 @@
     code {
         font-family: var(--font-mono);
     }
+}
+
+:where(a, button, input, select, textarea, summary, [role="menuitem"], [tabindex]):focus-visible {
+    outline: 0.5px solid var(--ring);
+    outline-offset: 0;
+    box-shadow: var(--focus-ring-shadow);
+}
+
+[data-current-computer="true"]:focus-visible {
+    outline: none;
+    box-shadow: none;
+}
+
+[data-state="open"]:where(button[aria-expanded="true"]):focus-visible {
+    outline: none;
+    box-shadow: none;
 }
 
 .pairing-card {

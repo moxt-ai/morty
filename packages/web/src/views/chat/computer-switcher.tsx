@@ -24,27 +24,20 @@ function BotConnectionStatusIndicator({
     readonly className?: string;
 }) {
     return (
-        <span className={cn("flex shrink-0 items-center justify-end gap-1.5", className)} role="status">
-            {status.kind === "connected" ? (
-                <span aria-hidden="true" className="size-2 rounded-full bg-emerald-500" />
-            ) : (
-                <>
-                    <span
-                        aria-hidden="true"
-                        className={`size-1.5 rounded-full ${
-                            status.kind === "connecting"
-                                ? "animate-pulse bg-amber-500 motion-reduce:animate-none"
-                                : "bg-muted-foreground/60"
-                        }`}
-                    />
-                    <span
-                        className={`whitespace-nowrap text-xs ${
-                            status.kind === "connecting" ? "text-amber-600" : "text-muted-foreground"
-                        }`}
-                    >
-                        {status.kind === "connecting" ? "Connecting" : "Offline"}
-                    </span>
-                </>
+        <span className={cn("flex shrink-0 items-center justify-end", className)} role="status">
+            <span
+                aria-hidden="true"
+                className={cn(
+                    "size-2 rounded-full",
+                    status.kind === "connected"
+                        ? "bg-emerald-500"
+                        : status.kind === "connecting"
+                          ? "animate-pulse bg-amber-500 motion-reduce:animate-none"
+                          : "bg-muted-foreground/60",
+                )}
+            />
+            {status.kind === "connected" ? null : (
+                <span className="sr-only">{status.kind === "connecting" ? "Connecting" : "Offline"}</span>
             )}
         </span>
     );
@@ -110,7 +103,7 @@ function ComputerChoiceDetail({
     );
 }
 
-const computerChoiceRowClassName = "grid grid-cols-[0.5rem_minmax(0,1fr)_1rem] items-start outline-none";
+const computerChoiceRowClassName = "grid grid-cols-[1rem_minmax(0,1fr)_1rem] items-center outline-none";
 
 const computerListChoiceInteractiveClassName =
     "hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring/60";
@@ -120,7 +113,7 @@ const computerListChoiceClassName = cn(
     computerListChoiceInteractiveClassName,
 );
 
-const computerListCurrentChoiceShellClassName = cn("outline-none", computerListChoiceInteractiveClassName);
+const computerListCurrentChoiceShellClassName = "outline-none";
 
 const computerListChoiceLinkClassName =
     "gap-x-4 py-2.5 pr-4 pl-6 hover:bg-transparent active:bg-transparent focus-visible:ring-0";
@@ -163,12 +156,12 @@ function ComputerChoiceContent({
 }) {
     return (
         <>
-            <span className="mt-2 flex size-2 shrink-0 items-center justify-center">
+            <span className="flex h-[22px] w-4 shrink-0 self-start items-center justify-center">
                 <span
                     aria-hidden="true"
                     className={cn(
-                        "size-2 rounded-full",
-                        choice.status === "online" ? "bg-emerald-500" : "bg-muted-foreground/60",
+                        "rounded-full",
+                        choice.status === "online" ? "size-2 bg-emerald-500" : "size-2 bg-muted-foreground/60",
                     )}
                 />
                 {choice.status === "online" ? <span className="sr-only">Online</span> : null}
@@ -183,7 +176,7 @@ function ComputerChoiceContent({
                     <ComputerChoiceDetail choice={choice} className={detailClassName} />
                 )}
             </span>
-            <span className="mt-1 flex size-4 items-center justify-center" aria-hidden="true">
+            <span className="flex size-4 items-center justify-center" aria-hidden="true">
                 {current ? <Check className="size-3.5" /> : null}
             </span>
         </>
@@ -198,9 +191,13 @@ function ComputerChoiceItem({ activeKey, choice }: { readonly activeKey: string;
                 href={choice.href}
                 className={cn(
                     computerChoiceRowClassName,
-                    "gap-x-2.5 rounded-md px-3 py-2 data-[highlighted]:bg-accent",
+                    "gap-x-2 rounded-md px-3 py-2",
+                    current
+                        ? "cursor-default data-[highlighted]:bg-transparent data-[highlighted]:shadow-none data-[highlighted]:outline-none"
+                        : "transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 data-[highlighted]:bg-accent motion-reduce:transition-none",
                 )}
                 aria-current={current ? "true" : undefined}
+                data-current-computer={current ? "true" : undefined}
             >
                 <ComputerChoiceContent choice={choice} current={current} />
             </a>
@@ -233,10 +230,10 @@ function ComputerChoiceList({
                 ) : (
                     <ComputerChoiceItem activeKey={activeKey} choice={sections.current} />
                 )}
-                <div className="pb-1 pl-[42px] pr-3">
+                <div className="-mt-1 pb-1 pl-9 pr-3">
                     <DropdownMenu.Item
                         aria-label={`View execution details for ${computerName}`}
-                        className="inline-flex h-8 w-fit cursor-pointer items-center gap-1 rounded-md px-3 text-xs font-medium text-copy-secondary outline-none data-[highlighted]:bg-morty-fill-opacity-2 data-[highlighted]:text-foreground"
+                        className="-mx-3 inline-flex h-8 w-fit cursor-pointer items-center gap-1 rounded-md px-3 text-xs font-medium text-copy-secondary outline-none data-[highlighted]:bg-morty-fill-opacity-2 data-[highlighted]:text-foreground"
                         onSelect={openDetails}
                     >
                         View execution details
@@ -343,14 +340,14 @@ function ComputerListChoices({
                 {sections.current === null ? (
                     <div className={computerListCurrentChoiceShellClassName}>
                         <span className={cn(computerChoiceRowClassName, computerListChoiceLinkClassName, "pb-0")}>
-                            <span className="mt-2 flex size-2 shrink-0 items-center justify-center">
+                            <span className="flex h-[22px] w-4 shrink-0 self-start items-center justify-center">
                                 <span
                                     aria-hidden="true"
                                     className={cn(
                                         "rounded-full",
                                         status.kind === "connected"
                                             ? "size-2 bg-emerald-500"
-                                            : "size-1.5 bg-muted-foreground/60",
+                                            : "size-2 bg-muted-foreground/60",
                                     )}
                                 />
                             </span>
@@ -364,7 +361,7 @@ function ComputerListChoices({
                                     </span>
                                 )}
                             </span>
-                            <span className="mt-1 flex size-4 items-center justify-center" aria-hidden="true">
+                            <span className="flex size-4 items-center justify-center" aria-hidden="true">
                                 <Check className="size-3.5" />
                             </span>
                         </span>
@@ -462,7 +459,7 @@ export function ComputerSwitcher({
                             data-testid={dataTestId.botConnectionStatus}
                             className={
                                 inHeader
-                                    ? "flex max-w-[120px] min-w-0 items-center gap-0.5 overflow-hidden rounded-lg px-3 py-1.5 text-left text-12 outline-none hover:bg-muted focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-muted-foreground max-sm:min-h-11"
+                                    ? "flex max-w-[120px] min-w-0 items-center gap-0.5 overflow-hidden rounded-lg px-3 py-1.5 text-left text-12 outline-none hover:bg-muted data-[state=open]:bg-muted data-[state=open]:shadow-none data-[state=open]:outline-none max-sm:min-h-11"
                                     : sidebarNavOptionTriggerClassName
                             }
                         >
