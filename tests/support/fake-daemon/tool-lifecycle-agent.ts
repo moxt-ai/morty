@@ -1,13 +1,18 @@
 import * as acp from "@agentclientprotocol/sdk";
 import { AcpAgentDefinition, type AcpEndpointTermination, type InProcessAcpEndpoint } from "@moxt-ai/mobius/runtime";
-import { ControlledEndpointConnection, fakeDaemonCapabilities } from "@moxt-ai/mobius-test-support/fake-daemon";
+import {
+    ControlledEndpointConnection,
+    type ControlledSessionUpdate,
+    controlledSessionUpdates,
+    fakeDaemonCapabilities,
+} from "@moxt-ai/mobius-test-support/fake-daemon";
 
 /** Stateful ACP peer that deliberately leaves tool status updates unfinished at turn termination. */
 export function createToolLifecycleAgent() {
     const sessions = new Map<string, acp.SessionNotification[]>();
     const steeringToolCounts = new Map<string, number>();
     const heldSteering = new Set<string>();
-    const createEndpoint = (): InProcessAcpEndpoint => {
+    const createEndpoint = (onSessionUpdate: ControlledSessionUpdate): InProcessAcpEndpoint => {
         const termination = Promise.withResolvers<AcpEndpointTermination>();
         const lifetime = new AbortController();
         const turns = new Map<string, AbortController>();
@@ -27,7 +32,7 @@ export function createToolLifecycleAgent() {
             })
             .onRequest(acp.methods.agent.session.load, async (context) => {
                 for (const event of sessions.get(context.params.sessionId) ?? []) {
-                    await context.client.notify(acp.methods.client.session.update, event);
+                    await onSessionUpdate(event);
                 }
                 return { configOptions: [] };
             })
@@ -54,7 +59,7 @@ export function createToolLifecycleAgent() {
                 const emit = async (update: acp.SessionNotification["update"]) => {
                     const event: acp.SessionNotification = { sessionId, update };
                     history.push(event);
-                    await context.client.notify(acp.methods.client.session.update, event);
+                    await onSessionUpdate(event);
                 };
                 const emitText = async (text: string) =>
                     await emit({
@@ -149,7 +154,7 @@ export function createToolLifecycleAgent() {
                             },
                         };
                         history.push(event);
-                        await context.client.notify(acp.methods.client.session.update, event);
+                        await onSessionUpdate(event);
                     }
                     if (prompt === "fail unfinished tools") {
                         throw new Error("Controlled Agent execution failed");
@@ -207,7 +212,7 @@ export function createToolLifecycleAgent() {
                             },
                         };
                         history.push(event);
-                        await context.client.notify(acp.methods.client.session.update, event);
+                        await onSessionUpdate(event);
                     }
                     const turn = turns.get(params.sessionId);
                     if (heldSteering.has(params.sessionId) && turn !== undefined) {
@@ -246,7 +251,8 @@ export function createToolLifecycleAgent() {
         "tool-lifecycle-test",
         "Tool Lifecycle Agent",
         process.execPath,
-        (options) => new ControlledEndpointConnection(createEndpoint(), options.client),
+        (options) =>
+            new ControlledEndpointConnection(createEndpoint(controlledSessionUpdates(options.client)), options.client),
         {},
         "controlled-harness",
         undefined,

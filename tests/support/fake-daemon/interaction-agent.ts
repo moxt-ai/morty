@@ -1,11 +1,16 @@
 import * as acp from "@agentclientprotocol/sdk";
 import { AcpAgentDefinition, type AcpEndpointTermination, type InProcessAcpEndpoint } from "@moxt-ai/mobius/runtime";
-import { ControlledEndpointConnection, fakeDaemonCapabilities } from "@moxt-ai/mobius-test-support/fake-daemon";
+import {
+    ControlledEndpointConnection,
+    type ControlledSessionUpdate,
+    controlledSessionUpdates,
+    fakeDaemonCapabilities,
+} from "@moxt-ai/mobius-test-support/fake-daemon";
 
 /** A stateful ACP peer injected through the production daemon's Agent port. */
 export function createInteractionAgent() {
     const sessions = new Set<string>();
-    const createEndpoint = (): InProcessAcpEndpoint => {
+    const createEndpoint = (onSessionUpdate: ControlledSessionUpdate): InProcessAcpEndpoint => {
         const termination = Promise.withResolvers<AcpEndpointTermination>();
         const lifetime = new AbortController();
         const turns = new Map<string, AbortController>();
@@ -97,10 +102,11 @@ export function createInteractionAgent() {
                             },
                             { cancellationSignal: signal },
                         );
-                        await context.client.notify(acp.methods.client.session.update, {
+                        await onSessionUpdate({
                             sessionId,
                             update: {
                                 sessionUpdate: "agent_message_chunk",
+                                messageId: crypto.randomUUID(),
                                 content: { type: "text", text: `Text answers: ${JSON.stringify(input)}` },
                             },
                         });
@@ -169,9 +175,13 @@ export function createInteractionAgent() {
                             }
                         }
                     }
-                    await context.client.notify(acp.methods.client.session.update, {
+                    await onSessionUpdate({
                         sessionId,
-                        update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
+                        update: {
+                            sessionUpdate: "agent_message_chunk",
+                            messageId: crypto.randomUUID(),
+                            content: { type: "text", text },
+                        },
                     });
                     return { stopReason: "end_turn" };
                 } catch (cause) {
@@ -202,7 +212,8 @@ export function createInteractionAgent() {
         "interaction-test",
         "Interaction Agent",
         process.execPath,
-        (options) => new ControlledEndpointConnection(createEndpoint(), options.client),
+        (options) =>
+            new ControlledEndpointConnection(createEndpoint(controlledSessionUpdates(options.client)), options.client),
         {},
         "controlled-harness",
         undefined,
