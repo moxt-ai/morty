@@ -198,7 +198,7 @@ test("Given setup was previously paired in another directory, When a new project
     );
     // Execution details live in the computer menu.
     await runtime.page.getByRole("button", { name: /^Switch computer, / }).click();
-    await runtime.page.getByRole("menuitem", { name: "Execution details", exact: true }).click();
+    await runtime.page.getByRole("menuitem", { name: /View execution details/ }).click();
     const details = runtime.page.getByRole("dialog", { name: "Execution details", exact: true });
     await expect(details.getByTestId(dataTestId.executionDirectory)).toHaveText(directoryLabel(workspace));
     await runtime.page.screenshot({ path: testInfo.outputPath("long-workspace-handoff.png"), fullPage: true });

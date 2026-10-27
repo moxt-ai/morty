@@ -224,7 +224,7 @@ class MobiusStateRootError extends Error {
     readonly code = "MOBIUS_STATE_ROOT_INVALID";
     readonly logPath: string;
     readonly nextStep =
-        "This shell's MOBIUS_STATE_DIRECTORY names Mobius installation data that an earlier Mobius Runtime passed to this agent, not a state root. Rerun setup with MOBIUS_STATE_DIRECTORY set to the state root that the Runtime log names. Setup changed nothing; existing Morty links keep working.";
+        "This shell's MOBIUS_STATE_DIRECTORY names Mobius installation data that an earlier Mobius Runtime passed to this agent, not a state root. Rerun setup with MOBIUS_STATE_DIRECTORY set to the state root that the Runtime log names.";
 
     constructor(logPath: string) {
         super(`Mobius refused this shell's state root. See ${logPath}.`);
@@ -232,7 +232,14 @@ class MobiusStateRootError extends Error {
         this.logPath = logPath;
     }
 
-    readonly diagnostic = () => ({ logPath: this.logPath, nextStep: this.nextStep });
+    readonly diagnostic = (access: ReplacementAccess) => ({
+        logPath: this.logPath,
+        nextStep: `${this.nextStep} ${
+            access.kind === "unchanged"
+                ? "Setup changed nothing; existing Morty links keep working."
+                : "An earlier replacement may already have changed shared access. Report replacementAccess before retrying; do not assume the old links still work."
+        }`,
+    });
 }
 
 /** A failure the Morty service reported with its own error code. */
@@ -1663,11 +1670,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                           ? "TIMEOUT"
                           : "SETUP_FAILED",
                 cause: serializeErrorCause(cause),
-                ...(cause instanceof RuntimeStartError ||
-                cause instanceof RuntimePreflightError ||
-                cause instanceof MobiusStateRootError
-                    ? { runtime: cause.diagnostic() }
-                    : {}),
+                ...(cause instanceof MobiusStateRootError
+                    ? { runtime: cause.diagnostic(replacementAccess) }
+                    : cause instanceof RuntimeStartError || cause instanceof RuntimePreflightError
+                      ? { runtime: cause.diagnostic() }
+                      : {}),
                 ...(cause instanceof AgentBindingError ? { binding: cause.diagnostic() } : {}),
                 ...(cause instanceof HarnessUnavailableError ? { harness: cause.diagnostic() } : {}),
                 ...(cause instanceof ProjectReplacementRequiredError ? { replacement: cause.diagnostic() } : {}),
