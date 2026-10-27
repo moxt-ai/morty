@@ -566,6 +566,44 @@ export class ChatService {
         input: NativeEntryInput,
     ) => await this.#openNativeSession(scope, runtimeId, entryId, input, "fork");
 
+    readonly recoverableNativeFork = async (
+        scope: ChatScope,
+        runtimeId: string,
+        operationId: string,
+        input: NativePreviewInput,
+    ) => {
+        // Operation identity belongs to this user and Machine, even when they share a Platform Project.
+        const scopedOperationId = await chatSessionId(scope.botId, `${scope.userId}\u0000fork\u0000${operationId}`);
+        const receipt = await this.#platform.forkNativeSession(
+            scope.projectId,
+            runtimeId,
+            scopedOperationId,
+            input,
+            scope.signal,
+        );
+        await this.#chatSessions.save(
+            scope.projectId,
+            scope.userId,
+            scope.botId,
+            { id: receipt.result.ready.sessionId },
+            scope.signal,
+        );
+        return receipt;
+    };
+
+    readonly continueRecoverableNativeFork = async (
+        scope: ChatScope,
+        operationId: string,
+        harness: string,
+        nativeSessionId: string,
+    ) => {
+        const bot = await this.#bot(scope);
+        const runtime = await this.localRuntime(scope);
+        const input = { agentId: harness, nativeSessionId, directoryId: "default", additionalDirectoryIds: [] };
+        const receipt = await this.recoverableNativeFork(scope, runtime.runtimeId, operationId, input);
+        return { agentRef: harness, ...receipt, instructions: bot.instructions };
+    };
+
     readonly #openNativeSession = async (
         scope: ChatScope,
         requestedRuntimeId: string,

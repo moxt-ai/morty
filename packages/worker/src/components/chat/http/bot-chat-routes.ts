@@ -38,6 +38,7 @@ const nativeListInput = v.strictObject({
 });
 const nativeEntryInput = v.strictObject({ ...nativeIdentity, discoveryId: platformIdentifier });
 const nativePreviewInput = v.strictObject({ ...nativeIdentity, nativeSessionId: platformIdentifier });
+const nativeForkContinuationInput = v.strictObject({ harness: platformIdentifier, sessionId: platformIdentifier });
 const directoryInput = v.strictObject({ directoryId: nativeDirectoryId });
 const nativeContinuationInput = v.strictObject({
     action: v.picklist(["fork", "import"]),
@@ -331,6 +332,41 @@ export function createBotChatRoutes() {
                         runtimeId,
                         entryId,
                         input,
+                    ),
+                );
+            },
+        )
+        .post(
+            "/bots/:botId/native-session-forks/:operationId",
+            authenticatedSession,
+            authorizedChat(120000),
+            bodyParser<AuthorizedChatEnvironment, typeof nativePreviewInput>(nativePreviewInput),
+            async (context) => {
+                const operationId = v.parse(platformIdentifier, context.req.param("operationId"));
+                const { runtimeId, ...input } = context.req.valid("json");
+                const receipt = await context.env.services.chat.recoverableNativeFork(
+                    context.get("chatScope"),
+                    runtimeId,
+                    operationId,
+                    input,
+                );
+                return privateJson(receipt.result);
+            },
+        )
+        .post(
+            "/bots/:botId/continue-native-session/forks/:operationId",
+            authenticatedSession,
+            authorizedChat(120000),
+            bodyParser<AuthorizedChatEnvironment, typeof nativeForkContinuationInput>(nativeForkContinuationInput),
+            async (context) => {
+                const operationId = v.parse(platformIdentifier, context.req.param("operationId"));
+                const input = context.req.valid("json");
+                return privateJson(
+                    await context.env.services.chat.continueRecoverableNativeFork(
+                        context.get("chatScope"),
+                        operationId,
+                        input.harness,
+                        input.sessionId,
                     ),
                 );
             },

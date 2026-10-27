@@ -52,7 +52,7 @@ const MOBILE_SHEET_DISMISS_LOCK_MILLISECONDS = 450;
 export function createSidebarDialogs(options: {
     readonly clock: Clock;
     readonly botId: string;
-    readonly requests: Pick<BotChatApi, "nativeSessions" | "nativeSession">;
+    readonly requests: Pick<BotChatApi, "nativeSessions" | "nativeSession" | "forkNativeSession">;
     /** The Runtime the page follows. */
     readonly runtime: () => ChatRuntime | null;
     readonly nativeSessionTitle: (entry: NativeSessionEntry) => string;

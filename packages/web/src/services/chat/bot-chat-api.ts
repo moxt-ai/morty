@@ -80,6 +80,7 @@ export type ManagedSessionEvent =
     | SessionStatusChangedEvent
     | SessionCloseNoticeEvent;
 const chatRuntimeSchema = v.object({
+    nativeForkRecovery: v.optional(v.boolean(), false),
     runtimeId: identifier,
     machineName: v.string(),
     online: v.boolean(),
@@ -440,10 +441,18 @@ export class BotChatApi {
         sessionId: string,
         action: "fork" | "import",
         signal: AbortSignal,
+        forkOperationId?: string,
     ) => {
         const stored = v.parse(
             localSessionSchema,
-            await this.#request(botId, "continue-native-session", { action, harness, sessionId }, signal),
+            await this.#request(
+                botId,
+                forkOperationId === undefined
+                    ? "continue-native-session"
+                    : `continue-native-session/forks/${encodeURIComponent(forkOperationId)}`,
+                forkOperationId === undefined ? { action, harness, sessionId } : { harness, sessionId },
+                signal,
+            ),
         );
         const result = decodeNativeSessionResult(JSON.stringify(stored.result));
         if (result.action !== action || (action === "fork" && result.ready.sessionId !== result.targetSessionId)) {
@@ -524,6 +533,24 @@ export class BotChatApi {
                       onReady(v.parse(runtimeConfigurationSchema, value));
                   },
         );
+    readonly forkNativeSession = async (
+        botId: string,
+        runtimeId: string,
+        operationId: string,
+        input: Parameters<MobiusClient["runtimes"]["forkNativeSession"]>[2],
+        signal: AbortSignal,
+    ) =>
+        decodeNativeSessionResult(
+            JSON.stringify(
+                await this.#request(
+                    botId,
+                    `native-session-forks/${encodeURIComponent(operationId)}`,
+                    { ...input, runtimeId },
+                    signal,
+                ),
+            ),
+        );
+
     readonly nativeSessions = async (
         botId: string,
         runtimeId: string,
