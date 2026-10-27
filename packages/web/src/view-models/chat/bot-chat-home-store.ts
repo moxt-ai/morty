@@ -31,7 +31,6 @@ import {
 import { createConversationSessionStore } from "./conversation-session-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import type { RuntimeObservation } from "./runtime-recovery.ts";
-import type { UnconfirmedSubmission } from "./session-delivery-store.ts";
 
 export type BotChatHomeStoreApi = ReturnType<typeof createBotChatHomeStore>;
 
@@ -142,7 +141,7 @@ export interface BotChatHomeStore {
     readonly selection: ConversationSelectionState;
     readonly rememberedSession: RememberedSession | null;
     readonly creation: ConversationCreationState;
-    /** First messages of created conversations that the service has not accepted yet, whichever is on screen. */
+    /** First messages waiting to enter their Session's delivery workflow, whichever is on screen. */
     readonly firstMessages: FirstMessages;
     readonly revision: number;
     readonly directoryRevision: number;
@@ -167,12 +166,8 @@ export interface BotChatHomeStore {
     readonly showPairingDialog: () => void;
     readonly closePairingDialog: () => void;
     readonly updateConversationTitle: (sessionId: string, title: string) => void;
-    /** Clears the queued first message once the pane has sent it. */
-    readonly initialMessageDelivered: (conversationId: string) => void;
-    /** Drops the recovery copy after the user removed the uncertain first message. */
-    readonly initialMessageRecoveryCleared: (conversationId: string, commandId: string) => void;
-    /** Marks the queued first message unconfirmed after an uncertain submission. */
-    readonly initialMessageUnconfirmed: (conversationId: string, journal: UnconfirmedSubmission) => void;
+    /** Releases the first message to delivery, or back to an editable composer if preparation failed. */
+    readonly initialMessageDequeued: (conversationId: string, commandId: string) => void;
     readonly createConversation: (signal: AbortSignal) => Promise<boolean>;
 }
 
@@ -838,24 +833,12 @@ export const createBotChatHomeStore = (
                     }
                 }
             },
-            initialMessageDelivered: (conversationId) =>
-                set((state) => ({
-                    firstMessages: transitionFirstMessages(state.firstMessages, { kind: "delivered", conversationId }),
-                })),
-            initialMessageRecoveryCleared: (conversationId, commandId) =>
+            initialMessageDequeued: (conversationId, commandId) =>
                 set((state) => ({
                     firstMessages: transitionFirstMessages(state.firstMessages, {
-                        kind: "discarded",
+                        kind: "dequeued",
                         conversationId,
                         commandId,
-                    }),
-                })),
-            initialMessageUnconfirmed: (conversationId, journal) =>
-                set((state) => ({
-                    firstMessages: transitionFirstMessages(state.firstMessages, {
-                        kind: "unconfirmed",
-                        conversationId,
-                        journal,
                     }),
                 })),
             createConversation: async (signal) => {

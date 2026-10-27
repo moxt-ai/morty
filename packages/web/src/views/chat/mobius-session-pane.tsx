@@ -545,6 +545,7 @@ export function MobiusSessionPaneLoading({ footer, title }: { readonly footer?: 
  */
 function UnconfirmedDeliveryCard({
     delivery,
+    retryDisabled,
     onRemove,
     onRetry,
 }: {
@@ -553,6 +554,7 @@ function UnconfirmedDeliveryCard({
         readonly displayPrompt: string;
         readonly attachments: readonly ComposerAttachment[];
     };
+    readonly retryDisabled: boolean;
     readonly onRemove: () => void;
     readonly onRetry: () => void;
 }) {
@@ -566,6 +568,7 @@ function UnconfirmedDeliveryCard({
                 <button
                     aria-label="Retry message with unknown delivery"
                     className="inline-flex size-7 items-center justify-center rounded-full"
+                    disabled={retryDisabled}
                     onClick={onRetry}
                     type="button"
                 >
@@ -864,6 +867,7 @@ function MobiusSessionPaneBody({
                                     {presentation.unconfirmedDelivery !== null && (
                                         <UnconfirmedDeliveryCard
                                             delivery={presentation.unconfirmedDelivery}
+                                            retryDisabled={model.connection.kind !== "ready"}
                                             onRemove={() => pane.store.getState().removeUnknownDelivery()}
                                             onRetry={() => run(pane.store.getState().retryUnknownDelivery)}
                                         />
