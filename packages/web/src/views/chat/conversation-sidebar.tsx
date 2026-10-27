@@ -491,7 +491,7 @@ export function ConversationSidebar({
                                                 </button>
                                                 <MortyLogoMark className="hidden sm:block" size={28} />
                                                 <span className="hidden min-w-0 sm:block">
-                                                    <h1 className="truncate text-[15px] leading-5 font-semibold tracking-[-0.015em]">
+                                                    <h1 className="truncate font-inter text-16 leading-5 font-semibold tracking-[-0.015em] text-foreground/90">
                                                         Morty
                                                     </h1>
                                                 </span>
