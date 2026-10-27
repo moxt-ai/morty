@@ -10,7 +10,7 @@ export function LinkButton({ className = "", ...props }: Readonly<ComponentProps
         <button
             {...props}
             type={props.type ?? "button"}
-            className={`inline-flex cursor-pointer items-center gap-1 rounded-sm font-medium text-primary underline-offset-2 outline-none transition-colors duration-150 motion-reduce:transition-none hover:underline disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+            className={`inline-flex cursor-pointer items-center gap-1 rounded-sm font-medium text-primary underline-offset-2 outline-none transition-colors duration-150 motion-reduce:transition-none hover:text-primary-hover hover:underline active:text-primary-active disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
         />
     );
 }

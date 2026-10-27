@@ -124,7 +124,7 @@ export function Select({
                 aria-busy={valueLoading}
                 aria-label={label}
                 className={cn(
-                    "flex h-9 min-w-0 items-center justify-between gap-1.5 rounded-lg text-left text-[13px] outline-none transition-colors keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/50 motion-reduce:transition-none",
+                    "flex h-9 min-w-0 items-center justify-between gap-1.5 rounded-lg text-left text-[13px] outline-none transition-colors keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 motion-reduce:transition-none",
                     valueLoading
                         ? "pointer-events-none"
                         : mutedWhenDisabled
@@ -187,7 +187,7 @@ export function Select({
                                     aria-label="Search models"
                                     autoComplete="off"
                                     className={cn(
-                                        "h-9 w-full rounded-full border border-border bg-background pl-8 text-[14px] outline-none keyboard-focus:focus-visible:border-ring keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/20 [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none",
+                                        "h-9 w-full rounded-full border border-border bg-background pl-8 text-[14px] outline-none keyboard-focus:focus-visible:border-ring keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/20 [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none",
                                         search.length > 0 ? "pr-8" : "pr-2",
                                     )}
                                     data-testid={dataTestId.modelSearch}

@@ -74,7 +74,7 @@ function HarnessSelect({
                             aria-disabled={!installed || harness.disabled}
                             aria-description={installed ? undefined : "Not installed"}
                             className={cn(
-                                "flex min-h-11 w-full min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2 text-center text-[13px] outline-none transition-colors keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/50 motion-reduce:transition-none disabled:cursor-not-allowed",
+                                "flex min-h-11 w-full min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2 text-center text-[13px] outline-none transition-colors keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 motion-reduce:transition-none disabled:cursor-not-allowed",
                                 selected
                                     ? "border-foreground bg-foreground font-medium text-background hover:border-foreground hover:bg-foreground hover:text-background"
                                     : "border-border bg-background text-foreground hover:border-foreground/20 hover:bg-accent",
@@ -188,7 +188,7 @@ function SettingPicker({
                     <input
                         aria-label="Search models"
                         autoComplete="off"
-                        className="h-11 w-full rounded-lg border border-border bg-background pr-3 pl-9 text-base outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/50"
+                        className="h-11 w-full rounded-lg border border-border bg-background pr-3 pl-9 text-base outline-none keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50"
                         data-testid={dataTestId.modelSearch}
                         onChange={(event) => setSearch(event.currentTarget.value)}
                         onKeyDown={(event) => {
@@ -233,7 +233,7 @@ function SettingPicker({
                 {options.map((option) => (
                     <button
                         aria-selected={option.value === control.value}
-                        className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left text-sm outline-none hover:bg-accent keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-inset keyboard-focus:focus-visible:ring-ring/50 aria-selected:bg-accent"
+                        className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left text-sm outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-inset keyboard-focus:focus-visible:ring-ring/50 aria-selected:bg-accent"
                         data-testid={dataTestId.sessionConfigValue(option.value)}
                         key={option.value}
                         onClick={() => onSelect(option.value)}
@@ -284,7 +284,7 @@ function SettingControl({
                 : { role: "switch", "aria-checked": control.checked })}
             aria-label={control.label}
             className={cn(
-                "flex min-h-14 w-full items-center justify-between gap-4 rounded-lg px-2 py-3 text-left text-sm outline-none hover:bg-accent keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/50 disabled:cursor-not-allowed",
+                "flex min-h-14 w-full items-center justify-between gap-4 rounded-lg px-2 py-3 text-left text-sm outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 disabled:cursor-not-allowed",
                 mutedWhenDisabled && "disabled:opacity-50",
             )}
             data-testid={control.testId}
@@ -403,7 +403,7 @@ export function ChatConfigurationMenu({
     const trigger = (
         <button
             aria-label="Configure agent"
-            className="group flex h-9 min-w-0 max-w-[200px] items-center gap-1.5 rounded-lg px-3 text-[13px] text-copy-secondary outline-none transition-colors duration-150 hover:bg-accent hover:text-foreground active:bg-accent-active active:text-foreground keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/50 data-[state=open]:bg-accent-active data-[state=open]:text-foreground motion-reduce:transition-none"
+            className="group flex h-9 min-w-0 max-w-[200px] items-center gap-1.5 rounded-lg px-3 text-[13px] text-copy-secondary outline-none transition-colors duration-150 hover:bg-accent hover:text-foreground active:bg-accent-active active:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 data-[state=open]:bg-accent-active data-[state=open]:text-foreground motion-reduce:transition-none"
             data-testid={dataTestId.agentConfiguration}
             title={selections.join(" · ")}
             type="button"
@@ -435,7 +435,7 @@ export function ChatConfigurationMenu({
             {picker !== undefined && (
                 <button
                     aria-label="Back to Agent configuration"
-                    className="flex size-11 shrink-0 items-center justify-center rounded-lg outline-none hover:bg-accent keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/50"
+                    className="flex size-11 shrink-0 items-center justify-center rounded-lg outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50"
                     onClick={goBack}
                     ref={backRef}
                     type="button"
@@ -448,7 +448,7 @@ export function ChatConfigurationMenu({
             </span>
             <button
                 aria-label="Close Agent configuration"
-                className="flex size-11 shrink-0 items-center justify-center rounded-lg text-copy-secondary outline-none hover:bg-accent keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/50"
+                className="flex size-11 shrink-0 items-center justify-center rounded-lg text-copy-secondary outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50"
                 onClick={() => changeOpen(false)}
                 type="button"
             >

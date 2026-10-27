@@ -26,6 +26,8 @@ const SECTIONS: readonly TokenSection[] = [
             "--popover",
             "--popover-foreground",
             "--primary",
+            "--primary-hover",
+            "--primary-active",
             "--primary-foreground",
             "--secondary",
             "--secondary-foreground",

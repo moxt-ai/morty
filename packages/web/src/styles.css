@@ -19,7 +19,9 @@
     --card-foreground: #0e0f11;
     --popover: #ffffff;
     --popover-foreground: #0e0f11;
-    --primary: #2fb872;
+    --primary: #4f7cff;
+    --primary-hover: #6e97ff;
+    --primary-active: #3154d2;
     --primary-foreground: #ffffff;
     --secondary: rgba(11, 26, 57, 0.08);
     --secondary-foreground: #1c1e22;
@@ -31,13 +33,13 @@
     --destructive: oklch(0.58 0.22 27);
     --border: #c8cdd1;
     --input: #c8cdd1;
-    --ring: #2fb872;
-    --focus-ring-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 20%, transparent);
+    --ring: #4f7cff;
+    --focus-ring-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
 
     /* Morty interaction layer */
-    --morty-brand-1: #eefaf3;
-    --morty-brand-6: #2fb872;
-    --morty-brand-7: #279a60;
+    --morty-brand-1: #e8f2ff;
+    --morty-brand-6: #4f7cff;
+    --morty-brand-7: #3154d2;
     --morty-text-2: #454959;
     --morty-text-3: #828a99;
     --morty-text-4: #bfc3c9;
@@ -48,7 +50,7 @@
     --morty-fill-opacity-4: rgba(11, 26, 57, 0.12);
 
     /* Morty semantic tokens */
-    --success: var(--primary);
+    --success: #2fb872;
     --copy-secondary: var(--morty-text-2);
     --surface-subtle: #f7f8f9;
     /* Opaque visual match for bg-card/90 over the dialog overlay. */
@@ -56,7 +58,7 @@
     --user-message-surface: #e6e8eb;
     --sidebar: #f4f5f7;
     --surface-elevated: var(--popover);
-    --primary-subtle: var(--morty-brand-1);
+    --primary-subtle: #e8f2ff;
 
     /* radius (mirrors @theme) */
     --radius: 1.25rem;
@@ -144,6 +146,8 @@
     --color-popover: var(--popover);
     --color-popover-foreground: var(--popover-foreground);
     --color-primary: var(--primary);
+    --color-primary-hover: var(--primary-hover);
+    --color-primary-active: var(--primary-active);
     --color-primary-foreground: var(--primary-foreground);
     --color-secondary: var(--secondary);
     --color-secondary-foreground: var(--secondary-foreground);

@@ -2,15 +2,15 @@ import { Slot } from "radix-ui";
 import type { ComponentProps } from "react";
 
 const variants = {
-    primary: "border-transparent bg-foreground text-background hover:bg-foreground/85",
-    outline: "border-border bg-background text-foreground hover:bg-accent",
-    ghost: "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
-    destructive: "border-transparent bg-destructive text-white hover:bg-destructive/90",
+    primary: "border-transparent bg-foreground text-background hover:bg-foreground/85 active:bg-foreground/75",
+    outline: "border-border bg-background text-foreground hover:bg-accent active:bg-morty-fill-opacity-4",
+    ghost: "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground active:bg-morty-fill-opacity-4 active:text-foreground",
+    destructive: "border-transparent bg-destructive text-white hover:bg-destructive/90 active:bg-destructive/70",
 };
 const sizes = {
-    default: "min-h-9 px-4 py-1.5 text-[13px]",
-    lg: "h-10 px-6 text-16",
-    sm: "min-h-8 px-4 py-1.5 text-xs",
+    default: "min-h-9 px-4 py-1.5 text-[13px] has-[>svg:first-child+*]:pl-3 has-[>*+svg:last-child]:pr-3",
+    lg: "h-10 px-6 text-16 has-[>svg:first-child+*]:pl-3 has-[>*+svg:last-child]:pr-3",
+    sm: "min-h-8 px-4 py-1.5 text-xs has-[>svg:first-child+*]:pl-3 has-[>*+svg:last-child]:pr-3",
     icon: "size-9 p-0 text-base",
 };
 
@@ -31,7 +31,7 @@ export function Button({
         <Component
             {...props}
             {...(asChild ? {} : { type })}
-            className={`inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg border font-medium outline-none transition-colors duration-150 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 ${variants[variant]} ${sizes[size]} ${className}`}
+            className={`inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg border font-medium outline-none transition-colors duration-150 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-50 active:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0 ${variants[variant]} ${sizes[size]} ${className}`}
         />
     );
 }

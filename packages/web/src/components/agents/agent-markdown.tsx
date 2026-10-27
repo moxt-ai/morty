@@ -79,7 +79,7 @@ const STREAMDOWN_FENCED_CODE_BLOCK_CLASSES = [
     "[&_[data-streamdown=code-block-copy-button]]:transition-opacity",
     "[&_[data-streamdown=code-block-copy-button]]:hover:bg-black/[0.045]",
     "[&_[data-streamdown=code-block-copy-button]]:hover:text-foreground",
-    "[&_[data-streamdown=code-block-copy-button]]:keyboard-focus:focus-visible:ring-2",
+    "[&_[data-streamdown=code-block-copy-button]]:keyboard-focus:focus-visible:ring-[3px]",
     "[&_[data-streamdown=code-block-copy-button]]:keyboard-focus:focus-visible:ring-ring/60",
     "[&_[data-streamdown=code-block-copy-button]_svg]:size-3.5",
     "[&_[data-streamdown=inline-code]]:text-[13px] [&_[data-streamdown=inline-code]]:text-copy-secondary",
@@ -197,7 +197,7 @@ function AgentMarkdownLink({ children, href }: ComponentProps<"a">) {
     if (path !== null && openLocalFile !== undefined) {
         return (
             <button
-                className="cursor-pointer font-inherit font-medium text-primary underline decoration-primary/35 underline-offset-2 hover:decoration-primary"
+                className="cursor-pointer font-inherit font-medium text-primary underline decoration-primary/35 underline-offset-2 hover:text-primary-hover hover:decoration-primary active:text-primary-active"
                 data-testid={dataTestId.localFileLink}
                 onClick={(event) => {
                     // Preserve a return-focus target even on browsers that do not focus tapped buttons.
@@ -339,7 +339,7 @@ export function AgentMarkdownContent({
                     "[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-5",
                     "[&_li>p]:my-0",
                     "[&_blockquote]:my-3 [&_blockquote]:border-l-[3px] [&_blockquote]:border-black/12 [&_blockquote]:pl-3 [&_blockquote]:text-[#454959]",
-                    "[&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:decoration-primary/35 [&_a]:underline-offset-2 hover:[&_a]:decoration-primary",
+                    "[&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:decoration-primary/35 [&_a]:underline-offset-2 [&_a]:transition-colors hover:[&_a]:text-primary-hover hover:[&_a]:decoration-primary active:[&_a]:text-primary-active",
                     "[&_code]:font-mono",
                     "[&_table]:text-sm",
                     STREAMDOWN_FENCED_CODE_BLOCK_CLASSES,

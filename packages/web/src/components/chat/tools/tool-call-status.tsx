@@ -8,7 +8,7 @@ export const ToolCallSupplementalContent = createContext<ReactNode>(null);
 
 /** Shared trigger row for intermediate agent steps (thinking rail + tool calls). */
 export const agentThinkStepTriggerClassName =
-    "flex w-full min-w-0 cursor-pointer items-start gap-2 rounded-md px-0.5 py-1 text-[13px] leading-[22px] text-morty-text-3 outline-none hover:text-copy-secondary active:text-copy-secondary keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60";
+    "flex w-full min-w-0 cursor-pointer items-start gap-2 rounded-md px-0.5 py-1 text-[13px] leading-[22px] text-morty-text-3 outline-none hover:text-copy-secondary active:text-copy-secondary keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60";
 
 export const agentThinkStepTitleClassName = "min-w-0 truncate text-left";
 
@@ -130,7 +130,7 @@ export function ToolCallStatus({ state }: { readonly state: ToolCallState }) {
             return (
                 <Check
                     aria-label="Tool succeeded"
-                    className={cn(toolCallStatusIconClassName, "size-3 text-emerald-600")}
+                    className={cn(toolCallStatusIconClassName, "size-3 text-success")}
                     strokeWidth={toolCallStatusStrokeWidthAt12Px}
                 />
             );

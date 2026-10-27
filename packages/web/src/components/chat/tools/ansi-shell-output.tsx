@@ -58,7 +58,7 @@ export function AnsiShellOutput({ output }: { readonly output: string }) {
             </pre>
             <button
                 aria-label={label}
-                className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 outline-none transition-opacity hover:bg-black/[0.06] hover:text-foreground focus:opacity-100 keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 group-hover/code:opacity-100 motion-reduce:transition-none"
+                className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 outline-none transition-opacity hover:bg-black/[0.06] hover:text-foreground focus:opacity-100 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 group-hover/code:opacity-100 motion-reduce:transition-none"
                 onClick={() => {
                     if (navigator.clipboard === undefined) {
                         setCopy("failed");

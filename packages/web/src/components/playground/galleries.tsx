@@ -312,7 +312,7 @@ function TextareaGallery() {
     const [value, setValue] = useState("Ask the agent to tighten the button padding.");
     return (
         <Specimen layout="stack" title="Inside a composer surface">
-            <div className="w-full max-w-lg rounded-[20px] border border-border bg-background px-3 py-2">
+            <div className="w-full max-w-lg rounded-[20px] border border-border bg-background px-3 py-2 transition-[border-color,box-shadow] has-[:focus]:border-[var(--color-ring)] has-[:focus]:shadow-[var(--focus-ring-shadow)]">
                 <Textarea
                     aria-label="Message"
                     onChange={(event) => setValue(event.currentTarget.value)}
@@ -331,7 +331,7 @@ function AutoSelectInputGallery() {
         <Specimen layout="stack" title="Selects its text on mount">
             <AutoSelectInput
                 aria-label="Rename session"
-                className="h-9 max-w-sm rounded-md border border-border bg-background px-3 text-13 outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/20"
+                className="h-9 max-w-sm rounded-md border border-border bg-background px-3 text-13 outline-none keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/20"
                 defaultValue="Rename this session"
             />
         </Specimen>

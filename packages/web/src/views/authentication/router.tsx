@@ -98,7 +98,7 @@ function ContinuePreviewStatePage() {
                         Unknown preview state: {stateId}
                     </p>
                     <Link
-                        className="mt-4 inline-block text-primary underline underline-offset-4"
+                        className="mt-4 inline-block text-primary underline underline-offset-4 hover:text-primary-hover active:text-primary-active"
                         to="/continue/preview"
                     >
                         Back to preview index

@@ -118,7 +118,7 @@ export function ImageCanvas({
             </div>
             <section
                 aria-label="Image canvas"
-                className="relative min-h-0 flex-1 touch-none overflow-auto overscroll-contain bg-surface-subtle outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-inset keyboard-focus:focus-visible:ring-ring"
+                className="relative min-h-0 flex-1 touch-none overflow-auto overscroll-contain bg-surface-subtle outline-none keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-inset keyboard-focus:focus-visible:ring-ring"
                 onDoubleClick={() => (zoom.kind === "fit" ? changeScale(1) : setZoom({ kind: "fit" }))}
                 onKeyDown={(event) => {
                     if (event.key === "+" || event.key === "=") {

@@ -52,7 +52,7 @@ const notFoundDocument = `<!doctype html>
       * { box-sizing: border-box; }
       body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; color: #0e0f11; background: radial-gradient(circle at top, #f6f7f9 0%, #f0f1f4 48%); font-family: Inter, ui-sans-serif, system-ui, sans-serif; line-height: 1.5; }
       a { color: inherit; }
-      a:focus-visible { outline: 2px solid #279a60; outline-offset: 3px; }
+      a:focus-visible { outline: 2px solid #4f7cff; outline-offset: 3px; }
       header { width: 100%; max-width: 1104px; margin: 0 auto; padding: 14px 24px; }
       .brand { display: inline-flex; align-items: center; gap: 12px; font-weight: 600; text-decoration: none; border-radius: 8px; }
       .mark { display: block; width: 36px; height: 36px; }
@@ -61,8 +61,9 @@ const notFoundDocument = `<!doctype html>
       .code { margin: 0 0 8px; color: #828a99; font-size: 14px; font-weight: 600; letter-spacing: 0.08em; }
       h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.03em; }
       p { margin: 12px 0 0; color: #454959; font-size: 15px; }
-      .home { display: flex; min-height: 48px; margin-top: 24px; align-items: center; justify-content: center; border-radius: 24px; background: #2fb872; color: #0e0f11; font-weight: 600; text-decoration: none; }
-      .home:hover { background: #279a60; }
+      .home { display: flex; min-height: 48px; margin-top: 24px; align-items: center; justify-content: center; border-radius: 24px; background: #4f7cff; color: #0e0f11; font-weight: 600; text-decoration: none; }
+      .home:hover { background: #6e97ff; }
+      .home:active { background: #3154d2; }
     </style>
   </head>
   <body>

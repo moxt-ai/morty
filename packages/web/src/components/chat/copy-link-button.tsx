@@ -25,7 +25,7 @@ export function CopyLinkButton({ url }: { readonly url: string }) {
                 ) : (
                     <Copy aria-hidden="true" className="size-4" />
                 )}
-                {copy === "copied" ? "Copied" : "Copy link"}
+                <span>{copy === "copied" ? "Copied" : "Copy link"}</span>
             </Button>
             {copy === "failed" && (
                 <p className="break-all font-mono text-xs text-muted-foreground" role="alert">

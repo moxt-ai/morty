@@ -22,7 +22,7 @@ export function LibrarySidebar() {
         <aside className="flex max-h-72 shrink-0 flex-col border-b border-border bg-sidebar md:max-h-none md:w-[248px] md:border-r md:border-b-0">
             <div className="px-4 pt-5 pb-3">
                 <Link
-                    className="flex items-center gap-2.5 rounded-lg outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70"
+                    className="flex items-center gap-2.5 rounded-lg outline-none keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/70"
                     to="/playground"
                 >
                     <MortyLogoMark size={32} />
@@ -61,7 +61,7 @@ export function LibrarySidebar() {
                                             <li key={entry.id}>
                                                 <Link
                                                     aria-current={active ? "page" : undefined}
-                                                    className={`block rounded-lg px-2 py-1.5 text-13 outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70 ${
+                                                    className={`block rounded-lg px-2 py-1.5 text-13 outline-none keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/70 ${
                                                         active
                                                             ? "bg-accent-active font-medium text-foreground"
                                                             : "text-muted-foreground hover:bg-accent hover:text-foreground"

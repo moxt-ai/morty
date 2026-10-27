@@ -64,7 +64,7 @@ export function HiddenFileInput({
             />
             <Button variant="ghost" size="sm" disabled={disabled} onClick={() => fileInput.current?.click()}>
                 <Paperclip aria-hidden="true" className="size-4" />
-                Attach images
+                <span>Attach images</span>
             </Button>
         </>
     );

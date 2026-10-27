@@ -31,7 +31,7 @@ export function AttemptFailure({
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                         <input
                             aria-label="Agent approval command"
-                            className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring"
+                            className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs outline-none keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring"
                             onFocus={(event) => event.currentTarget.select()}
                             readOnly
                             value={command}

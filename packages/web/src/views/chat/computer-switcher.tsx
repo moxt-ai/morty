@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, Info, LoaderCircle, Plus } from "lucide-react";
+import { Check, ChevronDown, Info, LoaderCircle, Plus } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { useStore } from "zustand";
 import { cn } from "@/lib/utils";
@@ -45,13 +45,22 @@ function choiceStatusLabel(status: ComputerChoice["status"]): string | null {
 }
 
 /** Online is a filled dot; every other state is a hollow ring, so the state never depends on color alone. */
-function StatusDot({ online, pulsing = false }: { readonly online: boolean; readonly pulsing?: boolean }) {
+function StatusDot({
+    className,
+    online,
+    pulsing = false,
+}: {
+    readonly className?: string;
+    readonly online: boolean;
+    readonly pulsing?: boolean;
+}) {
     return (
         <span
             aria-hidden="true"
             className={cn(
-                "size-2 shrink-0 rounded-full",
-                online ? "bg-emerald-500" : "border-[1.5px] border-muted-foreground/60",
+                "size-1.5 shrink-0 rounded-full",
+                className,
+                online ? "bg-success" : "border-[1.5px] border-muted-foreground/60",
                 pulsing && "animate-pulse border-amber-500 motion-reduce:animate-none",
             )}
         />
@@ -127,7 +136,7 @@ export const mobileDrawerCardClassName = "flex flex-col overflow-hidden rounded-
 export const mobileDrawerOptionDividerClassName = "[&>*+*]:border-t-[0.5px] [&>*+*]:border-black/[0.06]";
 
 export const mobileDrawerCardRowClassName =
-    "flex h-12 w-full items-center gap-3 px-4 text-left text-[15px] font-medium text-foreground outline-none transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-inset keyboard-focus:focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none";
+    "flex h-12 w-full items-center gap-3 px-4 text-left text-[15px] font-medium text-foreground outline-none transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-inset keyboard-focus:focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none";
 
 const mobileComputersSectionTitleClassName =
     "px-4 pt-3 pb-1 text-[15px] font-semibold leading-5 tracking-[-0.015em] text-foreground";
@@ -135,7 +144,7 @@ const mobileComputersSectionTitleClassName =
 const mobileChoiceRowClassName = cn(
     choiceRowClassName,
     // The first column matches the 20px icons of the drawer's action rows, so every label starts on one line.
-    "min-h-12 w-full grid-cols-[1.25rem_minmax(0,1fr)_auto_1rem] gap-x-3 px-4 text-left transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-inset keyboard-focus:focus-visible:ring-ring/60 motion-reduce:transition-none",
+    "min-h-12 w-full grid-cols-[1.25rem_minmax(0,1fr)_auto_1rem] gap-x-3 px-4 text-left transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-inset keyboard-focus:focus-visible:ring-ring/60 motion-reduce:transition-none",
 );
 
 function ComputerListChoice({
@@ -269,25 +278,29 @@ export function ComputerSwitcher({
                             aria-label={`Switch computer, ${computerName}, ${statusLabel}`}
                             data-connection-status={status.kind}
                             data-testid={dataTestId.botConnectionStatus}
-                            className="flex w-full min-w-0 items-center gap-2.5 rounded-xl py-1 pr-2 pl-1 text-left outline-none transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 data-[state=open]:bg-morty-fill-opacity-3 keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 motion-reduce:transition-none"
+                            className="group -mx-1 flex h-[50px] w-[calc(100%+0.5rem)] min-w-0 items-center gap-2.5 rounded-[16px] py-1.5 pr-3 pl-0.5 text-left outline-none transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 data-[state=open]:bg-morty-fill-opacity-3 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 motion-reduce:transition-none"
                         >
-                            <MortyLogoMark size={28} />
+                            <MortyLogoMark className="ml-2" size={30} />
                             <span className="flex min-w-0 flex-1 flex-col">
                                 <span
-                                    className="truncate font-inter text-14 leading-5 font-semibold tracking-[-0.01em] text-foreground"
+                                    className="mb-0.5 truncate font-inter text-15 leading-5 font-semibold tracking-[-0.01em] text-copy-secondary transition-colors duration-150 group-hover:text-foreground motion-reduce:transition-none"
                                     title={computerName}
                                 >
                                     {computerName}
                                 </span>
-                                <span className="flex min-w-0 items-center gap-1.5 text-12 leading-4 text-morty-text-3">
+                                <span className="-mb-0.5 flex min-w-0 items-center gap-1.5 text-12 leading-4 text-morty-text-3">
                                     <StatusDot
+                                        className="size-1.5"
                                         online={status.kind === "connected"}
                                         pulsing={status.kind === "connecting"}
                                     />
                                     <span className="truncate">{statusLabel}</span>
                                 </span>
                             </span>
-                            <ChevronsUpDown aria-hidden="true" className="size-4 shrink-0 text-morty-text-3" />
+                            <ChevronDown
+                                aria-hidden="true"
+                                className="size-3 shrink-0 text-morty-text-3 transition-colors duration-150 group-hover:text-copy-secondary group-focus-visible:text-copy-secondary group-active:text-copy-secondary group-data-[state=open]:text-copy-secondary motion-reduce:transition-none"
+                            />
                         </button>
                     </DropdownMenu.Trigger>
                     <span className="sr-only" id="computer-connection-description">
@@ -373,7 +386,10 @@ export function OnlineComputerAlternative({ model }: { readonly model: ComputerS
     const { choices } = useStore(model.store);
     const alternative = choices.find((choice) => choice.key !== model.activeKey && choice.status === "online");
     return alternative === undefined ? null : (
-        <a className="mt-2 inline-flex text-xs font-medium text-primary underline" href={alternative.href}>
+        <a
+            className="mt-2 inline-flex text-xs font-medium text-primary underline hover:text-primary-hover active:text-primary-active"
+            href={alternative.href}
+        >
             Switch to {alternative.name}
         </a>
     );

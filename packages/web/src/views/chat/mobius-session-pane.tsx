@@ -418,7 +418,7 @@ function SessionConversationTitleBar({
                     type="button"
                     aria-label={displayTitle}
                     className={cn(
-                        "min-w-0 max-w-full cursor-pointer truncate outline-none hover:text-primary keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70",
+                        "min-w-0 max-w-full cursor-pointer truncate outline-none hover:text-primary keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/70",
                         centered ? "text-center" : "text-left",
                     )}
                     title="Rename conversation"

@@ -57,7 +57,7 @@ function FieldControl({
             <label className="grid gap-1.5 text-[11px] font-medium text-[#555c68]">
                 {field.title}
                 <select
-                    className="min-h-11 rounded-md border-[0.5px] border-black/12 bg-white px-2.5 text-base font-normal text-foreground outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70 md:min-h-10 md:text-xs"
+                    className="min-h-11 rounded-md border-[0.5px] border-black/12 bg-white px-2.5 text-base font-normal text-foreground outline-none keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/70 md:min-h-10 md:text-xs"
                     defaultValue={
                         field.type === "multiselect" && Array.isArray(value)
                             ? value.filter((entry): entry is string => typeof entry === "string")
@@ -93,7 +93,7 @@ function FieldControl({
             <label className="grid gap-1.5 text-[11px] font-medium text-[#555c68]">
                 {field.title}
                 <textarea
-                    className="min-h-28 resize-y rounded-md border-[0.5px] border-black/12 bg-white px-3 py-2 text-base font-normal text-foreground outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70 md:text-xs"
+                    className="min-h-28 resize-y rounded-md border-[0.5px] border-black/12 bg-white px-3 py-2 text-base font-normal text-foreground outline-none keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/70 md:text-xs"
                     defaultValue={
                         typeof value === "string" ? value : field.hasDefaultValue ? field.defaultStringValue : undefined
                     }
@@ -115,7 +115,7 @@ function FieldControl({
         <label className="grid gap-1.5 text-[11px] font-medium text-[#555c68]">
             {field.title}
             <input
-                className="min-h-11 rounded-md border-[0.5px] border-black/12 bg-white px-3 text-base font-normal text-foreground outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70 md:min-h-10 md:text-xs"
+                className="min-h-11 rounded-md border-[0.5px] border-black/12 bg-white px-3 text-base font-normal text-foreground outline-none keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/70 md:min-h-10 md:text-xs"
                 defaultValue={
                     typeof value === "string" || typeof value === "number"
                         ? value
@@ -307,7 +307,7 @@ function ElicitationCard({
                                     </span>
                                     {externalUrl.length > 0 && (
                                         <a
-                                            className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-[#3159a6] outline-none hover:bg-[#e5edff] keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70 md:min-h-10"
+                                            className="inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-[#3159a6] outline-none hover:bg-[#e5edff] keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/70 md:min-h-10"
                                             href={externalUrl}
                                             rel="noreferrer"
                                             target="_blank"

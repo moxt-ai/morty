@@ -1,5 +1,6 @@
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
 import { ArrowLeft, Unplug } from "lucide-react";
+import { SetupConnectionGraphic } from "../../components/setup/setup-connection-graphic.tsx";
 import { LoadingWave } from "../../components/ui/loading-wave.tsx";
 import { MortyAlert } from "../../components/ui/morty-alert.tsx";
 import { Button, Spinner } from "../../index.ts";
@@ -13,7 +14,6 @@ import {
     SetupCardSection,
     SetupCardShell,
     SetupCardTitle,
-    SetupConnectionGraphic,
     SetupPageWithHeader,
     setupPrimaryButtonClassName,
     setupPrimaryButtonSize,
@@ -135,9 +135,9 @@ function SetupApplication({
     const pageNotice =
         notice === "access-ended" ? (
             <MortyAlert
-                className="w-full items-start justify-center rounded-[12px] border-primary/25 bg-primary/10 px-6 py-3 text-center text-foreground shadow-none [&>div]:flex-initial [&>svg]:mt-[3px] [&>svg]:text-success"
+                className="w-full items-start justify-center rounded-[12px] border-primary/25 bg-primary/10 px-6 py-3 text-center text-foreground shadow-none [&>div]:flex-initial [&>svg]:mt-[3px] [&>svg]:text-primary"
                 icon={Unplug}
-                tone="success"
+                tone="info"
             >
                 <p>
                     <span className="font-medium">Current access ended</span>{" "}
@@ -163,7 +163,7 @@ function SetupApplication({
             <Button asChild size="sm" variant="ghost">
                 <a href={returnHref}>
                     <ArrowLeft aria-hidden="true" className="size-4" />
-                    Back to your last computer
+                    <span>Back to your last computer</span>
                 </a>
             </Button>
         );

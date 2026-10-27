@@ -59,7 +59,7 @@ function AttachmentPreview({
             </span>
             <button
                 aria-label={`Remove ${name}`}
-                className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-black/[0.06] hover:text-foreground keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-50"
+                className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-black/[0.06] hover:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-50"
                 disabled={disabled}
                 onClick={onRemove}
                 type="button"
@@ -167,7 +167,7 @@ export function BotChatComposer({
                     )}
                 </div>
             )}
-            <div className="rounded-[24px] border-[0.5px] border-border bg-surface-elevated px-3 pt-3 pb-2.5 shadow-[0_8px_28px_rgba(23,30,36,0.06)] sm:min-h-[128px] sm:pb-3">
+            <div className="rounded-[24px] border-[0.5px] border-border bg-surface-elevated px-3 pt-3 pb-2.5 shadow-[0_8px_28px_rgba(23,30,36,0.06)] has-[:focus]:border-[var(--color-border)] sm:min-h-[128px] sm:pb-3">
                 {attachments.length > 0 && (
                     <ImageGallery>
                         <ul aria-label="Attachments" className="mb-2 flex list-none flex-wrap gap-2 p-0">
@@ -198,7 +198,7 @@ export function BotChatComposer({
                     <div className="flex min-w-0 items-center gap-1">
                         <button
                             aria-label="Add attachment"
-                            className="flex size-9 items-center justify-center rounded-full text-copy-secondary outline-none transition-colors duration-150 hover:bg-black/[0.045] hover:text-foreground active:bg-black/[0.07] active:text-foreground keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 disabled:opacity-50 motion-reduce:transition-none"
+                            className="flex size-9 items-center justify-center rounded-full text-copy-secondary outline-none transition-colors duration-150 hover:bg-black/[0.045] hover:text-foreground active:bg-black/[0.07] active:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 disabled:opacity-50 motion-reduce:transition-none"
                             disabled={disabled || !canAttach}
                             onClick={() => fileInput.current?.click()}
                             title="Add attachment"
@@ -239,7 +239,7 @@ export function BotChatComposer({
                                         ? submitLabel
                                         : "Stop agent output"
                             }
-                            className={`size-9 rounded-full text-background ${submitAction || outputState === "sending" ? "bg-foreground hover:bg-foreground/85" : "bg-destructive hover:bg-destructive/90"}`}
+                            className={`size-8! rounded-full text-background ${submitAction || outputState === "sending" ? "bg-foreground hover:bg-foreground/85" : "bg-destructive hover:bg-destructive/90"}`}
                             data-testid={dataTestId.sendMessage}
                             disabled={
                                 (submitAction && attachmentState.kind === "reading") ||

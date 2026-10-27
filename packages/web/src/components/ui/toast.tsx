@@ -42,7 +42,7 @@ export function ToastProvider({ children }: { readonly children: ReactNode }) {
                         {state.message.variant === "error" ? (
                             <CircleAlert aria-hidden="true" className="size-4 shrink-0 text-destructive" />
                         ) : (
-                            <Check aria-hidden="true" className="size-4 shrink-0 text-primary" />
+                            <Check aria-hidden="true" className="size-4 shrink-0 text-success" />
                         )}
                         <div className="min-w-0">
                             <Primitive.Title className="font-medium">{state.message.title}</Primitive.Title>
@@ -54,7 +54,7 @@ export function ToastProvider({ children }: { readonly children: ReactNode }) {
                         </div>
                         <Primitive.Close
                             aria-label="Dismiss notification"
-                            className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70"
+                            className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/70"
                         >
                             <X aria-hidden="true" className="size-3.5" />
                         </Primitive.Close>

@@ -45,7 +45,7 @@ export function DraftChatControls({
                     {settings.message}
                 </span>
                 <button
-                    className="flex h-9 min-w-0 max-w-48 items-center gap-1.5 rounded-lg px-2 text-[13px] text-destructive outline-none transition-colors hover:bg-destructive/8 keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-destructive/30 motion-reduce:transition-none"
+                    className="flex h-9 min-w-0 max-w-48 items-center gap-1.5 rounded-lg px-2 text-[13px] text-destructive outline-none transition-colors hover:bg-destructive/8 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-destructive/30 motion-reduce:transition-none"
                     onClick={retry}
                     type="button"
                 >
@@ -58,7 +58,7 @@ export function DraftChatControls({
                         <Tooltip.Trigger asChild>
                             <button
                                 aria-label="Why settings are unavailable"
-                                className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/50 motion-reduce:transition-none"
+                                className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 motion-reduce:transition-none"
                                 type="button"
                             >
                                 <CircleHelp aria-hidden="true" className="size-4" />

@@ -44,14 +44,14 @@ export function PairingInstruction() {
                 value={setupInstruction}
             >
                 <Copy aria-hidden="true" className="size-4" />
-                Copy setup prompt
+                <span>Copy setup prompt</span>
             </CopyToClipboardButton>
             <div className="mt-3 rounded-[16px] bg-muted/50 px-4 py-2 text-center text-xs leading-5 text-morty-text-3">
                 <p>Setup interrupts the agent's current task. Continue it in your browser afterwards.</p>
                 <p>Keep that computer awake and online while using Morty.</p>
             </div>
             <details aria-label="Setup details" className="group w-full text-xs leading-5 text-morty-text-3">
-                <summary className="mt-4 flex h-6 cursor-pointer list-none items-center justify-center gap-1.5 rounded-lg outline-none hover:text-morty-text-2 keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                <summary className="mt-4 flex h-6 cursor-pointer list-none items-center justify-center gap-1.5 rounded-lg outline-none hover:text-morty-text-2 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
                     Review setup details
                     <ChevronDown aria-hidden="true" className="size-3.5 group-open:rotate-180" />
                 </summary>

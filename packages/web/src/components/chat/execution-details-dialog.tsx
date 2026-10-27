@@ -9,7 +9,7 @@ import { HarnessMark } from "./harness-mark.tsx";
 function computerStatusDotClassName(status: ExecutionContext["computerStatus"]): string {
     switch (status) {
         case "Online":
-            return "size-2 bg-emerald-500";
+            return "size-2 bg-success";
         case "Checking availability":
             return "size-1.5 animate-pulse bg-amber-500 motion-reduce:animate-none";
         case "Offline":
@@ -103,7 +103,7 @@ export function ExecutionDetailsDialog({
                             </Dialog.Description>
                         </div>
                         <Dialog.Close
-                            className="mt-2.5 mr-2.5 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-muted keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/50"
+                            className="mt-2.5 mr-2.5 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-muted keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50"
                             aria-label="Close execution details"
                         >
                             <X aria-hidden="true" className="size-4" />

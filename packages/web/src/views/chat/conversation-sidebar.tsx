@@ -79,7 +79,7 @@ function SidebarSessionOption({
             className={
                 variant === "card"
                     ? mobileDrawerCardRowClassName
-                    : "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 active:bg-morty-fill-opacity-3 active:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-copy-secondary disabled:active:text-copy-secondary motion-reduce:transition-none"
+                    : "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 active:bg-morty-fill-opacity-3 active:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-copy-secondary disabled:active:text-copy-secondary motion-reduce:transition-none"
             }
             data-testid={testId}
             disabled={disabled}
@@ -240,7 +240,7 @@ function ManagedSessionDirectoryList({
                                 aria-current={activeId === session.id ? "page" : undefined}
                                 disabled={connectionStatus.kind !== "connected"}
                                 onClick={() => onOpen(session)}
-                                className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-4 py-2 text-left text-15 font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 aria-[current=page]:hover:text-foreground aria-[current=page]:disabled:hover:text-foreground motion-reduce:transition-none sm:px-3 sm:text-13"
+                                className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-4 py-2 text-left text-15 font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 aria-[current=page]:hover:text-foreground aria-[current=page]:disabled:hover:text-foreground motion-reduce:transition-none sm:px-3 sm:text-13"
                             >
                                 <span className="min-w-0 truncate">{session.title}</span>
                                 {(sessionStatuses.get(session.id) ?? session.status).kind === "working" ? (
@@ -341,7 +341,7 @@ function ConnectionStatus({
 }) {
     const dot =
         status.kind === "connected"
-            ? "bg-primary"
+            ? "bg-success"
             : status.kind === "connecting"
               ? "animate-pulse bg-amber-500 motion-reduce:animate-none"
               : "bg-muted-foreground/60";
@@ -464,13 +464,13 @@ export function ConversationSidebar({
                                         aria-label="Morty navigation"
                                         className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-card/90 px-3 pt-0 max-sm:overflow-visible sm:isolate sm:w-[264px] sm:gap-0 sm:bg-sidebar sm:pt-2 sm:pb-4"
                                     >
-                                        <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-4 py-3 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:bg-card/90 sm:gap-3">
+                                        <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-4 py-0 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:bg-card/90 sm:gap-3">
                                             <div
                                                 className={cn(
-                                                    "relative z-[1] flex w-fit shrink-0 items-center gap-2 sm:pl-1",
+                                                    "relative z-[1] flex w-fit shrink-0 items-center gap-2 sm:w-full sm:pl-1",
                                                     desktop &&
                                                         workspace.computers !== null &&
-                                                        "sm:w-full sm:min-w-0 sm:shrink sm:pl-0",
+                                                        "sm:min-w-0 sm:shrink sm:pl-0",
                                                 )}
                                             >
                                                 <button
@@ -479,7 +479,7 @@ export function ConversationSidebar({
                                                     aria-expanded={mobileNavOpen}
                                                     aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
                                                     className={cn(
-                                                        "inline-flex items-center justify-center outline-none keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 sm:hidden",
+                                                        "inline-flex items-center justify-center outline-none keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 sm:hidden",
                                                         mobileHeaderIconButtonClassName,
                                                     )}
                                                     onClick={() => {
@@ -541,7 +541,12 @@ export function ConversationSidebar({
                                                 id={dataTestId.mobileSessionTitleSlot}
                                                 className="pointer-events-none flex min-w-0 flex-1 items-center justify-center overflow-visible sm:hidden"
                                             />
-                                            <div className="flex min-w-0 shrink items-center justify-end gap-0.5">
+                                            <div
+                                                className={cn(
+                                                    "flex min-w-0 shrink items-center justify-end gap-0.5",
+                                                    workspace.computers !== null && "sm:hidden",
+                                                )}
+                                            >
                                                 <Tooltip.Provider delayDuration={150}>
                                                     {!desktop && (
                                                         <div className="flex items-center gap-2 sm:hidden">
@@ -640,7 +645,7 @@ export function ConversationSidebar({
                                                 <div className="hidden min-h-0 flex-1 sm:flex sm:min-h-0 sm:flex-col sm:gap-0">
                                                     <Tooltip.Provider delayDuration={150}>
                                                         <div className="flex min-w-0 items-center justify-between gap-2.5 pl-2.5 sm:mb-0 sm:w-full">
-                                                            <h2 className="font-inter text-13 font-semibold tracking-normal text-foreground">
+                                                            <h2 className="font-inter text-13 font-semibold tracking-normal text-copy-secondary">
                                                                 Recent sessions
                                                             </h2>
                                                             <SidebarActionTooltip

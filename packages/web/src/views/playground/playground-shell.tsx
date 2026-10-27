@@ -41,7 +41,7 @@ export function PlaygroundHome() {
                             {PLAYGROUND_ENTRIES.filter((entry) => entry.group === group).map((entry) => (
                                 <li key={entry.id}>
                                     <Link
-                                        className="block h-full rounded-xl border border-border bg-card px-4 py-4 outline-none transition-colors hover:bg-accent keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/70"
+                                        className="block h-full rounded-xl border border-border bg-card px-4 py-4 outline-none transition-colors hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/70"
                                         params={{ entryId: entry.id }}
                                         to="/playground/$entryId"
                                     >

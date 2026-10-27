@@ -20,7 +20,7 @@ const alertTones = {
     success: {
         icon: CircleCheck,
         role: "status",
-        surface: "items-start border-primary/20 bg-[oklch(0.97_0.025_163/0.6)] text-success backdrop-blur-[80px]",
+        surface: "items-start border-success/20 bg-[oklch(0.97_0.025_163/0.6)] text-success backdrop-blur-[80px]",
     },
     info: {
         icon: Info,
