@@ -38,8 +38,9 @@ export function createGoogleAnalytics(options: {
     script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`;
     options.document.head.appendChild(script);
 
-    function gtag(...command: unknown[]): void {
-        dataLayer.push(command);
+    function gtag(..._command: unknown[]): void {
+        // biome-ignore lint/complexity/noArguments: gtag.js recognizes command entries as Arguments objects.
+        dataLayer.push(arguments);
     }
     Reflect.set(options.window, "gtag", gtag);
     gtag("js", new Date());
