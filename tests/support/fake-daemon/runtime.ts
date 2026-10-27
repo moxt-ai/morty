@@ -188,6 +188,9 @@ export function createMortyFakeDaemon(behavior: ControlledAgentBehavior, workspa
     if (behavior.agentId === "interaction-test") {
         return { ...harness, agents: [createInteractionAgent()] };
     }
+    if (behavior.agentId === "configuration-test") {
+        return { ...harness, agents: [createSettingsAgent(defineCurrentAgent, "full")] };
+    }
     if (behavior.agentId === "settings-test") {
         return { ...harness, agents: [createSettingsAgent(defineCurrentAgent)] };
     }

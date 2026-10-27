@@ -19,6 +19,57 @@ async function waitForConnection(app: TestApp, status: string): Promise<void> {
     });
 }
 
+test("Given full harness settings, When the user searches and edits them with the keyboard, Then selections are retained in the conversation and focus returns", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: { id: "configuration-test", label: "Settings Agent" },
+    });
+    const trigger = await app.queryElementByTestId(dataTestId.agentConfiguration);
+    await app.user.click(trigger);
+    await openAgentModelPicker(app);
+    const search = getByRole(document.body, "searchbox", { name: "Search models" });
+    await app.user.type(search, "unmatched model");
+    expect(getByRole(getByRole(document.body, "dialog", { name: "Agent configuration" }), "status").textContent).toBe(
+        "No models found.",
+    );
+    await app.user.keyboard("{Escape}");
+    const model = getByRole(document.body, "combobox", { name: "Model" });
+    await app.waitForView(() => expect(document.activeElement).toBe(model));
+    await app.user.keyboard("{ArrowDown}");
+    await app.user.type(getByRole(document.body, "searchbox", { name: "Search models" }), "large");
+    await app.user.keyboard("{ArrowDown}{Enter}");
+    await app.waitForView(() => {
+        const updatedModel = getByRole(document.body, "combobox", { name: "Model" });
+        expect(updatedModel.textContent).toContain("Test Large");
+        expect(document.activeElement).toBe(updatedModel);
+    });
+    for (const { label, value } of [
+        { label: "Mode", value: "Plan" },
+        { label: "Effort", value: "Low" },
+    ]) {
+        await app.user.click(getByRole(document.body, "combobox", { name: label }));
+        await app.user.click(getByRole(document.body, "option", { name: value }));
+    }
+    await app.user.click(getByRole(document.body, "switch", { name: "Fast mode" }));
+    await app.user.click(getByRole(document.body, "button", { name: "Close Agent configuration" }));
+    await app.waitForView(() => expect(document.activeElement).toBe(trigger));
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    await sendPrompt(app, composer, "Keep my configuration");
+    await app.queryElementByTestId(
+        dataTestId.agentResponse,
+        (element) => element.textContent?.includes("Settings Agent: Keep my configuration") === true,
+    );
+    await app.user.click(getByRole(document.body, "button", { name: "Configure agent" }));
+    await app.waitForView(() => {
+        expect(getByRole(document.body, "combobox", { name: "Model" }).textContent).toContain("Test Large");
+        expect(getByRole(document.body, "combobox", { name: "Mode" }).textContent).toContain("Plan");
+        expect(getByRole(document.body, "combobox", { name: "Effort" }).textContent).toContain("Low");
+        expect(getByRole(document.body, "switch", { name: "Fast mode" }).getAttribute("aria-checked")).toBe("true");
+    });
+});
+
 test("Given Morty has no paired agent, When the setup page opens, Then it offers the current-origin setup instruction without a data region selector", {
     timeout: 30_000,
 }, async () => {
