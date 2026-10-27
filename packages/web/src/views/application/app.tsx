@@ -1,5 +1,7 @@
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { ArrowLeft, Unplug } from "lucide-react";
+import { LoadingWave } from "../../components/ui/loading-wave.tsx";
+import { MortyAlert } from "../../components/ui/morty-alert.tsx";
 import { Button, Spinner } from "../../index.ts";
 import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-store.ts";
 import { PairingInstruction } from "../chat/pairing-instruction.tsx";
@@ -12,6 +14,7 @@ import {
     SetupCardShell,
     SetupCardTitle,
     SetupConnectionGraphic,
+    SetupPageWithHeader,
     setupPrimaryButtonClassName,
     setupPrimaryButtonSize,
 } from "../setup/setup-card-shell.tsx";
@@ -30,45 +33,6 @@ export type AppState =
           readonly kind: "signed-in";
           readonly router: AnyRouter;
       };
-
-function AppHeader({ account, navigation }: { readonly account?: ReactNode; readonly navigation?: ReactNode }) {
-    return (
-        <header className="shrink-0 border-b border-border bg-card">
-            <div className="mx-auto flex min-h-16 max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-                <a className="flex items-center gap-3 font-semibold tracking-tight" href="/" aria-label="Morty home">
-                    <span
-                        aria-hidden="true"
-                        className="flex size-9 items-center justify-center rounded-lg bg-primary text-2xl text-primary-foreground"
-                    >
-                        ∞
-                    </span>
-                    Morty
-                </a>
-                <div className="flex flex-wrap items-center gap-3">
-                    {navigation}
-                    {account ?? <span className="text-xs text-muted-foreground">Your agents. Connected.</span>}
-                </div>
-            </div>
-        </header>
-    );
-}
-
-export function Page({
-    children,
-    account,
-    navigation,
-}: {
-    readonly children: ReactNode;
-    readonly account?: ReactNode;
-    readonly navigation?: ReactNode;
-}) {
-    return (
-        <div className="min-h-dvh bg-background font-sans text-foreground">
-            <AppHeader account={account} navigation={navigation} />
-            <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">{children}</main>
-        </div>
-    );
-}
 
 export function App({
     bugReportDialog,
@@ -97,21 +61,25 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
     switch (state.kind) {
         case "loading":
             return (
-                <SetupCardShell showPageHeader titleId="bootstrap-loading">
-                    <SetupCardTitle id="bootstrap-loading">Loading Morty</SetupCardTitle>
-                    <SetupCardSection className="flex justify-center">
-                        <Spinner label="Loading Morty" size="large" />
-                    </SetupCardSection>
-                </SetupCardShell>
+                <SetupPageWithHeader>
+                    <span role="status" aria-label="Loading Morty">
+                        <LoadingWave size="lg" />
+                    </span>
+                </SetupPageWithHeader>
             );
         case "failed":
             return (
-                <SetupCardShell cardLeading={<SetupCardFailureIcon />} showPageHeader titleId="bootstrap-failed">
+                <SetupCardShell
+                    cardClassName="pb-10"
+                    cardLeading={<SetupCardFailureIcon />}
+                    showPageHeader
+                    titleId="bootstrap-failed"
+                >
                     <SetupCardTitle id="bootstrap-failed">Morty is unavailable</SetupCardTitle>
                     <SetupCardDescription>
                         Check your connection and try again. Your saved computers are still here.
                     </SetupCardDescription>
-                    <SetupCardSection>
+                    <SetupCardSection className="mt-4">
                         <Button
                             aria-busy={state.retrying}
                             className={setupPrimaryButtonClassName}
@@ -121,7 +89,7 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
                         >
                             {state.retrying ? (
                                 <>
-                                    <Spinner label="Retrying" />
+                                    <Spinner className="text-primary-foreground" label="Retrying" />
                                     Retrying…
                                 </>
                             ) : (
@@ -137,7 +105,12 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
                     <SetupCardTitle id="invalid-link-title">This link is no longer valid</SetupCardTitle>
                     <SetupCardAlert>Ask for a new link. Morty has not switched to another computer.</SetupCardAlert>
                     {state.continueHref !== null && (
-                        <Button asChild variant="outline" className={`${setupPrimaryButtonClassName} mt-5 text-center`}>
+                        <Button
+                            asChild
+                            className={`${setupPrimaryButtonClassName} mt-5 text-center`}
+                            size={setupPrimaryButtonSize}
+                            variant="outline"
+                        >
                             <a href={state.continueHref}>Continue on your last computer</a>
                         </Button>
                     )}
@@ -159,36 +132,45 @@ function SetupApplication({
     readonly notice: "access-ended" | "legacy" | "none";
     readonly returnHref: string | null;
 }) {
-    const hasLeadingContent = notice !== "none" || returnHref !== null;
-    return (
-        <SetupCardShell showPageHeader titleId="setup-title">
-            {notice === "access-ended" && (
-                <div
-                    role="status"
-                    className="mb-5 w-full rounded-[24px] border border-primary/20 bg-primary/5 px-5 py-4 text-center text-sm"
-                >
-                    <p className="font-medium">Current access ended</p>
-                    <p className="mt-1 text-morty-text-3">Your local agent and tasks keep running.</p>
-                </div>
-            )}
-            {notice === "legacy" && (
-                <div
-                    className="mb-5 w-full rounded-[24px] border border-border px-5 py-4 text-center text-sm text-morty-text-2"
-                    role="status"
-                >
-                    Already using Morty? Open the link your agent gave you once, and this browser will remember your
-                    computer.
-                </div>
-            )}
-            {returnHref !== null && (
-                <a
-                    href={returnHref}
-                    className="mb-5 inline-flex min-h-11 items-center rounded-lg text-sm text-foreground underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                >
-                    ← Back to your last computer
+    const pageNotice =
+        notice === "access-ended" ? (
+            <MortyAlert
+                className="w-full items-start justify-center rounded-[12px] border-primary/25 bg-primary/10 px-6 py-3 text-center text-foreground shadow-none [&>div]:flex-initial [&>svg]:mt-[3px] [&>svg]:text-success"
+                icon={Unplug}
+                tone="success"
+            >
+                <p>
+                    <span className="font-medium">Current access ended</span>{" "}
+                    <span className="text-muted-foreground">Your local agent and tasks keep running.</span>
+                </p>
+            </MortyAlert>
+        ) : notice === "legacy" ? (
+            <MortyAlert
+                className="w-full items-start justify-center rounded-[12px] border-[oklch(0.62_0.19_255/0.20)] bg-[oklch(0.62_0.19_255/0.08)] px-6 py-3 text-center text-foreground shadow-none [&>div]:flex-initial [&>svg]:mt-[3px] [&>svg]:text-[oklch(0.62_0.19_255)]"
+                tone="info"
+            >
+                <p>
+                    <span className="font-medium">Already using Morty?</span>{" "}
+                    <span className="text-muted-foreground">
+                        Open the link your agent gave you once, and this browser will remember your computer.
+                    </span>
+                </p>
+            </MortyAlert>
+        ) : undefined;
+
+    const pageAction =
+        returnHref === null ? undefined : (
+            <Button asChild size="sm" variant="ghost">
+                <a href={returnHref}>
+                    <ArrowLeft aria-hidden="true" className="size-4" />
+                    Back to your last computer
                 </a>
-            )}
-            <SetupConnectionGraphic className={hasLeadingContent ? "mt-0" : ""} />
+            </Button>
+        );
+
+    return (
+        <SetupCardShell pageAction={pageAction} pageNotice={pageNotice} showPageHeader titleId="setup-title">
+            <SetupConnectionGraphic />
             <SetupCardTitle id="setup-title">
                 {returnHref === null ? "Connect your agent to Morty" : "Connect another computer"}
             </SetupCardTitle>

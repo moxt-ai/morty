@@ -1,8 +1,17 @@
 import { Copy } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "./cloud-button.tsx";
 import { useToast } from "./toast.tsx";
+
+/** How long the button reports the copy before returning to its idle affordance. */
+const CONFIRMATION_MILLISECONDS = 2_000;
+
+/**
+ * `confirming` is the short-lived button feedback; `confirmed` keeps the
+ * caller's next-step guidance visible after the button has returned to idle.
+ */
+type CopyFeedback = { readonly kind: "idle" } | { readonly kind: "confirming" } | { readonly kind: "confirmed" };
 
 /**
  * A copy affordance for a single text value with copied/failed feedback
@@ -37,9 +46,17 @@ export function CopyToClipboardButton({
     readonly size?: ComponentProps<typeof Button>["size"];
     readonly variant?: ComponentProps<typeof Button>["variant"];
 }) {
-    const [copy, setCopy] = useState<"idle" | "copied">("idle");
+    const [feedback, setFeedback] = useState<CopyFeedback>({ kind: "idle" });
     const showToast = useToast();
-    const ariaLabel = copy === "copied" ? "Copied" : label;
+    const confirming = feedback.kind === "confirming";
+    const ariaLabel = confirming ? "Copied" : label;
+    useEffect(() => {
+        if (feedback.kind !== "confirming") {
+            return;
+        }
+        const timeout = window.setTimeout(() => setFeedback({ kind: "confirmed" }), CONFIRMATION_MILLISECONDS);
+        return () => window.clearTimeout(timeout);
+    }, [feedback]);
     const onClick = () => {
         if (navigator.clipboard === undefined) {
             showToast(failureToast);
@@ -47,7 +64,7 @@ export function CopyToClipboardButton({
         }
         void navigator.clipboard.writeText(value).then(
             () => {
-                setCopy("copied");
+                setFeedback({ kind: "confirming" });
                 if (successContent === undefined) {
                     showToast(successToast);
                 }
@@ -67,9 +84,9 @@ export function CopyToClipboardButton({
                     title={label}
                     variant={variant}
                 >
-                    {copy === "copied" ? (copiedContent ?? "Copied") : children}
+                    {confirming ? (copiedContent ?? "Copied") : children}
                 </Button>
-                {copy === "copied" ? successContent : idleContent}
+                {feedback.kind === "idle" ? idleContent : successContent}
             </>
         );
     }

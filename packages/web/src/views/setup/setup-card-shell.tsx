@@ -116,11 +116,30 @@ function SetupPageHeader() {
 }
 
 /** Top logo bar plus a centered content column; pairs with a single card section surface. */
-export function SetupPageWithHeader({ children }: { readonly children: ReactNode }) {
+export function SetupPageWithHeader({
+    children,
+    pageAction,
+    pageNotice,
+}: {
+    readonly children: ReactNode;
+    readonly pageAction?: ReactNode;
+    readonly pageNotice?: ReactNode;
+}) {
+    const hasPageLeading = pageNotice !== undefined || pageAction !== undefined;
     return (
         <main className={`flex min-h-screen flex-col overflow-y-auto ${setupPageBackgroundClassName} text-foreground`}>
             <SetupPageHeader />
-            <div className="flex flex-1 flex-col items-center justify-center px-6 py-12">{children}</div>
+            {pageNotice !== undefined && <div className="w-full px-6">{pageNotice}</div>}
+            <div
+                className={
+                    hasPageLeading
+                        ? "flex flex-1 flex-col items-center justify-center px-6 py-6"
+                        : "flex flex-1 flex-col items-center justify-center px-6 py-12"
+                }
+            >
+                {pageAction !== undefined && <div className="mb-6">{pageAction}</div>}
+                {children}
+            </div>
         </main>
     );
 }
@@ -167,7 +186,7 @@ export function SetupCardAlert({
     readonly className?: string;
 }) {
     return (
-        <p role="alert" className={`mt-2 max-w-xl text-16 leading-[26px] text-destructive ${className}`}>
+        <p role="alert" className={cn("mt-2 max-w-xl text-16 leading-[26px] text-morty-text-2", className)}>
             {children}
         </p>
     );
@@ -180,7 +199,7 @@ export function SetupCardSection({
     readonly children: ReactNode;
     readonly className?: string;
 }) {
-    return <div className={`${setupContentStackClassName} ${className}`}>{children}</div>;
+    return <div className={cn(setupContentStackClassName, className)}>{children}</div>;
 }
 
 export function SetupCardOpeningStatus({
@@ -202,13 +221,19 @@ export function SetupCardOpeningStatus({
 }
 
 export function SetupCardShell({
+    cardClassName = "",
     cardLeading,
+    pageAction,
+    pageNotice,
     showPageHeader = false,
     titleId,
     children,
     wide = false,
 }: {
+    readonly cardClassName?: string;
     readonly cardLeading?: ReactNode | null;
+    readonly pageAction?: ReactNode;
+    readonly pageNotice?: ReactNode;
     readonly showPageHeader?: boolean;
     readonly titleId: string;
     readonly children: ReactNode;
@@ -222,7 +247,7 @@ export function SetupCardShell({
         ) : cardLeading === null ? null : (
             cardLeading
         );
-    const cardSurfaceClassName = setupCardClassName;
+    const cardSurfaceClassName = cn(setupCardClassName, cardClassName);
     const sectionClassName = wide ? setupSectionWideClassName : setupSectionClassName;
     const card = showPageHeader ? (
         <section aria-labelledby={titleId} className={`${sectionClassName} ${cardSurfaceClassName}`}>
@@ -238,7 +263,11 @@ export function SetupCardShell({
         </section>
     );
     if (showPageHeader) {
-        return <SetupPageWithHeader>{card}</SetupPageWithHeader>;
+        return (
+            <SetupPageWithHeader pageAction={pageAction} pageNotice={pageNotice}>
+                {card}
+            </SetupPageWithHeader>
+        );
     }
     return <main className={setupPageClassName}>{card}</main>;
 }

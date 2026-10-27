@@ -87,7 +87,7 @@ for (const viewport of [
             fullPage: true,
             animations: "disabled",
         });
-        await page.getByRole("link", { name: "← Back to your last computer" }).click();
+        await page.getByRole("link", { name: "Back to your last computer" }).click();
         await expect(page.getByRole("article", { name: "Agent response" })).toContainText(
             "Computer B release checklist",
         );
