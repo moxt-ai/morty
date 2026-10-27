@@ -1,4 +1,5 @@
-import { getAllByRole, getByRole, getByText, queryByRole } from "@testing-library/dom";
+import { fireEvent, getAllByRole, getByRole, getByText, queryByRole } from "@testing-library/dom";
+import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { createTestApp } from "./infra/test-app.tsx";
 
@@ -125,5 +126,33 @@ test("Given the first screen, When the user clicks Copy again after success, The
     await app.user.click(copied);
 
     expect(await navigator.clipboard.readText()).toBe(instruction);
+    expect(getByRole(document.body, "button", { name: "Copied" })).toBeInstanceOf(HTMLButtonElement);
+});
+
+test("Given the setup prompt was just copied, When its confirmation animation completes, Then the copy button returns to its default affordance and can copy again", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ page: { kind: "bootstrap" } });
+    const copy = await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup prompt" }));
+
+    await act(async () => {
+        fireEvent.click(copy);
+    });
+    expect(await navigator.clipboard.readText()).toContain(`${window.location.origin}/setup.md`);
+    const copied = getByRole(document.body, "button", { name: "Copied" });
+    expect(copied).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+        fireEvent.animationEnd(copied, { animationName: "copy-confirmation" });
+    });
+    const restored = getByRole(document.body, "button", { name: "Copy setup prompt" });
+    expect(restored).toBeInstanceOf(HTMLButtonElement);
+    expect(getByRole(document.body, "status", { name: "Setup next step" }).textContent).toContain(
+        "Paste into your agent, then open the link it returns.",
+    );
+
+    await act(async () => {
+        fireEvent.click(restored);
+    });
     expect(getByRole(document.body, "button", { name: "Copied" })).toBeInstanceOf(HTMLButtonElement);
 });

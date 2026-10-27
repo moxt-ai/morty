@@ -21,7 +21,7 @@ export function PairingInstruction() {
                     title: "Copied",
                 }}
                 idleContent={
-                    <p className="mt-3 min-h-10 text-center text-sm leading-5 text-foreground">
+                    <p className="mt-3 min-h-10 text-center text-sm leading-5 text-morty-text-2">
                         Next: paste it into the agent running on your computer.
                     </p>
                 }
@@ -35,7 +35,7 @@ export function PairingInstruction() {
                     <p
                         aria-label="Setup next step"
                         aria-atomic="true"
-                        className="mt-3 min-h-10 text-center text-sm leading-5 text-foreground"
+                        className="mt-3 min-h-10 text-center text-sm leading-5 text-morty-text-2"
                         role="status"
                     >
                         Paste into your agent, then open the link it returns.

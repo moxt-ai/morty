@@ -96,6 +96,33 @@
             clip-path: inset(0 0 0 0);
         }
     }
+    /*
+     * Whole-document loading wave: three dots rise and fall in sequence. The
+     * 0% frame is the resting row, 32% the peak, and the dot settles before the
+     * tail of the cycle so the wave reads as a ripple rather than a bounce.
+     */
+    --animate-loading-wave: loading-wave 950ms ease-in-out infinite;
+    @keyframes loading-wave {
+        0%,
+        100% {
+            transform: translateY(0);
+        }
+        32% {
+            /* Callers set the rise so it stays proportional to the dot size. */
+            transform: translateY(calc(var(--loading-wave-rise, 5.5px) * -1));
+        }
+        64% {
+            transform: translateY(0);
+        }
+    }
+    /* CSS owns the short-lived copy confirmation so the component needs no timer effect. */
+    --animate-copy-confirmation: copy-confirmation 2s linear both;
+    @keyframes copy-confirmation {
+        from,
+        to {
+            opacity: 1;
+        }
+    }
     /* radius */
     --radius: 1.25rem;
     --radius-xs: calc(var(--radius) * 0.4);

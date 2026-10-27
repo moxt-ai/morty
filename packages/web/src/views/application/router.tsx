@@ -1,10 +1,18 @@
 import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import { createRootRoute, createRoute, createRouter, Outlet, useRouter } from "@tanstack/react-router";
-import { CircleAlert } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { describePageFailure } from "../../view-models/format-error.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
+import {
+    SetupCardDescription,
+    SetupCardFailureIcon,
+    SetupCardSection,
+    SetupCardShell,
+    SetupCardTitle,
+    setupPrimaryButtonClassName,
+    setupPrimaryButtonSize,
+} from "../setup/setup-card-shell.tsx";
 
 export interface ApplicationShellProps {
     readonly children: ReactNode;
@@ -44,33 +52,31 @@ function RouteFailureContent({ error, onRetry }: { readonly error: Error; readon
     const details = getRouteFailureDetails(error);
     const copy = describePageFailure(details.message, "Something went wrong");
     return (
-        <div className="grid min-h-dvh place-items-center p-4">
-            <section className="grid w-full min-w-0 max-w-[460px] gap-4" role="alert">
-                <div className="grid min-w-0 justify-items-center gap-3 text-center">
-                    <span className="flex size-12 items-center justify-center rounded-full bg-destructive/5">
-                        <CircleAlert aria-hidden="true" className="size-6 shrink-0 text-destructive" />
-                    </span>
-                    <div className="grid min-w-0 gap-2">
-                        <h1 className="text-[18px] leading-6 font-semibold tracking-[-0.025em] [overflow-wrap:anywhere]">
-                            {copy.title}
-                        </h1>
-                        <p className="text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere]">
-                            {copy.content}
-                        </p>
-                        {details.kind === "message-with-url" && (
-                            <div className="overflow-hidden rounded-[16px] bg-muted">
-                                <code className="block select-text bg-background p-3 text-left text-[13px] leading-5 text-foreground [overflow-wrap:anywhere]">
-                                    {details.url}
-                                </code>
-                            </div>
-                        )}
-                    </div>
+        <SetupCardShell
+            cardClassName="pb-10"
+            cardLeading={<SetupCardFailureIcon />}
+            showPageHeader
+            titleId="route-failure-title"
+        >
+            <div className="min-w-0" role="alert">
+                <SetupCardTitle className="[overflow-wrap:anywhere]" id="route-failure-title">
+                    {copy.title}
+                </SetupCardTitle>
+                <SetupCardDescription className="[overflow-wrap:anywhere]">{copy.content}</SetupCardDescription>
+            </div>
+            {details.kind === "message-with-url" && (
+                <div className="mt-4 w-full min-w-0 overflow-hidden rounded-[16px] bg-muted/50">
+                    <code className="block select-text px-4 py-3 text-center text-xs leading-5 text-morty-text-2 [overflow-wrap:anywhere]">
+                        {details.url}
+                    </code>
                 </div>
-                <Button className="h-10 w-full" onClick={onRetry}>
+            )}
+            <SetupCardSection className="mt-4">
+                <Button className={setupPrimaryButtonClassName} onClick={onRetry} size={setupPrimaryButtonSize}>
                     Try again
                 </Button>
-            </section>
-        </div>
+            </SetupCardSection>
+        </SetupCardShell>
     );
 }
 

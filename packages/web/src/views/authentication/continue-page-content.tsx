@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Button, Spinner } from "../../index.ts";
+import { LoadingWave } from "../../components/ui/loading-wave.tsx";
+import { Button } from "../../index.ts";
 import type { ContinueState } from "../../view-models/authentication/continue-store.ts";
 import { describePageFailure } from "../../view-models/format-error.ts";
 import {
@@ -16,17 +17,26 @@ import {
 function ContinueError({
     title,
     content,
+    detail,
     children,
 }: {
     readonly title: string;
     readonly content: ReactNode;
+    /** Extra guidance that belongs to the failure itself, announced with it. */
+    readonly detail?: ReactNode;
     readonly children?: ReactNode;
 }) {
     return (
-        <SetupCardShell cardLeading={<SetupCardFailureIcon />} titleId="continue-title">
-            <div role="alert">
+        <SetupCardShell
+            cardClassName="pb-10"
+            cardLeading={<SetupCardFailureIcon />}
+            showPageHeader
+            titleId="continue-title"
+        >
+            <div className="w-full" role="alert">
                 <SetupCardTitle id="continue-title">{title}</SetupCardTitle>
                 <SetupCardDescription>{content}</SetupCardDescription>
+                {detail}
             </div>
             {children}
         </SetupCardShell>
@@ -46,7 +56,12 @@ export function ContinuePageContent({
 }) {
     const fallback =
         continueHref === null ? null : (
-            <Button asChild variant="outline" className={`${setupPrimaryButtonClassName} mt-5 text-center`}>
+            <Button
+                asChild
+                className={`${setupPrimaryButtonClassName} mt-5 text-center`}
+                size={setupPrimaryButtonSize}
+                variant="outline"
+            >
                 <a href={continueHref}>Continue on your last computer</a>
             </Button>
         );
@@ -54,11 +69,13 @@ export function ContinuePageContent({
         case "session-opening":
         case "session-resuming":
             return (
-                <SetupCardShell titleId="continue-title">
+                <SetupCardShell cardClassName="pb-10" showPageHeader titleId="continue-title">
                     <SetupCardTitle id="continue-title">Continue native session</SetupCardTitle>
                     <SetupCardDescription>Opening the original session in Morty.</SetupCardDescription>
                     <SetupCardSection className="flex items-center justify-center gap-3 space-y-0">
-                        <Spinner label="Opening session" />
+                        <span role="status" aria-label="Opening session">
+                            <LoadingWave size="inline" />
+                        </span>
                         <span className="text-14 leading-none text-muted-foreground">Opening session…</span>
                     </SetupCardSection>
                 </SetupCardShell>
@@ -99,27 +116,28 @@ export function ContinuePageContent({
         case "link-unavailable":
             return (
                 <ContinueError
-                    title="This link is no longer available"
-                    content={
-                        <>
-                            <span className="block">{state.message}</span>
-                            <span className="mt-2 block">
+                    detail={
+                        <div className="mt-4 w-full rounded-[16px] bg-muted/60 px-5 py-3.5">
+                            <p className="text-12 tracking-[0.04em] text-morty-text-3 uppercase">Next step</p>
+                            <p className="mt-0.5 text-14 leading-[22px] text-foreground">
                                 {state.recovery === "setup"
                                     ? "Run setup again on that computer to get a new link."
                                     : "Ask for a new link."}
-                            </span>
-                        </>
+                            </p>
+                        </div>
                     }
+                    title="This link is no longer available"
+                    content={state.message}
                 >
                     {fallback}
                 </ContinueError>
             );
         case "identity-redeeming":
             return (
-                <SetupCardShell titleId="continue-title">
+                <SetupCardShell cardClassName="pb-10" showPageHeader titleId="continue-title">
                     <SetupCardTitle id="continue-title">Continue in Morty</SetupCardTitle>
                     <SetupCardOpeningStatus ariaLabel="Securely transferring Morty access">
-                        <Spinner label="Securely transferring Morty access" />
+                        <LoadingWave size="inline" />
                         <span>Securely transferring Morty access…</span>
                     </SetupCardOpeningStatus>
                 </SetupCardShell>
@@ -129,7 +147,7 @@ export function ContinuePageContent({
             return (
                 <ContinueError title={copy.title} content={copy.content}>
                     <SetupCardSection>
-                        <Button className={setupPrimaryButtonClassName} onClick={retry}>
+                        <Button className={setupPrimaryButtonClassName} onClick={retry} size={setupPrimaryButtonSize}>
                             Try again
                         </Button>
                         {fallback}

@@ -170,7 +170,7 @@ test("Given a remembered computer, When I connect another computer, Then setup r
     window.location.href = `${app.origin}/setup`;
     const instruction = await app.reload();
     await instruction.waitForView(() => getByRole(document.body, "heading", { name: "Connect another computer" }));
-    expect(getByRole(document.body, "link", { name: "← Back to your last computer" }).getAttribute("href")).toBe("/");
+    expect(getByRole(document.body, "link", { name: "Back to your last computer" }).getAttribute("href")).toBe("/");
     window.location.href = `${app.origin}/`;
     const returned = await instruction.reload();
     await returned.waitForView(() =>

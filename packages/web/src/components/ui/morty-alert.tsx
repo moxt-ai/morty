@@ -48,15 +48,17 @@ export function MortyAlert({
     children,
     className,
     description,
+    icon,
     tone = "error",
 }: {
     readonly children: ReactNode;
     readonly className?: string;
     readonly description?: ReactNode;
+    readonly icon?: LucideIcon;
     readonly tone?: MortyAlertTone;
 }) {
     const selected = alertTones[tone];
-    const Icon = selected.icon;
+    const Icon = icon ?? selected.icon;
     return (
         <div className={cn(alertChrome, selected.surface, className)} role={selected.role}>
             {Icon !== null && <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />}
