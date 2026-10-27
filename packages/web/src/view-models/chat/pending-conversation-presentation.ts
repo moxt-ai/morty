@@ -1,4 +1,4 @@
-import type { BotChatHomeStore } from "./bot-chat-home-store.ts";
+import { type BotChatHomeStore, botConnectionStatus } from "./bot-chat-home-store.ts";
 import { selectedConversationId } from "./conversation-selection-machine.ts";
 
 /** A selected conversation is never presented as a new draft while its remote read is pending. */
@@ -18,13 +18,13 @@ export function pendingConversationPresentation(home: BotChatHomeStore): {
         selection.kind === "draft" ||
         selection.kind === "ready" ||
         selection.target.kind === "continue" ||
-        (selection.kind === "failed" && selection.failure === "unavailable")
+        (selection.kind === "failed" && (selection.failure === "unavailable" || selection.failure === "agent-required"))
     ) {
         return { title, recovery: null };
     }
     const recoveryTitle = !home.networkAvailable
         ? "No network connection"
-        : home.view.kind === "runtime-disconnected"
+        : botConnectionStatus(home).kind === "disconnected"
           ? "Computer is offline"
           : home.configurationWatch.kind === "unavailable" || selection.kind === "failed"
             ? "Connection interrupted"

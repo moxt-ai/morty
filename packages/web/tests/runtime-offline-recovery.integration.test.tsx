@@ -80,22 +80,37 @@ test("Given a saved conversation, When reloading it while its Runtime is offline
         expect(document.body.textContent).not.toContain("Your Mobius is disconnected.");
     }, RUNTIME_CHANGE_TIMEOUT_MS);
 
-    await daemon.reconnect();
-    await reopened.waitForView(() => {
-        expect(connectionStatus(reopened)).toBe("connected");
-        expect(agentAnswered(reopened, "Codex turn 1: Keep this conversation")).toBe(true);
-        const composer = reopened.elementByTestId(dataTestId.messageComposer);
-        expect(composer instanceof HTMLTextAreaElement && !composer.disabled).toBe(true);
-        expect(composer).toHaveProperty("value", "Keep this follow-up unsent");
-        expect(
-            reopened
-                .elementsByTestId(dataTestId.agentResponse)
-                .filter((message) => message.textContent?.includes("Codex turn 1: Keep this conversation")),
-        ).toHaveLength(1);
-        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain(
-            "Keep this follow-up unsent",
-        );
-    }, RUNTIME_CHANGE_TIMEOUT_MS);
+    // Connection and history recover independently. Every rendered recovery snapshot
+    // must agree with the sidebar, including while the session read is still pending.
+    const contradictoryNotices: string[] = [];
+    const observer = new MutationObserver(() => {
+        const messages = queryByRole(document.body, "log", { name: "Messages" })?.textContent ?? "";
+        if (connectionStatus(reopened) === "connected" && messages.includes("Computer is offline")) {
+            contradictoryNotices.push(messages);
+        }
+    });
+    observer.observe(document.body, { childList: true, characterData: true, subtree: true, attributes: true });
+    try {
+        await daemon.reconnect();
+        await reopened.waitForView(() => {
+            expect(connectionStatus(reopened)).toBe("connected");
+            expect(agentAnswered(reopened, "Codex turn 1: Keep this conversation")).toBe(true);
+            const composer = reopened.elementByTestId(dataTestId.messageComposer);
+            expect(composer instanceof HTMLTextAreaElement && !composer.disabled).toBe(true);
+            expect(composer).toHaveProperty("value", "Keep this follow-up unsent");
+            expect(
+                reopened
+                    .elementsByTestId(dataTestId.agentResponse)
+                    .filter((message) => message.textContent?.includes("Codex turn 1: Keep this conversation")),
+            ).toHaveLength(1);
+            expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain(
+                "Keep this follow-up unsent",
+            );
+        }, RUNTIME_CHANGE_TIMEOUT_MS);
+        expect(contradictoryNotices).toEqual([]);
+    } finally {
+        observer.disconnect();
+    }
 });
 
 test("Given a saved conversation, When a new-session page opens while the Runtime is offline and the Runtime comes back, Then the sidebar lists the conversation without a refresh", {

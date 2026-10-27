@@ -22,7 +22,7 @@ import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scr
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import { botConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
+import { botConnectionStatus, homeCanStartConversation } from "../../view-models/chat/bot-chat-home-store.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import {
     conversationComposerLocked,
@@ -150,16 +150,9 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
     const queuedInitialMessage = queuedDraftMessage(model.creation);
     const draft = model.draft;
     const pendingConversation = pendingConversationPresentation(model);
-    const setupView = model.view.kind === "setup" ? model.view : null;
+    const canStartConversation = homeCanStartConversation(model);
     const pairingNotice = model.notices.pairing.kind === "visible" || model.pairingDialogOpen;
 
-    const active =
-        model.view.kind === "connecting" ||
-        model.view.kind === "active" ||
-        model.view.kind === "setup" ||
-        model.view.kind === "runtime-disconnected"
-            ? model.view
-            : null;
     const newSessionHarness = activeHarnessMark(model, draftControls.settings);
     const newSessionHarnessLoading =
         draftControls.settings.kind === "loading" || draftControls.settings.kind === "switching";
@@ -210,7 +203,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                 workspace={workspace}
                 activeId={activeConversationId}
                 connectionStatus={connectionStatus}
-                onConnectAgent={setupView?.reason === "unconfigured" ? store.getState().showPairingDialog : null}
+                onConnectAgent={model.pairing.kind === "unpaired" ? store.getState().showPairingDialog : null}
                 requests={requests}
                 onOpen={(session) => openManaged(session.isExternal, session.id)}
                 onNewConversation={newConversation}
@@ -224,11 +217,13 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                 </div>
             )}
             <section aria-label="Conversation" className={chatSessionPaneSectionClassName}>
-                {model.selection.kind === "ready" && active !== null ? (
+                {model.selection.kind === "ready" ? (
                     <div className={chatSessionPaneEnterClassName} key={model.selection.session.result.ready.sessionId}>
                         <MobiusSessionPane workspace={workspace} />
                     </div>
-                ) : model.selection.kind === "loading" && active !== null && pendingConversation.recovery === null ? (
+                ) : model.selection.kind === "loading" &&
+                  model.initialization.kind !== "failed" &&
+                  pendingConversation.recovery === null ? (
                     <MobiusSessionPaneLoading
                         title={pendingConversation.title}
                         footer={
@@ -279,17 +274,18 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                         </div>
                                         <Button onClick={store.getState().retry}>Reconnect</Button>
                                     </div>
-                                ) : model.selection.kind === "loading" || model.view.kind === "loading" ? (
+                                ) : (model.selection.kind === "loading" && model.initialization.kind !== "failed") ||
+                                  model.initialization.kind === "loading" ? (
                                     <SessionMessageListSkeleton />
-                                ) : model.view.kind === "failed" || model.selection.kind === "failed" ? (
+                                ) : model.initialization.kind === "failed" || model.selection.kind === "failed" ? (
                                     <div className="m-auto grid justify-items-center gap-4 text-center">
                                         <div className="flex items-start gap-2">
                                             <SessionLoadFailure
                                                 message={
                                                     model.selection.kind === "failed"
                                                         ? model.selection.message
-                                                        : model.view.kind === "failed"
-                                                          ? model.view.message
+                                                        : model.initialization.kind === "failed"
+                                                          ? model.initialization.message
                                                           : "Chat is unavailable."
                                                 }
                                             />
@@ -332,7 +328,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                             </div>
                                         )}
                                     </div>
-                                ) : active === null ? null : (
+                                ) : (
                                     <div className="m-auto flex max-w-lg flex-col items-center px-6">
                                         <div className="text-center" data-testid={dataTestId.chatLanding}>
                                             <MortyLogoMark className="mx-auto mb-5 block" size={56} />
@@ -340,12 +336,11 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                                 Morty
                                             </h1>
                                             <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
-                                                {model.view.kind === "connecting"
-                                                    ? "Chat is restoring access to this session."
-                                                    : "Ask a question, explore your project, or start a task with your local agent."}
+                                                Ask a question, explore your project, or start a task with your local
+                                                agent.
                                             </p>
                                         </div>
-                                        {model.view.kind === "active" && model.selection.kind === "draft" && (
+                                        {canStartConversation && model.selection.kind === "draft" && (
                                             <DraftLandingDirectory
                                                 disabled={composerLocked}
                                                 settingsKind={draftControls.settings.kind}
@@ -388,7 +383,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                 outputState="idle"
                                 submitDisabled={
                                     !executionContext.available ||
-                                    model.view.kind !== "active" ||
+                                    !canStartConversation ||
                                     creationBusy ||
                                     (draft.trim().length === 0 && attachmentModel.attachments.length === 0) ||
                                     draftControls.settings.kind !== "ready"
@@ -397,14 +392,14 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                 <DraftChatControls
                                     key={model.selection.key}
                                     workspace={workspace}
-                                    disabled={composerLocked || model.view.kind !== "active"}
+                                    disabled={composerLocked || !canStartConversation}
                                 />
                             </BotChatComposer>
                         )}
                     </>
                 )}
             </section>
-            {pairingNotice && setupView?.reason === "unconfigured" && active !== null && (
+            {pairingNotice && model.pairing.kind === "unpaired" && (
                 <Dialog
                     appearance="setup"
                     title="Connect agent"

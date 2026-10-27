@@ -1,6 +1,6 @@
 import type { ExecutionContext } from "../../components/chat/execution-context.ts";
 import type { BotRuntimeConfiguration } from "../../services/chat/bot-chat-api.ts";
-import type { BotChatHomeStore } from "./bot-chat-home-store.ts";
+import { type BotChatHomeStore, homeCanStartConversation } from "./bot-chat-home-store.ts";
 import { connectionPresentation } from "./connection-presentation.ts";
 import { directoryName } from "./directory-name.ts";
 import type { DraftControlsStore } from "./draft-controls-store.ts";
@@ -13,8 +13,7 @@ export function pendingExecutionContext(
     home: BotChatHomeStore,
     settings: DraftControlsStore["settings"],
 ): ExecutionContext {
-    const loading =
-        home.selection.kind === "loading" || home.view.kind === "loading" || home.view.kind === "connecting";
+    const loading = home.selection.kind === "loading" || home.initialization.kind === "loading";
     const base: ExecutionContext = {
         ...connectionPresentation(home, null),
         agentRef: "",
@@ -24,7 +23,7 @@ export function pendingExecutionContext(
         directoryName: loading ? "Loading…" : "Unknown",
         directoryPlaceholder: loading ? "Loading…" : "Unknown",
     };
-    if (home.selection.kind !== "draft" || home.view.kind !== "active") {
+    if (home.selection.kind !== "draft" || !homeCanStartConversation(home)) {
         return base;
     }
     switch (settings.kind) {
