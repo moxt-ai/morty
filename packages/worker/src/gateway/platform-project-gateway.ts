@@ -7,12 +7,7 @@ import {
     MobiusTimeoutError,
 } from "@moxt-ai/mobius-sdk/platform";
 import { decodeRuntimeDiagnosticsResult } from "@moxt-ai/mobius-sdk/protocol";
-import {
-    AGENT_DEFAULT_EXECUTION_SETTING,
-    MobiusClient,
-    MobiusRecordingPolicy,
-    MobiusRuntimePairingRequest,
-} from "@moxt-ai/mobius-sdk/server";
+import { AGENT_DEFAULT_EXECUTION_SETTING, MobiusClient, MobiusRuntimePairingRequest } from "@moxt-ai/mobius-sdk/server";
 import * as v from "valibot";
 import {
     PlatformProjectError,
@@ -388,7 +383,6 @@ export class PlatformProjectGateway {
                                   agentId: input.agentRef,
                                   bindingId: input.bindingId,
                                   directoryId: input.workspaceRef,
-                                  policy: new MobiusRecordingPolicy("full", 30 * 24 * 60 * 60 * 1000, 1000, 6_000_000),
                                   runtimeId: input.runtimeId,
                                   sessionId,
                                   title,

@@ -39,7 +39,7 @@ function agentAnswered(app: TestApp, text: string): boolean {
     return app.elementsByTestId(dataTestId.agentResponse).some((message) => message.textContent?.includes(text));
 }
 
-test("Given a saved conversation, When reloading it while its Runtime is offline, Then its title and saved-history notice remain and reconnect restores history and the unsent draft", {
+test("Given a saved conversation, When reloading it while its Runtime is offline, Then its title and connection notice remain and reconnect restores history and the unsent draft", {
     timeout: 90_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -75,7 +75,7 @@ test("Given a saved conversation, When reloading it while its Runtime is offline
         expect(queryByRole(document.body, "heading", { name: "Saved offline conversation" })).not.toBeNull();
         expect(queryByRole(document.body, "heading", { name: "New session" })).toBeNull();
         expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
-            "Your conversation is saved on your computer. History will load when it reconnects.",
+            "History is temporarily unavailable. It will load when the connection returns.",
         );
         expect(document.body.textContent).not.toContain("Your Mobius is disconnected.");
     }, RUNTIME_CHANGE_TIMEOUT_MS);
@@ -117,9 +117,7 @@ test("Given a saved conversation, When a new-session page opens while the Runtim
     await reopened.waitForView(() => {
         expect(connectionStatus(reopened)).toBe("disconnected");
         expect(sidebarAlerts()).toEqual([]);
-        expect(document.body.textContent).toContain(
-            "Your sessions are saved on your computer and will appear when it reconnects.",
-        );
+        expect(document.body.textContent).toContain("Computer is offline. Sessions will appear when it reconnects.");
         expect(directoryTitles(reopened)).toHaveLength(0);
     }, RUNTIME_CHANGE_TIMEOUT_MS);
 
