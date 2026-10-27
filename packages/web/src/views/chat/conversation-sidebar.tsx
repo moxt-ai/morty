@@ -79,7 +79,7 @@ function SidebarSessionOption({
             className={
                 variant === "card"
                     ? mobileDrawerCardRowClassName
-                    : "flex w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 active:bg-morty-fill-opacity-3 active:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-copy-secondary disabled:active:text-copy-secondary motion-reduce:transition-none"
+                    : "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 active:bg-morty-fill-opacity-3 active:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-copy-secondary disabled:active:text-copy-secondary motion-reduce:transition-none"
             }
             data-testid={testId}
             disabled={disabled}
@@ -240,7 +240,7 @@ function ManagedSessionDirectoryList({
                                 aria-current={activeId === session.id ? "page" : undefined}
                                 disabled={connectionStatus.kind !== "connected"}
                                 onClick={() => onOpen(session)}
-                                className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-4 py-2 text-left text-15 font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 aria-[current=page]:hover:text-foreground aria-[current=page]:disabled:hover:text-foreground motion-reduce:transition-none sm:px-2.5 sm:text-13"
+                                className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-4 py-2 text-left text-15 font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-2 keyboard-focus:focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 aria-[current=page]:hover:text-foreground aria-[current=page]:disabled:hover:text-foreground motion-reduce:transition-none sm:px-3 sm:text-13"
                             >
                                 <span className="min-w-0 truncate">{session.title}</span>
                                 {(sessionStatuses.get(session.id) ?? session.status).kind === "working" ? (
@@ -625,7 +625,7 @@ export function ConversationSidebar({
                                             {desktop && (
                                                 <div className="hidden min-h-0 flex-1 sm:flex sm:min-h-0 sm:flex-col sm:gap-0">
                                                     <Tooltip.Provider delayDuration={150}>
-                                                        <div className="flex min-w-0 items-center justify-between gap-2 pl-2 sm:mb-0 sm:w-full">
+                                                        <div className="flex min-w-0 items-center justify-between gap-2.5 pl-2 sm:mb-0 sm:w-full">
                                                             <h2 className="font-inter text-13 font-semibold tracking-normal text-foreground">
                                                                 Recent sessions
                                                             </h2>
