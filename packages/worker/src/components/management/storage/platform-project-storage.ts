@@ -18,12 +18,7 @@ export class PlatformProjectStorage {
         return database;
     };
 
-    readonly read = async (
-        userId: string,
-        origin: string,
-        appId: string,
-        signal: AbortSignal,
-    ): Promise<PlatformProject | null> => {
+    readonly read = async (userId: string, appId: string, signal: AbortSignal): Promise<PlatformProject | null> => {
         signal.throwIfAborted();
         try {
             const value = await this.#requireDatabase()
@@ -32,13 +27,7 @@ export class PlatformProjectStorage {
                     displayName: platformProjectMapping.displayName,
                 })
                 .from(platformProjectMapping)
-                .where(
-                    and(
-                        eq(platformProjectMapping.userId, userId),
-                        eq(platformProjectMapping.platformOrigin, origin),
-                        eq(platformProjectMapping.appId, appId),
-                    ),
-                )
+                .where(and(eq(platformProjectMapping.userId, userId), eq(platformProjectMapping.appId, appId)))
                 .get();
             signal.throwIfAborted();
             return v.parse(v.nullish(platformProjectSchema), value) ?? null;
@@ -52,7 +41,6 @@ export class PlatformProjectStorage {
 
     readonly save = async (
         userId: string,
-        origin: string,
         appId: string,
         project: PlatformProject,
         signal: AbortSignal,
@@ -64,7 +52,6 @@ export class PlatformProjectStorage {
                 .insert(platformProjectMapping)
                 .values({
                     userId,
-                    platformOrigin: origin,
                     appId,
                     projectId: value.projectId,
                     displayName: value.displayName,
