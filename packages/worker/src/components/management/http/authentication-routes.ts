@@ -3,6 +3,7 @@ import * as v from "valibot";
 import { projectObject } from "../../../gateway/project-object-routing.ts";
 import { json } from "../../../infra/http.ts";
 import { bodyParser, readJsonBody } from "../../../middleware/body-parser.ts";
+import { credentialRevocationPaths } from "../entity/authentication/credential.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { projectLocationHint } from "../util/project-location.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
@@ -34,7 +35,10 @@ export function createAuthenticationRoutes() {
             const result = await context.env.services.authentication.session(token, request.signal);
             switch (result.kind) {
                 case "authenticated":
-                    return json(result.session);
+                    return json(result.session, 200, {
+                        "Cache-Control": "no-store",
+                        "Morty-Credential-Revocation": credentialRevocationPaths[result.credentialKind],
+                    });
                 case "unauthenticated":
                     throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
             }
@@ -131,16 +135,50 @@ export function createAuthenticationRoutes() {
             }
         })
         .delete("/identity/remote-access", async (context) => {
-            const result = await context.env.services.authentication.endRemoteAccess(
+            const result = await context.env.services.authentication.endLegacyRemoteAccess(
                 context.get("bearerToken"),
                 context.req.raw.signal,
             );
-            switch (result.kind) {
-                case "ended-credential":
-                case "ended-transfer":
-                    return new Response(null, { status: 204 });
-                case "unauthenticated":
-                    throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
-            }
+            return endAccessResponse(result);
+        })
+        .delete(credentialRevocationPaths.browser, async (context) => {
+            return endAccessResponse(
+                await context.env.services.authentication.endBrowserAccess(
+                    context.get("bearerToken"),
+                    context.req.raw.signal,
+                ),
+            );
+        })
+        .delete(credentialRevocationPaths.recovery, async (context) => {
+            return endAccessResponse(
+                await context.env.services.authentication.revokeRecoveryCredential(
+                    context.get("bearerToken"),
+                    context.req.raw.signal,
+                ),
+            );
+        })
+        .delete(credentialRevocationPaths.local, async (context) => {
+            return endAccessResponse(
+                await context.env.services.authentication.retireLocalCredential(
+                    context.get("bearerToken"),
+                    context.req.raw.signal,
+                ),
+            );
         });
+}
+
+// Successful deletion keeps the old 204/401 retry contract. A timeout is ambiguous: retry the same operation.
+function endAccessResponse(result: { readonly kind: "ended" | "unauthenticated" | "forbidden" }): Response {
+    switch (result.kind) {
+        case "ended":
+            return new Response(null, { status: 204 });
+        case "unauthenticated":
+            throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
+        case "forbidden":
+            throw new ManagementError(
+                "CREDENTIAL_KIND_REQUIRED",
+                "This operation requires a different credential kind.",
+                403,
+            );
+    }
 }

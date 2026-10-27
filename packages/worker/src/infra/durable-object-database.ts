@@ -33,6 +33,7 @@ import removeClerkUserBinding from "../../migrations/project-do/0031_wealthy_sil
 import credentialBrowser from "../../migrations/project-do/0032_lively_arachne.sql?raw";
 import platformProjectIdentity from "../../migrations/project-do/0033_platform_project_identity.sql?raw";
 import anonymousCredentialRevocation from "../../migrations/project-do/0034_anonymous_credential_revocation.sql?raw";
+import anonymousCredentialKind from "../../migrations/project-do/0035_anonymous_credential_kind.sql?raw";
 
 /** Generated Project Durable Object migrations, in order. The ledger records each by its tag. */
 const migrations = [
@@ -70,6 +71,7 @@ const migrations = [
     { tag: "0032_lively_arachne", sql: credentialBrowser },
     { tag: "0033_platform_project_identity", sql: platformProjectIdentity },
     { tag: "0034_anonymous_credential_revocation", sql: anonymousCredentialRevocation },
+    { tag: "0035_anonymous_credential_kind", sql: anonymousCredentialKind },
 ];
 
 /**

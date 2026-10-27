@@ -987,6 +987,11 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
             expect.objectContaining({ status: "replacement_access_revoked", previousProjectId: config.project_id }),
         );
         expect(approved.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
+        const retired = await fetch(`${paths.origin}/morty/api/projects/${config.project_id}/session`, {
+            headers: { authorization: `Bearer ${config.user_token}` },
+            signal: AbortSignal.timeout(10000),
+        });
+        expect(retired.status).toBe(401);
         expect((await session()).status).toBe(401);
         expect((await redeem()).status).toBe(410);
         const current = v.parse(

@@ -162,6 +162,13 @@
             "when": 1793099806946,
             "tag": "0034_anonymous_credential_revocation",
             "breakpoints": true
+        },
+        {
+            "idx": 35,
+            "version": "6",
+            "when": 1793117352999,
+            "tag": "0035_anonymous_credential_kind",
+            "breakpoints": true
         }
     ]
 }

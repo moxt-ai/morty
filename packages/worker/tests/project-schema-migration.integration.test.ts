@@ -34,7 +34,8 @@ test("Given a Project recorded by migration position without 0023, When it opens
     // Earlier Workers applied these 33 migrations in this order; 0001_management never ran in a Project.
     const legacy = Object.keys(files)
         .filter((path) => !path.endsWith("/0001_management.sql") && !path.endsWith("/0023_smiling_zaladane.sql"))
-        .sort();
+        .sort()
+        .slice(0, 33);
     expect(legacy).toHaveLength(33);
     const runtime = new Miniflare(
         convertV4MiniflareOptions({

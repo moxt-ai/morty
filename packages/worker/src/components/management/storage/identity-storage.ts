@@ -6,26 +6,16 @@ import {
     continueLink,
     platformProjectMapping,
 } from "../../../schema/project-do/index.ts";
+import type { Credential } from "../entity/authentication/credential.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
 import { type AnonymousIdentity, digest, randomSecret, requireIdentityDatabase } from "./identity-storage-common.ts";
 
-const anonymousToken = v.pipe(
-    v.string(),
-    v.regex(
-        /^(?:mobius_anon_v2_[A-Za-z0-9_-]{43}|mobius_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
-    ),
-);
 const userRow = v.pipe(v.object({ userId: v.string() }), v.readonly());
 const continueLinkLifetime = 24 * 60 * 60 * 1000;
 export interface IdentityTransfer {
     readonly code: string;
     readonly expiresAt: number;
 }
-
-export type EndRemoteAccessResult =
-    | { readonly kind: "ended-credential"; readonly credentialId: string; readonly userId: string }
-    | { readonly kind: "ended-transfer"; readonly transferId: string; readonly userId: string }
-    | { readonly kind: "unauthenticated" };
 
 export class IdentityStorage {
     readonly #database: unknown;
@@ -52,6 +42,7 @@ export class IdentityStorage {
                 id: credentialId,
                 userId,
                 tokenHash: await digest(token),
+                kind: "local",
                 createdAt: now,
             }),
         ]);
@@ -59,20 +50,25 @@ export class IdentityStorage {
         return { token, userId, projectId };
     };
 
-    readonly authenticateAnonymous = async (token: string, signal: AbortSignal): Promise<string | null> => {
-        const parsed = v.safeParse(anonymousToken, token);
-        if (!parsed.success || this.#projectId === null) {
+    readonly findCredential = async (token: string, signal: AbortSignal) => {
+        if (this.#projectId === null) {
             return null;
         }
         signal.throwIfAborted();
         const result = await requireIdentityDatabase(this.#database)
-            .select({ userId: anonymousCredential.userId })
+            .select({
+                credentialId: anonymousCredential.id,
+                userId: anonymousCredential.userId,
+                kind: anonymousCredential.kind,
+                transferId: anonymousCredential.remoteTransferId,
+                browserId: anonymousCredential.browserId,
+            })
             .from(anonymousCredential)
             .innerJoin(platformProjectMapping, eq(platformProjectMapping.userId, anonymousCredential.userId))
             .leftJoin(continueLink, eq(continueLink.id, anonymousCredential.remoteTransferId))
             .where(
                 and(
-                    eq(anonymousCredential.tokenHash, await digest(parsed.output)),
+                    eq(anonymousCredential.tokenHash, await digest(token)),
                     isNull(anonymousCredential.revokedAt),
                     eq(platformProjectMapping.projectId, this.#projectId),
                     or(isNull(anonymousCredential.remoteTransferId), isNull(continueLink.revokedAt)),
@@ -80,26 +76,21 @@ export class IdentityStorage {
             )
             .get();
         signal.throwIfAborted();
-        const row = v.safeParse(userRow, result);
-        return row.success ? row.output.userId : null;
+        return result ?? null;
     };
 
-    readonly isLocalCredential = async (token: string, userId: string, signal: AbortSignal): Promise<boolean> => {
+    readonly identifyLegacyCredential = async (
+        credentialId: string,
+        kind: Credential["kind"],
+        signal: AbortSignal,
+    ): Promise<void> => {
         signal.throwIfAborted();
-        const row = await requireIdentityDatabase(this.#database)
-            .select({ id: anonymousCredential.id })
-            .from(anonymousCredential)
-            .where(
-                and(
-                    eq(anonymousCredential.tokenHash, await digest(token)),
-                    eq(anonymousCredential.userId, userId),
-                    isNull(anonymousCredential.revokedAt),
-                    isNull(anonymousCredential.remoteTransferId),
-                ),
-            )
-            .get();
+        await requireIdentityDatabase(this.#database)
+            .update(anonymousCredential)
+            .set({ kind })
+            .where(and(eq(anonymousCredential.id, credentialId), isNull(anonymousCredential.kind)))
+            .run();
         signal.throwIfAborted();
-        return row !== undefined;
     };
 
     readonly revokeOtherAccess = async (
@@ -185,6 +176,7 @@ export class IdentityStorage {
                         id: sql<string>`${`cred_${crypto.randomUUID()}`}`.as("id"),
                         userId: anonymousCredential.userId,
                         tokenHash: sql<string>`${await digest(token)}`.as("token_hash"),
+                        kind: sql<"recovery">`'recovery'`.as("kind"),
                         createdAt: sql<number>`${now}`.as("created_at"),
                         revokedAt: sql<null>`null`.as("revoked_at"),
                         remoteTransferId: sql<null>`null`.as("remote_transfer_id"),
@@ -262,6 +254,7 @@ export class IdentityStorage {
                     id: sql<string>`${credentialId}`.as("id"),
                     userId: continueLink.userId,
                     tokenHash: sql<string>`${await digest(token)}`.as("token_hash"),
+                    kind: sql<"browser">`'browser'`.as("kind"),
                     createdAt: sql<number>`${now}`.as("created_at"),
                     revokedAt: sql<null>`null`.as("revoked_at"),
                     remoteTransferId: continueLink.id,
@@ -296,63 +289,36 @@ export class IdentityStorage {
         return { token, userId: user.userId, projectId: parsed.projectId };
     };
 
-    readonly endRemoteAccess = async (
-        token: string,
+    readonly revokeCredential = async (
+        credential: Exclude<Credential, { readonly kind: "browser" }>,
         now: number,
         signal: AbortSignal,
-    ): Promise<EndRemoteAccessResult> => {
-        const parsed = v.safeParse(anonymousToken, token);
-        if (!parsed.success || this.#projectId === null) {
-            return { kind: "unauthenticated" };
-        }
+    ): Promise<boolean> => {
         signal.throwIfAborted();
-        const database = requireIdentityDatabase(this.#database);
-        const credential = await database
-            .select({
-                browserId: anonymousCredential.browserId,
-                credentialId: anonymousCredential.id,
-                transferId: anonymousCredential.remoteTransferId,
-                userId: anonymousCredential.userId,
-            })
-            .from(anonymousCredential)
-            .innerJoin(platformProjectMapping, eq(platformProjectMapping.userId, anonymousCredential.userId))
-            .leftJoin(continueLink, eq(continueLink.id, anonymousCredential.remoteTransferId))
+        const revoked = await requireIdentityDatabase(this.#database)
+            .update(anonymousCredential)
+            .set({ revokedAt: now })
             .where(
                 and(
-                    eq(anonymousCredential.tokenHash, await digest(parsed.output)),
+                    eq(anonymousCredential.id, credential.credentialId),
+                    eq(anonymousCredential.userId, credential.userId),
                     isNull(anonymousCredential.revokedAt),
-                    eq(platformProjectMapping.projectId, this.#projectId),
-                    or(isNull(anonymousCredential.remoteTransferId), isNull(continueLink.revokedAt)),
                 ),
             )
-            .get();
+            .run();
         signal.throwIfAborted();
-        if (credential === undefined) {
-            return { kind: "unauthenticated" };
-        }
-        if (credential.transferId === null) {
-            const revoked = await database
-                .update(anonymousCredential)
-                .set({ revokedAt: now })
-                .where(
-                    and(
-                        eq(anonymousCredential.id, credential.credentialId),
-                        eq(anonymousCredential.userId, credential.userId),
-                        isNull(anonymousCredential.revokedAt),
-                    ),
-                )
-                .run();
-            signal.throwIfAborted();
-            return revoked.meta.changes === 1
-                ? {
-                      kind: "ended-credential",
-                      credentialId: credential.credentialId,
-                      userId: credential.userId,
-                  }
-                : { kind: "unauthenticated" };
-        }
+        return revoked.meta.changes === 1;
+    };
+
+    readonly revokeBrowserAccess = async (
+        credential: Extract<Credential, { readonly kind: "browser" }>,
+        now: number,
+        signal: AbortSignal,
+    ): Promise<boolean> => {
+        signal.throwIfAborted();
+        const database = requireIdentityDatabase(this.#database);
         // The browser joined through this credential's link and through the links of every credential it held.
-        const browserId = credential.browserId ?? credential.credentialId;
+        const browserId = credential.browserId;
         const held = await database
             .select({ transferId: anonymousCredential.remoteTransferId })
             .from(anonymousCredential)
@@ -402,10 +368,7 @@ export class IdentityStorage {
                 ),
         ]);
         signal.throwIfAborted();
-        if (results[0]?.meta.changes !== 1) {
-            return { kind: "unauthenticated" };
-        }
-        return { kind: "ended-transfer", transferId: credential.transferId, userId: credential.userId };
+        return results[0]?.meta.changes === 1;
     };
 
     readonly ownsProject = async (userId: string, projectId: string, signal: AbortSignal): Promise<boolean> => {

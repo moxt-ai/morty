@@ -224,11 +224,23 @@ export class AnonymousIdentityApi {
     };
 
     readonly endRemoteAccess = async (token: string, signal: AbortSignal): Promise<void> => {
-        await this.#request(
-            "/identity/remote-access",
-            { method: "DELETE", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
-            signal,
-        );
+        const headers = { authorization: `Bearer ${v.parse(tokenSchema, token)}` };
+        const session = await this.#response("/session", { method: "GET", headers }, signal);
+        await session.body?.cancel();
+        // Negotiate before mutating. Missing support is the old contract; a failed deletion never changes paths.
+        const advertised = session.headers.get("Morty-Credential-Revocation");
+        const path =
+            advertised === null
+                ? "/identity/remote-access"
+                : v.parse(
+                      v.picklist([
+                          "/identity/v1/local-credential",
+                          "/identity/v1/browser-access",
+                          "/identity/v1/recovery-credential",
+                      ]),
+                      advertised,
+                  );
+        await this.#request(path, { method: "DELETE", headers }, signal);
         const scope = readIdentityScope();
         if (scope !== null) {
             forgetComputer(scope);
@@ -307,6 +319,13 @@ export class AnonymousIdentityApi {
     };
 
     readonly #request = async (path: string, init: RequestInit, requestSignal: AbortSignal): Promise<unknown> => {
+        const response = await this.#response(path, init, requestSignal);
+        const value: unknown = response.status === 204 ? null : await response.json();
+        requestSignal.throwIfAborted();
+        return value;
+    };
+
+    readonly #response = async (path: string, init: RequestInit, requestSignal: AbortSignal): Promise<Response> => {
         const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(30_000)]);
         const headers = new Headers(init.headers);
         const scope = readIdentityScope();
@@ -319,9 +338,10 @@ export class AnonymousIdentityApi {
         const response = await this.#fetchRequest(
             new Request(new URL(`/morty/api${scopedPath}`, this.#origin), { ...init, headers, signal }),
         );
-        const value: unknown = response.status === 204 ? null : await response.json();
         signal.throwIfAborted();
         if (!response.ok) {
+            const value: unknown = await response.json();
+            signal.throwIfAborted();
             const error = v.safeParse(v.object({ error: v.object({ code: v.string(), message: v.string() }) }), value);
             throw new IdentityApiError(
                 error.success ? error.output.error.code : "IDENTITY_UNAVAILABLE",
@@ -329,7 +349,7 @@ export class AnonymousIdentityApi {
                 response.status,
             );
         }
-        return value;
+        return response;
     };
 }
 

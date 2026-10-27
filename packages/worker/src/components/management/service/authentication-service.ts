@@ -1,10 +1,14 @@
+import * as v from "valibot";
+import { anonymousToken, type Credential } from "../entity/authentication/credential.ts";
 import type { Session } from "../entity/authentication/session.ts";
 import type { IdentityStorage, IdentityTransfer } from "../storage/identity-storage.ts";
 import type { AnonymousIdentity } from "../storage/identity-storage-common.ts";
 
 type SessionResult =
-    | { readonly kind: "authenticated"; readonly session: Session }
+    | { readonly kind: "authenticated"; readonly session: Session; readonly credentialKind: Credential["kind"] }
     | { readonly kind: "unauthenticated" };
+
+type EndAccessResult = { readonly kind: "ended" | "unauthenticated" | "forbidden" };
 
 export class AuthenticationService {
     private readonly identities: IdentityStorage;
@@ -13,14 +17,62 @@ export class AuthenticationService {
         this.identities = cx.storages.identities;
     }
 
-    readonly session = async (token: string | undefined, signal: AbortSignal): Promise<SessionResult> => {
-        if (token === undefined) {
-            return { kind: "unauthenticated" };
+    readonly #credential = async (token: string | undefined, signal: AbortSignal): Promise<Credential | null> => {
+        const parsed = v.safeParse(anonymousToken, token);
+        if (!parsed.success) {
+            return null;
         }
-        const userId = await this.identities.authenticateAnonymous(token, signal);
-        return userId === null
+        const stored = await this.identities.findCredential(parsed.output, signal);
+        if (stored === null) {
+            return null;
+        }
+        // Only a successfully authenticated token can supply the missing historical fact. Hashes alone cannot.
+        const kind =
+            stored.kind ??
+            (stored.transferId !== null
+                ? "browser"
+                : parsed.output.startsWith("mobius_recovery_v1.")
+                  ? "recovery"
+                  : "local");
+        let credential: Credential;
+        switch (kind) {
+            case "browser":
+                if (stored.transferId === null) {
+                    return null;
+                }
+                credential = {
+                    kind,
+                    credentialId: stored.credentialId,
+                    userId: stored.userId,
+                    transferId: stored.transferId,
+                    browserId: stored.browserId ?? stored.credentialId,
+                };
+                break;
+            case "local":
+            case "recovery":
+                if (stored.transferId !== null || stored.browserId !== null) {
+                    return null;
+                }
+                credential = { kind, credentialId: stored.credentialId, userId: stored.userId };
+                break;
+            default:
+                return null;
+        }
+        if (stored.kind === null) {
+            await this.identities.identifyLegacyCredential(stored.credentialId, kind, signal);
+        }
+        return credential;
+    };
+
+    readonly session = async (token: string | undefined, signal: AbortSignal): Promise<SessionResult> => {
+        const credential = await this.#credential(token, signal);
+        return credential === null
             ? { kind: "unauthenticated" }
-            : { kind: "authenticated", session: { authentication: { kind: "anonymous" }, userId } };
+            : {
+                  kind: "authenticated",
+                  session: { authentication: { kind: "anonymous" }, userId: credential.userId },
+                  credentialKind: credential.kind,
+              };
     };
 
     readonly createAnonymous = async (
@@ -36,22 +88,20 @@ export class AuthenticationService {
         if (token === undefined) {
             return null;
         }
-        const userId = await this.identities.authenticateAnonymous(token, signal);
-        if (userId === null) {
-            return null;
-        }
-        return await this.identities.createTransfer(userId, token, Date.now(), signal);
+        const credential = await this.#credential(token, signal);
+        return credential === null
+            ? null
+            : await this.identities.createTransfer(credential.userId, token, Date.now(), signal);
     };
 
     readonly createRecoveryToken = async (token: string | undefined, signal: AbortSignal): Promise<string | null> => {
         if (token === undefined) {
             return null;
         }
-        const userId = await this.identities.authenticateAnonymous(token, signal);
-        if (userId === null) {
-            return null;
-        }
-        return await this.identities.createRecoveryToken(userId, token, Date.now(), signal);
+        const credential = await this.#credential(token, signal);
+        return credential === null
+            ? null
+            : await this.identities.createRecoveryToken(credential.userId, token, Date.now(), signal);
     };
 
     readonly redeemTransfer = async (
@@ -60,10 +110,7 @@ export class AuthenticationService {
         signal: AbortSignal,
     ): Promise<AnonymousIdentity | null> => await this.identities.redeemTransfer(code, replaces, Date.now(), signal);
 
-    /**
-     * The user behind the machine's own local credential. Shared browser and recovery credentials are not local, so
-     * they cannot administer the user's access or Project.
-     */
+    /** Only a machine's local credential can administer the user's access or Project. */
     readonly localIdentity = async (
         token: string | undefined,
         signal: AbortSignal,
@@ -75,14 +122,14 @@ export class AuthenticationService {
         if (token === undefined) {
             return { kind: "unauthenticated" };
         }
-        const userId = await this.identities.authenticateAnonymous(token, signal);
-        if (userId === null) {
+        const credential = await this.#credential(token, signal);
+        if (credential === null) {
             return { kind: "unauthenticated" };
         }
-        if (!token.startsWith("mobius_anon_v2_") || !(await this.identities.isLocalCredential(token, userId, signal))) {
+        if (credential.kind !== "local") {
             return { kind: "forbidden" };
         }
-        return { kind: "local", userId, token };
+        return { kind: "local", userId: credential.userId, token };
     };
 
     readonly revokeAllAccess = async (
@@ -97,10 +144,64 @@ export class AuthenticationService {
         return { kind: "revoked" };
     };
 
-    readonly endRemoteAccess = async (token: string | undefined, signal: AbortSignal) => {
-        if (token === undefined) {
-            return { kind: "unauthenticated" } as const;
+    readonly endBrowserAccess = async (token: string | undefined, signal: AbortSignal): Promise<EndAccessResult> => {
+        const credential = await this.#credential(token, signal);
+        if (credential === null) {
+            return { kind: "unauthenticated" };
         }
-        return await this.identities.endRemoteAccess(token, Date.now(), signal);
+        if (credential.kind !== "browser") {
+            return { kind: "forbidden" };
+        }
+        return {
+            kind: (await this.identities.revokeBrowserAccess(credential, Date.now(), signal))
+                ? "ended"
+                : "unauthenticated",
+        };
+    };
+
+    readonly retireLocalCredential = async (token: string | undefined, signal: AbortSignal): Promise<EndAccessResult> =>
+        await this.#revokeCredential(token, "local", signal);
+
+    readonly revokeRecoveryCredential = async (
+        token: string | undefined,
+        signal: AbortSignal,
+    ): Promise<EndAccessResult> => await this.#revokeCredential(token, "recovery", signal);
+
+    readonly #revokeCredential = async (
+        token: string | undefined,
+        kind: "local" | "recovery",
+        signal: AbortSignal,
+    ): Promise<EndAccessResult> => {
+        const credential = await this.#credential(token, signal);
+        if (credential === null) {
+            return { kind: "unauthenticated" };
+        }
+        if (credential.kind !== kind) {
+            return { kind: "forbidden" };
+        }
+        return {
+            kind: (await this.identities.revokeCredential(credential, Date.now(), signal))
+                ? "ended"
+                : "unauthenticated",
+        };
+    };
+
+    /** Compatibility for old browsers and setup executables; keep their existing revocation scope. */
+    readonly endLegacyRemoteAccess = async (
+        token: string | undefined,
+        signal: AbortSignal,
+    ): Promise<EndAccessResult> => {
+        const credential = await this.#credential(token, signal);
+        if (credential === null) {
+            return { kind: "unauthenticated" };
+        }
+        switch (credential.kind) {
+            case "browser":
+                return await this.endBrowserAccess(token, signal);
+            case "local":
+                return await this.retireLocalCredential(token, signal);
+            case "recovery":
+                return await this.revokeRecoveryCredential(token, signal);
+        }
     };
 }

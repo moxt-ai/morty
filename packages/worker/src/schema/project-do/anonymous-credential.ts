@@ -6,6 +6,8 @@ export const anonymousCredential = sqliteTable(
         id: text("id").primaryKey().notNull(),
         userId: text("user_id").notNull(),
         tokenHash: text("token_hash").notNull().unique(),
+        // Null is an unclassified legacy credential, never an assumption of local authority.
+        kind: text("kind", { enum: ["local", "browser", "recovery"] }),
         createdAt: integer("created_at").notNull(),
         revokedAt: integer("revoked_at"),
         remoteTransferId: text("remote_transfer_id"),

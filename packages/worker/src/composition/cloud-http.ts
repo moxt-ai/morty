@@ -51,6 +51,15 @@ export const publicCloudRoutes = new Hono<{ readonly Bindings: CloudBindings }>(
     )
     .post("/projects/:projectId/identity/recovery-token", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .delete("/projects/:projectId/identity/remote-access", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .delete("/projects/:projectId/identity/v1/browser-access", (context) =>
+        cloudRoutes.fetch(context.req.raw, context.env),
+    )
+    .delete("/projects/:projectId/identity/v1/recovery-credential", (context) =>
+        cloudRoutes.fetch(context.req.raw, context.env),
+    )
+    .delete("/projects/:projectId/identity/v1/local-credential", (context) =>
+        cloudRoutes.fetch(context.req.raw, context.env),
+    )
     .post("/chat/projects/:projectId/bots/:botId/setup", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .post("/chat/projects/:projectId/bots/:botId/setup/runtimes", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),

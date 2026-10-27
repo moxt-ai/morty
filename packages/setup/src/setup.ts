@@ -830,15 +830,26 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return context;
         }
         const { projectId, token } = replacement.previous;
-        const response = await fetch(
-            new URL(`/morty/api/projects/${identifier(projectId)}/identity/remote-access`, context.base),
-            {
+        const options = {
+            headers: { authorization: `Bearer ${credential(token)}` },
+            redirect: "error",
+            signal: AbortSignal.any([signal, AbortSignal.timeout(45000)]),
+        } as const;
+        const projectPath = `/morty/api/projects/${identifier(projectId)}`;
+        const session = await fetch(new URL(`${projectPath}/session`, context.base), options);
+        let response = session;
+        if (session.ok) {
+            await session.body?.cancel();
+            // Old Workers omit the capability. Select the operation before writing, never after an ambiguous failure.
+            const advertised = session.headers.get("Morty-Credential-Revocation");
+            if (advertised !== null && advertised !== "/identity/v1/local-credential") {
+                fail("LOCAL_IDENTITY_REQUIRED", new RemoteError("Only the saved local identity can be retired."));
+            }
+            response = await fetch(new URL(`${projectPath}${advertised ?? "/identity/remote-access"}`, context.base), {
+                ...options,
                 method: "DELETE",
-                headers: { authorization: `Bearer ${credential(token)}` },
-                redirect: "error",
-                signal: AbortSignal.any([signal, AbortSignal.timeout(45000)]),
-            },
-        );
+            });
+        }
         // A credential that no longer authenticates was ended by an earlier run that stopped before saving it.
         if (!response.ok && response.status !== 401) {
             remoteFailure(object(await response.json()), response.status);
