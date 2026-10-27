@@ -290,6 +290,12 @@ function SettingControl({
             data-testid={control.testId}
             disabled={control.disabled || valueLoading}
             onClick={control.kind === "select" ? onOpen : control.onCheckedChange}
+            onKeyDown={(event) => {
+                if (control.kind === "select" && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+                    event.preventDefault();
+                    onOpen();
+                }
+            }}
             ref={assignButton}
             type="button"
         >

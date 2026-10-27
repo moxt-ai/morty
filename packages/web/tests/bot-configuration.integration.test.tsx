@@ -37,7 +37,7 @@ test("Given full harness settings, When the user searches and edits them with th
     await app.user.keyboard("{Escape}");
     const model = getByRole(document.body, "combobox", { name: "Model" });
     await app.waitForView(() => expect(document.activeElement).toBe(model));
-    await app.user.click(model);
+    await app.user.keyboard("{ArrowDown}");
     await app.user.type(getByRole(document.body, "searchbox", { name: "Search models" }), "large");
     await app.user.keyboard("{ArrowDown}{Enter}");
     await app.waitForView(() => {
