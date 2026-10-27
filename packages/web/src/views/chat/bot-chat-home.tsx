@@ -307,12 +307,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                     <div className={`${chatSessionColumnClassName} flex flex-col gap-2`}>
                                         <div data-testid={dataTestId.queuedMessage}>
                                             <UserPromptMessage
-                                                images={queuedInitialMessage.attachments.flatMap((attachment) =>
-                                                    attachment.kind === "image" ? [attachment.image] : [],
-                                                )}
-                                                resources={queuedInitialMessage.attachments.flatMap((attachment) =>
-                                                    attachment.kind === "resource" ? [attachment.resource] : [],
-                                                )}
+                                                attachments={queuedInitialMessage.attachments}
                                                 text={queuedInitialMessage.content}
                                             />
                                         </div>

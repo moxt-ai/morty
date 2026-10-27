@@ -1,3 +1,4 @@
+import { CONTENT_CHUNK_MAX_BYTES, encodeContentChunkFrame } from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
 import { type Clock, systemClock } from "../time/clock.ts";
@@ -39,7 +40,13 @@ const serverFrame = v.variant("kind", [
     eventFrame,
     subscriptionEndFrame,
 ]);
-const permittedHeaders = new Set(["authorization", "content-type"]);
+const permittedHeaders = new Set([
+    "authorization",
+    "content-type",
+    "x-mobius-byte-length",
+    "x-mobius-content-kind",
+    "x-mobius-file-name",
+]);
 const KEEPALIVE_MILLISECONDS = 25_000;
 /** Delays between automatic reconnects; the last entry repeats until the bridge returns. */
 const RECONNECT_DELAYS_MILLISECONDS = [1_000, 2_000, 4_000, 8_000, 15_000] as const;
@@ -282,7 +289,9 @@ export class WebSocketApiTransport {
             }
             headers.push([name, value]);
         }
-        const body = request.body === null ? null : await request.text();
+        const binaryRequest = request.headers.has("x-mobius-byte-length");
+        const binaryBody = binaryRequest ? new Uint8Array(await request.arrayBuffer()) : null;
+        const body = binaryRequest || request.body === null ? null : await request.text();
         request.signal.throwIfAborted();
         const socket = await this.#connectForCall(request.signal);
         request.signal.throwIfAborted();
@@ -310,8 +319,21 @@ export class WebSocketApiTransport {
                         path: `${url.pathname}${url.search}`,
                         headers,
                         body,
+                        ...(binaryBody === null ? {} : { bodyByteLength: binaryBody.byteLength }),
                     }),
                 );
+                if (binaryBody !== null) {
+                    let sequence = 0;
+                    for (let offset = 0; offset < binaryBody.byteLength; offset += CONTENT_CHUNK_MAX_BYTES) {
+                        const chunk = encodeContentChunkFrame({
+                            bytes: binaryBody.subarray(offset, offset + CONTENT_CHUNK_MAX_BYTES),
+                            requestId,
+                            sequence,
+                        });
+                        socket.send(chunk.slice().buffer);
+                        sequence += 1;
+                    }
+                }
             } catch (cause) {
                 this.#settle(requestId)?.reject(cause);
             }

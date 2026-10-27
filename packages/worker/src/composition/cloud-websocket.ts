@@ -5,7 +5,13 @@ import type { WebSocketBridgeHandlers, WebSocketBridgeRequest } from "../infra/w
 const BRIDGE_ORIGIN = "https://bridge.internal";
 const WATCH_INTERVAL_MILLISECONDS = 5_000;
 const WATCH_REQUEST_TIMEOUT_MILLISECONDS = 120_000;
-const permittedHeaders = new Set(["authorization", "content-type"]);
+const permittedHeaders = new Set([
+    "authorization",
+    "content-type",
+    "x-mobius-byte-length",
+    "x-mobius-content-kind",
+    "x-mobius-file-name",
+]);
 const STATUS_SUBSCRIPTION_PATH =
     /^\/morty\/api\/chat\/projects\/([^/]+)\/bots\/([^/]+)\/managed-session\/status-events$/u;
 const statusSubscriptionPath = v.pipe(v.string(), v.regex(STATUS_SUBSCRIPTION_PATH));
@@ -48,6 +54,7 @@ function resolveRequest(
     const url = bridgedUrl(input.path);
     const headers = bridgedHeaders(input.headers);
     const body = input.body === "" ? null : input.body;
+    const requestBody = body instanceof Uint8Array ? body.slice().buffer : body;
     if (
         operation === "watch" &&
         (input.method !== "POST" ||
@@ -66,7 +73,7 @@ function resolveRequest(
         method: input.method,
         headers,
         signal,
-        ...(body === null ? {} : { body }),
+        ...(requestBody === null ? {} : { body: requestBody }),
     });
 }
 

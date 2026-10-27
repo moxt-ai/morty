@@ -1,34 +1,8 @@
-import type { PromptImage, PromptResource } from "@moxt-ai/mobius-sdk";
+import type { ComposerAttachment } from "./composer-attachment.ts";
 
 const IMAGE_BYTES_LIMIT = 2_500_000;
 const RESOURCE_BYTES_LIMIT = 1_000_000;
 const READ_TIMEOUT_MILLISECONDS = 15_000;
-
-abstract class ReadPromptAttachment {
-    abstract readonly name: string;
-}
-
-export class ReadPromptImage extends ReadPromptAttachment {
-    readonly image: PromptImage;
-    readonly name: string;
-
-    constructor(image: PromptImage) {
-        super();
-        this.image = image;
-        this.name = image.name;
-    }
-}
-
-export class ReadPromptResource extends ReadPromptAttachment {
-    readonly name: string;
-    readonly resource: PromptResource;
-
-    constructor(resource: PromptResource) {
-        super();
-        this.name = resource.name;
-        this.resource = resource;
-    }
-}
 
 export class AttachmentReadError extends Error {
     readonly code: string;
@@ -91,23 +65,11 @@ function readBytes(file: File, signal: AbortSignal): Promise<ArrayBuffer> {
     });
 }
 
-function encodeBase64(bytes: Uint8Array): string {
-    const chunks: string[] = [];
-    const chunkSize = 24_576;
-    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-        chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + chunkSize)));
-    }
-    return window.btoa(chunks.join(""));
-}
-
 function attachmentUri(name: string): string {
     return `attachment:///${encodeURIComponent(name.replaceAll("/", "_"))}`;
 }
 
-export async function readPromptAttachment(
-    file: File,
-    signal: AbortSignal,
-): Promise<ReadPromptImage | ReadPromptResource> {
+export async function readPromptAttachment(file: File, signal: AbortSignal): Promise<ComposerAttachment> {
     signal.throwIfAborted();
     const image = file.type.startsWith("image/");
     const limit = image ? IMAGE_BYTES_LIMIT : RESOURCE_BYTES_LIMIT;
@@ -126,18 +88,20 @@ export async function readPromptAttachment(
                 "Only PNG, JPEG, GIF, and WebP images are supported.",
             );
         }
-        return new ReadPromptImage({
-            data: encodeBase64(bytes),
-            mimeType: file.type,
+        return {
+            bytes,
+            kind: "image",
+            mediaType: file.type,
             name: file.name,
-        });
+            uri: attachmentUri(file.name),
+        };
     }
-    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    return new ReadPromptResource({
-        mimeType: file.type.length > 0 ? file.type : "text/plain",
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return {
+        bytes,
+        kind: "resource",
+        mediaType: file.type.length > 0 ? file.type : "text/plain",
         name: file.name,
-        text,
-        type: "embedded",
         uri: attachmentUri(file.name),
-    });
+    };
 }

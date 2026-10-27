@@ -1,23 +1,40 @@
-import type { PromptImage, PromptResource } from "@moxt-ai/mobius-sdk";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { UserMessageShell } from "../../components/chat/user-message-shell.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
 import { ImageGallery, PreviewImage } from "../images/image-gallery.tsx";
-
-const SAFE_IMAGE_MIME = /^image\/(?:gif|jpeg|png|webp)$/;
+import type { ComposerAttachment } from "./composer-attachment.ts";
 
 interface UserPromptMessageProps {
-    readonly images: readonly PromptImage[];
-    readonly resources: readonly PromptResource[];
+    readonly attachments: readonly ComposerAttachment[];
     readonly text: string;
 }
 
-export function UserPromptMessage({ images, resources, text }: UserPromptMessageProps) {
-    if (text.length === 0 && images.length === 0 && resources.length === 0) {
+function PromptImage({ attachment }: { readonly attachment: ComposerAttachment }) {
+    const [source, setSource] = useState("");
+    useEffect(() => {
+        const url = URL.createObjectURL(new Blob([attachment.bytes.slice().buffer], { type: attachment.mediaType }));
+        setSource(url);
+        return () => URL.revokeObjectURL(url);
+    }, [attachment]);
+    return source.length === 0 ? null : (
+        <PreviewImage
+            alt={attachment.name}
+            className="h-auto max-h-56 max-w-full rounded-lg object-contain object-left"
+            loading="lazy"
+            src={source}
+        />
+    );
+}
+
+export function UserPromptMessage({ attachments, text }: UserPromptMessageProps) {
+    if (text.length === 0 && attachments.length === 0) {
         return null;
     }
+    const images = attachments.filter((attachment) => attachment.kind === "image");
+    const resources = attachments.filter((attachment) => attachment.kind === "resource");
     return (
         <ImageGallery>
             <UserMessageShell>
@@ -25,24 +42,9 @@ export function UserPromptMessage({ images, resources, text }: UserPromptMessage
                     <div className="grid min-w-0 gap-2">
                         {images.length > 0 && (
                             <div className={cn("grid min-w-0 gap-1.5", images.length > 1 && "grid-cols-2")}>
-                                {images.map((image, index) =>
-                                    SAFE_IMAGE_MIME.test(image.mimeType) ? (
-                                        <PreviewImage
-                                            alt={image.name}
-                                            className="h-auto max-h-56 max-w-full rounded-lg object-contain object-left"
-                                            key={`${index.toString()}:${image.name}`}
-                                            loading="lazy"
-                                            src={`data:${image.mimeType};base64,${image.data}`}
-                                        />
-                                    ) : (
-                                        <span
-                                            className="rounded-lg border border-black/[0.06] bg-muted/40 p-2 text-[10px] text-muted-foreground"
-                                            key={`${index.toString()}:${image.name}`}
-                                        >
-                                            {image.name}
-                                        </span>
-                                    ),
-                                )}
+                                {images.map((image, index) => (
+                                    <PromptImage attachment={image} key={`${index.toString()}:${image.name}`} />
+                                ))}
                             </div>
                         )}
                         {resources.length > 0 && (

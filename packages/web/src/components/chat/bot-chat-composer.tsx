@@ -1,5 +1,13 @@
 import { ArrowUp, FileText, LoaderCircle, Plus, Square, X } from "lucide-react";
-import { type ClipboardEvent, type FormEvent, type KeyboardEvent, type ReactNode, useRef } from "react";
+import {
+    type ClipboardEvent,
+    type FormEvent,
+    type KeyboardEvent,
+    type ReactNode,
+    useEffect,
+    useRef,
+    useState,
+} from "react";
 import { dataTestId } from "../../data-testid.ts";
 import { ImageGallery, PreviewImage } from "../images/image-gallery.tsx";
 import { Button } from "../ui/cloud-button.tsx";
@@ -11,7 +19,19 @@ import type { ComposerAttachment } from "./composer-attachment.ts";
 import { type ComposerAttachmentStore, canAddAttachments } from "./composer-attachment-store.ts";
 
 function attachmentName(attachment: ComposerAttachment): string {
-    return attachment.kind === "image" ? attachment.image.name : attachment.resource.name;
+    return attachment.name;
+}
+
+function AttachmentImage({ attachment }: { readonly attachment: ComposerAttachment }) {
+    const [source, setSource] = useState("");
+    useEffect(() => {
+        const url = URL.createObjectURL(new Blob([attachment.bytes.slice().buffer], { type: attachment.mediaType }));
+        setSource(url);
+        return () => URL.revokeObjectURL(url);
+    }, [attachment]);
+    return source.length === 0 ? null : (
+        <PreviewImage alt={attachment.name} className="size-11 rounded-lg object-contain" src={source} />
+    );
 }
 
 function AttachmentPreview({
@@ -28,11 +48,7 @@ function AttachmentPreview({
     return (
         <li className="group/attachment relative flex h-[60px] max-w-52 items-center gap-2 rounded-md border border-border bg-surface-subtle p-2 pr-8 text-xs text-copy-secondary">
             {attachment.kind === "image" ? (
-                <PreviewImage
-                    alt={name}
-                    className="size-11 rounded-lg object-contain"
-                    src={`data:${attachment.image.mimeType};base64,${attachment.image.data}`}
-                />
+                <AttachmentImage attachment={attachment} />
             ) : (
                 <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-white text-muted-foreground shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]">
                     <FileText aria-hidden="true" className="size-5" />

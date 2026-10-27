@@ -874,14 +874,7 @@ export const createBotChatHomeStore = (
                 const commandId = current.selection.key;
                 const settings = current.draftSettings;
                 const content = draft.trim();
-                const title = (
-                    content ||
-                    attachments
-                        .map((attachment) =>
-                            attachment.kind === "image" ? attachment.image.name : attachment.resource.name,
-                        )
-                        .join(", ")
-                ).slice(0, 500);
+                const title = (content || attachments.map((attachment) => attachment.name).join(", ")).slice(0, 500);
                 const queuedMessage = {
                     attachments,
                     commandId,

@@ -1,4 +1,4 @@
-import type { MobiusTurn, PromptImage, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
+import type { MobiusTurn, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
 import { SessionPromptDisposition } from "@moxt-ai/mobius-sdk";
 import type { NativeSessionResult } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
@@ -6,7 +6,6 @@ import { formatError } from "../format-error.ts";
 
 interface QueuedMessageValue {
     readonly commandId: string;
-    readonly images: readonly PromptImage[];
     readonly summary: string;
     readonly turnId: string;
 }
@@ -108,7 +107,6 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                 signal.throwIfAborted();
                 const message: ChatQueuedMessage = {
                     commandId,
-                    images: request.images,
                     kind: "queued",
                     summary,
                     turnId: accepted.turnId,
@@ -164,7 +162,6 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                     commandId: message.commandId,
                     turnId: message.commandId,
                     summary: message.prompt,
-                    images: message.images,
                     kind: state.messages.find((current) => current.commandId === message.commandId)?.kind ?? "queued",
                 })),
             })),

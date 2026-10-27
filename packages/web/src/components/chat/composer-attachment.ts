@@ -1,5 +1,7 @@
-import type { PromptImage, PromptResource } from "@moxt-ai/mobius-sdk";
-
-export type ComposerAttachment =
-    | { readonly kind: "image"; readonly image: PromptImage }
-    | { readonly kind: "resource"; readonly resource: PromptResource };
+export interface ComposerAttachment {
+    readonly bytes: Uint8Array;
+    readonly kind: "image" | "resource";
+    readonly mediaType: string;
+    readonly name: string;
+    readonly uri: string;
+}

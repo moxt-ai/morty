@@ -32,7 +32,7 @@ test("Given text and two images in one user message, When the conversation reloa
         const images = getAllByRole(message, "img", { name: "Your attachment" });
         expect(images).toHaveLength(2);
         const sources = images.map((image) => image.getAttribute("src"));
-        expect(sources.every((source) => source !== null)).toBe(true);
+        expect(sources.every((source) => source?.startsWith("blob:") === true)).toBe(true);
         expect(new Set(sources).size).toBe(2);
         return sources;
     });
@@ -42,9 +42,11 @@ test("Given text and two images in one user message, When the conversation reloa
         expect(getAllByRole(document.body, "article", { name: "Your message" })).toHaveLength(1);
         const message = getByRole(document.body, "article", { name: "Your message" });
         expect(message.textContent).toContain(prompt);
-        expect(
-            getAllByRole(message, "img", { name: "Your attachment" }).map((image) => image.getAttribute("src")),
-        ).toEqual(sources);
+        const reloadedSources = getAllByRole(message, "img", { name: "Your attachment" }).map((image) =>
+            image.getAttribute("src"),
+        );
+        expect(reloadedSources.every((source) => source?.startsWith("blob:") === true)).toBe(true);
+        expect(reloadedSources).not.toEqual(sources);
     });
     const followUp = "A separate message";
     await sendPrompt(reloaded, await reloaded.queryElementByTestId(dataTestId.messageComposer), followUp);
@@ -55,11 +57,10 @@ test("Given text and two images in one user message, When the conversation reloa
         expect(messages).toHaveLength(2);
         expect(messages[0]?.textContent).toContain(prompt);
         expect(messages[1]?.textContent).toContain(followUp);
-        expect(
-            getAllByRole(messages[0] ?? document.body, "img", { name: "Your attachment" }).map((image) =>
-                image.getAttribute("src"),
-            ),
-        ).toEqual(sources);
+        const reopenedSources = getAllByRole(messages[0] ?? document.body, "img", { name: "Your attachment" }).map(
+            (image) => image.getAttribute("src"),
+        );
+        expect(reopenedSources.every((source) => source?.startsWith("blob:") === true)).toBe(true);
         expect(queryByRole(messages[1] ?? document.body, "img", { name: "Your attachment" })).toBeNull();
     });
 });

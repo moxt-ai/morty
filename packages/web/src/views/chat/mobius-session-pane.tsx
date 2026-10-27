@@ -1,4 +1,4 @@
-import type { PromptImage, PromptResource, SessionConfigOption } from "@moxt-ai/mobius-sdk";
+import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
 import { Check, CircleAlert, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
@@ -17,6 +17,7 @@ import {
     chatSessionMessageScrollClassName,
     chatSessionPaneFillClassName,
 } from "../../components/chat/chat-session-layout.ts";
+import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { ConnectionNotice } from "../../components/chat/connection-notice.tsx";
 import { ReadonlyWorkingDirectory, WorkingDirectorySkeleton } from "../../components/chat/cwd-selector.tsx";
 import { HarnessMark } from "../../components/chat/harness-mark.tsx";
@@ -549,15 +550,14 @@ function UnconfirmedDeliveryCard({
     readonly delivery: {
         readonly commandId: string;
         readonly displayPrompt: string;
-        readonly images: readonly PromptImage[];
-        readonly resources: readonly PromptResource[];
+        readonly attachments: readonly ComposerAttachment[];
     };
     readonly onRemove: () => void;
     readonly onRetry: () => void;
 }) {
     return (
         <div className={chatSessionMessageItemClassName} data-testid={dataTestId.unconfirmedDelivery}>
-            <UserPromptMessage images={delivery.images} resources={delivery.resources} text={delivery.displayPrompt} />
+            <UserPromptMessage attachments={delivery.attachments} text={delivery.displayPrompt} />
             <div
                 className="ml-auto flex max-w-[85%] items-center gap-3 rounded-lg border border-destructive/15 bg-destructive/5 py-2 pr-2 pl-3 text-xs leading-5 text-destructive"
                 role="alert"
@@ -779,13 +779,8 @@ function MobiusSessionPaneBody({
                                     {initialMessage !== null && (
                                         <div className={chatSessionMessageItemClassName}>
                                             <UserPromptMessage
+                                                attachments={initialMessage.attachments}
                                                 text={initialMessage.content}
-                                                images={initialMessage.attachments.flatMap((attachment) =>
-                                                    attachment.kind === "image" ? [attachment.image] : [],
-                                                )}
-                                                resources={initialMessage.attachments.flatMap((attachment) =>
-                                                    attachment.kind === "resource" ? [attachment.resource] : [],
-                                                )}
                                             />
                                         </div>
                                     )}

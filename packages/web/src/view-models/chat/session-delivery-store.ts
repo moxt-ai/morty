@@ -1,5 +1,6 @@
 import { MobiusApiError, MobiusCancellationError, type MobiusClient } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
+import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
 import { formatError } from "../format-error.ts";
 
@@ -12,6 +13,7 @@ type SubmissionOutcome =
     | { readonly kind: "rejected" }
     | { readonly kind: "delivery-unknown" };
 export type Journal = {
+    readonly attachments: readonly ComposerAttachment[];
     readonly commandId: string;
     readonly displayPrompt: string;
     readonly request: Omit<SubmitRequest, "idempotencyKey">;
@@ -34,6 +36,7 @@ export interface SessionDeliveryStore {
         commandId: string,
         displayPrompt: string,
         request: Omit<SubmitRequest, "idempotencyKey">,
+        attachments: readonly ComposerAttachment[],
         signal: AbortSignal,
     ) => Promise<SubmissionOutcome>;
     readonly retry: (signal: AbortSignal) => Promise<SubmissionOutcome | null>;
@@ -80,8 +83,7 @@ export const createSessionDeliveryStore = (options: {
                 {
                     additionalDirectoryIds: journal.request.additionalDirectoryIds,
                     content: journal.request.content,
-                    images: journal.request.images,
-                    resources: journal.request.resources,
+                    attachments: journal.request.attachments,
                     idempotencyKey: journal.commandId,
                     ...(journal.request.disposition === undefined ? {} : { disposition: journal.request.disposition }),
                     ...(journal.request.targetCommandId === undefined
@@ -146,8 +148,8 @@ export const createSessionDeliveryStore = (options: {
                 reportDelivered(state.journal.commandId);
             }
         },
-        submit: async (commandId, displayPrompt, request, signal) =>
-            await send({ commandId, displayPrompt, request }, signal, set),
+        submit: async (commandId, displayPrompt, request, attachments, signal) =>
+            await send({ attachments, commandId, displayPrompt, request }, signal, set),
         retry: async (signal) => {
             const state = get().state;
             return state.kind === "delivery-unknown" ? await send(state.journal, signal, set) : null;

@@ -1,3 +1,4 @@
+import { decodeContentChunkFrame } from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
 import { toHttpError } from "./http-error.ts";
 import { RequestError } from "./request-error.ts";
@@ -10,6 +11,7 @@ const requestFrame = v.strictObject({
     path: v.pipe(v.string(), v.minLength(1), v.maxLength(4096)),
     headers: v.pipe(v.array(v.tuple([v.string(), v.string()])), v.maxLength(16)),
     body: v.nullable(v.pipe(v.string(), v.maxLength(7_000_000))),
+    bodyByteLength: v.optional(v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(3 * 1_024 * 1_024))),
 });
 const watchFrame = v.strictObject({
     kind: v.literal("watch"),
@@ -52,7 +54,7 @@ export interface WebSocketBridgeRequest {
     readonly method: "DELETE" | "GET" | "PATCH" | "POST" | "PUT";
     readonly path: string;
     readonly headers: readonly (readonly [string, string])[];
-    readonly body: string | null;
+    readonly body: string | Uint8Array | null;
 }
 
 export interface WebSocketBridgeHandlers {
@@ -72,6 +74,16 @@ export interface WebSocketBridgeHandlers {
         signal: AbortSignal,
         baseline?: string,
     ) => Promise<void>;
+}
+
+interface BinaryBridgeRequest {
+    readonly body: Uint8Array;
+    readonly byteLength: number;
+    readonly controller: AbortController;
+    readonly frame: WebSocketBridgeRequest;
+    readonly requestId: string;
+    receivedBytes: number;
+    sequence: number;
 }
 
 function send(socket: WebSocket, value: Readonly<Record<string, unknown>>): void {
@@ -122,6 +134,7 @@ export function createWebSocketApiBridge(
     const client = pair[0];
     const server = pair[1];
     const pending = new Map<string, AbortController>();
+    const binaryRequests = new Map<string, BinaryBridgeRequest>();
     const watches = new Map<string, AbortController>();
     let idleTimer: ReturnType<typeof setTimeout>;
     const refreshIdleDeadline = () => {
@@ -134,6 +147,7 @@ export function createWebSocketApiBridge(
             controller.abort(new Error("The WebSocket bridge closed."));
         }
         pending.clear();
+        binaryRequests.clear();
         for (const controller of watches.values()) {
             controller.abort(new Error("The WebSocket bridge closed."));
         }
@@ -146,7 +160,56 @@ export function createWebSocketApiBridge(
     server.addEventListener("message", (event) => {
         refreshIdleDeadline();
         if (typeof event.data !== "string") {
-            protocolError(server, null);
+            try {
+                const chunk = decodeContentChunkFrame(event.data);
+                const upload = binaryRequests.get(chunk.requestId);
+                if (upload === undefined || chunk.sequence !== upload.sequence) {
+                    throw new Error("The binary bridge chunk is not expected");
+                }
+                upload.sequence += 1;
+                upload.receivedBytes += chunk.bytes.byteLength;
+                if (upload.receivedBytes > upload.byteLength) {
+                    throw new Error("The binary bridge request exceeds its declared size");
+                }
+                upload.body.set(chunk.bytes, upload.receivedBytes - chunk.bytes.byteLength);
+                if (upload.receivedBytes === upload.byteLength) {
+                    binaryRequests.delete(upload.requestId);
+                    const signal = AbortSignal.any([
+                        upload.controller.signal,
+                        AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
+                    ]);
+                    let dispatchedRequest: Request;
+                    try {
+                        dispatchedRequest = handlers.resolve({ ...upload.frame, body: upload.body }, "request", signal);
+                    } catch {
+                        pending.delete(upload.requestId);
+                        protocolError(server, upload.requestId);
+                        return;
+                    }
+                    void handlers
+                        .dispatch(dispatchedRequest)
+                        .then(async (response) => {
+                            await sendResponse(server, upload.requestId, response, signal);
+                        })
+                        .catch((cause: unknown) => {
+                            if (!upload.controller.signal.aborted) {
+                                const httpError = toHttpError(cause);
+                                send(server, {
+                                    kind: "error",
+                                    requestId: upload.requestId,
+                                    code: httpError.body.error.code,
+                                    message: httpError.body.error.message,
+                                });
+                            }
+                        })
+                        .finally(() => {
+                            pending.delete(upload.requestId);
+                            refreshIdleDeadline();
+                        });
+                }
+            } catch {
+                protocolError(server, null);
+            }
             return;
         }
         let value: unknown;
@@ -172,6 +235,8 @@ export function createWebSocketApiBridge(
         }
         if (frame.kind === "cancel") {
             pending.get(frame.requestId)?.abort(new Error("The bridged request was cancelled."));
+            pending.delete(frame.requestId);
+            binaryRequests.delete(frame.requestId);
             return;
         }
         if (frame.kind === "unwatch") {
@@ -237,6 +302,28 @@ export function createWebSocketApiBridge(
             return;
         }
         const controller = new AbortController();
+        if (frame.bodyByteLength !== undefined) {
+            if (frame.body !== null) {
+                protocolError(server, frame.requestId);
+                return;
+            }
+            pending.set(frame.requestId, controller);
+            binaryRequests.set(frame.requestId, {
+                body: new Uint8Array(frame.bodyByteLength),
+                byteLength: frame.bodyByteLength,
+                controller,
+                frame: {
+                    body: null,
+                    headers: frame.headers,
+                    method: frame.method,
+                    path: frame.path,
+                },
+                receivedBytes: 0,
+                requestId: frame.requestId,
+                sequence: 0,
+            });
+            return;
+        }
         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS)]);
         let dispatchedRequest: Request;
         try {

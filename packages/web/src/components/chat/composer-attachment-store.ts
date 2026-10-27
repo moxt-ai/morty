@@ -1,5 +1,5 @@
 import { createStore } from "zustand/vanilla";
-import { AttachmentReadError, ReadPromptImage, readPromptAttachment } from "./attachment-reader.ts";
+import { AttachmentReadError, readPromptAttachment } from "./attachment-reader.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 
 type AttachmentReadState =
@@ -44,12 +44,7 @@ export function createComposerAttachmentStore(initial: readonly ComposerAttachme
                     if (readSignal.aborted || pending !== controller) {
                         return;
                     }
-                    const added = read.map((attachment): ComposerAttachment => {
-                        if (attachment instanceof ReadPromptImage) {
-                            return { image: attachment.image, kind: "image" };
-                        }
-                        return { kind: "resource", resource: attachment.resource };
-                    });
+                    const added: readonly ComposerAttachment[] = read;
                     pending = null;
                     // Read the latest list: a removal during file I/O must survive completion.
                     set((current) => ({ attachments: [...current.attachments, ...added], state: { kind: "idle" } }));

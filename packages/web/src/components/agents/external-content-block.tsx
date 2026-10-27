@@ -66,8 +66,12 @@ function renderContent(
         case "external_image":
             return isDisplayableImageType(content.mimeType) && state.kind === "media" ? (
                 <PreviewImage
-                    alt="Agent-provided content"
-                    className="max-h-[480px] w-auto max-w-full rounded-xl border border-border object-contain"
+                    alt={speaker === "user" ? "Your attachment" : "Agent-provided content"}
+                    className={
+                        speaker === "user"
+                            ? "h-auto max-h-56 max-w-full rounded-lg object-contain object-left"
+                            : "max-h-[480px] w-auto max-w-full rounded-xl border border-border object-contain"
+                    }
                     data-testid={speaker === "user" ? dataTestId.userMessageImage : undefined}
                     blob={state.blob}
                     src={state.source}
