@@ -399,7 +399,14 @@ type SessionEventResult =
           readonly kind: "turn-requested";
           readonly commandId: string;
           readonly executionCommandId: string;
-          readonly message: SessionMessage | null;
+          readonly execution: "starts" | "steers";
+      }
+    | {
+          readonly kind: "turn-ended";
+          readonly commandId: string;
+          readonly execution: "starts" | "steers" | "unknown";
+          readonly message: SessionMessage;
+          readonly userMessageId: string | null;
       }
     | {
           readonly kind: "constructed";
@@ -467,7 +474,12 @@ type ReducedSessionEntry =
     | ReducedSessionMessage
     | { readonly kind: "turn-started"; readonly commandId: string }
     | { readonly kind: "execution-idle" }
-    | { readonly kind: "execution-owner"; readonly commandId: string; readonly executionCommandId: string };
+    | {
+          readonly kind: "execution-owner";
+          readonly commandId: string;
+          readonly executionCommandId: string;
+          readonly execution: "starts" | "steers";
+      };
 
 export interface SessionMessageReduction {
     readonly entries: readonly ReducedSessionEntry[];
@@ -488,9 +500,14 @@ function consumeSessionEvent(
             lifecycle.kind === "prompt.failed" ||
             lifecycle.kind === "prompt.failed-before-start"
         ) {
+            const owner = entries.find(
+                (entry) => entry.kind === "execution-owner" && entry.commandId === lifecycle.commandId,
+            );
             return {
-                kind: "constructed",
-                firstEvent: "known",
+                kind: "turn-ended",
+                commandId: lifecycle.commandId,
+                execution: owner?.kind === "execution-owner" ? owner.execution : "unknown",
+                userMessageId: "messageId" in lifecycle ? (lifecycle.messageId ?? null) : null,
                 message: {
                     role: "assistant",
                     commandId: lifecycle.commandId,
@@ -503,7 +520,6 @@ function consumeSessionEvent(
             };
         }
         if (lifecycle.kind === "prompt.requested") {
-            const contents = lifecycle.content.filter((content) => !isBotInstructions(content)).map(userDisplayContent);
             return {
                 kind: "turn-requested",
                 commandId: lifecycle.commandId,
@@ -511,16 +527,7 @@ function consumeSessionEvent(
                     lifecycle.disposition === "steer"
                         ? (lifecycle.targetCommandId ?? lifecycle.commandId)
                         : lifecycle.commandId,
-                message:
-                    contents.length === 0
-                        ? null
-                        : {
-                              commandId: lifecycle.commandId,
-                              contents,
-                              execution: lifecycle.disposition === "steer" ? "steers" : "starts",
-                              firstEvent: event,
-                              role: "user",
-                          },
+                execution: lifecycle.disposition === "steer" ? "steers" : "starts",
             };
         }
         return { kind: "skipped" };
@@ -578,10 +585,9 @@ function consumeSessionEvent(
                 const first = entry.message.firstEvent;
                 return (
                     first.sessionGenerationId === event.sessionGenerationId &&
-                    (first.type === "acp"
-                        ? first.payload.sessionUpdate === "user_message_chunk" &&
-                          first.payload.messageId === update.messageId
-                        : first.payload.kind === "prompt.requested" && first.eventId === update.messageId)
+                    first.type === "acp" &&
+                    first.payload.sessionUpdate === "user_message_chunk" &&
+                    first.payload.messageId === update.messageId
                 );
             });
             const existing = entries[existingIndex];
@@ -589,11 +595,7 @@ function consumeSessionEvent(
                 return {
                     index: existingIndex,
                     kind: "consumed",
-                    // A live request already contains all its projected content blocks.
-                    message:
-                        existing.message.firstEvent.type === "lifecycle-metadata"
-                            ? existing.message
-                            : { ...existing.message, contents: [...existing.message.contents, ...message.contents] },
+                    message: { ...existing.message, contents: [...existing.message.contents, ...message.contents] },
                 };
             }
         }
@@ -650,21 +652,44 @@ function applySessionEvent(
 ): readonly ReducedSessionEntry[] {
     switch (result.kind) {
         case "turn-requested": {
-            const withOwner: readonly ReducedSessionEntry[] = [
+            return [
                 ...entries,
                 {
                     kind: "execution-owner",
                     commandId: result.commandId,
                     executionCommandId: result.executionCommandId,
+                    execution: result.execution,
                 },
             ];
-            return result.message === null
-                ? withOwner
-                : applySessionEvent(withOwner, event, {
-                      kind: "constructed",
-                      firstEvent: "known",
-                      message: result.message,
-                  });
+        }
+        case "turn-ended": {
+            const identified =
+                result.userMessageId === null
+                    ? entries
+                    : entries.map((entry): ReducedSessionEntry => {
+                          if (entry.kind !== "message" || entry.message.role !== "user") {
+                              return entry;
+                          }
+                          const first = entry.message.firstEvent;
+                          return first.type === "acp" &&
+                              first.sessionGenerationId === event.sessionGenerationId &&
+                              first.payload.sessionUpdate === "user_message_chunk" &&
+                              first.payload.messageId === result.userMessageId
+                              ? {
+                                    ...entry,
+                                    message: {
+                                        ...entry.message,
+                                        commandId: result.commandId,
+                                        execution: result.execution,
+                                    },
+                                }
+                              : entry;
+                      });
+            return applySessionEvent(identified, event, {
+                kind: "constructed",
+                firstEvent: "known",
+                message: result.message,
+            });
         }
         case "turn-started":
             return [...entries, result];

@@ -1040,6 +1040,9 @@ export function createSessionPaneModel(options: {
                             }
                             case "turn-started": {
                                 delivery.getState().reconcile([fact.commandId]);
+                                if (get().pendingInitialMessage?.commandId === fact.commandId) {
+                                    set({ pendingInitialMessage: null });
+                                }
                                 const queued = messageQueue.getState().takeStarted(fact.commandId);
                                 const owner = sessionProjectionExecutionOwner(projection, fact.commandId);
                                 if (owner !== null && owner !== fact.commandId) {

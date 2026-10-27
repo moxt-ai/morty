@@ -5,6 +5,18 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
+async function renderedImageBytes(sources: readonly (string | null)[]): Promise<readonly Uint8Array[]> {
+    return await Promise.all(
+        sources.map(async (source) => {
+            const blob = source === null ? undefined : resolveObjectURL(source);
+            if (blob === undefined) {
+                throw new Error("Expected a loaded attachment image");
+            }
+            return new Uint8Array(await blob.arrayBuffer());
+        }),
+    );
+}
+
 test("Given text and two images in one user message, When the conversation reloads, Then its chunks remain one message and later prompts stay separate", {
     timeout: 30_000,
 }, async () => {
@@ -37,32 +49,36 @@ test("Given text and two images in one user message, When the conversation reloa
         return sources;
     });
 
+    const originalImages = await renderedImageBytes(sources);
     const reloaded = await app.reload();
-    await reloaded.waitForView(() => {
+    const reloadedSources = await reloaded.waitForView(() => {
         expect(getAllByRole(document.body, "article", { name: "Your message" })).toHaveLength(1);
         const message = getByRole(document.body, "article", { name: "Your message" });
         expect(message.textContent).toContain(prompt);
-        const reloadedSources = getAllByRole(message, "img", { name: "Your attachment" }).map((image) =>
-            image.getAttribute("src"),
-        );
-        expect(reloadedSources.every((source) => source?.startsWith("blob:") === true)).toBe(true);
-        expect(reloadedSources).not.toEqual(sources);
+        const images = getAllByRole(message, "img", { name: "Your attachment" });
+        expect(images).toHaveLength(2);
+        const result = images.map((image) => image.getAttribute("src"));
+        expect(result.every((source) => source?.startsWith("blob:") === true)).toBe(true);
+        expect(result).not.toEqual(sources);
+        return result;
     });
+    expect(await renderedImageBytes(reloadedSources)).toEqual(originalImages);
     const followUp = "A separate message";
     await sendPrompt(reloaded, await reloaded.queryElementByTestId(dataTestId.messageComposer), followUp);
     await reloaded.waitForView(() => expect(document.body.textContent).toContain(`Codex turn 2: ${followUp}`));
     const reopened = await reloaded.reload();
-    await reopened.waitForView(() => {
+    const reopenedSources = await reopened.waitForView(() => {
         const messages = getAllByRole(document.body, "article", { name: "Your message" });
         expect(messages).toHaveLength(2);
         expect(messages[0]?.textContent).toContain(prompt);
         expect(messages[1]?.textContent).toContain(followUp);
-        const reopenedSources = getAllByRole(messages[0] ?? document.body, "img", { name: "Your attachment" }).map(
-            (image) => image.getAttribute("src"),
-        );
-        expect(reopenedSources.every((source) => source?.startsWith("blob:") === true)).toBe(true);
+        const images = getAllByRole(messages[0] ?? document.body, "img", { name: "Your attachment" });
+        expect(images).toHaveLength(2);
+        expect(images.every((image) => image.getAttribute("src")?.startsWith("blob:") === true)).toBe(true);
         expect(queryByRole(messages[1] ?? document.body, "img", { name: "Your attachment" })).toBeNull();
+        return images.map((image) => image.getAttribute("src"));
     });
+    expect(await renderedImageBytes(reopenedSources)).toEqual(originalImages);
 });
 
 test("Given the message composer, When the user clicks Add attachment and selects a file, Then the picker opens directly and the attachment appears", {
@@ -234,3 +250,5 @@ test("Given an attachment is being read, When the user removes an earlier attach
         expect(attachments.textContent).not.toContain("removed.json");
     });
 });
+
+import { resolveObjectURL } from "node:buffer";

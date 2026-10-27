@@ -29,7 +29,7 @@ export async function createTestRuntime(
             reply: mortyReply,
             // Match Web/Worker fixtures: the daemon records the submitted
             // prompt, so this controlled Agent does not echo it again.
-            echoUserMessage: false,
+            echoUserMessage: true,
             nativeSessionIds: new Set(["setup-reconnect-session"]),
         },
         machineName,
@@ -100,7 +100,7 @@ export async function createTestRuntime(
                                   agentName,
                                   files: mortyFiles,
                                   reply: mortyReply,
-                                  echoUserMessage: false,
+                                  echoUserMessage: true,
                               },
                               computerName,
                           );

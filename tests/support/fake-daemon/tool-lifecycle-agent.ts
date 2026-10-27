@@ -61,6 +61,10 @@ export function createToolLifecycleAgent() {
                     history.push(event);
                     await onSessionUpdate(event);
                 };
+                const messageId = crypto.randomUUID();
+                for (const content of context.params.prompt) {
+                    await emit({ sessionUpdate: "user_message_chunk", messageId, content });
+                }
                 const emitText = async (text: string) =>
                     await emit({
                         sessionUpdate: "agent_message_chunk",
@@ -89,7 +93,7 @@ export function createToolLifecycleAgent() {
                             content: [],
                         });
                         await emitText("Background verification launched.");
-                        return { stopReason: "end_turn" };
+                        return { stopReason: "end_turn", _meta: { messageId } };
                     }
                     const backgroundStatus = prompt.replace("finish background verification ", "");
                     if (
@@ -110,7 +114,7 @@ export function createToolLifecycleAgent() {
                                 },
                             ],
                         });
-                        return { stopReason: "end_turn" };
+                        return { stopReason: "end_turn", _meta: { messageId } };
                     }
                     if (prompt === "answer after verification" || prompt === "answer then hold") {
                         await emitTool("Completed verification", "completed", []);
@@ -134,7 +138,7 @@ export function createToolLifecycleAgent() {
                         await emitText("Checking the failed verification.");
                         await emitTool("Failed verification", "failed", []);
                         await emitText("Verification finished with one failure.");
-                        return { stopReason: "end_turn" };
+                        return { stopReason: "end_turn", _meta: { messageId } };
                     }
                     for (const [title, status] of [
                         ["Completed verification", "completed"],
@@ -161,11 +165,11 @@ export function createToolLifecycleAgent() {
                     }
                     for (const stopReason of ["max_tokens", "max_turn_requests", "refusal"] as const) {
                         if (prompt === `stop with ${stopReason}`) {
-                            return { stopReason };
+                            return { stopReason, _meta: { messageId } };
                         }
                     }
                     if (prompt === "complete unfinished tools") {
-                        return { stopReason: "end_turn" };
+                        return { stopReason: "end_turn", _meta: { messageId } };
                     }
                     const finished = Promise.withResolvers<acp.PromptResponse>();
                     const abort = () => finished.resolve({ stopReason: "cancelled" });

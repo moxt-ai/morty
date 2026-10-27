@@ -3,7 +3,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given a user message with Codex browser context, When it appears in Chat, Then only the actual request is displayed", {
+test("Given a live user chunk with Codex browser context, When Chat displays it and reloads history, Then the actual request appears exactly once", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -16,6 +16,12 @@ test("Given a user message with Codex browser context, When it appears in Chat, 
     await sendPrompt(app, composer, context);
     await app.waitForView(() => {
         const messages = app.elementsByTestId(dataTestId.userMessage);
+        expect(messages).toHaveLength(1);
+        expect(messages[0]?.textContent).toBe("Hello from the GUI");
+    });
+    const reloaded = await app.reload();
+    await reloaded.waitForView(() => {
+        const messages = reloaded.elementsByTestId(dataTestId.userMessage);
         expect(messages).toHaveLength(1);
         expect(messages[0]?.textContent).toBe("Hello from the GUI");
     });
