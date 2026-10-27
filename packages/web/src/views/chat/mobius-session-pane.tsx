@@ -43,7 +43,11 @@ import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { harnessOptions } from "../../view-models/chat/native-session-agents.ts";
 import { sessionInteractionPresentation } from "../../view-models/chat/session-interaction-store.ts";
-import { type SessionPaneModel, sessionPanePresentation } from "../../view-models/chat/session-pane-store.ts";
+import {
+    type SessionPaneModel,
+    sessionPanePresentation,
+    type TitleEdit,
+} from "../../view-models/chat/session-pane-store.ts";
 import {
     type SessionExecutionState,
     type SessionMessage,
@@ -353,10 +357,7 @@ function SessionConversationTitleBar({
     onConfirmTitleEdit,
 }: {
     readonly title: string;
-    readonly titleEdit:
-        | { readonly kind: "closed" }
-        | { readonly kind: "editing"; readonly draft: string }
-        | { readonly kind: "saving"; readonly draft: string };
+    readonly titleEdit: TitleEdit;
     readonly titleLoading: boolean;
     readonly centered: boolean;
     readonly agentRef: string;
@@ -379,7 +380,7 @@ function SessionConversationTitleBar({
                 testId={dataTestId.sessionTitleHarnessMark}
             />
         );
-    if (titleEdit.kind === "closed") {
+    if (titleEdit.kind === "closed" || titleEdit.kind === "failed") {
         if (titleLoading) {
             return (
                 <h2
@@ -736,7 +737,7 @@ function MobiusSessionPaneBody({
                             className={chatSessionMessageScrollClassName}
                             loadOlder={{
                                 hasMore: model.hasOlderHistory,
-                                loading: model.historyLoading,
+                                loading: presentation.historyLoading,
                                 onLoadMore: (signal) => pane.store.getState().loadOlderMessages(signal),
                                 revision: model.historyRevision,
                             }}
@@ -766,14 +767,14 @@ function MobiusSessionPaneBody({
                                 model.messages.length === 0 &&
                                 model.connection.kind === "ready" &&
                                 presentation.activity.kind === "idle" &&
-                                !model.historyLoading && (
+                                !presentation.historyLoading && (
                                     <div className={chatSessionMessageColumnClassName}>
                                         <p className="text-center text-sm text-muted-foreground" role="status">
                                             No message history is available for this session.
                                         </p>
                                     </div>
                                 )}
-                            {!sessionMessagesLoading && model.historyLoading && <OlderHistorySkeleton />}
+                            {!sessionMessagesLoading && presentation.historyLoading && <OlderHistorySkeleton />}
                             {!sessionMessagesLoading && (
                                 <div className={chatSessionMessageColumnClassName}>
                                     {initialMessage !== null && (
@@ -1020,7 +1021,13 @@ function MobiusSessionPaneBody({
                         </BotChatComposer>
                     </section>
                     {desktop ? null : (
-                        <MobileSessionTitlePortal variant={model.titleEdit.kind === "closed" ? "default" : "editing"}>
+                        <MobileSessionTitlePortal
+                            variant={
+                                model.titleEdit.kind === "editing" || model.titleEdit.kind === "saving"
+                                    ? "editing"
+                                    : "default"
+                            }
+                        >
                             <div className="flex min-w-0 w-full flex-col items-center">
                                 <SessionConversationTitleBar {...titleBarProps} centered />
                                 {sessionMessagesLoading ? (

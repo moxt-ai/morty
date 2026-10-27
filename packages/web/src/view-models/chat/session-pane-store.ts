@@ -83,15 +83,24 @@ import { createSessionWelcomeStore } from "./session-welcome-store.ts";
 
 export type SessionPaneModel = ReturnType<typeof createSessionPaneModel>;
 
+/** A change to the Session's settings. */
 type Operation =
     | { readonly kind: "idle" }
     | { readonly kind: "configuring" }
     | { readonly kind: "failed"; readonly message: string };
 
-type TitleEdit =
+/** Renaming the Session. A failed rename closes the editor and keeps its failure until the next edit. */
+export type TitleEdit =
     | { readonly kind: "closed" }
     | { readonly kind: "editing"; readonly draft: string }
-    | { readonly kind: "saving"; readonly draft: string };
+    | { readonly kind: "saving"; readonly draft: string }
+    | { readonly kind: "failed"; readonly message: string };
+
+/** Loading the page of history before the oldest message shown. A failure lasts until the next load. */
+type OlderHistory =
+    | { readonly kind: "idle" }
+    | { readonly kind: "loading" }
+    | { readonly kind: "failed"; readonly message: string };
 
 export type { SessionConnection } from "./session-connection.ts";
 
@@ -103,7 +112,7 @@ export interface SessionPaneStore {
     readonly titleEdit: TitleEdit;
     readonly messages: readonly SessionMessage[];
     readonly pendingInitialMessage: QueuedDraftMessage | null;
-    readonly historyLoading: boolean;
+    readonly olderHistory: OlderHistory;
     readonly historyRevision: number;
     readonly hasOlderHistory: boolean;
     readonly draft: string;
@@ -151,7 +160,6 @@ export interface SessionPaneStore {
     readonly setTitleDraft: (draft: string) => void;
     readonly confirmTitleEdit: (signal: AbortSignal) => Promise<void>;
     readonly cancelTitleEdit: () => void;
-    readonly refreshSettings: (signal: AbortSignal) => Promise<void>;
     readonly stop: (signal: AbortSignal) => Promise<void>;
 }
 
@@ -254,7 +262,7 @@ export function sessionPanePresentation(
         composerError:
             model.connection.kind === "closed"
                 ? ""
-                : ([activity, model.operation, delivery.state]
+                : ([activity, model.titleEdit, model.olderHistory, model.operation, delivery.state]
                       .filter((state) => state.kind === "failed")
                       .find(
                           (state) =>
@@ -267,7 +275,7 @@ export function sessionPanePresentation(
         controlRunning,
         deliveryUnknownUserMessageId,
         hasOlderHistory: model.hasOlderHistory,
-        historyLoading: model.historyLoading,
+        historyLoading: model.olderHistory.kind === "loading",
         outputState:
             queue.operation.kind === "submitting"
                 ? "sending"
@@ -928,7 +936,7 @@ export function createSessionPaneModel(options: {
             titleEdit: { kind: "closed" },
             messages: initialTimeline.messages,
             pendingInitialMessage: options.initialMessage ?? null,
-            historyLoading: false,
+            olderHistory: { kind: "idle" },
             historyRevision: 0,
             hasOlderHistory: false,
             draft: centralSessionStorage.read(draftEntry) ?? "",
@@ -942,7 +950,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 loadingOlderHistory = true;
-                set({ historyLoading: true });
+                set({ olderHistory: { kind: "loading" } });
                 const reopeningsAtStart = reopenings;
                 try {
                     const page = await readSessionHistory(
@@ -955,14 +963,16 @@ export function createSessionPaneModel(options: {
                     );
                     signal.throwIfAborted();
                     commitProjection({ kind: "older-page", page, revision: pagination.revision });
+                    set({ olderHistory: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();
                     if (closedNow(cause, reopeningsAtStart)) {
+                        set({ olderHistory: { kind: "idle" } });
                         get().sessionClosed(null);
                         return;
                     }
                     set({
-                        operation: {
+                        olderHistory: {
                             kind: "failed",
                             message: formatError(cause, "Older messages could not be loaded."),
                         },
@@ -970,9 +980,6 @@ export function createSessionPaneModel(options: {
                     throw cause;
                 } finally {
                     loadingOlderHistory = false;
-                    if (!signal.aborted) {
-                        set({ historyLoading: false });
-                    }
                 }
             },
             connect: async (signal) => {
@@ -1710,36 +1717,9 @@ export function createSessionPaneModel(options: {
                         return;
                     }
                     set({
-                        titleEdit: { kind: "closed" },
-                        operation: {
+                        titleEdit: {
                             kind: "failed",
                             message: cause instanceof Error ? cause.message : "The conversation could not be renamed.",
-                        },
-                    });
-                }
-            },
-            refreshSettings: async (signal) => {
-                if (client === null || get().connection.kind !== "ready") {
-                    return;
-                }
-                set({ operation: { kind: "configuring" } });
-                const reopeningsAtStart = reopenings;
-                try {
-                    const connected = client;
-                    await dispatchProjection({ kind: "reconcile" }, connected, signal);
-                    signal.throwIfAborted();
-                    set({ operation: { kind: "idle" } });
-                } catch (cause) {
-                    signal.throwIfAborted();
-                    if (closedNow(cause, reopeningsAtStart)) {
-                        set({ operation: { kind: "idle" } });
-                        get().sessionClosed(null);
-                        return;
-                    }
-                    set({
-                        operation: {
-                            kind: "failed",
-                            message: formatError(cause, "The settings could not be reloaded."),
                         },
                     });
                 }
