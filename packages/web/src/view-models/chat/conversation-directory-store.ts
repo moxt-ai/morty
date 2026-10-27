@@ -182,7 +182,7 @@ export const createConversationDirectoryStore = (
                             return;
                         }
                         const message = isRuntimeConnectionFailure(cause)
-                            ? "Computer is offline. Your sessions are saved on your computer and will appear when it reconnects."
+                            ? "Computer is offline. Sessions will appear when it reconnects."
                             : isChatBridgeError(cause)
                               ? "Connection interrupted. Your sessions will appear when the connection returns."
                               : formatError(cause, "Sessions are unavailable.");

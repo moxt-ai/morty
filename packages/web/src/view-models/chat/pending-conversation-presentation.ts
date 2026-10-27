@@ -1,8 +1,6 @@
 import type { BotChatHomeStore } from "./bot-chat-home-store.ts";
 import { selectedConversationId } from "./conversation-selection-machine.ts";
 
-const SAVED_HISTORY_NOTICE = "Your conversation is saved on your computer. History will load when it reconnects.";
-
 /** A selected conversation is never presented as a new draft while its remote read is pending. */
 export function pendingConversationPresentation(home: BotChatHomeStore): {
     readonly title: string;
@@ -38,10 +36,7 @@ export function pendingConversationPresentation(home: BotChatHomeStore): {
                 ? null
                 : {
                       title: recoveryTitle,
-                      description:
-                          home.rememberedSession?.id === id
-                              ? SAVED_HISTORY_NOTICE
-                              : "History is temporarily unavailable. It will load when the connection returns.",
+                      description: "History is temporarily unavailable. It will load when the connection returns.",
                   },
     };
 }
