@@ -71,7 +71,7 @@ const SECTIONS: readonly TokenSection[] = [
     ],
 ];
 
-export const COLOR_TOKENS: readonly ColorToken[] = SECTIONS.flatMap(([group, variables]) =>
+const COLOR_TOKENS: readonly ColorToken[] = SECTIONS.flatMap(([group, variables]) =>
     variables.map((variable) => ({ group, utility: `bg-${variable.slice(2)}`, variable })),
 );
 
