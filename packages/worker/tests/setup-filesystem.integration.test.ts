@@ -1080,7 +1080,7 @@ test.each(["replacement_access_revoked", "project_replaced"])(
             const first = await setupMachine(runtime, paths);
             expect(first.events.at(-1)).toMatchObject({ status: "ready", project: "created" });
             const config = v.parse(
-                v.object({ project_id: v.string() }),
+                v.object({ project_id: v.string(), user_token: v.string() }),
                 JSON.parse(await readFile(join(paths.state, "config.json"), "utf8")),
             );
             await runtime.forgetConnections();
@@ -1097,12 +1097,101 @@ test.each(["replacement_access_revoked", "project_replaced"])(
                 },
             });
 
+            // Retain the on-disk contract read by setup at 102a93db (#899), including rollback recovery.
+            const saved = JSON.parse(await readFile(join(paths.state, "config.json"), "utf8"));
+            if (interruptAt === "replacement_access_revoked") {
+                expect(saved).toMatchObject({
+                    project_id: config.project_id,
+                    replacement_access: { kind: "unknown", previousProjectId: config.project_id },
+                });
+            } else {
+                expect(saved).toMatchObject({
+                    replaced_project_id: config.project_id,
+                    replaced_user_token: config.user_token,
+                    replacement_notice: "pending",
+                    replacement_access: {
+                        kind: "revoked",
+                        previousProjectId: config.project_id,
+                        projectId: saved.project_id,
+                    },
+                });
+            }
+
             const finished = await setupMachine(runtime, paths, undefined, { replaceProject: config.project_id });
             expect(finished.code, JSON.stringify(finished.events)).toBe(0);
             expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
 
             const again = await setupMachine(runtime, paths);
             expect(again.events.at(-1)).toMatchObject({ status: "ready", project: "reused" });
+            const completed = JSON.parse(await readFile(join(paths.state, "config.json"), "utf8"));
+            for (const key of [
+                "replacement_access",
+                "replacement_notice",
+                "replaced_project_id",
+                "replaced_user_token",
+                "agent_config_revision",
+            ]) {
+                expect(completed).not.toHaveProperty(key);
+            }
+        });
+    },
+);
+
+test.each(["notice-only", "access-only"] as const)(
+    "Given a saved %s replacement notice and an obsolete agent revision, When setup resumes, Then it reports the revoked access once and completes without the revision",
+    { timeout: 120_000 },
+    async (format) => {
+        await withUpgradeMachine("unavailable", async (runtime, paths) => {
+            expect((await setupMachine(runtime, paths)).code).toBe(0);
+            const configPath = join(paths.state, "config.json");
+            const config = v.parse(v.record(v.string(), v.unknown()), JSON.parse(await readFile(configPath, "utf8")));
+            await writeFile(
+                configPath,
+                JSON.stringify({
+                    ...config,
+                    // #861 wrote only this notice; #899 added the structured access result.
+                    ...(format === "notice-only"
+                        ? { replacement_notice: "pending" }
+                        : {
+                              replacement_access: {
+                                  kind: "revoked",
+                                  previousProjectId: "previous-project",
+                                  projectId: config["project_id"],
+                              },
+                          }),
+                    agent_config_revision: format === "notice-only" ? "obsolete" : 1,
+                }),
+                { mode: 0o600 },
+            );
+
+            const stopped = await setupMachine(runtime, paths, undefined, { interruptAt: "runtime_reused" });
+            expect(stopped.code).toBe(1);
+            expect(stopped.events.at(-1)).toMatchObject({
+                error: {
+                    replacementAccess: {
+                        kind: "revoked",
+                        previousProjectId: format === "notice-only" ? null : "previous-project",
+                    },
+                },
+            });
+            const resumable = JSON.parse(await readFile(configPath, "utf8"));
+            expect(resumable.replacement_notice).toBe("pending");
+            if (format === "notice-only") {
+                // #899 rejects null previousProjectId in replacement_access; retain its notice-only fallback.
+                expect(resumable).not.toHaveProperty("replacement_access");
+            }
+
+            const finished = await setupMachine(runtime, paths);
+            expect(finished.code, JSON.stringify(finished.events)).toBe(0);
+            expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
+            const saved = JSON.parse(await readFile(configPath, "utf8"));
+            expect(saved).not.toHaveProperty("agent_config_revision");
+            expect(saved).not.toHaveProperty("replacement_access");
+            expect(saved).not.toHaveProperty("replacement_notice");
+            expect((await setupMachine(runtime, paths)).events.at(-1)).toMatchObject({
+                status: "ready",
+                project: "reused",
+            });
         });
     },
 );

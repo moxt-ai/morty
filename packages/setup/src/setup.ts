@@ -58,7 +58,24 @@ interface Context {
     readonly directory: string;
     readonly base: string;
     readonly config: Readonly<Record<string, unknown>>;
+    readonly replacement: ReplacementState;
 }
+
+interface RetiringIdentity {
+    readonly kind: "pending";
+    readonly projectId: string;
+    readonly token: string;
+}
+
+type ReplacementState =
+    | { readonly kind: "unchanged" }
+    | { readonly kind: "unknown" }
+    | {
+          readonly kind: "revoked";
+          readonly previous: RetiringIdentity | { readonly kind: "retired"; readonly projectId: string | null };
+      }
+    // Earlier releases could owe identity cleanup without owing a completion notice.
+    | { readonly kind: "retiring"; readonly previous: RetiringIdentity };
 
 type RuntimeSelection =
     | {
@@ -97,7 +114,7 @@ interface VerifiedIdentity {
 
 /**
  * What setup did to this computer's Project. `replaced` ended every link and browser from the previous
- * Project, so the agent must tell the user; the saved `replacement_notice` keeps that owed until a finished
+ * Project, so the agent must tell the user; the saved replacement keeps that owed until a finished
  * setup reports it, even when the run that replaced the Project stopped first.
  */
 type ProjectOutcome = "created" | "reused" | "replaced";
@@ -541,19 +558,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     function savedIdentity(config: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
         return Object.fromEntries(
             Object.entries(config).filter(([key]) =>
-                [
-                    "user_token",
-                    "user_id",
-                    "project_id",
-                    "bot_id",
-                    "agent_ref",
-                    "agent_config_revision",
-                    "pairing_runtime_id",
-                    "replaced_project_id",
-                    "replaced_user_token",
-                    "replacement_notice",
-                    "replacement_access",
-                ].includes(key),
+                ["user_token", "user_id", "project_id", "bot_id", "agent_ref", "pairing_runtime_id"].includes(key),
             ),
         );
     }
@@ -573,11 +578,16 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (earlierPath === null || earlier === null || typeof earlier["base_url"] !== "string") {
             return;
         }
-        const context: Context = { directory, base: origin(earlier["base_url"]), config: savedIdentity(earlier) };
+        const context: Context = {
+            directory,
+            base: origin(earlier["base_url"]),
+            config: savedIdentity(earlier),
+            replacement: { kind: "unchanged" },
+        };
         if ((base !== undefined && context.base !== base) || !(await runsOnThisComputer(context, cwd))) {
             return;
         }
-        await saveConfiguration(context, {});
+        await saveConfiguration({ ...context, replacement: readReplacementState(earlier) }, {});
         await rm(earlierPath, { force: true });
         progress("identity", "Moved the saved identity out of Documents into this computer's private state.");
     }
@@ -623,44 +633,117 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             if (errorCode(cause) !== "ENOENT") {
                 throw cause;
             }
-            return { directory, base, config };
+            return { directory, base, config, replacement: { kind: "unchanged" } };
         }
         // Preserve identity and Bot configuration; resolve Runtime connections through the manager.
-        const identity = config["base_url"] !== undefined && config["base_url"] !== base ? {} : savedIdentity(config);
-        return { directory, base, config: identity };
+        const saved = config["base_url"] !== undefined && config["base_url"] !== base ? {} : config;
+        return { directory, base, config: savedIdentity(saved), replacement: readReplacementState(saved) };
     }
 
-    function restoreReplacementAccess(context: Context): void {
-        const saved = context.config["replacement_access"];
+    /** Decode old file layouts once. Business operations never read or synchronize their overlapping keys. */
+    function readReplacementState(config: Readonly<Record<string, unknown>>): ReplacementState {
+        const retiring: RetiringIdentity | null =
+            config["replaced_project_id"] === undefined && config["replaced_user_token"] === undefined
+                ? null
+                : {
+                      kind: "pending",
+                      projectId: identifier(config["replaced_project_id"]),
+                      token: credential(config["replaced_user_token"]),
+                  };
+        const saved = config["replacement_access"];
         if (saved !== undefined) {
             const value = object(saved);
             const previousProjectId = identifier(value["previousProjectId"]);
             switch (value["kind"]) {
                 case "unknown":
-                    if (previousProjectId !== context.config["project_id"]) {
+                    if (previousProjectId !== config["project_id"] || retiring !== null) {
                         fail("INVALID_REPLACEMENT_STATE");
                     }
-                    replacementAccess = { kind: "unknown", previousProjectId };
-                    return;
+                    return { kind: "unknown" };
                 case "revoked": {
                     const projectId = identifier(value["projectId"]);
-                    if (projectId !== context.config["project_id"]) {
+                    if (
+                        projectId !== config["project_id"] ||
+                        (retiring !== null && retiring.projectId !== previousProjectId)
+                    ) {
                         fail("INVALID_REPLACEMENT_STATE");
                     }
-                    replacementAccess = { kind: "revoked", previousProjectId, projectId };
-                    return;
+                    return {
+                        kind: "revoked",
+                        previous: retiring ?? { kind: "retired", projectId: previousProjectId },
+                    };
                 }
                 default:
                     fail("INVALID_REPLACEMENT_STATE");
             }
         }
         // Earlier setup versions saved only the notification, without the previous Project's ID.
-        if (context.config["replacement_notice"] === "pending") {
-            replacementAccess = {
-                kind: "revoked",
-                previousProjectId: null,
-                projectId: identifier(context.config["project_id"]),
-            };
+        if (config["replacement_notice"] === "pending") {
+            identifier(config["project_id"]);
+            return { kind: "revoked", previous: retiring ?? { kind: "retired", projectId: null } };
+        }
+        return retiring === null ? { kind: "unchanged" } : { kind: "retiring", previous: retiring };
+    }
+
+    /** Old setup executables share this file. Derive their fields here so rollback can still finish recovery. */
+    function replacementFields(replacement: ReplacementState, projectId: unknown): Readonly<Record<string, unknown>> {
+        switch (replacement.kind) {
+            case "unchanged":
+                return {};
+            case "unknown":
+                return { replacement_access: { kind: "unknown", previousProjectId: identifier(projectId) } };
+            case "retiring":
+                return {
+                    replaced_project_id: replacement.previous.projectId,
+                    replaced_user_token: replacement.previous.token,
+                };
+            case "revoked":
+                return {
+                    replacement_notice: "pending",
+                    // The old structured decoder requires a previous ID; notice-only files never had one.
+                    ...(replacement.previous.projectId === null
+                        ? {}
+                        : {
+                              replacement_access: {
+                                  kind: "revoked",
+                                  previousProjectId: replacement.previous.projectId,
+                                  projectId: identifier(projectId),
+                              },
+                          }),
+                    ...(replacement.previous.kind === "retired"
+                        ? {}
+                        : {
+                              replaced_project_id: replacement.previous.projectId,
+                              replaced_user_token: replacement.previous.token,
+                          }),
+                };
+            default: {
+                const exhaustive: never = replacement;
+                return exhaustive;
+            }
+        }
+    }
+
+    function restoreReplacementAccess(context: Context): void {
+        switch (context.replacement.kind) {
+            case "unchanged":
+            case "retiring":
+                replacementAccess = { kind: "unchanged" };
+                return;
+            case "unknown":
+                replacementAccess = { kind: "unknown", previousProjectId: identifier(context.config["project_id"]) };
+                return;
+            case "revoked":
+                replacementAccess = {
+                    kind: "revoked",
+                    previousProjectId: context.replacement.previous.projectId,
+                    projectId: identifier(context.config["project_id"]),
+                };
+                return;
+            default: {
+                const exhaustive: never = context.replacement;
+                throw exhaustive;
+            }
         }
     }
 
@@ -685,10 +768,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function saveConfiguration(context: Context, updates: Readonly<Record<string, unknown>>): Promise<Context> {
-        const config = { ...context.config, ...updates, base_url: context.base };
+        const config: Readonly<Record<string, unknown>> = { ...context.config, ...updates, base_url: context.base };
         const temporary = join(context.directory, `.config-${crypto.randomUUID()}`);
         try {
-            await writePrivateJson(temporary, config);
+            await writePrivateJson(temporary, {
+                ...config,
+                ...replacementFields(context.replacement, config["project_id"]),
+            });
             await rename(temporary, join(context.directory, "config.json"));
             return { ...context, config };
         } finally {
@@ -736,11 +822,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
      * Project. Nothing else from that Project opens it: its replacement ended everything shared from it.
      */
     async function retireReplacedIdentity(context: Context): Promise<Context> {
-        const projectId = context.config["replaced_project_id"];
-        const token = context.config["replaced_user_token"];
-        if (projectId === undefined && token === undefined) {
+        const replacement = context.replacement;
+        if (
+            (replacement.kind !== "revoked" && replacement.kind !== "retiring") ||
+            replacement.previous.kind !== "pending"
+        ) {
             return context;
         }
+        const { projectId, token } = replacement.previous;
         const response = await fetch(
             new URL(`/morty/api/projects/${identifier(projectId)}/identity/remote-access`, context.base),
             {
@@ -754,7 +843,16 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (!response.ok && response.status !== 401) {
             remoteFailure(object(await response.json()), response.status);
         }
-        return await saveConfiguration(context, { replaced_project_id: undefined, replaced_user_token: undefined });
+        return await saveConfiguration(
+            {
+                ...context,
+                replacement:
+                    replacement.kind === "retiring"
+                        ? { kind: "unchanged" }
+                        : { kind: "revoked", previous: { kind: "retired", projectId } },
+            },
+            {},
+        );
     }
 
     function readSetupOptions(commandArgs: readonly string[]): SetupOptions {
@@ -1021,7 +1119,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const previousProjectId = identifier(context.config["project_id"]);
         const pending: ReplacementAccess = { kind: "unknown", previousProjectId };
         // Save before the request: a timeout or interrupted process cannot prove that access was not revoked.
-        const prepared = await saveConfiguration(context, { replacement_access: pending });
+        const prepared = await saveConfiguration({ ...context, replacement: { kind: "unknown" } }, {});
         replacementAccess = pending;
         progress("replacement", "Replacing the saved connection with approval. Earlier shared access will be revoked.");
         const replacement = await request(prepared, "/management/project/replacement", {});
@@ -1035,21 +1133,29 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             message:
                 "Earlier sharing links and browser access have been revoked. The new connection is still being set up.",
         });
-        const saved = await saveConfiguration(prepared, {
-            user_token: credential(replacement["token"]),
-            user_id: identifier(replacement["userId"]),
-            bot_id: identifier(object(replacement["bot"])["botId"]),
-            project_id: projectId,
-            // The replacement Machine starts unbound; drop the previous Machine's Agent binding.
-            agent_ref: undefined,
-            agent_config_revision: undefined,
-            pairing_runtime_id: undefined,
-            replaced_project_id: context.config["project_id"],
-            replaced_user_token: context.config["user_token"],
-            replacement_notice: "pending",
-            replacement_access: replacementAccess,
-            entry: "setup",
-        });
+        const saved = await saveConfiguration(
+            {
+                ...prepared,
+                replacement: {
+                    kind: "revoked",
+                    previous: {
+                        kind: "pending",
+                        projectId: previousProjectId,
+                        token: credential(context.config["user_token"]),
+                    },
+                },
+            },
+            {
+                user_token: credential(replacement["token"]),
+                user_id: identifier(replacement["userId"]),
+                bot_id: identifier(object(replacement["bot"])["botId"]),
+                project_id: projectId,
+                // The replacement Machine starts unbound; drop the previous Machine's Agent binding.
+                agent_ref: undefined,
+                pairing_runtime_id: undefined,
+                entry: "setup",
+            },
+        );
         emit({ status: "project_replaced", botId: saved.config["bot_id"], projectId: saved.config["project_id"] });
         return await retireReplacedIdentity(saved);
     }
@@ -1084,7 +1190,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         };
         // A restored local pairing cannot settle whether a previous request revoked shared access.
         // Finish that idempotent operation with its original approval before reporting setup ready.
-        if (replacementAccess.kind === "unknown") {
+        if (context.replacement.kind === "unknown") {
             return await replaceWithApproval("replacement_result_unknown", null);
         }
         const reusable = async (runtimeId: string) => {
@@ -1382,10 +1488,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         progress("binding", `Connecting the Machine to ${harness} in the default working directory.`);
         const runtimeId = runtime.runtimeId;
         const agentRef = identifier(harness);
-        const revision = context.config["agent_ref"] === agentRef ? (context.config["agent_config_revision"] ?? 1) : 1;
-        if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 1) {
-            fail("AGENT_REVISION_REQUIRED");
-        }
         try {
             await request(
                 context,
@@ -1412,7 +1514,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         // The Machine now owns its Runtime, so the pairing record is no longer needed.
         const saved = await saveConfiguration(context, {
             agent_ref: agentRef,
-            agent_config_revision: revision,
             pairing_runtime_id: undefined,
         });
         emit({ status: "binding_activated", botId: context.config["bot_id"], harness });
@@ -1522,7 +1623,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 message: "The QR image is unavailable. Use the handoff link instead.",
             });
         }
-        const project: ProjectOutcome = context.config["replacement_notice"] === "pending" ? "replaced" : identity;
+        const project: ProjectOutcome = context.replacement.kind === "revoked" ? "replaced" : identity;
         emit({
             status: "ready",
             botId,
@@ -1538,7 +1639,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         setupReady = true;
         if (project === "replaced") {
             // Cleared only after ready reported it, so a run that stops earlier leaves the notice owed.
-            await saveConfiguration(context, { replacement_notice: undefined, replacement_access: undefined });
+            await saveConfiguration({ ...context, replacement: { kind: "unchanged" } }, {});
         }
     }
 
@@ -1562,7 +1663,23 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (options.base !== undefined && options.base !== base) {
             fail("LOCAL_IDENTITY_REQUIRED");
         }
-        const context = await retireReplacedIdentity({ directory, base, config });
+        const context = await retireReplacedIdentity({
+            directory,
+            base,
+            config: Object.fromEntries(
+                Object.entries(config).filter(
+                    ([key]) =>
+                        ![
+                            "replacement_access",
+                            "replacement_notice",
+                            "replaced_project_id",
+                            "replaced_user_token",
+                            "agent_config_revision",
+                        ].includes(key),
+                ),
+            ),
+            replacement: readReplacementState(config),
+        });
         const revoked = await request(context, "/identity/revoke-all-access", {});
         if (revoked["status"] !== "access_revoked") {
             fail("INVALID_RESPONSE");
@@ -1621,7 +1738,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const directory = await prepareStateDirectory(resolveStateDirectory(host.state, signal));
         // A previous replacement must still be explained when this run fails its local startup checks.
         restoreReplacementAccess(await loadConfiguration(directory, options.base));
-        await preflightRuntime({ directory, base: options.base, config: {} }, cwd);
+        await preflightRuntime({ directory, base: options.base, config: {}, replacement: { kind: "unchanged" } }, cwd);
         await adoptEarlierState(directory, options.base, cwd);
         let context = await loadConfiguration(directory, options.base);
         restoreReplacementAccess(context);
