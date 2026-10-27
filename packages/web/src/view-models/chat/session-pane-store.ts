@@ -45,6 +45,7 @@ import {
     type CurrentTurnEvent,
     idleTurn,
     openedTurn,
+    submittingCommandId,
     transitionCurrentTurn,
     turnActivity,
 } from "./session-current-turn.ts";
@@ -73,7 +74,6 @@ import {
 import { createSessionSettingsStore } from "./session-settings-store.ts";
 import {
     createSessionTaskControlsStore,
-    type RunningTurn,
     type SessionTaskControlsStore,
     stopFailure,
     stopRequested,
@@ -85,16 +85,8 @@ export type SessionPaneModel = ReturnType<typeof createSessionPaneModel>;
 
 type Operation =
     | { readonly kind: "idle" }
-    | { readonly kind: "sending"; readonly commandId: string }
     | { readonly kind: "configuring" }
     | { readonly kind: "failed"; readonly message: string };
-
-function finishPromptOperation(operation: Operation, commandId: string): Operation {
-    if (operation.kind === "sending" && operation.commandId === commandId) {
-        return { kind: "idle" };
-    }
-    return operation;
-}
 
 type TitleEdit =
     | { readonly kind: "closed" }
@@ -123,9 +115,12 @@ export interface SessionPaneStore {
      */
     readonly followRevision: number;
     readonly operation: Operation;
-    readonly activity: SessionActivityState;
-    /** The turn the service reports running, as the current turn holds it; the stop control acts on it. */
-    readonly runningTurn: RunningTurn | null;
+    /**
+     * The one record of the current turn: which command runs, how far the service confirmed it and when it started.
+     * The submission in flight, the activity the pane shows and reports, and the running turn the stop control acts
+     * on are all derived from it.
+     */
+    readonly turn: CurrentTurn;
     readonly connect: (signal: AbortSignal) => Promise<void>;
     readonly recover: (signal: AbortSignal) => Promise<void>;
     readonly retryNow: () => void;
@@ -176,15 +171,18 @@ export function sessionPanePresentation(
                 (interaction.elicitation.state.kind === "pending" ||
                     interaction.elicitation.state.kind === "submitted")),
     );
+    const activity = turnActivity(model.turn);
+    const submitting = submittingCommandId(model.turn) !== null;
     // Which turn runs is the current turn's; the stop control only adds whether the user asked to stop it.
-    const controlRunning = model.runningTurn !== null;
-    const stopping = stopRequested(tasks, model.runningTurn);
+    const runningTurn = acceptedTurn(model.turn);
+    const controlRunning = runningTurn !== null;
+    const stopping = stopRequested(tasks, runningTurn);
     const composerDisabled =
         !connectionAvailable ||
         model.connection.kind !== "ready" ||
         delivery.state.kind === "submitting" ||
         delivery.state.kind === "delivery-unknown" ||
-        model.operation.kind === "sending" ||
+        submitting ||
         model.operation.kind === "configuring" ||
         waitingForInput ||
         queue.operation.kind === "submitting" ||
@@ -193,17 +191,15 @@ export function sessionPanePresentation(
         model.connection.kind === "closed" ||
         delivery.state.kind === "submitting" ||
         delivery.state.kind === "delivery-unknown" ||
-        model.operation.kind === "sending" ||
+        submitting ||
         model.operation.kind === "configuring" ||
         waitingForInput ||
         queue.operation.kind === "submitting" ||
         stopping;
-    const workingActivityCommandId = workingCommandId(model.activity);
-    const submittingCommandId = model.operation.kind === "sending" ? model.operation.commandId : null;
-    const activeCommandId = workingActivityCommandId ?? submittingCommandId;
+    const activeCommandId = workingCommandId(activity);
     const busy = activeCommandId !== null || composerDisabled;
     const activeMessageId =
-        workingActivityCommandId !== null || submittingCommandId !== null
+        activeCommandId !== null
             ? (model.messages.findLast((message) => message.role === "assistant")?.firstEvent.eventId ?? null)
             : null;
     const deliveryUnknownCommandId =
@@ -224,7 +220,6 @@ export function sessionPanePresentation(
                   displayPrompt: unconfirmed.displayPrompt,
                   attachments: unconfirmed.attachments,
               };
-    const activity = model.activity;
     const hasFailureCard =
         activity.kind === "failed" &&
         model.messages.some(
@@ -241,6 +236,7 @@ export function sessionPanePresentation(
             ? activity
             : null;
     return {
+        activity,
         authenticationFailure,
         activeMessageId,
         activeCommandId,
@@ -258,7 +254,7 @@ export function sessionPanePresentation(
         composerError:
             model.connection.kind === "closed"
                 ? ""
-                : ([model.activity, model.operation, delivery.state]
+                : ([activity, model.operation, delivery.state]
                       .filter((state) => state.kind === "failed")
                       .find(
                           (state) =>
@@ -277,7 +273,7 @@ export function sessionPanePresentation(
                 ? "sending"
                 : stopping
                   ? "stopping"
-                  : model.operation.kind === "sending" || delivery.state.kind === "submitting"
+                  : submitting || delivery.state.kind === "submitting"
                     ? "sending"
                     : controlRunning
                       ? "running"
@@ -411,8 +407,7 @@ export function createSessionPaneModel(options: {
         initial: session.result.ready,
     });
     const fallbackStartedAt = Date.now();
-    // The one record of the current turn. `updateTurn` moves it together with the activity and the stop control.
-    let currentTurn: CurrentTurn =
+    const initialTurn: CurrentTurn =
         session.result.action === "conversation" && session.result.activeTurn.kind === "running"
             ? openedTurn({
                   commandId: session.result.activeTurn.commandId,
@@ -518,7 +513,7 @@ export function createSessionPaneModel(options: {
                 return await client.turns.cancel(sessionId, turnId, { idempotencyKey }, signal);
             }),
         },
-        runningTurn: () => acceptedTurn(currentTurn),
+        runningTurn: () => acceptedTurn(store.getState().turn),
     });
     const messageQueue = createSessionMessageQueueStore({
         port: {
@@ -653,32 +648,22 @@ export function createSessionPaneModel(options: {
         // Reports an activity transition to the owner through the latch; the
         // explicit sites that change activity call this right after their set.
         const announceActivity = (): void => {
-            const activity = get().activity;
-            if (activity !== reportedStatus) {
+            const activity = turnActivity(get().turn);
+            if (reportedStatus === null || !sameSessionActivity(activity, reportedStatus)) {
                 reportedStatus = activity;
                 options.onStatusChange?.(activity);
             }
         };
-        /**
-         * Moves the current turn, and with it what the pane derives from it in one update: the activity it shows and
-         * reports, and the running turn the stop control acts on. Callers announce the activity once their other
-         * updates are in.
-         */
+        /** Moves the current turn. Callers announce the activity derived from it once their other updates are in. */
         const updateTurn = (event: CurrentTurnEvent): void => {
-            currentTurn = transitionCurrentTurn(currentTurn, event);
-            const activity = turnActivity(currentTurn);
-            const running = acceptedTurn(currentTurn);
-            const current = get();
-            const runningChanged =
-                running?.commandId !== current.runningTurn?.commandId ||
-                running?.turnId !== current.runningTurn?.turnId;
-            if (!sameSessionActivity(activity, current.activity) || runningChanged) {
-                set({
-                    ...(sameSessionActivity(activity, current.activity) ? {} : { activity }),
-                    ...(runningChanged ? { runningTurn: running } : {}),
-                });
+            const previous = get().turn;
+            const turn = transitionCurrentTurn(previous, event);
+            if (turn === previous) {
+                return;
             }
-            if (running !== null && running.commandId !== current.runningTurn?.commandId) {
+            set({ turn });
+            const running = acceptedTurn(turn);
+            if (running !== null && running.commandId !== acceptedTurn(previous)?.commandId) {
                 tasks.getState().turnRunning(running.commandId);
             }
         };
@@ -817,11 +802,11 @@ export function createSessionPaneModel(options: {
             signal: AbortSignal,
         ): Promise<void> => {
             const current = get();
+            // One turn at a time, and none while the Session's settings change.
             if (
                 current.connection.kind !== "ready" ||
-                current.operation.kind === "sending" ||
                 current.operation.kind === "configuring" ||
-                current.runningTurn !== null
+                current.turn.kind === "current"
             ) {
                 return;
             }
@@ -846,7 +831,6 @@ export function createSessionPaneModel(options: {
             const pending = deriveTimeline();
             set({
                 followRevision: get().followRevision + 1,
-                operation: { kind: "sending", commandId },
                 messages: pending.messages,
             });
             try {
@@ -907,16 +891,11 @@ export function createSessionPaneModel(options: {
                 }
                 if (outcome.kind === "accepted") {
                     updateTurn({ kind: "accepted", commandId, turnId: outcome.turn.turnId });
-                    set({ operation: finishPromptOperation(get().operation, commandId) });
                     return;
                 }
                 updateTurn({ kind: "submission-ended", commandId, failure: null });
                 const restored = deriveTimeline();
-                set({
-                    messages: restored.messages,
-                    pendingInitialMessage: null,
-                    operation: finishPromptOperation(get().operation, commandId),
-                });
+                set({ messages: restored.messages, pendingInitialMessage: null });
                 announceActivity();
             } catch (cause) {
                 signal.throwIfAborted();
@@ -935,7 +914,8 @@ export function createSessionPaneModel(options: {
                     commandId,
                     failure: { code: cause instanceof MobiusError ? cause.code : "", message: failureMessage },
                 });
-                set({ pendingInitialMessage: null, operation: { kind: "failed", message: failureMessage } });
+                // The ended turn keeps the failure; the composer shows it from there.
+                set({ pendingInitialMessage: null });
                 announceActivity();
             }
         };
@@ -953,8 +933,7 @@ export function createSessionPaneModel(options: {
             queuedFilesNotice: false,
             followRevision: 0,
             operation: { kind: "idle" },
-            activity: turnActivity(currentTurn),
-            runningTurn: acceptedTurn(currentTurn),
+            turn: initialTurn,
             loadOlderMessages: async (signal) => {
                 const pagination = sessionProjectionPagination(projection);
                 if (loadingOlderHistory || pagination === null || client === null) {
@@ -1046,7 +1025,7 @@ export function createSessionPaneModel(options: {
                                     // Steering starts a command, not a new execution to stop.
                                     return;
                                 }
-                                const accepted = acceptedTurn(currentTurn);
+                                const accepted = acceptedTurn(get().turn);
                                 updateTurn({
                                     kind: "running",
                                     commandId: fact.commandId,
@@ -1077,10 +1056,7 @@ export function createSessionPaneModel(options: {
                                             startedAt: turns.startedAt(running.commandId, Date.now()),
                                         });
                                         const timeline = deriveTimeline();
-                                        set({
-                                            messages: timeline.messages,
-                                            operation: finishPromptOperation(get().operation, fact.commandId),
-                                        });
+                                        set({ messages: timeline.messages });
                                         announceActivity();
                                         return;
                                     }
@@ -1092,10 +1068,7 @@ export function createSessionPaneModel(options: {
                                         fact.kind === "turn-failed" ? { code: fact.code, message: fact.message } : null,
                                 });
                                 const completed = deriveTimeline();
-                                set({
-                                    messages: completed.messages,
-                                    operation: finishPromptOperation(get().operation, fact.commandId),
-                                });
+                                set({ messages: completed.messages });
                                 announceActivity();
                                 return;
                             }
@@ -1107,7 +1080,7 @@ export function createSessionPaneModel(options: {
                     };
                     const observer: MobiusSessionEventObserver = {
                         reconcile: async (connection) => {
-                            const reconcilingTurn = currentTurn;
+                            const reconcilingTurn = get().turn;
                             const reconciliation =
                                 connection.kind === "initial"
                                     ? { kind: "initial-subscription" as const, turn: reconcilingTurn }
@@ -1553,7 +1526,7 @@ export function createSessionPaneModel(options: {
             queueDraft: async (signal) => {
                 const current = get();
                 const { attachments, state: attachmentState } = composerAttachments.getState();
-                const running = current.runningTurn;
+                const running = acceptedTurn(current.turn);
                 if (
                     attachmentState.kind === "reading" ||
                     current.connection.kind !== "ready" ||
@@ -1629,7 +1602,14 @@ export function createSessionPaneModel(options: {
                 });
             },
             configure: async (option, value, booleanValue, signal) => {
-                if (client === null || get().connection.kind !== "ready") {
+                const current = get();
+                // Settings change between turns, one change at a time.
+                if (
+                    client === null ||
+                    current.connection.kind !== "ready" ||
+                    current.operation.kind === "configuring" ||
+                    current.turn.kind === "current"
+                ) {
                     return;
                 }
                 const connected = client;
