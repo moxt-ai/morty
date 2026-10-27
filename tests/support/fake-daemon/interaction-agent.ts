@@ -1,10 +1,6 @@
 import * as acp from "@agentclientprotocol/sdk";
-import {
-    type AcpEndpointTermination,
-    InProcessAcpAgentDefinition,
-    type InProcessAcpEndpoint,
-} from "@moxt-ai/mobius/runtime";
-import { fakeDaemonCapabilities } from "@moxt-ai/mobius-test-support/fake-daemon";
+import { AcpAgentDefinition, type AcpEndpointTermination, type InProcessAcpEndpoint } from "@moxt-ai/mobius/runtime";
+import { ControlledEndpointConnection, fakeDaemonCapabilities } from "@moxt-ai/mobius-test-support/fake-daemon";
 
 /** A stateful ACP peer injected through the production daemon's Agent port. */
 export function createInteractionAgent() {
@@ -202,11 +198,11 @@ export function createInteractionAgent() {
             },
         };
     };
-    return new InProcessAcpAgentDefinition(
+    return new AcpAgentDefinition(
         "interaction-test",
         "Interaction Agent",
         process.execPath,
-        createEndpoint,
+        (options) => new ControlledEndpointConnection(createEndpoint(), options.client),
         {},
         "controlled-harness",
         undefined,
