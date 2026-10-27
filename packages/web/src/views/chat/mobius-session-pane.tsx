@@ -903,6 +903,9 @@ function MobiusSessionPaneBody({
                             onDelete={(commandId) =>
                                 run(async (signal) => await pane.store.getState().deleteQueued(commandId, signal))
                             }
+                            onEdit={(commandId) =>
+                                run(async (signal) => await pane.store.getState().editQueued(commandId, signal))
+                            }
                             onSteer={(commandId) =>
                                 runAndFollow(
                                     async (signal) => await pane.store.getState().steerQueued(commandId, signal),
@@ -934,13 +937,15 @@ function MobiusSessionPaneBody({
                             draft={model.connection.kind === "session-loading-after-create" ? "" : model.draft}
                             error={presentation.composerError}
                             errorStatus={
-                                executionContext.feedback.kind === "hidden" ? undefined : (
+                                executionContext.feedback.kind !== "hidden" ? (
                                     <ConnectionNotice
                                         feedback={executionContext.feedback}
                                         onRetryNow={pane.store.getState().retryNow}
                                         onReopen={() => run(pane.store.getState().reopen)}
                                     />
-                                )
+                                ) : model.queuedFilesNotice ? (
+                                    "Files attached to the queued message could not be restored here. Add them again if it had any."
+                                ) : undefined
                             }
                             onDraftChange={pane.store.getState().setDraft}
                             onStop={() => run(pane.store.getState().stop)}

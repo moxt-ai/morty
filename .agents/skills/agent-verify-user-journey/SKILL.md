@@ -1,6 +1,6 @@
 ---
 name: agent-verify-user-journey
-description: Start Morty's local Chat and Platform stack with --mode=initial|paired|todolist (default todolist). Open the unpaired setup page, pair a selected harness and open its handoff, or run the complete browser-driven app verification. Use for prompts such as "use Codex, GPT 5.5, and agent-browser to verify a todo app."
+description: Start Morty's local Chat and Platform stack with --mode=initial|paired|todolist (default todolist). Open the unpaired setup page, pair a selected harness and open its handoff, or verify an agent turn and live message controls through Morty's browser UI. Generated-app correctness is out of scope.
 ---
 
 # Agent User-Journey Verification
@@ -8,7 +8,8 @@ description: Start Morty's local Chat and Platform stack with --mode=initial|pai
 Verify the real Morty product boundary at the requested stopping point. Start
 the local Chat Worker and local Platform in every mode. Depending on `--mode`,
 open the initial setup page, pair a Runtime and open its handoff, or continue
-through app generation and browser verification.
+through an agent task and live message controls in Morty's browser UI. Verify
+the agent integration, not the correctness of the work the agent produces.
 
 **Invoke the selected harness directly only for setup and pairing.** Ask Codex,
 Claude Code, or Pi to run the isolated local setup command below from its own
@@ -49,7 +50,8 @@ Resolve these inputs before starting:
   Stop there; do not select a model, start a new conversation, or generate an app.
 - `todolist` (also when `--mode` is omitted): run the complete existing journey,
   including pairing, model selection, app generation, queue/steer/delete controls,
-  and generated-app verification.
+  and visible turn completion. The name identifies the default agent task;
+  installing, starting, or testing the generated app is out of scope.
 
 For `initial`, only resolve the mode and browser. For `paired`, also resolve the
 harness; that harness resolves its native session during pairing. Model and app inputs apply only to `todolist`.
@@ -97,7 +99,14 @@ Use `chat-local-full-dev` to:
 3. Check stack health before opening the browser.
 4. For `initial`, open `<chatOrigin>/setup` using the browser procedure below,
    confirm the initial setup page is visible, then report the result. Do not pair.
-5. For `paired` and `todolist`, launch the selected harness in its own native
+5. For `paired` and `todolist`, `local-dev.cjs setup` automatically builds, packs,
+   and installs the checkout's CLI into the isolated stack before pairing,
+   including unpublished versions. Do not ask the harness to build or install
+   the CLI separately, publish it, or install it globally. A local CLI preparation
+   failure stops setup; do not substitute a published version. The installation
+   is removed with the stack. `initial` mode does not run setup or install a CLI.
+
+   Launch the selected harness in its own native
    session and ask it to run the following command from `<original-cwd>`.
    Give it the actual state directory, app workspace, and a private output-file
    path under the state directory. Its task is setup and pairing only, not app
@@ -146,6 +155,11 @@ Use `chat-local-full-dev` to:
    Wait for completion and leave the Runtime running. Do not open or reveal the
    handoff link. Report only completion or a sanitized error. Do not build an app
    or change repository files.
+
+   Checkout prerequisites are already complete. The setup command prepares the
+   local CLI automatically; do not build or install it separately.
+   Do not run pnpm sync:submodules, git checkout, git switch, or git submodule
+   update. Preserve the prepared checkout revision.
    ```
 
    ```sh
@@ -202,7 +216,7 @@ so do not seed storage or use browser internals to manipulate application state
 after setup.
 
 In `paired`, confirm the paired Runtime and imported session are visible, then
-stop and report the result. The remaining generation and app-verification
+stop and report the result. The remaining agent-turn verification
 sections apply only to `todolist`.
 
 ## Ask the agent through Morty (`todolist` only)
@@ -214,8 +228,8 @@ Through visible Morty controls:
 2. Select the exact requested model in the Session configuration.
 3. Start a new conversation with the **New Session** control.
 4. Send an outcome-focused build request that names the already-paired app
-   workspace and asks the agent to provide exact local install and loopback-only
-   start commands when it finishes.
+   workspace. Ask the agent not to start servers, deploy, or publish, and to
+   summarize its work when finished.
 
 Unless the user supplied different requirements, require a locally runnable
 to-do app in which a user can:
@@ -231,12 +245,11 @@ through the UI rather than waiting for completion:
 1. Submit a concise follow-up that changes an observable app requirement. Verify
    it appears in **Queued messages** instead of starting another turn.
 2. Use that queued message's **Steer** action. Verify it leaves the queue and the
-   active turn visibly accepts it. The final app must include the steered
-   requirement.
+   active turn visibly accepts it through the conversation's live events.
 3. Submit a second follow-up with a harmless, uniquely observable requirement.
    Verify it appears in **Queued messages**, then use its **Delete** action before
-   the active turn finishes. Verify the queued entry disappears and the final
-   app does not include that deleted requirement.
+   the active turn finishes. Verify the queued entry disappears without being
+   submitted as a new user message.
 
 Choose follow-ups that are deterministic and safe to verify. For example, steer
 the agent to use a distinctive visible heading, then queue and delete a request
@@ -247,7 +260,7 @@ through internal APIs to keep the turn active.
 
 Wait for the visible turn to complete through live Session events. Confirm in
 the UI that the selected model handled the turn and capture the final response
-with its run commands. Do not infer success merely from files appearing in the
+and its summary. Do not infer success merely from files appearing in the
 workspace, and do not bypass Morty by querying the daemon or Platform directly.
 
 If generation fails, retain the browser-visible failure and inspect the local
@@ -255,30 +268,14 @@ stack logs using `chat-local-full-dev`. Report the failure; do not repair the
 app unless the user explicitly requests a repair attempt. Keep initial-failure
 evidence distinct from any later repaired result.
 
-## Start and inspect the generated app (`todolist` only)
+## Verification boundary (`todolist` only)
 
-Inspect the generated files only after the Morty turn completes. Validate the
-agent-provided commands before running them: they must be local development
-commands and must not deploy, publish, read credentials, escalate privileges,
-or access unrelated paths.
-
-Run the provided install command if needed, then start the app bound to
-loopback. Use the server's reported URL rather than assuming a port. Keep
-ownership of the app server process and stop it on success, failure, or
-cancellation.
-
-If the app cannot install, build, or start, report that as the verification
-result without changing its source.
-
-## Verify the generated app (`todolist` only)
-
-Reuse the selected browser and dedicated session or tab opened above.
-
-Open the generated app's loopback URL and exercise it only through visible
-controls, labels, and text. Do not call app internals, mutate storage directly,
-or treat a successful page load as proof of the full journey. Verify every
-requested state and check browser-visible errors and console failures relevant
-to the journey.
+Stop at the completed agent turn in Morty. Check Morty's browser-visible errors
+and console failures relevant to the journey. Do not inspect generated files to
+grade the result, run generated install/build/start commands, open the generated
+app, or test its controls. The to-do requirements and distinctive follow-ups are
+task inputs, not acceptance criteria for the generated work. A deficient app is
+not an agent-integration failure; a failed agent turn or message control is.
 
 ## Retain visual evidence
 
@@ -290,8 +287,8 @@ streaming fix.
 For example, a streaming fix needs screenshots of the Morty conversation while
 the turn is still active: one showing partial reasoning and another showing a
 partial assistant message before completion. A queue-control fix needs the
-relevant queued, steered, or deleted state in Morty. Capture generated-app
-states only when the generated app journey itself is the requested behavior.
+relevant queued, steered, or deleted state in Morty. Do not capture generated-app
+states for this skill; they do not establish agent-integration behavior.
 
 Capture each required state through normal browser actions. Name files after
 the behavior they prove, for example:
@@ -318,9 +315,8 @@ On failure or cancellation in any mode, clean up owned resources. On successful
 `todolist` completion, clean up unless the user explicitly asks to leave services
 running:
 
-1. Stop the generated app server.
-2. Close the dedicated browser session or tab.
-3. Remove the local stack with
+1. Close the dedicated browser session or tab.
+2. Remove the local stack with
    `node scripts/local-dev.cjs remove --state-dir <stateDir>`.
 
 Keep the generated app workspace and repository evidence. Cleanup must never
@@ -336,17 +332,17 @@ Return:
    whether the stack was stopped or intentionally left running. Never report
    identity tokens or handoff links.
 3. State directory and removal command when left running; randomized workspace
-   path if created; validated install/start commands only for `todolist`.
+   path if created.
 4. Pass or fail for the requested stopping point: initial setup page for
    `initial`, paired session for `paired`, or the Morty generation turn, queue,
-   steer, queued-message deletion, and every app journey step for `todolist`.
-   Mark skipped stages as not run, never passed.
+   steer, queued-message deletion, and visible turn completion for `todolist`.
+   Mark skipped stages as not run, never passed. Generated-app correctness is
+   out of scope, not a passed stage.
 5. Repository-relative screenshot paths.
-6. Any generation, Worker, Platform, Runtime, install, server, browser, or app
+6. Any agent-turn, Worker, Platform, Runtime, local CLI install, or Morty browser
    failure, including relevant typed error codes when available.
 
 Setup-only success is not full journey verification. Do not call the journey
 verified unless the task traveled through Morty's local
 browser UI and paired Runtime, the visible turn completed with the requested
-model, queue/steer/delete were visibly exercised during the active turn, and the
-selected browser completed every requested app interaction.
+model, and queue/steer/delete were visibly exercised during the active turn.

@@ -1,4 +1,4 @@
-import { Clock4, CornerUpLeft, LoaderCircle, MessageSquare, Trash2 } from "lucide-react";
+import { Clock4, CornerUpLeft, LoaderCircle, MessageSquare, Pencil, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import type { ChatQueuedMessage } from "../../view-models/chat/session-message-queue-store.ts";
@@ -32,11 +32,13 @@ export function ChatMessageQueue({
     messages,
     steeringSupported,
     onDelete,
+    onEdit,
     onSteer,
 }: {
     readonly messages: readonly ChatQueuedMessage[];
     readonly steeringSupported: boolean;
     readonly onDelete: (commandId: string) => void;
+    readonly onEdit: (commandId: string) => void;
     readonly onSteer: (commandId: string) => void;
 }) {
     if (messages.length === 0) {
@@ -60,6 +62,9 @@ export function ChatMessageQueue({
                     <ol className="mb-0 flex max-h-[152px] w-full min-w-0 list-none flex-col gap-0 overflow-y-auto px-3 pt-1 pb-6 [scrollbar-color:transparent_transparent] [scrollbar-width:thin] hover:[scrollbar-color:var(--morty-fill-opacity-4)_transparent]">
                         {messages.map((message) => {
                             const pending = message.kind !== "queued";
+                            // Only files the Runtime did not report remain: nothing could return to the composer.
+                            const editable =
+                                message.prompt !== "" || message.images.length > 0 || message.files.kind === "reported";
                             return (
                                 <li
                                     className="-mx-2 flex items-start gap-2 rounded-sm py-1.5 pr-2.5 pl-2 text-morty-text-2 transition-colors hover:bg-morty-fill-opacity-2"
@@ -86,6 +91,17 @@ export function ChatMessageQueue({
                                         {message.summary}
                                     </span>
                                     <div className="flex h-6 shrink-0 items-center gap-0.5">
+                                        <QueueAction
+                                            disabled={pending || !editable}
+                                            label={
+                                                editable
+                                                    ? `Edit queued message: ${message.summary}`
+                                                    : "This message's files cannot be restored here. Delete it and send it again."
+                                            }
+                                            onClick={() => onEdit(message.commandId)}
+                                        >
+                                            <Pencil aria-hidden="true" className="size-3.5" />
+                                        </QueueAction>
                                         <QueueAction
                                             disabled={pending || !steeringSupported}
                                             label={`Steer queued message: ${message.summary}`}

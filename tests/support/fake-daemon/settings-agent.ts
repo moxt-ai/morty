@@ -1,10 +1,6 @@
 import * as acp from "@agentclientprotocol/sdk";
-import {
-    type AcpEndpointTermination,
-    InProcessAcpAgentDefinition,
-    type InProcessAcpEndpoint,
-} from "@moxt-ai/mobius/runtime";
-import { fakeDaemonCapabilities } from "@moxt-ai/mobius-test-support/fake-daemon";
+import { AcpAgentDefinition, type AcpEndpointTermination, type InProcessAcpEndpoint } from "@moxt-ai/mobius/runtime";
+import { ControlledEndpointConnection, fakeDaemonCapabilities } from "@moxt-ai/mobius-test-support/fake-daemon";
 
 export type DefineInProcessAgent<Definition> = (
     id: string,
@@ -12,12 +8,12 @@ export type DefineInProcessAgent<Definition> = (
     createEndpoint: () => InProcessAcpEndpoint,
 ) => Definition;
 
-export const defineCurrentAgent: DefineInProcessAgent<InProcessAcpAgentDefinition> = (id, label, createEndpoint) =>
-    new InProcessAcpAgentDefinition(
+export const defineCurrentAgent: DefineInProcessAgent<AcpAgentDefinition> = (id, label, createEndpoint) =>
+    new AcpAgentDefinition(
         id,
         label,
         process.execPath,
-        createEndpoint,
+        (options) => new ControlledEndpointConnection(createEndpoint(), options.client),
         {},
         "controlled-harness",
         undefined,
