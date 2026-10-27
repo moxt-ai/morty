@@ -564,12 +564,7 @@ function consumeSessionEvent(
             : { index: existingIndex, kind: "consumed", message };
     }
     if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
-        const incoming = messageFromAcpUpdate(event, update);
-        const owner = entries.findLast((entry) => entry.kind === "execution-owner");
-        const message =
-            incoming?.role === "user" && owner?.kind === "execution-owner"
-                ? { ...incoming, commandId: owner.commandId, execution: owner.execution }
-                : incoming;
+        const message = messageFromAcpUpdate(event, update);
         if (message === null) {
             return { kind: "skipped" };
         }

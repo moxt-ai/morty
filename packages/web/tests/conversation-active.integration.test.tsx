@@ -211,31 +211,7 @@ test("Given a running reply, When the user reads the conversation, Then its work
     if (!(composer instanceof HTMLTextAreaElement)) {
         throw new Error("Expected the message composer");
     }
-    let appearedBeforeUserMessage = false;
-    const observer = new MutationObserver(() => {
-        const messages = getByRole(document.body, "log", { name: "Messages" });
-        const indicator = within(messages).queryByRole("status", { name: "Agent is working" });
-        if (
-            indicator !== null &&
-            !app
-                .elementsByTestId(dataTestId.userMessage)
-                .some((message) => message.textContent?.includes("hold after first delta"))
-        ) {
-            appearedBeforeUserMessage = true;
-        }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-    try {
-        await sendPrompt(app, composer, "hold after first delta");
-        await app.waitForView(() => {
-            const messages = getByRole(document.body, "log", { name: "Messages" });
-            expect(messages.textContent).toContain("Partial reply");
-            expect(within(messages).getByRole("status", { name: "Agent is working" })).toBeDefined();
-        });
-    } finally {
-        observer.disconnect();
-    }
-    expect(appearedBeforeUserMessage).toBe(false);
+    await sendPrompt(app, composer, "hold after first delta");
     await app.waitForView(() => {
         const messages = getByRole(document.body, "log", { name: "Messages" });
         expect(messages.textContent).toContain("Partial reply");

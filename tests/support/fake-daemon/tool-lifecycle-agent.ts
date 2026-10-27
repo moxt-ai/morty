@@ -12,6 +12,7 @@ export function createToolLifecycleAgent() {
     const sessions = new Map<string, acp.SessionNotification[]>();
     const steeringToolCounts = new Map<string, number>();
     const heldSteering = new Set<string>();
+    const delayedUserMessages = new Map<string, acp.SessionUpdate[]>();
     const createEndpoint = (onSessionUpdate: ControlledSessionUpdate): InProcessAcpEndpoint => {
         const termination = Promise.withResolvers<AcpEndpointTermination>();
         const lifetime = new AbortController();
@@ -62,8 +63,17 @@ export function createToolLifecycleAgent() {
                     await onSessionUpdate(event);
                 };
                 const messageId = crypto.randomUUID();
-                for (const content of context.params.prompt) {
-                    await emit({ sessionUpdate: "user_message_chunk", messageId, content });
+                const userUpdates: acp.SessionUpdate[] = context.params.prompt.map((content) => ({
+                    sessionUpdate: "user_message_chunk",
+                    messageId,
+                    content,
+                }));
+                if (prompt === "hold delayed initial message") {
+                    delayedUserMessages.set(sessionId, userUpdates);
+                } else {
+                    for (const update of userUpdates) {
+                        await emit(update);
+                    }
                 }
                 const emitText = async (text: string) =>
                     await emit({
@@ -184,6 +194,7 @@ export function createToolLifecycleAgent() {
                     }
                 } finally {
                     turns.delete(sessionId);
+                    delayedUserMessages.delete(sessionId);
                 }
             })
             .onRequest(
@@ -204,6 +215,12 @@ export function createToolLifecycleAgent() {
                         return { outcome: "promptRequired" };
                     }
                     const count = steeringToolCounts.get(params.sessionId) ?? 1;
+                    for (const update of delayedUserMessages.get(params.sessionId) ?? []) {
+                        const event: acp.SessionNotification = { sessionId: params.sessionId, update };
+                        history.push(event);
+                        await onSessionUpdate(event);
+                    }
+                    delayedUserMessages.delete(params.sessionId);
                     for (let index = 0; index < count; index += 1) {
                         const event: acp.SessionNotification = {
                             sessionId: params.sessionId,

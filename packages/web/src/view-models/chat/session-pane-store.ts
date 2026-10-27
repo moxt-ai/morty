@@ -282,10 +282,7 @@ export function sessionPanePresentation(
                     : controlRunning
                       ? "running"
                       : "idle",
-        workingIndicatorVisible:
-            !waitingForInput &&
-            activeCommandId !== null &&
-            model.messages.some((message) => message.role === "user" && message.commandId === activeCommandId),
+        workingIndicatorVisible: !waitingForInput && controlRunning,
         shouldQueueOnSubmit: controlRunning && !stopping,
         submitDisabled:
             !connectionAvailable ||
@@ -688,18 +685,10 @@ export function createSessionPaneModel(options: {
             projection = result.state;
             const pagination = sessionProjectionPagination(projection);
             const messages = sessionProjectionMessages(projection);
-            const initialMessage = get().pendingInitialMessage;
             set({
                 hasOlderHistory: pagination !== null,
                 historyRevision: projection.revision,
                 messages,
-                pendingInitialMessage:
-                    initialMessage !== null &&
-                    messages.some(
-                        (message) => message.role === "user" && message.commandId === initialMessage.commandId,
-                    )
-                        ? null
-                        : initialMessage,
             });
             for (const effect of result.effects) {
                 if (effect.kind !== "adopted") {
@@ -1198,7 +1187,7 @@ export function createSessionPaneModel(options: {
                     };
                     const subscription = await connected.events.subscribeLive(sessionId, observer, signal);
                     signal.throwIfAborted();
-                    setAndSettle({ connection: { kind: "ready", client: connected } });
+                    setAndSettle({ connection: { kind: "ready", client: connected }, pendingInitialMessage: null });
                     const monitoring = new AbortController();
                     const monitorSignal = AbortSignal.any([signal, monitoring.signal]);
                     void (async () => {

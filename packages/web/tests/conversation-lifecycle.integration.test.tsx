@@ -5,7 +5,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { openAgentModelPicker, sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given a new conversation, When I send its first prompt, Then it stays visible without a history skeleton until the Agent streams a reply", {
+test("Given a new conversation, When I send its first prompt, Then it stays visible while creating the session without a history skeleton or panel remount", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -13,14 +13,10 @@ test("Given a new conversation, When I send its first prompt, Then it stays visi
     const conversationPanel = getByRole(document.body, "region", { name: "Conversation" });
     const loadingMessages: Element[] = [];
     let promptWasVisible = false;
-    let promptDisappeared = false;
     const observer = new MutationObserver((records) => {
         const promptVisible = app
             .elementsByTestId(dataTestId.userMessage)
             .some((element) => element.textContent === "hold after first delta");
-        if (promptWasVisible && !promptVisible) {
-            promptDisappeared = true;
-        }
         promptWasVisible ||= promptVisible;
         for (const record of records) {
             for (const node of record.addedNodes) {
@@ -49,7 +45,7 @@ test("Given a new conversation, When I send its first prompt, Then it stays visi
         ]);
     });
     expect(loadingMessages).toHaveLength(0);
-    expect(promptDisappeared).toBe(false);
+    expect(promptWasVisible).toBe(true);
     expect(getByRole(document.body, "region", { name: "Conversation" })).toBe(conversationPanel);
     observer.disconnect();
     await app.user.click(
@@ -58,6 +54,32 @@ test("Given a new conversation, When I send its first prompt, Then it stays visi
             (element) => element.getAttribute("aria-label") === "Stop agent output",
         ),
     );
+});
+
+test("Given a loaded session whose initial user chunk is delayed, When I steer before it arrives, Then the optimistic copy is retired and the delayed message appears once while the Agent is working", async () => {
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: { id: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
+        page: { kind: "bootstrap", identity: true },
+    });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold delayed initial message");
+    await app.waitForView(() => {
+        expect(getByRole(document.body, "button", { name: "Stop agent output" })).toBeDefined();
+        expect(app.elementsByTestId(dataTestId.userMessage)).toHaveLength(0);
+        expect(app.optionalElementByTestId(dataTestId.sessionStatus)).not.toBeNull();
+    });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "New steering requirement");
+    const steer = await app.waitForView(() =>
+        getByRole(document.body, "button", { name: "Steer queued message: New steering requirement" }),
+    );
+    await app.user.click(steer);
+    await app.waitForView(() => {
+        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+            "hold delayed initial message",
+        ]);
+        expect(app.optionalElementByTestId(dataTestId.sessionStatus)).not.toBeNull();
+    });
+    await app.user.click(getByRole(document.body, "button", { name: "Stop agent output" }));
 });
 
 test("Given a configuration request is in flight, When the chat view detaches and re-attaches, Then the reconnected composer accepts and sends a new prompt", {
