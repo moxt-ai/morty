@@ -5,7 +5,8 @@ import { CloudApiError } from "../../services/management/management-api.ts";
 import { formatError } from "../format-error.ts";
 
 type SubmitRequest = Parameters<MobiusClient["turns"]["submit"]>[1];
-export type AcceptedTurn = { readonly turnId: string };
+type AcceptedTurn = { readonly turnId: string };
+type SubmitTurn = (request: SubmitRequest, signal: AbortSignal) => Promise<AcceptedTurn>;
 type SubmissionOutcome =
     | { readonly kind: "accepted"; readonly turn: AcceptedTurn }
     /** The request failed, but the service had already shown it has the command. */
@@ -18,12 +19,9 @@ export type Journal = {
     readonly displayPrompt: string;
     readonly request: Omit<SubmitRequest, "idempotencyKey">;
 };
-/** A Journal that can cross into the home store and back on remount. */
-export type UnconfirmedSubmission = Journal;
-
 type DeliveryState =
     | { readonly kind: "idle" }
-    | { readonly kind: "submitting"; readonly journal: Journal }
+    | { readonly kind: "submitting"; readonly journal: Journal; readonly confirmation: "unknown" | "delivered" }
     | { readonly kind: "delivery-unknown"; readonly journal: Journal }
     | { readonly kind: "failed"; readonly message: string };
 
@@ -31,15 +29,11 @@ export interface SessionDeliveryStore {
     readonly state: DeliveryState;
     readonly discardUnknown: () => string | null;
     readonly dismissFailure: () => void;
+    /** Losing an attempt's connection does not discard its submitted intent. */
+    readonly submissionInterrupted: () => void;
     readonly reconcile: (commandIds: readonly string[]) => void;
-    readonly submit: (
-        commandId: string,
-        displayPrompt: string,
-        request: Omit<SubmitRequest, "idempotencyKey">,
-        attachments: readonly ComposerAttachment[],
-        signal: AbortSignal,
-    ) => Promise<SubmissionOutcome>;
-    readonly retry: (signal: AbortSignal) => Promise<SubmissionOutcome | null>;
+    readonly submit: (journal: Journal, submit: SubmitTurn, signal: AbortSignal) => Promise<SubmissionOutcome>;
+    readonly retry: (submit: SubmitTurn, signal: AbortSignal) => Promise<SubmissionOutcome | null>;
 }
 
 function isAuthoritativeFailure(cause: unknown): boolean {
@@ -49,37 +43,18 @@ function isAuthoritativeFailure(cause: unknown): boolean {
     );
 }
 
-export const createSessionDeliveryStore = (options: {
-    readonly submit: (request: SubmitRequest, signal: AbortSignal) => Promise<AcceptedTurn>;
-    /**
-     * A submission whose outcome the previous pane could not confirm. It is
-     * adopted as `delivery-unknown` so the user can retry or discard it, and
-     * nothing is resubmitted without that decision.
-     */
-    readonly initialUnknown?: Journal | undefined;
-    /**
-     * Hears that the service has a command, whether its submission was accepted or a later event showed a
-     * submission of uncertain delivery arrived. Each command is reported at most once.
-     */
-    readonly onDelivered?: ((commandId: string) => void) | undefined;
-}) => {
-    const delivered = new Set<string>();
-    // Commands the service showed it has while their submission was still in flight.
-    const shownWhileSubmitting = new Set<string>();
-    const reportDelivered = (commandId: string): void => {
-        if (!delivered.has(commandId)) {
-            delivered.add(commandId);
-            options.onDelivered?.(commandId);
-        }
-    };
+/** The Session owns delivery; each attempt borrows the currently connected pane's submit port. */
+export const createSessionDeliveryStore = () => {
     const send = async (
         journal: Journal,
+        submit: SubmitTurn,
         signal: AbortSignal,
         set: (state: Pick<SessionDeliveryStore, "state">) => void,
+        get: () => SessionDeliveryStore,
     ): Promise<SubmissionOutcome> => {
-        set({ state: { kind: "submitting", journal } });
+        set({ state: { kind: "submitting", journal, confirmation: "unknown" } });
         try {
-            const accepted = await options.submit(
+            const accepted = await submit(
                 {
                     ...journal.request,
                     idempotencyKey: journal.commandId,
@@ -88,7 +63,6 @@ export const createSessionDeliveryStore = (options: {
             );
             signal.throwIfAborted();
             set({ state: { kind: "idle" } });
-            reportDelivered(journal.commandId);
             return { kind: "accepted", turn: accepted };
         } catch (cause) {
             if (signal.aborted || cause instanceof MobiusCancellationError) {
@@ -103,9 +77,9 @@ export const createSessionDeliveryStore = (options: {
                 });
                 return { kind: "rejected" };
             }
-            if (shownWhileSubmitting.has(journal.commandId)) {
+            const state = get().state;
+            if (state.kind === "submitting" && state.confirmation === "delivered") {
                 set({ state: { kind: "idle" } });
-                reportDelivered(journal.commandId);
                 return { kind: "delivered" };
             }
             set({ state: { kind: "delivery-unknown", journal } });
@@ -113,10 +87,7 @@ export const createSessionDeliveryStore = (options: {
         }
     };
     return createStore<SessionDeliveryStore>()((set, get) => ({
-        state:
-            options.initialUnknown === undefined
-                ? { kind: "idle" }
-                : { journal: options.initialUnknown, kind: "delivery-unknown" },
+        state: { kind: "idle" },
         discardUnknown: () => {
             const state = get().state;
             if (state.kind !== "delivery-unknown") {
@@ -130,23 +101,32 @@ export const createSessionDeliveryStore = (options: {
                 set({ state: { kind: "idle" } });
             }
         },
+        submissionInterrupted: () => {
+            const state = get().state;
+            if (state.kind === "submitting") {
+                set({
+                    state:
+                        state.confirmation === "delivered"
+                            ? { kind: "idle" }
+                            : { kind: "delivery-unknown", journal: state.journal },
+                });
+            }
+        },
         reconcile: (commandIds) => {
             const state = get().state;
             // An in-flight request owns the disabled composer until it settles;
             // a live event must not expose the submitted draft to another send.
             if (state.kind === "submitting" && commandIds.includes(state.journal.commandId)) {
-                shownWhileSubmitting.add(state.journal.commandId);
+                set({ state: { ...state, confirmation: "delivered" } });
             }
             if (state.kind === "delivery-unknown" && commandIds.includes(state.journal.commandId)) {
                 set({ state: { kind: "idle" } });
-                reportDelivered(state.journal.commandId);
             }
         },
-        submit: async (commandId, displayPrompt, request, attachments, signal) =>
-            await send({ attachments, commandId, displayPrompt, request }, signal, set),
-        retry: async (signal) => {
+        submit: async (journal, submit, signal) => await send(journal, submit, signal, set, get),
+        retry: async (submit, signal) => {
             const state = get().state;
-            return state.kind === "delivery-unknown" ? await send(state.journal, signal, set) : null;
+            return state.kind === "delivery-unknown" ? await send(state.journal, submit, signal, set, get) : null;
         },
     }));
 };
