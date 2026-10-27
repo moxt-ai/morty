@@ -1,4 +1,12 @@
-import { fireEvent, getByLabelText, getByRole, getByText, queryAllByRole, queryByRole } from "@testing-library/dom";
+import {
+    fireEvent,
+    getByLabelText,
+    getByRole,
+    getByText,
+    queryAllByRole,
+    queryByRole,
+    queryByTestId,
+} from "@testing-library/dom";
 import { flushSync } from "react-dom";
 import { expect, onTestFinished, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
@@ -236,6 +244,56 @@ test("Given a remounted conversation whose re-read is in flight, When the user r
         );
     });
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionLoadFailure)).toBeNull());
+});
+
+test("Given a saved-session entry is still loading, When the user selects New Session, Then a late failure cannot replace or disable the new draft", {
+    timeout: 30_000,
+}, async () => {
+    let selectedDraft = false;
+    const failures: string[] = [];
+    const observer = new MutationObserver(() => {
+        const connection = queryByTestId(document.body, dataTestId.botConnectionStatus);
+        const newSession = queryByTestId(document.body, dataTestId.newConversation);
+        if (
+            !selectedDraft &&
+            connection?.getAttribute("data-connection-status") === "connected" &&
+            newSession !== null
+        ) {
+            // Select at the rendered boundary between configuration and session loading,
+            // before the real server answers the missing-session request.
+            selectedDraft = true;
+            fireEvent.click(newSession);
+        }
+        const failure = queryByTestId(document.body, dataTestId.sessionLoadFailure);
+        if (selectedDraft && failure !== null) {
+            failures.push(failure.textContent ?? "");
+        }
+    });
+    observer.observe(document.body, { attributes: true, childList: true, characterData: true, subtree: true });
+    try {
+        const app = await createTestApp({
+            connectAgent: true,
+            page: { kind: "managed-session", sessionId: "chat_missing_session" },
+        });
+        const composer = await app.queryElementByTestId(
+            dataTestId.messageComposer,
+            (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+        );
+        expect(selectedDraft).toBe(true);
+        await sendPrompt(app, composer, "A fresh draft after leaving the pending session");
+        await app.waitForView(() =>
+            expect(
+                app
+                    .elementsByTestId(dataTestId.agentResponse)
+                    .some((element) =>
+                        element.textContent?.includes("Codex turn 1: A fresh draft after leaving the pending session"),
+                    ),
+            ).toBe(true),
+        );
+        expect(failures).toEqual([]);
+    } finally {
+        observer.disconnect();
+    }
 });
 
 test("Given conversations updated across recent dates, When the directory loads, Then conversations are grouped by latest activity", {

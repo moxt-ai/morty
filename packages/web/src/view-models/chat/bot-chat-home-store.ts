@@ -698,7 +698,11 @@ export const createBotChatHomeStore = (
                 composerAttachments.getState().clear();
                 const current = get();
                 centralSessionStorage.remove(newConversationDraftEntry(botId));
-                const restart = !homeCanStartConversation(current) || current.selection.kind === "failed";
+                // Leaving a pending selection releases its request, even when entry configuration is already ready.
+                const restart =
+                    !homeCanStartConversation(current) ||
+                    current.selection.kind === "loading" ||
+                    current.selection.kind === "failed";
                 options.navigation.showDraft();
                 const draftKey = options.createId();
                 set((state) => ({
