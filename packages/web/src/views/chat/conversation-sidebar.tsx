@@ -625,7 +625,7 @@ export function ConversationSidebar({
                                             {desktop && (
                                                 <div className="hidden min-h-0 flex-1 sm:flex sm:min-h-0 sm:flex-col sm:gap-0">
                                                     <Tooltip.Provider delayDuration={150}>
-                                                        <div className="flex min-w-0 items-center justify-between gap-2.5 pl-2 sm:mb-0 sm:w-full">
+                                                        <div className="flex min-w-0 items-center justify-between gap-2.5 pl-2.5 sm:mb-0 sm:w-full">
                                                             <h2 className="font-inter text-13 font-semibold tracking-normal text-foreground">
                                                                 Recent sessions
                                                             </h2>

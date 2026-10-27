@@ -81,7 +81,7 @@ export function SetupConnectionGraphic({ className = "" }: { readonly className?
             </span>
             <span
                 aria-hidden="true"
-                className="absolute top-[84px] left-1/2 -translate-x-1/2 rounded-[18px] ring-4 ring-white"
+                className="absolute top-[77px] left-1/2 flex size-[70px] -translate-x-1/2 items-center justify-center rounded-[22px] bg-card"
             >
                 <MortyLogoMark size={56} />
             </span>
