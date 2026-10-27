@@ -11,6 +11,7 @@ export function Dialog({
     onClose,
     busy = false,
     wide = false,
+    mobileSheet = false,
     appearance = "default",
     testId,
     headerAction,
@@ -21,6 +22,8 @@ export function Dialog({
     readonly onClose: () => void;
     readonly busy?: boolean;
     readonly wide?: boolean;
+    /** Present as a bottom sheet on mobile, then return to a centered dialog at the sm breakpoint. */
+    readonly mobileSheet?: boolean;
     readonly appearance?: "default" | "setup" | "surface";
     readonly testId?: string;
     readonly headerAction?: ReactNode;
@@ -40,7 +43,7 @@ export function Dialog({
             className={
                 titleEmbedded
                     ? "mb-0 pr-10 sm:pr-0"
-                    : `${setup ? "mb-0" : surface ? "mb-4" : "mb-5"} ${headerAction === undefined ? (surface ? "pr-10" : "pr-7") : "pr-16"}`
+                    : `${setup ? "mb-0" : surface ? (mobileSheet ? "mb-2 sm:mb-4" : "mb-4") : "mb-5"} ${headerAction === undefined ? (surface ? "pr-10" : "pr-7") : "pr-16"}`
             }
         >
             <Primitive.Title
@@ -90,7 +93,9 @@ export function Dialog({
                         setup
                             ? `max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-[560px] overflow-hidden ${overlaySurfaceRadiusClassName} border-[1px] border-white bg-card/90 p-8 shadow-module backdrop-blur sm:p-12 fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 overflow-y-auto outline-none motion-safe:animate-cloud-enter`
                             : surface
-                              ? `fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] ${wide ? "max-w-5xl" : "max-w-lg"} -translate-x-1/2 -translate-y-1/2 overflow-y-auto ${overlaySurfaceRadiusClassName} border-[1px] border-white bg-card/90 p-2 font-inter text-13 text-foreground shadow-module backdrop-blur outline-none motion-safe:animate-cloud-enter`
+                              ? mobileSheet
+                                  ? `fixed inset-x-0 bottom-0 z-50 flex h-[85dvh] max-h-[calc(100dvh-0.75rem)] w-full flex-col overflow-hidden rounded-t-overlay border-x-0 border-t border-b-0 border-white bg-card/90 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] font-inter text-13 text-foreground shadow-module backdrop-blur outline-none motion-safe:animate-cloud-enter sm:inset-x-auto sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:block sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100%-2rem)] ${wide ? "sm:max-w-5xl" : "sm:max-w-lg"} sm:-translate-x-1/2 sm:-translate-y-1/2 sm:overflow-y-auto sm:rounded-overlay sm:border sm:p-2`
+                                  : `fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] ${wide ? "max-w-5xl" : "max-w-lg"} -translate-x-1/2 -translate-y-1/2 overflow-y-auto ${overlaySurfaceRadiusClassName} border-[1px] border-white bg-card/90 p-2 font-inter text-13 text-foreground shadow-module backdrop-blur outline-none motion-safe:animate-cloud-enter`
                               : `fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] ${wide ? "max-w-5xl" : "max-w-lg"} -translate-x-1/2 -translate-y-1/2 overflow-y-auto ${overlaySurfaceRadiusClassName} border border-border bg-card p-6 text-[13px] leading-5 text-foreground shadow-lg outline-none motion-safe:animate-cloud-enter`
                     }
                 >
