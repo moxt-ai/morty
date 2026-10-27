@@ -154,6 +154,65 @@ test("Given a draft attachment, When Chat remounts, Then the attachment remains 
     expect(queryByRole(document.body, "list", { name: "Attachments" })).toBeNull();
 });
 
+test("Given an existing Session draft, When Chat remounts during an attachment read, Then its text and attachments remain until removed", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true, nativeSessionIds: new Set(["draft-lifetime"]) });
+    await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: "Open Session" })));
+    const dialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
+    await app.user.click(await app.waitForView(() => getByRole(dialog, "button", { name: "Native draft-lifetime" })));
+    await app.waitForView(() => getByRole(dialog, "heading", { name: "Native draft-lifetime" }));
+    await app.user.click(getByRole(dialog, "button", { name: "Open" }));
+    await app.waitForView(() => expect(queryByRole(document.body, "dialog", { name: "Open Session" })).toBeNull());
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    await app.user.click(composer);
+    await app.user.paste("Keep this unsent draft");
+    const input = getByLabelText(document.body, "Choose attachments");
+    await app.user.upload(input, new File(["Already read"], "first.json", { type: "text/plain" }));
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "list", { name: "Attachments" }).textContent).toContain("first.json"),
+    );
+    // Detach before the second asynchronous file read can complete.
+    act(() => {
+        fireEvent.change(input, {
+            target: { files: [new File(["Still reading"], "second.json", { type: "text/plain" })] },
+        });
+        app.remount();
+    });
+    await app.waitForView(() => getByRole(document.body, "heading", { name: "Native draft-lifetime" }));
+    const restored = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    if (!(restored instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    expect(restored.value).toBe("Keep this unsent draft");
+    await app.waitForView(() => {
+        const attachments = getByRole(document.body, "list", { name: "Attachments" });
+        expect(attachments.textContent).toContain("first.json");
+        expect(attachments.textContent).toContain("second.json");
+    });
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    expect(queryByRole(document.body, "list", { name: "Attachments" })).toBeNull();
+    await app.user.click(await app.queryElementByTestId(dataTestId.managedConversation));
+    const reopened = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    if (!(reopened instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the reopened message composer");
+    }
+    expect(reopened.value).toBe("Keep this unsent draft");
+    await app.user.click(getByRole(document.body, "button", { name: "Remove first.json" }));
+    await app.user.click(getByRole(document.body, "button", { name: "Remove second.json" }));
+    expect(queryByRole(document.body, "list", { name: "Attachments" })).toBeNull();
+    expect(reopened.value).toBe("Keep this unsent draft");
+});
+
 test("Given an attachment is being read, When the user removes an earlier attachment, Then completing the read preserves that removal", {
     timeout: 30_000,
 }, async () => {

@@ -927,7 +927,7 @@ function MobiusSessionPaneBody({
                         )}
                         <BotChatComposer
                             attachmentModel={attachmentModel}
-                            attachmentSignal={pane.operationsSignal()}
+                            attachmentSignal={pane.attachmentSignal}
                             disabled={presentation.composerInputDisabled}
                             draft={model.connection.kind === "session-loading-after-create" ? "" : model.draft}
                             error={presentation.composerError}

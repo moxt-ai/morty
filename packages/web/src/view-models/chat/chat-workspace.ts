@@ -1,4 +1,5 @@
 import type { StoreApi } from "zustand/vanilla";
+import { createComposerAttachmentStore } from "../../components/chat/composer-attachment-store.ts";
 import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import type { BotChatApi, ChatDraftConfiguration } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
@@ -454,6 +455,8 @@ export function createChatWorkspace(options: {
     // The single live pane model; replaced when a different session is
     // requested, torn down with the workspace.
     let paneEntry: ChatWorkspacePaneEntry | null = null;
+    // Drafts belong to their sessions, independently of pane and connection replacements.
+    const sessionAttachments = new Map<string, ReturnType<typeof createComposerAttachmentStore>>();
     const announceChatViewAttached = (node: HTMLElement): (() => void) => {
         if (announcedViews.has(node)) {
             return () => {};
@@ -512,9 +515,16 @@ export function createChatWorkspace(options: {
             rememberedSessionId = sessionId;
         }
         const firstMessage = home.getState().firstMessages.get(sessionId);
+        let composerAttachments = sessionAttachments.get(sessionId);
+        if (composerAttachments === undefined) {
+            composerAttachments = createComposerAttachmentStore();
+            sessionAttachments.set(sessionId, composerAttachments);
+        }
         const model = createSessionPaneModel({
             clock: options.clock,
             session: selection.session,
+            composerAttachments,
+            attachmentSignal: operationsLifetime.signal,
             botId,
             requests,
             initialMessage: firstMessage?.kind === "pending" ? firstMessage.message : undefined,
@@ -584,6 +594,10 @@ export function createChatWorkspace(options: {
         dispose: () => {
             options.computers?.dispose();
             home.getState().composerAttachments.getState().clear();
+            for (const attachments of sessionAttachments.values()) {
+                attachments.getState().clear();
+            }
+            sessionAttachments.clear();
             paneEntry?.model.stop();
             chatLifetime.abort(new Error("The chat workspace was disposed."));
             directoryLifetime.abort(new Error("The chat workspace was disposed."));

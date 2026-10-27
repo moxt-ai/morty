@@ -10,12 +10,9 @@ import {
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
 import type { SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
-import { createStore } from "zustand/vanilla";
+import { createStore, type StoreApi } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
-import {
-    type ComposerAttachmentStore,
-    createComposerAttachmentStore,
-} from "../../components/chat/composer-attachment-store.ts";
+import type { ComposerAttachmentStore } from "../../components/chat/composer-attachment-store.ts";
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
@@ -382,6 +379,8 @@ function mergeSessionEvents(
 export function createSessionPaneModel(options: {
     readonly clock: Clock;
     readonly session: OpenMobiusSession;
+    readonly composerAttachments: StoreApi<ComposerAttachmentStore>;
+    readonly attachmentSignal: AbortSignal;
     readonly botId: string;
     readonly requests: Pick<
         BotChatApi,
@@ -409,8 +408,7 @@ export function createSessionPaneModel(options: {
     readonly onStatusChange?: ((status: SessionActivityState) => void) | undefined;
     readonly onTitleChange: (sessionId: string, title: string) => void;
 }) {
-    const { session, botId, requests, clock } = options;
-    const composerAttachments = createComposerAttachmentStore();
+    const { session, botId, requests, clock, composerAttachments } = options;
     const sessionId = session.result.ready.sessionId;
     // Working in a conversation makes it the reference for the next draft: its
     // harness and the settings it runs with carry into New Session.
@@ -1865,12 +1863,12 @@ export function createSessionPaneModel(options: {
         return () => {
             attachedViews.delete(node);
             unregisterDebug();
-            composerAttachments.getState().clear();
             stop();
         };
     };
     return {
         composerAttachments,
+        attachmentSignal: options.attachmentSignal,
         interactions,
         settings,
         store,
