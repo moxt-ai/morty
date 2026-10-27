@@ -99,29 +99,14 @@ Use `chat-local-full-dev` to:
 3. Check stack health before opening the browser.
 4. For `initial`, open `<chatOrigin>/setup` using the browser procedure below,
    confirm the initial setup page is visible, then report the result. Do not pair.
-5. For `paired` and `todolist`, install the checkout's local CLI into the isolated
-   stack **before pairing**, even when that version is not published on npm.
-   From `<original-cwd>`, substitute the actual `stateDir` and run:
+5. For `paired` and `todolist`, `local-dev.cjs setup` automatically builds, packs,
+   and installs the checkout's CLI into the isolated stack before pairing,
+   including unpublished versions. Do not ask the harness to build or install
+   the CLI separately, publish it, or install it globally. A local CLI preparation
+   failure stops setup; do not substitute a published version. The installation
+   is removed with the stack. `initial` mode does not run setup or install a CLI.
 
-   ```sh
-   (
-   set -eu
-   state_dir='<stateDir>'
-   cli_version="$(node -p "require('./third-party/mobius/packages/cli/package.json').version")"
-   mkdir "$state_dir/cli-package"
-   pnpm --dir third-party/mobius/packages/cli pack --pack-destination "$state_dir/cli-package"
-   npm install --prefix "$state_dir/mobius/npm/$cli_version" \
-     --ignore-scripts --omit=dev --no-audit --no-fund --save-exact -- \
-     "$state_dir/cli-package/moxt-ai-mobius-$cli_version.tgz"
-   )
-   ```
-
-   Packing runs the CLI's build hook. Stop on a build, pack, or install failure;
-   do not fall back to a published CLI that does not contain the checkout's code.
-   Do not publish the package or install it globally. This install belongs to the
-   disposable stack and is removed with it. Skip it in `initial` mode.
-
-6. For `paired` and `todolist`, launch the selected harness in its own native
+   Launch the selected harness in its own native
    session and ask it to run the following command from `<original-cwd>`.
    Give it the actual state directory, app workspace, and a private output-file
    path under the state directory. Its task is setup and pairing only, not app
@@ -171,7 +156,8 @@ Use `chat-local-full-dev` to:
    handoff link. Report only completion or a sanitized error. Do not build an app
    or change repository files.
 
-   Checkout prerequisites and the local CLI installation are already complete.
+   Checkout prerequisites are already complete. The setup command prepares the
+   local CLI automatically; do not build or install it separately.
    Do not run pnpm sync:submodules, git checkout, git switch, or git submodule
    update. Preserve the prepared checkout revision.
    ```
@@ -197,7 +183,7 @@ Use `chat-local-full-dev` to:
    verification agent's session. The setup bundle prefers the selected harness's
    environment variable, so the explicit argument must match it.
 
-7. Have the harness capture the setup result to the protected temporary file
+6. Have the harness capture the setup result to the protected temporary file
    rather than printing it into its response or the conversation. Require private
    filesystem permissions, wait for setup to finish, and read the result privately.
    Ask it to report only completion or sanitized failure, never the handoff URL.
