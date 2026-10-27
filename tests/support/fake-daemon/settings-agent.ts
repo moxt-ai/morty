@@ -146,21 +146,28 @@ export function createSettingsAgent<Definition>(
             .onRequest(acp.methods.agent.session.list, () => ({ sessions: [] }))
             .onRequest(acp.methods.agent.session.prompt, async (context) => {
                 const sessionId = context.params.sessionId;
+                const messageId = crypto.randomUUID();
+                const replyId = crypto.randomUUID();
                 configuration(sessionId);
                 const prompt = context.params.prompt.map((block) => (block.type === "text" ? block.text : "")).join("");
                 const history = histories.get(sessionId);
                 if (history === undefined) {
                     throw new Error("Unknown controlled settings history");
                 }
-                history.push({
-                    sessionUpdate: "user_message_chunk",
-                    messageId: crypto.randomUUID(),
-                    content: { type: "text", text: prompt },
-                });
+                for (const content of context.params.prompt) {
+                    const update: acp.SessionUpdate = { sessionUpdate: "user_message_chunk", content, messageId };
+                    history.push(update);
+                    const notification: acp.SessionNotification = { sessionId, update };
+                    if (onSessionUpdate === undefined) {
+                        await context.client.notify(acp.methods.client.session.update, notification);
+                    } else {
+                        await onSessionUpdate(notification);
+                    }
+                }
                 if (prompt !== "Remove settings") {
                     const update: acp.SessionUpdate = {
                         sessionUpdate: "agent_message_chunk",
-                        messageId: crypto.randomUUID(),
+                        messageId: replyId,
                         content: {
                             type: "text",
                             text:
@@ -182,7 +189,7 @@ export function createSettingsAgent<Definition>(
                     { sessionUpdate: "config_option_update", configOptions: [] },
                     {
                         sessionUpdate: "agent_message_chunk",
-                        messageId: crypto.randomUUID(),
+                        messageId: replyId,
                         content: { type: "text", text: "Settings removed" },
                     },
                 ];

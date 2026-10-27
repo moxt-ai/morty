@@ -37,6 +37,11 @@ test("Given text and two images in one user message, When the conversation reloa
     const prompt = "Keep these images together";
     await sendPrompt(app, composer, prompt);
     const sources = await app.waitForView(() => {
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((response) => response.textContent?.includes(`Codex turn 1: ${prompt}`)),
+        ).toBe(true);
         expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
         expect(getAllByRole(document.body, "article", { name: "Your message" })).toHaveLength(1);
         const message = getByRole(document.body, "article", { name: "Your message" });
@@ -75,7 +80,7 @@ test("Given text and two images in one user message, When the conversation reloa
         const images = getAllByRole(messages[0] ?? document.body, "img", { name: "Your attachment" });
         expect(images).toHaveLength(2);
         expect(images.every((image) => image.getAttribute("src")?.startsWith("blob:") === true)).toBe(true);
-        expect(queryByRole(messages[1] ?? document.body, "img", { name: "Your attachment" })).toBeNull();
+        expect(queryByRole(messages[1] ?? document.body, "img")).toBeNull();
         return images.map((image) => image.getAttribute("src"));
     });
     expect(await renderedImageBytes(reopenedSources)).toEqual(originalImages);

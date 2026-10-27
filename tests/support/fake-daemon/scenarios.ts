@@ -97,7 +97,7 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
         case "require agent authentication":
             throw RequestError.authRequired();
         case "fail this turn explicitly":
-            throw new Error("The controlled Agent rejected this turn.");
+            throw RequestError.internalError(undefined, "The controlled Agent rejected this turn.");
         case "draw a deployment diagram":
             return {
                 outcome: "hold",
