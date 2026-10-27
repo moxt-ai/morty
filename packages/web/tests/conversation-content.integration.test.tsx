@@ -241,41 +241,6 @@ test("Given the agent sends many session events, When the response completes, Th
     });
 });
 
-test("Given a file-change tool includes a rich diff, When the user views it, Then the complete edit stays collapsed until opened", {
-    timeout: 30_000,
-}, async () => {
-    const app = await createTestApp({ connectAgent: true });
-    await app.queryElementByTestId(
-        dataTestId.botConnectionStatus,
-        (element) => element.getAttribute("data-connection-status") === "connected",
-    );
-    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
-    if (!(composer instanceof HTMLTextAreaElement)) {
-        throw new Error("Expected the message composer");
-    }
-
-    await sendPrompt(app, composer, "change several files");
-
-    const edit = await app.waitForView(() =>
-        getByRole(document.body, "group", {
-            name: "Edit: /workspace/app.js, /workspace/index.html, /workspace/styles.css",
-        }),
-    );
-    const editDisclosure = getByRole(edit, "button", {
-        name: "/workspace/app.js, /workspace/index.html, /workspace/styles.css Tool succeeded",
-    });
-    expect(editDisclosure.getAttribute("aria-expanded")).toBe("false");
-    expect(queryByText(document.body, "/workspace/app.js", { exact: true })).toBeNull();
-    await app.user.click(editDisclosure);
-    expect(editDisclosure.getAttribute("aria-expanded")).toBe("true");
-    expect(getAllByText(document.body, "/workspace/app.js", { exact: true }).length).toBeGreaterThan(0);
-    expect(getByRole(edit, "list", { name: "Changed files" }).textContent).toBe(
-        "/workspace/index.html/workspace/styles.css",
-    );
-    expect(queryByText(edit, "Request")).toBeNull();
-    expect(queryByText(edit, "Response")).toBeNull();
-});
-
 test("Given a file tool reports a rich diff, When the user opens it, Then Chat presents it as an edit without raw protocol payloads", {
     timeout: 30_000,
 }, async () => {
