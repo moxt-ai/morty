@@ -127,6 +127,11 @@ export function acceptedTurn(turn: CurrentTurn): { readonly commandId: string; r
         : null;
 }
 
+/** The command this pane is submitting and the service has not yet accepted. */
+export function submittingCommandId(turn: CurrentTurn): string | null {
+    return turn.kind === "current" && turn.submission.kind === "submitting" ? turn.commandId : null;
+}
+
 /** Whether a reconnect that finds no running turn must end this one: only a submitted command can have ended. */
 export function awaitsService(turn: CurrentTurn): boolean {
     return turn.kind === "current" && turn.submission.kind !== "unconfirmed";
