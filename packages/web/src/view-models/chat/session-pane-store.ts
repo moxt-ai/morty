@@ -674,8 +674,9 @@ export function createSessionPaneModel(options: {
                 hasOlderHistory: pagination !== null,
                 historyRevision: projection.revision,
                 messages,
-                // Retire the creation preview when the first session event arrives.
-                pendingInitialMessage: input.kind === "live-event" ? null : get().pendingInitialMessage,
+                // Lifecycle bookkeeping does not replace the preview; wait for Agent output.
+                pendingInitialMessage:
+                    input.kind === "live-event" && input.event.type === "acp" ? null : get().pendingInitialMessage,
             });
             for (const effect of result.effects) {
                 if (effect.kind !== "adopted") {

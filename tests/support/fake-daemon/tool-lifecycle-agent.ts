@@ -68,7 +68,7 @@ export function createToolLifecycleAgent() {
                     messageId,
                     content,
                 }));
-                if (prompt === "hold delayed initial message") {
+                if (prompt === "hold delayed initial message" || prompt === "hold before first acp") {
                     delayedUserMessages.set(sessionId, userUpdates);
                 } else {
                     for (const update of userUpdates) {
@@ -156,6 +156,9 @@ export function createToolLifecycleAgent() {
                         ["Unfinished verification", "in_progress"],
                         ["Pending verification", "pending"],
                     ] satisfies readonly (readonly [string, acp.ToolCallStatus])[]) {
+                        if (prompt === "hold before first acp") {
+                            break;
+                        }
                         const event: acp.SessionNotification = {
                             sessionId,
                             update: {

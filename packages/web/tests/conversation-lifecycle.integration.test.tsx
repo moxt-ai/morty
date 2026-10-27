@@ -56,7 +56,7 @@ test("Given a new conversation, When I send its first prompt, Then its preview a
     );
 });
 
-test("Given a loaded session whose initial user chunk is delayed, When its first event arrives and I steer, Then the preview disappears and native chunks appear without duplicates", async () => {
+test("Given a loaded session whose initial user chunk is delayed, When its first ACP event arrives and I steer, Then the preview disappears and native chunks appear without duplicates", async () => {
     const app = await createTestApp({
         connectAgent: true,
         agent: { id: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
@@ -82,6 +82,35 @@ test("Given a loaded session whose initial user chunk is delayed, When its first
         expect(app.optionalElementByTestId(dataTestId.sessionStatus)).not.toBeNull();
     });
     await app.user.click(getByRole(document.body, "button", { name: "Stop agent output" }));
+});
+
+test("Given lifecycle events arrive before ACP output, When I queue a follow-up, Then the optimistic prompt remains until the first ACP event", async () => {
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: { id: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
+        page: { kind: "bootstrap", identity: true },
+    });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold before first acp");
+    await app.waitForView(() => getByRole(document.body, "button", { name: "Stop agent output" }));
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Release ACP output");
+    const steer = await app.waitForView(() =>
+        getByRole(document.body, "button", { name: "Steer queued message: Release ACP output" }),
+    );
+    expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+        "hold before first acp",
+    ]);
+    await app.user.click(steer);
+    await app.waitForView(() => {
+        expect(getByLabelText(document.body, "Tool: Steered verification")).toBeDefined();
+        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+            "hold before first acp",
+            "Release ACP output",
+        ]);
+    });
+    await app.user.click(getByRole(document.body, "button", { name: "Stop agent output" }));
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.agentReplyStatus).textContent).toBe("Turn stopped."),
+    );
 });
 
 test("Given a configuration request is in flight, When the chat view detaches and re-attaches, Then the reconnected composer accepts and sends a new prompt", {
