@@ -19,14 +19,16 @@ import {
 import { readLastHarnessPreference, saveLastHarnessPreference } from "@/services/chat/last-harness-preference";
 import { pathDirectoryId } from "@/services/chat/workspace-directory-reference";
 import { isRuntimeConnectionFailure } from "@/services/management/management-api";
-import { formatError, runtimeDisconnectedMessage } from "../format-error.ts";
+import { formatError } from "../format-error.ts";
 
 type DraftSettingsState =
     | { readonly kind: "loading" }
+    | { readonly kind: "waiting-agent" }
+    | { readonly kind: "waiting-runtime" }
     | { readonly kind: "failed"; readonly message: string }
     | {
           readonly kind: "switching";
-          readonly selectedHarness: string;
+          readonly agentRef: string;
       }
     | {
           readonly kind: "refreshing";
@@ -85,7 +87,6 @@ export interface DraftControlsStore {
     readonly closeCwd: () => void;
     readonly forgetRecentCwd: (directoryId: string) => void;
     readonly load: (signal: AbortSignal) => Promise<void>;
-    readonly waitsForRuntime: () => boolean;
     /**
      * The Runtime's Agents changed. A draft whose Agent the Runtime no longer offers loads again, which settles on an
      * offered Agent and drops the settings for the removed one.
@@ -184,22 +185,17 @@ export const createDraftControlsStore = (
                 },
             };
         };
-        // Set when the draft could not load from the Runtime as the page knows it: no connected Agent yet, or the
-        // Runtime cannot be reached. `runtimeChanged` loads once the Runtime is online.
-        let waitingForRuntime = false;
         /**
          * The draft cannot load while the Runtime is unreachable, whether the configuration already says so or a
          * read found out. It says why and offers Retry, and loads by itself once the Runtime is back.
          */
         const awaitRuntime = (): void => {
-            waitingForRuntime = true;
-            set({ settings: { kind: "failed", message: runtimeDisconnectedMessage } });
+            set({ settings: { kind: "waiting-runtime" } });
             onWaitingForRuntime();
         };
         /** Waits for the Runtime to offer an Agent, settling any switch in progress so `runtimeChanged` can resume. */
         const awaitAgent = (): void => {
-            waitingForRuntime = true;
-            set({ settings: { kind: "loading" } });
+            set({ settings: { kind: "waiting-agent" } });
         };
         const settleFailure = (cause: unknown, message: string): void => {
             if (isRuntimeConnectionFailure(cause)) {
@@ -207,18 +203,6 @@ export const createDraftControlsStore = (
                 return;
             }
             set({ settings: { kind: "failed", message: formatError(cause, message) } });
-        };
-        // Set while an explicit harness choice is being loaded. The load selects that harness while the Runtime offers
-        // it, and otherwise falls back like any other load.
-        let pendingHarness: string | null = null;
-        // The harness that was applied before an in-flight switch; restored if the switch never lands.
-        let revertingHarnessPreference: string | null = null;
-        let harnessSwitchSawOffline = false;
-        const revertHarnessPreference = (): void => {
-            if (revertingHarnessPreference !== null) {
-                saveLastHarnessPreference(botId, revertingHarnessPreference);
-                revertingHarnessPreference = null;
-            }
         };
         const rememberAgentSettings = (settings: ReadyDraftSettings): void => {
             saveLastAgentSettings(botId, settings.selectedAgent.agentRef, settings.options);
@@ -360,10 +344,9 @@ export const createDraftControlsStore = (
             if (currentSettings.kind !== "switching") {
                 set({ settings: { kind: "loading" } });
             }
-            waitingForRuntime = false;
             try {
-                const requestedHarness = pendingHarness ?? readLastHarnessPreference(botId);
-                const refreshSelectedAgent = pendingHarness !== null;
+                const switching = currentSettings.kind === "switching";
+                const requestedHarness = switching ? currentSettings.agentRef : readLastHarnessPreference(botId);
                 const configuration = runtimeConfiguration();
                 if (configuration?.runtime.online === false) {
                     awaitRuntime();
@@ -372,10 +355,8 @@ export const createDraftControlsStore = (
                 const agents = configuration === null ? [] : connectedChatRuntimeAgents(configuration.runtime);
                 // A requested harness the Runtime does not offer must not block the draft; the first connected Agent
                 // stands in until the user chooses again.
-                const selected =
-                    (requestedHarness === null
-                        ? undefined
-                        : agents.find((agent) => agent.agentRef === requestedHarness)) ?? agents[0];
+                const requestedAgent = agents.find((agent) => agent.agentRef === requestedHarness);
+                const selected = requestedAgent ?? agents[0];
                 if (selected === undefined) {
                     // The Runtime the page follows offers no Agent to load yet.
                     awaitAgent();
@@ -384,7 +365,7 @@ export const createDraftControlsStore = (
                 const [result, defaultCwd] = await Promise.all([
                     // A deliberate Agent switch must be acknowledged by the live Runtime, not satisfied by settings
                     // cached before the user made the choice.
-                    readAgentSettings(selected.agentRef, refreshSelectedAgent, operation),
+                    readAgentSettings(selected.agentRef, switching, operation),
                     requests.directory(botId, "default", operation.signal),
                 ]);
                 operation.signal.throwIfAborted();
@@ -405,18 +386,12 @@ export const createDraftControlsStore = (
                 // that never lands must not become the remembered harness.
                 const live = runtimeConfiguration();
                 if (live === null || live.runtime.online === false) {
-                    pendingHarness = null;
-                    harnessSwitchSawOffline = true;
-                    revertHarnessPreference();
                     awaitRuntime();
                     return;
                 }
-                applyAgentSettings(
-                    selected,
-                    cwd,
-                    result.options,
-                    requestedHarness === selected.agentRef && pendingHarness === null,
-                );
+                // Applying the settings and remembering the choice settle together, without an asynchronous gap.
+                // A failed, cancelled, superseded or offline switch never changes the remembered preference.
+                applyAgentSettings(selected, cwd, result.options, requestedAgent !== undefined);
             } catch (cause) {
                 if (!lifetimeSignal.aborted && operation.current()) {
                     settleFailure(cause, "Harness settings are unavailable.");
@@ -469,7 +444,6 @@ export const createDraftControlsStore = (
                 set({ recentCwds: forgetRecentCwdPreference(botId, directoryId) });
             },
             load,
-            waitsForRuntime: () => waitingForRuntime && get().settings.kind === "failed",
             runtimeChanged: async (configuration, signal) => {
                 // Agent settings follow the Runtime configuration: a different one drops those read before it.
                 const runtime = JSON.stringify(configuration.runtime);
@@ -481,20 +455,18 @@ export const createDraftControlsStore = (
                 // An offline Runtime offers nothing for now, which says nothing about whether the Agent was removed.
                 // A harness switch still in flight has to stop here, or its late response would be remembered.
                 if (!configuration.runtime.online) {
-                    if (pendingHarness !== null || get().settings.kind === "switching") {
+                    if (get().settings.kind === "switching") {
                         settingsOperation?.abort(new Error("The Runtime went offline."));
-                        pendingHarness = null;
-                        harnessSwitchSawOffline = true;
-                        revertHarnessPreference();
+                        settingsOperation = null;
                         awaitRuntime();
                     }
                     return;
                 }
-                if (!changed && !waitingForRuntime) {
+                const settings = get().settings;
+                if (!changed && settings.kind !== "waiting-runtime" && settings.kind !== "waiting-agent") {
                     return;
                 }
                 // Reconcile with this configuration. The new operation supersedes any read still in flight.
-                const settings = get().settings;
                 const selectedAgent =
                     settings.kind === "ready" || settings.kind === "refreshing" ? settings.selectedAgent : null;
                 const offered =
@@ -631,45 +603,8 @@ export const createDraftControlsStore = (
                 if (agent === undefined) {
                     return;
                 }
-                revertingHarnessPreference = settings.selectedAgent.agentRef;
-                harnessSwitchSawOffline = false;
-                pendingHarness = agent.agentRef;
-                set({ settings: { kind: "switching", selectedHarness: value } });
-                // Let an immediate Runtime drop run before settings reads start.
-                await Promise.resolve();
-                try {
-                    await load(signal);
-                    // A Runtime drop can land after settings apply but before the switch is remembered.
-                    await Promise.resolve();
-                    if (!signal.aborted && !harnessSwitchSawOffline) {
-                        const current = get().settings;
-                        const configuration = runtimeConfiguration();
-                        if (
-                            current.kind === "ready" &&
-                            current.selectedAgent.agentRef === agent.agentRef &&
-                            configuration?.runtime.online === true
-                        ) {
-                            saveLastHarnessPreference(botId, agent.agentRef);
-                            revertingHarnessPreference = null;
-                        }
-                    }
-                } catch (cause) {
-                    if (!signal.aborted) {
-                        set({
-                            settings: {
-                                kind: "failed",
-                                message: formatError(cause, "The harness could not be selected."),
-                            },
-                        });
-                    }
-                } finally {
-                    if (pendingHarness === agent.agentRef) {
-                        pendingHarness = null;
-                    }
-                    if (harnessSwitchSawOffline) {
-                        revertHarnessPreference();
-                    }
-                }
+                set({ settings: { kind: "switching", agentRef: agent.agentRef } });
+                await load(signal);
             },
             selectOption: (configId, value) => {
                 const settings = get().settings;

@@ -348,7 +348,7 @@ export function createChatWorkspace(options: {
         return listed === "failed" || listed === "stale";
     };
     const draftWaitsForRuntime = (): boolean =>
-        home.getState().selection.kind === "draft" && draftControls.getState().waitsForRuntime();
+        home.getState().selection.kind === "draft" && draftControls.getState().settings.kind === "waiting-runtime";
     /**
      * Retries everything the page reads through the Runtime that it could not read while the Runtime was unreachable:
      * the home view, the session list, and the stream that follows their statuses. Each retries only what it lost.

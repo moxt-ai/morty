@@ -79,7 +79,7 @@ function DraftLandingDirectory({
     readonly signal: AbortSignal;
     readonly viewModel: DraftControlsStore;
 }) {
-    if (settingsKind === "loading") {
+    if (settingsKind === "loading" || settingsKind === "waiting-agent") {
         return (
             <div
                 aria-hidden="true"
@@ -162,7 +162,9 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
             : null;
     const newSessionHarness = activeHarnessMark(model, draftControls.settings);
     const newSessionHarnessLoading =
-        draftControls.settings.kind === "loading" || draftControls.settings.kind === "switching";
+        draftControls.settings.kind === "loading" ||
+        draftControls.settings.kind === "waiting-agent" ||
+        draftControls.settings.kind === "switching";
     const showNewSessionTitle = model.selection.kind === "draft";
     const activeConversationId = selectedConversationId(model.selection);
     const reportButton = (

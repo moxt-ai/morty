@@ -7,6 +7,7 @@ import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.t
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { harnessOptions } from "../../view-models/chat/native-session-agents.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
+import { runtimeDisconnectedMessage } from "../../view-models/format-error.ts";
 
 function DraftChatControlsSkeleton() {
     return (
@@ -35,14 +36,15 @@ export function DraftChatControls({
     const retry = () => {
         workspace.retryDraftControls();
     };
-    if (settings.kind === "loading") {
+    if (settings.kind === "loading" || settings.kind === "waiting-agent") {
         return <DraftChatControlsSkeleton />;
     }
-    if (settings.kind === "failed") {
+    if (settings.kind === "failed" || settings.kind === "waiting-runtime") {
+        const message = settings.kind === "waiting-runtime" ? runtimeDisconnectedMessage : settings.message;
         return (
             <div className="flex min-w-0 items-center gap-1">
                 <span className="sr-only" role="alert">
-                    {settings.message}
+                    {message}
                 </span>
                 <button
                     className="flex h-9 min-w-0 max-w-48 items-center gap-1.5 rounded-lg px-2 text-[13px] text-destructive outline-none transition-colors hover:bg-destructive/8 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-destructive/30 motion-reduce:transition-none"
@@ -66,7 +68,7 @@ export function DraftChatControls({
                         </Tooltip.Trigger>
                         <Tooltip.Portal>
                             <MortyTooltipContent className="max-w-80 px-3 py-2 leading-5" side="top" sideOffset={8}>
-                                {settings.message}
+                                {message}
                                 <Tooltip.Arrow className="fill-foreground" />
                             </MortyTooltipContent>
                         </Tooltip.Portal>
@@ -78,7 +80,7 @@ export function DraftChatControls({
     const switching = settings.kind === "switching";
     const settingsLoading = switching || settings.kind === "refreshing";
     const selectedHarness = switching
-        ? settings.selectedHarness
+        ? `${runtimeConfiguration?.runtime.runtimeId ?? ""}:${settings.agentRef}`
         : `${settings.selectedAgent.runtimeId}:${settings.selectedAgent.agentRef}`;
     const options = settings.kind === "ready" ? settings.options : [];
     const model = options.find((option) => option.category === "model" && option.type !== "boolean");
