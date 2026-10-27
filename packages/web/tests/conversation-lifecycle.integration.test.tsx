@@ -5,7 +5,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { openAgentModelPicker, sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given a new conversation, When I send its first prompt, Then it stays visible while creating the session without a history skeleton or panel remount", {
+test("Given a new conversation, When I send its first prompt, Then its preview and native message render without a history skeleton or panel remount", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -13,12 +13,10 @@ test("Given a new conversation, When I send its first prompt, Then it stays visi
     const conversationPanel = getByRole(document.body, "region", { name: "Conversation" });
     const loadingMessages: Element[] = [];
     let promptWasVisible = false;
-    let promptDisappeared = false;
     const observer = new MutationObserver((records) => {
         const promptVisible = app
             .elementsByTestId(dataTestId.userMessage)
             .some((element) => element.textContent === "hold after first delta");
-        promptDisappeared ||= promptWasVisible && !promptVisible;
         promptWasVisible ||= promptVisible;
         for (const record of records) {
             for (const node of record.addedNodes) {
@@ -48,7 +46,6 @@ test("Given a new conversation, When I send its first prompt, Then it stays visi
     });
     expect(loadingMessages).toHaveLength(0);
     expect(promptWasVisible).toBe(true);
-    expect(promptDisappeared).toBe(false);
     expect(getByRole(document.body, "region", { name: "Conversation" })).toBe(conversationPanel);
     observer.disconnect();
     await app.user.click(
@@ -59,7 +56,7 @@ test("Given a new conversation, When I send its first prompt, Then it stays visi
     );
 });
 
-test("Given a loaded session whose initial user chunk is delayed, When I steer before it arrives, Then the optimistic message stays until the native chunk replaces it without a duplicate", async () => {
+test("Given a loaded session whose initial user chunk is delayed, When its first event arrives and I steer, Then the preview disappears and native chunks appear without duplicates", async () => {
     const app = await createTestApp({
         connectAgent: true,
         agent: { id: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
@@ -68,9 +65,7 @@ test("Given a loaded session whose initial user chunk is delayed, When I steer b
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold delayed initial message");
     await app.waitForView(() => {
         expect(getByRole(document.body, "button", { name: "Stop agent output" })).toBeDefined();
-        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
-            "hold delayed initial message",
-        ]);
+        expect(app.elementsByTestId(dataTestId.userMessage)).toHaveLength(0);
         expect(app.optionalElementByTestId(dataTestId.sessionStatus)).not.toBeNull();
     });
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "New steering requirement");
@@ -82,6 +77,7 @@ test("Given a loaded session whose initial user chunk is delayed, When I steer b
         expect(getByLabelText(document.body, "Tool: Steered verification")).toBeDefined();
         expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
             "hold delayed initial message",
+            "New steering requirement",
         ]);
         expect(app.optionalElementByTestId(dataTestId.sessionStatus)).not.toBeNull();
     });

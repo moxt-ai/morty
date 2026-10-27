@@ -56,7 +56,7 @@ import { createSessionMessageQueueStore, type SessionMessageQueueStore } from ".
 import type { ElicitationInteractionResponse, PermissionInteractionResponse } from "./session-pane-types.ts";
 import {
     createSessionMessageReduction,
-    type SessionMessage,
+    type SessionExecutionMessage,
     sessionEventCommandIds,
     sessionReductionMessages,
 } from "./session-presentation.ts";
@@ -109,7 +109,7 @@ export interface SessionPaneStore {
     readonly connection: SessionConnection;
     readonly title: string;
     readonly titleEdit: TitleEdit;
-    readonly messages: readonly SessionMessage[];
+    readonly messages: readonly SessionExecutionMessage[];
     readonly pendingInitialMessage: QueuedDraftMessage | null;
     readonly historyLoading: boolean;
     readonly historyRevision: number;
@@ -502,7 +502,7 @@ export function createSessionPaneModel(options: {
         },
     });
     const lastSentMessageEntry = sessionLastSentMessageEntry(sessionId);
-    const deriveTimeline = (): { readonly messages: readonly SessionMessage[] } => ({
+    const deriveTimeline = (): { readonly messages: readonly SessionExecutionMessage[] } => ({
         messages: sessionProjectionMessages(projection),
     });
     const tasks = createSessionTaskControlsStore({
@@ -689,10 +689,8 @@ export function createSessionPaneModel(options: {
                 hasOlderHistory: pagination !== null,
                 historyRevision: projection.revision,
                 messages,
-                // Replace the creation preview atomically with the first harness-owned user message.
-                pendingInitialMessage: messages.some((message) => message.role === "user")
-                    ? null
-                    : get().pendingInitialMessage,
+                // Retire the creation preview when the first session event arrives.
+                pendingInitialMessage: input.kind === "live-event" ? null : get().pendingInitialMessage,
             });
             for (const effect of result.effects) {
                 if (effect.kind !== "adopted") {

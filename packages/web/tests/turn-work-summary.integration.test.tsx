@@ -79,6 +79,7 @@ test("Given the agent has answered part of a turn, When the user steers it and t
     await app.user.click(getByLabelText(queued, `Steer queued message: ${instruction}`));
 
     await app.waitForView(() => expect(queryByLabelText(document.body, "Tool: Steered verification")).not.toBeNull());
+    expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toContain(instruction);
     expect(queryByLabelText(document.body, "Tool: Completed verification")).not.toBeNull();
     expect(queryByRole(document.body, "button", { name: /^\d+ steps?/ })).toBeNull();
 

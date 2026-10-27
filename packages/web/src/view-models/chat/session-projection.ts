@@ -3,7 +3,7 @@ import {
     appendSessionMessageEvent,
     createSessionMessageReduction,
     prependSessionMessageEvents,
-    type SessionMessage,
+    type SessionExecutionMessage,
     type SessionMessageReduction,
     sessionReductionExecutionOwner,
     sessionReductionMessages,
@@ -280,7 +280,7 @@ export function sessionProjectionExecutionOwner(state: SessionProjection, comman
     return state.kind === "established" ? sessionReductionExecutionOwner(state.reduction, commandId) : null;
 }
 
-export function sessionProjectionMessages(state: SessionProjection): readonly SessionMessage[] {
+export function sessionProjectionMessages(state: SessionProjection): readonly SessionExecutionMessage[] {
     return state.kind === "established" ? sessionReductionMessages(state.reduction) : [];
 }
 

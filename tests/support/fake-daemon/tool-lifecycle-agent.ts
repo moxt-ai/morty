@@ -221,6 +221,27 @@ export function createToolLifecycleAgent() {
                         await onSessionUpdate(event);
                     }
                     delayedUserMessages.delete(params.sessionId);
+                    const messageId = crypto.randomUUID();
+                    const prompt: unknown = Reflect.get(params, "prompt");
+                    if (!Array.isArray(prompt)) {
+                        throw new Error("Invalid steering content");
+                    }
+                    for (const block of prompt) {
+                        if (typeof block !== "object" || block === null || Reflect.get(block, "type") !== "text") {
+                            throw new Error("Invalid steering content");
+                        }
+                        const text: unknown = Reflect.get(block, "text");
+                        if (typeof text !== "string") {
+                            throw new Error("Invalid steering text");
+                        }
+                        const content: acp.ContentBlock = { type: "text", text };
+                        const event: acp.SessionNotification = {
+                            sessionId: params.sessionId,
+                            update: { sessionUpdate: "user_message_chunk", messageId, content },
+                        };
+                        history.push(event);
+                        await onSessionUpdate(event);
+                    }
                     for (let index = 0; index < count; index += 1) {
                         const event: acp.SessionNotification = {
                             sessionId: params.sessionId,

@@ -73,6 +73,12 @@ export interface SessionTimeline {
     readonly messages: readonly SessionMessage[];
 }
 
+export type SessionExecutionMessage = SessionMessage & {
+    readonly executionContext:
+        | { readonly kind: "unmanaged" }
+        | { readonly kind: "managed"; readonly commandId: string };
+};
+
 function exhaustive(value: never): never {
     throw new Error(`Unsupported Session Event Log payload: ${JSON.stringify(value)}`);
 }
@@ -759,8 +765,8 @@ export function sessionReductionExecutionOwner(reduction: SessionMessageReductio
     return owner?.kind === "execution-owner" ? owner.executionCommandId : null;
 }
 
-export function sessionReductionMessages(reduction: SessionMessageReduction): readonly SessionMessage[] {
-    const messages: SessionMessage[] = [];
+export function sessionReductionMessages(reduction: SessionMessageReduction): readonly SessionExecutionMessage[] {
+    const messages: SessionExecutionMessage[] = [];
     const unfinished = new Map<string | null, number[]>();
     const executionOwners = new Map<string, string>();
     let turn: { readonly kind: "unknown" } | { readonly kind: "active" | "terminal"; readonly commandId: string } = {
@@ -829,7 +835,11 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
                 unfinished.set(commandId, indexes);
             }
         }
-        messages.push(message);
+        messages.push({
+            ...message,
+            executionContext:
+                turn.kind === "unknown" ? { kind: "unmanaged" } : { kind: "managed", commandId: turn.commandId },
+        });
         const event = message.firstEvent;
         if (event.type !== "lifecycle-metadata") {
             continue;
@@ -909,7 +919,7 @@ function terminalExecutionState(message: SessionMessage): SessionExecutionState 
 
 /** Returns, for each message, the state of the execution that owns it. */
 export function sessionExecutionStates(
-    messages: readonly SessionMessage[],
+    messages: readonly SessionExecutionMessage[],
     sessionWorking: boolean,
 ): readonly SessionExecutionState[] {
     interface Span {
@@ -919,16 +929,28 @@ export function sessionExecutionStates(
     }
     const spans: Span[] = [];
     let current: Span = { start: 0, managed: false, terminal: null };
+    let executionCommandId: string | null = null;
     for (const [index, message] of messages.entries()) {
+        const context = message.executionContext;
+        if (context.kind === "managed") {
+            if (executionCommandId !== null && executionCommandId !== context.commandId) {
+                spans.push(current);
+                current = { start: index, managed: true, terminal: null };
+            }
+            executionCommandId = context.commandId;
+            current.managed = true;
+        }
         if (index > 0 && message.role === "user") {
             const starts =
-                message.execution === "starts" ||
-                // An Agent-reported user message cannot interrupt an execution Morty
-                // is still waiting on; it may be the Agent echoing a steering message.
-                (message.execution === "unknown" && !(current.managed && current.terminal === null));
+                context.kind === "unmanaged" &&
+                (message.execution === "starts" ||
+                    // An Agent-reported user message cannot interrupt an execution Morty
+                    // is still waiting on; it may be the Agent echoing a steering message.
+                    (message.execution === "unknown" && !(current.managed && current.terminal === null)));
             if (starts) {
                 spans.push(current);
                 current = { start: index, managed: false, terminal: null };
+                executionCommandId = null;
             }
         }
         if (message.role === "user" && message.execution !== "unknown") {
