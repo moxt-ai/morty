@@ -181,6 +181,25 @@ class RuntimePreflightError extends Error {
     });
 }
 
+/** `mobius` exits with EX_CONFIG (78) when MOBIUS_STATE_DIRECTORY names another root's installation data. */
+const MOBIUS_EXIT_STATE_ROOT_INVALID = 78;
+
+/** Mobius refused this shell's state root; setup must not continue against a state it cannot see. */
+class MobiusStateRootError extends Error {
+    readonly code = "MOBIUS_STATE_ROOT_INVALID";
+    readonly logPath: string;
+    readonly nextStep =
+        "This shell's MOBIUS_STATE_DIRECTORY names Mobius installation data that an earlier Mobius Runtime passed to this agent, not a state root. Rerun setup with MOBIUS_STATE_DIRECTORY set to the state root that the Runtime log names. Setup changed nothing; existing Morty links keep working.";
+
+    constructor(logPath: string) {
+        super(`Mobius refused this shell's state root. See ${logPath}.`);
+        this.name = "MobiusStateRootError";
+        this.logPath = logPath;
+    }
+
+    readonly diagnostic = () => ({ logPath: this.logPath, nextStep: this.nextStep });
+}
+
 /** A failure the Morty service reported with its own error code. */
 class RemoteError extends Error {
     constructor(message: string) {
@@ -798,6 +817,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             if (typeof code !== "number") {
                 fail("INVALID_RUNTIME_EXIT");
             }
+            if (code === MOBIUS_EXIT_STATE_ROOT_INVALID) {
+                throw new MobiusStateRootError(logPath);
+            }
             if (code !== 0) {
                 throw new RuntimeStartError({ kind: "exit", exitCode: code }, logPath);
             }
@@ -826,7 +848,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 }
             }
             operation.throwIfAborted();
-            if (errorCode(cause) === "RUNTIME_NOT_INSTALLED") {
+            if (errorCode(cause) === "RUNTIME_NOT_INSTALLED" || cause instanceof MobiusStateRootError) {
                 throw cause;
             }
             const code = errorCode(cause);
@@ -1435,6 +1457,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             }
         } catch (cause) {
             signal.throwIfAborted();
+            // The installation is fine; the shell names the wrong state root.
+            if (cause instanceof MobiusStateRootError) {
+                throw cause;
+            }
             throw new RuntimePreflightError(
                 "The local Runtime failed its startup check. No remote identity or pairing was created by this run.",
                 cause,
@@ -1493,7 +1519,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                           ? "TIMEOUT"
                           : "SETUP_FAILED",
                 cause: serializeErrorCause(cause),
-                ...(cause instanceof RuntimeStartError || cause instanceof RuntimePreflightError
+                ...(cause instanceof RuntimeStartError ||
+                cause instanceof RuntimePreflightError ||
+                cause instanceof MobiusStateRootError
                     ? { runtime: cause.diagnostic() }
                     : {}),
                 ...(cause instanceof AgentBindingError ? { binding: cause.diagnostic() } : {}),
