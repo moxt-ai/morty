@@ -70,7 +70,7 @@ test("Given a connected computer on mobile, When the user views the conversation
 
         await app.user.click(getByRole(header, "button", { name: "Open navigation" }));
         const computers = await app.waitForView(() => getByRole(document.body, "navigation", { name: "Computers" }));
-        expect(computers.textContent).toContain("Controlled Agent Runtime");
+        await app.waitForView(() => expect(computers.textContent).toContain("Controlled Agent Runtime"));
     } finally {
         if (app !== null) {
             await app.close();
