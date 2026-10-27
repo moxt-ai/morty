@@ -132,6 +132,21 @@ test("Given setup replaced this computer's Project, When an agent follows the se
     expect(document).toContain("links and browsers from this computer's earlier Morty setup stopped working");
 });
 
+test("Given a missing saved connection, When an agent follows setup instructions, Then it asks before replacing and reports revoked or uncertain access even on failure", async () => {
+    const response = await worker.fetch(new Request("https://preview.example/setup.md"), {
+        APP_ORIGIN: "https://chat.example",
+    });
+    const document = (await response.text()).replaceAll("\n", " ");
+
+    expect(document).toContain("PROJECT_REPLACEMENT_REQUIRED");
+    expect(document).toContain("Merely asking to run setup or reconnect is not approval.");
+    expect(document).toContain("--replace-project <projectId>");
+    expect(document).toContain("Do not retry with this option automatically");
+    expect(document).toContain("Do not wait for ready to report this access change.");
+    expect(document).toContain("error.replacementAccess.message");
+    expect(document).toContain("never say the old links are still valid");
+});
+
 test("Given the setup document, When an agent follows it, Then it neither passes nor asks the user for a session ID", async () => {
     const response = await worker.fetch(new Request("https://preview.example/setup.md"), {
         APP_ORIGIN: "https://chat.example",

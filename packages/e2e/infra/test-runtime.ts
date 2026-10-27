@@ -164,6 +164,7 @@ export async function createTestRuntime(
                 sessionId?: string,
                 maximumWaitMilliseconds?: number,
                 workspace?: string,
+                replaceProject?: string,
             ) => {
                 const url = new URL(instructionUrl, stack.chatOrigin);
                 if (sessionId !== undefined && agentId !== "claude") {
@@ -191,6 +192,7 @@ export async function createTestRuntime(
                         },
                     },
                     runtime,
+                    ...(replaceProject === undefined ? {} : { replaceProject }),
                     // A Claude Code shell exposes its current session; the controlled peer stands in for Claude Code.
                     agentEnvironment: sessionId === undefined ? {} : { CLAUDE_CODE_SESSION_ID: sessionId },
                 });

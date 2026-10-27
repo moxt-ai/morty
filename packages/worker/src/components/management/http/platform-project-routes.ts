@@ -49,24 +49,51 @@ export function createPlatformProjectRoutes() {
                 case "local":
                     break;
             }
-            const project = await management.replaceProject(local.userId, signal);
-            const response = await projectObject(context.env.config.bindings, project.projectId).fetch(
-                new Request("https://project.internal/__project/bootstrap", {
-                    body: JSON.stringify({ project, userId: local.userId }),
-                    headers: { "content-type": "application/json" },
-                    method: "POST",
-                    signal,
-                }),
-            );
-            signal.throwIfAborted();
-            if (!response.ok) {
+            // This optional correlation ID is untrusted diagnostics, never authorization.
+            const setupRunId = v.safeParse(v.pipe(v.string(), v.uuid()), context.req.header("x-morty-setup-run-id"));
+            const audit = {
+                event: "project_replacement",
+                previousProjectId: context.env.config.bindings.CHAT_PROJECT_ID,
+                setupRunId: setupRunId.success ? setupRunId.output : null,
+            };
+            context.env.logger.info({ ...audit, stage: "requested" }, "Project replacement requested");
+            try {
+                const project = await management.replaceProject(local.userId, signal);
+                const response = await projectObject(context.env.config.bindings, project.projectId).fetch(
+                    new Request("https://project.internal/__project/bootstrap", {
+                        body: JSON.stringify({ project, userId: local.userId }),
+                        headers: { "content-type": "application/json" },
+                        method: "POST",
+                        signal,
+                    }),
+                );
+                signal.throwIfAborted();
+                if (!response.ok) {
+                    context.env.logger.warn(
+                        { ...audit, projectId: project.projectId, stage: "bootstrap_failed", status: response.status },
+                        "Project replacement did not reach access revocation",
+                    );
+                    return response;
+                }
+                // Keep the local identity until setup has saved the successor, so a lost reply can be retried.
+                const revoked = await authentication.revokeAllAccess(local.token, signal);
+                if (revoked.kind !== "revoked") {
+                    throw new ManagementError("UNAUTHENTICATED", "Local identity is no longer available.", 401);
+                }
+                context.env.logger.info(
+                    { ...audit, projectId: project.projectId, stage: "access_revoked" },
+                    "Earlier shared access revoked by Project replacement",
+                );
                 return response;
+            } catch (cause) {
+                // Do not log request bodies, credentials, or arbitrary remote error messages. A failed response
+                // cannot prove whether a request already changed access, so leave the outcome unconfirmed.
+                context.env.logger.warn(
+                    { ...audit, stage: "outcome_unconfirmed" },
+                    "Project replacement did not return a confirmed result",
+                );
+                throw cause;
             }
-            // The successor holds the user's access from now on, so nothing shared from this Project opens it any
-            // more. The local identity stays until setup has saved the successor's and ends it itself: a reply lost on
-            // the way can be asked for again.
-            await authentication.revokeAllAccess(local.token, signal);
-            return response;
         })
         .post(
             "/project",

@@ -113,6 +113,41 @@ interface SetupOptions {
     readonly cwd: string;
     readonly harness: string;
     readonly sessionId: string;
+    /** Explicit local approval applies only to this Project, never to a later replacement. */
+    readonly replaceProject: string | null;
+}
+
+type ReplacementAccess =
+    | { readonly kind: "unchanged" }
+    | { readonly kind: "unknown"; readonly previousProjectId: string }
+    | { readonly kind: "revoked"; readonly previousProjectId: string | null; readonly projectId: string };
+
+type ReplacementReason = "managed_runtime_missing" | "replacement_result_unknown";
+
+class ProjectReplacementRequiredError extends Error {
+    readonly code = "PROJECT_REPLACEMENT_REQUIRED";
+    readonly projectId: string;
+    readonly reason: ReplacementReason;
+
+    constructor(projectId: string, reason: ReplacementReason) {
+        super(
+            reason === "managed_runtime_missing"
+                ? "The saved connection is missing. Replacing it will revoke earlier sharing links and browser access."
+                : "An earlier replacement has an unknown result. Continue only with approval for that same Project.",
+        );
+        this.name = "ProjectReplacementRequiredError";
+        this.projectId = projectId;
+        this.reason = reason;
+    }
+
+    readonly diagnostic = () => ({
+        projectId: this.projectId,
+        reason: this.reason,
+        nextStep:
+            "Explain the access impact and ask the user whether to continue, unless they already explicitly approved this same replacement. " +
+            `Only after explicit approval, rerun the same setup command with --replace-project ${this.projectId}. ` +
+            "Do not remove local state or create another identity to bypass this confirmation.",
+    });
 }
 
 interface RevokeAllAccessOptions {
@@ -348,7 +383,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         },
     };
     const deadline = host.clock?.deadline ?? ((milliseconds: number) => AbortSignal.timeout(milliseconds));
-    const emit = (value: Readonly<Record<string, unknown>>) => host.emit({ time: clock.now().toISOString(), ...value });
+    const runId = crypto.randomUUID();
+    const emit = (value: Readonly<Record<string, unknown>>) =>
+        host.emit({ time: clock.now().toISOString(), runId, ...value });
+    let replacementAccess: ReplacementAccess = { kind: "unchanged" };
+    let setupReady = false;
 
     function progress(stage: string, message: string) {
         emit({ status: "progress", stage, message });
@@ -506,6 +545,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     "replaced_project_id",
                     "replaced_user_token",
                     "replacement_notice",
+                    "replacement_access",
                 ].includes(key),
             ),
         );
@@ -583,6 +623,60 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return { directory, base, config: identity };
     }
 
+    function restoreReplacementAccess(context: Context): void {
+        const saved = context.config["replacement_access"];
+        if (saved !== undefined) {
+            const value = object(saved);
+            const previousProjectId = identifier(value["previousProjectId"]);
+            switch (value["kind"]) {
+                case "unknown":
+                    if (previousProjectId !== context.config["project_id"]) {
+                        fail("INVALID_REPLACEMENT_STATE");
+                    }
+                    replacementAccess = { kind: "unknown", previousProjectId };
+                    return;
+                case "revoked": {
+                    const projectId = identifier(value["projectId"]);
+                    if (projectId !== context.config["project_id"]) {
+                        fail("INVALID_REPLACEMENT_STATE");
+                    }
+                    replacementAccess = { kind: "revoked", previousProjectId, projectId };
+                    return;
+                }
+                default:
+                    fail("INVALID_REPLACEMENT_STATE");
+            }
+        }
+        // Earlier setup versions saved only the notification, without the previous Project's ID.
+        if (context.config["replacement_notice"] === "pending") {
+            replacementAccess = {
+                kind: "revoked",
+                previousProjectId: null,
+                projectId: identifier(context.config["project_id"]),
+            };
+        }
+    }
+
+    function replacementFailure(access: ReplacementAccess) {
+        if (access.kind === "unchanged") {
+            return {};
+        }
+        return {
+            replacementAccess: {
+                ...access,
+                setupReady,
+                message:
+                    access.kind === "unknown"
+                        ? "The replacement result is unknown. Earlier access may already be revoked; do not assume the old links still work."
+                        : setupReady
+                          ? "Earlier access was revoked and the new connection is ready, but saving the completion notice failed."
+                          : "Earlier sharing links and browser access were revoked, but the new setup has not finished.",
+                nextStep:
+                    "Report this access state to the user. Keep the saved local identity and retry setup to continue recovery; never clear local state to hide the failure.",
+            },
+        };
+    }
+
     async function saveConfiguration(context: Context, updates: Readonly<Record<string, unknown>>): Promise<Context> {
         const config = { ...context.config, ...updates, base_url: context.base };
         const temporary = join(context.directory, `.config-${crypto.randomUUID()}`);
@@ -599,6 +693,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const headers: Record<string, string> = { "content-type": "application/json" };
         if (authenticated) {
             headers["authorization"] = `Bearer ${credential(context.config["user_token"])}`;
+        }
+        if (route === "/management/project/replacement") {
+            headers["x-morty-setup-run-id"] = runId;
         }
         const path =
             authenticated && !route.startsWith("/chat/projects/")
@@ -662,6 +759,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 harness: { type: "string" },
                 "base-url": { type: "string" },
                 "session-id": { type: "string" },
+                "replace-project": { type: "string" },
             },
         });
         if (values["base-url"] === undefined) {
@@ -679,6 +777,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const harness = identifier(values.harness);
         return {
             base: origin(values["base-url"]),
+            replaceProject: values["replace-project"] === undefined ? null : identifier(values["replace-project"]),
             cwd: text(values.cwd),
             harness,
             sessionId: currentSessionId(harness, values["session-id"]),
@@ -912,13 +1011,28 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function replaceProject(context: Context): Promise<Context> {
-        progress("identity", "Replacing the Project to pair a new Runtime for the same user.");
-        const replacement = await request(context, "/management/project/replacement", {});
-        const saved = await saveConfiguration(context, {
+        const previousProjectId = identifier(context.config["project_id"]);
+        const pending: ReplacementAccess = { kind: "unknown", previousProjectId };
+        // Save before the request: a timeout or interrupted process cannot prove that access was not revoked.
+        const prepared = await saveConfiguration(context, { replacement_access: pending });
+        replacementAccess = pending;
+        progress("replacement", "Replacing the saved connection with approval. Earlier shared access will be revoked.");
+        const replacement = await request(prepared, "/management/project/replacement", {});
+        const projectId = identifier(replacement["projectId"]);
+        replacementAccess = { kind: "revoked", previousProjectId, projectId };
+        // Report the access change immediately, even if saving or connecting the successor fails next.
+        emit({
+            status: "replacement_access_revoked",
+            previousProjectId,
+            projectId,
+            message:
+                "Earlier sharing links and browser access have been revoked. The new connection is still being set up.",
+        });
+        const saved = await saveConfiguration(prepared, {
             user_token: credential(replacement["token"]),
             user_id: identifier(replacement["userId"]),
             bot_id: identifier(object(replacement["bot"])["botId"]),
-            project_id: identifier(replacement["projectId"]),
+            project_id: projectId,
             // The replacement Machine starts unbound; drop the previous Machine's Agent binding.
             agent_ref: undefined,
             agent_config_revision: undefined,
@@ -926,6 +1040,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             replaced_project_id: context.config["project_id"],
             replaced_user_token: context.config["user_token"],
             replacement_notice: "pending",
+            replacement_access: replacementAccess,
             entry: "setup",
         });
         emit({ status: "project_replaced", botId: saved.config["bot_id"], projectId: saved.config["project_id"] });
@@ -936,12 +1051,38 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         context: Context,
         cwd: string,
         expectedRuntimeId: string | null,
+        confirmedProjectId: string | null,
     ): Promise<{ readonly context: Context; readonly runtime: RuntimeSelection }> {
         progress("pairing", "Preparing the Runtime connection.");
         const project = await request(context, "/management/project");
         const appId = identifier(project["appId"]);
+        const replaceWithApproval = async (reason: ReplacementReason, managedConnectionCount: number | null) => {
+            const projectId = identifier(context.config["project_id"]);
+            emit({
+                status: "replacement_check",
+                reason,
+                projectId,
+                expectedRuntimeId,
+                managedConnectionCount,
+                approved: confirmedProjectId === projectId,
+                platform: process.platform,
+                nodeVersion: process.versions.node,
+                runtimeStateSource: process.env["MOBIUS_STATE_DIRECTORY"]?.trim() ? "environment" : "default",
+            });
+            if (confirmedProjectId !== projectId) {
+                throw new ProjectReplacementRequiredError(projectId, reason);
+            }
+            const replaced = await replaceProject(context);
+            return await pairRuntime(replaced, appId);
+        };
+        // A restored local pairing cannot settle whether a previous request revoked shared access.
+        // Finish that idempotent operation with its original approval before reporting setup ready.
+        if (replacementAccess.kind === "unknown") {
+            return await replaceWithApproval("replacement_result_unknown", null);
+        }
         const reusable = async (runtimeId: string) => {
-            const existing = (await listManagedConnections(context, cwd)).find(
+            const connections = await listManagedConnections(context, cwd);
+            const existing = connections.find(
                 (connection) => connection.appId === appId && connection.runtimeId === runtimeId,
             );
             if (existing !== undefined) {
@@ -951,23 +1092,21 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     connectionId: existing.connectionId,
                 });
             }
-            return existing;
+            return { existing, managedConnectionCount: connections.length };
         };
         if (expectedRuntimeId !== null) {
-            const existing = await reusable(expectedRuntimeId);
+            const { existing, managedConnectionCount } = await reusable(expectedRuntimeId);
             if (existing !== undefined) {
                 return { context, runtime: { kind: "existing", ...existing, bound: true } };
             }
-            // The saved Machine's Runtime is not managed here anymore: keep the user, but
-            // continue on a fresh Project with a fresh Machine and a new Runtime pairing.
-            const replaced = await replaceProject(context);
-            return await pairRuntime(replaced, appId);
+            // Losing the local pairing does not itself authorize ending shared access.
+            return await replaceWithApproval("managed_runtime_missing", managedConnectionCount);
         }
         // The Machine is unbound. A Runtime an earlier run paired for it still holds one of the Project's Runtime
         // slots, so continue on it while this machine still manages its connection.
         const pairing = context.config["pairing_runtime_id"];
         if (typeof pairing === "string") {
-            const existing = await reusable(pairing);
+            const { existing } = await reusable(pairing);
             if (existing !== undefined) {
                 return { context, runtime: { kind: "existing", ...existing, bound: false } };
             }
@@ -1389,9 +1528,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     ? "Open the link or scan the QR code to chat. Keep the Runtime online."
                     : "Open the link to chat. Keep the Runtime online.",
         });
+        setupReady = true;
         if (project === "replaced") {
             // Cleared only after ready reported it, so a run that stops earlier leaves the notice owed.
-            await saveConfiguration(context, { replacement_notice: undefined });
+            await saveConfiguration(context, { replacement_notice: undefined, replacement_access: undefined });
         }
     }
 
@@ -1472,15 +1612,19 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function setup(options: SetupOptions) {
         const cwd = await resolveWorkingDirectory(options.cwd);
         const directory = await prepareStateDirectory(resolveStateDirectory(host.state, signal));
+        // A previous replacement must still be explained when this run fails its local startup checks.
+        restoreReplacementAccess(await loadConfiguration(directory, options.base));
         await preflightRuntime({ directory, base: options.base, config: {} }, cwd);
         await adoptEarlierState(directory, options.base, cwd);
-        let context = await retireReplacedIdentity(await loadConfiguration(directory, options.base));
+        let context = await loadConfiguration(directory, options.base);
+        restoreReplacementAccess(context);
+        context = await retireReplacedIdentity(context);
         const identity = await prepareIdentity(context);
         context = identity.context;
         const verified = await verifyIdentityAndBot(context);
         context = verified.context;
         emit({ status: "identity_ready", userId: context.config["user_id"], botId: context.config["bot_id"] });
-        const prepared = await prepareRuntime(context, cwd, verified.expectedRuntimeId);
+        const prepared = await prepareRuntime(context, cwd, verified.expectedRuntimeId, options.replaceProject);
         context = prepared.context;
         context = await startRuntime(context, prepared.runtime, cwd, options.harness);
         await waitForRuntime(context, prepared.runtime, options.harness, cwd);
@@ -1526,6 +1670,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     : {}),
                 ...(cause instanceof AgentBindingError ? { binding: cause.diagnostic() } : {}),
                 ...(cause instanceof HarnessUnavailableError ? { harness: cause.diagnostic() } : {}),
+                ...(cause instanceof ProjectReplacementRequiredError ? { replacement: cause.diagnostic() } : {}),
+                ...replacementFailure(replacementAccess),
             },
         });
         return 1;
