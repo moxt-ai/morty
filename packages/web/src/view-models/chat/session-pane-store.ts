@@ -281,7 +281,9 @@ export function sessionPanePresentation(
         workingIndicatorVisible:
             !waitingForInput &&
             activeCommandId !== null &&
-            model.messages.some((message) => message.role === "user" && message.commandId === activeCommandId),
+            // History restores user content without its live command ID. Session
+            // activity owns whether work is running; history only gates placement.
+            model.messages.some((message) => message.role === "user"),
         shouldQueueOnSubmit: controlRunning && !stopping,
         submitDisabled:
             !connectionAvailable ||
