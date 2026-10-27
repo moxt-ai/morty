@@ -403,10 +403,7 @@ type SessionEventResult =
       }
     | {
           readonly kind: "turn-ended";
-          readonly commandId: string;
-          readonly execution: "starts" | "steers" | "unknown";
           readonly message: SessionMessage;
-          readonly userMessageId: string | null;
       }
     | {
           readonly kind: "constructed";
@@ -500,14 +497,8 @@ function consumeSessionEvent(
             lifecycle.kind === "prompt.failed" ||
             lifecycle.kind === "prompt.failed-before-start"
         ) {
-            const owner = entries.find(
-                (entry) => entry.kind === "execution-owner" && entry.commandId === lifecycle.commandId,
-            );
             return {
                 kind: "turn-ended",
-                commandId: lifecycle.commandId,
-                execution: owner?.kind === "execution-owner" ? owner.execution : "unknown",
-                userMessageId: "messageId" in lifecycle ? (lifecycle.messageId ?? null) : null,
                 message: {
                     role: "assistant",
                     commandId: lifecycle.commandId,
@@ -663,29 +654,7 @@ function applySessionEvent(
             ];
         }
         case "turn-ended": {
-            const identified =
-                result.userMessageId === null
-                    ? entries
-                    : entries.map((entry): ReducedSessionEntry => {
-                          if (entry.kind !== "message" || entry.message.role !== "user") {
-                              return entry;
-                          }
-                          const first = entry.message.firstEvent;
-                          return first.type === "acp" &&
-                              first.sessionGenerationId === event.sessionGenerationId &&
-                              first.payload.sessionUpdate === "user_message_chunk" &&
-                              first.payload.messageId === result.userMessageId
-                              ? {
-                                    ...entry,
-                                    message: {
-                                        ...entry.message,
-                                        commandId: result.commandId,
-                                        execution: result.execution,
-                                    },
-                                }
-                              : entry;
-                      });
-            return applySessionEvent(identified, event, {
+            return applySessionEvent(entries, event, {
                 kind: "constructed",
                 firstEvent: "known",
                 message: result.message,
