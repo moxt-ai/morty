@@ -213,6 +213,7 @@ export const createBotChatHomeStore = (
         | "access"
         | "conversationSession"
         | "continueNativeSession"
+        | "continueRecoverableNativeFork"
         | "createConversation"
         | "managedSession"
         | "readBot"
@@ -544,16 +545,22 @@ export const createBotChatHomeStore = (
                             };
                             set({ selection: { kind: "loading", target: currentTarget } });
                         }
-                        const session = await requests.continueNativeSession(
-                            botId,
-                            currentTarget.harness,
-                            currentTarget.sessionId,
-                            currentTarget.action,
-                            signal,
+                        const session =
                             currentTarget.action === "fork" && currentTarget.operation.contract === "recoverable"
-                                ? currentTarget.operation.id
-                                : undefined,
-                        );
+                                ? await requests.continueRecoverableNativeFork(
+                                      botId,
+                                      currentTarget.harness,
+                                      currentTarget.sessionId,
+                                      currentTarget.operation.id,
+                                      signal,
+                                  )
+                                : await requests.continueNativeSession(
+                                      botId,
+                                      currentTarget.harness,
+                                      currentTarget.sessionId,
+                                      currentTarget.action,
+                                      signal,
+                                  );
                         signal.throwIfAborted();
                         options.navigation.showContinuedSession(session.result.ready.sessionId);
                         set({
