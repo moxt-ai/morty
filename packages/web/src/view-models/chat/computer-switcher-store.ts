@@ -9,16 +9,19 @@ import {
     resumeComputerAddress,
 } from "../../services/identity/remembered-computers.ts";
 
-import { directoryName } from "./directory-name.ts";
-
 export interface ComputerChoice {
     readonly key: string;
     readonly name: string;
     readonly href: string;
-    readonly directory: string | null;
-    readonly directoryName: string | null;
-    readonly lastUsedAt: number;
     readonly status: "online" | "offline" | "unavailable";
+}
+
+/**
+ * Stable by name, so a computer keeps its place when the current computer or a status changes. Keys only break
+ * ties between computers with the same name.
+ */
+function inStableOrder(choices: readonly ComputerChoice[]): readonly ComputerChoice[] {
+    return [...choices].sort((left, right) => left.name.localeCompare(right.name) || left.key.localeCompare(right.key));
 }
 
 type ComputerChoicesState =
@@ -40,16 +43,18 @@ export function createComputerSwitcher(options: {
     let disposed = false;
     let current: BotRuntimeConfiguration | null = null;
     const applyCurrent = (choices: readonly ComputerChoice[]): readonly ComputerChoice[] =>
-        choices.map((choice) => {
-            if (choice.key !== activeKey || current === null) {
-                return choice;
-            }
-            return {
-                ...choice,
-                name: current.runtime.machineName || choice.name,
-                status: current.runtime.online ? "online" : "offline",
-            };
-        });
+        inStableOrder(
+            choices.map((choice) => {
+                if (choice.key !== activeKey || current === null) {
+                    return choice;
+                }
+                return {
+                    ...choice,
+                    name: current.runtime.machineName || choice.name,
+                    status: current.runtime.online ? "online" : "offline",
+                };
+            }),
+        );
     return {
         store,
         activeKey,
@@ -83,9 +88,6 @@ export function createComputerSwitcher(options: {
                             key: computerKey(computer.scope),
                             name: computer.name || "Computer",
                             href: resumeComputerAddress(computer.scope, computer.destination),
-                            directory: computer.directory,
-                            directoryName: computer.directory === null ? null : directoryName(computer.directory),
-                            lastUsedAt: computer.lastUsedAt,
                             status: "unavailable",
                         };
                         try {

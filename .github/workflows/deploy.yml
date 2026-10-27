@@ -81,12 +81,17 @@ jobs:
               exit 1
             fi
           done
+          if [ "$CLOUDFLARE_ENV" = production ] && [ -z "$VITE_GA_MEASUREMENT_ID" ]; then
+            echo "Missing Google Analytics deployment setting: VITE_GA_MEASUREMENT_ID" >&2
+            exit 1
+          fi
           pnpm build
         env:
           CLOUDFLARE_ENV: ${{ inputs.environment }}
           VITE_SENTRY_DSN: ${{ vars.SENTRY_DSN }}
           VITE_SENTRY_ENVIRONMENT: ${{ inputs.environment }}
           VITE_SENTRY_RELEASE: morty@${{ inputs.revision }}
+          VITE_GA_MEASUREMENT_ID: ${{ inputs.environment == 'production' && vars.GA_MEASUREMENT_ID || '' }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
