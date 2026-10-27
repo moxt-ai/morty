@@ -218,7 +218,7 @@ export function MobiusAssistantText({
 }) {
     return (
         <div className="min-w-0" data-testid={dataTestId.agentResponse}>
-            <MessageBubble speaker="assistant">
+            <MessageBubble copyText={streaming ? undefined : text} speaker="assistant">
                 <AgentResponseText
                     text={text}
                     createResourceStore={createResourceStore}
