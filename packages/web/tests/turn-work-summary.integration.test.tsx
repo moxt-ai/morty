@@ -64,6 +64,31 @@ test("Given the agent has answered part of a turn, When the user stops it, Then 
     expect(queryByRole(document.body, "button", { name: /^1 step/ })).toBeNull();
 });
 
+test("Given a reloaded completed reply with tools, When the user starts another turn and stops it, Then the earlier work stays collapsed", {
+    timeout: 30_000,
+}, async () => {
+    const original = await start("answer after verification");
+    await assertWorkCollapsed(original);
+    const app = await original.reload();
+    await assertWorkCollapsed(app);
+
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "answer then hold");
+    await app.waitForView(() => getByText(document.body, "Partial answer before stopping."));
+    await assertWorkCollapsed(app);
+
+    await app.user.click(
+        await app.queryElementByTestId(
+            dataTestId.sendMessage,
+            (element) => element.getAttribute("aria-label") === "Stop agent output",
+        ),
+    );
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.agentReplyStatus).textContent).toBe("Turn stopped."),
+    );
+    await assertWorkCollapsed(app);
+    expect(queryByLabelText(document.body, "Tool: Completed verification")).not.toBeNull();
+});
+
 test("Given the agent has answered part of a turn, When the user steers it and then stops it, Then the steered execution keeps its earlier work visible", {
     timeout: 30_000,
 }, async () => {

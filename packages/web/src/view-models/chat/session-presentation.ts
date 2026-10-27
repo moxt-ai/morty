@@ -933,7 +933,7 @@ export function sessionExecutionStates(
     for (const [index, message] of messages.entries()) {
         const context = message.executionContext;
         if (context.kind === "managed") {
-            if (executionCommandId !== null && executionCommandId !== context.commandId) {
+            if (index > current.start && executionCommandId !== context.commandId) {
                 spans.push(current);
                 current = { start: index, managed: true, terminal: null };
             }
