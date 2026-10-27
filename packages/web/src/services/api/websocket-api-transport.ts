@@ -610,29 +610,24 @@ export class WebSocketApiTransport {
             cancel: () => controller.abort(new Error("The Chat transport stopped reconnecting.")),
         };
         this.#reconnectTimer = timer;
-        void this.#clock
-            .sleep(
-                Math.round(delay * (0.5 + Math.random() * 0.5)),
-                AbortSignal.any([this.#lifetime.signal, controller.signal]),
-            )
-            .then(
-                () => {
-                    if (this.#reconnectTimer !== timer) {
-                        return;
-                    }
+        void this.#clock.sleep(Math.round(delay * (0.5 + Math.random() * 0.5)), controller.signal).then(
+            () => {
+                if (this.#reconnectTimer !== timer) {
+                    return;
+                }
+                this.#reconnectTimer = null;
+                if (this.#state.kind === "connected") {
+                    this.#reconnectAttempt = 0;
+                    return;
+                }
+                void this.#dial();
+            },
+            () => {
+                if (this.#reconnectTimer === timer) {
                     this.#reconnectTimer = null;
-                    if (this.#state.kind === "connected") {
-                        this.#reconnectAttempt = 0;
-                        return;
-                    }
-                    void this.#dial();
-                },
-                () => {
-                    if (this.#reconnectTimer === timer) {
-                        this.#reconnectTimer = null;
-                    }
-                },
-            );
+                }
+            },
+        );
     };
 
     /**
@@ -848,15 +843,10 @@ export class WebSocketApiTransport {
             // A handshake the network never finishes must not pin the bridge in
             // "connecting": give up, release the state, and let the retry budget
             // continue from a clean slate.
-            void this.#clock
-                .sleep(
-                    CHAT_BRIDGE_HANDSHAKE_TIMEOUT_MILLISECONDS,
-                    AbortSignal.any([this.#lifetime.signal, deadline.signal]),
-                )
-                .then(
-                    () => abandoned(bridgeUnavailable()),
-                    () => undefined,
-                );
+            void this.#clock.sleep(CHAT_BRIDGE_HANDSHAKE_TIMEOUT_MILLISECONDS, deadline.signal).then(
+                () => abandoned(bridgeUnavailable()),
+                () => undefined,
+            );
         });
         this.#state = {
             kind: "connecting",
