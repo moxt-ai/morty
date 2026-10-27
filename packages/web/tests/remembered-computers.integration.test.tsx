@@ -1,4 +1,4 @@
-import { getAllByRole, getByRole, getByText, getByTitle, queryByRole } from "@testing-library/dom";
+import { getAllByRole, getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { WebSocketApiTransport } from "../src/services/api/websocket-api-transport.ts";
@@ -27,6 +27,17 @@ async function startConversation(app: TestApp, prompt: string): Promise<string> 
     return sessionId;
 }
 
+function computerChoices(menu: HTMLElement): HTMLElement[] {
+    return getAllByRole(menu, "menuitemradio");
+}
+
+/** Other computers are links to their address; the current computer is not a link because it is already open. */
+function identityOf(choice: HTMLElement, currentScope: string): string | null {
+    return choice instanceof HTMLAnchorElement
+        ? new URL(choice.href, window.location.origin).searchParams.get("identity")
+        : currentScope;
+}
+
 test("Given two remembered computers, When I return and then switch, Then the last computer and each computer's own conversation are restored", {
     timeout: 30_000,
 }, async () => {
@@ -40,6 +51,11 @@ test("Given two remembered computers, When I return and then switch, Then the la
     await first.close();
     const second = await createTestApp({ connectAgent: true });
     const secondSession = await startConversation(second, "Work on computer B");
+    const secondScope = encodeIdentityScope({
+        botId: second.botId,
+        projectId: second.identity.projectId,
+        userId: second.userId,
+    });
     window.location.href = `${second.origin}/chat`;
     const returned = await second.reload();
     await returned.waitForView(() =>
@@ -47,39 +63,33 @@ test("Given two remembered computers, When I return and then switch, Then the la
     );
     const switcher = await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ }));
     await returned.user.click(switcher);
-    const { currentComputer, currentLabel, otherComputers } = await returned.waitForView(() => {
+    const { choices, details } = await returned.waitForView(() => {
         const menu = getByRole(document.body, "menu");
-        return {
-            currentComputer: getByRole(menu, "group", { name: "Current computer" }),
-            currentLabel: getByText(menu, "Current"),
-            otherComputers: getByRole(menu, "group", { name: "Other computers" }),
-        };
-    });
-    expect(currentComputer.previousElementSibling).toBe(currentLabel);
-    expect(currentComputer.classList.contains("bg-morty-fill-opacity-1")).toBe(false);
-    expect(currentComputer.querySelector('[aria-current="true"]')).toBeInstanceOf(HTMLAnchorElement);
-    const detailsTrigger = getByRole(currentComputer, "menuitem", { name: /View execution details/ });
-    expect(detailsTrigger.classList.contains("px-3")).toBe(true);
-    expect(queryByRole(otherComputers, "menuitem", { name: /View execution details/ })).toBeNull();
-    const firstLink = await returned.waitForView(() => {
-        const item = getAllByRole(document.body, "menuitem").find(
-            (item) =>
-                new URL(item.getAttribute("href") ?? "/", returned.origin).searchParams.get("identity") === firstScope,
-        );
-        if (!(item instanceof HTMLAnchorElement)) {
-            throw new Error("Waiting for computer A");
+        const items = computerChoices(menu);
+        if (items.length !== 2) {
+            throw new Error("Waiting for both computers");
         }
-        return item;
+        return { choices: items, details: getByRole(menu, "menuitem", { name: /View execution details/ }) };
     });
+    expect(queryByRole(document.body, "group", { name: "Current computer" })).toBeNull();
+    expect(queryByRole(document.body, "group", { name: "Other computers" })).toBeNull();
+    expect(choices.filter((item) => item.getAttribute("aria-checked") === "true")).toHaveLength(1);
+    const [firstChoice] = choices;
+    if (firstChoice === undefined) {
+        throw new Error("Expected a computer");
+    }
+    expect(details.compareDocumentPosition(firstChoice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const order = choices.map((item) => identityOf(item, secondScope));
+    expect(choices.find((item) => item.getAttribute("aria-checked") === "true")).not.toBeInstanceOf(HTMLAnchorElement);
+    const firstLink = choices.find((item) => identityOf(item, secondScope) === firstScope);
+    if (!(firstLink instanceof HTMLAnchorElement)) {
+        throw new Error("Expected computer A");
+    }
+    expect(firstLink.getAttribute("aria-checked")).toBe("false");
     expect(new URL(firstLink.href).searchParams.get("sessionId")).toBe(firstSession);
-    expect(firstLink.textContent).toContain("workspace");
-    expect(firstLink.textContent).not.toContain("/workspace");
-    const directory = getByTitle(firstLink, /\/workspace$/u);
-    expect(directory?.textContent).toBe("workspace");
-    expect(directory?.getAttribute("title")).toMatch(/\/workspace$/u);
-    const computers = getAllByRole(document.body, "menuitem").filter((item) => item.getAttribute("href") !== "/setup");
-    expect(computers[0]?.getAttribute("aria-current")).toBe("true");
-    expect(computers[0]?.querySelector(".sr-only")?.textContent).toBe("Online");
+    // A folder belongs to one Session, not to the computer, so the computer list never shows it.
+    expect(firstLink.textContent).not.toContain("workspace");
+    expect(firstLink.querySelector(".sr-only")?.textContent).toBe("Online");
     window.location.href = firstLink.href;
     const switched = await returned.reload();
     await switched.waitForView(() =>
@@ -90,9 +100,51 @@ test("Given two remembered computers, When I return and then switch, Then the la
         ).toBe(true),
     );
     expect(new URL(window.location.href).searchParams.get("identity")).toBe(firstScope);
+    await switched.user.click(
+        await switched.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ })),
+    );
+    const reordered = await switched.waitForView(() => {
+        const items = computerChoices(getByRole(document.body, "menu"));
+        if (items.length !== 2) {
+            throw new Error("Waiting for both computers");
+        }
+        return items;
+    });
+    expect(reordered.map((item) => identityOf(item, firstScope))).toEqual(order);
+    expect(reordered.findIndex((item) => item.getAttribute("aria-checked") === "true")).toBe(order.indexOf(firstScope));
 });
 
-test("Given two remembered computers on mobile, When I open navigation, Then execution details belong only to the current computer", {
+test("Given two remembered computers, When I choose the computer I am already on, Then the menu closes and the conversation stays open", {
+    timeout: 30_000,
+}, async () => {
+    const first = await createTestApp({ connectAgent: true });
+    await startConversation(first, "Another computer");
+    await first.close();
+    const app = await createTestApp({ connectAgent: true });
+    const sessionId = await startConversation(app, "Stay on this computer");
+    await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ })));
+    const current = await app.waitForView(() => {
+        const choice = computerChoices(getByRole(document.body, "menu")).find(
+            (item) => item.getAttribute("aria-checked") === "true",
+        );
+        if (choice === undefined) {
+            throw new Error("Waiting for the current computer");
+        }
+        return choice;
+    });
+    const address = window.location.href;
+    await app.user.click(current);
+    await app.waitForView(() => expect(queryByRole(document.body, "menu")).toBeNull());
+    expect(window.location.href).toBe(address);
+    expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
+    expect(
+        app
+            .elementsByTestId(dataTestId.agentResponse)
+            .some((item) => item.textContent?.includes("Stay on this computer")),
+    ).toBe(true);
+});
+
+test("Given two remembered computers on mobile, When I open navigation and tap the current computer, Then navigation closes and execution details stay one tap away", {
     timeout: 30_000,
 }, async () => {
     const desktopViewport = { height: window.innerHeight, width: window.innerWidth };
@@ -106,22 +158,38 @@ test("Given two remembered computers on mobile, When I open navigation, Then exe
 
         window.happyDOM.setViewport({ height: 844, width: 413 });
         current = await createTestApp({ connectAgent: true });
-        await startConversation(current, "Current mobile computer");
-        await current.user.click(getByRole(document.body, "button", { name: "Open navigation" }));
-
-        const computers = await current.waitForView(() =>
-            getByRole(document.body, "navigation", { name: "Computers" }),
+        const sessionId = await startConversation(current, "Current mobile computer");
+        const app = current;
+        const openNavigation = async () => {
+            await app.user.click(getByRole(document.body, "button", { name: "Open navigation" }));
+            return app.waitForView(() => {
+                const computers = getByRole(document.body, "navigation", { name: "Computers" });
+                const others = getAllByRole(computers, "link").filter((item) => item.getAttribute("href") !== "/setup");
+                const current = computers.querySelectorAll('[aria-current="true"]');
+                const [choice] = current;
+                if (others.length !== 1 || current.length !== 1 || !(choice instanceof HTMLElement)) {
+                    throw new Error("Waiting for both computers");
+                }
+                return { computers, current: choice };
+            });
+        };
+        const { computers, current: currentChoice } = await openNavigation();
+        expect(queryByRole(computers, "region", { name: "Current computer" })).toBeNull();
+        expect(queryByRole(computers, "region", { name: "Other computers" })).toBeNull();
+        expect(currentChoice).toBeInstanceOf(HTMLButtonElement);
+        expect(getAllByRole(computers, "button", { name: /View execution details/ })).toHaveLength(1);
+        const address = window.location.href;
+        await app.user.click(currentChoice);
+        await app.waitForView(() =>
+            expect(getByRole(document.body, "button", { name: "Open navigation" }).getAttribute("aria-expanded")).toBe(
+                "false",
+            ),
         );
-        const { currentComputer, otherComputers } = await current.waitForView(() => ({
-            currentComputer: getByRole(computers, "region", { name: "Current computer" }),
-            otherComputers: getByRole(computers, "region", { name: "Other computers" }),
-        }));
-        expect(currentComputer.querySelector('[aria-current="true"]')).toBeInstanceOf(HTMLAnchorElement);
-        const detailsTrigger = getByRole(currentComputer, "button", { name: /View execution details/ });
-        expect(detailsTrigger).toBeInstanceOf(HTMLButtonElement);
-        expect(queryByRole(otherComputers, "button", { name: /View execution details/ })).toBeNull();
-        await current.user.click(detailsTrigger);
-        await current.waitForView(() => getByRole(document.body, "dialog", { name: "Execution details" }));
+        expect(window.location.href).toBe(address);
+        expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
+        const reopened = await openNavigation();
+        await app.user.click(getByRole(reopened.computers, "button", { name: /View execution details/ }));
+        await app.waitForView(() => getByRole(document.body, "dialog", { name: "Execution details" }));
     } finally {
         if (first !== null) {
             await first.close();
@@ -248,17 +316,17 @@ test("Given the last computer is offline and another is online, When I return, T
         await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ })),
     );
     const offlineChoice = await returned.waitForView(() => {
-        const currentComputer = getByRole(document.body, "group", { name: "Current computer" });
-        const choice = currentComputer.querySelector('[aria-current="true"]');
-        if (!(choice instanceof HTMLAnchorElement)) {
+        const choice = computerChoices(getByRole(document.body, "menu")).find(
+            (item) => item.getAttribute("aria-checked") === "true",
+        );
+        if (choice === undefined || !choice.textContent?.includes("Offline")) {
             throw new Error("Waiting for the current computer");
         }
         return choice;
     });
     expect(offlineChoice.textContent).toContain("Offline");
-    expect(offlineChoice.querySelector('[aria-hidden="true"]')?.classList.contains("size-2")).toBe(true);
     const alternative = await returned.waitForView(() => {
-        const choice = getAllByRole(document.body, "menuitem").find(
+        const choice = getAllByRole(document.body, "menuitemradio").find(
             (item) =>
                 new URL(item.getAttribute("href") ?? "/", returned.origin).searchParams.get("sessionId") ===
                 firstSession,
@@ -493,7 +561,7 @@ test("Given the last computer was deleted, When I return, Then the next valid co
     );
     await returned.waitForView(() => expect(document.body.textContent).not.toContain("Checking connections"));
     expect(
-        getAllByRole(document.body, "menuitem").some(
+        getAllByRole(document.body, "menuitemradio").some(
             (item) =>
                 new URL(item.getAttribute("href") ?? "/", returned.origin).searchParams.get("identity") ===
                 deletedScope,
@@ -546,9 +614,10 @@ test("Given a computer I keep using, When ten more computers are saved in this b
         await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ })),
     );
     await returned.waitForView(() => expect(document.body.textContent).not.toContain("Checking connections"));
-    const offered = getAllByRole(document.body, "menuitem").map((item) =>
-        new URL(item.getAttribute("href") ?? "/", returned.origin).searchParams.get("identity"),
-    );
+    if (dailyScope === null) {
+        throw new Error("Expected the daily computer's address");
+    }
+    const offered = computerChoices(getByRole(document.body, "menu")).map((item) => identityOf(item, dailyScope));
     expect(offered).toContain(dailyScope);
     expect(offered).not.toContain(oldestScope);
     expect(offered.filter((scope) => scope !== null)).toHaveLength(10);
@@ -661,7 +730,7 @@ test("Given a computer whose remembered conversation was closed elsewhere, When 
         await second.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ })),
     );
     const firstLink = await second.waitForView(() => {
-        const item = getAllByRole(document.body, "menuitem").find(
+        const item = getAllByRole(document.body, "menuitemradio").find(
             (item) =>
                 new URL(item.getAttribute("href") ?? "/", second.origin).searchParams.get("identity") === firstScope,
         );
@@ -711,7 +780,7 @@ test("Given a switch to a computer whose remembered conversation is gone, When o
         userId: first.userId,
     });
     const firstLink = await second.waitForView(() => {
-        const item = getAllByRole(document.body, "menuitem").find(
+        const item = getAllByRole(document.body, "menuitemradio").find(
             (item) =>
                 new URL(item.getAttribute("href") ?? "/", second.origin).searchParams.get("identity") === firstScope,
         );

@@ -22,6 +22,7 @@ import type { OpenMobiusSession } from "./open-session.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
 import { createRuntimeRecovery } from "./runtime-recovery.ts";
 import type { SessionActivityState } from "./session-activity-machine.ts";
+import { createSessionDeliveryStore } from "./session-delivery-store.ts";
 import { createSessionPaneModel, type SessionPaneModel } from "./session-pane-store.ts";
 import { createSidebarDialogs, type SidebarDialogs } from "./sidebar-dialogs.ts";
 
@@ -457,6 +458,8 @@ export function createChatWorkspace(options: {
     let paneEntry: ChatWorkspacePaneEntry | null = null;
     // Drafts belong to their sessions, independently of pane and connection replacements.
     const sessionAttachments = new Map<string, ReturnType<typeof createComposerAttachmentStore>>();
+    // Submitted intent belongs to the Session until confirmed or discarded, across pane replacements.
+    const sessionDeliveries = new Map<string, ReturnType<typeof createSessionDeliveryStore>>();
     const announceChatViewAttached = (node: HTMLElement): (() => void) => {
         if (announcedViews.has(node)) {
             return () => {};
@@ -520,19 +523,21 @@ export function createChatWorkspace(options: {
             composerAttachments = createComposerAttachmentStore();
             sessionAttachments.set(sessionId, composerAttachments);
         }
+        let delivery = sessionDeliveries.get(sessionId);
+        if (delivery === undefined) {
+            delivery = createSessionDeliveryStore();
+            sessionDeliveries.set(sessionId, delivery);
+        }
         const model = createSessionPaneModel({
             clock: options.clock,
             session: selection.session,
             composerAttachments,
+            delivery,
             attachmentSignal: operationsLifetime.signal,
             botId,
             requests,
-            initialMessage: firstMessage?.kind === "pending" ? firstMessage.message : undefined,
-            unconfirmedMessage: firstMessage?.kind === "unconfirmed" ? firstMessage.journal : undefined,
-            onInitialMessageDelivered: () => home.getState().initialMessageDelivered(sessionId),
-            onInitialMessageRecoveryCleared: (commandId) =>
-                home.getState().initialMessageRecoveryCleared(sessionId, commandId),
-            onInitialMessageUnconfirmed: (journal) => home.getState().initialMessageUnconfirmed(sessionId, journal),
+            initialMessage: firstMessage,
+            onInitialMessageDequeued: (commandId) => home.getState().initialMessageDequeued(sessionId, commandId),
             onStatusChange: (status) =>
                 statuses.getState().statusChanged(botId, sessionId, status, statusLifetime.signal),
             onTitleChange: (id, title) => {
@@ -603,6 +608,7 @@ export function createChatWorkspace(options: {
             directoryLifetime.abort(new Error("The chat workspace was disposed."));
             statusLifetime.abort(new Error("Conversation status lifetime ended."));
             operationsLifetime.abort(new Error("The chat workspace was disposed."));
+            sessionDeliveries.clear();
             statuses.getState().close();
         },
     };

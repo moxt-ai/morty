@@ -465,7 +465,14 @@ export function ConversationSidebar({
                                         className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-card/90 px-3 pt-0 max-sm:overflow-visible sm:isolate sm:w-[264px] sm:gap-0 sm:bg-sidebar sm:pt-2 sm:pb-4"
                                     >
                                         <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-4 py-3 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:bg-card/90 sm:gap-3">
-                                            <div className="relative z-[1] flex w-fit shrink-0 items-center gap-2 sm:pl-1">
+                                            <div
+                                                className={cn(
+                                                    "relative z-[1] flex w-fit shrink-0 items-center gap-2 sm:pl-1",
+                                                    desktop &&
+                                                        workspace.computers !== null &&
+                                                        "sm:w-full sm:min-w-0 sm:shrink sm:pl-0",
+                                                )}
+                                            >
                                                 <button
                                                     type="button"
                                                     aria-controls="conversation-sidebar-mobile-drawer"
@@ -489,12 +496,28 @@ export function ConversationSidebar({
                                                 >
                                                     <MortyLogoMark size={28} />
                                                 </button>
-                                                <MortyLogoMark className="hidden sm:block" size={28} />
-                                                <span className="hidden min-w-0 sm:block">
-                                                    <h1 className="truncate font-inter text-16 leading-5 font-semibold tracking-[-0.015em] text-foreground/90">
-                                                        Morty
-                                                    </h1>
-                                                </span>
+                                                {desktop && workspace.computers !== null ? (
+                                                    <>
+                                                        <h1 className="sr-only">Morty</h1>
+                                                        {/* The computer scopes everything in the sidebar, so it heads it. */}
+                                                        <ComputerSwitcher
+                                                            context={executionContext}
+                                                            layout="header"
+                                                            model={workspace.computers}
+                                                            name={computerName}
+                                                            status={connectionStatus}
+                                                        />
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <MortyLogoMark className="hidden sm:block" size={28} />
+                                                        <span className="hidden min-w-0 sm:block">
+                                                            <h1 className="truncate font-inter text-16 leading-5 font-semibold tracking-[-0.015em] text-foreground/90">
+                                                                Morty
+                                                            </h1>
+                                                        </span>
+                                                    </>
+                                                )}
                                                 <Button
                                                     variant="ghost"
                                                     className={cn(mobileHeaderIconButtonClassName, "sm:hidden")}
@@ -558,15 +581,6 @@ export function ConversationSidebar({
                                                         testId={dataTestId.botConnectionStatus}
                                                     />
                                                 )}
-                                                {desktop && workspace.computers !== null ? (
-                                                    <ComputerSwitcher
-                                                        context={executionContext}
-                                                        layout="header"
-                                                        model={workspace.computers}
-                                                        name={computerName}
-                                                        status={connectionStatus}
-                                                    />
-                                                ) : null}
                                             </div>
                                         </header>
                                         {navigationMotion.present ? (
@@ -684,6 +698,7 @@ export function ConversationSidebar({
                                                                 layout="list"
                                                                 model={workspace.computers}
                                                                 name={computerName}
+                                                                onChooseCurrent={dialogs.getState().closeMobileNav}
                                                                 status={connectionStatus}
                                                             />
                                                         </div>

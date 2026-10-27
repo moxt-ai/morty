@@ -1,6 +1,5 @@
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import type { ChatAccess } from "../../services/chat/bot-chat-api.ts";
-import type { UnconfirmedSubmission } from "./session-delivery-store.ts";
 
 export interface QueuedDraftMessage {
     readonly attachments: readonly ComposerAttachment[];
@@ -29,59 +28,26 @@ export type ConversationCreationState =
           readonly message: QueuedDraftMessage;
       };
 
-/**
- * A conversation's first message, from the moment its conversation exists until the service accepts it or the user
- * discards it. It belongs to that conversation, not to whichever conversation is on screen: leaving the conversation
- * keeps it, and the conversation's pane delivers it whenever it opens.
- */
-type FirstMessageDelivery =
-    | { readonly kind: "pending"; readonly message: QueuedDraftMessage }
-    | {
-          /**
-           * The pane submitted the first message but the service never confirmed it, so the user must retry or
-           * discard it. Distinct from "pending" so a later pane never auto-submits an unconfirmed message.
-           */
-          readonly kind: "unconfirmed";
-          readonly message: QueuedDraftMessage;
-          /** The exact submission the previous pane issued, which a later pane adopts as its delivery journal. */
-          readonly journal: UnconfirmedSubmission;
-      };
-
-/** First messages not yet accepted by the service, by conversation id. */
-export type FirstMessages = ReadonlyMap<string, FirstMessageDelivery>;
+/** First messages waiting to enter their Session's delivery workflow, by conversation id. */
+export type FirstMessages = ReadonlyMap<string, QueuedDraftMessage>;
 
 type FirstMessageEvent =
     | { readonly kind: "queued"; readonly conversationId: string; readonly message: QueuedDraftMessage }
-    | { readonly kind: "delivered"; readonly conversationId: string }
-    | { readonly kind: "discarded"; readonly conversationId: string; readonly commandId: string }
-    | { readonly kind: "unconfirmed"; readonly conversationId: string; readonly journal: UnconfirmedSubmission };
+    | { readonly kind: "dequeued"; readonly conversationId: string; readonly commandId: string };
 
 export function transitionFirstMessages(messages: FirstMessages, event: FirstMessageEvent): FirstMessages {
     const current = messages.get(event.conversationId);
     const next = new Map(messages);
     switch (event.kind) {
         case "queued":
-            next.set(event.conversationId, { kind: "pending", message: event.message });
+            next.set(event.conversationId, event.message);
             return next;
-        case "delivered":
-            // The conversation's pane sent the first message; a later pane must not send it again.
-            if (current === undefined) {
+        case "dequeued":
+            // Delivery or the editable composer now owns this message; the creation queue must release it.
+            if (current?.commandId !== event.commandId) {
                 return messages;
             }
             next.delete(event.conversationId);
-            return next;
-        case "discarded":
-            // The user removed the first message after an uncertain delivery, so no later pane may submit it.
-            if (current?.message.commandId !== event.commandId) {
-                return messages;
-            }
-            next.delete(event.conversationId);
-            return next;
-        case "unconfirmed":
-            if (current?.kind !== "pending" || current.message.commandId !== event.journal.commandId) {
-                return messages;
-            }
-            next.set(event.conversationId, { kind: "unconfirmed", message: current.message, journal: event.journal });
             return next;
         default:
             return event satisfies never;

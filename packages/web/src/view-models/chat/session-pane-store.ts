@@ -50,7 +50,7 @@ import {
     turnActivity,
 } from "./session-current-turn.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
-import { createSessionDeliveryStore, type Journal, type SessionDeliveryStore } from "./session-delivery-store.ts";
+import type { SessionDeliveryStore } from "./session-delivery-store.ts";
 import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
 import { requestedInteraction, type SessionLifecycleFact, sessionLifecycleFact } from "./session-lifecycle.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
@@ -83,15 +83,24 @@ import { createSessionWelcomeStore } from "./session-welcome-store.ts";
 
 export type SessionPaneModel = ReturnType<typeof createSessionPaneModel>;
 
+/** A change to the Session's settings. */
 type Operation =
     | { readonly kind: "idle" }
     | { readonly kind: "configuring" }
     | { readonly kind: "failed"; readonly message: string };
 
-type TitleEdit =
+/** Renaming the Session. A failed rename closes the editor and keeps its failure until the next edit. */
+export type TitleEdit =
     | { readonly kind: "closed" }
     | { readonly kind: "editing"; readonly draft: string }
-    | { readonly kind: "saving"; readonly draft: string };
+    | { readonly kind: "saving"; readonly draft: string }
+    | { readonly kind: "failed"; readonly message: string };
+
+/** Loading the page of history before the oldest message shown. A failure lasts until the next load. */
+type OlderHistory =
+    | { readonly kind: "idle" }
+    | { readonly kind: "loading" }
+    | { readonly kind: "failed"; readonly message: string };
 
 export type { SessionConnection } from "./session-connection.ts";
 
@@ -103,7 +112,7 @@ export interface SessionPaneStore {
     readonly titleEdit: TitleEdit;
     readonly messages: readonly SessionExecutionMessage[];
     readonly pendingInitialMessage: QueuedDraftMessage | null;
-    readonly historyLoading: boolean;
+    readonly olderHistory: OlderHistory;
     readonly historyRevision: number;
     readonly hasOlderHistory: boolean;
     readonly draft: string;
@@ -151,7 +160,6 @@ export interface SessionPaneStore {
     readonly setTitleDraft: (draft: string) => void;
     readonly confirmTitleEdit: (signal: AbortSignal) => Promise<void>;
     readonly cancelTitleEdit: () => void;
-    readonly refreshSettings: (signal: AbortSignal) => Promise<void>;
     readonly stop: (signal: AbortSignal) => Promise<void>;
 }
 
@@ -254,7 +262,7 @@ export function sessionPanePresentation(
         composerError:
             model.connection.kind === "closed"
                 ? ""
-                : ([activity, model.operation, delivery.state]
+                : ([activity, model.titleEdit, model.olderHistory, model.operation, delivery.state]
                       .filter((state) => state.kind === "failed")
                       .find(
                           (state) =>
@@ -267,7 +275,7 @@ export function sessionPanePresentation(
         controlRunning,
         deliveryUnknownUserMessageId,
         hasOlderHistory: model.hasOlderHistory,
-        historyLoading: model.historyLoading,
+        historyLoading: model.olderHistory.kind === "loading",
         outputState:
             queue.operation.kind === "submitting"
                 ? "sending"
@@ -365,6 +373,7 @@ export function createSessionPaneModel(options: {
     readonly session: OpenMobiusSession;
     readonly composerAttachments: StoreApi<ComposerAttachmentStore>;
     readonly attachmentSignal: AbortSignal;
+    readonly delivery: StoreApi<SessionDeliveryStore>;
     readonly botId: string;
     readonly requests: Pick<
         BotChatApi,
@@ -376,23 +385,13 @@ export function createSessionPaneModel(options: {
         | "resetSessionConnections"
     >;
     readonly initialMessage?: QueuedDraftMessage | undefined;
-    /**
-     * A previous pane's unconfirmed first-message submission. Adopted as the
-     * delivery journal so the user can retry or discard it, and a remount never
-     * resubmits it automatically.
-     */
-    readonly unconfirmedMessage?: Journal | undefined;
-    /** Invoked once after the queued first message has been sent. */
-    readonly onInitialMessageDelivered?: (() => void) | undefined;
-    /** Invoked when the queued first message can no longer be delivered by this pane. */
-    readonly onInitialMessageRecoveryCleared?: ((commandId: string) => void) | undefined;
-    /** Invoked when the submission of the queued first message was not confirmed. */
-    readonly onInitialMessageUnconfirmed?: ((journal: Journal) => void) | undefined;
+    /** Transfers the queued first message to delivery or the editable composer. */
+    readonly onInitialMessageDequeued?: ((commandId: string) => void) | undefined;
     /** Reports session activity transitions, such as a running turn, to the owner. */
     readonly onStatusChange?: ((status: SessionActivityState) => void) | undefined;
     readonly onTitleChange: (sessionId: string, title: string) => void;
 }) {
-    const { session, botId, requests, clock, composerAttachments } = options;
+    const { session, botId, requests, clock, composerAttachments, delivery } = options;
     const sessionId = session.result.ready.sessionId;
     // Working in a conversation makes it the reference for the next draft: its
     // harness and the settings it runs with carry into New Session.
@@ -446,10 +445,8 @@ export function createSessionPaneModel(options: {
     let projection = createSessionProjection();
     let loadingOlderHistory = false;
     let draftRevision = 0;
-    // The queued first message belongs to the home store's conversation creation. This pane submits it as given,
-    // never as a copy in its composer, and reports every outcome back. It stays the pane's recovery responsibility
-    // until the service accepts it or the user discards it, not just until the send starts.
-    const queuedInitialCommandId = options.initialMessage?.commandId ?? options.unconfirmedMessage?.commandId ?? null;
+    // Creation owns the queued first message until the Session's delivery workflow takes its frozen request.
+    const queuedInitialCommandId = options.initialMessage?.commandId ?? null;
     const isQueuedInitialMessage = (commandId: string): boolean => commandId === queuedInitialCommandId;
     let queuedInitialSubmission: "waiting" | "submitted" =
         options.initialMessage === undefined ? "submitted" : "waiting";
@@ -482,19 +479,11 @@ export function createSessionPaneModel(options: {
             attachments: [...request.attachments.filter((item) => item.uri !== instructionUri), attachment],
         };
     };
-    const delivery = createSessionDeliveryStore({
-        submit: noticingClosure(async (request, signal) => {
-            if (client === null) {
-                throw new Error("The Session is not connected.");
-            }
-            return await client.turns.submit(sessionId, request, signal);
-        }),
-        initialUnknown: options.unconfirmedMessage,
-        onDelivered: (commandId) => {
-            if (isQueuedInitialMessage(commandId)) {
-                options.onInitialMessageDelivered?.();
-            }
-        },
+    const submitTurn: Parameters<SessionDeliveryStore["submit"]>[1] = noticingClosure(async (request, signal) => {
+        if (client === null) {
+            throw new Error("The Session is not connected.");
+        }
+        return await client.turns.submit(sessionId, request, signal);
     });
     const lastSentMessageEntry = sessionLastSentMessageEntry(sessionId);
     const deriveTimeline = (): { readonly messages: readonly SessionExecutionMessage[] } => ({
@@ -798,6 +787,8 @@ export function createSessionPaneModel(options: {
             if (
                 current.connection.kind !== "ready" ||
                 current.operation.kind === "configuring" ||
+                delivery.getState().state.kind === "submitting" ||
+                delivery.getState().state.kind === "delivery-unknown" ||
                 current.turn.kind === "current"
             ) {
                 return;
@@ -812,12 +803,6 @@ export function createSessionPaneModel(options: {
             void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
             const prompt = message.content.trim();
             const displayPrompt = prompt || attachments.map((attachment) => attachment.name).join(", ");
-            if (!queued) {
-                // The draft leaves the composer for the submission.
-                centralSessionStorage.remove(draftEntry);
-                composerAttachments.getState().clear();
-                set({ draft: "", queuedFilesNotice: false });
-            }
             const submittedDraftRevision = draftRevision;
             updateTurn({ kind: "submitting", commandId, startedAt: sent.sentAt });
             const pending = deriveTimeline();
@@ -846,9 +831,19 @@ export function createSessionPaneModel(options: {
                     },
                     signal,
                 );
-                const outcome = await delivery
+                signal.throwIfAborted();
+                const sending = delivery
                     .getState()
-                    .submit(commandId, displayPrompt, submission, attachments, signal);
+                    .submit({ commandId, displayPrompt, request: submission, attachments }, submitTurn, signal);
+                // Delivery owns the only recovery journal before the draft or creation queue releases its message.
+                if (queued) {
+                    options.onInitialMessageDequeued?.(commandId);
+                } else {
+                    centralSessionStorage.remove(draftEntry);
+                    composerAttachments.getState().clear();
+                    set({ draft: "", queuedFilesNotice: false });
+                }
+                const outcome = await sending;
                 signal.throwIfAborted();
                 switch (outcome.kind) {
                     case "accepted":
@@ -863,23 +858,9 @@ export function createSessionPaneModel(options: {
                             composerAttachments.getState().restore(attachments);
                             centralSessionStorage.write(draftEntry, message.content);
                         }
-                        if (queued) {
-                            // This rejected message is editable again. Retire
-                            // the auto-send/retry copy owned by the home store.
-                            options.onInitialMessageRecoveryCleared?.(commandId);
-                        }
                         break;
                     default:
                         return outcome satisfies never;
-                }
-                // The delivery store reports an accepted submission itself, as it reports any later confirmation.
-                if (outcome.kind === "delivery-unknown" && queued) {
-                    options.onInitialMessageUnconfirmed?.({
-                        attachments,
-                        commandId,
-                        displayPrompt,
-                        request: submission,
-                    });
                 }
                 if (outcome.kind === "accepted") {
                     updateTurn({ kind: "accepted", commandId, turnId: outcome.turn.turnId });
@@ -898,7 +879,7 @@ export function createSessionPaneModel(options: {
                     centralSessionStorage.write(draftEntry, message.content);
                 }
                 if (queued) {
-                    options.onInitialMessageRecoveryCleared?.(commandId);
+                    options.onInitialMessageDequeued?.(commandId);
                 }
                 const failureMessage = formatError(cause, "The agent could not complete the message.");
                 updateTurn({
@@ -918,7 +899,7 @@ export function createSessionPaneModel(options: {
             titleEdit: { kind: "closed" },
             messages: initialTimeline.messages,
             pendingInitialMessage: options.initialMessage ?? null,
-            historyLoading: false,
+            olderHistory: { kind: "idle" },
             historyRevision: 0,
             hasOlderHistory: false,
             draft: centralSessionStorage.read(draftEntry) ?? "",
@@ -932,7 +913,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 loadingOlderHistory = true;
-                set({ historyLoading: true });
+                set({ olderHistory: { kind: "loading" } });
                 const reopeningsAtStart = reopenings;
                 try {
                     const page = await readSessionHistory(
@@ -945,14 +926,16 @@ export function createSessionPaneModel(options: {
                     );
                     signal.throwIfAborted();
                     commitProjection({ kind: "older-page", page, revision: pagination.revision });
+                    set({ olderHistory: { kind: "idle" } });
                 } catch (cause) {
                     signal.throwIfAborted();
                     if (closedNow(cause, reopeningsAtStart)) {
+                        set({ olderHistory: { kind: "idle" } });
                         get().sessionClosed(null);
                         return;
                     }
                     set({
-                        operation: {
+                        olderHistory: {
                             kind: "failed",
                             message: formatError(cause, "Older messages could not be loaded."),
                         },
@@ -960,9 +943,6 @@ export function createSessionPaneModel(options: {
                     throw cause;
                 } finally {
                     loadingOlderHistory = false;
-                    if (!signal.aborted) {
-                        set({ historyLoading: false });
-                    }
                 }
             },
             connect: async (signal) => {
@@ -1186,12 +1166,7 @@ export function createSessionPaneModel(options: {
                     try {
                         welcome.getState().connected();
                         if (options.initialMessage !== undefined && queuedInitialSubmission === "waiting") {
-                            // Submission reports delivery itself, so an uncertain or
-                            // rejected submission leaves the queued message and its
-                            // idempotent command id in the home store for a remount
-                            // to recover.
-                            // The send belongs to the pane, not to this attempt: a closing of the Session must not
-                            // abandon a submission that is already on its way.
+                            // Preparation uses this pane; the frozen submission transfers to Session-owned delivery.
                             await submit(
                                 {
                                     commandId: options.initialMessage.commandId,
@@ -1202,10 +1177,6 @@ export function createSessionPaneModel(options: {
                             );
                             signal.throwIfAborted();
                         }
-                        // A detach between submit and the delivery report can still
-                        // re-send the queued message on re-attach. That is safe:
-                        // the command id is the turn submit's idempotency key, so
-                        // the service deduplicates the repeated submission.
                         await subscription.completed;
                     } finally {
                         monitoring.abort();
@@ -1464,12 +1435,6 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 updateTurn({ kind: "submission-ended", commandId, failure: null });
-                // Mirrors the delivery report: dropping this pane's retry path
-                // must also drop the home store's recovery copy, or a remount
-                // would submit the message the user just discarded.
-                if (isQueuedInitialMessage(commandId)) {
-                    options.onInitialMessageRecoveryCleared?.(commandId);
-                }
                 const restored = deriveTimeline();
                 set({ messages: restored.messages });
                 announceActivity();
@@ -1488,7 +1453,7 @@ export function createSessionPaneModel(options: {
                 const retried = deriveTimeline();
                 set({ messages: retried.messages });
                 announceActivity();
-                const outcome = await delivery.getState().retry(signal);
+                const outcome = await delivery.getState().retry(submitTurn, signal);
                 signal.throwIfAborted();
                 switch (outcome?.kind) {
                     case "accepted":
@@ -1500,9 +1465,6 @@ export function createSessionPaneModel(options: {
                         composerAttachments.getState().restore(pending.attachments);
                         centralSessionStorage.write(draftEntry, pending.request.content);
                         set({ draft: pending.request.content });
-                        if (isQueuedInitialMessage(pending.commandId)) {
-                            options.onInitialMessageRecoveryCleared?.(pending.commandId);
-                        }
                         break;
                     }
                     case "delivery-unknown":
@@ -1700,36 +1662,9 @@ export function createSessionPaneModel(options: {
                         return;
                     }
                     set({
-                        titleEdit: { kind: "closed" },
-                        operation: {
+                        titleEdit: {
                             kind: "failed",
                             message: cause instanceof Error ? cause.message : "The conversation could not be renamed.",
-                        },
-                    });
-                }
-            },
-            refreshSettings: async (signal) => {
-                if (client === null || get().connection.kind !== "ready") {
-                    return;
-                }
-                set({ operation: { kind: "configuring" } });
-                const reopeningsAtStart = reopenings;
-                try {
-                    const connected = client;
-                    await dispatchProjection({ kind: "reconcile" }, connected, signal);
-                    signal.throwIfAborted();
-                    set({ operation: { kind: "idle" } });
-                } catch (cause) {
-                    signal.throwIfAborted();
-                    if (closedNow(cause, reopeningsAtStart)) {
-                        set({ operation: { kind: "idle" } });
-                        get().sessionClosed(null);
-                        return;
-                    }
-                    set({
-                        operation: {
-                            kind: "failed",
-                            message: formatError(cause, "The settings could not be reloaded."),
                         },
                     });
                 }
@@ -1822,8 +1757,12 @@ export function createSessionPaneModel(options: {
      * element's own cleanup then re-runs it as a no-op.
      */
     const stop = (): void => {
+        if (connection.signal.aborted) {
+            return;
+        }
         filePreview.getState().close();
         connection.abort(new Error("The session pane stopped."));
+        delivery.getState().submissionInterrupted();
     };
     /**
      * Announced with the pane's attached root element, following React's
