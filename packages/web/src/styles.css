@@ -115,6 +115,14 @@
             transform: translateY(0);
         }
     }
+    /* CSS owns the short-lived copy confirmation so the component needs no timer effect. */
+    --animate-copy-confirmation: copy-confirmation 2s linear both;
+    @keyframes copy-confirmation {
+        from,
+        to {
+            opacity: 1;
+        }
+    }
     /* radius */
     --radius: 1.25rem;
     --radius-xs: calc(var(--radius) * 0.4);

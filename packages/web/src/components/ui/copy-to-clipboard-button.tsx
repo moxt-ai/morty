@@ -1,17 +1,18 @@
 import { Copy } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "./cloud-button.tsx";
 import { useToast } from "./toast.tsx";
-
-/** How long the button reports the copy before returning to its idle affordance. */
-const CONFIRMATION_MILLISECONDS = 2_000;
 
 /**
  * `confirming` is the short-lived button feedback; `confirmed` keeps the
  * caller's next-step guidance visible after the button has returned to idle.
+ * The attempt lets a repeated copy restart the animation-driven confirmation.
  */
-type CopyFeedback = { readonly kind: "idle" } | { readonly kind: "confirming" } | { readonly kind: "confirmed" };
+type CopyFeedback =
+    | { readonly kind: "idle" }
+    | { readonly kind: "confirming"; readonly attempt: number }
+    | { readonly kind: "confirmed"; readonly attempt: number };
 
 /**
  * A copy affordance for a single text value with copied/failed feedback
@@ -50,13 +51,11 @@ export function CopyToClipboardButton({
     const showToast = useToast();
     const confirming = feedback.kind === "confirming";
     const ariaLabel = confirming ? "Copied" : label;
-    useEffect(() => {
-        if (feedback.kind !== "confirming") {
-            return;
-        }
-        const timeout = window.setTimeout(() => setFeedback({ kind: "confirmed" }), CONFIRMATION_MILLISECONDS);
-        return () => window.clearTimeout(timeout);
-    }, [feedback]);
+    const finishConfirmation = (attempt: number) => {
+        setFeedback((current) =>
+            current.kind === "confirming" && current.attempt === attempt ? { kind: "confirmed", attempt } : current,
+        );
+    };
     const onClick = () => {
         if (navigator.clipboard === undefined) {
             showToast(failureToast);
@@ -64,7 +63,10 @@ export function CopyToClipboardButton({
         }
         void navigator.clipboard.writeText(value).then(
             () => {
-                setFeedback({ kind: "confirming" });
+                setFeedback((current) => ({
+                    kind: "confirming",
+                    attempt: current.kind === "idle" ? 1 : current.attempt + 1,
+                }));
                 if (successContent === undefined) {
                     showToast(successToast);
                 }
@@ -80,11 +82,25 @@ export function CopyToClipboardButton({
                     aria-label={ariaLabel}
                     className={className}
                     onClick={onClick}
+                    onAnimationEnd={(event) => {
+                        if (feedback.kind === "confirming" && event.animationName === "copy-confirmation") {
+                            finishConfirmation(feedback.attempt);
+                        }
+                    }}
                     {...(size !== undefined ? { size } : {})}
                     title={label}
                     variant={variant}
                 >
-                    {confirming ? (copiedContent ?? "Copied") : children}
+                    {confirming ? (
+                        <span
+                            className="inline-flex animate-copy-confirmation items-center gap-2"
+                            key={feedback.attempt}
+                        >
+                            {copiedContent ?? "Copied"}
+                        </span>
+                    ) : (
+                        children
+                    )}
                 </Button>
                 {feedback.kind === "idle" ? idleContent : successContent}
             </>
@@ -92,8 +108,23 @@ export function CopyToClipboardButton({
     }
 
     return (
-        <button aria-label={ariaLabel} title={label} type="button" onClick={onClick}>
-            <Copy aria-hidden="true" className="size-4" />
+        <button
+            aria-label={ariaLabel}
+            onAnimationEnd={(event) => {
+                if (feedback.kind === "confirming" && event.animationName === "copy-confirmation") {
+                    finishConfirmation(feedback.attempt);
+                }
+            }}
+            title={label}
+            type="button"
+            onClick={onClick}
+        >
+            <span
+                className={confirming ? "inline-flex animate-copy-confirmation" : "inline-flex"}
+                key={confirming ? feedback.attempt : "idle"}
+            >
+                <Copy aria-hidden="true" className="size-4" />
+            </span>
         </button>
     );
 }

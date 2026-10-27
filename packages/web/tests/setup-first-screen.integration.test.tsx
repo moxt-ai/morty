@@ -1,6 +1,6 @@
 import { fireEvent, getAllByRole, getByRole, getByText, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
-import { expect, onTestFinished, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { createTestApp } from "./infra/test-app.tsx";
 
 test("Given a new visitor, When the setup page opens, Then it presents one clear setup flow and keeps installation details reviewable", {
@@ -129,29 +129,21 @@ test("Given the first screen, When the user clicks Copy again after success, The
     expect(getByRole(document.body, "button", { name: "Copied" })).toBeInstanceOf(HTMLButtonElement);
 });
 
-test("Given the setup prompt was just copied, When two seconds pass, Then the copy button returns to its default affordance and can copy again", {
+test("Given the setup prompt was just copied, When its confirmation animation completes, Then the copy button returns to its default affordance and can copy again", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap" } });
     const copy = await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup prompt" }));
-    vi.useFakeTimers({ now: new Date("2026-10-26T09:00:00Z"), toFake: ["setTimeout", "clearTimeout", "Date"] });
-    onTestFinished(() => {
-        vi.useRealTimers();
-    });
 
     await act(async () => {
         fireEvent.click(copy);
     });
     expect(await navigator.clipboard.readText()).toContain(`${window.location.origin}/setup.md`);
-    expect(getByRole(document.body, "button", { name: "Copied" })).toBeInstanceOf(HTMLButtonElement);
+    const copied = getByRole(document.body, "button", { name: "Copied" });
+    expect(copied).toBeInstanceOf(HTMLButtonElement);
 
     await act(async () => {
-        vi.advanceTimersByTime(1_999);
-    });
-    expect(getByRole(document.body, "button", { name: "Copied" })).toBeInstanceOf(HTMLButtonElement);
-
-    await act(async () => {
-        vi.advanceTimersByTime(1);
+        fireEvent.animationEnd(copied, { animationName: "copy-confirmation" });
     });
     const restored = getByRole(document.body, "button", { name: "Copy setup prompt" });
     expect(restored).toBeInstanceOf(HTMLButtonElement);
