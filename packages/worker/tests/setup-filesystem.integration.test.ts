@@ -42,6 +42,74 @@ if (!isSetupModule(setupModule)) {
 }
 const { runSetup } = setupModule;
 
+test("Given this shell inherited installation data as MOBIUS_STATE_DIRECTORY from an earlier Runtime, When setup runs and Mobius refuses that root, Then setup stops before creating an identity and says how to rerun with the right root", {
+    timeout: 30_000,
+}, async () => {
+    const directory = await mkdtemp(join(tmpdir(), "morty-setup-state-root-"));
+    const state = join(directory, "state");
+    const bin = join(directory, "bin");
+    await mkdir(bin);
+    const fixture = await createIdentityFixture({ listenOnLoopback: true });
+    try {
+        // Mobius 0.0.315 and later refuse another root's installation data with EX_CONFIG.
+        const refusal =
+            "MOBIUS_STATE_DIRECTORY is Mobius installation data, not a state root. Use the state root that owns it: MOBIUS_STATE_DIRECTORY=/owning-root";
+        await writeFile(
+            join(bin, process.platform === "win32" ? "mobius.cmd" : "mobius"),
+            process.platform === "win32"
+                ? `@echo off\r\necho ${refusal} 1>&2\r\nexit /b 78\r\n`
+                : `#!${process.execPath}\nprocess.stderr.write(${JSON.stringify(`${refusal}\n`)});\nprocess.exit(78);\n`,
+            { mode: 0o700 },
+        );
+        let output = "";
+        const child = spawn(
+            process.execPath,
+            [
+                fileURLToPath(new URL("../../setup/src/cli.ts", import.meta.url)),
+                "setup",
+                "--base-url",
+                fixture.origin,
+                "--cwd",
+                directory,
+                "--harness",
+                "codex",
+                "--session-id",
+                "state-root-test",
+            ],
+            {
+                env: {
+                    ...process.env,
+                    PATH: bin,
+                    MOBIUS_STATE_DIRECTORY: join(directory, "inherited-installation-data"),
+                    MORTY_STATE_DIRECTORY: state,
+                    DOCUMENT_DIR: directory,
+                },
+                stdio: ["ignore", "pipe", "pipe"],
+                signal: AbortSignal.timeout(20000),
+                windowsHide: true,
+            },
+        );
+        child.stdout.on("data", (chunk: Buffer) => {
+            output += chunk.toString();
+        });
+        child.stderr.on("data", (chunk: Buffer) => {
+            output += chunk.toString();
+        });
+        const [code] = await once(child, "close");
+        expect(code, output).toBe(1);
+        expect(output).toContain('"code":"MOBIUS_STATE_ROOT_INVALID"');
+        expect(output).toContain(
+            "Rerun setup with MOBIUS_STATE_DIRECTORY set to the state root that the Runtime log names",
+        );
+        expect(output).not.toContain("RUNTIME_PREFLIGHT_FAILED");
+        expect(output).not.toContain('"status":"identity_ready"');
+        await expect(readFile(join(state, "config.json"))).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+        await fixture.close();
+        await rm(directory, { recursive: true, force: true });
+    }
+});
+
 test.each(["missing", "unlaunchable", "npm-missing", "npm-unlaunchable"] as const)(
     "Given a %s local dependency, When setup checks the Mobius executable, Then it fails before creating an identity and reports recovery instructions",
     async (failure) => {
