@@ -1,11 +1,11 @@
 import type { SessionElicitationRequestedEvent, SessionPermissionRequestedEvent } from "@moxt-ai/mobius-sdk";
-import type { SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
+import type { SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
 import type { SessionInteraction } from "./session-pane-types.ts";
 
 // The Session pane reads Mobius lifecycle metadata only through this module, so
 // a lifecycle protocol change is absorbed here instead of across pane workflows.
 
-type LifecycleMetadata = Extract<SessionEvent, { readonly type: "lifecycle-metadata" }>["payload"];
+type LifecycleMetadata = Extract<SessionLiveEvent, { readonly type: "lifecycle-metadata" }>["payload"];
 type LifecycleEvent<Kind extends LifecycleMetadata["kind"]> = Extract<
     LifecycleMetadata,
     { readonly kind: Kind; readonly event: unknown }

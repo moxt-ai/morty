@@ -1,4 +1,5 @@
 import type { SessionEvent, SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
+import type { SessionPresentationEvent } from "./session-presentation.ts";
 import {
     appendSessionMessageEvent,
     createSessionMessageReduction,
@@ -64,7 +65,10 @@ export function createSessionProjection(): SessionProjection {
     return { kind: "pristine", pending: null, revision: 0 };
 }
 
-function mergeSessionEvents(first: readonly SessionEvent[], second: readonly SessionEvent[]): readonly SessionEvent[] {
+function mergeSessionEvents(
+    first: readonly SessionPresentationEvent[],
+    second: readonly SessionPresentationEvent[],
+): readonly SessionPresentationEvent[] {
     const events = new Map(first.map((event) => [event.eventId, event]));
     for (const event of second) {
         events.set(event.eventId, event);
@@ -72,7 +76,7 @@ function mergeSessionEvents(first: readonly SessionEvent[], second: readonly Ses
     return [...events.values()];
 }
 
-function newestTitle(events: readonly SessionEvent[]): string | undefined {
+function newestTitle(events: readonly SessionPresentationEvent[]): string | undefined {
     for (let index = events.length - 1; index >= 0; index -= 1) {
         const event = events[index];
         if (
@@ -89,7 +93,7 @@ function newestTitle(events: readonly SessionEvent[]): string | undefined {
 }
 
 /** Live settings updates invalidate the display; only a Runtime read establishes current settings. */
-function adoptionEffect(events: readonly SessionEvent[]): readonly SessionProjectionEffect[] {
+function adoptionEffect(events: readonly SessionPresentationEvent[]): readonly SessionProjectionEffect[] {
     const title = newestTitle(events);
     const configurationChanged = events.some(
         (event) =>
@@ -104,20 +108,20 @@ function adoptionEffect(events: readonly SessionEvent[]): readonly SessionProjec
 }
 
 /** A new history baseline adopts its title, and leaves the current settings to the Runtime. */
-function baselineEffects(events: readonly SessionEvent[]): readonly SessionProjectionEffect[] {
+function baselineEffects(events: readonly SessionPresentationEvent[]): readonly SessionProjectionEffect[] {
     const title = newestTitle(events);
     return [...(title === undefined ? [] : [{ kind: "adopted" as const, title }]), { kind: "read-settings" }];
 }
 
 /** Events a reload found after the ones the page saw apply as they would have live; the Runtime then confirms. */
-function catchUpEffects(events: readonly SessionEvent[]): readonly SessionProjectionEffect[] {
+function catchUpEffects(events: readonly SessionPresentationEvent[]): readonly SessionProjectionEffect[] {
     return baselineEffects(events);
 }
 
 function adoptGeneration(
     state: SessionProjection,
     history: SessionEventHistory,
-    events: readonly SessionEvent[],
+    events: readonly SessionPresentationEvent[],
 ): SessionProjection {
     return {
         eventIds: new Set(events.map((event) => event.eventId)),
@@ -134,11 +138,11 @@ function adoptGeneration(
 
 function applyNewerEvents(
     state: Extract<SessionProjection, { readonly kind: "established" }>,
-    history: SessionEventHistory,
-): { readonly events: readonly SessionEvent[]; readonly state: SessionProjection } {
+    events: readonly SessionPresentationEvent[],
+): { readonly events: readonly SessionPresentationEvent[]; readonly state: SessionProjection } {
     let next = { ...state, pending: null };
-    const applied: SessionEvent[] = [];
-    for (const event of history.events) {
+    const applied: SessionPresentationEvent[] = [];
+    for (const event of events) {
         if (next.eventIds.has(event.eventId)) {
             continue;
         }
@@ -247,7 +251,7 @@ export function transitionSessionProjection(
                     state: adoptGeneration(state, input.history, events),
                 };
             }
-            const merged = applyNewerEvents(state, { ...input.history, events });
+            const merged = applyNewerEvents(state, events);
             return { effects: catchUpEffects(merged.events), state: merged.state };
         }
         case "older-page": {

@@ -1,5 +1,5 @@
 import { externalContentPath } from "@moxt-ai/mobius-sdk";
-import type { AcpSessionUpdate, ContentBlock, SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
+import type { AcpSessionUpdate, ContentBlock, SessionEvent, SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
 import type { AgentDisplayContent } from "../../components/agents/display-content.ts";
 import {
     REASONING_CHARACTER_LIMIT,
@@ -11,6 +11,8 @@ type ToolCallUpdate = Extract<AcpSessionUpdate, { readonly sessionUpdate: "tool_
 const BOT_INSTRUCTIONS_URI = "morty://bot/instructions";
 
 export const COMPACTION_CHARACTER_LIMIT = 16 * 1024;
+
+export type SessionPresentationEvent = SessionEvent | SessionLiveEvent;
 
 export type SessionText =
     | {
@@ -35,7 +37,7 @@ type SessionContentBlock =
 export type SessionMessage =
     | {
           readonly role: "user";
-          readonly firstEvent: SessionEvent;
+          readonly firstEvent: SessionPresentationEvent;
           readonly commandId: string | null;
           readonly contents: readonly ContentBlock[];
           /**
@@ -47,7 +49,7 @@ export type SessionMessage =
       }
     | {
           readonly role: "assistant";
-          readonly firstEvent: SessionEvent;
+          readonly firstEvent: SessionPresentationEvent;
           readonly commandId: string | null;
           readonly presentation:
               | { readonly kind: "message"; readonly content: SessionContentBlock; readonly messageId: string | null }
@@ -341,7 +343,7 @@ function compactionStatus(
     }
 }
 
-function messageFromAcpUpdate(event: SessionEvent, update: AcpSessionUpdate): SessionMessage | null {
+function messageFromAcpUpdate(event: SessionPresentationEvent, update: AcpSessionUpdate): SessionMessage | null {
     switch (update.sessionUpdate) {
         case "user_message_chunk": {
             if (isBotInstructions(update.content)) {
@@ -470,7 +472,7 @@ interface ReducedSessionMessage {
     readonly kind: "message";
     readonly message: SessionMessage;
     readonly provenance: FirstEventProvenance;
-    readonly unresolvedEvents: readonly SessionEvent[];
+    readonly unresolvedEvents: readonly SessionPresentationEvent[];
 }
 
 type ReducedSessionEntry =
@@ -490,7 +492,7 @@ export interface SessionMessageReduction {
 
 function consumeSessionEvent(
     entries: readonly ReducedSessionEntry[],
-    event: SessionEvent,
+    event: SessionPresentationEvent,
     leadingEvent: "known" | "possibly-before-page",
 ): SessionEventResult {
     if (event.type === "lifecycle-metadata") {
@@ -644,7 +646,7 @@ function consumeSessionEvent(
 
 function applySessionEvent(
     entries: readonly ReducedSessionEntry[],
-    event: SessionEvent,
+    event: SessionPresentationEvent,
     result: SessionEventResult,
 ): readonly ReducedSessionEntry[] {
     switch (result.kind) {
@@ -700,7 +702,7 @@ function applySessionEvent(
 }
 
 function reduceSessionEvents(
-    events: readonly SessionEvent[],
+    events: readonly SessionPresentationEvent[],
     leadingEvent: "known" | "possibly-before-page",
 ): SessionMessageReduction {
     let entries: readonly ReducedSessionEntry[] = [];
@@ -711,16 +713,16 @@ function reduceSessionEvents(
 }
 
 export function createSessionMessageReduction(history: {
-    readonly events: readonly SessionEvent[];
+    readonly events: readonly SessionPresentationEvent[];
     readonly nextCursor: string | null;
 }): SessionMessageReduction {
     return reduceSessionEvents(history.events, history.nextCursor === null ? "known" : "possibly-before-page");
 }
 
 function mergeSessionEventSequences(
-    first: readonly SessionEvent[],
-    second: readonly SessionEvent[],
-): readonly SessionEvent[] {
+    first: readonly SessionPresentationEvent[],
+    second: readonly SessionPresentationEvent[],
+): readonly SessionPresentationEvent[] {
     const events = new Map(first.map((event) => [event.eventId, event]));
     for (const event of second) {
         events.set(event.eventId, event);
@@ -730,7 +732,7 @@ function mergeSessionEventSequences(
 
 export function appendSessionMessageEvent(
     reduction: SessionMessageReduction,
-    event: SessionEvent,
+    event: SessionPresentationEvent,
 ): SessionMessageReduction {
     return {
         entries: applySessionEvent(reduction.entries, event, consumeSessionEvent(reduction.entries, event, "known")),
@@ -739,7 +741,7 @@ export function appendSessionMessageEvent(
 
 export function prependSessionMessageEvents(
     reduction: SessionMessageReduction,
-    history: { readonly events: readonly SessionEvent[]; readonly nextCursor: string | null },
+    history: { readonly events: readonly SessionPresentationEvent[]; readonly nextCursor: string | null },
 ): SessionMessageReduction {
     const unresolvedEvents = reduction.entries.flatMap((entry) =>
         entry.kind === "message" ? entry.unresolvedEvents : [],
@@ -864,11 +866,11 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
     return messages;
 }
 
-export function sessionEventLogPresentation(events: readonly SessionEvent[]): SessionTimeline {
+export function sessionEventLogPresentation(events: readonly SessionPresentationEvent[]): SessionTimeline {
     return { messages: sessionReductionMessages(reduceSessionEvents(events, "known")) };
 }
 
-export function sessionEventCommandIds(events: readonly SessionEvent[]): readonly string[] {
+export function sessionEventCommandIds(events: readonly SessionPresentationEvent[]): readonly string[] {
     const commandIds: string[] = [];
     for (const event of events) {
         if (event.type === "lifecycle-metadata") {
