@@ -90,9 +90,11 @@ test("Given an active turn exceeds one recovery page, When the user leaves and r
     expect(document.body.textContent).toContain(prompt);
 });
 
-test("Given a partially streamed reply, When Chat remounts and the daemon continues, Then the restored prefix and file survive subsequent deltas", {
+test("Given a partially streamed reply, When Chat remounts and the daemon continues, Then its working indicator, restored prefix, and file survive until completion", {
     timeout: 30_000,
 }, async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-13T08:00:00Z"));
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
@@ -114,9 +116,15 @@ test("Given a partially streamed reply, When Chat remounts and the daemon contin
                 .some((element) => element.textContent?.includes("Partial reply") === true),
         ).toBe(true),
     );
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "status", { name: "Agent is working" }).textContent).toBe("Working for 0s"),
+    );
     app.remount();
     await app.queryElementByTestId(dataTestId.sessionStatus);
     await app.waitForView(() => expect(document.body.textContent).toContain("partial.bin"));
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "status", { name: "Agent is working" }).textContent).toBe("Working for 0s"),
+    );
     await daemon.continueReply("hold after first delta", {
         outcome: "hold",
         output: [{ kind: "text", text: " and the next streamed chunk" }],
@@ -130,6 +138,7 @@ test("Given a partially streamed reply, When Chat remounts and the daemon contin
         expect(text).toContain("and the next streamed chunk");
         expect(document.body.textContent).toContain("partial.bin");
         expect(app.optionalElementByTestId(dataTestId.sessionStatus)).not.toBeNull();
+        expect(getByRole(document.body, "status", { name: "Agent is working" }).textContent).toBe("Working for 0s");
     });
     await daemon.continueReply("hold after first delta", {
         outcome: "complete",
@@ -137,6 +146,7 @@ test("Given a partially streamed reply, When Chat remounts and the daemon contin
     });
     const text = await app.waitForView(() => {
         expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
+        expect(queryAllByRole(document.body, "status", { name: "Agent is working" })).toHaveLength(0);
         const response = app
             .elementsByTestId(dataTestId.agentResponse)
             .map((element) => element.textContent)
