@@ -23,7 +23,7 @@ function privatePath(pathname: string, origin: string): string {
     return resolved.origin === origin ? resolved.pathname : "/";
 }
 
-export function createGoogleAnalytics(options: {
+function createGoogleAnalytics(options: {
     readonly document: Document;
     readonly location: Pick<Location, "origin">;
     readonly measurementId: string;
