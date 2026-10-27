@@ -22,7 +22,7 @@ test("Given two draft images, When the user opens, navigates and closes the view
     const trigger = await app.waitForView(() => getByRole(document.body, "button", { name: "View image: before.png" }));
     await app.user.click(trigger);
     const viewer = getByRole(document.body, "dialog", { name: "Image viewer" });
-    expect(getByRole(viewer, "img", { name: "before.png" }).getAttribute("src")).toMatch(/^data:image\/png/u);
+    expect(getByRole(viewer, "img", { name: "before.png" }).getAttribute("src")).toMatch(/^blob:/u);
     expect(viewer.textContent).toContain("1 of 2");
     await app.user.click(getByRole(viewer, "button", { name: "Next image" }));
     expect(getByRole(viewer, "img", { name: "after.png" })).toBeDefined();
