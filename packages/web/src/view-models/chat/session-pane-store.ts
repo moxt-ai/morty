@@ -689,6 +689,10 @@ export function createSessionPaneModel(options: {
                 hasOlderHistory: pagination !== null,
                 historyRevision: projection.revision,
                 messages,
+                // Replace the creation preview atomically with the first harness-owned user message.
+                pendingInitialMessage: messages.some((message) => message.role === "user")
+                    ? null
+                    : get().pendingInitialMessage,
             });
             for (const effect of result.effects) {
                 if (effect.kind !== "adopted") {
@@ -1187,7 +1191,7 @@ export function createSessionPaneModel(options: {
                     };
                     const subscription = await connected.events.subscribeLive(sessionId, observer, signal);
                     signal.throwIfAborted();
-                    setAndSettle({ connection: { kind: "ready", client: connected }, pendingInitialMessage: null });
+                    setAndSettle({ connection: { kind: "ready", client: connected } });
                     const monitoring = new AbortController();
                     const monitorSignal = AbortSignal.any([signal, monitoring.signal]);
                     void (async () => {
