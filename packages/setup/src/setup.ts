@@ -230,22 +230,24 @@ interface HarnessDiagnosis {
 
 /** What the agent should do when the Runtime does not offer the chosen harness, chosen by the inventory status. */
 function harnessNextStep(harness: string, diagnosis: HarnessDiagnosis | null): string {
-    const rerun = `then rerun setup with --harness ${harness}; it reuses this computer's Machine.`;
+    const rerun = `rerun setup with --harness ${harness}; it reuses this computer's Machine.`;
     switch (diagnosis?.status) {
         case "authentication_required":
             return `Ask the user to sign in to ${diagnosis.label} on this computer by running \`${diagnosis.recoveryCommand || harness}\` in a terminal; you cannot sign in for them. When they confirm, ${rerun}`;
         case "missing_agent":
-            return `Mobius cannot find ${diagnosis.label} on this computer. Make sure \`${harness}\` runs in a new terminal, ${rerun} Do not switch to another harness.`;
+            return `Mobius cannot find ${diagnosis.label} on this computer. Make sure \`${harness}\` runs in a new terminal, then ${rerun} Do not switch to another harness.`;
         case "missing_adapter":
             return diagnosis.recoveryCommand.length > 0
-                ? `Install the ${diagnosis.label} adapter by running \`${diagnosis.recoveryCommand}\`, ${rerun}`
-                : `Install the ${diagnosis.label} adapter, ${rerun}`;
+                ? `Install the ${diagnosis.label} adapter by running \`${diagnosis.recoveryCommand}\`, then ${rerun}`
+                : `Install the ${diagnosis.label} adapter, then ${rerun}`;
         case "unsupported_version":
-            return `Update ${diagnosis.label} to ${diagnosis.minimumSupportedVersion || "its latest release"} or newer, ${rerun}`;
+            return `Update ${diagnosis.label} to ${diagnosis.minimumSupportedVersion || "its latest release"} or newer, then ${rerun}`;
         case "ready":
-            return `${diagnosis.label} is ready now; rerun setup with --harness ${harness}.`;
+            // Mobius 0.0.314 and later refresh a running Runtime's Agents when setup starts it; earlier releases keep
+            // the Agents they found at startup until the daemon restarts.
+            return `${diagnosis.label} is ready, but this computer's running Morty Runtime has not picked it up yet. Rerun setup once. If it fails the same way again, ask the user before running \`mobius quit\`, because it stops every Morty session on this computer; when they agree, run it and ${rerun}`;
         default:
-            return `Confirm \`${harness}\` starts and answers a prompt in a new terminal and fix what stops it, ${rerun} If it answers and setup fails the same way again, report error.code to the user.`;
+            return `Confirm \`${harness}\` starts and answers a prompt in a new terminal and fix what stops it, then ${rerun} If it answers and setup fails the same way again, report error.code to the user.`;
     }
 }
 

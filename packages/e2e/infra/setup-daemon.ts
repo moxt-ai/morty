@@ -41,6 +41,8 @@ export class ControlledSetupRuntime implements SetupRuntime {
     #options: ControlledAgentBehavior;
     /** What `mobius agents --output-json` reports as unavailable; `null` is a release without that option. */
     #unavailableAgents: readonly UnavailableAgentReport[] | null = null;
+    /** Agents `mobius agents` reports ready although the running Runtime did not publish them. */
+    #unpublishedReadyAgents: readonly { readonly id: string; readonly label: string }[] = [];
     readonly #machineName: string;
     #upgrade: ControlledUpgrade;
     #release: NonNullable<ControlledAgentBehavior["runtime"]>;
@@ -91,11 +93,9 @@ export class ControlledSetupRuntime implements SetupRuntime {
             await writeFile(
                 output.slice("--output-json=".length),
                 JSON.stringify({
-                    available: createMortyFakeDaemon(this.#options).catalog.map(({ id, label }) => ({
-                        id,
-                        label,
-                        status: "ready",
-                    })),
+                    available: [...createMortyFakeDaemon(this.#options).catalog, ...this.#unpublishedReadyAgents].map(
+                        ({ id, label }) => ({ id, label, status: "ready" }),
+                    ),
                     unavailable: this.#unavailableAgents,
                 }),
             );
@@ -160,9 +160,16 @@ export class ControlledSetupRuntime implements SetupRuntime {
         }
     };
 
-    /** Sets the Agents the machine has installed but cannot offer, such as one the user has not signed in to. */
-    readonly reportUnavailableAgents = (agents: readonly UnavailableAgentReport[]): void => {
-        this.#unavailableAgents = agents;
+    /**
+     * Sets what this machine's Mobius reports: Agents it cannot offer, such as one the user has not signed in to, and
+     * Agents that are ready now but missing from the catalog a running Runtime published at startup.
+     */
+    readonly reportAgentInventory = (
+        unavailable: readonly UnavailableAgentReport[],
+        unpublishedReady: readonly { readonly id: string; readonly label: string }[] = [],
+    ): void => {
+        this.#unavailableAgents = unavailable;
+        this.#unpublishedReadyAgents = unpublishedReady;
     };
 
     /** Changes how later `mobius upgrade` runs behave, such as when the registry becomes reachable. */

@@ -1020,7 +1020,7 @@ test("Given Pi is installed but signed out, so the Runtime does not offer it, Wh
     await withUpgradeMachine(
         "unavailable",
         async (runtime, paths) => {
-            runtime.reportUnavailableAgents([
+            runtime.reportAgentInventory([
                 {
                     id: "pi",
                     label: "Pi",
@@ -1044,7 +1044,7 @@ test("Given Pi is installed but signed out, so the Runtime does not offer it, Wh
             });
 
             // The user signs in, so this computer's Mobius offers Pi again.
-            runtime.reportUnavailableAgents([]);
+            runtime.reportAgentInventory([]);
             await runtime.installAgents({
                 agentId: "pi",
                 agentName: "Pi",
@@ -1054,6 +1054,32 @@ test("Given Pi is installed but signed out, so the Runtime does not offer it, Wh
             expect(finished.code, JSON.stringify(finished.events)).toBe(0);
             expect(machineOf(finished.events)).toBe(machineOf(failed.events));
             expect(finished.events.at(-1)).toMatchObject({ status: "ready" });
+        },
+        "current",
+    );
+});
+
+test("Given Pi became ready after the running Runtime published its Agents, When setup runs with Pi and the Runtime still omits it, Then setup asks to rerun once and to get the user's consent before restarting Mobius", {
+    timeout: 120_000,
+}, async () => {
+    await withUpgradeMachine(
+        "unavailable",
+        async (runtime, paths) => {
+            runtime.reportAgentInventory([], [{ id: "pi", label: "Pi" }]);
+            const failed = await setupMachine(runtime, paths, undefined, { harness: "pi" });
+            expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
+            const failure = failed.events.at(-1)?.["error"];
+            expect(failure).toMatchObject({
+                code: "HARNESS_UNAVAILABLE",
+                harness: {
+                    harness: "pi",
+                    status: "ready",
+                    nextStep: expect.stringContaining(
+                        "ask the user before running `mobius quit`, because it stops every Morty session on this computer",
+                    ),
+                },
+            });
+            expect(JSON.stringify(failure)).toContain("Rerun setup once.");
         },
         "current",
     );
