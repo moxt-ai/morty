@@ -29,7 +29,10 @@ export const defineCurrentAgent: DefineInProcessAgent<InProcessAcpAgentDefinitio
  * its configuration through a real ACP update; it answers any other prompt.
  * `define` registers it with the daemon release under test.
  */
-export function createSettingsAgent<Definition>(define: DefineInProcessAgent<Definition>) {
+export function createSettingsAgent<Definition>(
+    define: DefineInProcessAgent<Definition>,
+    profile: "model" | "full" = "model",
+) {
     const sessions = new Map<string, acp.SessionConfigOption[]>();
     const configuration = (sessionId: string): acp.SessionConfigOption[] => {
         const options = sessions.get(sessionId);
@@ -60,9 +63,41 @@ export function createSettingsAgent<Definition>(define: DefineInProcessAgent<Def
                         options: [
                             { value: "test-small", name: "Test Small" },
                             { value: "test-large", name: "Test Large" },
+                            ...(profile === "full"
+                                ? Array.from({ length: 20 }, (_, index) => ({
+                                      value: `test-model-${index}`,
+                                      name: `Test model ${index} with a descriptive name`,
+                                  }))
+                                : []),
                         ],
                     },
                 ]);
+                if (profile === "full") {
+                    sessions.set(sessionId, [
+                        {
+                            id: "mode",
+                            name: "Mode",
+                            type: "select",
+                            currentValue: "default",
+                            options: [
+                                { value: "default", name: "Default" },
+                                { value: "plan", name: "Plan" },
+                            ],
+                        },
+                        ...configuration(sessionId),
+                        {
+                            id: "effort",
+                            name: "Effort",
+                            type: "select",
+                            currentValue: "high",
+                            options: [
+                                { value: "high", name: "High" },
+                                { value: "low", name: "Low" },
+                            ],
+                        },
+                        { id: "fast", name: "Fast mode", type: "boolean", currentValue: false },
+                    ]);
+                }
                 return { sessionId, configOptions: configuration(sessionId) };
             })
             .onRequest(acp.methods.agent.session.load, (context) => ({
@@ -73,12 +108,26 @@ export function createSettingsAgent<Definition>(define: DefineInProcessAgent<Def
             }))
             .onRequest(acp.methods.agent.session.setConfigOption, (context) => {
                 const { configId, value, sessionId } = context.params;
-                if (configId !== "model" || (value !== "test-small" && value !== "test-large")) {
-                    throw new Error("Unknown controlled model");
+                const current = configuration(sessionId).find((option) => option.id === configId);
+                if (current === undefined) {
+                    throw new Error("Unknown controlled setting");
                 }
-                const options = configuration(sessionId).map((option) =>
-                    option.type === "select" ? { ...option, currentValue: value } : option,
-                );
+                const options = configuration(sessionId).map((option) => {
+                    if (option.id !== configId) {
+                        return option;
+                    }
+                    if (option.type === "boolean" && typeof value === "boolean") {
+                        return { ...option, currentValue: value };
+                    }
+                    if (
+                        option.type === "select" &&
+                        typeof value === "string" &&
+                        option.options.some((choice) => "value" in choice && choice.value === value)
+                    ) {
+                        return { ...option, currentValue: value };
+                    }
+                    throw new Error("Unknown controlled setting value");
+                });
                 sessions.set(sessionId, options);
                 return { configOptions: options };
             })
@@ -119,7 +168,7 @@ export function createSettingsAgent<Definition>(define: DefineInProcessAgent<Def
             close: async () => termination.resolve({ kind: "closed" }),
         };
     };
-    return define("settings-test", "Settings Agent", createEndpoint);
+    return define(profile === "full" ? "configuration-test" : "settings-test", "Settings Agent", createEndpoint);
 }
 
 /** How an installed Agent fails to open a session: signed out like a real harness, or broken. */
