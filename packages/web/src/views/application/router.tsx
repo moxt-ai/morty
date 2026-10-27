@@ -48,7 +48,7 @@ function getRouteFailureDetails(error: Error): RouteFailureDetails {
     };
 }
 
-export function RouteFailureContent({ error, onRetry }: { readonly error: Error; readonly onRetry: () => void }) {
+function RouteFailureContent({ error, onRetry }: { readonly error: Error; readonly onRetry: () => void }) {
     const details = getRouteFailureDetails(error);
     const copy = describePageFailure(details.message, "Something went wrong");
     return (
