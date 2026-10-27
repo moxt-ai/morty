@@ -15,6 +15,9 @@ const setupSectionWideClassName = `${setupSectionClassName} md:max-w-[960px]`;
 
 export const setupCardClassName = `flex flex-col items-center overflow-hidden ${overlaySurfaceRadiusClassName} border-[1px] border-white bg-card/90 px-8 pt-10 pb-6 text-center shadow-module backdrop-blur`;
 
+/** Light gray surface behind the setup connection arc; the logo badge reuses it so both read as one card surface. */
+const setupConnectionBandFill = "#E8ECF1";
+
 /** Vertical rhythm below title or description (24px top, 12px between children). */
 const setupContentStackClassName = "mt-6 w-full space-y-3";
 
@@ -43,7 +46,7 @@ export function SetupConnectionGraphic({ className = "" }: { readonly className?
                 preserveAspectRatio="none"
                 viewBox="0 0 400 140"
             >
-                <path d="M0 0H400V72C278 126 122 126 0 72Z" fill="#E8ECF1" />
+                <path d="M0 0H400V72C278 126 122 126 0 72Z" fill={setupConnectionBandFill} />
                 <path
                     d="M400 72C278 126 122 126 0 72"
                     stroke="var(--morty-fill-white)"
@@ -81,7 +84,8 @@ export function SetupConnectionGraphic({ className = "" }: { readonly className?
             </span>
             <span
                 aria-hidden="true"
-                className="absolute top-[77px] left-1/2 flex size-[70px] -translate-x-1/2 items-center justify-center rounded-[22px] bg-card/90"
+                className="absolute top-[77px] left-1/2 flex size-[70px] -translate-x-1/2 items-center justify-center rounded-[22px]"
+                style={{ backgroundColor: setupConnectionBandFill }}
             >
                 <MortyLogoMark size={56} />
             </span>
