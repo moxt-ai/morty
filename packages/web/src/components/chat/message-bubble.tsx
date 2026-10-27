@@ -1,18 +1,20 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { MessageCopyButton } from "./message-copy-button.tsx";
-import { ResponseCopyButton } from "./response-copy-button.tsx";
+import { ResponseCopyButton, type ResponseCopyStoreFactory } from "./response-copy-button.tsx";
 
 export function MessageBubble({
     speaker,
     children,
     copyText,
+    createResponseCopyStore,
     status,
     "data-testid": testId,
 }: {
     readonly speaker: "user" | "assistant";
     readonly children: ReactNode;
     readonly copyText?: string | undefined;
+    readonly createResponseCopyStore?: ResponseCopyStoreFactory;
     readonly status?: ReactNode;
     readonly "data-testid"?: string | undefined;
 }) {
@@ -34,9 +36,12 @@ export function MessageBubble({
         >
             {children}
             {messageCopyText !== null && <MessageCopyButton text={messageCopyText} />}
-            {speaker === "assistant" && copyText !== undefined && copyText.trim().length > 0 && (
-                <ResponseCopyButton text={copyText} />
-            )}
+            {speaker === "assistant" &&
+                createResponseCopyStore !== undefined &&
+                copyText !== undefined &&
+                copyText.trim().length > 0 && (
+                    <ResponseCopyButton createStore={createResponseCopyStore} text={copyText} />
+                )}
             {status !== undefined && (
                 <span className="absolute top-1/2 right-full mr-1.5 flex -translate-y-1/2">{status}</span>
             )}

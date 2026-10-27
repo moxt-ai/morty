@@ -1,33 +1,36 @@
 import { Check, Copy } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
+import { useStore } from "zustand";
+import type { StoreApi } from "zustand/vanilla";
 
-/** Clipboard feedback is transient DOM state; the caller supplies the completed response. */
-export function ResponseCopyButton({ text }: { readonly text: string }) {
-    const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
+export interface ResponseCopyModel {
+    readonly state:
+        | { readonly kind: "idle" | "copying" | "copied" }
+        | { readonly kind: "failed"; readonly message: string };
+    readonly copy: () => void;
+    readonly onAttach: (node: HTMLElement | null) => (() => void) | undefined;
+}
 
-    useEffect(() => {
-        if (copy !== "copied") {
-            return;
-        }
-        const timer = window.setTimeout(() => setCopy("idle"), 2000);
-        return () => window.clearTimeout(timer);
-    }, [copy]);
+export type ResponseCopyStoreFactory = (text: string) => StoreApi<ResponseCopyModel>;
+
+export function ResponseCopyButton({
+    text,
+    createStore,
+}: {
+    readonly text: string;
+    readonly createStore: ResponseCopyStoreFactory;
+}) {
+    const store = useMemo(() => createStore(text), [createStore, text]);
+    const model = useStore(store);
+    const copy = model.state.kind;
 
     return (
-        <div className="mt-2 flex flex-wrap items-center gap-x-3">
+        <div className="mt-2 flex flex-wrap items-center gap-x-3" ref={model.onAttach}>
             <button
                 aria-label={copy === "copied" ? "Copied" : "Copy response"}
                 className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 motion-reduce:transition-none"
-                onClick={() => {
-                    if (navigator.clipboard === undefined) {
-                        setCopy("failed");
-                        return;
-                    }
-                    void navigator.clipboard.writeText(text).then(
-                        () => setCopy("copied"),
-                        () => setCopy("failed"),
-                    );
-                }}
+                aria-disabled={copy === "copying"}
+                onClick={model.copy}
                 title="Copy response as Markdown"
                 type="button"
             >
@@ -41,9 +44,9 @@ export function ResponseCopyButton({ text }: { readonly text: string }) {
             <span className="sr-only" role="status">
                 {copy === "copied" ? "Response copied to clipboard" : ""}
             </span>
-            {copy === "failed" && (
+            {model.state.kind === "failed" && (
                 <span className="text-xs text-muted-foreground" role="alert">
-                    Could not access the clipboard. Try again or select the response and copy it manually.
+                    {model.state.message}
                 </span>
             )}
         </div>
