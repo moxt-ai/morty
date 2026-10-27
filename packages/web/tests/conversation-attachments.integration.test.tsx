@@ -93,6 +93,18 @@ test("Given the message composer, When the user clicks Add attachment and select
     expect(queryByRole(document.body, "list", { name: "Attachments" })).toBeNull();
 });
 
+test("Given an image larger than the former limit, When the user attaches it, Then the composer accepts it", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(dataTestId.messageComposer);
+    const input = getByLabelText(document.body, "Choose attachments");
+    await app.user.upload(input, new File([new Uint8Array(3_000_000)], "large-image.png", { type: "image/png" }));
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "list", { name: "Attachments" }).textContent).toContain("large-image.png"),
+    );
+});
+
 test("Given an Agent is running, When the user reads an attachment and immediately stops output, Then cancellation remains available before the file read finishes", {
     timeout: 30_000,
 }, async () => {

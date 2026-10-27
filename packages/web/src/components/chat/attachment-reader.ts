@@ -1,6 +1,6 @@
+import { PROMPT_IMAGE_MAX_BYTES } from "@moxt-ai/mobius-sdk/protocol";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 
-const IMAGE_BYTES_LIMIT = 2_500_000;
 const RESOURCE_BYTES_LIMIT = 1_000_000;
 const READ_TIMEOUT_MILLISECONDS = 15_000;
 
@@ -72,11 +72,11 @@ function attachmentUri(name: string): string {
 export async function readPromptAttachment(file: File, signal: AbortSignal): Promise<ComposerAttachment> {
     signal.throwIfAborted();
     const image = file.type.startsWith("image/");
-    const limit = image ? IMAGE_BYTES_LIMIT : RESOURCE_BYTES_LIMIT;
+    const limit = image ? PROMPT_IMAGE_MAX_BYTES : RESOURCE_BYTES_LIMIT;
     if (file.size === 0 || file.size > limit) {
         throw new AttachmentReadError(
             "attachment_size_invalid",
-            image ? "Images must be between 1 byte and 2.5 MB." : "Text resources must be between 1 byte and 1 MB.",
+            image ? "Images must be between 1 byte and 5 MB." : "Text resources must be between 1 byte and 1 MB.",
         );
     }
     const bytes = new Uint8Array(await readBytes(file, signal));
