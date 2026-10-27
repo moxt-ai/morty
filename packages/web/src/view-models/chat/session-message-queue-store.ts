@@ -2,10 +2,17 @@ import type { MobiusTurn, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
 import { SessionPromptDisposition } from "@moxt-ai/mobius-sdk";
 import type { NativeSessionResult } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
+import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { formatError } from "../format-error.ts";
+
+type QueuedMessageAttachments =
+    | { readonly kind: "restorable"; readonly values: readonly ComposerAttachment[] }
+    | { readonly kind: "unrestorable"; readonly count: number };
 
 interface QueuedMessageValue {
     readonly commandId: string;
+    readonly attachments: QueuedMessageAttachments;
+    readonly prompt: string;
     readonly summary: string;
     readonly turnId: string;
 }
@@ -34,6 +41,7 @@ export interface SessionMessageQueueStore {
         targetCommandId: string,
         summary: string,
         request: Omit<SubmitMobiusTurnRequest, "disposition" | "idempotencyKey" | "targetCommandId">,
+        attachments: readonly ComposerAttachment[],
         signal: AbortSignal,
     ) => Promise<ChatQueuedMessage | null>;
     readonly steerMessage: (commandId: string, signal: AbortSignal) => Promise<ChatQueuedMessage | null>;
@@ -87,7 +95,7 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
             }
         },
         dismissFailure: () => set({ feedback: { kind: "none" } }),
-        enqueue: async (targetCommandId, summary, request, parent) => {
+        enqueue: async (targetCommandId, summary, request, attachments, parent) => {
             if (get().operation.kind !== "idle") {
                 return null;
             }
@@ -107,7 +115,9 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                 signal.throwIfAborted();
                 const message: ChatQueuedMessage = {
                     commandId,
+                    attachments: { kind: "restorable", values: attachments },
                     kind: "queued",
+                    prompt: request.content,
                     summary,
                     turnId: accepted.turnId,
                 };
@@ -162,6 +172,8 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                     commandId: message.commandId,
                     turnId: message.commandId,
                     summary: message.prompt,
+                    prompt: message.prompt,
+                    attachments: { kind: "unrestorable", count: message.attachments.length },
                     kind: state.messages.find((current) => current.commandId === message.commandId)?.kind ?? "queued",
                 })),
             })),
