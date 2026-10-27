@@ -15,6 +15,7 @@ import { UserMessageShell } from "../../components/chat/user-message-shell.tsx";
 import { ImageGallery, PreviewImage } from "../../components/images/image-gallery.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { authenticationGuidance } from "../../view-models/chat/authentication-guidance.ts";
+import { createResponseCopyStore } from "../../view-models/chat/response-copy-store.ts";
 import {
     COMPACTION_CHARACTER_LIMIT,
     completedTurnNotice,
@@ -218,7 +219,11 @@ export function MobiusAssistantText({
 }) {
     return (
         <div className="min-w-0" data-testid={dataTestId.agentResponse}>
-            <MessageBubble speaker="assistant">
+            <MessageBubble
+                copyText={streaming ? undefined : text}
+                createResponseCopyStore={createResponseCopyStore}
+                speaker="assistant"
+            >
                 <AgentResponseText
                     text={text}
                     createResourceStore={createResourceStore}
