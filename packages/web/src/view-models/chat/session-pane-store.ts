@@ -13,7 +13,6 @@ import {
 import type { SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
-import type { ComposerAttachmentStore } from "../../components/chat/composer-attachment-store.ts";
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
@@ -25,6 +24,7 @@ import { centralSessionStorage, sessionDraftEntry } from "../../services/session
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError, isRetryableRuntimeConnectionFailure, isSessionClosedFailure } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
+import type { ComposerAttachmentStore } from "./composer-attachment-store.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";

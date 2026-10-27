@@ -9,6 +9,7 @@ import {
     useState,
 } from "react";
 import { dataTestId } from "../../data-testid.ts";
+import type { ComposerAttachmentStore } from "../../view-models/chat/composer-attachment-store.ts";
 import { ImageGallery, PreviewImage } from "../images/image-gallery.tsx";
 import { Button } from "../ui/cloud-button.tsx";
 import { MortyAlert } from "../ui/morty-alert.tsx";
@@ -16,7 +17,6 @@ import { Textarea } from "../ui/textarea.tsx";
 import { useComposerNoticeLayout } from "../utils/use-composer-notice-layout.ts";
 import { chatSessionComposerClassName } from "./chat-session-layout.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
-import { type ComposerAttachmentStore, canAddAttachments } from "./composer-attachment-store.ts";
 
 function attachmentName(attachment: ComposerAttachment): string {
     return attachment.name;
@@ -72,6 +72,7 @@ function AttachmentPreview({
 
 export function BotChatComposer({
     attachmentModel,
+    canAttach,
     attachmentSignal,
     children,
     disabled,
@@ -89,6 +90,8 @@ export function BotChatComposer({
     stopDisabled = false,
 }: {
     readonly attachmentModel: ComposerAttachmentStore;
+    /** Whether the attachment rules admit another file now. */
+    readonly canAttach: boolean;
     readonly attachmentSignal: AbortSignal;
     readonly children: ReactNode;
     readonly disabled: boolean;
@@ -108,7 +111,6 @@ export function BotChatComposer({
     const fileInput = useRef<HTMLInputElement>(null);
     const notice = useRef<HTMLDivElement>(null);
     const { attachments, state: attachmentState } = attachmentModel;
-    const canAttach = canAddAttachments(attachmentModel);
 
     const submit = (event: FormEvent<HTMLFormElement>): void => {
         event.preventDefault();

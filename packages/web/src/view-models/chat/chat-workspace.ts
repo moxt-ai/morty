@@ -1,5 +1,4 @@
 import type { StoreApi } from "zustand/vanilla";
-import { createComposerAttachmentStore } from "../../components/chat/composer-attachment-store.ts";
 import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
@@ -11,6 +10,7 @@ import type { BugReportDialogStore } from "../bug-report-dialog-store.ts";
 import { formatError } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
 import { type BotChatHomeStoreApi, createBotChatHomeStore, homeWaitsForRuntime } from "./bot-chat-home-store.ts";
+import { createComposerAttachmentStore } from "./composer-attachment-store.ts";
 import type { ComputerSwitcherModel } from "./computer-switcher-store.ts";
 import { type ConversationDirectoryStore, createConversationDirectoryStore } from "./conversation-directory-store.ts";
 import type { ConversationSelectionState, SelectedConversationTarget } from "./conversation-selection-machine.ts";

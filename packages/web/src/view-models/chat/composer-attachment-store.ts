@@ -1,6 +1,6 @@
 import { createStore } from "zustand/vanilla";
+import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { AttachmentReadError, readPromptAttachment } from "./attachment-reader.ts";
-import type { ComposerAttachment } from "./composer-attachment.ts";
 
 type AttachmentReadState =
     | { readonly kind: "idle" }

@@ -40,6 +40,7 @@ import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { cn } from "../../lib/utils.ts";
 import { authenticationGuidance } from "../../view-models/chat/authentication-guidance.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
+import { canAddAttachments } from "../../view-models/chat/composer-attachment-store.ts";
 import { sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { harnessOptions } from "../../view-models/chat/native-session-agents.ts";
 import { sessionInteractionPresentation } from "../../view-models/chat/session-interaction-store.ts";
@@ -933,6 +934,7 @@ function MobiusSessionPaneBody({
                         )}
                         <BotChatComposer
                             attachmentModel={attachmentModel}
+                            canAttach={canAddAttachments(attachmentModel)}
                             attachmentSignal={pane.attachmentSignal}
                             disabled={presentation.composerInputDisabled}
                             draft={model.connection.kind === "session-loading-after-create" ? "" : model.draft}

@@ -1,5 +1,5 @@
 import { PROMPT_IMAGE_MAX_BYTES } from "@moxt-ai/mobius-sdk/protocol";
-import type { ComposerAttachment } from "./composer-attachment.ts";
+import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 
 const RESOURCE_BYTES_LIMIT = 1_000_000;
 const READ_TIMEOUT_MILLISECONDS = 15_000;

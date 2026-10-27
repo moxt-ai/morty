@@ -24,6 +24,7 @@ import { cn } from "../../lib/utils.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { botConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
+import { canAddAttachments } from "../../view-models/chat/composer-attachment-store.ts";
 import {
     conversationComposerLocked,
     conversationCreationBusy,
@@ -234,6 +235,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                         footer={
                             <BotChatComposer
                                 attachmentModel={attachmentModel}
+                                canAttach={canAddAttachments(attachmentModel)}
                                 attachmentSignal={workspace.operationsSignal()}
                                 disabled
                                 draft=""
@@ -360,6 +362,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                         {model.runtimeConfiguration !== null && model.selection.kind === "draft" && (
                             <BotChatComposer
                                 attachmentModel={attachmentModel}
+                                canAttach={canAddAttachments(attachmentModel)}
                                 attachmentSignal={workspace.operationsSignal()}
                                 disabled={composerLocked}
                                 draft={draft}

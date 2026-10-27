@@ -77,6 +77,14 @@ module.exports = {
                 dependencyTypesNot: ["type-only"],
             },
         },
+        {
+            name: "web-stores-live-in-view-models",
+            severity: "error",
+            comment:
+                "Zustand stores belong to the view-model layer (packages/web/AGENTS.md). Elsewhere a store may only be received and typed, never created.",
+            from: { path: "^packages/web/src/", pathNot: "^packages/web/src/view-models/" },
+            to: { path: "/node_modules/zustand/esm/vanilla", dependencyTypesNot: ["type-only"] },
+        },
     ],
     options: {
         doNotFollow: { path: "node_modules|third-party" },

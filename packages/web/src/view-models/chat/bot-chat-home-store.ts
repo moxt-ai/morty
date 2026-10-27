@@ -1,6 +1,5 @@
 import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
-import { createComposerAttachmentStore } from "../../components/chat/composer-attachment-store.ts";
 import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import type {
     BotChatApi,
@@ -16,6 +15,7 @@ import {
     rememberedSessionEntry,
 } from "../../services/session-storage/central-session-storage.ts";
 import { formatError } from "../format-error.ts";
+import { createComposerAttachmentStore } from "./composer-attachment-store.ts";
 import {
     type ConversationCreationState,
     type FirstMessages,
