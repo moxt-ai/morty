@@ -180,6 +180,9 @@ async function run(command, args, options = {}) {
             env: { ...process.env, ...options.env },
             stdio: ["ignore", "pipe", "pipe"],
             windowsHide: true,
+            signal: options.signal,
+            timeout: options.timeout,
+            killSignal: "SIGKILL",
         });
         let stdout = "";
         let stderr = "";
@@ -569,6 +572,56 @@ async function prepare(options) {
 
 const SETUP_READY_TIMEOUT_MILLISECONDS = 300_000;
 
+async function installLocalCli(stack) {
+    const cliDirectory = path.join(MOBIUS_ROOT, "packages/cli");
+    const manifest = JSON.parse(fs.readFileSync(path.join(cliDirectory, "package.json"), "utf8"));
+    if (
+        manifest.name !== "@moxt-ai/mobius" ||
+        typeof manifest.version !== "string" ||
+        !/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?$/u.test(manifest.version)
+    ) {
+        fail("the checkout's CLI package must have a valid Mobius name and version");
+    }
+    const packageDirectory = fs.mkdtempSync(path.join(stack.stateDir, "cli-package-"));
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    process.once("SIGINT", cancel);
+    process.once("SIGTERM", cancel);
+    const options = {
+        signal: controller.signal,
+        timeout: SETUP_READY_TIMEOUT_MILLISECONDS,
+    };
+    try {
+        log(`building and packing the checkout's Mobius CLI ${manifest.version}`);
+        await run("pnpm", ["pack", "--pack-destination", packageDirectory], { ...options, cwd: cliDirectory });
+        controller.signal.throwIfAborted();
+        const tarball = path.join(packageDirectory, `moxt-ai-mobius-${manifest.version}.tgz`);
+        const prefix = path.join(stack.stateDir, "mobius", "npm", manifest.version);
+        log(`installing the local CLI into ${prefix}`);
+        await run(
+            "npm",
+            [
+                "install",
+                "--prefix",
+                prefix,
+                "--ignore-scripts",
+                "--omit=dev",
+                "--no-audit",
+                "--no-fund",
+                "--save-exact",
+                "--",
+                tarball,
+            ],
+            options,
+        );
+        controller.signal.throwIfAborted();
+    } finally {
+        process.removeListener("SIGINT", cancel);
+        process.removeListener("SIGTERM", cancel);
+        fs.rmSync(packageDirectory, { recursive: true, force: true });
+    }
+}
+
 function readSetupRecord(line) {
     if (line.length === 0) {
         return null;
@@ -622,6 +675,7 @@ async function setup(options) {
     for (const directory of [documents, mortyStateDirectory, mobiusStateDirectory, workspace]) {
         fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     }
+    await installLocalCli(stack);
     const origin = new URL(stack.chatOrigin).origin;
 
     log(`downloading the setup bundle from ${origin}`);
