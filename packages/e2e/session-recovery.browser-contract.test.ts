@@ -10,6 +10,8 @@ type Network = {
     readonly blackhole: (route: "all" | "session" | "bridge") => void;
     readonly disconnect: () => void;
     readonly interruptSession: () => void;
+    readonly stallSessionRequests: () => void;
+    readonly resumeSessionRequests: () => void;
     readonly restore: () => void;
 };
 
@@ -104,6 +106,21 @@ const test = base.extend<{ readonly network: Network }>({
                         }
                     }
                 },
+                stallSessionRequests: () => {
+                    for (const tunnel of tunnels) {
+                        if (tunnel.route === "session") {
+                            // Stall requests while keeping server-to-browser events and heartbeats flowing.
+                            tunnel.client.pause();
+                        }
+                    }
+                },
+                resumeSessionRequests: () => {
+                    for (const tunnel of tunnels) {
+                        if (tunnel.route === "session") {
+                            tunnel.client.resume();
+                        }
+                    }
+                },
                 restore: () => {
                     offline = false;
                     for (const socket of sockets) {
@@ -132,7 +149,7 @@ test.use({
     browserName: "webkit",
 });
 
-test("Given a healthy conversation, when overdue timers and foreground signals arrive together, then it keeps its connection without an error", async ({
+test("Given a healthy conversation, when the stability timer and foreground signals arrive together, then it keeps its connection without an error", async ({
     runtime,
 }) => {
     const { page } = runtime;
@@ -154,7 +171,7 @@ test("Given a healthy conversation, when overdue timers and foreground signals a
     );
     await composer.fill("Keep this draft across a healthy resume.");
     const before = connections;
-    await page.clock.fastForward(180000);
+    await page.clock.runFor(25000);
     await page.evaluate(() => {
         document.dispatchEvent(new Event("visibilitychange"));
         document.dispatchEvent(new Event("resume"));
@@ -163,8 +180,7 @@ test("Given a healthy conversation, when overdue timers and foreground signals a
     await expect(composer).toBeEnabled();
     await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
     await expect(composer).toHaveValue("Keep this draft across a healthy resume.");
-    // Let real network I/O settle through a user-visible round trip before
-    // advancing virtual deadlines; the healthy probe shares this transport.
+    // Complete a user-visible round trip before advancing the transport's virtual deadline.
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("article", { name: "Agent response" }).last()).toContainText(
         "Keep this draft across a healthy resume.",
@@ -291,6 +307,7 @@ for (const route of ["all", "session", "bridge", "suspended"] as const) {
     }) => {
         const { page } = runtime;
         await page.clock.install({ time: new Date("2026-10-23T00:00:00Z") });
+        await page.clock.pauseAt(new Date("2026-10-23T00:01:00Z"));
         const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
         await page.goto(connected.url);
         const composer = page.getByRole("textbox", { name: "Message" });
@@ -311,10 +328,20 @@ for (const route of ["all", "session", "bridge", "suspended"] as const) {
             window.dispatchEvent(new Event("online"));
             window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
         });
-        await page.clock.runFor(5000);
-        if (route !== "bridge") {
-            await expect(composer).toBeEnabled();
+        if (route === "session" || route === "all") {
+            await page.clock.runFor(30000);
+            if (route === "session") {
+                // Foreground hints must not probe or reset an otherwise-open Session transport.
+                await expect(composer).toBeEnabled();
+                await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
+                await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
+            }
+            // The existing tunnel stays blackholed until the SDK's 60-second idle deadline.
+            await page.clock.runFor(30000);
             await expect(page.getByTestId(dataTestId.sendMessage)).toBeDisabled();
+        } else if (route !== "suspended") {
+            // Bridge liveness is independent of Session execution-state polling.
+            await page.clock.runFor(5000);
         }
         await page.clock.runFor(5000);
         await expect(composer).toBeEnabled();
@@ -334,6 +361,7 @@ test("Given a silently stalled session without a lifecycle event, when its liven
 }) => {
     const { page } = runtime;
     await page.clock.install({ time: new Date("2026-10-23T00:00:00Z") });
+    await page.clock.pauseAt(new Date("2026-10-23T00:01:00Z"));
     const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     await page.goto(connected.url);
     const composer = page.getByRole("textbox", { name: "Message" });
@@ -343,17 +371,69 @@ test("Given a silently stalled session without a lifecycle event, when its liven
     await expect(page.getByRole("article", { name: "Agent response" }).last()).toContainText(
         "Establish the conversation before the network stalls.",
     );
+    await composer.fill("Preserve this draft until transport recovery.");
     network.blackhole("session");
-    await page.clock.runFor(25000);
-    await page.clock.runFor(5000);
+    await page.clock.runFor(30000);
+    await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
+    await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
+    await page.clock.runFor(30000);
     await expect(composer).toBeEnabled();
     await expect(page.getByTestId(dataTestId.sendMessage)).toBeDisabled();
     await page.clock.runFor(5000);
     await expect(composer).toBeEnabled();
-    await composer.fill("Send after silent network recovery.");
+    await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
+    await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
+    await expect(composer).toHaveValue("Preserve this draft until transport recovery.");
+    await expect(page.getByRole("article", { name: "Your message" })).toHaveCount(1);
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("article", { name: "Agent response" }).last()).toContainText(
-        "Send after silent network recovery.",
+        "Preserve this draft until transport recovery.",
+    );
+});
+
+test("Given a live Session stream with stalled execution reads, when foreground hints and the former health deadline pass, then the draft stays sendable without reconnecting", async ({
+    runtime,
+    network,
+}) => {
+    const { page } = runtime;
+    let connections = 0;
+    page.on("websocket", (socket) => {
+        if (new URL(socket.url()).pathname === "/mobius/api/v1/transport") {
+            connections += 1;
+        }
+    });
+    await page.clock.install({ time: new Date("2026-10-23T00:00:00Z") });
+    await page.clock.pauseAt(new Date("2026-10-23T00:01:00Z"));
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    await page.goto(connected.url);
+    const composer = page.getByRole("textbox", { name: "Message" });
+    await expect(composer).toBeEnabled();
+    await composer.fill("Establish a live stream before stalling requests.");
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect(page.getByRole("article", { name: "Agent response" }).last()).toContainText(
+        "Establish a live stream before stalling requests.",
+    );
+    await composer.fill("Keep this draft on the live connection.");
+    const before = connections;
+    network.stallSessionRequests();
+    await page.evaluate(() => {
+        document.dispatchEvent(new Event("resume"));
+        window.dispatchEvent(new Event("online"));
+    });
+    await page.clock.runFor(5000);
+    await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
+    await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
+    await page.clock.runFor(20000);
+    await page.clock.runFor(10000);
+    await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
+    await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
+    await expect(composer).toHaveValue("Keep this draft on the live connection.");
+    await expect(page.getByRole("article", { name: "Your message" })).toHaveCount(1);
+    expect(connections).toBe(before);
+    network.resumeSessionRequests();
+    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    await expect(page.getByRole("article", { name: "Agent response" }).last()).toContainText(
+        "Keep this draft on the live connection.",
     );
 });
 
