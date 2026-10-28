@@ -1,7 +1,14 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronDown, ListChecks } from "lucide-react";
 import { Fragment, type ReactNode, useId, useState } from "react";
 import { cn } from "../../lib/utils.ts";
-import { agentThinkStepTriggerClassName } from "./tools/tool-call-status.tsx";
+import {
+    agentThinkStepChevronClassName,
+    agentThinkStepIconClassName,
+    agentThinkStepInlineLabelClassName,
+    agentThinkStepTitleClassName,
+    agentThinkStepTriggerClassName,
+    agentThinkStepWorkingTextClassName,
+} from "./tools/tool-call-status.tsx";
 
 export interface TurnWorkSummary {
     readonly backgroundRunning: number;
@@ -17,17 +24,22 @@ function counted(count: number, singular: string, plural: string): string {
 }
 
 /**
- * Collapses a completed turn's intermediate work (tool calls, reasoning, and
- * progress notes) behind one summary row so the final answer leads.
+ * Collapses one adjacent process segment (tool calls, reasoning, and progress
+ * notes) behind a summary row. The latest generating segment shimmers.
  */
 export function TurnWorkDisclosure({
     children,
+    open: requestedOpen,
     summary,
+    working = false,
 }: {
     readonly children: ReactNode;
+    readonly open?: boolean | undefined;
     readonly summary: TurnWorkSummary;
+    readonly working?: boolean | undefined;
 }) {
-    const [open, setOpen] = useState(false);
+    const [internalOpen, setInternalOpen] = useState(false);
+    const open = requestedOpen ?? internalOpen;
     const contentId = useId();
     const parts: { readonly key: string; readonly text: string; readonly alert: boolean }[] = [
         { key: "steps", text: counted(summary.steps, "step", "steps"), alert: false },
@@ -56,28 +68,32 @@ export function TurnWorkDisclosure({
         parts.push({ key: "interrupted", text: `${summary.interrupted.toString()} interrupted`, alert: true });
     }
     return (
-        <div className="min-w-0 space-y-4">
+        <div className="min-w-0">
             <button
                 aria-controls={contentId}
                 aria-expanded={open}
-                className={cn(agentThinkStepTriggerClassName, "w-auto items-center")}
-                onClick={() => setOpen((current) => !current)}
+                className={cn(agentThinkStepTriggerClassName, working && "text-morty-text-3")}
+                onClick={() => setInternalOpen((current) => !current)}
                 type="button"
             >
-                <ChevronRight
-                    aria-hidden="true"
-                    className={cn(
-                        "size-3.5 shrink-0 transition-transform motion-reduce:transition-none",
-                        open && "rotate-90",
-                    )}
-                />
-                <span className="min-w-0 text-left">
-                    {parts.map((part, index) => (
-                        <Fragment key={part.key}>
-                            {index > 0 && " · "}
-                            <span className={cn(part.alert && "text-destructive")}>{part.text}</span>
-                        </Fragment>
-                    ))}
+                <span className={agentThinkStepIconClassName}>
+                    <ListChecks aria-hidden="true" className="size-3.5 shrink-0" />
+                </span>
+                <span className={agentThinkStepInlineLabelClassName}>
+                    <span className={agentThinkStepTitleClassName}>
+                        <span className={cn(working && agentThinkStepWorkingTextClassName)}>
+                            {parts.map((part, index) => (
+                                <Fragment key={part.key}>
+                                    {index > 0 && " · "}
+                                    <span className={cn(part.alert && "text-destructive")}>{part.text}</span>
+                                </Fragment>
+                            ))}
+                        </span>
+                    </span>
+                    <ChevronDown
+                        aria-hidden="true"
+                        className={cn(agentThinkStepChevronClassName, open && "visible rotate-0")}
+                    />
                 </span>
             </button>
             {open && (

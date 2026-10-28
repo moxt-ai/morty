@@ -205,13 +205,13 @@ function ManagedSessionDirectoryList({
                                 {(sessionStatuses.get(session.id) ?? session.status).kind === "working" ? (
                                     <span
                                         aria-label="Session working"
-                                        className="inline-flex text-copy-secondary"
+                                        className="inline-flex -mr-0.5 text-copy-secondary"
                                         data-testid={dataTestId.sessionStatus}
                                         role="status"
                                     >
                                         <LoaderCircle
                                             aria-hidden="true"
-                                            className="size-4 animate-spin motion-reduce:animate-none"
+                                            className="size-3 animate-spin motion-reduce:animate-none"
                                         />
                                     </span>
                                 ) : sessionStatuses.get(session.id)?.kind === "failed" ? (
@@ -604,7 +604,7 @@ export function ConversationSidebar({
                                             {desktop && (
                                                 <div className="hidden min-h-0 flex-1 sm:flex sm:min-h-0 sm:flex-col sm:gap-0">
                                                     <Tooltip.Provider delayDuration={150}>
-                                                        <div className="flex min-w-0 items-center justify-between gap-2.5 pl-2.5 sm:mb-0 sm:w-full sm:pl-3">
+                                                        <div className="flex min-w-0 items-center justify-between gap-2.5 pl-2.5 sm:mb-0 sm:w-full sm:pl-3.5">
                                                             <h2 className="font-inter text-13 font-semibold tracking-normal text-copy-secondary">
                                                                 Recent sessions
                                                             </h2>

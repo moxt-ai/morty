@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from "react";
-import { CodeBlock, CodeBlockCopyButton, type CustomRendererProps } from "streamdown";
+import { CodeBlock, type CustomRendererProps } from "streamdown";
 import { MAX_MERMAID_CHARACTERS } from "./mermaid-options.ts";
 import { INCOMPLETE_MERMAID_META } from "./remark-mermaid-completion.ts";
 
@@ -9,9 +9,7 @@ function MermaidSource({ code, message }: { readonly code: string; readonly mess
             <p className="text-sm text-muted-foreground" role="status">
                 {message}
             </p>
-            <CodeBlock code={code} language="mermaid" lineNumbers={false}>
-                <CodeBlockCopyButton code={code} />
-            </CodeBlock>
+            <CodeBlock code={code} language="mermaid" lineNumbers={false} />
         </div>
     );
 }

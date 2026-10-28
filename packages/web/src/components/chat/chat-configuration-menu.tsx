@@ -173,7 +173,7 @@ function SettingPicker({
     readonly focusOnOpen?: boolean;
 }) {
     const [search, setSearch] = useState("");
-    const listRef = useRef<HTMLDivElement | null>(null);
+    const listRef = useRef<HTMLElement | null>(null);
     const searchInputRef = useRef<HTMLInputElement | null>(null);
     const query = search.trim().toLocaleLowerCase();
     const options = control.options.filter((option) =>
@@ -211,7 +211,7 @@ function SettingPicker({
         };
     }, [control.searchable, focusOnOpen]);
     return (
-        <div className={cn("flex min-h-0 flex-col", control.searchable && "h-80")}>
+        <div className="flex min-h-0 flex-col">
             {control.searchable && (
                 <div className={cn("relative mb-2 shrink-0", nested ? "mx-2 mt-2" : "mx-4")}>
                     <Search
@@ -237,15 +237,18 @@ function SettingPicker({
                     />
                 </div>
             )}
-            <div
+            <ScrollEdgeFade
                 aria-label={control.label}
-                id={id}
                 className={cn(
                     "min-h-0 flex-auto overflow-y-auto overscroll-contain px-2",
                     nested ? "pb-2" : "pb-[max(1rem,env(safe-area-inset-bottom))]",
                     nested && !control.searchable && "pt-2",
                     mortyThinScrollbarClassName,
                 )}
+                fadeFromClassName="from-background"
+                fadeToClassName="to-background/0"
+                frameClassName={cn("flex min-h-0 flex-auto flex-col", control.searchable && "max-h-80")}
+                id={id}
                 onKeyDown={(event) => {
                     const direction =
                         event.key === "ArrowDown"
@@ -262,8 +265,10 @@ function SettingPicker({
                         focusOption(direction);
                     }
                 }}
-                ref={listRef}
                 role="listbox"
+                scrollElementRef={(element) => {
+                    listRef.current = element;
+                }}
                 tabIndex={-1}
             >
                 {options.map((option) => (
@@ -288,7 +293,7 @@ function SettingPicker({
                         No models found.
                     </p>
                 )}
-            </div>
+            </ScrollEdgeFade>
         </div>
     );
 }
@@ -406,7 +411,7 @@ function SettingControl({
                 : { role: "switch", "aria-checked": control.checked })}
             aria-label={control.label}
             className={cn(
-                "group my-2 flex h-9 w-full items-center justify-between gap-4 rounded-full py-0 pr-2.5 pl-3.5 text-left text-13 outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 disabled:cursor-not-allowed",
+                "group my-2 flex h-9 w-full items-center justify-between gap-4 rounded-full py-0 pr-2.5 pl-3.5 text-left text-13 outline-none hover:bg-accent data-[state=open]:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 disabled:cursor-not-allowed",
                 mutedWhenDisabled && "disabled:opacity-50",
             )}
             data-testid={control.testId}
@@ -460,7 +465,7 @@ function SettingControl({
             }}
             type="button"
         >
-            <span className="shrink-0 text-copy-secondary">{control.label}</span>
+            <span className="shrink-0 text-morty-text-3">{control.label}</span>
             <span className="flex min-w-0 items-center justify-end gap-2 text-right">
                 {valueLoading ? (
                     <span
@@ -632,7 +637,9 @@ export function ChatConfigurationMenu({
                     testId={dataTestId.harnessTriggerMark}
                 />
             )}
-            <span className="min-w-0 truncate">{selections.filter((value) => value.length > 0).join(" · ")}</span>
+            <span className="min-w-0 truncate text-black">
+                {selections.filter((value) => value.length > 0).join(" · ")}
+            </span>
             <ChevronDown
                 aria-hidden="true"
                 className="size-3.5 shrink-0 text-muted-foreground transition-colors duration-150 group-hover:text-foreground group-active:text-foreground group-data-[state=open]:text-foreground motion-reduce:transition-none"
@@ -780,7 +787,7 @@ export function ChatConfigurationMenu({
                                                           className={cn(
                                                               "z-50 flex min-h-0 flex-col overflow-hidden",
                                                               control.searchable
-                                                                  ? "h-[min(24rem,var(--radix-popover-content-available-height))] w-[280px]"
+                                                                  ? "max-h-[min(24rem,var(--radix-popover-content-available-height))] w-[280px]"
                                                                   : "max-h-[var(--radix-popover-content-available-height)] w-52",
                                                               overlaySurfacePanelClassName,
                                                               overlaySurfaceRadiusClassName,

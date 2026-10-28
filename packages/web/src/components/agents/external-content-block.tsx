@@ -1,7 +1,9 @@
 import { externalContentPath, type MobiusExternalContentBlock } from "@moxt-ai/mobius-sdk";
 import { type ReactNode, useMemo } from "react";
 import { dataTestId } from "../../data-testid.ts";
+import { cn } from "../../lib/utils.ts";
 import { PreviewImage } from "../images/image-gallery.tsx";
+import { textLinkClassName } from "../ui/text-link.ts";
 import type { MarkdownImageReader } from "./agent-markdown.tsx";
 import { isDisplayableImageType } from "./displayable-image-type.ts";
 import type { SessionResourceRequest, SessionResourceState, SessionResourceStoreFactory } from "./resource-reader.ts";
@@ -158,7 +160,7 @@ function renderContent(
                     {state.text}
                 </pre>
             ) : state.kind === "media" ? (
-                <a className="break-all text-sm underline" download href={state.source}>
+                <a className={cn("break-all text-sm", textLinkClassName)} download href={state.source}>
                     Download resource
                 </a>
             ) : (

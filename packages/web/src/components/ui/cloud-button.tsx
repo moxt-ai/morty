@@ -11,6 +11,7 @@ const sizes = {
     default: "min-h-9 px-4 py-1.5 text-[13px] has-[>svg:first-child+*]:pl-3 has-[>*+svg:last-child]:pr-3",
     lg: "h-10 px-6 text-16 has-[>svg:first-child+*]:pl-3 has-[>*+svg:last-child]:pr-3",
     sm: "min-h-8 px-4 py-1.5 text-xs has-[>svg:first-child+*]:pl-3 has-[>*+svg:last-child]:pr-3",
+    xs: "h-7 px-3 text-xs has-[>svg:first-child+*]:pl-2 has-[>*+svg:last-child]:pr-2",
     icon: "size-9 p-0 text-base",
 };
 

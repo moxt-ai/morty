@@ -1,4 +1,3 @@
-import { LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { dataTestId } from "../../data-testid.ts";
 
@@ -31,12 +30,9 @@ export function WorkingIndicator({ startedAt }: { readonly startedAt: number }) 
             data-testid={dataTestId.workingIndicator}
             role="status"
         >
-            <span>Working for {workingDuration(elapsedSeconds)}</span>
-            <LoaderCircle
-                aria-hidden="true"
-                className="size-4 animate-spin motion-reduce:animate-none"
-                data-testid={dataTestId.workingSpinner}
-            />
+            <span className="animate-loading-text-shimmer bg-[linear-gradient(90deg,#8a8f98_0%,#8a8f98_35%,#fafafb_50%,#8a8f98_65%,#8a8f98_100%)] bg-[length:200%_100%] bg-clip-text text-transparent motion-reduce:animate-none motion-reduce:bg-none motion-reduce:text-muted-foreground">
+                Working for {workingDuration(elapsedSeconds)}
+            </span>
         </span>
     );
 }

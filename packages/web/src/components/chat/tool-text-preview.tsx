@@ -1,12 +1,9 @@
 import { useState } from "react";
+import { MAX_FORMATTED_TOOL_TEXT_CHARACTERS, TOOL_TEXT_TAIL_CHARACTERS } from "@/lib/tool-text";
 import { cn } from "@/lib/utils";
+import { textLinkClassName } from "../ui/text-link.ts";
 
-const MAX_FORMATTED_TOOL_TEXT_CHARACTERS = 32 * 1024;
-const TOOL_TEXT_TAIL_CHARACTERS = MAX_FORMATTED_TOOL_TEXT_CHARACTERS / 2;
-
-export function isOversizedToolText(text: string): boolean {
-    return text.length > MAX_FORMATTED_TOOL_TEXT_CHARACTERS;
-}
+export { isOversizedToolText } from "@/lib/tool-text";
 
 export function ToolTextPreview({ className, text }: { readonly className?: string; readonly text: string }) {
     const [visibleBeginningCharacters, setVisibleBeginningCharacters] = useState(TOOL_TEXT_TAIL_CHARACTERS);
@@ -27,7 +24,7 @@ export function ToolTextPreview({ className, text }: { readonly className?: stri
             </pre>
             {omittedCharacters > 0 && (
                 <button
-                    className="mt-1 text-xs text-copy-secondary underline"
+                    className={`mt-1 text-xs text-copy-secondary ${textLinkClassName}`}
                     onClick={() =>
                         setVisibleBeginningCharacters((current) =>
                             Math.min(

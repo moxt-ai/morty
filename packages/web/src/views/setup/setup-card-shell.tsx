@@ -8,11 +8,11 @@ const setupPageBackgroundClassName = "bg-[radial-gradient(circle_at_top,_#f6f7f9
 
 const setupPageClassName = `flex min-h-screen flex-col items-center justify-center overflow-y-auto ${setupPageBackgroundClassName} px-6 py-12 text-foreground`;
 
-export const setupSectionClassName = "mx-auto w-full max-w-[460px]";
+const setupSectionClassName = "mx-auto w-full max-w-[460px]";
 
 const setupSectionWideClassName = `${setupSectionClassName} md:max-w-[960px]`;
 
-export const setupCardClassName = `flex flex-col items-center overflow-hidden ${overlaySurfaceRadiusClassName} border-[1px] border-white bg-card px-8 pt-10 pb-6 text-center shadow-module backdrop-blur`;
+const setupCardClassName = `flex flex-col items-center overflow-hidden ${overlaySurfaceRadiusClassName} border-[1px] border-white bg-card px-8 pt-10 pb-6 text-center shadow-module backdrop-blur`;
 
 /** Vertical rhythm below title or description (24px top, 12px between children). */
 const setupContentStackClassName = "mt-6 w-full space-y-3";
@@ -38,7 +38,7 @@ function SetupPageHeader() {
                     href="/"
                     aria-label="Morty home"
                 >
-                    <MortyLogoMark size={30} />
+                    <MortyLogoMark size={28} />
                     Morty
                 </a>
             </div>

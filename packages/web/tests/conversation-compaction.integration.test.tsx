@@ -2,7 +2,7 @@ import { fireEvent, getByRole, queryByLabelText, queryByRole } from "@testing-li
 import { flushSync } from "react-dom";
 import { expect, onTestFinished, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { expandProcessSections, sendPrompt, withExpandedProcess } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
 function expectCompactionSucceeded(compaction: HTMLElement): void {
@@ -29,6 +29,7 @@ test("Given an Agent settles a compaction with a multi-block summary, When the u
     }
 
     await sendPrompt(app, composer, "compact with summary blocks");
+    await expandProcessSections(app);
 
     await app.waitForView(() => expectCompactionSucceeded(app.elementByTestId(dataTestId.agentCompaction)));
     const compaction = app.elementByTestId(dataTestId.agentCompaction);
@@ -58,8 +59,11 @@ test("Given a history page that ends mid-compaction, When the user loads older m
     }
 
     await sendPrompt(app, composer, "many session events then compact");
-    await app.waitForView(() => expect(app.elementsByTestId(dataTestId.agentCompaction).length).toBe(1));
-    await app.waitForView(() => expectCompactionSucceeded(app.elementByTestId(dataTestId.agentCompaction)));
+    await withExpandedProcess(app, () => {
+        expect(app.elementsByTestId(dataTestId.agentCompaction).length).toBe(1);
+        expectCompactionSucceeded(app.elementByTestId(dataTestId.agentCompaction));
+        return undefined;
+    });
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
 
     // Reopen the saved conversation so history loads through the paginated
@@ -81,7 +85,10 @@ test("Given a history page that ends mid-compaction, When the user loads older m
     await app.user.click(conversation);
     // The latest page carries the compaction's terminal events; the page
     // boundary falls inside the same compaction's earlier events.
-    await app.waitForView(() => expectCompactionSucceeded(app.elementByTestId(dataTestId.agentCompaction)));
+    await withExpandedProcess(app, () => {
+        expectCompactionSucceeded(app.elementByTestId(dataTestId.agentCompaction));
+        return undefined;
+    });
     const messages = queryByRole(document.body, "log", { name: "Messages" });
     if (!(messages instanceof HTMLElement)) {
         throw new Error("Expected the Session message list");
@@ -91,8 +98,12 @@ test("Given a history page that ends mid-compaction, When the user loads older m
 
     // The older page's start and summary-chunk events merge with the newer
     // page's terminal update: one entry, full summary, no orphaned compacting twin.
-    await app.waitForView(() => expectCompactionSucceeded(app.elementByTestId(dataTestId.agentCompaction)));
-    await app.user.click(getByRole(app.elementByTestId(dataTestId.agentCompaction), "button"));
+    const merged = await withExpandedProcess(app, () => {
+        const compaction = app.elementByTestId(dataTestId.agentCompaction);
+        expectCompactionSucceeded(compaction);
+        return compaction;
+    });
+    await app.user.click(getByRole(merged, "button"));
     await app.waitForView(() => {
         expect(app.elementsByTestId(dataTestId.agentCompaction).length).toBe(1);
         const compaction = app.elementByTestId(dataTestId.agentCompaction);
@@ -118,6 +129,7 @@ test("Given a history page that starts inside an interleaved compaction, When th
     }
 
     await sendPrompt(app, composer, "interleaved compaction hold");
+    await expandProcessSections(app);
     await app.waitForView(() => expectCompactionRunning(app.elementByTestId(dataTestId.agentCompaction)));
     await app.waitForView(() =>
         expect(
@@ -184,9 +196,10 @@ test("Given a history page that starts inside an interleaved compaction, When th
     // The newest page's first compaction event is the settle chunk, not the
     // start: the entry must still render immediately as one completed
     // compaction, without loading the older page that holds the start.
-    await app.waitForView(() => {
+    await withExpandedProcess(app, () => {
         expect(app.elementsByTestId(dataTestId.agentCompaction).length).toBe(1);
         expectCompactionSucceeded(app.elementByTestId(dataTestId.agentCompaction));
+        return undefined;
     });
     const messages = queryByRole(document.body, "log", { name: "Messages" });
     if (!(messages instanceof HTMLElement)) {
@@ -197,8 +210,12 @@ test("Given a history page that starts inside an interleaved compaction, When th
 
     // The older page's start and the newest page's settle events merge under
     // one compaction id with the whole summary; no second, compacting twin.
-    await app.waitForView(() => expectCompactionSucceeded(app.elementByTestId(dataTestId.agentCompaction)));
-    await app.user.click(getByRole(app.elementByTestId(dataTestId.agentCompaction), "button"));
+    const merged = await withExpandedProcess(app, () => {
+        const compaction = app.elementByTestId(dataTestId.agentCompaction);
+        expectCompactionSucceeded(compaction);
+        return compaction;
+    });
+    await app.user.click(getByRole(merged, "button"));
     await app.waitForView(() => {
         expect(app.elementsByTestId(dataTestId.agentCompaction).length).toBe(1);
         const compaction = app.elementByTestId(dataTestId.agentCompaction);
@@ -223,6 +240,7 @@ test("Given a compaction is streaming in progress, When the user collapses and r
     }
 
     await sendPrompt(app, composer, "interleaved compaction hold");
+    await expandProcessSections(app);
     // In-progress default: expanded, streaming summary visible.
     await app.waitForView(() => {
         const compaction = app.elementByTestId(dataTestId.agentCompaction);

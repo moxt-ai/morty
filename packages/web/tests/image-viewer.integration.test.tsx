@@ -1,7 +1,7 @@
 import { getAllByRole, getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { expandProcessSections, sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
 const png = Uint8Array.from(
@@ -131,6 +131,7 @@ for (const [prompt, label] of [
         const app = await createTestApp({ connectAgent: true });
         const composer = await app.queryElementByTestId(dataTestId.messageComposer);
         await sendPrompt(app, composer, prompt ?? "");
+        await expandProcessSections(app);
         const disclosure = await app.waitForView(() =>
             getByRole(document.body, "button", { name: `${label} Tool succeeded` }),
         );
@@ -163,7 +164,7 @@ test("Given an image in a streaming reply, When the reply completes between poin
     expect(getByRole(document.body, "dialog", { name: "Image viewer" })).toBeDefined();
 });
 
-test("Given a tool image is open while the agent works, When the finished turn collapses its tools, Then the viewer keeps showing the image", {
+test("Given a tool image is open while the agent works, When the user collapses its process segment, Then the viewer keeps showing the image", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -171,6 +172,7 @@ test("Given a tool image is open while the agent works, When the finished turn c
         throw new Error("Expected a connected Runtime");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold image tool");
+    await expandProcessSections(app);
     await app.user.click(
         await app.waitForView(() => getByRole(document.body, "button", { name: "Generate image Tool succeeded" })),
     );
@@ -182,7 +184,8 @@ test("Given a tool image is open while the agent works, When the finished turn c
         outcome: "complete",
         output: [{ kind: "text", text: "The generated image is ready." }],
     });
-    await app.waitForView(() => getByRole(document.body, "button", { name: "1 step" }));
+    await app.waitForView(() => expect(document.body.textContent).toContain("The generated image is ready."));
+    await app.user.click(getByRole(document.body, "button", { name: "1 step", expanded: true }));
     expect(getByRole(document.body, "dialog", { name: "Image viewer" })).toBe(viewer);
     expect(getByRole(viewer, "img", { name: "Image" })).toBeDefined();
     await app.user.click(getByRole(viewer, "button", { name: "Close image viewer" }));

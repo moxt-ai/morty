@@ -14,6 +14,7 @@ import { UserMessageShell } from "../chat/user-message-shell.tsx";
 import { WorkingIndicator } from "../chat/working-indicator.tsx";
 import { AutoSelectInput } from "../ui/auto-select-input.tsx";
 import { Button as FieldButton } from "../ui/button.tsx";
+import { ButtonGroup } from "../ui/button-group.tsx";
 import { Card } from "../ui/card.tsx";
 import { Button } from "../ui/cloud-button.tsx";
 import { CopyToClipboardButton } from "../ui/copy-to-clipboard-button.tsx";
@@ -40,6 +41,7 @@ import {
     SelectValue,
 } from "../ui/select.tsx";
 import { Spinner } from "../ui/spinner.tsx";
+import { textLinkClassName } from "../ui/text-link.ts";
 import { Textarea } from "../ui/textarea.tsx";
 import { useToast } from "../ui/toast.tsx";
 import type { PlaygroundEntryId } from "./catalog.ts";
@@ -75,9 +77,9 @@ const radii = [
 ] as const;
 
 const cloudVariants = ["primary", "outline", "ghost", "destructive"] as const;
-const cloudSizes = ["default", "lg", "sm", "icon"] as const;
+const cloudSizes = ["default", "lg", "sm", "xs", "icon"] as const;
 const fieldVariants = ["default", "outline", "secondary", "ghost"] as const;
-const fieldSizes = ["sm", "default", "lg", "icon"] as const;
+const fieldSizes = ["xs", "sm", "default", "lg", "icon"] as const;
 
 const agentOptions = [
     { label: "Codex", value: "codex" },
@@ -255,6 +257,51 @@ function CloudButtonGallery() {
     );
 }
 
+const buttonGroupSamples = [
+    { gap: "12px", height: "40px", size: "lg" },
+    { gap: "10px", height: "36px", size: "default" },
+    { gap: "8px", height: "32px", size: "sm" },
+    { gap: "6px", height: "28px", size: "xs" },
+] as const;
+
+function ButtonGroupGallery() {
+    return (
+        <div className="grid gap-6">
+            <Specimen title="Stacked action pairs">
+                {buttonGroupSamples.map((sample) => (
+                    <div className="grid w-40 gap-2" key={sample.height}>
+                        <div className="flex items-baseline justify-between text-12 text-muted-foreground">
+                            <span>{sample.height}</span>
+                            <span className="font-mono">{sample.gap}</span>
+                        </div>
+                        <ButtonGroup size={sample.size}>
+                            <Button size={sample.size}>Try again</Button>
+                            <Button size={sample.size} variant="outline">
+                                Continue
+                            </Button>
+                        </ButtonGroup>
+                    </div>
+                ))}
+            </Specimen>
+            <Specimen layout="stack" title="Horizontal action pairs">
+                {buttonGroupSamples.map((sample) => (
+                    <div className="grid gap-2" key={sample.height}>
+                        <p className="text-12 text-muted-foreground">
+                            {sample.height} buttons · <span className="font-mono">{sample.gap}</span> gap
+                        </p>
+                        <ButtonGroup orientation="horizontal" size={sample.size}>
+                            <Button size={sample.size}>Try again</Button>
+                            <Button size={sample.size} variant="outline">
+                                Continue
+                            </Button>
+                        </ButtonGroup>
+                    </div>
+                ))}
+            </Specimen>
+        </div>
+    );
+}
+
 function FieldButtonGallery() {
     const [variant, setVariant] = useState<FieldVariant>("default");
     const [size, setSize] = useState<FieldSize>("default");
@@ -407,6 +454,27 @@ function LinkButtonGallery() {
             </p>
             <p className="text-13 text-muted-foreground" role="status">
                 {followed ? "Pairing steps opened in this preview." : "The link has not been used."}
+            </p>
+        </Specimen>
+    );
+}
+
+function TextLinkGallery() {
+    return (
+        <Specimen layout="stack" title="In prose">
+            <p className="text-14 text-foreground">
+                Ask the owner in{" "}
+                <a className={textLinkClassName} href="mailto:wuhuajia@paraflow.com">
+                    wuhuajia@paraflow.com
+                </a>{" "}
+                before changing the timeout, then check{" "}
+                <a className={textLinkClassName} href="https://moxt.ai/chat-replay">
+                    the chat replay
+                </a>
+                .
+            </p>
+            <p className="text-13 text-muted-foreground">
+                Resting is primary, hover is lighter, and pressed is darker. No underline in any state.
             </p>
         </Specimen>
     );
@@ -811,6 +879,7 @@ const galleries = {
     "attempt-failure": AttemptFailureGallery,
     "auto-select-input": AutoSelectInputGallery,
     button: FieldButtonGallery,
+    "button-group": ButtonGroupGallery,
     card: CardGallery,
     "cloud-button": CloudButtonGallery,
     color: ColorGallery,
@@ -829,6 +898,7 @@ const galleries = {
     radius: RadiusGallery,
     "session-agent-tabs": SessionAgentTabsGallery,
     spinner: SpinnerGallery,
+    "text-link": TextLinkGallery,
     textarea: TextareaGallery,
     toast: ToastGallery,
     "tool-call": ToolCallGallery,

@@ -28,7 +28,7 @@ export function ResponseCopyButton({
         <div className="mt-2 flex flex-wrap items-center gap-x-3" ref={model.onAttach}>
             <button
                 aria-label={copy === "copied" ? "Copied" : "Copy response"}
-                className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 motion-reduce:transition-none"
+                className="-ml-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-morty-text-3 transition-colors hover:bg-morty-fill-opacity-2 hover:text-foreground active:bg-morty-fill-opacity-3 active:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 motion-reduce:transition-none"
                 aria-disabled={copy === "copying"}
                 onClick={model.copy}
                 title="Copy response as Markdown"
@@ -39,7 +39,6 @@ export function ResponseCopyButton({
                 ) : (
                     <Copy aria-hidden="true" className="size-3.5" />
                 )}
-                {copy === "copied" ? "Copied" : copy === "failed" ? "Retry copy" : "Copy"}
             </button>
             <span className="sr-only" role="status">
                 {copy === "copied" ? "Response copied to clipboard" : ""}

@@ -2,6 +2,7 @@ import { Download } from "lucide-react";
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 import { useStore } from "zustand";
 import type { StoreApi } from "zustand/vanilla";
+import { textLinkClassName } from "../ui/text-link.ts";
 
 export interface ViewerImage {
     readonly src: string;
@@ -54,7 +55,7 @@ function DownloadControl({ factory, image }: { readonly factory: DownloadFactory
             {model.state.kind === "failed" && (
                 <span className="max-w-64 text-xs" role="alert">
                     {model.state.message}{" "}
-                    <a className="underline" href={image.src} rel="noreferrer" target="_blank">
+                    <a className={textLinkClassName} href={image.src} rel="noreferrer" target="_blank">
                         Open original
                     </a>
                 </span>

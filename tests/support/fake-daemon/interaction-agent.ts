@@ -137,7 +137,12 @@ export function createInteractionAgent() {
                                                 content.text === "request without tool input",
                                         )
                                       ? undefined
-                                      : { command: "pnpm test -- --reporter=verbose", target: "src/<entry>.ts" },
+                                      : {
+                                            command: longPermission
+                                                ? `pnpm inspect ${longPath} --reporter=verbose`
+                                                : "pnpm test -- --reporter=verbose",
+                                            target: "src/<entry>.ts",
+                                        },
                                 locations: planMode ? [] : [{ path: "src/<entry>.ts", line: 12 }],
                             },
                             options,

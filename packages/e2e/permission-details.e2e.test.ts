@@ -59,6 +59,13 @@ for (const width of [320, 390]) {
         expect(box.x).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(width);
         expect(await permission.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+        const rawInput = permission.locator("pre");
+        expect(await rawInput.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+        const beforeScroll = await rawInput.evaluate((element) => element.scrollLeft);
+        await rawInput.evaluate((element) => {
+            element.scrollLeft = element.scrollWidth;
+        });
+        expect(await rawInput.evaluate((element) => element.scrollLeft)).toBeGreaterThan(beforeScroll);
         const allow = permission.getByRole("button", { name: /^Allow: Allow reading/ });
         await allow.scrollIntoViewIfNeeded();
         await page.screenshot({ path: testInfo.outputPath(`long-permission-decision-${width}.png`), fullPage: true });

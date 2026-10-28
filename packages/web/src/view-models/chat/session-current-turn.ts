@@ -13,7 +13,10 @@ type TurnSubmission =
     | { readonly kind: "submitting" }
     | { readonly kind: "accepted"; readonly turnId: string };
 
-export type CurrentTurn =
+export type CurrentTurn = {
+    /** The last Runtime terminal outcome observed, retained when a local submission clears its failure. */
+    readonly lastEndedCommandId: string | null;
+} & (
     | {
           readonly kind: "idle";
           /** The last turn's failure, reported until another turn starts. */
@@ -24,7 +27,8 @@ export type CurrentTurn =
           readonly commandId: string;
           readonly startedAt: number;
           readonly submission: TurnSubmission;
-      };
+      }
+);
 
 export type CurrentTurnEvent =
     /** This pane submits a new command. */
@@ -54,7 +58,7 @@ export type CurrentTurnEvent =
     /** This browser sent the command at `sentAt`, which is when its work started. */
     | { readonly kind: "sent-at-known"; readonly commandId: string; readonly sentAt: number };
 
-export const idleTurn: CurrentTurn = { kind: "idle", failure: null };
+export const idleTurn: CurrentTurn = { kind: "idle", failure: null, lastEndedCommandId: null };
 
 /** A turn the pane opened with, already running on the service. */
 export function openedTurn(running: {
@@ -67,6 +71,7 @@ export function openedTurn(running: {
         commandId: decodeIdentifier(running.commandId),
         startedAt: running.startedAt,
         submission: { kind: "accepted", turnId: decodeIdentifier(running.turnId) },
+        lastEndedCommandId: null,
     };
 }
 
@@ -74,8 +79,8 @@ function isCurrent(turn: CurrentTurn, commandId: string): turn is Extract<Curren
     return turn.kind === "current" && turn.commandId === commandId;
 }
 
-function endedTurn(commandId: string, failure: TurnFailure | null): CurrentTurn {
-    return { kind: "idle", failure: failure === null ? null : { commandId, ...failure } };
+function endedTurn(commandId: string, failure: TurnFailure | null, lastEndedCommandId: string | null): CurrentTurn {
+    return { kind: "idle", failure: failure === null ? null : { commandId, ...failure }, lastEndedCommandId };
 }
 
 export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent): CurrentTurn {
@@ -86,6 +91,7 @@ export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent
                 commandId: event.commandId,
                 startedAt: event.startedAt,
                 submission: { kind: "submitting" },
+                lastEndedCommandId: turn.lastEndedCommandId,
             };
         case "retrying":
             // Retrying a submission cannot displace a turn the service reports running.
@@ -97,6 +103,7 @@ export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent
                 commandId: event.commandId,
                 startedAt: event.startedAt,
                 submission: isCurrent(turn, event.commandId) ? turn.submission : { kind: "unconfirmed" },
+                lastEndedCommandId: turn.lastEndedCommandId,
             };
         case "accepted":
             // A terminal live event can precede the acceptance response; the turn it ended stays ended.
@@ -109,25 +116,27 @@ export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent
                 commandId: decodeIdentifier(event.commandId),
                 startedAt: isCurrent(turn, event.commandId) ? turn.startedAt : event.startedAt,
                 submission: { kind: "accepted", turnId: decodeIdentifier(event.turnId) },
+                lastEndedCommandId: turn.lastEndedCommandId,
             };
         case "ended":
-            return isCurrent(turn, event.commandId) ? endedTurn(event.commandId, event.failure) : turn;
+            return isCurrent(turn, event.commandId) ? endedTurn(event.commandId, event.failure, event.commandId) : turn;
         case "submission-ended":
             // The service's report that the command runs outranks this pane's account of its submission.
             return isCurrent(turn, event.commandId) && turn.submission.kind !== "accepted"
-                ? endedTurn(event.commandId, event.failure)
+                ? endedTurn(event.commandId, event.failure, turn.lastEndedCommandId)
                 : turn;
         case "nothing-running":
             // Learning that nothing runs cannot resolve an earlier turn failure.
-            return turn.kind === "idle" ? turn : idleTurn;
+            return turn.kind === "idle" ? turn : { ...idleTurn, lastEndedCommandId: turn.lastEndedCommandId };
         case "last-turn-reported":
-            // Another current command outranks the report, and a failure this pane saw live keeps its own message.
-            if (turn.kind === "current") {
-                return turn.commandId === event.commandId ? endedTurn(event.commandId, event.failure) : turn;
+            // Repeating an observed Runtime outcome cannot undo a later local submission's result.
+            // A genuinely unseen outcome still recovers a turn that ended while this pane was disconnected.
+            if (turn.lastEndedCommandId === event.commandId) {
+                return turn;
             }
-            return turn.failure?.commandId === event.commandId || (turn.failure === null && event.failure === null)
-                ? turn
-                : endedTurn(event.commandId, event.failure);
+            return turn.kind === "current" && turn.commandId !== event.commandId
+                ? { ...turn, lastEndedCommandId: event.commandId }
+                : endedTurn(event.commandId, event.failure, event.commandId);
         case "sent-at-known":
             return isCurrent(turn, event.commandId) ? { ...turn, startedAt: event.sentAt } : turn;
     }

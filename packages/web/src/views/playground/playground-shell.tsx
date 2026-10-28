@@ -3,6 +3,7 @@ import { PLAYGROUND_ENTRIES, playgroundEntry, playgroundGroups } from "../../com
 import { PlaygroundGallery } from "../../components/playground/galleries.tsx";
 import { LibrarySidebar } from "../../components/playground/library-sidebar.tsx";
 import { SourcePath } from "../../components/playground/source-path.tsx";
+import { textLinkClassName } from "../../components/ui/text-link.ts";
 
 export function PlaygroundShell() {
     return (
@@ -72,10 +73,7 @@ export function PlaygroundEntryPage() {
                 <p className="text-14 text-destructive" role="alert">
                     Unknown component: {entryId}
                 </p>
-                <Link
-                    className="mt-4 inline-block text-14 font-medium text-primary underline-offset-2 hover:underline"
-                    to="/playground"
-                >
+                <Link className={`mt-4 inline-block text-14 font-medium ${textLinkClassName}`} to="/playground">
                     Back to the library
                 </Link>
             </div>

@@ -71,6 +71,7 @@ test("Given the agent asks a question, When the user reads and answers it, Then 
     const form = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Agent information request" }));
     expect(getByRole(form, "status", { name: "Waiting for your answer" }).textContent).toBe("Waiting for your answer");
     expect(queryByRole(document.body, "status", { name: "Agent is working" })).toBeNull();
+    expect(document.body.querySelector(".animate-loading-text-shimmer")).toBeNull();
 
     await app.user.type(getByRole(form, "textbox", { name: "Branch" }), "feature/answer-status");
     await app.user.click(getByRole(form, "button", { name: "Continue" }));
@@ -86,6 +87,7 @@ test("Given a pending permission, When Chat remounts and the user allows it and 
     const initial = getByRole(document.body, "alertdialog", { name: "Agent permission request" });
     expect(initial.textContent).toContain("pnpm test -- --reporter=verbose");
     expect(initial.textContent).toContain("src/<entry>.ts");
+    expect(document.body.querySelector(".animate-loading-text-shimmer")).toBeNull();
     expect(getByRole(initial, "region", { name: "Session working directory" }).textContent).not.toBe("");
     app.remount();
     const permission = await app.waitForView(() =>

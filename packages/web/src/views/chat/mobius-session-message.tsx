@@ -18,9 +18,10 @@ import { CompactionDisclosure } from "../../components/chat/compaction-disclosur
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { UserMessageShell } from "../../components/chat/user-message-shell.tsx";
 import { ImageGallery, PreviewImage } from "../../components/images/image-gallery.tsx";
+import { textLinkClassName } from "../../components/ui/text-link.ts";
 import { dataTestId } from "../../data-testid.ts";
+import { cn } from "../../lib/utils.ts";
 import { authenticationGuidance } from "../../view-models/chat/authentication-guidance.ts";
-import { createResponseCopyStore } from "../../view-models/chat/response-copy-store.ts";
 import {
     COMPACTION_CHARACTER_LIMIT,
     completedTurnNotice,
@@ -127,7 +128,7 @@ function MessageContentBlock({
             return href === null ? (
                 <p className="break-all text-sm text-muted-foreground">{content.title ?? content.name}</p>
             ) : (
-                <a className="break-all text-sm underline" href={href} rel="noreferrer" target="_blank">
+                <a className={cn("break-all text-sm", textLinkClassName)} href={href} rel="noreferrer" target="_blank">
                     {content.title ?? content.name}
                 </a>
             );
@@ -237,11 +238,7 @@ export function MobiusAssistantText({
 }) {
     return (
         <div className="min-w-0" data-testid={dataTestId.agentResponse}>
-            <MessageBubble
-                copyText={streaming ? undefined : text}
-                createResponseCopyStore={createResponseCopyStore}
-                speaker="assistant"
-            >
+            <MessageBubble speaker="assistant">
                 <AgentResponseText
                     text={text}
                     createResourceStore={createResourceStore}

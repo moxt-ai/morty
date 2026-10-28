@@ -6,6 +6,9 @@ export const mortyThinScrollbarClassName = "[scrollbar-color:#d4d7db_transparent
 
 export const chatSessionColumnClassName = `mx-auto w-full min-w-0 max-w-[920px] ${chatSessionContentInsetClassName}`;
 
+/** Interaction cards keep a 12px inset at every breakpoint. */
+export const chatSessionInteractionColumnClassName = "mx-auto w-full min-w-0 max-w-[920px] px-3";
+
 export const chatSessionMessageScrollClassName = `min-h-0 flex-1 overflow-y-auto pt-6 pb-[calc(72px+var(--composer-overlay-block,0px))] -mb-4 ${mortyThinScrollbarClassName} sm:pt-10`;
 
 export const chatSessionMessageColumnClassName = `${chatSessionColumnClassName} font-inter text-foreground`;
@@ -17,8 +20,12 @@ export const chatSessionComposerClassName =
 /**
  * Fills the conversation card. Background, radius, and the outer inset stay on
  * the parent section so they are not painted twice.
+ *
+ * `overflow-clip` rather than `overflow-hidden`: a clipped box cannot hold a
+ * scroll offset, so revealing a control deep in the pane (focus, find-in-page,
+ * scrollIntoView) can never scroll the header and composer out of the card.
  */
-export const chatSessionPaneFillClassName = "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden";
+export const chatSessionPaneFillClassName = "flex min-h-0 min-w-0 flex-1 flex-col overflow-clip";
 
 /**
  * No backdrop-filter here. It would make this pane the backdrop root, and the

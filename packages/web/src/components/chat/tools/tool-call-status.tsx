@@ -1,4 +1,4 @@
-import { Check, ChevronDown, CircleMinus, LoaderCircle, X } from "lucide-react";
+import { Check, ChevronDown, CircleMinus, X } from "lucide-react";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { cn } from "../../../lib/utils.ts";
 import { ScrollEdgeFade } from "../../utils/scroll-edge-fade.tsx";
@@ -8,15 +8,20 @@ export const ToolCallSupplementalContent = createContext<ReactNode>(null);
 
 /** Shared trigger row for intermediate agent steps (thinking rail + tool calls). */
 export const agentThinkStepTriggerClassName =
-    "flex w-full min-w-0 cursor-pointer items-start gap-2 rounded-md px-0.5 py-1 text-[13px] leading-[22px] text-morty-text-3 outline-none hover:text-copy-secondary active:text-copy-secondary keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60";
+    "group/process -mx-2 flex h-8 w-full min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 text-[13px] leading-[22px] text-morty-text-3 outline-none hover:text-copy-secondary active:text-copy-secondary focus-visible:text-copy-secondary keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60";
+
+export const agentThinkStepIconClassName = "flex size-[18px] shrink-0 items-center justify-center [&>svg]:size-3.5";
 
 export const agentThinkStepTitleClassName = "min-w-0 truncate text-left";
 
-export const agentThinkStepInlineLabelClassName = "flex min-w-0 flex-1 max-w-full items-start gap-2";
+export const agentThinkStepWorkingTextClassName =
+    "animate-loading-text-shimmer bg-[linear-gradient(90deg,#8a8f98_0%,#8a8f98_35%,#fafafb_50%,#8a8f98_65%,#8a8f98_100%)] bg-[length:200%_100%] bg-clip-text text-transparent motion-reduce:animate-none motion-reduce:bg-none motion-reduce:text-morty-text-3";
 
-/** Chevron hidden until hover, focus, or open; does not occupy width while hidden. */
+export const agentThinkStepInlineLabelClassName = "flex min-w-0 flex-1 items-center gap-1";
+
+/** Chevron reserves fixed width and appears on hover, focus, or open without shifting the title. */
 export const agentThinkStepChevronClassName =
-    "mt-0.5 hidden size-3.5 shrink-0 -rotate-90 transition-transform motion-reduce:transition-none";
+    "invisible size-3.5 shrink-0 -rotate-90 transition-[transform,visibility] group-hover/process:visible group-focus-visible/process:visible motion-reduce:transition-none";
 
 export const agentThinkStepExpandedPanelClassName =
     "grid max-h-[280px] min-w-0 gap-2 overflow-y-auto overscroll-contain border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere] [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]";
@@ -77,19 +82,15 @@ export function ToolCallDisclosure({
                 title={title}
                 type="button"
             >
-                <span className="shrink-0 [&>svg]:size-3.5">{icon}</span>
-                <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden leading-[22px]">
-                    <span className={cn(agentThinkStepTitleClassName, "leading-[22px]")}>{title}</span>
+                <span className={agentThinkStepIconClassName}>{icon}</span>
+                <span className={cn(agentThinkStepInlineLabelClassName, "overflow-hidden leading-[22px]")}>
+                    <span className={agentThinkStepTitleClassName}>{title}</span>
                     <span className={toolCallStatusSlotClassName}>
                         <ToolCallStatus state={state} />
                     </span>
                     <ChevronDown
                         aria-hidden="true"
-                        className={cn(
-                            agentThinkStepChevronClassName,
-                            "mt-0 group-focus-visible/trigger:inline group-hover/trigger:inline",
-                            open && "inline rotate-0",
-                        )}
+                        className={cn(agentThinkStepChevronClassName, open && "visible rotate-0")}
                     />
                 </span>
             </button>
@@ -113,19 +114,10 @@ export function ToolCallStatus({ state }: { readonly state: ToolCallState }) {
                 stopped: "Stopped",
                 unknown: "Status unknown",
             };
-            return <span className="ml-1 whitespace-nowrap text-xs text-morty-text-3">{labels[state.status]}</span>;
+            return <span className="ml-1 whitespace-nowrap text-xs">{labels[state.status]}</span>;
         }
         case "running":
-            return (
-                <LoaderCircle
-                    aria-label="Tool running"
-                    className={cn(
-                        toolCallStatusIconClassName,
-                        "size-3 animate-spin text-primary motion-reduce:animate-none",
-                    )}
-                    strokeWidth={toolCallStatusStrokeWidthAt12Px}
-                />
-            );
+            return <span aria-label="Tool running" className="sr-only" role="img" />;
         case "succeeded":
             return (
                 <Check

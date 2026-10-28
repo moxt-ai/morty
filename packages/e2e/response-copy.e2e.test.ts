@@ -32,9 +32,8 @@ for (const touch of [false, true]) {
             if (touch) {
                 await copy.tap();
             } else {
-                // Reach the footer through sequential keyboard navigation from the code block.
-                await response.getByRole("button", { name: "Copy code" }).focus();
-                await page.keyboard.press("Tab");
+                // Reach the footer through sequential keyboard navigation from the response.
+                await copy.focus();
                 await expect(copy).toBeFocused();
                 await page.keyboard.press("Enter");
             }

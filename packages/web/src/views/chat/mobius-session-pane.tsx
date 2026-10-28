@@ -1,6 +1,6 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
 import { Check, CircleAlert, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
 import { AgentThinking, type AgentThinkingEntry } from "../../components/chat/agent-thinking.tsx";
@@ -12,6 +12,7 @@ import {
     chatSessionAgentReplyGroupClassName,
     chatSessionColumnClassName,
     chatSessionExecutionHeaderClassName,
+    chatSessionInteractionColumnClassName,
     chatSessionMessageColumnClassName,
     chatSessionMessageItemClassName,
     chatSessionMessageScrollClassName,
@@ -22,6 +23,7 @@ import { ConnectionNotice } from "../../components/chat/connection-notice.tsx";
 import { ReadonlyWorkingDirectory, WorkingDirectorySkeleton } from "../../components/chat/cwd-selector.tsx";
 import { HarnessMark } from "../../components/chat/harness-mark.tsx";
 import { MobileSessionTitlePortal } from "../../components/chat/mobile-session-title-portal.tsx";
+import { ResponseCopyButton } from "../../components/chat/response-copy-button.tsx";
 import {
     type ElicitationInteractionResponse,
     type PermissionInteractionResponse,
@@ -38,11 +40,13 @@ import { DesktopChatLayout } from "../../components/utils/desktop-chat-layout.ts
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { cn } from "../../lib/utils.ts";
+import { agentReplyCopyText, agentReplyMessageGroups } from "../../view-models/chat/agent-reply-copy.ts";
 import { authenticationGuidance } from "../../view-models/chat/authentication-guidance.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { canAddAttachments } from "../../view-models/chat/composer-attachment-store.ts";
 import { sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { sessionHarnessSelection } from "../../view-models/chat/native-session-agents.ts";
+import { createResponseCopyStore } from "../../view-models/chat/response-copy-store.ts";
 import { sessionInteractionPresentation } from "../../view-models/chat/session-interaction-store.ts";
 import {
     type SessionPaneModel,
@@ -50,7 +54,6 @@ import {
     type TitleEdit,
 } from "../../view-models/chat/session-pane-store.ts";
 import {
-    type SessionExecutionState,
     type SessionMessage,
     sessionExecutionStates,
     sessionTextValue,
@@ -189,60 +192,110 @@ function sessionRenderGroups(items: readonly SessionRenderItem[]): readonly Sess
     return groups;
 }
 
-type AgentReplyLayout =
-    | { readonly kind: "inline" }
+type ReplyContentSection =
     | {
-          readonly answer: readonly SessionRenderItem[];
-          readonly kind: "collapsed-work";
+          readonly id: string;
+          readonly items: readonly SessionRenderItem[];
+          readonly kind: "visible";
+      }
+    | {
+          readonly id: string;
+          readonly items: readonly SessionRenderItem[];
+          readonly kind: "process";
           readonly summary: TurnWorkSummary;
-          readonly work: readonly SessionRenderItem[];
       };
 
-/**
- * A reply whose execution finished leads with its answer: everything up to the
- * last tool or reasoning step collapses into one summary, and everything after
- * it stays visible. Replies of executions that are still open, failed, or
- * stopped early, and replies without a final answer, stay fully expanded so
- * nothing that needs attention is hidden.
- */
-function agentReplyLayout(items: readonly SessionRenderItem[], execution: SessionExecutionState): AgentReplyLayout {
-    if (execution.kind !== "finished") {
-        return { kind: "inline" };
+function isProcessRenderItem(item: SessionRenderItem): boolean {
+    if (item.kind === "thinking") {
+        return true;
     }
-    const lastWorkIndex = items.findLastIndex((item) => item.kind === "thinking");
-    const work = items.slice(0, lastWorkIndex + 1);
-    const answer = items.slice(lastWorkIndex + 1);
-    const tools = work.flatMap((item) =>
-        item.kind === "thinking" ? item.entries.filter((entry) => entry.kind === "tool") : [],
+    return (
+        item.kind === "event" && item.message.role === "assistant" && item.message.presentation.kind === "compaction"
     );
-    if (tools.length === 0 || !answer.some((item) => item.kind === "assistant-text")) {
-        return { kind: "inline" };
+}
+
+function isGeneratingProcessRenderItem(item: SessionRenderItem): boolean {
+    if (item.kind === "thinking") {
+        const current = item.entries.at(-1);
+        return (
+            current?.kind === "reasoning" ||
+            current?.state.kind === "running" ||
+            (current?.state.kind === "background" && current.state.status === "running")
+        );
     }
+    return (
+        item.kind === "event" &&
+        item.message.role === "assistant" &&
+        item.message.presentation.kind === "compaction" &&
+        item.message.presentation.status === "in_progress"
+    );
+}
+
+function processSummary(items: readonly SessionRenderItem[]): TurnWorkSummary {
+    const entries = items.flatMap((item) => (item.kind === "thinking" ? item.entries : []));
+    const tools = entries.filter((entry) => entry.kind === "tool");
     return {
-        answer,
-        kind: "collapsed-work",
-        summary: {
-            failed: tools.filter(
-                (entry) =>
-                    entry.state.kind === "failed" ||
-                    (entry.state.kind === "background" && entry.state.status === "failed"),
-            ).length,
-            backgroundRunning: tools.filter(
-                (tool) => tool.state.kind === "background" && tool.state.status === "running",
-            ).length,
-            backgroundUnknown: tools.filter(
-                (tool) => tool.state.kind === "background" && tool.state.status === "unknown",
-            ).length,
-            fileEdits: tools.filter(isFileEditToolCall).length,
-            interrupted: tools.filter(
-                (entry) =>
-                    entry.state.kind === "interrupted" ||
-                    (entry.state.kind === "background" && entry.state.status === "stopped"),
-            ).length,
-            steps: tools.length,
-        },
-        work,
+        failed: tools.filter(
+            (entry) =>
+                entry.state.kind === "failed" || (entry.state.kind === "background" && entry.state.status === "failed"),
+        ).length,
+        backgroundRunning: tools.filter((tool) => tool.state.kind === "background" && tool.state.status === "running")
+            .length,
+        backgroundUnknown: tools.filter((tool) => tool.state.kind === "background" && tool.state.status === "unknown")
+            .length,
+        fileEdits: tools.filter(isFileEditToolCall).length,
+        interrupted: tools.filter(
+            (entry) =>
+                entry.state.kind === "interrupted" ||
+                (entry.state.kind === "background" && entry.state.status === "stopped"),
+        ).length,
+        steps: Math.max(tools.length, items.length),
     };
+}
+
+/**
+ * Groups adjacent weakened process rows until visible answer text starts the
+ * next section. A process section remains disclosed during generation and
+ * after completion so the answer leads; its summary carries the live shimmer
+ * while the owning execution is still running.
+ */
+function agentReplySections(items: readonly SessionRenderItem[]): readonly ReplyContentSection[] {
+    const sections: ReplyContentSection[] = [];
+    let index = 0;
+    while (index < items.length) {
+        const item = items[index];
+        if (item === undefined) {
+            break;
+        }
+        if (isProcessRenderItem(item)) {
+            const start = index;
+            while (true) {
+                const candidate = items[index];
+                if (candidate === undefined || !isProcessRenderItem(candidate)) {
+                    break;
+                }
+                index += 1;
+            }
+            const processItems = items.slice(start, index);
+            const summary = processSummary(processItems);
+            sections.push({
+                id: `process:${sessionRenderItemId(processItems[0] ?? item)}`,
+                items: processItems,
+                kind: "process",
+                summary,
+            });
+            continue;
+        }
+        const start = index;
+        index += 1;
+        const visibleItems = items.slice(start, index);
+        sections.push({
+            id: `visible:${sessionRenderItemId(visibleItems[0] ?? item)}`,
+            items: visibleItems,
+            kind: "visible",
+        });
+    }
+    return sections;
 }
 
 function SessionRenderItemContent({
@@ -686,7 +739,11 @@ function MobiusSessionPaneBody({
             return state === undefined ? [] : [[message.firstEvent.eventId, state] as const];
         }),
     );
+    const replyMessagesByRenderGroupId = new Map(
+        agentReplyMessageGroups(model.messages).map((group) => [group.id, group.messages] as const),
+    );
     const lastRenderItemIndex = renderItems.length - 1;
+    const generationActive = presentation.workingIndicatorVisible && presentation.activity.kind === "working";
     const sessionMessagesLoading = model.connection.kind === "loading" && model.messages.length === 0;
     const initialMessage = model.pendingInitialMessage;
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
@@ -792,15 +849,23 @@ function MobiusSessionPaneBody({
                                     )}
                                     {(() => {
                                         let flatIndex = 0;
-                                        return renderGroups.map((group) => {
+                                        return renderGroups.map((group, groupIndex) => {
                                             if (group.kind === "user") {
-                                                const active =
-                                                    presentation.activity.kind === "working" &&
-                                                    flatIndex === lastRenderItemIndex;
+                                                const followsUserMessage =
+                                                    groupIndex === 0
+                                                        ? initialMessage !== null
+                                                        : renderGroups[groupIndex - 1]?.kind === "user";
+                                                const active = generationActive && flatIndex === lastRenderItemIndex;
                                                 const item = group.item;
                                                 flatIndex += 1;
                                                 return (
-                                                    <div key={group.id} className={chatSessionMessageItemClassName}>
+                                                    <div
+                                                        key={group.id}
+                                                        className={cn(
+                                                            chatSessionMessageItemClassName,
+                                                            followsUserMessage && "mt-9",
+                                                        )}
+                                                    >
                                                         <SessionRenderItemContent
                                                             active={active}
                                                             item={item}
@@ -820,13 +885,12 @@ function MobiusSessionPaneBody({
                                             }
                                             const firstIndex = flatIndex;
                                             flatIndex += group.items.length;
-                                            const replyActive =
-                                                presentation.activity.kind === "working" &&
-                                                flatIndex > lastRenderItemIndex;
+                                            const replyActive = generationActive && flatIndex > lastRenderItemIndex;
+                                            const isRenderItemActive = (item: SessionRenderItem) =>
+                                                replyActive &&
+                                                firstIndex + group.items.indexOf(item) === lastRenderItemIndex;
                                             const renderItem = (item: SessionRenderItem) => {
-                                                const active =
-                                                    replyActive &&
-                                                    firstIndex + group.items.indexOf(item) === lastRenderItemIndex;
+                                                const active = isRenderItemActive(item);
                                                 return (
                                                     <div key={sessionRenderItemId(item)}>
                                                         <SessionRenderItemContent
@@ -846,23 +910,48 @@ function MobiusSessionPaneBody({
                                                     </div>
                                                 );
                                             };
-                                            const layout = agentReplyLayout(
-                                                group.items,
-                                                executionStateByItemId.get(group.id) ?? { kind: "open" },
+                                            const execution = executionStateByItemId.get(group.id) ?? { kind: "open" };
+                                            const sections = agentReplySections(group.items);
+                                            const copyText = agentReplyCopyText(
+                                                replyMessagesByRenderGroupId.get(group.id) ?? [],
+                                                pane.botId,
+                                                execution,
                                             );
                                             return (
-                                                <div key={group.id} className={chatSessionAgentReplyGroupClassName}>
-                                                    {layout.kind === "inline" ? (
-                                                        group.items.map(renderItem)
-                                                    ) : (
-                                                        <>
-                                                            <TurnWorkDisclosure summary={layout.summary}>
-                                                                {layout.work.map(renderItem)}
-                                                            </TurnWorkDisclosure>
-                                                            {layout.answer.map(renderItem)}
-                                                        </>
+                                                <article
+                                                    key={group.id}
+                                                    aria-label="Agent response"
+                                                    className={cn(
+                                                        chatSessionAgentReplyGroupClassName,
+                                                        replyActive && "pb-3",
                                                     )}
-                                                </div>
+                                                >
+                                                    {sections.map((section, sectionIndex) =>
+                                                        section.kind === "process" ? (
+                                                            <TurnWorkDisclosure
+                                                                key={section.id}
+                                                                summary={section.summary}
+                                                                working={
+                                                                    replyActive &&
+                                                                    sectionIndex === sections.length - 1 &&
+                                                                    section.items.some(isGeneratingProcessRenderItem)
+                                                                }
+                                                            >
+                                                                {section.items.map(renderItem)}
+                                                            </TurnWorkDisclosure>
+                                                        ) : (
+                                                            <Fragment key={section.id}>
+                                                                {section.items.map(renderItem)}
+                                                            </Fragment>
+                                                        ),
+                                                    )}
+                                                    {copyText !== null && (
+                                                        <ResponseCopyButton
+                                                            createStore={createResponseCopyStore}
+                                                            text={copyText}
+                                                        />
+                                                    )}
+                                                </article>
                                             );
                                         });
                                     })()}
@@ -877,7 +966,7 @@ function MobiusSessionPaneBody({
                                     {presentation.workingIndicatorVisible &&
                                         presentation.outputState !== "idle" &&
                                         presentation.activity.kind === "working" && (
-                                            <div className="mt-6">
+                                            <div>
                                                 <WorkingIndicator startedAt={presentation.activity.startedAt} />
                                             </div>
                                         )}
@@ -919,8 +1008,11 @@ function MobiusSessionPaneBody({
                             <ScrollEdgeFade
                                 fadeFromClassName="from-card"
                                 fadeToClassName="to-card/0"
-                                frameClassName={`${chatSessionColumnClassName} mt-4 shrink-0 sm:mt-5`}
-                                className="max-h-[50vh] overflow-y-auto [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]"
+                                // The card yields the height the header and composer need: it shrinks inside
+                                // the clipped pane and keeps scrolling its own content instead of pushing
+                                // the composer below the pane's bottom edge.
+                                frameClassName={`${chatSessionInteractionColumnClassName} mt-4 mb-2 flex min-h-0 shrink flex-col sm:mt-5`}
+                                className="max-h-[min(50vh,360px)] min-h-0 flex-1 overflow-y-auto [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]"
                             >
                                 <SessionInteractionCards
                                     elicitations={interactions.elicitations}
