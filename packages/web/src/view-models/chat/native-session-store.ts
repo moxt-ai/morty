@@ -43,12 +43,19 @@ type NativeSessionPreview =
 
 type Operation = "idle" | "more" | "import" | "fork";
 
+type ForkIntent = {
+    readonly target: string;
+    readonly operationId: string;
+    readonly contract: "legacy" | "recoverable";
+};
+
 export interface NativeSessionStore {
     /** The agent tab the user chose, by `runtimeId:agentRef`; the tabs themselves come from the Runtime configuration. */
     readonly selected: string;
     readonly directory: NativeSessionDirectory;
     readonly preview: NativeSessionPreview;
     readonly operation: Operation;
+    readonly forkIntent: ForkIntent | null;
     readonly error: string;
     /** Starts discovery when the dialog opens. */
     readonly start: () => void;
@@ -79,7 +86,7 @@ function listingFor(agent: NativeSessionAgent | undefined): string {
 
 export const createNativeSessionStore = (
     botId: string,
-    requests: Pick<BotChatApi, "nativeSessions" | "nativeSession">,
+    requests: Pick<BotChatApi, "nativeSessions" | "nativeSession" | "forkNativeSession">,
     /** The Runtime the page follows, the one owner of which agents it offers. */
     runtime: () => ChatRuntime | null,
     displayTitle: (entry: NativeSessionEntry) => string,
@@ -106,6 +113,7 @@ export const createNativeSessionStore = (
         directory: { kind: "loading", scope: "initial", listing: null },
         preview: { kind: "empty" },
         operation: "idle",
+        forkIntent: null,
         error: "",
         load: async (parent) => {
             const current = runtime();
@@ -281,19 +289,48 @@ export const createNativeSessionStore = (
             }
             set({ operation: action, error: "" });
             try {
-                const result = await requests.nativeSessions(
-                    botId,
-                    directory.runtimeId,
-                    {
-                        action,
-                        discoveryId: directory.discoveryId,
-                        agentId: directory.agentRef,
-                        directoryId: preview.entry.directoryId,
-                        additionalDirectoryIds: preview.entry.additionalDirectories.map((item) => item.directoryId),
-                        entryId: preview.entry.entryId,
-                    },
-                    signal,
-                );
+                const input = {
+                    agentId: directory.agentRef,
+                    directoryId: preview.entry.directoryId,
+                    additionalDirectoryIds: preview.entry.additionalDirectories.map((item) => item.directoryId),
+                    nativeSessionId: preview.entry.nativeSessionId,
+                };
+                let forkIntent = get().forkIntent;
+                if (action === "fork") {
+                    const target = JSON.stringify([directory.runtimeId, input]);
+                    if (forkIntent === null || forkIntent.target !== target) {
+                        forkIntent = {
+                            target,
+                            operationId: crypto.randomUUID(),
+                            contract: runtime()?.nativeForkRecovery === true ? "recoverable" : "legacy",
+                        };
+                        set({ forkIntent });
+                    }
+                }
+                const result =
+                    action === "fork" && forkIntent?.contract === "recoverable"
+                        ? await requests.forkNativeSession(
+                              botId,
+                              directory.runtimeId,
+                              forkIntent.operationId,
+                              input,
+                              signal,
+                          )
+                        : await requests.nativeSessions(
+                              botId,
+                              directory.runtimeId,
+                              {
+                                  action,
+                                  discoveryId: directory.discoveryId,
+                                  agentId: directory.agentRef,
+                                  directoryId: preview.entry.directoryId,
+                                  additionalDirectoryIds: preview.entry.additionalDirectories.map(
+                                      (item) => item.directoryId,
+                                  ),
+                                  entryId: preview.entry.entryId,
+                              },
+                              signal,
+                          );
                 signal.throwIfAborted();
                 if (result.action !== action) {
                     throw new Error(`This agent cannot ${action} the selected native session.`);

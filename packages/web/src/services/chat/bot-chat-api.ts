@@ -80,6 +80,7 @@ export type ManagedSessionEvent =
     | SessionStatusChangedEvent
     | SessionCloseNoticeEvent;
 const chatRuntimeSchema = v.object({
+    nativeForkRecovery: v.optional(v.boolean(), false),
     runtimeId: identifier,
     machineName: v.string(),
     online: v.boolean(),
@@ -154,6 +155,15 @@ const localSessionSchema = v.object({
     result: v.unknown(),
     entry: localSessionEntrySchema,
 });
+
+function continuedSession(value: unknown, action: "fork" | "import") {
+    const stored = v.parse(localSessionSchema, value);
+    const result = decodeNativeSessionResult(JSON.stringify(stored.result));
+    if (result.action !== action || (action === "fork" && result.ready.sessionId !== result.targetSessionId)) {
+        throw new CloudApiError("INVALID_SESSION", "The continued Chat session is invalid.");
+    }
+    return { ...stored, result };
+}
 
 function sessionEndpoint(value: string): string {
     const endpoint = new URL(value);
@@ -440,20 +450,27 @@ export class BotChatApi {
         sessionId: string,
         action: "fork" | "import",
         signal: AbortSignal,
-    ) => {
-        const stored = v.parse(
-            localSessionSchema,
+    ) =>
+        continuedSession(
             await this.#request(botId, "continue-native-session", { action, harness, sessionId }, signal),
+            action,
         );
-        const result = decodeNativeSessionResult(JSON.stringify(stored.result));
-        if (result.action !== action || (action === "fork" && result.ready.sessionId !== result.targetSessionId)) {
-            throw new CloudApiError("INVALID_SESSION", "The continued Chat session is invalid.");
-        }
-        return {
-            ...stored,
-            result,
-        };
-    };
+    readonly continueRecoverableNativeFork = async (
+        botId: string,
+        harness: string,
+        sessionId: string,
+        operationId: string,
+        signal: AbortSignal,
+    ) =>
+        continuedSession(
+            await this.#request(
+                botId,
+                `continue-native-session/forks/${encodeURIComponent(operationId)}`,
+                { harness, sessionId },
+                signal,
+            ),
+            "fork",
+        );
     readonly agentSettings = async (
         botId: string,
         agentRef: string,
@@ -524,6 +541,24 @@ export class BotChatApi {
                       onReady(v.parse(runtimeConfigurationSchema, value));
                   },
         );
+    readonly forkNativeSession = async (
+        botId: string,
+        runtimeId: string,
+        operationId: string,
+        input: Parameters<MobiusClient["runtimes"]["forkNativeSession"]>[2],
+        signal: AbortSignal,
+    ) =>
+        decodeNativeSessionResult(
+            JSON.stringify(
+                await this.#request(
+                    botId,
+                    `native-session-forks/${encodeURIComponent(operationId)}`,
+                    { ...input, runtimeId },
+                    signal,
+                ),
+            ),
+        );
+
     readonly nativeSessions = async (
         botId: string,
         runtimeId: string,
@@ -643,7 +678,13 @@ export class BotChatApi {
         const signal = AbortSignal.any([
             parent,
             AbortSignal.timeout(
-                operation.startsWith("native-session") || operation === "agent-settings" ? 120000 : 45000,
+                // Native Session work, including continuing one, has the Worker's 120s budget; a shorter wait
+                // would abandon, and the home load would retry, a request still running there.
+                operation.startsWith("native-session") ||
+                    operation.startsWith("continue-native-session") ||
+                    operation === "agent-settings"
+                    ? 120000
+                    : 45000,
             ),
         ]);
         const requestedBotId = v.parse(identifier, botId);
