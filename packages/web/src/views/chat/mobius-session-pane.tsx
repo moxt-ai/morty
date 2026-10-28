@@ -3,7 +3,7 @@ import { Check, CircleAlert, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
-import { AgentThinking, type AgentThinkingEntry } from "../../components/chat/agent-thinking.tsx";
+import { AgentThinking } from "../../components/chat/agent-thinking.tsx";
 import { AuthenticationNotice } from "../../components/chat/authentication-notice.tsx";
 import { AutoFocusInput } from "../../components/chat/auto-focus-input.tsx";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
@@ -29,8 +29,7 @@ import {
 } from "../../components/chat/session-interactions.tsx";
 import { SessionLoadFailure } from "../../components/chat/session-load-failure.tsx";
 import { SessionWelcome } from "../../components/chat/session-welcome.tsx";
-import { isFileEditToolCall } from "../../components/chat/tools/tool-renderer-registry.tsx";
-import { TurnWorkDisclosure, type TurnWorkSummary } from "../../components/chat/turn-work-disclosure.tsx";
+import { TurnWorkDisclosure } from "../../components/chat/turn-work-disclosure.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -42,6 +41,7 @@ import { authenticationGuidance } from "../../view-models/chat/authentication-gu
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { canAddAttachments } from "../../view-models/chat/composer-attachment-store.ts";
 import { sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
+import { executionSummary } from "../../view-models/chat/execution-summary.ts";
 import { sessionHarnessSelection } from "../../view-models/chat/native-session-agents.ts";
 import { sessionInteractionPresentation } from "../../view-models/chat/session-interaction-store.ts";
 import {
@@ -49,204 +49,24 @@ import {
     sessionPanePresentation,
     type TitleEdit,
 } from "../../view-models/chat/session-pane-store.ts";
+import { sessionExecutionStates } from "../../view-models/chat/session-presentation.ts";
 import {
-    type SessionExecutionState,
-    type SessionMessage,
-    sessionExecutionStates,
-    sessionTextValue,
-} from "../../view-models/chat/session-presentation.ts";
+    type SessionRenderItem,
+    sessionRenderGroups,
+    sessionRenderItemId,
+    sessionRenderItems,
+} from "../../view-models/chat/session-render-items.ts";
 import { createSessionResourceStore } from "../../view-models/chat/session-resource-store.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { ChatMessageQueue } from "./chat-message-queue.tsx";
 import { FilePreview } from "./file-preview.tsx";
 import { MobiusAssistantText, MobiusSessionMessage } from "./mobius-session-message.tsx";
 
-type SessionRenderItem =
-    | {
-          readonly kind: "assistant-text";
-          readonly id: string;
-          readonly messageId: string | null;
-          readonly text: string;
-      }
-    | {
-          readonly kind: "event";
-          readonly message: SessionMessage;
-      }
-    | {
-          readonly entries: readonly AgentThinkingEntry[];
-          readonly id: string;
-          readonly kind: "thinking";
-      };
-
-function assistantText(message: SessionMessage): { readonly messageId: string | null; readonly text: string } | null {
-    if (
-        message.role === "assistant" &&
-        message.presentation.kind === "message" &&
-        message.presentation.content.type === "text"
-    ) {
-        return { messageId: message.presentation.messageId, text: sessionTextValue(message.presentation.content.text) };
-    }
-    return null;
-}
-
-function thinkingEntry(message: SessionMessage): AgentThinkingEntry | null {
-    if (message.role !== "assistant") {
-        return null;
-    }
-    if (message.presentation.kind === "tool") {
-        return message.presentation.entry;
-    }
-    if (message.presentation.kind === "thought" && message.presentation.content.type === "text") {
-        return {
-            id: message.firstEvent.eventId,
-            kind: "reasoning",
-            messageId: message.presentation.messageId,
-            omitted: message.presentation.omitted,
-            text: sessionTextValue(message.presentation.content.text),
-            truncated: message.presentation.content.text.truncated,
-        };
-    }
-    return null;
-}
-
-function sessionRenderItems(messages: readonly SessionMessage[]): readonly SessionRenderItem[] {
-    type RenderItemBuilder =
-        | { kind: "assistant-text"; id: string; messageId: string | null; text: string[] }
-        | { readonly kind: "event"; readonly message: SessionMessage }
-        | { entries: AgentThinkingEntry[]; readonly id: string; readonly kind: "thinking" };
-    const items: RenderItemBuilder[] = [];
-    for (const message of messages) {
-        const text = assistantText(message);
-        const thinking = thinkingEntry(message);
-        const previous = items.at(-1);
-        if (text !== null && previous?.kind === "assistant-text" && previous.messageId === text.messageId) {
-            previous.text.push(text.text);
-        } else if (text !== null) {
-            items.push({
-                kind: "assistant-text",
-                id: message.firstEvent.eventId,
-                messageId: text.messageId,
-                text: [text.text],
-            });
-        } else if (thinking !== null && previous?.kind === "thinking") {
-            previous.entries.push(thinking);
-        } else if (thinking !== null) {
-            items.push({ entries: [thinking], id: message.firstEvent.eventId, kind: "thinking" });
-        } else {
-            items.push({ kind: "event", message });
-        }
-    }
-    return items.map(
-        (item): SessionRenderItem => (item.kind === "assistant-text" ? { ...item, text: item.text.join("") } : item),
-    );
-}
-
-type SessionRenderGroup =
-    | {
-          readonly id: string;
-          readonly items: readonly SessionRenderItem[];
-          readonly kind: "agent-reply";
-      }
-    | {
-          readonly id: string;
-          readonly item: SessionRenderItem;
-          readonly kind: "user";
-      };
-
-function sessionRenderItemId(item: SessionRenderItem): string {
-    return item.kind === "event" ? item.message.firstEvent.eventId : item.id;
-}
-
-function isUserSessionRenderItem(item: SessionRenderItem): boolean {
-    return item.kind === "event" && item.message.role === "user";
-}
-
-function sessionRenderGroups(items: readonly SessionRenderItem[]): readonly SessionRenderGroup[] {
-    const groups: SessionRenderGroup[] = [];
-    let replyItems: SessionRenderItem[] = [];
-
-    const flushReplyGroup = (): void => {
-        if (replyItems.length === 0) {
-            return;
-        }
-        const firstReplyItem = replyItems.at(0);
-        if (firstReplyItem === undefined) {
-            return;
-        }
-        groups.push({ id: sessionRenderItemId(firstReplyItem), items: replyItems, kind: "agent-reply" });
-        replyItems = [];
-    };
-
-    for (const item of items) {
-        if (isUserSessionRenderItem(item)) {
-            flushReplyGroup();
-            groups.push({ id: sessionRenderItemId(item), item, kind: "user" });
-        } else {
-            replyItems.push(item);
-        }
-    }
-    flushReplyGroup();
-    return groups;
-}
-
-type AgentReplyLayout =
-    | { readonly kind: "inline" }
-    | {
-          readonly answer: readonly SessionRenderItem[];
-          readonly kind: "collapsed-work";
-          readonly summary: TurnWorkSummary;
-          readonly work: readonly SessionRenderItem[];
-      };
-
-/**
- * A reply whose execution finished leads with its answer: everything up to the
- * last tool or reasoning step collapses into one summary, and everything after
- * it stays visible. Replies of executions that are still open, failed, or
- * stopped early, and replies without a final answer, stay fully expanded so
- * nothing that needs attention is hidden.
- */
-function agentReplyLayout(items: readonly SessionRenderItem[], execution: SessionExecutionState): AgentReplyLayout {
-    if (execution.kind !== "finished") {
-        return { kind: "inline" };
-    }
-    const lastWorkIndex = items.findLastIndex((item) => item.kind === "thinking");
-    const work = items.slice(0, lastWorkIndex + 1);
-    const answer = items.slice(lastWorkIndex + 1);
-    const tools = work.flatMap((item) =>
-        item.kind === "thinking" ? item.entries.filter((entry) => entry.kind === "tool") : [],
-    );
-    if (tools.length === 0 || !answer.some((item) => item.kind === "assistant-text")) {
-        return { kind: "inline" };
-    }
-    return {
-        answer,
-        kind: "collapsed-work",
-        summary: {
-            failed: tools.filter(
-                (entry) =>
-                    entry.state.kind === "failed" ||
-                    (entry.state.kind === "background" && entry.state.status === "failed"),
-            ).length,
-            backgroundRunning: tools.filter(
-                (tool) => tool.state.kind === "background" && tool.state.status === "running",
-            ).length,
-            backgroundUnknown: tools.filter(
-                (tool) => tool.state.kind === "background" && tool.state.status === "unknown",
-            ).length,
-            fileEdits: tools.filter(isFileEditToolCall).length,
-            interrupted: tools.filter(
-                (entry) =>
-                    entry.state.kind === "interrupted" ||
-                    (entry.state.kind === "background" && entry.state.status === "stopped"),
-            ).length,
-            steps: tools.length,
-        },
-        work,
-    };
-}
-
 function SessionRenderItemContent({
     active,
+    executionFinished,
+    workingStartedAt,
+    waitingFor,
     item,
     machineName,
     onRetryUnknownDelivery,
@@ -256,6 +76,9 @@ function SessionRenderItemContent({
     presentation,
 }: {
     readonly active: boolean;
+    readonly executionFinished?: boolean;
+    readonly workingStartedAt?: number | undefined;
+    readonly waitingFor?: "permission" | "answer" | null;
     readonly item: SessionRenderItem;
     readonly machineName: string;
     readonly onRemoveUnknownDelivery: () => void;
@@ -278,12 +101,20 @@ function SessionRenderItemContent({
     if (item.kind === "thinking") {
         return (
             <div data-testid={dataTestId.agentResponse}>
-                <AgentThinking
-                    active={active}
-                    createResourceStore={createSessionResourceStore}
-                    entries={item.entries}
-                    readImage={pane.readResource}
-                />
+                <TurnWorkDisclosure
+                    startedAt={workingStartedAt}
+                    summary={executionSummary(item.entries, active, executionFinished === true, waitingFor ?? null)}
+                >
+                    {(open) => (
+                        <AgentThinking
+                            active={active}
+                            collapsed={!open}
+                            createResourceStore={createSessionResourceStore}
+                            entries={item.entries}
+                            readImage={pane.readResource}
+                        />
+                    )}
+                </TurnWorkDisclosure>
             </div>
         );
     }
@@ -830,6 +661,18 @@ function MobiusSessionPaneBody({
                                                     <div key={sessionRenderItemId(item)}>
                                                         <SessionRenderItemContent
                                                             active={active}
+                                                            workingStartedAt={
+                                                                active &&
+                                                                presentation.workingIndicatorVisible &&
+                                                                presentation.activity.kind === "working"
+                                                                    ? presentation.activity.startedAt
+                                                                    : undefined
+                                                            }
+                                                            waitingFor={active ? interactions.waitingFor : null}
+                                                            executionFinished={
+                                                                executionStateByItemId.get(group.id)?.kind ===
+                                                                "finished"
+                                                            }
                                                             item={item}
                                                             machineName={executionContext.machine}
                                                             onRemoveUnknownDelivery={
@@ -845,22 +688,9 @@ function MobiusSessionPaneBody({
                                                     </div>
                                                 );
                                             };
-                                            const layout = agentReplyLayout(
-                                                group.items,
-                                                executionStateByItemId.get(group.id) ?? { kind: "open" },
-                                            );
                                             return (
                                                 <div key={group.id} className={chatSessionAgentReplyGroupClassName}>
-                                                    {layout.kind === "inline" ? (
-                                                        group.items.map(renderItem)
-                                                    ) : (
-                                                        <>
-                                                            <TurnWorkDisclosure summary={layout.summary}>
-                                                                {layout.work.map(renderItem)}
-                                                            </TurnWorkDisclosure>
-                                                            {layout.answer.map(renderItem)}
-                                                        </>
-                                                    )}
+                                                    {group.items.map(renderItem)}
                                                 </div>
                                             );
                                         });
@@ -873,7 +703,8 @@ function MobiusSessionPaneBody({
                                             onRetry={() => run(pane.store.getState().retryUnknownDelivery)}
                                         />
                                     )}
-                                    {presentation.workingIndicatorVisible &&
+                                    {renderItems.at(-1)?.kind !== "thinking" &&
+                                        presentation.workingIndicatorVisible &&
                                         presentation.outputState !== "idle" &&
                                         presentation.activity.kind === "working" && (
                                             <div className="mt-6">

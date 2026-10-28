@@ -19,6 +19,8 @@ export interface SessionToolPresentation {
     readonly kind: "tool";
     readonly name: string;
     readonly output: string;
+    /** ACP operation category; absent on older stored events. */
+    readonly operation?: string | null;
     readonly state: SessionToolCallState;
     readonly title: string;
 }

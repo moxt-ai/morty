@@ -5,13 +5,14 @@ import { expect, test } from "./infra/test.ts";
 const tallImage = imagePreviewPng(1600, 2400);
 const smallImage = imagePreviewPng(16, 16);
 
-test("Given a tool image is open, When the agent finishes and its tools collapse, Then the image stays visible until the user closes it", async ({
+test("Given a tool image is open, When the agent finishes, Then the history stays expanded and the image retains its trigger focus", async ({
     runtime,
 }) => {
     const { page } = runtime;
     await runtime.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("hold image tool");
     await page.getByRole("button", { name: "Send message" }).click();
+    await page.getByRole("button", { name: "Show execution details" }).click();
     await page.getByRole("button", { name: "Generate image Tool succeeded" }).click();
     await page.getByRole("button", { name: "View image: Image" }).click();
     const viewer = page.getByRole("dialog", { name: "Image viewer" });
@@ -20,12 +21,12 @@ test("Given a tool image is open, When the agent finishes and its tools collapse
         outcome: "complete",
         output: [{ kind: "text", text: "The generated image is ready." }],
     });
-    await expect(page.getByRole("button", { name: "1 step", includeHidden: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Hide execution details", includeHidden: true })).toBeVisible();
     await expect(viewer.getByRole("img", { name: "Image" })).toBeVisible();
     await expect(viewer.getByLabel("Zoom level")).toHaveText("100%");
     await viewer.getByRole("button", { name: "Close image viewer" }).click();
     await expect(viewer).toBeHidden();
-    await expect(page.getByRole("button", { name: "1 step" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "View image: Image" })).toBeFocused();
 });
 
 test("Given draft screenshots, When the user zooms, pans, switches and saves, Then the viewer preserves the draft and returns focus", async ({

@@ -112,6 +112,22 @@ export function createInteractionAgent() {
                         });
                         return { stopReason: "end_turn" };
                     }
+                    if (
+                        context.params.prompt.some(
+                            (content) => content.type === "text" && content.text === "request after execution",
+                        )
+                    ) {
+                        await onSessionUpdate({
+                            sessionId,
+                            update: {
+                                sessionUpdate: "tool_call",
+                                toolCallId: crypto.randomUUID(),
+                                title: "Read verification configuration",
+                                kind: "read",
+                                status: "completed",
+                            },
+                        });
+                    }
                     const permission = await context.client.request(
                         acp.methods.client.session.requestPermission,
                         {

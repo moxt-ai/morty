@@ -94,6 +94,34 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
         return manySessionEvents(`Completed ${prompt.slice(eventBurstPrefix.length)}`);
     }
     switch (prompt) {
+        case "Review the execution summary behavior":
+            return {
+                outcome: "hold",
+                output: [
+                    { kind: "message", text: "I'll review the implementation and check the interactions." },
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        title: "Read the conversation layout",
+                        output: "Reviewed the message list and execution controls.",
+                        content: [],
+                    },
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        title: "Check keyboard accessibility",
+                        output: "Enter and Space toggle the execution details.",
+                        content: [],
+                    },
+                    {
+                        kind: "activity",
+                        activityType: "tool",
+                        title: "Verify disclosure state",
+                        output: "New calls preserve the user's expanded choice.",
+                        content: [],
+                    },
+                ],
+            };
         case "require agent authentication":
             throw RequestError.authRequired();
         case "fail this turn explicitly":

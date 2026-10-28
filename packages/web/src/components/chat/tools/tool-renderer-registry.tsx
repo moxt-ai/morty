@@ -127,11 +127,11 @@ export function isFileEditToolCall(entry: ToolThinkingEntry): boolean {
     return registeredRenderer(entry)?.editsFiles === true;
 }
 
-export function renderRegisteredTool(entry: ToolThinkingEntry): ReactNode | null {
+export function renderRegisteredTool(entry: ToolThinkingEntry, autoOpen = false): ReactNode | null {
     const renderer = registeredRenderer(entry);
     if (renderer === undefined) {
         return null;
     }
     const Component = renderer.Component;
-    return <Component autoOpen={false} entry={entry} />;
+    return <Component autoOpen={autoOpen} entry={entry} />;
 }

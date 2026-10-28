@@ -11,10 +11,12 @@ for (const width of [1440, 390]) {
         const composer = page.getByRole("textbox", { name: "Message" });
         await composer.fill("hold unfinished tools");
         await page.getByRole("button", { name: "Send message" }).click();
+        await page.getByRole("button", { name: "Show execution details" }).click();
         await expect(page.getByLabel("Tool running", { exact: true })).toHaveCount(2);
         await composer.fill("Add another verification");
         await page.getByRole("button", { name: "Send message" }).click();
         await page.getByRole("button", { name: "Steer queued message: Add another verification" }).click();
+        await page.getByRole("button", { name: "Show execution details" }).click();
         await expect(page.getByLabel("Tool running", { exact: true })).toHaveCount(3);
         await page.getByRole("button", { name: "Stop agent output" }).click();
         await expect(page.getByLabel("Tool interrupted", { exact: true })).toHaveCount(3);
@@ -22,14 +24,18 @@ for (const width of [1440, 390]) {
         await page.reload();
         await expect(page.getByLabel("Tool running", { exact: true })).toHaveCount(0);
         await expect(page.getByLabel("Tool interrupted", { exact: true })).toHaveCount(3);
+        await page.getByRole("button", { name: "Show execution details" }).first().click();
         await expect(page.getByLabel("Tool succeeded", { exact: true })).toHaveCount(1);
         await expect(page.getByLabel("Tool failed", { exact: true })).toHaveCount(1);
-        await expect(page.getByText("Turn stopped.", { exact: true })).toBeVisible();
+        // Native replay restores tool outcomes; the live stop notice is transient.
+        await expect(page.getByText("Execution interrupted", { exact: true })).toBeVisible();
+        await expect(page.getByText("Turn stopped.", { exact: true })).toHaveCount(0);
         await page.screenshot({ path: testInfo.outputPath(`stopped-tools-${width}.png`), fullPage: true });
         await composer.fill("complete unfinished tools");
         await page.getByRole("button", { name: "Send message" }).click();
         await expect(page.getByLabel("Tool interrupted", { exact: true })).toHaveCount(5);
         await expect(page.getByLabel("Tool running", { exact: true })).toHaveCount(0);
-        await expect(page.getByText("Turn stopped.", { exact: true })).toHaveCount(1);
+        await expect(page.getByText("Execution interrupted", { exact: true })).toBeVisible();
+        await expect(page.getByText("Turn stopped.", { exact: true })).toHaveCount(0);
     });
 }

@@ -16,7 +16,7 @@ test("Given an agent answer with reasoning and a tool call, When the user reads 
     const reasoningSummary = page.getByText("Show Thinking", { exact: true });
     const toolDisclosure = page.getByRole("button", { name: "Inspect workspace Tool succeeded" });
     await expect(answer).toBeVisible();
-    await page.getByRole("button", { name: "1 step", exact: true }).click();
+    await page.getByRole("button", { name: "Show execution details", exact: true }).click();
 
     const answerColor = await answer.evaluate((element) => getComputedStyle(element).color);
     const agentWorkColor = await reasoningSummary.evaluate((element) => getComputedStyle(element).color);

@@ -161,6 +161,8 @@ export function sessionInteractionPresentation(model: SessionInteractionStore) {
     return {
         permissions,
         elicitations,
+        waitingFor:
+            permissions.length > 0 ? ("permission" as const) : elicitations.length > 0 ? ("answer" as const) : null,
         busyInteractionIds: new Set(
             Array.from(model.submissions).flatMap(([id, operation]) => (operation.kind === "submitting" ? [id] : [])),
         ),

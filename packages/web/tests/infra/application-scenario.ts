@@ -1,4 +1,4 @@
-import { getByRole } from "@testing-library/dom";
+import { getByRole, queryAllByRole } from "@testing-library/dom";
 import { dataTestId } from "../../src/data-testid.ts";
 import type { TestApp } from "./test-app.tsx";
 
@@ -43,4 +43,22 @@ export async function openExecutionDetails(app: TestApp): Promise<HTMLElement> {
         await app.waitForView(() => getByRole(document.body, "menuitem", { name: /View execution details/ })),
     );
     return app.waitForView(() => getByRole(document.body, "dialog", { name: "Execution details" }));
+}
+
+/** Open every loaded run through its visible disclosure, scoped to this viewer. */
+export async function expandExecutionHistory(app: TestApp, minimumGroups = 1): Promise<void> {
+    const summaries = await app.waitForView(() => {
+        const buttons = app
+            .elementsByTestId(dataTestId.agentResponse)
+            .flatMap((response) => queryAllByRole(response, "button", { name: /^(Show|Hide) execution details$/ }));
+        if (buttons.length < minimumGroups) {
+            throw new Error("Execution history is not visible yet");
+        }
+        return buttons;
+    });
+    for (const summary of summaries) {
+        if (summary.getAttribute("aria-expanded") === "false") {
+            await app.user.click(summary);
+        }
+    }
 }

@@ -12,8 +12,12 @@ for (const width of [1440, 390]) {
         const composer = page.getByRole("textbox", { name: "Message" });
         await composer.fill("start background verification");
         await page.getByRole("button", { name: "Send message" }).click();
-        await page.getByRole("button", { name: "1 step · 1 running in background" }).click();
-        await expect(page.getByText("Running in background", { exact: true })).toBeVisible();
+        await page.getByRole("button", { name: "Show execution details" }).click();
+        await expect(
+            page
+                .getByRole("group", { name: "Tool: Background verification" })
+                .getByText("Running in background", { exact: true }),
+        ).toBeVisible();
         await expect(composer).toBeEnabled();
         await page.screenshot({
             path: fileURLToPath(new URL(`../../test-results/background-running-${width}.png`, import.meta.url)),
@@ -23,7 +27,7 @@ for (const width of [1440, 390]) {
         await page.getByRole("button", { name: "Send message" }).click();
         await expect(page.getByText("Completed", { exact: true })).toBeVisible();
         await page.reload();
-        await page.getByRole("button", { name: "1 step", exact: true }).click();
+        await page.getByRole("button", { name: "Show execution details", exact: true }).click();
         await expect(page.getByText("Completed", { exact: true })).toBeVisible();
         await expect(page.getByLabel("Tool: Background verification", { exact: true })).toHaveCount(1);
         await page.screenshot({

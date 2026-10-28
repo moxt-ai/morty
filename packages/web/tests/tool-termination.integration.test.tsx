@@ -1,7 +1,7 @@
-import { getAllByLabelText, getByLabelText, getByRole, queryByLabelText } from "@testing-library/dom";
+import { getAllByLabelText, getByLabelText, getByRole, queryAllByRole, queryByLabelText } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { expandExecutionHistory, sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 
 function readTool(app: TestApp, title: string) {
@@ -14,9 +14,30 @@ function readTool(app: TestApp, title: string) {
     return entry;
 }
 async function tool(app: TestApp, title: string) {
-    return await app.waitForView(() => readTool(app, title));
+    for (;;) {
+        const next = await app.waitForView(() => {
+            const entry = app
+                .elementsByTestId(dataTestId.agentToolCall)
+                .find((element) => element.getAttribute("aria-label") === `Tool: ${title}`);
+            if (entry !== undefined) {
+                return { kind: "tool" as const, element: entry };
+            }
+            const summary = app
+                .elementsByTestId(dataTestId.agentResponse)
+                .flatMap((response) => queryAllByRole(response, "button", { name: "Show execution details" }))[0];
+            if (summary !== undefined) {
+                return { kind: "summary" as const, element: summary };
+            }
+            throw new Error(`Tool unavailable: ${title}`);
+        });
+        if (next.kind === "tool") {
+            return next.element;
+        }
+        await app.user.click(next.element);
+    }
 }
 async function assertSettled(app: TestApp) {
+    await expandExecutionHistory(app);
     for (const title of ["Unfinished verification", "Pending verification"]) {
         await app.waitForView(() => expect(getByLabelText(readTool(app, title), "Tool interrupted")).toBeDefined());
         expect(queryByLabelText(readTool(app, title), "Tool running")).toBeNull();
@@ -47,6 +68,7 @@ for (const prompt of ["fail unfinished tools", "complete unfinished tools"]) {
             await reloaded.queryElementByTestId(dataTestId.messageComposer),
             "hold unfinished tools",
         );
+        await expandExecutionHistory(reloaded, 2);
         await reloaded.waitForView(() => expect(getAllByLabelText(document.body, "Tool running")).toHaveLength(2));
         expect(getAllByLabelText(document.body, "Tool interrupted")).toHaveLength(2);
         await reloaded.user.click(
@@ -106,6 +128,7 @@ test("Given an idle conversation is being opened by another viewer, When a new t
     const viewer = await app.openViewer();
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold unfinished tools");
     for (const current of [app, viewer]) {
+        await expandExecutionHistory(current, 2);
         await current.waitForView(() => expect(current.elementsByTestId(dataTestId.agentToolCall)).toHaveLength(8));
         const unfinished = current
             .elementsByTestId(dataTestId.agentToolCall)
@@ -200,7 +223,7 @@ for (const [status, label] of [
     }, async () => {
         const app = await start("start background verification");
         const summary = await app.waitForView(() =>
-            getByRole(document.body, "button", { name: "1 step · 1 running in background" }),
+            getByRole(document.body, "button", { name: "Show execution details" }),
         );
         await app.user.click(summary);
         await app.waitForView(() =>
@@ -216,7 +239,7 @@ for (const [status, label] of [
         expect(app.elementsByTestId(dataTestId.agentToolCall)).toHaveLength(1);
         const reloaded = await app.reload();
         const restoredSummary = await reloaded.waitForView(() =>
-            getByRole(document.body, "button", { name: /^1 step/ }),
+            getByRole(document.body, "button", { name: "Show execution details" }),
         );
         const summarySuffix =
             status === "failed"
@@ -226,7 +249,7 @@ for (const [status, label] of [
                   : status === "unknown"
                     ? " · 1 status unknown"
                     : "";
-        expect(restoredSummary.textContent).toBe(`1 step${summarySuffix}`);
+        expect(restoredSummary.textContent).toContain(`1 step${summarySuffix}`);
         await reloaded.user.click(restoredSummary);
         await reloaded.waitForView(() =>
             expect(readTool(reloaded, "Background verification").textContent).toContain(label),

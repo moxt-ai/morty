@@ -146,9 +146,44 @@ export function createToolLifecycleAgent() {
                             { type: "diff", path: "/workspace/notes.md", oldText: "before\n", newText: "after\n" },
                         ]);
                         await emitText("Checking the failed verification.");
-                        await emitTool("Failed verification", "failed", []);
+                        await emitTool("Failed verification", "failed", [
+                            {
+                                type: "content",
+                                content: { type: "text", text: "Verification command exited with status 1." },
+                            },
+                        ]);
                         await emitText("Verification finished with one failure.");
                         return { stopReason: "end_turn", _meta: { messageId } };
+                    }
+                    const phaseScenario = [
+                        "hold categorized execution",
+                        "hold uncategorized execution",
+                        "hold parallel execution",
+                    ].includes(prompt);
+                    if (phaseScenario) {
+                        const toolCallId = crypto.randomUUID();
+                        await emit({
+                            sessionUpdate: "tool_call",
+                            toolCallId,
+                            title: "Inspect package metadata",
+                            status: "in_progress",
+                            ...(prompt === "hold uncategorized execution" ? {} : { kind: "read" as const }),
+                        });
+                        // Partial patches from existing peers need not repeat the category.
+                        await emit({
+                            sessionUpdate: "tool_call_update",
+                            toolCallId,
+                            rawOutput: "Received partial package metadata",
+                        });
+                        if (prompt === "hold parallel execution") {
+                            await emit({
+                                sessionUpdate: "tool_call",
+                                toolCallId: crypto.randomUUID(),
+                                title: "Check scripts",
+                                status: "in_progress",
+                                kind: "execute",
+                            });
+                        }
                     }
                     for (const [title, status] of [
                         ["Completed verification", "completed"],
@@ -156,7 +191,7 @@ export function createToolLifecycleAgent() {
                         ["Unfinished verification", "in_progress"],
                         ["Pending verification", "pending"],
                     ] satisfies readonly (readonly [string, acp.ToolCallStatus])[]) {
-                        if (prompt === "hold before first acp") {
+                        if (prompt === "hold before first acp" || phaseScenario) {
                             break;
                         }
                         const event: acp.SessionNotification = {

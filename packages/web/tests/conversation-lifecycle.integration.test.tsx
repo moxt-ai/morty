@@ -81,6 +81,15 @@ test("Given a loaded session whose initial user chunk is delayed, When its first
         getByRole(document.body, "button", { name: "Steer queued message: New steering requirement" }),
     );
     await app.user.click(steer);
+    await app.user.click(
+        await app.waitForView(() => {
+            const history = getByText(document.body, "1 step").closest("fieldset");
+            if (!(history instanceof HTMLElement)) {
+                throw new Error("Missing the steered execution summary");
+            }
+            return getByRole(history, "button", { name: "Show execution details" });
+        }),
+    );
     await app.waitForView(() => {
         expect(getByLabelText(document.body, "Tool: Steered verification")).toBeDefined();
         expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
@@ -108,6 +117,15 @@ test("Given lifecycle events arrive before ACP output, When I queue a follow-up,
         "hold before first acp",
     ]);
     await app.user.click(steer);
+    await app.user.click(
+        await app.waitForView(() => {
+            const history = getByText(document.body, "1 step").closest("fieldset");
+            if (!(history instanceof HTMLElement)) {
+                throw new Error("Missing the steered execution summary");
+            }
+            return getByRole(history, "button", { name: "Show execution details" });
+        }),
+    );
     await app.waitForView(() => {
         expect(getByLabelText(document.body, "Tool: Steered verification")).toBeDefined();
         expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
@@ -665,7 +683,10 @@ test("Given more saved messages than one history page, When live output arrives 
             .filter((text) => text.includes("Completed Pagination message")),
     };
     const expectSavedReasoning = async () => {
-        for (const summary of queryAllByRole(document.body, "button", { name: "20 steps", expanded: false })) {
+        for (const summary of queryAllByRole(document.body, "button", {
+            name: "Show execution details",
+            expanded: false,
+        })) {
             await app.user.click(summary);
         }
         const reasoningItems = app.elementsByTestId(dataTestId.agentReasoning);

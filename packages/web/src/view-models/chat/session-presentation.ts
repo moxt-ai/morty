@@ -245,6 +245,7 @@ function mergeToolPresentation(
         input: update.rawInput === undefined ? (previous?.input ?? "") : encodedJson(update.rawInput),
         kind: "tool",
         name: update.name === undefined ? (previous?.name ?? "") : (update.name ?? ""),
+        operation: update.kind === undefined ? (previous?.operation ?? null) : update.kind,
         output: update.rawOutput === undefined ? (previous?.output ?? "") : encodedJson(update.rawOutput),
         state:
             update.backgroundTask !== undefined

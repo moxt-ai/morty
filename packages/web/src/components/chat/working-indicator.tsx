@@ -14,7 +14,13 @@ function elapsedSecondsSince(startedAt: number): number {
     return Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
 }
 
-export function WorkingIndicator({ startedAt }: { readonly startedAt: number }) {
+export function WorkingIndicator({
+    startedAt,
+    compact = false,
+}: {
+    readonly startedAt: number;
+    readonly compact?: boolean;
+}) {
     const [elapsedSeconds, setElapsedSeconds] = useState(() => elapsedSecondsSince(startedAt));
 
     useEffect(() => {
@@ -27,16 +33,19 @@ export function WorkingIndicator({ startedAt }: { readonly startedAt: number }) 
     return (
         <span
             aria-label="Agent is working"
+            aria-live={compact ? "off" : "polite"}
             className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground tabular-nums"
             data-testid={dataTestId.workingIndicator}
             role="status"
         >
-            <span>Working for {workingDuration(elapsedSeconds)}</span>
-            <LoaderCircle
-                aria-hidden="true"
-                className="size-4 animate-spin motion-reduce:animate-none"
-                data-testid={dataTestId.workingSpinner}
-            />
+            <span>{compact ? workingDuration(elapsedSeconds) : `Working for ${workingDuration(elapsedSeconds)}`}</span>
+            {!compact && (
+                <LoaderCircle
+                    aria-hidden="true"
+                    className="size-4 animate-spin motion-reduce:animate-none"
+                    data-testid={dataTestId.workingSpinner}
+                />
+            )}
         </span>
     );
 }

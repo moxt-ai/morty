@@ -8,9 +8,13 @@ for (const width of [1440, 390]) {
         const { page } = runtime;
         await page.setViewportSize({ width, height: 900 });
         await runtime.openPairedChat();
-        await page.getByRole("textbox", { name: "Message" }).fill("Review the verification action");
+        await page.getByRole("textbox", { name: "Message" }).fill("request after execution");
         await page.getByRole("button", { name: "Send message" }).click();
         const permission = page.getByRole("alertdialog", { name: "Agent permission request" });
+        await expect(page.getByRole("button", { name: "Show execution details" })).toContainText(
+            "Waiting for confirmation",
+        );
+        await expect(page.getByRole("group", { name: "Tool: Read verification configuration" })).toBeHidden();
         await expect(permission).toContainText("pnpm test -- --reporter=verbose");
         await expect(permission).toContainText("src/<entry>.ts");
         await page.reload();
@@ -79,7 +83,7 @@ test("Given a pending permission on a phone-height screen, When it appears, Then
     const { page } = runtime;
     await page.setViewportSize({ width: 390, height: 664 });
     await runtime.openPairedChat();
-    await page.getByRole("textbox", { name: "Message" }).fill("Review the verification action");
+    await page.getByRole("textbox", { name: "Message" }).fill("request after execution");
     await page.getByRole("button", { name: "Send message" }).click();
     const permission = page.getByRole("alertdialog", { name: "Agent permission request" });
     await expect(permission).toContainText("pnpm test -- --reporter=verbose");

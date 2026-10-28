@@ -7,6 +7,7 @@ import { AgentRichContent } from "../agents/agent-rich-content.tsx";
 import type { SessionResourceStoreFactory } from "../agents/resource-reader.ts";
 import { FollowLatestScrollArea } from "../utils/follow-latest-scroll-area.tsx";
 import { useScrollClippedEdges } from "../utils/use-scroll-clipped-edges.ts";
+import { matchesQuestionToolCall } from "./tools/question-tool-call.tsx";
 import {
     agentThinkStepChevronClassName,
     agentThinkStepExpandedPanelClassName,
@@ -16,7 +17,7 @@ import {
     ToolCallSupplementalContent,
 } from "./tools/tool-call-status.tsx";
 import { REASONING_CHARACTER_LIMIT, type SessionToolPresentation } from "./tools/tool-contract.ts";
-import { toolRichContent } from "./tools/tool-display-content.ts";
+import { toolRichContent, toolTextContent } from "./tools/tool-display-content.ts";
 import { renderRegisteredTool } from "./tools/tool-renderer-registry.tsx";
 
 export type AgentThinkingEntry =
@@ -131,12 +132,15 @@ function ToolCall({
     entry,
     createResourceStore,
     readImage,
+    attention,
 }: {
+    readonly attention: boolean;
     readonly entry: SessionToolPresentation;
     readonly createResourceStore?: SessionResourceStoreFactory | undefined;
     readonly readImage?: MarkdownImageReader | undefined;
 }) {
-    const registered = renderRegisteredTool(entry);
+    const registered = renderRegisteredTool(entry, attention);
+    const output = entry.output.length > 0 ? entry.output : (toolTextContent(entry.content) ?? "");
     const supplementalContent = (
         <AgentRichContent
             contents={toolRichContent(entry.content)}
@@ -151,7 +155,7 @@ function ToolCall({
         <ToolCallSupplementalContent value={supplementalContent}>
             <ToolCallDisclosure
                 ariaLabel={`Tool: ${entry.title}`}
-                autoOpen={false}
+                autoOpen={attention}
                 icon={<Wrench aria-hidden="true" className="size-3.5 shrink-0" />}
                 state={entry.state}
                 testId={dataTestId.agentToolCall}
@@ -164,10 +168,10 @@ function ToolCall({
                             <ToolTextPreview text={entry.input} />
                         </div>
                     )}
-                    {entry.output.length > 0 && (
+                    {output.length > 0 && (
                         <div className="grid gap-1">
                             <span className="font-medium text-copy-tertiary">Response</span>
-                            <ToolTextPreview text={entry.output} />
+                            <ToolTextPreview text={output} />
                         </div>
                     )}
                 </div>
@@ -178,11 +182,13 @@ function ToolCall({
 
 export function AgentThinking({
     active,
+    collapsed = false,
     createResourceStore,
     entries,
     readImage,
 }: {
     readonly active: boolean;
+    readonly collapsed?: boolean;
     /** The view-model resource store factory; without it remote images render as links. */
     readonly createResourceStore?: SessionResourceStoreFactory | undefined;
     readonly entries: readonly AgentThinkingEntry[];
@@ -231,8 +237,17 @@ export function AgentThinking({
     const currentEntry = timeline.at(-1);
     return (
         <div className="grid min-w-0 gap-0 py-0.5 text-[13px] leading-[22px] text-muted-foreground">
-            {timeline.map((item) =>
-                item.kind === "reasoning" ? (
+            {timeline.map((item) => {
+                const attention =
+                    item.kind === "tool" &&
+                    (item.entry.state.kind === "failed" ||
+                        item.entry.state.kind === "interrupted" ||
+                        (item.entry.state.kind === "background" && item.entry.state.status !== "completed") ||
+                        (matchesQuestionToolCall(item.entry) && item.entry.state.kind === "running"));
+                if (collapsed && !attention) {
+                    return null;
+                }
+                return item.kind === "reasoning" ? (
                     <ReasoningDisclosure
                         active={active && item === currentEntry}
                         entry={item.entry}
@@ -240,13 +255,18 @@ export function AgentThinking({
                     />
                 ) : (
                     <ToolCall
+                        attention={
+                            item.entry.state.kind === "failed" ||
+                            (item.entry.state.kind === "background" && item.entry.state.status === "failed") ||
+                            (matchesQuestionToolCall(item.entry) && item.entry.state.kind === "running")
+                        }
                         createResourceStore={createResourceStore}
                         entry={item.entry}
                         key={`tool:${item.entry.id}`}
                         readImage={readImage}
                     />
-                ),
-            )}
+                );
+            })}
         </div>
     );
 }
