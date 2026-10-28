@@ -678,7 +678,13 @@ export class BotChatApi {
         const signal = AbortSignal.any([
             parent,
             AbortSignal.timeout(
-                operation.startsWith("native-session") || operation === "agent-settings" ? 120000 : 45000,
+                // Native Session work, including continuing one, has the Worker's 120s budget; a shorter wait
+                // would abandon, and the home load would retry, a request still running there.
+                operation.startsWith("native-session") ||
+                    operation.startsWith("continue-native-session") ||
+                    operation === "agent-settings"
+                    ? 120000
+                    : 45000,
             ),
         ]);
         const requestedBotId = v.parse(identifier, botId);

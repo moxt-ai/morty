@@ -568,6 +568,16 @@ export class ChatService {
 
     readonly recoverableNativeFork = async (
         scope: ChatScope,
+        requestedRuntimeId: string,
+        operationId: string,
+        input: NativePreviewInput,
+    ) => {
+        const runtime = await this.#nativeSessionRuntime(scope, requestedRuntimeId);
+        return await this.#recoverFork(scope, runtime.runtimeId, operationId, input);
+    };
+
+    readonly #recoverFork = async (
+        scope: ChatScope,
         runtimeId: string,
         operationId: string,
         input: NativePreviewInput,
@@ -600,7 +610,7 @@ export class ChatService {
         const bot = await this.#bot(scope);
         const runtime = await this.localRuntime(scope);
         const input = { agentId: harness, nativeSessionId, directoryId: "default", additionalDirectoryIds: [] };
-        const receipt = await this.recoverableNativeFork(scope, runtime.runtimeId, operationId, input);
+        const receipt = await this.#recoverFork(scope, runtime.runtimeId, operationId, input);
         return { agentRef: harness, ...receipt, instructions: bot.instructions };
     };
 
