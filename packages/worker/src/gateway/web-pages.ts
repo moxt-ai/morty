@@ -45,7 +45,7 @@ const notFoundDocument = `<!doctype html>
     <meta name="theme-color" content="#18181b" />
     <meta name="robots" content="noindex" />
     <title>Page not found · Morty</title>
-    <link rel="icon" href="/favicon.ico" />
+    <link rel="icon" href="/favicon.ico?v=2" sizes="16x16 32x32 48x48" />
     <style>
       @font-face { font-family: "Inter"; font-weight: 400; font-display: swap; src: url("/fonts/Inter-Regular.ttf") format("truetype"); }
       @font-face { font-family: "Inter"; font-weight: 600; font-display: swap; src: url("/fonts/Inter-SemiBold.ttf") format("truetype"); }
