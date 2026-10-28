@@ -88,6 +88,37 @@ test("Given a browser connection, When it sends fixed connection heartbeats betw
     }
 });
 
+test.each([
+    {
+        name: "missing upgrade",
+        headers: new Headers({ Origin: "https://chat.test" }),
+        status: 426,
+        code: "WEBSOCKET_UPGRADE_REQUIRED",
+    },
+    {
+        name: "foreign origin",
+        headers: new Headers({ Origin: "https://other.test", Upgrade: "websocket" }),
+        status: 403,
+        code: "WEBSOCKET_ORIGIN_FORBIDDEN",
+    },
+    {
+        name: "missing origin",
+        headers: new Headers({ Upgrade: "websocket" }),
+        status: 403,
+        code: "WEBSOCKET_ORIGIN_FORBIDDEN",
+    },
+])(
+    "Given a $name handshake rejection, When it crosses the public Worker to DO boundary, Then the HTTP status and error code are preserved",
+    async ({ headers, status, code }) => {
+        const response = await runtime.dispatchFetch("https://chat.test/morty/ws", {
+            headers: Object.fromEntries(headers),
+        });
+        expect(response.status).toBe(status);
+        expect(await response.json()).toMatchObject({ error: { code } });
+        expect(response.headers.get("Cache-Control")).toBe("no-store");
+    },
+);
+
 test("Given browser API requests and watches, When the Chat web application uses the WebSocket bridge, Then responses and watch snapshots preserve JSON errors and document requests are rejected", async () => {
     const response = await runtime.dispatchFetch("https://chat.test/morty/ws", {
         headers: { Origin: "https://chat.test", Upgrade: "websocket" },

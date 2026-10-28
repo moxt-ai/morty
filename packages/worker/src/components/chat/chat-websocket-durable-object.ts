@@ -3,6 +3,8 @@ import application from "../../application.ts";
 import { createApplicationDependencies } from "../../composition/application-context.ts";
 import { createCloudWebSocketHandlers } from "../../composition/cloud-websocket.ts";
 import type { CloudBindings } from "../../infra/cloud-bindings.ts";
+import { json } from "../../infra/http.ts";
+import { toHttpError } from "../../infra/http-error.ts";
 import { RequestError } from "../../infra/request-error.ts";
 import { createWebSocketApiBridge } from "../../infra/websocket-api-bridge.ts";
 
@@ -29,28 +31,34 @@ export class ChatWebSocketDurableObject extends DurableObject<CloudBindings> {
 
     override async fetch(request: Request): Promise<Response> {
         const logger = createApplicationDependencies(this.env).logger;
-        return createWebSocketApiBridge(
-            request,
-            createCloudWebSocketHandlers({
-                dispatch: async (dispatched) => await application.fetch(dispatched, this.env),
+        try {
+            return createWebSocketApiBridge(
+                request,
+                createCloudWebSocketHandlers({
+                    dispatch: async (dispatched) => await application.fetch(dispatched, this.env),
+                    logger,
+                }),
                 logger,
-            }),
-            logger,
-            {
-                accept: (socket, receive, release) => {
-                    if (this.#connection.kind !== "waiting") {
-                        throw new RequestError(
-                            "BRIDGE_ALREADY_CONNECTED",
-                            "The Chat bridge is already connected.",
-                            409,
-                        );
-                    }
-                    this.ctx.acceptWebSocket(socket);
-                    this.#connection = { kind: "connected", socket, receive, release };
+                {
+                    accept: (socket, receive, release) => {
+                        if (this.#connection.kind !== "waiting") {
+                            throw new RequestError(
+                                "BRIDGE_ALREADY_CONNECTED",
+                                "The Chat bridge is already connected.",
+                                409,
+                            );
+                        }
+                        this.ctx.acceptWebSocket(socket);
+                        this.#connection = { kind: "connected", socket, receive, release };
+                    },
+                    lastHeartbeatAt: (socket) => this.ctx.getWebSocketAutoResponseTimestamp(socket)?.getTime() ?? null,
                 },
-                lastHeartbeatAt: (socket) => this.ctx.getWebSocketAutoResponseTimestamp(socket)?.getTime() ?? null,
-            },
-        );
+            );
+        } catch (error) {
+            logger.error({ err: error }, "Chat WebSocket handshake failed");
+            const response = toHttpError(error);
+            return json(response.body, response.status, response.headers);
+        }
     }
 
     override webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): void {
