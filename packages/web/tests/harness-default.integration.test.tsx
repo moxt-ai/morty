@@ -1,4 +1,4 @@
-import { getAllByRole, getByRole } from "@testing-library/dom";
+import { getAllByRole, getByRole, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
@@ -198,6 +198,16 @@ test("Given an active Pi conversation, When the Runtime is offline while the new
     // A brief outage can fall entirely between configuration-watch samples.
     // Recovery must retry the failed settings read even without a changed snapshot.
     await act(async () => clock.advanceBy(1_000));
+    // Let the read started by recovery settle before driving another scheduled retry.
+    // Relay readiness and an already in-flight HTTP request can cross during reconnect.
+    const retrySettings = await app.waitForView(() => {
+        expect(queryByRole(document.body, "status", { name: "Loading harness and model settings" })).toBeNull();
+        return queryByRole(document.body, "button", { name: "Retry settings" });
+    });
+    if (retrySettings !== null) {
+        expect(app.elementByTestId(dataTestId.sendMessage).hasAttribute("disabled")).toBe(true);
+        await act(async () => clock.advanceBy(2_000));
+    }
     await waitForHarness(app, "pi");
     await app.waitForView(() =>
         expect(app.elementByTestId(dataTestId.sendMessage).hasAttribute("disabled")).toBe(false),

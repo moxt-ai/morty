@@ -18,7 +18,7 @@ import {
 } from "@/services/chat/last-cwd-preference";
 import { readLastHarnessPreference, saveLastHarnessPreference } from "@/services/chat/last-harness-preference";
 import { pathDirectoryId } from "@/services/chat/workspace-directory-reference";
-import { isRuntimeConnectionFailure } from "@/services/management/management-api";
+import { CloudApiError, isRuntimeConnectionFailure } from "@/services/management/management-api";
 import { formatError } from "../format-error.ts";
 import { harnessOptions, nativeSessionAgentTabs } from "./native-session-agents.ts";
 
@@ -210,7 +210,12 @@ export const createDraftControlsStore = (
             set({ settings: { kind: "waiting-agent" } });
         };
         const settleFailure = (cause: unknown, message: string): void => {
-            if (isRuntimeConnectionFailure(cause)) {
+            if (
+                isRuntimeConnectionFailure(cause) ||
+                (cause instanceof CloudApiError && cause.code.toLowerCase() === "service_unavailable")
+            ) {
+                // The relay can be reported online before an in-flight directory/settings
+                // read can reach it. Keep transient transport failures in bounded recovery.
                 awaitRuntime();
                 return;
             }
