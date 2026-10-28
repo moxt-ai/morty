@@ -509,7 +509,7 @@ function MobiusSessionPaneBody({
         presentation.authenticationFailure === null
             ? null
             : authenticationGuidance(presentation.authenticationFailure.code, pane.agentRef, executionContext.machine);
-    const renderItems = sessionRenderItems(model.messages, presentation.activity.kind === "working");
+    const renderItems = sessionRenderItems(model.messages, presentation.activity, model.connection.kind);
     const renderGroups = sessionRenderGroups(renderItems);
     const executionStates = sessionExecutionStates(model.messages, presentation.activity.kind === "working");
     const executionStateByItemId = new Map(

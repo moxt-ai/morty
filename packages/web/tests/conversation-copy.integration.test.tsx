@@ -1,5 +1,5 @@
-import { getAllByRole, getByLabelText, getByRole, getByText, queryByRole } from "@testing-library/dom";
-import { expect, test } from "vitest";
+import { getAllByRole, getByLabelText, getByRole, getByText, queryAllByRole, queryByRole } from "@testing-library/dom";
+import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
@@ -41,6 +41,16 @@ test("Given progress prose and a streaming final answer, When the turn finishes 
     await app.waitForView(() => responseWithText("Waiting for steering"));
     expect(queryByRole(responseWithText("Waiting for steering"), "button", { name: "Copy response" })).toBeNull();
     expect(getByRole(answer, "button", { name: /^(Copy response|Copied)$/ })).toBeDefined();
+    let copyExposedBeforeCompletion = false;
+    const observer = new MutationObserver(() => {
+        const runningResponse = queryAllByRole(document.body, "article", { name: "Agent response" }).find((article) =>
+            article.textContent?.includes("Waiting for steering"),
+        );
+        copyExposedBeforeCompletion ||=
+            runningResponse !== undefined && queryByRole(runningResponse, "button", { name: "Copy response" }) !== null;
+    });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    onTestFinished(() => observer.disconnect());
     app.remount();
     const restored = await app.waitForView(() => responseWithText("Verified."));
     await app.user.click(getByRole(restored, "button", { name: "Copy response" }));
@@ -48,6 +58,11 @@ test("Given progress prose and a streaming final answer, When the turn finishes 
     expect(await navigator.clipboard.readText()).toBe(`${markdown}\n\nVerified.`);
     expect(queryByRole(responseWithText(introduction), "button", { name: "Copy response" })).toBeNull();
     expect(queryByRole(responseWithText("Waiting for steering"), "button", { name: "Copy response" })).toBeNull();
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "button", { name: "Stop agent output" }).hasAttribute("disabled")).toBe(false),
+    );
+    observer.disconnect();
+    expect(copyExposedBeforeCompletion).toBe(false);
 });
 
 test("Given progress prose followed only by tool calls, When the turn ends without an answer, Then progress is not promoted to a copyable final response", {

@@ -85,6 +85,9 @@ for (const width of [1280, 390]) {
         const nextAnswer = page.getByRole("article", { name: "Agent response" }).filter({ hasText: "Partial reply" });
         await expect(nextAnswer).toBeVisible();
         await expect(nextAnswer.getByRole("button", { name: "Copy response", exact: true })).toHaveCount(0);
+        await page.reload();
+        await expect(nextAnswer).toBeVisible();
+        await expect(nextAnswer.getByRole("button", { name: "Copy response", exact: true })).toHaveCount(0);
         await finalAnswer.getByRole("button", { name: "Copy response", exact: true }).click();
         expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
             "Review complete. Execution details stay collapsed by default, expand on demand, and remain open when new calls arrive or the turn finishes.",

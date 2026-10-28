@@ -1,4 +1,6 @@
 import type { AgentThinkingEntry } from "../../components/chat/agent-thinking.tsx";
+import type { SessionActivityState } from "./session-activity-machine.ts";
+import type { SessionConnection } from "./session-connection.ts";
 import {
     type SessionExecutionMessage,
     type SessionExecutionState,
@@ -99,9 +101,13 @@ function executionRenderItems(
 
 export function sessionRenderItems(
     messages: readonly SessionExecutionMessage[],
-    sessionWorking: boolean,
+    activity: SessionActivityState,
+    connection: SessionConnection["kind"],
 ): readonly SessionRenderItem[] {
-    return sessionExecutions(messages, sessionWorking).flatMap((execution) =>
+    // Imported text can arrive before execution reconciliation. Absence of an
+    // active turn is only evidence of completion once the connection is ready.
+    const executionPending = activity.kind === "working" || connection !== "ready";
+    return sessionExecutions(messages, executionPending).flatMap((execution) =>
         executionRenderItems(execution.messages, execution.state),
     );
 }
