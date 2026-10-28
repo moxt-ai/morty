@@ -73,6 +73,22 @@ test("Given the first agent lists saved sessions, When the user opens Open Sessi
     expect(getByRole(dialog, "button", { name: "Open" }).hasAttribute("disabled")).toBe(false);
 });
 
+test("Given a native session is already selected, When the user selects it again, Then its preview stays visible and Open stays available", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true, nativeSessionIds: new Set(["selected-session"]) });
+    await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: "Open Session" })));
+    const dialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
+    await app.waitForView(() => getByRole(dialog, "heading", { name: "Native selected-session" }));
+    const entry = getByRole(dialog, "button", { name: "Native selected-session" });
+    act(() => {
+        fireEvent.click(entry);
+        fireEvent.click(entry);
+    });
+    expect(getByRole(dialog, "heading", { name: "Native selected-session" })).toBeDefined();
+    expect(getByRole(dialog, "button", { name: "Open" }).hasAttribute("disabled")).toBe(false);
+});
+
 test("Given Pi is not installed on the Runtime, When the user opens Open Session and selects Pi, Then the dialog explains Pi is not installed", {
     timeout: 30_000,
 }, async () => {
@@ -142,13 +158,17 @@ test("Given native sessions are available, When the user selects a session from 
 test("Given native sessions were discovered before the Runtime disconnected, When a preview fails, Then Open Session shows one error with one bug report action", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({ connectAgent: true, nativeSessionIds: new Set(["preview-error-session"]) });
+    const app = await createTestApp({
+        connectAgent: true,
+        nativeSessionIds: new Set(["preview-ready-session", "preview-error-session"]),
+    });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
         (element) => element.getAttribute("data-connection-status") === "connected",
     );
     await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
     const menu = await app.waitForView(() => getByRole(document.body, "combobox", { name: "Native session" }));
+    await app.waitForView(() => getByRole(document.body, "heading", { name: "Native preview-ready-session" }));
     if (app.daemon === null) {
         throw new Error("The scenario requires a connected Runtime.");
     }

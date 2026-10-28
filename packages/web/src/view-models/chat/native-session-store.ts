@@ -237,8 +237,13 @@ export const createNativeSessionStore = (
             void get().load(lifetime.signal);
         },
         select: async (entry, lifetimeSignal) => {
-            const { directory, operation } = get();
+            const { directory, operation, preview } = get();
             if (directory.kind !== "ready" || operation !== "idle") {
+                return;
+            }
+            // Discovery already selects the first entry. Selecting that same entry
+            // must not cancel its preview and race another native read against it.
+            if ((preview.kind === "loading" || preview.kind === "ready") && preview.entry.entryId === entry.entryId) {
                 return;
             }
             selection?.abort();
