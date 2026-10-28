@@ -6,11 +6,16 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import * as v from "valibot";
-import { expect, test } from "vitest";
+import { beforeAll, expect, test } from "vitest";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
 import worker from "../src/application.ts";
-import { createIdentityFixture } from "./support/identity-fixture.ts";
+import { prepareIdentityFixture } from "./support/identity-fixture.ts";
+
+let createIdentityFixture: Awaited<ReturnType<typeof prepareIdentityFixture>>;
+beforeAll(async () => {
+    createIdentityFixture = await prepareIdentityFixture({ listenOnLoopback: true });
+});
 
 interface SetupModule {
     readonly runSetup: (
@@ -52,7 +57,7 @@ test.each(["fresh", "unknown", "revoked"] as const)(
         const state = join(directory, "state");
         const bin = join(directory, "bin");
         await mkdir(bin);
-        const fixture = await createIdentityFixture({ listenOnLoopback: true });
+        const fixture = await createIdentityFixture();
         try {
             if (replacementState !== "fresh") {
                 const previous = await fixture.createAnonymousUser();
@@ -167,7 +172,7 @@ test.each(["missing", "unlaunchable", "npm-missing", "npm-unlaunchable"] as cons
         const state = join(directory, "state");
         const bin = join(directory, "bin");
         await mkdir(bin);
-        const fixture = await createIdentityFixture({ listenOnLoopback: true });
+        const fixture = await createIdentityFixture();
         try {
             if (failure !== "missing") {
                 const entry = join(bin, "broken.mjs");
@@ -246,7 +251,7 @@ test("Given a local workspace and a private state directory, When setup creates 
     const state = join(directory, "state ' & workspace");
     const workspace = join(directory, "workspace with spaces & quotes '");
     await Promise.all([documents, workspace].map((path) => mkdir(path)));
-    const fixture = await createIdentityFixture({ listenOnLoopback: true });
+    const fixture = await createIdentityFixture();
     const cancellation = new AbortController();
     const events: Readonly<Record<string, unknown>>[] = [];
     try {
@@ -361,7 +366,7 @@ test.runIf(process.platform !== "win32")(
                 : join(directory, ".local", "state", "morty");
         const workspace = join(directory, "workspace");
         await Promise.all([documents, workspace].map((path) => mkdir(path)));
-        const fixture = await createIdentityFixture({ listenOnLoopback: true });
+        const fixture = await createIdentityFixture();
         const environment = Object.fromEntries(
             Object.entries(process.env).filter(
                 ([name]) => !["DOCUMENT_DIR", "MORTY_STATE_DIRECTORY", "XDG_STATE_HOME"].includes(name),
@@ -438,7 +443,7 @@ for (const [failure, scenario] of starterFailures) {
             const state = join(directory, "state");
             const bin = join(directory, "bin");
             await Promise.all([mkdir(state, { recursive: true }), mkdir(bin)]);
-            const fixture = await createIdentityFixture({ listenOnLoopback: true });
+            const fixture = await createIdentityFixture();
             try {
                 const identity = await fixture.createAnonymousUser();
                 const runtime = await fixture.connectAgent(identity.projectId);
@@ -651,7 +656,7 @@ test.runIf(process.env["MORTY_VERIFY_SYSTEM_STATE"] === "true" && process.platfo
             }
         }
         const workspace = await mkdtemp(join(tmpdir(), "morty-macos-workspace-"));
-        const fixture = await createIdentityFixture({ listenOnLoopback: true });
+        const fixture = await createIdentityFixture();
         const cancellation = new AbortController();
         const events: Readonly<Record<string, unknown>>[] = [];
         try {
@@ -707,7 +712,7 @@ for (const segments of [4, 8]) {
                 ...Array.from({ length: segments }, () => "\u00e9".repeat(segments === 8 ? 110 : 90)),
             );
             await mkdir(workspace, { recursive: true });
-            const fixture = await createIdentityFixture({ listenOnLoopback: true });
+            const fixture = await createIdentityFixture();
             const runtime = new ControlledSetupRuntime(
                 { agentId: "codex", agentName: "Codex", reply: mortyReply },
                 "Setup test Runtime",
@@ -882,7 +887,7 @@ async function withUpgradeMachine(
     const root = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-upgrade-")));
     const workspace = join(root, "workspace");
     await mkdir(workspace, { recursive: true });
-    const fixture = await createIdentityFixture({ listenOnLoopback: true });
+    const fixture = await createIdentityFixture();
     const runtime = new ControlledSetupRuntime(
         { agentId: "settings-test", agentName: "Settings Agent", reply: mortyReply, runtime: release },
         "Setup test Runtime",
@@ -1581,7 +1586,7 @@ test("Given two shared links and redeemed access, When the local owner revokes a
     const documents = join(directory, "Documents");
     const configurationDirectory = join(directory, "state");
     await mkdir(configurationDirectory, { recursive: true, mode: 0o700 });
-    const fixture = await createIdentityFixture({ listenOnLoopback: true });
+    const fixture = await createIdentityFixture();
     const signal = AbortSignal.timeout(30000);
     try {
         const owner = await fixture.createAnonymousUser();
@@ -1681,7 +1686,7 @@ test("Given setup replaced the Project but stopped before ending the previous id
     const documents = join(directory, "Documents");
     const configurationDirectory = join(directory, "state");
     await mkdir(configurationDirectory, { recursive: true, mode: 0o700 });
-    const fixture = await createIdentityFixture({ listenOnLoopback: true });
+    const fixture = await createIdentityFixture();
     const signal = AbortSignal.timeout(30000);
     try {
         const previous = await fixture.createAnonymousUser();
@@ -1737,7 +1742,7 @@ test("Given two computers share a synced Documents folder holding the first one'
     const workspace = join(root, "workspace");
     await mkdir(workspace, { recursive: true });
     const documents = join(root, "Documents");
-    const fixture = await createIdentityFixture({ listenOnLoopback: true });
+    const fixture = await createIdentityFixture();
     const computer = (name: string) =>
         new ControlledSetupRuntime(
             { agentId: "settings-test", agentName: "Settings Agent", reply: mortyReply, runtime: "current" },
@@ -1821,7 +1826,7 @@ test("Given an earlier release kept this computer's identity in Documents, When 
     await mkdir(workspace, { recursive: true });
     const documents = join(root, "Documents");
     const state = join(root, "state");
-    const fixture = await createIdentityFixture({ listenOnLoopback: true });
+    const fixture = await createIdentityFixture();
     const runtime = new ControlledSetupRuntime(
         { agentId: "settings-test", agentName: "Settings Agent", reply: mortyReply, runtime: "current" },
         "Setup test Runtime",

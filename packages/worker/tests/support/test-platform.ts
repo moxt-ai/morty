@@ -5,10 +5,13 @@ import { type ControlledAgent, createControlledAgentRuntime } from "../../../../
 import { mortyFiles, mortyReply } from "../../../../tests/support/fake-daemon/scenarios.ts";
 
 /** Starts the production Platform boundary with isolated local Cloudflare storage. */
-export async function startTestPlatform(options: { readonly allowedOrigins?: ReadonlySet<string> } = {}) {
+export async function startTestPlatform(
+    options: { readonly allowedOrigins?: ReadonlySet<string> } = {},
+    createBindings: typeof createTestMobiusPlatformBindings = createTestMobiusPlatformBindings,
+) {
     const cancellation = new AbortController();
     const runtimes: AsyncDisposable[] = [];
-    const bindings = await createTestMobiusPlatformBindings(options.allowedOrigins);
+    const bindings = await createBindings(options.allowedOrigins);
     try {
         const clerk = new FakeClerk();
         const app = { request: bindings.request };
