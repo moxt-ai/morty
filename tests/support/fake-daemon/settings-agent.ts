@@ -170,6 +170,21 @@ export function createSettingsAgent<Definition>(
                         await onSessionUpdate(notification);
                     }
                 }
+                if (prompt === "hold with consecutive user messages") {
+                    const update: acp.SessionUpdate = {
+                        sessionUpdate: "user_message_chunk",
+                        messageId: crypto.randomUUID(),
+                        content: { type: "text", text: "[Request interrupted by user]" },
+                    };
+                    history.push(update);
+                    const notification: acp.SessionNotification = { sessionId, update };
+                    if (onSessionUpdate === undefined) {
+                        await context.client.notify(acp.methods.client.session.update, notification);
+                    } else {
+                        await onSessionUpdate(notification);
+                    }
+                    return { stopReason: "end_turn" };
+                }
                 if (prompt !== "Remove settings") {
                     const update: acp.SessionUpdate = {
                         sessionUpdate: "agent_message_chunk",

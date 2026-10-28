@@ -26,7 +26,7 @@ test("Given a paired Bot, When a Mermaid reply finishes, Then I can view, copy a
     await page.screenshot({ path: testInfo.outputPath("mermaid-streamed.png"), fullPage: true });
 
     await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-    await response.getByRole("button", { name: "Copy diagram source", exact: true }).click();
+    await response.getByRole("button", { name: "Copy response", exact: true }).click();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("Worker --> Agent");
     await response.getByRole("button", { name: "View diagram fullscreen", exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible();

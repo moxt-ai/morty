@@ -5,6 +5,8 @@ import { cn } from "../../lib/utils.ts";
 import {
     AgentThinkStepExpandedPanel,
     agentThinkStepChevronClassName,
+    agentThinkStepIconClassName,
+    agentThinkStepInlineLabelClassName,
     agentThinkStepTitleClassName,
     agentThinkStepTriggerClassName,
     ToolCallStatus,
@@ -60,21 +62,17 @@ export function CompactionDisclosure({
                 title={title}
                 type="button"
             >
-                <span className="shrink-0 [&>svg]:size-3.5">
+                <span className={agentThinkStepIconClassName}>
                     <FileText aria-hidden="true" className="size-3.5 shrink-0" />
                 </span>
-                <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden leading-[22px]">
-                    <span className={cn(agentThinkStepTitleClassName, "leading-[22px]")}>{title}</span>
+                <span className={cn(agentThinkStepInlineLabelClassName, "overflow-hidden leading-[22px]")}>
+                    <span className={agentThinkStepTitleClassName}>{title}</span>
                     <span className={toolCallStatusSlotClassName}>
                         <ToolCallStatus state={compactionStatusToToolState(status)} />
                     </span>
                     <ChevronDown
                         aria-hidden="true"
-                        className={cn(
-                            agentThinkStepChevronClassName,
-                            "mt-0 group-focus-visible/trigger:inline group-hover/trigger:inline",
-                            open && "inline rotate-0",
-                        )}
+                        className={cn(agentThinkStepChevronClassName, open && "visible rotate-0")}
                     />
                 </span>
             </button>

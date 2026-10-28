@@ -1,4 +1,4 @@
-import { Check, Copy, RotateCcw, X, ZoomIn, ZoomOut } from "lucide-react";
+import { RotateCcw, X, ZoomIn, ZoomOut } from "lucide-react";
 import { Dialog as Primitive } from "radix-ui";
 import { type ReactNode, type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { useElementSize } from "../utils/use-element-size.ts";
@@ -68,11 +68,9 @@ function ViewerButton({
  * readable and is panned and zoomed rather than scaled down to the viewport.
  */
 export function MermaidFullscreen({
-    code,
     diagram,
     onClose,
 }: {
-    readonly code: string;
     readonly diagram: MermaidFullscreenDiagram;
     readonly onClose: () => void;
 }) {
@@ -85,7 +83,6 @@ export function MermaidFullscreen({
         readonly y: number;
     } | null>(null);
     const [view, setView] = useState<View>(FIT);
-    const [copied, setCopied] = useState(false);
     const offsetX = view.kind === "manual" ? view.offsetX : 0;
     const offsetY = view.kind === "manual" ? view.offsetY : 0;
     const scale = view.kind === "manual" ? view.scale : size === null ? 1 : fitScale(size, diagram);
@@ -108,27 +105,8 @@ export function MermaidFullscreen({
         return () => viewport.removeEventListener("wheel", onWheel);
     }, [scale, viewport]);
 
-    useEffect(() => {
-        if (!copied) {
-            return;
-        }
-        const timer = window.setTimeout(() => setCopied(false), 2_000);
-        return () => window.clearTimeout(timer);
-    }, [copied]);
-
     const zoomBy = (step: number) => {
         setView({ kind: "manual", offsetX, offsetY, scale: clamp(scale + step, MIN_SCALE, MAX_SCALE) });
-    };
-
-    const copy = () => {
-        const clipboard = navigator.clipboard;
-        if (clipboard === undefined) {
-            return;
-        }
-        void clipboard.writeText(code).then(
-            () => setCopied(true),
-            () => undefined,
-        );
     };
 
     const startDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -184,9 +162,6 @@ export function MermaidFullscreen({
                     className="fixed inset-0 z-50 flex flex-col bg-background/95 p-4 backdrop-blur-sm outline-none"
                 >
                     <div className="absolute top-4 right-4 z-10 flex items-center gap-1 rounded-md border border-border bg-background/80 p-1">
-                        <ViewerButton label={copied ? "Copied" : "Copy diagram source"} onClick={copy}>
-                            {copied ? <Check aria-hidden="true" size={18} /> : <Copy aria-hidden="true" size={18} />}
-                        </ViewerButton>
                         <ViewerButton
                             label="Zoom out"
                             onClick={() => {

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
 import { ToolTextPreview } from "../../components/chat/tool-text-preview.tsx";
 import { dataTestId } from "../../data-testid.ts";
+import { cn } from "../../lib/utils.ts";
 import { AgentRichContent } from "../agents/agent-rich-content.tsx";
 import type { SessionResourceStoreFactory } from "../agents/resource-reader.ts";
 import { FollowLatestScrollArea } from "../utils/follow-latest-scroll-area.tsx";
@@ -10,7 +11,9 @@ import { useScrollClippedEdges } from "../utils/use-scroll-clipped-edges.ts";
 import {
     agentThinkStepChevronClassName,
     agentThinkStepExpandedPanelClassName,
+    agentThinkStepIconClassName,
     agentThinkStepInlineLabelClassName,
+    agentThinkStepTitleClassName,
     agentThinkStepTriggerClassName,
     ToolCallDisclosure,
     ToolCallSupplementalContent,
@@ -111,14 +114,16 @@ function ReasoningDisclosure({ active, entry }: { readonly active: boolean; read
             <summary
                 className={`${agentThinkStepTriggerClassName} group/summary list-none [&::-webkit-details-marker]:hidden`}
             >
+                <span className={agentThinkStepIconClassName}>
+                    <Brain aria-hidden="true" className="size-3.5 shrink-0" />
+                </span>
                 <span className={agentThinkStepInlineLabelClassName}>
-                    <span className="mt-0.5 shrink-0 [&>svg]:size-3.5">
-                        <Brain aria-hidden="true" className="size-3.5 shrink-0" />
+                    <span className={cn(agentThinkStepTitleClassName, "leading-snug [overflow-wrap:anywhere]")}>
+                        Show Thinking
                     </span>
-                    <span className="min-w-0 text-left leading-snug [overflow-wrap:anywhere]">Show Thinking</span>
                     <ChevronDown
                         aria-hidden="true"
-                        className={`${agentThinkStepChevronClassName} group-focus-visible/summary:inline group-hover/summary:inline group-open/thinking:inline group-open/thinking:rotate-0`}
+                        className={`${agentThinkStepChevronClassName} group-open/thinking:visible group-open/thinking:rotate-0`}
                     />
                 </span>
             </summary>

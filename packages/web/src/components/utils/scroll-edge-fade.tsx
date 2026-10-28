@@ -1,4 +1,13 @@
-import { type CSSProperties, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+    type CSSProperties,
+    type KeyboardEventHandler,
+    type ReactNode,
+    useCallback,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+} from "react";
 import { cn } from "@/lib/utils";
 
 const EDGE_THRESHOLD_PX = 4;
@@ -14,6 +23,11 @@ type ScrollEdgeFadeBase = {
     readonly className?: string;
     readonly id?: string;
     readonly "aria-label"?: string;
+    readonly onKeyDown?: KeyboardEventHandler<HTMLElement>;
+    readonly role?: React.AriaRole;
+    readonly tabIndex?: number;
+    /** Receives the actual scrollport element when a caller also needs to reference it. */
+    readonly scrollElementRef?: (element: HTMLElement | null) => void;
 };
 
 type EdgeStrokeAppearance = {
@@ -102,7 +116,18 @@ function clippedEdges(element: HTMLElement): ClippedEdges {
  * `revealSurface` so the mask shows the real background instead of a second color.
  */
 export function ScrollEdgeFade(props: ScrollEdgeFadeProps) {
-    const { scrollElement = "div", children, frameClassName, className, id, "aria-label": ariaLabel } = props;
+    const {
+        scrollElement = "div",
+        children,
+        frameClassName,
+        className,
+        id,
+        "aria-label": ariaLabel,
+        onKeyDown,
+        role,
+        tabIndex,
+        scrollElementRef,
+    } = props;
     const scrollRef = useRef<HTMLElement | null>(null);
     const [edges, setEdges] = useState<ClippedEdges>(hiddenEdges);
 
@@ -148,6 +173,7 @@ export function ScrollEdgeFade(props: ScrollEdgeFadeProps) {
 
     const assignScrollElement = (node: HTMLElement | null) => {
         scrollRef.current = node;
+        scrollElementRef?.(node);
     };
     const revealSurface = props.revealSurface === true;
     const maskImage = revealSurface ? viewportEdgeMask(edges) : undefined;
@@ -156,10 +182,13 @@ export function ScrollEdgeFade(props: ScrollEdgeFadeProps) {
         id,
         "aria-label": ariaLabel,
         className,
+        onKeyDown,
         onScroll: () => {
             syncEdges();
         },
+        role,
         style: maskImage === undefined ? undefined : surfaceMaskStyle(maskImage),
+        tabIndex,
     };
 
     return (

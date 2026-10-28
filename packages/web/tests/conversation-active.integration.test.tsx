@@ -207,6 +207,33 @@ test("Given a conversation is running in the background, When it completes after
     );
 });
 
+test("Given a running session, When the sidebar shows its status, Then the working icon is 14px", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.getAttribute("data-connection-status") === "connected",
+    );
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, "hold after first delta");
+    await app.waitForView(() => {
+        const status = app.optionalElementByTestId(dataTestId.sessionStatus);
+        if (status === null) {
+            throw new Error("Expected the session status");
+        }
+        const icon = status.querySelector("svg");
+        if (!(icon instanceof SVGElement)) {
+            throw new Error("Expected the session status icon");
+        }
+        expect(getComputedStyle(icon).width).toBe("14px");
+        expect(getComputedStyle(icon).height).toBe("14px");
+    });
+});
+
 test("Given a running reply, When the user reads the conversation, Then its working indicator appears in message history until completion", {
     timeout: 30_000,
 }, async () => {
@@ -234,7 +261,6 @@ test("Given a running reply, When the user reads the conversation, Then its work
         }
         expect(userMessage.compareDocumentPosition(indicator) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
         expect(indicator.textContent).toBe("Working for 0s");
-        expect(app.elementsByTestId(dataTestId.workingSpinner)).toHaveLength(1);
         expect(app.elementsByTestId(dataTestId.workingIndicator)).toHaveLength(1);
     });
     const daemon = app.daemon;

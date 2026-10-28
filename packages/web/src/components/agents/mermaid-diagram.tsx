@@ -5,8 +5,8 @@ import { mermaidConfig } from "./mermaid-options.ts";
 import { mermaidPlugin } from "./mermaid-plugin.ts";
 
 const plugins = { mermaid: mermaidPlugin };
-const controls = { mermaid: { copy: true, fullscreen: true, panZoom: true, download: false } };
-const translations = { copyCode: "Copy diagram source", viewFullscreen: "View diagram fullscreen" };
+const controls = { mermaid: { copy: false, fullscreen: true, panZoom: true, download: false } };
+const translations = { viewFullscreen: "View diagram fullscreen" };
 const options = {
     config: mermaidConfig,
     errorComponent: () => (
@@ -71,7 +71,6 @@ export default memo(function MermaidDiagram({ code }: { readonly code: string })
             </details>
             {fullscreen !== null && (
                 <MermaidFullscreen
-                    code={code}
                     diagram={fullscreen}
                     onClose={() => {
                         setFullscreen(null);

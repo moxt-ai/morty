@@ -1,6 +1,6 @@
 import { expect, test } from "./infra/test.ts";
 
-test("Given an agent answer with reasoning and a tool call, When the user reads it, Then agent work is grayer than the answer", async ({
+test("Given an agent answer with reasoning and a tool call, When the user inspects the agent work, Then every process row shares compact hover disclosure styling", async ({
     runtime,
 }, testInfo) => {
     const { page } = runtime;
@@ -16,16 +16,117 @@ test("Given an agent answer with reasoning and a tool call, When the user reads 
     const reasoningSummary = page.getByText("Show Thinking", { exact: true });
     const toolDisclosure = page.getByRole("button", { name: "Inspect workspace Tool succeeded" });
     await expect(answer).toBeVisible();
-    await page.getByRole("button", { name: "1 step", exact: true }).click();
-
     const answerColor = await answer.evaluate((element) => getComputedStyle(element).color);
-    const agentWorkColor = await reasoningSummary.evaluate((element) => getComputedStyle(element).color);
-    expect(agentWorkColor).not.toBe(answerColor);
-    await expect(toolDisclosure).toHaveCSS("color", agentWorkColor);
+    const stepDisclosure = page.getByRole("button", { name: "1 step", exact: true });
+    const stepChevron = stepDisclosure.locator("svg").last();
+    const stepTitle = stepDisclosure.getByText("1 step", { exact: true });
+    const stepIcon = stepDisclosure.locator("svg").first();
+    const assertChevronFollowsTitle = async (
+        row: typeof stepDisclosure,
+        title: typeof stepTitle,
+        chevron: typeof stepChevron,
+    ) => {
+        const rowBox = await row.boundingBox();
+        const titleBox = await title.boundingBox();
+        const chevronBox = await chevron.boundingBox();
+        if (rowBox === null || titleBox === null || chevronBox === null) {
+            throw new Error("Expected process row, title, and chevron to have layout boxes");
+        }
+        const chevronGap = chevronBox.x - (titleBox.x + titleBox.width);
+        expect(chevronGap).toBeGreaterThanOrEqual(0);
+        expect(chevronGap).toBeLessThan(32);
+    };
 
-    await reasoningSummary.click();
+    if ((await stepDisclosure.getAttribute("aria-expanded")) === "true") {
+        await stepDisclosure.click();
+    }
     await page.mouse.move(0, 0);
+    const collapsedStepColor = await stepDisclosure.evaluate((element) => getComputedStyle(element).color);
+    expect(collapsedStepColor).not.toBe(answerColor);
+    await expect(stepChevron).toBeHidden();
+    await expect(stepIcon).toHaveCSS("color", collapsedStepColor);
+
+    // The collapsed summary first proves the shared hover contract before it
+    // reveals the reasoning and tool rows it contains.
+    await stepDisclosure.hover();
+    await expect(stepChevron).toBeVisible();
+    const hoveredStepColor = await stepDisclosure.evaluate((element) => getComputedStyle(element).color);
+    expect(hoveredStepColor).not.toBe(collapsedStepColor);
+    await expect(stepIcon).toHaveCSS("color", hoveredStepColor);
+    await assertChevronFollowsTitle(stepDisclosure, stepTitle, stepChevron);
+
+    await stepDisclosure.click();
+    await page.mouse.move(0, 0);
+
+    const reasoningRow = page.locator("summary").filter({ hasText: "Show Thinking" });
+    const rows = [
+        {
+            chevronAlwaysVisible: false,
+            row: reasoningRow,
+            title: reasoningRow.getByText("Show Thinking", { exact: true }),
+        },
+        {
+            chevronAlwaysVisible: false,
+            row: toolDisclosure,
+            title: toolDisclosure.getByText("Inspect workspace", { exact: true }),
+        },
+        { chevronAlwaysVisible: true, row: stepDisclosure, title: stepTitle },
+    ];
+    const initialRowColor = await reasoningRow.evaluate((element) => getComputedStyle(element).color);
+    expect(initialRowColor).not.toBe(answerColor);
+    for (const { row } of rows) {
+        await expect(row).toHaveCSS("color", initialRowColor);
+        await expect(row).toHaveCSS("margin-left", "-8px");
+        await expect(row).toHaveCSS("margin-right", "-8px");
+        await expect(row).toHaveCSS("padding-left", "8px");
+        await expect(row).toHaveCSS("padding-right", "8px");
+        const initialIconColor = await row
+            .locator("svg")
+            .first()
+            .evaluate((element) => getComputedStyle(element).color);
+        expect(initialIconColor).toBe(initialRowColor);
+    }
+    const rowHeights = await Promise.all(
+        rows.map(async ({ row }) => {
+            const box = await row.boundingBox();
+            if (box === null) {
+                throw new Error("Expected every agent process row to have a layout box");
+            }
+            return box.height;
+        }),
+    );
+    expect(new Set(rowHeights.map((height) => Math.round(height))).size).toBe(1);
+    expect(Math.round(rowHeights[0] ?? 0)).toBe(32);
+
+    for (const { chevronAlwaysVisible, row, title } of rows) {
+        const chevron = row.locator("svg").last();
+        await page.mouse.move(0, 0);
+        if (chevronAlwaysVisible) {
+            await expect(chevron).toBeVisible();
+        } else {
+            await expect(chevron).toBeHidden();
+        }
+        const initialTextColor = await row.evaluate((element) => getComputedStyle(element).color);
+        const initialIconColor = await row
+            .locator("svg")
+            .first()
+            .evaluate((element) => getComputedStyle(element).color);
+        await row.hover();
+        await expect(chevron).toBeVisible();
+        const hoveredTextColor = await row.evaluate((element) => getComputedStyle(element).color);
+        const hoveredIconColor = await row
+            .locator("svg")
+            .first()
+            .evaluate((element) => getComputedStyle(element).color);
+        expect(hoveredTextColor).not.toBe(initialTextColor);
+        expect(hoveredIconColor).toBe(hoveredTextColor);
+        expect(hoveredIconColor).not.toBe(initialIconColor);
+        await assertChevronFollowsTitle(row, title, chevron);
+    }
+
+    await toolDisclosure.hover();
     await page.screenshot({ fullPage: true, path: testInfo.outputPath("agent-work.png") });
+    await reasoningSummary.click();
     const reasoning = page.getByText("Inspecting the request before acting.", { exact: true });
     await expect(reasoning).toBeVisible();
     await expect(reasoning).not.toHaveCSS("color", answerColor);

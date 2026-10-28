@@ -13,10 +13,19 @@ import type { ComposerAttachmentStore } from "../../view-models/chat/composer-at
 import { ImageGallery, PreviewImage } from "../images/image-gallery.tsx";
 import { Button } from "../ui/cloud-button.tsx";
 import { MortyAlert } from "../ui/morty-alert.tsx";
+import { ScrollArea } from "../ui/scroll-area.tsx";
 import { Textarea } from "../ui/textarea.tsx";
+import { useAutoGrowingTextarea } from "../utils/use-auto-growing-textarea.ts";
 import { useComposerNoticeLayout } from "../utils/use-composer-notice-layout.ts";
+import { useScrollClippedEdges } from "../utils/use-scroll-clipped-edges.ts";
 import { chatSessionComposerClassName } from "./chat-session-layout.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
+
+const composerMaxHeightPx = 256;
+/** Outer vertical padding and footer height. */
+const composerChromeHeightPx = 64;
+const composerTextareaMaxHeightPx = composerMaxHeightPx - composerChromeHeightPx;
+const composerScrollEdgeThresholdPx = 1;
 
 function attachmentName(attachment: ComposerAttachment): string {
     return attachment.name;
@@ -110,6 +119,10 @@ export function BotChatComposer({
 }) {
     const fileInput = useRef<HTMLInputElement>(null);
     const notice = useRef<HTMLDivElement>(null);
+    const textarea = useRef<HTMLTextAreaElement>(null);
+    const scrollViewport = useRef<HTMLDivElement>(null);
+    useAutoGrowingTextarea(textarea, draft, scrollViewport);
+    const clipped = useScrollClippedEdges(scrollViewport, composerScrollEdgeThresholdPx);
     const { attachments, state: attachmentState } = attachmentModel;
 
     const submit = (event: FormEvent<HTMLFormElement>): void => {
@@ -169,7 +182,7 @@ export function BotChatComposer({
                     )}
                 </div>
             )}
-            <div className="rounded-[24px] border-[0.5px] border-border bg-surface-elevated px-3 pt-3 pb-2.5 shadow-[0_8px_28px_rgba(23,30,36,0.06)] has-[:focus]:border-[var(--color-border)] sm:min-h-[128px] sm:pb-3">
+            <div className="flex max-h-64 flex-col rounded-[24px] border-[0.5px] border-border bg-surface-elevated px-3 pt-3 pb-2.5 shadow-[0_8px_28px_rgba(23,30,36,0.06)] has-[:focus]:border-[var(--color-border)] sm:min-h-[128px] sm:pb-3">
                 {attachments.length > 0 && (
                     <ImageGallery>
                         <ul aria-label="Attachments" className="mb-2 flex list-none flex-wrap gap-2 p-0">
@@ -184,19 +197,37 @@ export function BotChatComposer({
                         </ul>
                     </ImageGallery>
                 )}
-                <Textarea
-                    aria-describedby="chat-composer-keyboard-hint"
-                    aria-label={messageLabel}
-                    className="min-h-[56px] px-1 py-1 text-14 placeholder:text-14 sm:min-h-[64px]"
-                    data-testid={dataTestId.messageComposer}
-                    disabled={disabled}
-                    onChange={(event) => onDraftChange(event.target.value)}
-                    onKeyDown={handleKeyDown}
-                    onPaste={handlePaste}
-                    placeholder={placeholder}
-                    value={draft}
-                />
-                <div className="mt-1 flex items-center justify-between gap-2">
+                <div className="relative min-h-0 flex-1">
+                    <ScrollArea
+                        className="-mx-3 min-h-0"
+                        type="auto"
+                        viewportRef={scrollViewport}
+                        viewportStyle={{ maxHeight: composerTextareaMaxHeightPx }}
+                    >
+                        <Textarea
+                            aria-describedby="chat-composer-keyboard-hint"
+                            aria-label={messageLabel}
+                            className="mb-2 min-h-[56px] w-full resize-none overflow-hidden px-4 pt-0 pb-1 text-14 placeholder:text-14 sm:min-h-[64px]"
+                            data-testid={dataTestId.messageComposer}
+                            disabled={disabled}
+                            onChange={(event) => onDraftChange(event.target.value)}
+                            onKeyDown={handleKeyDown}
+                            onPaste={handlePaste}
+                            placeholder={placeholder}
+                            ref={textarea}
+                            value={draft}
+                        />
+                    </ScrollArea>
+                    <div
+                        aria-hidden="true"
+                        className={`pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-surface-elevated to-surface-elevated/0 transition-opacity duration-150 motion-reduce:transition-none ${clipped.top ? "opacity-100" : "opacity-0"}`}
+                    />
+                    <div
+                        aria-hidden="true"
+                        className={`pointer-events-none absolute inset-x-0 -bottom-1 h-8 bg-gradient-to-t from-surface-elevated to-surface-elevated/0 transition-opacity duration-150 motion-reduce:transition-none ${clipped.bottom ? "opacity-100" : "opacity-0"}`}
+                    />
+                </div>
+                <div className="mt-1 flex shrink-0 items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-1">
                         <button
                             aria-label="Add attachment"

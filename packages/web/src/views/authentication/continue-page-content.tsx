@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ButtonGroup } from "../../components/ui/button-group.tsx";
 import { Button } from "../../index.ts";
 import type { ContinueState } from "../../view-models/authentication/continue-store.ts";
 import { describePageFailure } from "../../view-models/format-error.ts";
@@ -6,7 +7,6 @@ import { GlobalLoadingPage } from "../setup/global-loading-page.tsx";
 import {
     SetupCardDescription,
     SetupCardFailureIcon,
-    SetupCardSection,
     SetupCardShell,
     SetupCardTitle,
     setupPrimaryButtonClassName,
@@ -57,7 +57,7 @@ export function ContinuePageContent({
         continueHref === null ? null : (
             <Button
                 asChild
-                className={`${setupPrimaryButtonClassName} mt-5 text-center`}
+                className={`${setupPrimaryButtonClassName} text-center`}
                 size={setupPrimaryButtonSize}
                 variant="outline"
             >
@@ -72,7 +72,7 @@ export function ContinuePageContent({
             const copy = describePageFailure(state.message, "Couldn't open this session");
             return (
                 <ContinueError title={copy.title} content={copy.content}>
-                    <SetupCardSection>
+                    <ButtonGroup className="mt-6 w-full" size={setupPrimaryButtonSize}>
                         <Button className={setupPrimaryButtonClassName} onClick={retry} size={setupPrimaryButtonSize}>
                             Try again
                         </Button>
@@ -84,7 +84,7 @@ export function ContinuePageContent({
                         >
                             Go to Morty
                         </Button>
-                    </SetupCardSection>
+                    </ButtonGroup>
                 </ContinueError>
             );
         }
@@ -92,12 +92,12 @@ export function ContinuePageContent({
             const copy = describePageFailure(state.message, "Couldn't continue");
             return (
                 <ContinueError title={copy.title} content={copy.content}>
-                    <SetupCardSection>
+                    <ButtonGroup className="mt-6 w-full" size={setupPrimaryButtonSize}>
                         <Button className={setupPrimaryButtonClassName} onClick={retry} size={setupPrimaryButtonSize}>
                             Try again
                         </Button>
                         {fallback}
-                    </SetupCardSection>
+                    </ButtonGroup>
                 </ContinueError>
             );
         }
@@ -117,7 +117,11 @@ export function ContinuePageContent({
                     title="This link is no longer available"
                     content={state.message}
                 >
-                    {fallback}
+                    {fallback !== null && (
+                        <ButtonGroup className="mt-5 w-full" size={setupPrimaryButtonSize}>
+                            {fallback}
+                        </ButtonGroup>
+                    )}
                 </ContinueError>
             );
         case "identity-redeeming":
@@ -126,19 +130,23 @@ export function ContinuePageContent({
             const copy = describePageFailure(state.message, "Couldn't continue");
             return (
                 <ContinueError title={copy.title} content={copy.content}>
-                    <SetupCardSection>
+                    <ButtonGroup className="mt-6 w-full" size={setupPrimaryButtonSize}>
                         <Button className={setupPrimaryButtonClassName} onClick={retry} size={setupPrimaryButtonSize}>
                             Try again
                         </Button>
                         {fallback}
-                    </SetupCardSection>
+                    </ButtonGroup>
                 </ContinueError>
             );
         }
         case "invalid":
             return (
                 <ContinueError title="This transfer link is invalid" content="Ask for a new link.">
-                    {fallback}
+                    {fallback !== null && (
+                        <ButtonGroup className="mt-5 w-full" size={setupPrimaryButtonSize}>
+                            {fallback}
+                        </ButtonGroup>
+                    )}
                 </ContinueError>
             );
     }

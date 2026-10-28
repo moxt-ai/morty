@@ -38,7 +38,7 @@ function SetupPageHeader() {
                     href="/"
                     aria-label="Morty home"
                 >
-                    <MortyLogoMark size={30} />
+                    <MortyLogoMark size={28} />
                     Morty
                 </a>
             </div>

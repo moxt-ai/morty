@@ -1,4 +1,5 @@
 import { memo, useState } from "react";
+import { textLinkClassName } from "../ui/text-link.ts";
 import { AgentMarkdown, type MarkdownImageReader } from "./agent-markdown.tsx";
 import type { SessionResourceStoreFactory } from "./resource-reader.ts";
 
@@ -65,7 +66,7 @@ export function AgentResponseText({ text, createResourceStore, openLocalFile, re
                 <div className="my-3 space-y-2 text-sm text-muted-foreground">
                     <p>The Markdown preview shows the beginning of this response. Load more to read additional text.</p>
                     <button
-                        className="underline"
+                        className={textLinkClassName}
                         onClick={() => setVisibleCharacters((current) => current + PREVIEW_CHARACTERS)}
                         type="button"
                     >

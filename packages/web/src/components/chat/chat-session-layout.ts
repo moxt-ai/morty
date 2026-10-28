@@ -6,6 +6,9 @@ export const mortyThinScrollbarClassName = "[scrollbar-color:#d4d7db_transparent
 
 export const chatSessionColumnClassName = `mx-auto w-full min-w-0 max-w-[920px] ${chatSessionContentInsetClassName}`;
 
+/** Interaction cards keep a 12px inset at every breakpoint. */
+export const chatSessionInteractionColumnClassName = "mx-auto w-full min-w-0 max-w-[920px] px-3";
+
 export const chatSessionMessageScrollClassName = `min-h-0 flex-1 overflow-y-auto pt-6 pb-[calc(72px+var(--composer-overlay-block,0px))] -mb-4 ${mortyThinScrollbarClassName} sm:pt-10`;
 
 export const chatSessionMessageColumnClassName = `${chatSessionColumnClassName} font-inter text-foreground`;

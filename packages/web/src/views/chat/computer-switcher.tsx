@@ -13,6 +13,7 @@ import {
     overlayTriggerOffsetPx,
     preventOverlayOpenAutoFocus,
 } from "../../components/ui/overlay-surface.ts";
+import { textLinkClassName } from "../../components/ui/text-link.ts";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
 import type { ComputerChoice, ComputerSwitcherModel } from "../../view-models/chat/computer-switcher-store.ts";
@@ -280,10 +281,10 @@ export function ComputerSwitcher({
                             data-testid={dataTestId.botConnectionStatus}
                             className="group -mr-1 -ml-1.5 flex h-[50px] w-[calc(100%+0.625rem)] min-w-0 items-center gap-2 rounded-[16px] py-1.5 pr-3 pl-0.5 text-left outline-none transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 data-[state=open]:bg-morty-fill-opacity-3 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 motion-reduce:transition-none"
                         >
-                            <MortyLogoMark className="ml-2" size={30} />
+                            <MortyLogoMark className="ml-2" size={28} />
                             <span className="mr-1.5 flex min-w-0 flex-1 flex-col">
                                 <span
-                                    className="mb-0.5 truncate font-inter text-15 leading-5 font-semibold tracking-[-0.01em] text-copy-secondary transition-colors duration-150 group-hover:text-foreground motion-reduce:transition-none"
+                                    className="mb-0.5 truncate font-inter text-14 leading-5 font-semibold tracking-[-0.01em] text-copy-secondary transition-colors duration-150 group-hover:text-foreground motion-reduce:transition-none"
                                     title={computerName}
                                 >
                                     {computerName}
@@ -386,10 +387,7 @@ export function OnlineComputerAlternative({ model }: { readonly model: ComputerS
     const { choices } = useStore(model.store);
     const alternative = choices.find((choice) => choice.key !== model.activeKey && choice.status === "online");
     return alternative === undefined ? null : (
-        <a
-            className="mt-2 inline-flex text-xs font-medium text-primary underline hover:text-primary-hover active:text-primary-active"
-            href={alternative.href}
-        >
+        <a className={`mt-2 inline-flex text-xs font-medium ${textLinkClassName}`} href={alternative.href}>
             Switch to {alternative.name}
         </a>
     );

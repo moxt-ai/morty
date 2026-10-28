@@ -40,6 +40,13 @@ export const PLAYGROUND_ENTRIES = [
     },
     {
         group: "Controls",
+        id: "button-group",
+        source: "components/ui/button-group.tsx",
+        summary: "Stacked and horizontal gaps for 40, 36, 32, and 28px button groups.",
+        title: "Button group",
+    },
+    {
+        group: "Controls",
         id: "input",
         source: "components/ui/input.tsx",
         summary: "Single-line field with placeholder and disabled states.",
@@ -79,6 +86,13 @@ export const PLAYGROUND_ENTRIES = [
         source: "components/ui/link-button.tsx",
         summary: "A button that reads as part of a sentence.",
         title: "Link button",
+    },
+    {
+        group: "Controls",
+        id: "text-link",
+        source: "components/ui/text-link.ts",
+        summary: "Inline link or command text. Color alone marks the resting, hover, and pressed states.",
+        title: "Text link",
     },
     {
         group: "Controls",

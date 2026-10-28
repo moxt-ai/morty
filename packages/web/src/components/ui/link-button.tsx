@@ -1,4 +1,6 @@
 import type { ComponentProps } from "react";
+import { cn } from "../../lib/utils.ts";
+import { textLinkClassName } from "./text-link.ts";
 
 /**
  * A command rendered as inline text so it reads as part of a sentence while
@@ -10,7 +12,12 @@ export function LinkButton({ className = "", ...props }: Readonly<ComponentProps
         <button
             {...props}
             type={props.type ?? "button"}
-            className={`inline-flex cursor-pointer items-center gap-1 rounded-sm font-medium text-primary underline-offset-2 outline-none transition-colors duration-150 motion-reduce:transition-none hover:text-primary-hover hover:underline active:text-primary-active disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+            className={cn(
+                "inline-flex cursor-pointer items-center gap-1 rounded-sm font-medium outline-none",
+                textLinkClassName,
+                "disabled:cursor-not-allowed disabled:opacity-50",
+                className,
+            )}
         />
     );
 }

@@ -15,13 +15,15 @@ import { cn } from "@/lib/utils";
 import { boundedCodeHighlighter } from "../../components/agents/bounded-code-highlighter.ts";
 import { MermaidCodeBlock } from "../../components/agents/mermaid-code-block.tsx";
 import { remarkMermaidCompletion } from "../../components/agents/remark-mermaid-completion.ts";
+import { textLinkClassName } from "../ui/text-link.ts";
 import type { SessionResourceReader as MarkdownImageReader, SessionResourceStoreFactory } from "./resource-reader.ts";
 import { SessionResource } from "./session-resource.tsx";
 
 export type { SessionResourceReader as MarkdownImageReader } from "./resource-reader.ts";
 
 const STREAMDOWN_CONTROLS = Object.freeze({
-    code: Object.freeze({ copy: true, download: false }),
+    code: Object.freeze({ copy: false, download: false }),
+    table: Object.freeze({ copy: false }),
 });
 const STREAMDOWN_PLUGINS = Object.freeze({
     code: boundedCodeHighlighter,
@@ -197,7 +199,7 @@ function AgentMarkdownLink({ children, href }: ComponentProps<"a">) {
     if (path !== null && openLocalFile !== undefined) {
         return (
             <button
-                className="cursor-pointer font-inherit font-medium text-primary underline decoration-primary/35 underline-offset-2 hover:text-primary-hover hover:decoration-primary active:text-primary-active"
+                className={cn("cursor-pointer font-inherit font-medium", textLinkClassName)}
                 data-testid={dataTestId.localFileLink}
                 onClick={(event) => {
                     // Preserve a return-focus target even on browsers that do not focus tapped buttons.
@@ -339,7 +341,7 @@ export function AgentMarkdownContent({
                     "[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-5",
                     "[&_li>p]:my-0",
                     "[&_blockquote]:my-3 [&_blockquote]:border-l-[3px] [&_blockquote]:border-black/12 [&_blockquote]:pl-3 [&_blockquote]:text-[#454959]",
-                    "[&_a]:font-medium [&_a]:text-primary [&_a]:underline [&_a]:decoration-primary/35 [&_a]:underline-offset-2 [&_a]:transition-colors hover:[&_a]:text-primary-hover hover:[&_a]:decoration-primary active:[&_a]:text-primary-active",
+                    "[&_a]:font-medium [&_a]:text-primary [&_a]:transition-colors [&_a]:hover:text-primary-hover [&_a]:active:text-primary-active",
                     "[&_code]:font-mono",
                     "[&_table]:text-sm",
                     STREAMDOWN_FENCED_CODE_BLOCK_CLASSES,

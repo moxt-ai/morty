@@ -1,9 +1,11 @@
 import {
     fireEvent,
+    getAllByLabelText,
     getAllByRole,
     getAllByText,
     getByRole,
     getByText,
+    queryByLabelText,
     queryByRole,
     queryByText,
 } from "@testing-library/dom";
@@ -126,7 +128,7 @@ test("Given an open code block, When the agent appends code, Then the visible bl
         outcome: "hold",
         output: [{ kind: "text", text: "\n\n```typescript\n" }],
     });
-    await app.waitForView(() => expect(getByRole(document.body, "button", { name: "Copy code" })).toBeDefined());
+    await app.waitForView(() => expect(queryByRole(document.body, "button", { name: "Copy code" })).toBeNull());
 
     await daemon.continueReply("hold after first delta", {
         outcome: "hold",
@@ -513,28 +515,30 @@ test("Given the daemon emits reasoning, a tool, and text, When the user observes
         throw new Error("Expected the message composer");
     }
     await sendPrompt(app, composer, prompt);
+    const processSummary = await app.waitForView(() =>
+        getByRole(document.body, "button", { name: "1 step", expanded: false }),
+    );
+    expect(getByText(document.body, "Partial rich reply")).toBeDefined();
+    expect(processSummary.querySelector(".animate-loading-text-shimmer")).toBeNull();
+    expect(queryByText(document.body, "Inspecting the workspace")).toBeNull();
+    expect(queryByLabelText(document.body, "Tool: Read package metadata")).toBeNull();
+
+    await app.user.click(processSummary);
     const thinking = await app.queryElementByTestId(dataTestId.agentReasoning);
     if (!(thinking instanceof HTMLDetailsElement)) {
         throw new Error("Expected reasoning to use a disclosure");
     }
-    if (!thinking.open) {
-        await app.user.click(getByText(thinking, "Show Thinking"));
-    }
+    await app.waitForView(() => expect(thinking.textContent).toContain("Show Thinking"));
+    expect(thinking.open).toBe(false);
+    expect(thinking.querySelector(".animate-loading-text-shimmer")).toBeNull();
+    await app.user.click(getByText(thinking, "Show Thinking"));
     await app.waitForView(() => expect(thinking.textContent).toContain("Inspecting the workspace"));
     expect(thinking.open).toBe(true);
-    expect(thinking.textContent).toContain("Show Thinking");
     await app.waitForView(() => expect(document.body.textContent).toContain("Read package metadata"));
     const genericTool = await app.queryElementByTestId(dataTestId.agentToolCall);
     expect(getByRole(genericTool, "button").getAttribute("aria-expanded")).toBe("false");
     expect(genericTool.textContent).not.toContain("Package metadata response");
-    await app.waitForView(() => {
-        const restored = app
-            .elementsByTestId(dataTestId.agentResponse)
-            .some((element) => element.textContent?.includes("Partial rich reply") === true);
-        if (!restored) {
-            throw new Error(`The restored response is unavailable: ${document.body.textContent}`);
-        }
-    });
+    expect(queryByText(document.body, "Inspecting the workspace")).not.toBeNull();
     await app.queryElementByTestId(dataTestId.sessionStatus);
     await app.user.click(
         await app.queryElementByTestId(
@@ -544,14 +548,16 @@ test("Given the daemon emits reasoning, a tool, and text, When the user observes
     );
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     app.remount();
-    await app.user.click(
-        await app.waitForView(() => getByRole(document.body, "button", { name: "1 step", expanded: false })),
+    const restoredProcessSummary = await app.waitForView(() =>
+        getByRole(document.body, "button", { name: "1 step", expanded: false }),
     );
+    await app.user.click(restoredProcessSummary);
     const restoredThinking = await app.queryElementByTestId(dataTestId.agentReasoning);
     if (!(restoredThinking instanceof HTMLDetailsElement)) {
         throw new Error("Expected restored reasoning to use a disclosure");
     }
     await app.waitForView(() => expect(restoredThinking.open).toBe(false));
+    await app.user.click(getByText(restoredThinking, "Show Thinking"));
     await app.waitForView(() => {
         const restored = app
             .elementsByTestId(dataTestId.agentResponse)
@@ -561,6 +567,93 @@ test("Given the daemon emits reasoning, a tool, and text, When the user observes
         }
     });
     await app.waitForView(() => expect(document.body.textContent).toContain("Read package metadata"));
+});
+
+test("Given two process segments are separated by visible text, When the later segment completed but the turn is still open, Then neither segment falsely shimmers", {
+    timeout: 30_000,
+}, async () => {
+    const prompt = "hold with rich content";
+    const app = await createTestApp({ connectAgent: true });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected a controlled Agent Runtime");
+    }
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, prompt);
+    const firstSummary = await app.waitForView(() =>
+        getByRole(document.body, "button", { name: "1 step", expanded: false }),
+    );
+    await app.waitForView(() => expect(getByText(document.body, "Partial rich reply")).toBeDefined());
+    expect(firstSummary.querySelector(".animate-loading-text-shimmer")).toBeNull();
+
+    await daemon.continueReply(prompt, {
+        outcome: "hold",
+        output: [
+            {
+                activityType: "tool",
+                content: [],
+                kind: "activity",
+                output: "Follow-up verified.",
+                title: "Follow-up verification",
+            },
+        ],
+    });
+    const summaries = await app.waitForView(() => {
+        const buttons = getAllByRole(document.body, "button", { name: "1 step", expanded: false });
+        expect(buttons).toHaveLength(2);
+        return buttons;
+    });
+    expect(summaries[0]?.querySelector(".animate-loading-text-shimmer")).toBeNull();
+    expect(summaries[1]?.querySelector(".animate-loading-text-shimmer")).toBeNull();
+
+    await daemon.continueReply(prompt, {
+        outcome: "complete",
+        output: [{ kind: "text", text: "Follow-up complete." }],
+    });
+    await app.waitForView(() => {
+        expect(getByText(document.body, "Follow-up complete.")).toBeDefined();
+        const settled = getAllByRole(document.body, "button", { name: "1 step", expanded: false });
+        expect(settled).toHaveLength(2);
+        for (const summary of settled) {
+            expect(summary.querySelector(".animate-loading-text-shimmer")).toBeNull();
+        }
+    });
+});
+
+test("Given an expanded process segment whose tool is still generating, When the user reads it, Then only the segment summary shimmers", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: { id: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
+    });
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, "hold unfinished tools");
+    const summary = await app.waitForView(() => {
+        const button = getByRole(document.body, "button", { name: "4 steps", expanded: false });
+        expect(button.querySelector(".animate-loading-text-shimmer")).not.toBeNull();
+        return button;
+    });
+    await app.user.click(summary);
+    await app.waitForView(() => {
+        const contentId = summary.getAttribute("aria-controls");
+        const content = contentId === null ? null : document.getElementById(contentId);
+        expect(content).not.toBeNull();
+        if (content !== null) {
+            expect(content.getBoundingClientRect().top - summary.getBoundingClientRect().bottom).toBe(0);
+            expect(content.querySelector(".animate-loading-text-shimmer")).toBeNull();
+        }
+    });
+    expect(app.elementsByTestId(dataTestId.agentToolCall)).toHaveLength(4);
+    expect(getAllByLabelText(document.body, "Tool running")).toHaveLength(2);
 });
 
 test("Given an Agent response references a local image, When the user reads it and reopens the conversation, Then the image is fetched through Runtime and remains visible without base64 text", {

@@ -1,6 +1,5 @@
 import Anser from "anser";
-import { Check, Copy } from "lucide-react";
-import { type CSSProperties, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { dataTestId } from "../../../data-testid.ts";
 import { isOversizedToolText, ToolTextPreview } from "../tool-text-preview.tsx";
 
@@ -28,9 +27,6 @@ function segmentStyle(segment: Anser.AnserJsonEntry): CSSProperties {
 }
 
 export function AnsiShellOutput({ output }: { readonly output: string }) {
-    const content = useRef<HTMLPreElement>(null);
-    const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
-    const label = copy === "copied" ? "Copied" : copy === "failed" ? "Copy unavailable" : "Copy shell output";
     if (isOversizedToolText(output)) {
         return <ToolTextPreview className="p-4 pr-10 font-mono text-xs leading-relaxed" text={output} />;
     }
@@ -42,11 +38,10 @@ export function AnsiShellOutput({ output }: { readonly output: string }) {
         return { key, segment };
     });
     return (
-        <div className="group/code relative min-w-0">
+        <div className="relative min-w-0">
             <pre
-                className="m-0 p-4 pr-10 font-mono text-xs leading-relaxed whitespace-pre-wrap"
+                className="m-0 p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap"
                 data-testid={dataTestId.ansiShellOutput}
-                ref={content}
             >
                 <code className="font-inherit">
                     {positionedSegments.map(({ key, segment }) => (
@@ -56,28 +51,6 @@ export function AnsiShellOutput({ output }: { readonly output: string }) {
                     ))}
                 </code>
             </pre>
-            <button
-                aria-label={label}
-                className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 outline-none transition-opacity hover:bg-black/[0.06] hover:text-foreground focus:opacity-100 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 group-hover/code:opacity-100 motion-reduce:transition-none"
-                onClick={() => {
-                    if (navigator.clipboard === undefined) {
-                        setCopy("failed");
-                        return;
-                    }
-                    void navigator.clipboard.writeText(content.current?.textContent ?? "").then(
-                        () => setCopy("copied"),
-                        () => setCopy("failed"),
-                    );
-                }}
-                title={label}
-                type="button"
-            >
-                {copy === "copied" ? (
-                    <Check aria-hidden="true" className="size-3.5" />
-                ) : (
-                    <Copy aria-hidden="true" className="size-3.5" />
-                )}
-            </button>
         </div>
     );
 }

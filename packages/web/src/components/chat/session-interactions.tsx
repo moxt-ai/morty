@@ -1,7 +1,7 @@
 import type { SessionElicitationField } from "@moxt-ai/mobius-sdk";
 import type { ElicitationResponseRequest } from "@moxt-ai/mobius-sdk/channel";
 import { ExternalLink, HelpCircle, ShieldCheck } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/cloud-button";
 import { encodeElicitationForm, readMultiselectDefaults } from "@/services/chat/elicitation-form";
 import { permissionPresentation } from "@/view-models/chat/session-interaction-store";
 import type {
@@ -198,7 +198,7 @@ function PermissionCard({
                     <p className="text-base leading-6 font-semibold text-foreground">
                         {confirmed ? "Confirmed" : "Agent needs permission"}
                     </p>
-                    <pre className="mt-3 max-h-56 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3 font-mono text-xs leading-5">
+                    <pre className="mt-3 max-h-56 overflow-auto whitespace-pre rounded-md bg-muted p-3 font-mono text-xs leading-5">
                         {presentation.input}
                     </pre>
                     <section aria-label="Session working directory" className="mt-2 break-all text-xs leading-5">
@@ -230,7 +230,7 @@ function PermissionCard({
                                     });
                                 }}
                                 size="sm"
-                                variant={option.allow ? "default" : "outline"}
+                                variant={option.allow ? "primary" : "outline"}
                             >
                                 {option.label}
                             </Button>

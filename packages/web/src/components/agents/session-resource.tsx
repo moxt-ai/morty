@@ -1,5 +1,6 @@
 import { type ReactNode, useMemo } from "react";
 import { useStore } from "zustand";
+import { textLinkClassName } from "../ui/text-link.ts";
 import type {
     SessionResourceReader,
     SessionResourceRequest,
@@ -33,7 +34,7 @@ export function SessionResource({
     const model = useStore(store);
     const retry =
         model.state.kind === "failed" && (kind === "image" || kind === "raster-image") ? (
-            <button className="ml-2 text-xs underline" onClick={model.retry} type="button">
+            <button className={`ml-2 text-xs ${textLinkClassName}`} onClick={model.retry} type="button">
                 Retry image
             </button>
         ) : null;
