@@ -920,11 +920,11 @@ function terminalExecutionState(message: SessionMessage): SessionExecutionState 
     return completedTurnNotice(presentation.stopReason) === null ? { kind: "finished" } : { kind: "ended-early" };
 }
 
-/** Returns, for each message, the state of the execution that owns it. */
-export function sessionExecutionStates(
+/** Keeps steering messages in their owning execution, including imported history without lifecycle events. */
+export function sessionExecutions(
     messages: readonly SessionExecutionMessage[],
     sessionWorking: boolean,
-): readonly SessionExecutionState[] {
+): readonly { readonly messages: readonly SessionExecutionMessage[]; readonly state: SessionExecutionState }[] {
     interface Span {
         readonly start: number;
         managed: boolean;
@@ -962,7 +962,10 @@ export function sessionExecutionStates(
         current.terminal = terminalExecutionState(message) ?? current.terminal;
     }
     spans.push(current);
-    const states: SessionExecutionState[] = [];
+    const executions: {
+        readonly messages: readonly SessionExecutionMessage[];
+        readonly state: SessionExecutionState;
+    }[] = [];
     for (const [spanIndex, span] of spans.entries()) {
         const end = spans[spanIndex + 1]?.start ?? messages.length;
         let state: SessionExecutionState;
@@ -975,11 +978,19 @@ export function sessionExecutionStates(
         } else {
             state = { kind: "open" };
         }
-        for (let index = span.start; index < end; index += 1) {
-            states.push(state);
-        }
+        executions.push({ messages: messages.slice(span.start, end), state });
     }
-    return states;
+    return executions;
+}
+
+/** Returns, for each message, the state of the execution that owns it. */
+export function sessionExecutionStates(
+    messages: readonly SessionExecutionMessage[],
+    sessionWorking: boolean,
+): readonly SessionExecutionState[] {
+    return sessionExecutions(messages, sessionWorking).flatMap((execution) =>
+        execution.messages.map(() => execution.state),
+    );
 }
 
 export function completedTurnNotice(stopReason: string): string | null {

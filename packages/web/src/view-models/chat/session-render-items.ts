@@ -1,5 +1,11 @@
 import type { AgentThinkingEntry } from "../../components/chat/agent-thinking.tsx";
-import { type SessionMessage, sessionTextValue } from "./session-presentation.ts";
+import {
+    type SessionExecutionMessage,
+    type SessionExecutionState,
+    type SessionMessage,
+    sessionExecutions,
+    sessionTextValue,
+} from "./session-presentation.ts";
 
 export type SessionRenderItem =
     | {
@@ -7,6 +13,7 @@ export type SessionRenderItem =
           readonly id: string;
           readonly messageId: string | null;
           readonly text: string;
+          readonly copyable: boolean;
       }
     | {
           readonly kind: "event";
@@ -49,7 +56,10 @@ function thinkingEntry(message: SessionMessage): AgentThinkingEntry | null {
     return null;
 }
 
-export function sessionRenderItems(messages: readonly SessionMessage[]): readonly SessionRenderItem[] {
+function executionRenderItems(
+    messages: readonly SessionMessage[],
+    state: SessionExecutionState,
+): readonly SessionRenderItem[] {
     type RenderItemBuilder =
         | { kind: "assistant-text"; id: string; messageId: string | null; text: string[] }
         | { readonly kind: "event"; readonly message: SessionMessage }
@@ -76,8 +86,23 @@ export function sessionRenderItems(messages: readonly SessionMessage[]): readonl
             items.push({ kind: "event", message });
         }
     }
+    // Only the trailing response is an answer. A later tool/reasoning run or
+    // steering message leaves earlier prose as progress, even after completion.
+    const response = items.findLast((item) => item.kind !== "event" || item.message.role === "user");
     return items.map(
-        (item): SessionRenderItem => (item.kind === "assistant-text" ? { ...item, text: item.text.join("") } : item),
+        (item): SessionRenderItem =>
+            item.kind === "assistant-text"
+                ? { ...item, text: item.text.join(""), copyable: state.kind !== "open" && item === response }
+                : item,
+    );
+}
+
+export function sessionRenderItems(
+    messages: readonly SessionExecutionMessage[],
+    sessionWorking: boolean,
+): readonly SessionRenderItem[] {
+    return sessionExecutions(messages, sessionWorking).flatMap((execution) =>
+        executionRenderItems(execution.messages, execution.state),
     );
 }
 

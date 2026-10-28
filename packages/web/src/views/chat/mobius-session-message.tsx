@@ -206,12 +206,14 @@ function UserMessage({
 
 export function MobiusAssistantText({
     text,
+    copyable,
     createResourceStore,
     openLocalFile,
     readImage,
     streaming,
 }: {
     readonly text: string;
+    readonly copyable: boolean;
     readonly createResourceStore?: SessionResourceStoreFactory | undefined;
     readonly streaming: boolean;
     readonly openLocalFile: (path: string) => void;
@@ -220,7 +222,7 @@ export function MobiusAssistantText({
     return (
         <div className="min-w-0" data-testid={dataTestId.agentResponse}>
             <MessageBubble
-                copyText={streaming ? undefined : text}
+                copyText={copyable ? text : undefined}
                 createResponseCopyStore={createResponseCopyStore}
                 speaker="assistant"
             >
@@ -280,6 +282,7 @@ export function MobiusSessionMessage({
         if (presentation.content.type === "text") {
             return (
                 <MobiusAssistantText
+                    copyable={!active}
                     createResourceStore={createResourceStore}
                     openLocalFile={openLocalFile}
                     readImage={readImage}

@@ -90,6 +90,7 @@ function SessionRenderItemContent({
     if (item.kind === "assistant-text") {
         return (
             <MobiusAssistantText
+                copyable={item.copyable}
                 createResourceStore={createSessionResourceStore}
                 openLocalFile={openLocalFile}
                 readImage={pane.readResource}
@@ -508,7 +509,7 @@ function MobiusSessionPaneBody({
         presentation.authenticationFailure === null
             ? null
             : authenticationGuidance(presentation.authenticationFailure.code, pane.agentRef, executionContext.machine);
-    const renderItems = sessionRenderItems(model.messages);
+    const renderItems = sessionRenderItems(model.messages, presentation.activity.kind === "working");
     const renderGroups = sessionRenderGroups(renderItems);
     const executionStates = sessionExecutionStates(model.messages, presentation.activity.kind === "working");
     const executionStateByItemId = new Map(
