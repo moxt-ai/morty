@@ -5,6 +5,47 @@ import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
 
+test("Given a running message whose admission response was lost, When Chat reconnects, Then delivery is confirmed without retrying or waiting for completion", {
+    timeout: 60_000,
+}, async () => {
+    const environment = await createChatWorkerEnvironment(true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true });
+    const network = app.network;
+    if (network === null || app.daemon === null) {
+        throw new Error("Expected the response-loss network and connected Runtime");
+    }
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Established session");
+    await app.waitForView(() => {
+        expect(app.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain("Established session");
+        expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
+    });
+    network.interruptNextTurn("after-acceptance");
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold after first delta");
+    await app.waitForView(() => getByRole(document.body, "button", { name: "Retry message with unknown delivery" }));
+    const submissions = network.submissions.length;
+    network.reconnect();
+    await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: "Retry now" })));
+    await app.waitForView(() => {
+        expect(app.optionalElementByTestId(dataTestId.sessionReconnectNotice)).toBeNull();
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes("Partial reply")),
+        ).toBe(true);
+        expect(app.optionalElementByTestId(dataTestId.workingIndicator)).not.toBeNull();
+        expect(queryByRole(document.body, "button", { name: "Retry message with unknown delivery" })).toBeNull();
+    });
+    expect(network.submissions).toHaveLength(submissions);
+    expect(
+        app
+            .elementsByTestId(dataTestId.userMessage)
+            .filter((element) => element.textContent?.includes("hold after first delta")),
+    ).toHaveLength(1);
+    await app.user.click(getByRole(document.body, "button", { name: "Stop agent output" }));
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull());
+});
+
 for (const message of ["first", "subsequent"] as const) {
     test(`Given an unconfirmed ${message} message with an attachment, When Chat remounts and I retry, Then the original submission is delivered once`, {
         timeout: 60_000,

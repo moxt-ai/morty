@@ -1085,6 +1085,8 @@ export function createSessionPaneModel(options: {
                             }
                             messageQueue.getState().replace(execution.queued);
                             if (running !== null) {
+                                // The execution receipt confirms delivery even when admission and live events were lost.
+                                delivery.getState().reconcile([running.commandId]);
                                 const accepted = acceptedTurn(reconciliation.turn);
                                 updateTurn({
                                     kind: "running",
