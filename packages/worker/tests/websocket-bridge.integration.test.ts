@@ -27,6 +27,7 @@ beforeAll(async () => {
             },
             compatibilityDate: "2026-09-07",
             compatibilityFlags: ["nodejs_compat"],
+            durableObjects: { CHAT_WEBSOCKETS: { className: "ChatWebSocketDurableObject", useSQLite: true } },
             modules: true,
             script: output.text,
         }),
@@ -62,6 +63,28 @@ test("Given a public HTTP client, When it requests browser-only APIs, Then Chat 
     for (const response of [identityResponse, projectResponse]) {
         expect(response.status).toBe(404);
         await expect(response.json()).resolves.toEqual({ error: { code: "NOT_FOUND", message: "Not found." } });
+    }
+});
+
+test("Given a browser connection, When it sends fixed connection heartbeats between API calls, Then it receives acknowledgements and can still use the bridge", async () => {
+    const response = await runtime.dispatchFetch("https://chat.test/morty/ws", {
+        headers: { Origin: "https://chat.test", Upgrade: "websocket" },
+    });
+    expect(response.status).toBe(101);
+    const socket = response.webSocket;
+    if (socket === null) {
+        throw new Error("Expected the Chat WebSocket bridge.");
+    }
+    socket.accept();
+    try {
+        const heartbeat = receive(socket);
+        socket.send('{"kind":"ping"}');
+        await expect(heartbeat).resolves.toEqual({ kind: "pong" });
+        const reply = receive(socket);
+        socket.send(JSON.stringify({ kind: "diagnostic.ping", requestId: "latency-after-heartbeat" }));
+        await expect(reply).resolves.toEqual({ kind: "diagnostic.pong", requestId: "latency-after-heartbeat" });
+    } finally {
+        socket.close();
     }
 });
 

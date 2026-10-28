@@ -105,10 +105,13 @@ test("Given a running task and an unsent draft, When Chat disconnects while the 
     }
     await app.user.click(composer);
     await app.user.paste("My unsent follow-up");
-    app.transport.disconnect();
-    await app.daemon.continueReply("hold after first delta", {
-        outcome: "complete",
-        output: [{ kind: "text", text: "Finished during the Chat interruption" }],
+    const daemon = app.daemon;
+    await act(async () => {
+        app.transport.disconnect();
+        await daemon.continueReply("hold after first delta", {
+            outcome: "complete",
+            output: [{ kind: "text", text: "Finished during the Chat interruption" }],
+        });
     });
     await recoverChat(app, clock);
     await app.waitForView(() => {

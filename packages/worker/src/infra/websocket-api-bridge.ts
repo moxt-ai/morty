@@ -76,6 +76,15 @@ export interface WebSocketBridgeHandlers {
     ) => Promise<void>;
 }
 
+export interface WebSocketBridgeHost {
+    readonly accept: (
+        socket: WebSocket,
+        receive: (event: { readonly data: string | ArrayBuffer }) => void,
+        release: () => void,
+    ) => void;
+    readonly lastHeartbeatAt: (socket: WebSocket) => number | null;
+}
+
 interface BinaryBridgeRequest {
     readonly body: Uint8Array;
     readonly byteLength: number;
@@ -123,6 +132,7 @@ export function createWebSocketApiBridge(
     request: Request,
     handlers: WebSocketBridgeHandlers,
     logger: BridgeLogger,
+    host: WebSocketBridgeHost,
 ): Response {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
         throw new RequestError("WEBSOCKET_UPGRADE_REQUIRED", "A WebSocket upgrade is required.", 426);
@@ -137,9 +147,24 @@ export function createWebSocketApiBridge(
     const binaryRequests = new Map<string, BinaryBridgeRequest>();
     const watches = new Map<string, AbortController>();
     let idleTimer: ReturnType<typeof setTimeout>;
+    let lastActivityAt = Date.now();
     const refreshIdleDeadline = () => {
         clearTimeout(idleTimer);
-        idleTimer = setTimeout(() => server.close(1001, "Bridge idle timeout"), CONNECTION_IDLE_MILLISECONDS);
+        if (server.readyState !== WebSocket.OPEN) {
+            return;
+        }
+        lastActivityAt = Date.now();
+        idleTimer = setTimeout(checkIdleDeadline, CONNECTION_IDLE_MILLISECONDS);
+    };
+    const checkIdleDeadline = () => {
+        const lastSeen = Math.max(lastActivityAt, host.lastHeartbeatAt(server) ?? 0);
+        const remaining = CONNECTION_IDLE_MILLISECONDS - (Date.now() - lastSeen);
+        if (remaining > 0) {
+            idleTimer = setTimeout(checkIdleDeadline, remaining);
+        } else {
+            server.close(1001, "Bridge idle timeout");
+            release();
+        }
     };
     const release = () => {
         clearTimeout(idleTimer);
@@ -153,11 +178,7 @@ export function createWebSocketApiBridge(
         }
         watches.clear();
     };
-    server.accept();
-    refreshIdleDeadline();
-    server.addEventListener("close", release, { once: true });
-    server.addEventListener("error", release, { once: true });
-    server.addEventListener("message", (event) => {
+    const receive = (event: { readonly data: string | ArrayBuffer }) => {
         refreshIdleDeadline();
         if (typeof event.data !== "string") {
             try {
@@ -362,6 +383,8 @@ export function createWebSocketApiBridge(
                 pending.delete(frame.requestId);
                 refreshIdleDeadline();
             });
-    });
+    };
+    host.accept(server, receive, release);
+    refreshIdleDeadline();
     return new Response(null, { status: 101, webSocket: client });
 }

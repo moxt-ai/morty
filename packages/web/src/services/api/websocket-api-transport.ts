@@ -135,6 +135,7 @@ export class WebSocketApiTransport {
     readonly #pending = new Map<string, PendingRequest>();
     readonly #eventStreams = new Map<string, PendingEventStream>();
     readonly #diagnostics = new Map<string, PendingDiagnostic>();
+    readonly #heartbeatChecks = new Map<WebSocket, Promise<void>>();
     readonly #watches = new Map<string, PendingWatch>();
     readonly #bridgeWaiters = new Set<PendingBridgeWaiter>();
     readonly #lifetime = new AbortController();
@@ -183,14 +184,69 @@ export class WebSocketApiTransport {
     };
 
     readonly #checkHealth = async (socket: WebSocket, parent: AbortSignal): Promise<void> => {
+        parent.throwIfAborted();
+        let pending = this.#heartbeatChecks.get(socket);
+        if (pending === undefined) {
+            pending = this.#performHealthCheck(socket, parent).finally(() => this.#heartbeatChecks.delete(socket));
+            this.#heartbeatChecks.set(socket, pending);
+        }
+        await new Promise<void>((resolve, reject) => {
+            const abort = () => reject(parent.reason);
+            parent.addEventListener("abort", abort, { once: true });
+            void pending.then(
+                () => {
+                    parent.removeEventListener("abort", abort);
+                    resolve();
+                },
+                (cause) => {
+                    parent.removeEventListener("abort", abort);
+                    reject(cause);
+                },
+            );
+        });
+    };
+
+    readonly #performHealthCheck = async (socket: WebSocket, parent: AbortSignal): Promise<void> => {
         const deadline = new AbortController();
         const signal = AbortSignal.any([parent, deadline.signal]);
-        void this.#clock.sleep(5_000, signal).then(
+        void this.#clock.sleep(10_000, signal).then(
             () => deadline.abort(bridgeUnavailable()),
             () => undefined,
         );
         try {
-            await this.measureMortyLatency(signal);
+            await new Promise<void>((resolve, reject) => {
+                const release = () => {
+                    socket.removeEventListener("message", receive);
+                    socket.removeEventListener("close", closed);
+                    socket.removeEventListener("error", closed);
+                    signal.removeEventListener("abort", aborted);
+                };
+                const receive = (event: MessageEvent) => {
+                    if (event.data === '{"kind":"pong"}') {
+                        release();
+                        resolve();
+                    }
+                };
+                const closed = () => {
+                    release();
+                    reject(bridgeUnavailable());
+                };
+                const aborted = () => {
+                    release();
+                    reject(signal.reason);
+                };
+                socket.addEventListener("message", receive);
+                socket.addEventListener("close", closed, { once: true });
+                socket.addEventListener("error", closed, { once: true });
+                signal.addEventListener("abort", aborted, { once: true });
+                try {
+                    signal.throwIfAborted();
+                    socket.send('{"kind":"ping"}');
+                } catch (cause) {
+                    release();
+                    reject(cause);
+                }
+            });
             if (this.#state.kind === "connected" && this.#state.socket === socket) {
                 this.#reconnectAttempt = 0;
             }

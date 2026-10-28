@@ -5,12 +5,10 @@ import { instructionDocumentRoutes } from "./components/instruction-documents/ht
 import { projectBootstrap } from "./components/management/entity/project-bootstrap.ts";
 import { createApplicationDependencies } from "./composition/application-context.ts";
 import { cloudRoutes, publicCloudRoutes } from "./composition/cloud-http.ts";
-import { createCloudWebSocketHandlers } from "./composition/cloud-websocket.ts";
 import { setupArtifact } from "./gateway/setup-artifact.ts";
 import { notFoundPage, webPages } from "./gateway/web-pages.ts";
-import type { CloudBindings } from "./infra/cloud-bindings.ts";
+import { type CloudBindings, webSocketNamespaceBindingSchema } from "./infra/cloud-bindings.ts";
 import { RequestError } from "./infra/request-error.ts";
-import { createWebSocketApiBridge } from "./infra/websocket-api-bridge.ts";
 import { errorMiddleware, rethrowHttpError } from "./middleware/error-middleware.ts";
 
 const MAXIMUM_REQUEST_BODY_BYTES = 3 * 1_024 * 1_024;
@@ -60,15 +58,8 @@ const application: Hono<{ readonly Bindings: CloudBindings }> = new Hono<{ reado
     .route("/", instructionDocumentRoutes)
     .route("/", setupArtifact)
     .get("/morty/ws", (context) => {
-        const logger = createApplicationDependencies(context.env).logger;
-        return createWebSocketApiBridge(
-            context.req.raw,
-            createCloudWebSocketHandlers({
-                dispatch: async (request): Promise<Response> => await application.fetch(request, context.env),
-                logger,
-            }),
-            logger,
-        );
+        const namespace = v.parse(webSocketNamespaceBindingSchema, context.env.CHAT_WEBSOCKETS);
+        return namespace.get(namespace.newUniqueId()).fetch(context.req.raw);
     })
     .post("/__project/bootstrap", (context) => bootstrapProject(context.req.raw, context.env))
     .route("/morty/api", cloudRoutes)

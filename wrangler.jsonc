@@ -21,6 +21,7 @@
     "r2_buckets": [{ "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-local-apac-attachments" }],
     "durable_objects": {
         "bindings": [
+            { "name": "CHAT_WEBSOCKETS", "class_name": "ChatWebSocketDurableObject" },
             {
                 "name": "CHAT_PROJECTS",
                 "class_name": "ProjectDurableObject"
@@ -30,7 +31,8 @@
     "migrations": [
         { "tag": "v1", "new_sqlite_classes": ["BotTriggerRateLimiter"] },
         { "tag": "v2", "new_sqlite_classes": ["ProjectDurableObject"] },
-        { "tag": "v3", "deleted_classes": ["BotTriggerRateLimiter"] }
+        { "tag": "v3", "deleted_classes": ["BotTriggerRateLimiter"] },
+        { "tag": "v4", "new_sqlite_classes": ["ChatWebSocketDurableObject"] }
     ],
     "env": {
         "staging": {
@@ -47,6 +49,7 @@
             "r2_buckets": [{ "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-staging-apac-attachments" }],
             "durable_objects": {
                 "bindings": [
+                    { "name": "CHAT_WEBSOCKETS", "class_name": "ChatWebSocketDurableObject" },
                     {
                         "name": "CHAT_PROJECTS",
                         "class_name": "ProjectDurableObject"
@@ -67,6 +70,7 @@
             "workers_dev": false,
             "durable_objects": {
                 "bindings": [
+                    { "name": "CHAT_WEBSOCKETS", "class_name": "ChatWebSocketDurableObject" },
                     {
                         "name": "CHAT_PROJECTS",
                         "class_name": "ProjectDurableObject"

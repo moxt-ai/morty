@@ -1,10 +1,13 @@
 import {
+    type ConfiguredPlatformRelayBindings,
     createPlatformApplication,
     createPlatformGateways,
+    createPlatformWorker,
     PlatformAuthenticationConfiguration,
 } from "../../../third-party/mobius/packages/relay-cloudflare-platform/src/worker.ts";
 import {
     ProjectAuthenticationError,
+    standardWebSocketHost,
     VerifiedExternalIdentity,
 } from "../../../third-party/mobius/packages/relay-core/src/index.ts";
 
@@ -34,11 +37,20 @@ const authenticator = {
 const worker = createPlatformApplication(
     new PlatformAuthenticationConfiguration(authenticator, new Set([E2E_DEVELOPER_SUBJECT]), new Set(["*"])),
     createPlatformGateways,
+    standardWebSocketHost,
 );
 
-export default worker;
+const transport = createPlatformWorker();
+
+export default {
+    fetch: (request: Request, environment: ConfiguredPlatformRelayBindings) =>
+        request.headers.get("Upgrade")?.toLowerCase() === "websocket"
+            ? transport.fetch(request, environment)
+            : worker.fetch(request, environment),
+};
 
 export {
     ProjectDO,
     RuntimeRelay,
+    WebSocketTransport,
 } from "../../../third-party/mobius/packages/relay-cloudflare-platform/src/worker.ts";
