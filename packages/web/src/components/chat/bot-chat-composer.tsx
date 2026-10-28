@@ -214,7 +214,7 @@ export function BotChatComposer({
                         </button>
                         <input
                             aria-label="Choose attachments"
-                            accept="image/png,image/jpeg,image/gif,image/webp,text/*,.md,.json,.csv,.yaml,.yml,.xml"
+                            accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg,application/pdf,.pdf,text/*,.md,.json,.csv,.yaml,.yml,.xml"
                             className="sr-only"
                             disabled={disabled}
                             multiple

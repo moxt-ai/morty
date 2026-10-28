@@ -1,3 +1,4 @@
+import { resolveObjectURL } from "node:buffer";
 import { getByLabelText, getByRole } from "@testing-library/dom";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
@@ -56,11 +57,11 @@ test("Given a first prompt with an attachment, When it creates the conversation,
                 .elementsByTestId(dataTestId.agentResponse)
                 .some((element) => element.textContent?.includes("Read the attached notes")),
         ).toBe(true);
-        // The conversation history renders the delivered attachment by its contents.
-        expect(getByRole(document.body, "region", { name: "Conversation" }).textContent).toContain(
-            "Attachment contents",
-        );
+        expect(getByRole(document.body, "link", { name: "Download notes.json" }).hasAttribute("download")).toBe(true);
     });
+    const source = getByRole(document.body, "link", { name: "Download notes.json" }).getAttribute("href");
+    const attachment = source === null ? undefined : resolveObjectURL(source);
+    expect(await attachment?.text()).toBe("Attachment contents");
     observer.disconnect();
     expect(removableWhileSending).toBe(false);
     expect(document.querySelector(REMOVE_ATTACHMENT)).toBeNull();

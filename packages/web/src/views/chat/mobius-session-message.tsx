@@ -1,9 +1,14 @@
 import type { ContentBlock } from "@moxt-ai/mobius-sdk/protocol";
 import { CircleAlert, X } from "lucide-react";
-import { AgentMarkdown, loadLatexRenderer, type MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
+import {
+    AgentMarkdown,
+    loadLatexRenderer,
+    localFilePath,
+    type MarkdownImageReader,
+} from "../../components/agents/agent-markdown.tsx";
 import { AgentResponseText } from "../../components/agents/agent-response-text.tsx";
 import { isDisplayableImageType } from "../../components/agents/displayable-image-type.ts";
-import { ExternalContentBlock } from "../../components/agents/external-content-block.tsx";
+import { ExternalContentBlock, LinkedResourceBlock } from "../../components/agents/external-content-block.tsx";
 import { loadDiagramRenderer } from "../../components/agents/mermaid-code-block.tsx";
 import type { SessionResourceStoreFactory } from "../../components/agents/resource-reader.ts";
 import { AgentThinking } from "../../components/chat/agent-thinking.tsx";
@@ -105,6 +110,19 @@ function MessageContentBlock({
                 <p className="text-sm text-muted-foreground">Audio content could not be displayed safely.</p>
             );
         case "resource_link": {
+            const path = localFilePath(content.uri);
+            if (path !== null) {
+                return (
+                    <LinkedResourceBlock
+                        createResourceStore={createResourceStore}
+                        mediaType={content.mimeType ?? "application/octet-stream"}
+                        name={content.name}
+                        path={path}
+                        readContent={readImage}
+                        speaker={speaker}
+                    />
+                );
+            }
             const href = safeRemoteUrl(content.uri);
             return href === null ? (
                 <p className="break-all text-sm text-muted-foreground">{content.title ?? content.name}</p>

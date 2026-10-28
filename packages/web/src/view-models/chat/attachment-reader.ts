@@ -1,7 +1,6 @@
-import { PROMPT_IMAGE_MAX_BYTES } from "@moxt-ai/mobius-sdk/protocol";
+import { MAX_PROMPT_ATTACHMENT_BYTES, PROMPT_IMAGE_MAX_BYTES } from "@moxt-ai/mobius-sdk/protocol";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 
-const RESOURCE_BYTES_LIMIT = 1_000_000;
 const READ_TIMEOUT_MILLISECONDS = 15_000;
 
 export class AttachmentReadError extends Error {
@@ -71,23 +70,20 @@ function attachmentUri(name: string): string {
 
 export async function readPromptAttachment(file: File, signal: AbortSignal): Promise<ComposerAttachment> {
     signal.throwIfAborted();
-    const image = file.type.startsWith("image/");
-    const limit = image ? PROMPT_IMAGE_MAX_BYTES : RESOURCE_BYTES_LIMIT;
+    const rasterImage = /^image\/(?:gif|jpeg|png|webp)$/u.test(file.type);
+    const lowerName = file.name.toLowerCase();
+    const svg = file.type === "image/svg+xml" || (file.type.length === 0 && lowerName.endsWith(".svg"));
+    const pdf = file.type === "application/pdf" || (file.type.length === 0 && lowerName.endsWith(".pdf"));
+    const limit = rasterImage ? PROMPT_IMAGE_MAX_BYTES : MAX_PROMPT_ATTACHMENT_BYTES;
     if (file.size === 0 || file.size > limit) {
         throw new AttachmentReadError(
             "attachment_size_invalid",
-            image ? "Images must be between 1 byte and 5 MB." : "Text resources must be between 1 byte and 1 MB.",
+            rasterImage ? "Images must be between 1 byte and 5 MB." : "Files must be between 1 byte and 32 MB.",
         );
     }
     const bytes = new Uint8Array(await readBytes(file, signal));
     signal.throwIfAborted();
-    if (image) {
-        if (!/^image\/(?:gif|jpeg|png|webp)$/.test(file.type)) {
-            throw new AttachmentReadError(
-                "attachment_type_unsupported",
-                "Only PNG, JPEG, GIF, and WebP images are supported.",
-            );
-        }
+    if (rasterImage) {
         return {
             bytes,
             kind: "image",
@@ -96,11 +92,16 @@ export async function readPromptAttachment(file: File, signal: AbortSignal): Pro
             uri: attachmentUri(file.name),
         };
     }
-    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     return {
         bytes,
         kind: "resource",
-        mediaType: file.type.length > 0 ? file.type : "text/plain",
+        mediaType: svg
+            ? "image/svg+xml"
+            : pdf
+              ? "application/pdf"
+              : file.type.length > 0
+                ? file.type
+                : "application/octet-stream",
         name: file.name,
         uri: attachmentUri(file.name),
     };

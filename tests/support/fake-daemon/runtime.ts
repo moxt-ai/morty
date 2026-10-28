@@ -18,7 +18,7 @@ import {
     createRuntimeConfig,
     RuntimeLocalContext,
 } from "../../../third-party/mobius/packages/cli/src/engine/runtime/config.ts";
-import { MobiusRuntimeEngine } from "../../../third-party/mobius/packages/cli/src/engine/runtime/engine.ts";
+import { RuntimeLoop } from "../../../third-party/mobius/packages/cli/src/engine/runtime/runtime-loop.ts";
 import { createInteractionAgent } from "./interaction-agent.ts";
 import { createSettingsAgent, createUnavailableAgent, defineCurrentAgent } from "./settings-agent.ts";
 import { createToolLifecycleAgent } from "./tool-lifecycle-agent.ts";
@@ -89,8 +89,8 @@ function controlledRuntime(
             );
             return {
                 start: (onConnectionStatus) =>
-                    new MobiusRuntimeEngine(
-                        {
+                    new RuntimeLoop(
+                        async () => ({
                             ...config,
                             // Every injected peer speaks ACP, regardless of its catalog label. Use the production
                             // ACP history adapter rather than a vendor-native reader or an unregistered adapter ID.
@@ -109,7 +109,7 @@ function controlledRuntime(
                                     ),
                                     dependencies,
                                 ),
-                        },
+                        }),
                         { onConnectionStatus },
                     ),
             };

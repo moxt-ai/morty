@@ -6,6 +6,7 @@ export type SessionResourceReader = (
 export type SessionResourceRequest = {
     readonly path: string;
     readonly kind: "image" | "raster-image" | "text" | "binary" | "audio" | "download";
+    readonly mediaType?: string;
 };
 
 export type SessionResourceState =
