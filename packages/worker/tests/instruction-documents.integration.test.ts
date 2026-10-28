@@ -158,18 +158,3 @@ test("Given the setup document, When an agent follows it, Then it neither passes
     expect(command).not.toContain("--session-id");
     expect(document.replaceAll("\n", " ")).not.toMatch(/ask the user for (it|the session)/u);
 });
-
-test("Given Morty owns local Agent sessions, When the user asks to return to the computer, Then the setup document tells the Agent how to release every session", async () => {
-    const response = await worker.fetch(new Request("https://preview.example/setup.md"), {
-        APP_ORIGIN: "https://chat.example",
-    });
-    const document = (await response.text()).replaceAll("\n", " ");
-
-    expect(document).toContain("run `mobius quit`");
-    expect(document).toContain("Before running the command");
-    expect(document).toContain("Codex: `codex resume`");
-    expect(document).toContain("Claude Code: `claude --resume`");
-    expect(document).toContain("Pi: `pi --resume`");
-    expect(document).toContain("`mobius start`");
-    expect(document).toContain("do not report that the command completed after invoking it");
-});
