@@ -346,6 +346,7 @@ test("Given a managed Chat session is still running, When its owner archives it,
     const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
 
     expect(archived.status).toBe(200);
+    expect(await archived.json()).toEqual({ close: "confirmed" });
     const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
     expect(await managed.json()).toEqual({ sessions: [] });
 });
@@ -369,6 +370,7 @@ test("Given an idle managed Chat session, When its owner archives it, Then Chat 
     const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
 
     expect(archived.status).toBe(200);
+    expect(await archived.json()).toEqual({ close: "confirmed" });
     const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
     expect(await managed.json()).toEqual({ sessions: [] });
     await expect(
@@ -376,7 +378,7 @@ test("Given an idle managed Chat session, When its owner archives it, Then Chat 
     ).resolves.toMatchObject({ ready: { sessionId } });
 });
 
-test("Given a Runtime cannot complete Session close, When its owner archives a managed Chat session, Then Chat removes it after the best-effort close", async ({
+test("Given a Runtime cannot complete Session close, When its owner archives a managed Chat session, Then Chat reports the unconfirmed close while preserving legacy archival", async ({
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
@@ -396,6 +398,13 @@ test("Given a Runtime cannot complete Session close, When its owner archives a m
     const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
 
     expect(archived.status).toBe(200);
+    const result: unknown = await archived.json();
+    expect(result).toEqual({ close: "unconfirmed" });
+    // The released browser at 830721ff accepts an object and ignores additional response fields.
+    expect(v.parse(v.object({}), result)).toEqual({});
     const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
     expect(await managed.json()).toEqual({ sessions: [] });
+    const repeated = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
+    expect(repeated.status).toBe(200);
+    expect(await repeated.json()).toEqual({ close: "unconfirmed" });
 });

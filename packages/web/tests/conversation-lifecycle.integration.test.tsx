@@ -453,6 +453,36 @@ test("Given a saved Session, When the user opens its context menu, Then the Sess
         expect(queryByRole(document.body, "menuitem", { name: "Close session" })).not.toBeNull();
         expect(queryByRole(document.body, "menuitem", { name: "Archive session" })).toBeNull();
     });
+    await app.user.click(getByRole(document.body, "menuitem", { name: "Close session" }));
+    await app.waitForView(() => expect(app.elementsByTestId(dataTestId.managedConversation)).toHaveLength(0));
+    expect(queryByRole(document.body, "alert")).toBeNull();
+});
+
+test("Given a saved Session whose Runtime becomes unavailable, When the user closes it, Then the entry is removed and the unconfirmed close is visible", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await sendPrompt(
+        app,
+        await app.queryElementByTestId(dataTestId.messageComposer),
+        "Close with an unavailable Runtime",
+    );
+    const conversation = await app.queryElementByTestId(dataTestId.managedConversation);
+    flushSync(() => fireEvent.contextMenu(conversation));
+    const close = await app.waitForView(() => getByRole(document.body, "menuitem", { name: "Close session" }));
+    if (app.daemon === null) {
+        throw new Error("Expected a connected Runtime");
+    }
+    await app.daemon.disconnect();
+
+    await app.user.click(close);
+
+    await app.waitForView(() => {
+        expect(app.elementsByTestId(dataTestId.managedConversation)).toHaveLength(0);
+        expect(getByRole(document.body, "alert").textContent).toBe(
+            "Removed from the list, but stopping the session could not be confirmed. The agent may still be running on your computer.",
+        );
+    });
 });
 
 test("Given a named conversation, When the user opens it, Then the Session title heads the conversation", {

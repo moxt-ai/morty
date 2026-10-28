@@ -398,9 +398,15 @@ export class BotChatApi {
             },
         );
     };
-    readonly archiveManagedSession = async (botId: string, sessionId: string, signal: AbortSignal): Promise<void> => {
+    readonly archiveManagedSession = async (botId: string, sessionId: string, signal: AbortSignal) =>
         v.parse(
-            v.object({}),
+            v.pipe(
+                v.object({
+                    // Older Workers return only {} after their best-effort close.
+                    close: v.optional(v.picklist(["confirmed", "unconfirmed"]), "unconfirmed"),
+                }),
+                v.readonly(),
+            ),
             await this.#request(
                 botId,
                 "managed-session/archive",
@@ -408,7 +414,6 @@ export class BotChatApi {
                 signal,
             ),
         );
-    };
     readonly managedSession = async (botId: string, sessionId: string, signal: AbortSignal) => {
         const stored = v.parse(
             managedSdkSessionSchema,

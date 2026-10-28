@@ -176,6 +176,12 @@ function ManagedSessionDirectoryList({
                 </div>
             )}
             {archive.kind === "failed" && <MortyAlert>{archive.message}</MortyAlert>}
+            {archive.kind === "unconfirmed" && (
+                <MortyAlert tone="warning">
+                    Removed from the list, but stopping the session could not be confirmed. The agent may still be
+                    running on your computer.
+                </MortyAlert>
+            )}
             {sessions !== null && sessions.length === 0 && (
                 <p className="py-3 text-xs text-muted-foreground sm:py-2">Your Chat sessions will appear here.</p>
             )}

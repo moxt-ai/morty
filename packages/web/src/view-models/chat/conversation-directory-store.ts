@@ -22,6 +22,7 @@ type ConversationDirectoryState =
 type ArchiveOperation =
     | { readonly kind: "idle" }
     | { readonly kind: "archiving"; readonly sessionId: string }
+    | { readonly kind: "unconfirmed" }
     | { readonly kind: "failed"; readonly message: string; readonly sessionId: string };
 
 export interface ConversationDirectoryStore {
@@ -136,14 +137,16 @@ export const createConversationDirectoryStore = (
             archiveSession: async (sessionId, signal) => {
                 set({ archive: { kind: "archiving", sessionId } });
                 try {
-                    await requests.archiveManagedSession(botId, sessionId, signal);
+                    const result = await requests.archiveManagedSession(botId, sessionId, signal);
                     signal.throwIfAborted();
+                    const archive: ArchiveOperation =
+                        result.close === "confirmed" ? { kind: "idle" } : { kind: "unconfirmed" };
                     set((current) => {
                         const state = current.state;
                         switch (state.kind) {
                             case "ready":
                                 return {
-                                    archive: { kind: "idle" },
+                                    archive,
                                     state: {
                                         kind: "ready",
                                         sessions: state.sessions.filter((session) => session.id !== sessionId),
@@ -151,7 +154,7 @@ export const createConversationDirectoryStore = (
                                 };
                             case "refreshing":
                                 return {
-                                    archive: { kind: "idle" },
+                                    archive,
                                     state: {
                                         kind: "refreshing",
                                         sessions: state.sessions.filter((session) => session.id !== sessionId),
@@ -159,7 +162,7 @@ export const createConversationDirectoryStore = (
                                 };
                             case "stale":
                                 return {
-                                    archive: { kind: "idle" },
+                                    archive,
                                     state: {
                                         kind: "stale",
                                         failure: state.failure,
@@ -170,7 +173,7 @@ export const createConversationDirectoryStore = (
                             case "loading":
                             case "setup-required":
                             case "failed":
-                                return { archive: { kind: "idle" }, state };
+                                return { archive, state };
                         }
                     });
                 } catch (cause) {

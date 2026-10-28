@@ -440,20 +440,26 @@ export class ChatService {
         };
     };
 
-    readonly archiveManagedSession = async (scope: ChatScope, sessionId: string): Promise<Record<string, never>> => {
+    readonly archiveManagedSession = async (
+        scope: ChatScope,
+        sessionId: string,
+    ): Promise<{ readonly close: "confirmed" | "unconfirmed" }> => {
         if (
             !(await this.#chatSessions.ownsSession(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal))
         ) {
-            return {};
+            return { close: "unconfirmed" };
         }
         const runtime = await this.localRuntime(scope);
+        let close: "confirmed" | "unconfirmed" = "unconfirmed";
         try {
             await this.#platform.closeChatSession(scope.projectId, runtime.runtimeId, sessionId, scope.signal);
+            close = "confirmed";
         } catch {
             scope.signal.throwIfAborted();
         }
+        // Archival stays available to offline and older Runtimes, but does not prove their process stopped.
         await this.#chatSessions.archive(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
-        return {};
+        return { close };
     };
 
     readonly nativeSessions = async (scope: ChatScope, requestedRuntimeId: string, input: NativeListInput) => {
