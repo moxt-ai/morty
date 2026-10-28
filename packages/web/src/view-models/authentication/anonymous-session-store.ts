@@ -104,6 +104,10 @@ export const createAnonymousSessionStore = (
                             return;
                         }
                         settleResumedComputer();
+                        if (window.location.pathname === "/setup") {
+                            set({ state: { kind: "setup", notice: "none", returnHref: "/" } });
+                            return;
+                        }
                         activate(identity, entry, null);
                         return;
                     }
