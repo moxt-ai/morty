@@ -131,6 +131,9 @@ for (const [prompt, label] of [
         const app = await createTestApp({ connectAgent: true });
         const composer = await app.queryElementByTestId(dataTestId.messageComposer);
         await sendPrompt(app, composer, prompt ?? "");
+        await app.user.click(
+            await app.waitForView(() => getByRole(document.body, "button", { name: "Show execution details" })),
+        );
         const disclosure = await app.waitForView(() =>
             getByRole(document.body, "button", { name: `${label} Tool succeeded` }),
         );
@@ -163,7 +166,7 @@ test("Given an image in a streaming reply, When the reply completes between poin
     expect(getByRole(document.body, "dialog", { name: "Image viewer" })).toBeDefined();
 });
 
-test("Given a tool image is open while the agent works, When the finished turn collapses its tools, Then the viewer keeps showing the image", {
+test("Given a tool image is open while the agent works, When the turn finishes, Then the history stays expanded and the viewer keeps showing the image", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -171,6 +174,9 @@ test("Given a tool image is open while the agent works, When the finished turn c
         throw new Error("Expected a connected Runtime");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold image tool");
+    await app.user.click(
+        await app.waitForView(() => getByRole(document.body, "button", { name: "Show execution details" })),
+    );
     await app.user.click(
         await app.waitForView(() => getByRole(document.body, "button", { name: "Generate image Tool succeeded" })),
     );
@@ -182,10 +188,14 @@ test("Given a tool image is open while the agent works, When the finished turn c
         outcome: "complete",
         output: [{ kind: "text", text: "The generated image is ready." }],
     });
-    await app.waitForView(() => getByRole(document.body, "button", { name: "1 step" }));
+    await app.waitForView(() => {
+        const summary = getByRole(document.body, "button", { name: "Hide execution details", hidden: true });
+        expect(summary.getAttribute("aria-expanded")).toBe("true");
+        expect(summary.textContent).toContain("Operations complete");
+    });
     expect(getByRole(document.body, "dialog", { name: "Image viewer" })).toBe(viewer);
     expect(getByRole(viewer, "img", { name: "Image" })).toBeDefined();
     await app.user.click(getByRole(viewer, "button", { name: "Close image viewer" }));
     await app.waitForView(() => expect(queryByRole(document.body, "dialog", { name: "Image viewer" })).toBeNull());
-    expect(document.activeElement).toBe(getByRole(document.body, "button", { name: "1 step" }));
+    expect(document.activeElement).toBe(getByRole(document.body, "button", { name: "View image: Image" }));
 });
