@@ -1,6 +1,6 @@
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
-import { miniflareDurableObjects } from "@moxt-ai/mobius-test/cloudflare";
+import { miniflareDurableObjects, prepareTestMobiusPlatformBindings } from "@moxt-ai/mobius-test/cloudflare";
 import { createResponseLossProxy } from "@moxt-ai/mobius-test/response-loss-proxy";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
@@ -48,35 +48,52 @@ async function disposeFailedRuntime(runtime: Miniflare): Promise<void> {
     await runtime.dispose().catch(() => undefined);
 }
 
-export async function createIdentityFixture(
-    options: {
-        /** Serve the Chat Worker on a free loopback port and use that origin as APP_ORIGIN. */
-        readonly listenOnLoopback?: true;
-        readonly loseTurnResponses?: true;
-        readonly platformAllowedOrigins?: ReadonlySet<string>;
-        readonly workerEntryPoint?: string;
-        readonly wranglerConfiguration?: URL;
-    } = {},
+type IdentityFixtureOptions = {
+    /** Serve the Chat Worker on a free loopback port and use that origin as APP_ORIGIN. */
+    readonly listenOnLoopback?: true;
+    readonly loseTurnResponses?: true;
+    readonly platformAllowedOrigins?: ReadonlySet<string>;
+    readonly workerEntryPoint?: string;
+    readonly wranglerConfiguration?: URL;
+};
+
+export async function createIdentityFixture(options: IdentityFixtureOptions = {}) {
+    const createFixture = await prepareIdentityFixture(options);
+    return createFixture();
+}
+
+/** Call in beforeAll so each suite run rebuilds its inputs, including watch reruns. */
+export async function prepareIdentityFixture(options: IdentityFixtureOptions = {}) {
+    const bundle = await build({
+        entryPoints: [options.workerEntryPoint ?? fileURLToPath(new URL("../../src/index.ts", import.meta.url))],
+        bundle: true,
+        external: ["cloudflare:*", "node:*"],
+        format: "esm",
+        loader: { ".txt": "text", ".sql": "text" },
+        platform: "browser",
+        target: "es2022",
+        write: false,
+    });
+    const output = bundle.outputFiles[0];
+    if (output === undefined) {
+        throw new Error("Missing Chat Worker bundle");
+    }
+    const script = output.text;
+    const createBindings = await prepareTestMobiusPlatformBindings();
+    return () => startIdentityFixture(options, script, createBindings);
+}
+
+async function startIdentityFixture(
+    options: IdentityFixtureOptions,
+    script: string,
+    createBindings: Awaited<ReturnType<typeof prepareTestMobiusPlatformBindings>>,
 ) {
     const platform = await startTestPlatform(
         options.platformAllowedOrigins === undefined ? {} : { allowedOrigins: options.platformAllowedOrigins },
+        createBindings,
     );
     const network = options.loseTurnResponses === true ? await createResponseLossProxy(platform.baseUrl) : null;
     try {
-        const bundle = await build({
-            entryPoints: [options.workerEntryPoint ?? fileURLToPath(new URL("../../src/index.ts", import.meta.url))],
-            bundle: true,
-            external: ["cloudflare:*", "node:*"],
-            format: "esm",
-            loader: { ".txt": "text", ".sql": "text" },
-            platform: "browser",
-            target: "es2022",
-            write: false,
-        });
-        const output = bundle.outputFiles[0];
-        if (output === undefined) {
-            throw new Error("Missing Chat Worker bundle");
-        }
         const startChatWorker = async () => {
             for (let attempt = 1; ; attempt += 1) {
                 // Choose the port as late as possible: the Platform and the bundle are ready by now.
@@ -101,7 +118,7 @@ export async function createIdentityFixture(
                     ),
                     modules: true,
                     r2Buckets: ["CHAT_ATTACHMENTS_APAC"],
-                    script: output.text,
+                    script,
                 } satisfies Parameters<typeof convertV4MiniflareOptions>[0];
                 const runtime = new Miniflare(convertV4MiniflareOptions(runtimeOptions));
                 try {
