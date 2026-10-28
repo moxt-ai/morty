@@ -1,3 +1,4 @@
+import { resolveObjectURL } from "node:buffer";
 import { fireEvent, getAllByRole, getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
@@ -84,6 +85,37 @@ test("Given text and two images in one user message, When the conversation reloa
         return images.map((image) => image.getAttribute("src"));
     });
     expect(await renderedImageBytes(reopenedSources)).toEqual(originalImages);
+});
+
+test("Given an SVG, a PDF, and a Word document, When the user sends them with a prompt, Then the message shows each attachment and the agent replies", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8"/></svg>';
+    await app.user.upload(getByLabelText(document.body, "Choose attachments"), [
+        new File([svg], "diagram.svg", { type: "image/svg+xml" }),
+        new File(["%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"], "brief.pdf", { type: "application/pdf" }),
+        new File(["PK"], "notes.docx", {
+            type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }),
+    ]);
+    await app.waitForView(() => {
+        const attachments = getByRole(document.body, "list", { name: "Attachments" });
+        expect(attachments.textContent).toContain("diagram.svg");
+        expect(attachments.textContent).toContain("brief.pdf");
+        expect(attachments.textContent).toContain("notes.docx");
+    });
+    const prompt = "Describe these files";
+    await sendPrompt(app, composer, prompt);
+    await app.waitForView(() => {
+        expect(document.body.textContent).toContain(`Codex turn 1: ${prompt}`);
+        const message = getByRole(document.body, "article", { name: "Your message" });
+        expect(message.textContent).toContain(prompt);
+        expect(getByRole(message, "img", { name: "Your attachment" })).toBeTruthy();
+        expect(getByRole(message, "link", { name: "brief.pdf" })).toBeTruthy();
+        expect(getByRole(message, "link", { name: "notes.docx" })).toBeTruthy();
+    });
 });
 
 test("Given the message composer, When the user clicks Add attachment and selects a file, Then the picker opens directly and the attachment appears", {
@@ -255,5 +287,3 @@ test("Given an attachment is being read, When the user removes an earlier attach
         expect(attachments.textContent).not.toContain("removed.json");
     });
 });
-
-import { resolveObjectURL } from "node:buffer";

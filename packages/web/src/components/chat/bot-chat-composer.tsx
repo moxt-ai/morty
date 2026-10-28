@@ -16,7 +16,7 @@ import { MortyAlert } from "../ui/morty-alert.tsx";
 import { Textarea } from "../ui/textarea.tsx";
 import { useComposerNoticeLayout } from "../utils/use-composer-notice-layout.ts";
 import { chatSessionComposerClassName } from "./chat-session-layout.ts";
-import type { ComposerAttachment } from "./composer-attachment.ts";
+import { type ComposerAttachment, isPromptAttachmentCandidate, promptAttachmentAccept } from "./composer-attachment.ts";
 
 function attachmentName(attachment: ComposerAttachment): string {
     return attachment.name;
@@ -145,12 +145,12 @@ export function BotChatComposer({
         event.currentTarget.form?.requestSubmit();
     };
     const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>): void => {
-        const images = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
-        if (images.length === 0 || disabled || !canAttach) {
+        const files = Array.from(event.clipboardData.files).filter((file) => isPromptAttachmentCandidate(file));
+        if (files.length === 0 || disabled || !canAttach) {
             return;
         }
         event.preventDefault();
-        attachmentModel.addFiles(images, attachmentSignal);
+        attachmentModel.addFiles(files, attachmentSignal);
     };
     const submitAction = outputState === "idle" || (outputState === "running" && !submitDisabled);
     const composerErrorMessage =
@@ -214,7 +214,7 @@ export function BotChatComposer({
                         </button>
                         <input
                             aria-label="Choose attachments"
-                            accept="image/png,image/jpeg,image/gif,image/webp,text/*,.md,.json,.csv,.yaml,.yml,.xml"
+                            accept={promptAttachmentAccept}
                             className="sr-only"
                             disabled={disabled}
                             multiple

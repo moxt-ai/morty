@@ -51,6 +51,16 @@ function requestKind(content: MobiusExternalContentBlock): SessionResourceReques
     return "download";
 }
 
+function attachmentFileName(uri: string): string {
+    const leaf = uri.split("/").pop() ?? "";
+    try {
+        const name = decodeURIComponent(leaf);
+        return name.length > 0 ? name : "Download attachment";
+    } catch {
+        return leaf.length > 0 ? leaf : "Download attachment";
+    }
+}
+
 function renderContent(
     content: MobiusExternalContentBlock,
     state: SessionResourceState,
@@ -93,8 +103,12 @@ function renderContent(
                     {state.text}
                 </pre>
             ) : state.kind === "media" ? (
-                <a className="break-all text-sm underline" download href={state.source}>
-                    Download resource
+                <a
+                    className="break-all text-sm underline"
+                    download={attachmentFileName(content.uri)}
+                    href={state.source}
+                >
+                    {attachmentFileName(content.uri)}
                 </a>
             ) : (
                 <p className="text-sm text-muted-foreground">Content could not be loaded.</p>
