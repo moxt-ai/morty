@@ -139,7 +139,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: coverage-${{ matrix.report }}
+          name: coverage-input-${{ matrix.report }}
           path: coverage/
           if-no-files-found: error
           retention-days: 14
@@ -155,17 +155,24 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./.github/actions/setup
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Install coverage report dependencies
+        run: |
+          corepack enable
+          pnpm --dir scripts/coverage-report install --frozen-lockfile --ignore-scripts
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          pattern: coverage-*
+          pattern: coverage-input-*
           path: coverage/
           merge-multiple: true
 
-      - run: pnpm test:coverage:merge --web-shards=8
+      # A root pnpm script can auto-install the whole workspace before it runs.
+      - run: node scripts/coverage.mjs --merge-only --web-shards=8
 
       - name: Save combined coverage report
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
