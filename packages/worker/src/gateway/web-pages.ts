@@ -10,6 +10,7 @@ const assetBindingSchema = v.custom<Fetcher>(
 // Keep the document entry points aligned with the application's three routers.
 // Unmatched paths must reach the public application's HTTP 404 handler.
 const paths = [
+    "/setup",
     "/chat",
     "/continue",
     "/continue/preview",

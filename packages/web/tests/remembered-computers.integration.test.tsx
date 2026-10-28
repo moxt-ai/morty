@@ -227,26 +227,30 @@ test("Given a remembered computer, When I open an invalid explicit computer link
     expect(new URL(window.location.href).searchParams.get("identity")).toBe("invalid");
 });
 
-test("Given a remembered computer and its identity-scoped setup URL, When I open setup, Then I can copy the setup prompt and return to my original conversation", {
-    timeout: 30_000,
-}, async () => {
-    const app = await createTestApp({ connectAgent: true });
-    const sessionId = await startConversation(app, "Return after scoped setup");
-    const setupUrl = new URL(window.location.href);
-    setupUrl.pathname = "/setup";
-    setupUrl.searchParams.delete("sessionId");
-    window.location.href = setupUrl.href;
-    const setup = await app.reload();
-    await setup.waitForView(() => getByRole(document.body, "heading", { name: "Connect another computer" }));
-    await setup.user.click(getByRole(document.body, "button", { name: "Copy setup prompt" }));
-    expect(await navigator.clipboard.readText()).toContain(`${app.origin}/setup.md`);
-    const back = getByRole(document.body, "link", { name: "Back to your last computer" });
-    window.location.href = new URL(back.getAttribute("href") ?? "", app.origin).href;
-    const returned = await setup.reload();
-    await returned.waitForView(() =>
-        expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId),
-    );
-});
+test.each(["/setup", "/setup/"])(
+    "Given a remembered computer and its identity-scoped %s URL, When I open setup, Then I can copy the setup prompt and return to my original conversation",
+    {
+        timeout: 30_000,
+    },
+    async (path) => {
+        const app = await createTestApp({ connectAgent: true });
+        const sessionId = await startConversation(app, "Return after scoped setup");
+        const setupUrl = new URL(window.location.href);
+        setupUrl.pathname = path;
+        setupUrl.searchParams.delete("sessionId");
+        window.location.href = setupUrl.href;
+        const setup = await app.reload();
+        await setup.waitForView(() => getByRole(document.body, "heading", { name: "Connect another computer" }));
+        await setup.user.click(getByRole(document.body, "button", { name: "Copy setup prompt" }));
+        expect(await navigator.clipboard.readText()).toContain(`${app.origin}/setup.md`);
+        const back = getByRole(document.body, "link", { name: "Back to your last computer" });
+        window.location.href = new URL(back.getAttribute("href") ?? "", app.origin).href;
+        const returned = await setup.reload();
+        await returned.waitForView(() =>
+            expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId),
+        );
+    },
+);
 
 test("Given a remembered computer, When I connect another computer, Then setup remains reachable and returning keeps my original conversation", {
     timeout: 30_000,

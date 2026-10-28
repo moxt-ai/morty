@@ -74,6 +74,22 @@ const browserNavigation = {
     "Sec-Fetch-Mode": "navigate",
 };
 
+test("Given the setup URL, When a browser opens it directly, Then it receives the application HTML without redirecting", async () => {
+    for (const path of ["/setup", "/setup/", "/setup?identity=private-identity"]) {
+        const response = await runtime.dispatchFetch(`https://morty.example${path}`, {
+            headers: browserNavigation,
+            redirect: "manual",
+        });
+        expect(response.status, path).toBe(200);
+        expect(response.headers.get("content-type"), path).toContain("text/html");
+        expect(response.headers.get("location"), path).toBeNull();
+        expect(response.headers.get("x-robots-tag"), path).toBe("noindex");
+        const html = await response.text();
+        expect(html, path).toContain('<div id="root">');
+        expect(html, path).not.toContain("private-identity");
+    }
+});
+
 test("Given an unknown URL, When an agent fetches it, Then the server returns the structured JSON 404", async () => {
     for (const headers of [{}, { Accept: "*/*" }, { Accept: "application/json" }]) {
         for (const path of [...unknownPaths, "/morty/api/unknown"]) {
