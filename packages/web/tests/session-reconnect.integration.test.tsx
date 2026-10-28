@@ -99,7 +99,7 @@ async function openSavedConversation(app: TestApp, prompt: string): Promise<HTML
     return composer;
 }
 
-test("Given a failed Agent turn, When its Runtime reconnects and the conversation reloads, Then the live failure is not duplicated or replayed into history", {
+test("Given a failed Agent turn, When its Runtime reconnects and the conversation reloads, Then the failure is never duplicated and the reload still shows how the turn ended", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
@@ -148,11 +148,14 @@ test("Given a failed Agent turn, When its Runtime reconnects and the conversatio
     });
     const reloaded = await app.reload();
     await reloaded.queryElementByTestId(dataTestId.messageComposer);
+    // History holds no failure, but the Runtime still reports how the last turn ended: once, with its retained message.
     await reloaded.waitForView(() => {
         expect(
             queryAllByText(document.body, "Internal error: The controlled Agent rejected this turn.", { exact: true }),
         ).toHaveLength(0);
-        expect(queryAllByRole(document.body, "alert")).toHaveLength(0);
+        expect(
+            queryAllByText(document.body, "The local Agent could not complete the request", { exact: true }),
+        ).toHaveLength(1);
     });
 });
 

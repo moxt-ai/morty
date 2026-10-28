@@ -1108,8 +1108,23 @@ export function createSessionPaneModel(options: {
                                         accepted?.commandId === running.commandId ? accepted.turnId : running.commandId,
                                     startedAt: turns.startedAt(running.commandId, Date.now()),
                                 });
-                            } else if (awaitsService(reconciliation.turn)) {
-                                updateTurn({ kind: "nothing-running" });
+                            } else {
+                                if (awaitsService(reconciliation.turn)) {
+                                    updateTurn({ kind: "nothing-running" });
+                                }
+                                // The Runtime's record of the last turn shows an outcome this pane missed. Older
+                                // Runtimes and Relays omit it, which leaves the turn as before.
+                                const lastTurn = execution.lastTurn;
+                                if (lastTurn !== undefined) {
+                                    updateTurn({
+                                        kind: "last-turn-reported",
+                                        commandId: lastTurn.commandId,
+                                        failure:
+                                            lastTurn.state === "failed"
+                                                ? { code: lastTurn.code, message: lastTurn.message }
+                                                : null,
+                                    });
+                                }
                             }
                             signal.throwIfAborted();
                             const interaction = execution.turn?.interaction;

@@ -46,6 +46,11 @@ export type CurrentTurnEvent =
     | { readonly kind: "submission-ended"; readonly commandId: string; readonly failure: TurnFailure | null }
     /** Nothing runs any more, as when the Session closed or a reconnect found no running turn. */
     | { readonly kind: "nothing-running" }
+    /**
+     * With nothing running, the service reports how its last started command ended, as when this pane opens or
+     * reconnects after missing that turn's live outcome. `failure` explains a failed one.
+     */
+    | { readonly kind: "last-turn-reported"; readonly commandId: string; readonly failure: TurnFailure | null }
     /** This browser sent the command at `sentAt`, which is when its work started. */
     | { readonly kind: "sent-at-known"; readonly commandId: string; readonly sentAt: number };
 
@@ -115,6 +120,14 @@ export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent
         case "nothing-running":
             // Learning that nothing runs cannot resolve an earlier turn failure.
             return turn.kind === "idle" ? turn : idleTurn;
+        case "last-turn-reported":
+            // Another current command outranks the report, and a failure this pane saw live keeps its own message.
+            if (turn.kind === "current") {
+                return turn.commandId === event.commandId ? endedTurn(event.commandId, event.failure) : turn;
+            }
+            return turn.failure?.commandId === event.commandId || (turn.failure === null && event.failure === null)
+                ? turn
+                : endedTurn(event.commandId, event.failure);
         case "sent-at-known":
             return isCurrent(turn, event.commandId) ? { ...turn, startedAt: event.sentAt } : turn;
     }
