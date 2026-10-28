@@ -176,8 +176,12 @@ test("Given the agent sends separate reasoning messages, When the user reads the
         dataTestId.messageComposer,
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
     );
+    // A reasoning-only segment has no completion state of its own: once the
+    // turn finishes, its summary must stop shimmering.
+    expect(document.body.querySelector(".animate-loading-text-shimmer")).toBeNull();
     app.remount();
     await expandProcessSections(app);
+    expect(document.body.querySelector(".animate-loading-text-shimmer")).toBeNull();
     const restoredThinking = await app.queryElementByTestId(dataTestId.agentReasoning);
     await app.user.click(getByText(restoredThinking, "Show Thinking"));
     await app.waitForView(() => {

@@ -926,14 +926,16 @@ function MobiusSessionPaneBody({
                                                         replyActive && "pb-3",
                                                     )}
                                                 >
-                                                    {sections.map((section) =>
+                                                    {sections.map((section, sectionIndex) =>
                                                         section.kind === "process" ? (
                                                             <TurnWorkDisclosure
                                                                 key={section.id}
                                                                 summary={section.summary}
-                                                                working={section.items.some(
-                                                                    isGeneratingProcessRenderItem,
-                                                                )}
+                                                                working={
+                                                                    replyActive &&
+                                                                    sectionIndex === sections.length - 1 &&
+                                                                    section.items.some(isGeneratingProcessRenderItem)
+                                                                }
                                                             >
                                                                 {section.items.map(renderItem)}
                                                             </TurnWorkDisclosure>
