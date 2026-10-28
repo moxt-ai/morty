@@ -20,8 +20,12 @@ export const chatSessionComposerClassName =
 /**
  * Fills the conversation card. Background, radius, and the outer inset stay on
  * the parent section so they are not painted twice.
+ *
+ * `overflow-clip` rather than `overflow-hidden`: a clipped box cannot hold a
+ * scroll offset, so revealing a control deep in the pane (focus, find-in-page,
+ * scrollIntoView) can never scroll the header and composer out of the card.
  */
-export const chatSessionPaneFillClassName = "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden";
+export const chatSessionPaneFillClassName = "flex min-h-0 min-w-0 flex-1 flex-col overflow-clip";
 
 /**
  * No backdrop-filter here. It would make this pane the backdrop root, and the
