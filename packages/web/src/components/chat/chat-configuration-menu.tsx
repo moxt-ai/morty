@@ -1,6 +1,6 @@
 import { ArrowLeft, Check, ChevronDown, ChevronRight, Search, X } from "lucide-react";
 import { Dialog, Tooltip } from "radix-ui";
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
 import { MortyTooltipContent } from "../ui/morty-tooltip-content.tsx";
@@ -8,6 +8,7 @@ import {
     overlaySurfacePanelClassName,
     overlaySurfaceRadiusClassName,
     overlayTriggerOffsetPx,
+    preventOverlayOpenAutoFocus,
 } from "../ui/overlay-surface.ts";
 import { Popover } from "../ui/popover.tsx";
 import { ScrollEdgeFade } from "../utils/scroll-edge-fade.tsx";
@@ -56,7 +57,7 @@ function HarnessSelect({
 }) {
     return (
         <div className="flex flex-col gap-1.5">
-            <span className="px-1 text-xs font-medium text-copy-tertiary">{harness.label}</span>
+            <span className="px-3.5 text-13 text-copy-secondary">{harness.label}</span>
             <div
                 aria-label={harness.label}
                 className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(88px,1fr))] gap-1.5"
@@ -74,7 +75,7 @@ function HarnessSelect({
                             aria-disabled={!installed || harness.disabled}
                             aria-description={installed ? undefined : "Not installed"}
                             className={cn(
-                                "flex min-h-11 w-full min-w-0 flex-col items-center justify-center gap-1 rounded-lg border px-2 py-2 text-center text-[13px] outline-none transition-colors keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 motion-reduce:transition-none disabled:cursor-not-allowed",
+                                "flex min-h-11 w-full min-w-0 flex-col items-center justify-center gap-1 rounded-[16px] border px-2 py-2 text-center text-[13px] outline-none transition-colors keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 motion-reduce:transition-none disabled:cursor-not-allowed",
                                 selected
                                     ? "border-foreground bg-foreground font-medium text-background hover:border-foreground hover:bg-foreground hover:text-background"
                                     : "border-border bg-background text-foreground hover:border-foreground/20 hover:bg-accent",
@@ -124,7 +125,11 @@ function SettingsDataSkeleton() {
     return (
         <>
             {SETTINGS_DATA_SKELETON_ROWS.map((row) => (
-                <div aria-hidden="true" className="flex min-h-14 items-center justify-between gap-4 px-2" key={row.key}>
+                <div
+                    aria-hidden="true"
+                    className="my-2 flex min-h-9 items-center justify-between gap-4 py-0 pr-2.5 pl-3.5"
+                    key={row.key}
+                >
                     <span
                         className={cn(
                             "mx-1 h-3 animate-pulse rounded-full bg-morty-fill-opacity-3 motion-reduce:animate-none",
@@ -147,17 +152,29 @@ function SettingsDataSkeleton() {
 
 type ConfigurationPage = { readonly kind: "overview" } | { readonly kind: "picker"; readonly controlId: string };
 
+type NestedMenuHoverHandlers = {
+    readonly keepOpen: () => void;
+    readonly scheduleClose: () => void;
+};
+
+type NestedMenuOpenSource = "hover" | "pointer" | "keyboard";
+
 function SettingPicker({
     control,
     onSelect,
     id,
+    nested = false,
+    focusOnOpen = false,
 }: {
     readonly control: ChatConfigurationSelectControl;
     readonly onSelect: (value: string) => void;
     readonly id: string;
+    readonly nested?: boolean;
+    readonly focusOnOpen?: boolean;
 }) {
     const [search, setSearch] = useState("");
     const listRef = useRef<HTMLDivElement | null>(null);
+    const searchInputRef = useRef<HTMLInputElement | null>(null);
     const query = search.trim().toLocaleLowerCase();
     const options = control.options.filter((option) =>
         [option.label, option.value].some((value) => value.toLocaleLowerCase().includes(query)),
@@ -177,18 +194,34 @@ function SettingPicker({
                     : (current - 1 + buttons.length) % buttons.length;
         buttons[index]?.focus();
     };
+    useEffect(() => {
+        if (!focusOnOpen) {
+            return;
+        }
+        const frame = requestAnimationFrame(() => {
+            if (control.searchable) {
+                searchInputRef.current?.focus({ preventScroll: true });
+                return;
+            }
+            const selectedOption = listRef.current?.querySelector<HTMLButtonElement>('[role="option"][tabindex="0"]');
+            (selectedOption ?? listRef.current)?.focus({ preventScroll: true });
+        });
+        return () => {
+            cancelAnimationFrame(frame);
+        };
+    }, [control.searchable, focusOnOpen]);
     return (
         <div className={cn("flex min-h-0 flex-col", control.searchable && "h-80")}>
             {control.searchable && (
-                <div className="relative mx-4 mb-2 shrink-0">
+                <div className={cn("relative mb-2 shrink-0", nested ? "mx-2 mt-2" : "mx-4")}>
                     <Search
                         aria-hidden="true"
-                        className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-copy-tertiary"
+                        className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-morty-text-3"
                     />
                     <input
                         aria-label="Search models"
                         autoComplete="off"
-                        className="h-11 w-full rounded-lg border border-border bg-background pr-3 pl-9 text-base outline-none keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50"
+                        className="h-9 w-full rounded-lg border border-border bg-background pr-3 pl-9 text-base outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/20"
                         data-testid={dataTestId.modelSearch}
                         onChange={(event) => setSearch(event.currentTarget.value)}
                         onKeyDown={(event) => {
@@ -198,6 +231,7 @@ function SettingPicker({
                             }
                         }}
                         placeholder="Search models…"
+                        ref={searchInputRef}
                         type="search"
                         value={search}
                     />
@@ -207,7 +241,9 @@ function SettingPicker({
                 aria-label={control.label}
                 id={id}
                 className={cn(
-                    "min-h-0 flex-auto overflow-y-auto overscroll-contain px-2 pb-[max(1rem,env(safe-area-inset-bottom))]",
+                    "min-h-0 flex-auto overflow-y-auto overscroll-contain px-2",
+                    nested ? "pb-2" : "pb-[max(1rem,env(safe-area-inset-bottom))]",
+                    nested && !control.searchable && "pt-2",
                     mortyThinScrollbarClassName,
                 )}
                 onKeyDown={(event) => {
@@ -233,7 +269,7 @@ function SettingPicker({
                 {options.map((option) => (
                     <button
                         aria-selected={option.value === control.value}
-                        className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 py-3 text-left text-sm outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-inset keyboard-focus:focus-visible:ring-ring/50 aria-selected:bg-accent"
+                        className="flex h-9 w-full items-center justify-between gap-3 rounded-full px-3 py-2 text-left text-sm outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-inset keyboard-focus:focus-visible:ring-ring/50 aria-selected:bg-accent"
                         data-testid={dataTestId.sessionConfigValue(option.value)}
                         key={option.value}
                         onClick={() => onSelect(option.value)}
@@ -241,12 +277,14 @@ function SettingPicker({
                         tabIndex={option.value === selected?.value ? 0 : -1}
                         type="button"
                     >
-                        <span className="min-w-0 break-words">{option.label}</span>
+                        <span className="min-w-0 truncate" title={option.label}>
+                            {option.label}
+                        </span>
                         {option.value === control.value && <Check aria-hidden="true" className="size-4 shrink-0" />}
                     </button>
                 ))}
                 {options.length === 0 && (
-                    <p className="px-3 py-6 text-sm text-copy-tertiary" role="status">
+                    <p className="px-3 py-6 text-sm text-morty-text-3" role="status">
                         No models found.
                     </p>
                 )}
@@ -260,6 +298,11 @@ function SettingControl({
     mutedWhenDisabled = true,
     valueLoading,
     onOpen,
+    desktop,
+    nestedOpen,
+    onNestedOpenChange,
+    expanded = false,
+    nestedContent,
     assignButton,
     pickerId,
 }: {
@@ -267,36 +310,154 @@ function SettingControl({
     readonly mutedWhenDisabled?: boolean;
     readonly valueLoading: boolean;
     readonly onOpen: () => void;
+    readonly desktop: boolean;
+    readonly nestedOpen: boolean;
+    readonly onNestedOpenChange: (open: boolean) => void;
+    readonly expanded?: boolean;
+    readonly nestedContent?:
+        | ((
+              close: () => void,
+              hoverHandlers: NestedMenuHoverHandlers,
+              focusOnOpen: boolean,
+              setHovered: (hovered: boolean) => void,
+          ) => ReactNode)
+        | undefined;
     readonly assignButton: (node: HTMLButtonElement | null) => void;
     readonly pickerId: string;
 }) {
+    const [focusNestedPickerOnOpen, setFocusNestedPickerOnOpen] = useState(false);
+    const nestedMenuHoveredRef = useRef(false);
+    const previousNestedOpenRef = useRef(nestedOpen);
+    const focusFrameRef = useRef<number | null>(null);
+    const pressButtonRef = useRef<HTMLButtonElement | null>(null);
+    const nestedMenuOpenSourceRef = useRef<NestedMenuOpenSource | null>(null);
+    const nestedMenuCloseTimerRef = useRef<number | null>(null);
+    const cancelNestedMenuClose = useCallback(() => {
+        if (nestedMenuCloseTimerRef.current !== null) {
+            window.clearTimeout(nestedMenuCloseTimerRef.current);
+            nestedMenuCloseTimerRef.current = null;
+        }
+    }, []);
+    const closeNestedMenu = useCallback(() => {
+        cancelNestedMenuClose();
+        onNestedOpenChange(false);
+    }, [cancelNestedMenuClose, onNestedOpenChange]);
+    const scheduleNestedMenuClose = useCallback(() => {
+        if (nestedMenuOpenSourceRef.current !== "hover") {
+            return;
+        }
+        cancelNestedMenuClose();
+        nestedMenuCloseTimerRef.current = window.setTimeout(closeNestedMenu, 120);
+    }, [cancelNestedMenuClose, closeNestedMenu]);
+    const openNestedMenu = useCallback(
+        (source: NestedMenuOpenSource) => {
+            cancelNestedMenuClose();
+            nestedMenuOpenSourceRef.current = source;
+            // Only keyboard activation moves focus into the picker. Pointer and
+            // hover openers leave focus where the user clicked, so the search
+            // field does not start out showing its focus ring.
+            setFocusNestedPickerOnOpen(source === "keyboard");
+            nestedMenuHoveredRef.current = source === "hover";
+            onNestedOpenChange(true);
+        },
+        [cancelNestedMenuClose, onNestedOpenChange],
+    );
+
+    useEffect(() => {
+        const wasOpen = previousNestedOpenRef.current;
+        previousNestedOpenRef.current = nestedOpen;
+        if (nestedOpen || !wasOpen) {
+            return;
+        }
+        const source = nestedMenuOpenSourceRef.current;
+        nestedMenuOpenSourceRef.current = null;
+        nestedMenuHoveredRef.current = false;
+        setFocusNestedPickerOnOpen(false);
+        if (source !== null && source !== "hover") {
+            focusFrameRef.current = requestAnimationFrame(() => pressButtonRef.current?.focus({ preventScroll: true }));
+        }
+    }, [nestedOpen]);
+    useEffect(
+        () => () => {
+            if (focusFrameRef.current !== null) {
+                cancelAnimationFrame(focusFrameRef.current);
+            }
+        },
+        [],
+    );
+    useEffect(() => cancelNestedMenuClose, [cancelNestedMenuClose]);
     const value =
         control.kind === "select"
             ? (control.options.find((option) => option.value === control.value)?.label ?? control.value)
             : control.checked
               ? "On"
               : "Off";
-    return (
+    const opensNestedMenuOnHover = desktop && control.kind === "select" && nestedContent !== undefined;
+    const trigger = (
         <button
             aria-busy={valueLoading || undefined}
             {...(control.kind === "select"
-                ? { role: "combobox", "aria-controls": pickerId, "aria-expanded": false, "aria-haspopup": "listbox" }
+                ? {
+                      role: "combobox",
+                      "aria-controls": nestedContent === undefined ? pickerId : `${pickerId}-${control.id}`,
+                      "aria-expanded": nestedContent === undefined ? expanded : nestedOpen,
+                      "aria-haspopup": "listbox",
+                  }
                 : { role: "switch", "aria-checked": control.checked })}
             aria-label={control.label}
             className={cn(
-                "flex min-h-14 w-full items-center justify-between gap-4 rounded-lg px-2 py-3 text-left text-sm outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 disabled:cursor-not-allowed",
+                "group my-2 flex h-9 w-full items-center justify-between gap-4 rounded-full py-0 pr-2.5 pl-3.5 text-left text-13 outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 disabled:cursor-not-allowed",
                 mutedWhenDisabled && "disabled:opacity-50",
             )}
             data-testid={control.testId}
             disabled={control.disabled || valueLoading}
-            onClick={control.kind === "select" ? onOpen : control.onCheckedChange}
-            onKeyDown={(event) => {
-                if (control.kind === "select" && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
-                    event.preventDefault();
+            onClick={(event) => {
+                if (control.kind !== "select") {
+                    control.onCheckedChange();
+                    return;
+                }
+                if (nestedContent === undefined) {
                     onOpen();
+                    return;
+                }
+                // Keyboard activation uses the same focus-visible path as ArrowDown.
+                if (event.detail === 0) {
+                    event.preventDefault();
+                    openNestedMenu("keyboard");
+                    return;
+                }
+                // Prevent the trigger's built-in toggle from immediately closing a hover-opened submenu.
+                event.preventDefault();
+                openNestedMenu("pointer");
+            }}
+            onKeyDown={(event) => {
+                if (
+                    control.kind === "select" &&
+                    (event.key === "Enter" || event.key === " " || event.key === "ArrowDown" || event.key === "ArrowUp")
+                ) {
+                    event.preventDefault();
+                    if (nestedContent === undefined) {
+                        onOpen();
+                    } else {
+                        openNestedMenu("keyboard");
+                    }
                 }
             }}
-            ref={assignButton}
+            onPointerEnter={
+                opensNestedMenuOnHover
+                    ? () => {
+                          if (nestedMenuHoveredRef.current) {
+                              cancelNestedMenuClose();
+                              return;
+                          }
+                          openNestedMenu("hover");
+                      }
+                    : undefined
+            }
+            ref={(node) => {
+                pressButtonRef.current = node;
+                assignButton(node);
+            }}
             type="button"
         >
             <span className="shrink-0 text-copy-secondary">{control.label}</span>
@@ -308,10 +469,27 @@ function SettingControl({
                         role="status"
                     />
                 ) : (
-                    <span className="min-w-0 break-words">{value}</span>
+                    <Tooltip.Provider delayDuration={150}>
+                        <Tooltip.Root>
+                            <Tooltip.Trigger asChild>
+                                <span className="min-w-0 truncate text-copy-secondary transition-colors duration-150 group-hover:text-secondary-foreground group-active:text-foreground group-data-[state=open]:text-foreground motion-reduce:transition-none">
+                                    {value}
+                                </span>
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                                <MortyTooltipContent className="max-w-64 break-all leading-5" side="top" sideOffset={6}>
+                                    {value}
+                                    <Tooltip.Arrow className="fill-foreground" />
+                                </MortyTooltipContent>
+                            </Tooltip.Portal>
+                        </Tooltip.Root>
+                    </Tooltip.Provider>
                 )}
                 {control.kind === "select" ? (
-                    <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-copy-tertiary" />
+                    <ChevronRight
+                        aria-hidden="true"
+                        className="size-3.5 shrink-0 text-morty-text-3 transition-colors duration-150 group-hover:text-foreground group-active:text-foreground group-data-[state=open]:text-foreground motion-reduce:transition-none"
+                    />
                 ) : (
                     <span
                         aria-hidden="true"
@@ -331,6 +509,26 @@ function SettingControl({
             </span>
         </button>
     );
+    return control.kind === "select" && nestedContent !== undefined ? (
+        <Popover.Root onOpenChange={onNestedOpenChange} open={nestedOpen}>
+            <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+            <Popover.Portal>
+                {nestedContent(
+                    closeNestedMenu,
+                    {
+                        keepOpen: cancelNestedMenuClose,
+                        scheduleClose: scheduleNestedMenuClose,
+                    },
+                    focusNestedPickerOnOpen,
+                    (pointerInside) => {
+                        nestedMenuHoveredRef.current = pointerInside;
+                    },
+                )}
+            </Popover.Portal>
+        </Popover.Root>
+    ) : (
+        trigger
+    );
 }
 
 export function ChatConfigurationMenu({
@@ -344,6 +542,8 @@ export function ChatConfigurationMenu({
     readonly settingsLoading?: boolean;
 }) {
     const [open, setOpen] = useState(false);
+    const [nestedControlId, setNestedControlId] = useState<string | null>(null);
+    const nestedControlIdRef = useRef<string | null>(null);
     const retainedSettingsRef = useRef<readonly ChatConfigurationControl[]>([]);
     const viewport = useConfigurationViewport();
     const desktop = viewport.desktop;
@@ -352,6 +552,20 @@ export function ChatConfigurationMenu({
     const buttonsRef = useRef(new Map<string, HTMLButtonElement>());
     const restoreFocusRef = useRef<string | null>(null);
     const backRef = useRef<HTMLButtonElement | null>(null);
+    const openNestedControl = useCallback((controlId: string) => {
+        nestedControlIdRef.current = controlId;
+        setNestedControlId(controlId);
+    }, []);
+    const closeNestedControl = useCallback((controlId: string) => {
+        // A submenu that is being replaced can still deliver a deferred
+        // outside-pointer down after the next setting opened. Only the setting
+        // that is still current may close itself.
+        if (nestedControlIdRef.current !== controlId) {
+            return;
+        }
+        nestedControlIdRef.current = null;
+        setNestedControlId(null);
+    }, []);
     useEffect(() => {
         if (page.kind === "picker") {
             backRef.current?.focus();
@@ -367,6 +581,8 @@ export function ChatConfigurationMenu({
     const changeOpen = (next: boolean) => {
         setOpen(next);
         if (!next) {
+            nestedControlIdRef.current = null;
+            setNestedControlId(null);
             setPage({ kind: "overview" });
             restoreFocusRef.current = null;
         }
@@ -431,11 +647,14 @@ export function ChatConfigurationMenu({
               )
             : undefined;
     const header = (
-        <header className="flex min-h-14 shrink-0 items-center gap-2 px-3">
+        <header className="flex min-h-14 shrink-0 items-center gap-2 pl-4 pr-2.5">
             {picker !== undefined && (
                 <button
                     aria-label="Back to Agent configuration"
-                    className="flex size-11 shrink-0 items-center justify-center rounded-lg outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50"
+                    className={cn(
+                        "flex shrink-0 items-center justify-center rounded-lg outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50",
+                        desktop ? "size-9" : "size-11",
+                    )}
                     onClick={goBack}
                     ref={backRef}
                     type="button"
@@ -443,12 +662,13 @@ export function ChatConfigurationMenu({
                     <ArrowLeft aria-hidden="true" className="size-4" />
                 </button>
             )}
-            <span className="min-w-0 flex-1 px-1 text-base font-semibold">
-                {picker?.label ?? "Agent configuration"}
-            </span>
+            <span className="min-w-0 flex-1 px-1 text-16 font-semibold">{picker?.label ?? "Agent configuration"}</span>
             <button
                 aria-label="Close Agent configuration"
-                className="flex size-11 shrink-0 items-center justify-center rounded-lg text-copy-secondary outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50"
+                className={cn(
+                    "flex shrink-0 items-center justify-center rounded-lg text-copy-secondary outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50",
+                    desktop ? "size-9" : "size-11",
+                )}
                 onClick={() => changeOpen(false)}
                 type="button"
             >
@@ -474,15 +694,22 @@ export function ChatConfigurationMenu({
         ) : (
             <>
                 {harness !== undefined && selectedHarness !== undefined && harness.locked === true && (
-                    <div className="px-4 pb-2">
+                    <div className="pb-2 pr-4 pl-5">
                         <Tooltip.Provider delayDuration={150}>
                             <Tooltip.Root>
                                 <Tooltip.Trigger asChild>
                                     <h3
-                                        className="min-w-0 truncate pr-8 text-16 font-semibold"
+                                        className="flex min-w-0 items-center gap-2 text-14 font-medium text-copy-secondary"
                                         data-testid={dataTestId.agentHarness(selectedHarness.value)}
                                     >
-                                        {selectedHarness.tabLabel ?? selectedHarness.label}
+                                        <HarnessMark
+                                            agentRef={selectedHarness.agentRef ?? selectedHarness.value}
+                                            appearance="line"
+                                            label={selectedHarness.label}
+                                        />
+                                        <span className="min-w-0 truncate">
+                                            {selectedHarness.tabLabel ?? selectedHarness.label}
+                                        </span>
                                     </h3>
                                 </Tooltip.Trigger>
                                 <Tooltip.Portal>
@@ -500,7 +727,7 @@ export function ChatConfigurationMenu({
                     fadeToClassName="to-background/0"
                     frameClassName="flex min-h-0 flex-auto flex-col"
                     className={cn(
-                        "flex min-h-0 flex-auto flex-col gap-2 overflow-y-auto overscroll-contain px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]",
+                        "flex min-h-0 flex-auto flex-col gap-2 overflow-y-auto overscroll-contain px-2 pb-0",
                         mortyThinScrollbarClassName,
                     )}
                 >
@@ -521,7 +748,10 @@ export function ChatConfigurationMenu({
                             </p>
                         ) : (
                             displayedSettings.map((control) => (
-                                <div className="border-b border-border/60 last:border-0" key={control.id}>
+                                <div
+                                    className="relative after:pointer-events-none after:absolute after:inset-x-3 after:bottom-0 after:border-b after:border-border/40 after:content-[''] last:after:hidden"
+                                    key={control.id}
+                                >
                                     <SettingControl
                                         control={control}
                                         assignButton={(node) => {
@@ -532,6 +762,93 @@ export function ChatConfigurationMenu({
                                             }
                                         }}
                                         onOpen={() => setPage({ kind: "picker", controlId: control.id })}
+                                        desktop={desktop}
+                                        nestedOpen={nestedControlId === control.id}
+                                        onNestedOpenChange={(next) => {
+                                            if (next) {
+                                                openNestedControl(control.id);
+                                            } else {
+                                                closeNestedControl(control.id);
+                                            }
+                                        }}
+                                        nestedContent={
+                                            desktop && control.kind === "select"
+                                                ? (close, hoverHandlers, focusOnOpen, setHovered) => (
+                                                      <Popover.Content
+                                                          align="start"
+                                                          aria-label={`${control.label} options`}
+                                                          className={cn(
+                                                              "z-50 flex min-h-0 flex-col overflow-hidden",
+                                                              control.searchable
+                                                                  ? "h-[min(24rem,var(--radix-popover-content-available-height))] w-[280px]"
+                                                                  : "max-h-[var(--radix-popover-content-available-height)] w-52",
+                                                              overlaySurfacePanelClassName,
+                                                              overlaySurfaceRadiusClassName,
+                                                          )}
+                                                          collisionPadding={16}
+                                                          onEscapeKeyDown={(event) => {
+                                                              // The submenu owns Escape: closing only it keeps
+                                                              // the configuration panel open for the next setting.
+                                                              event.preventDefault();
+                                                              close();
+                                                          }}
+                                                          onCloseAutoFocus={(event) => {
+                                                              // Replacing A with B unmounts A. Radix would return
+                                                              // focus to A's trigger, which B then observes as an
+                                                              // outside focus event and closes itself. Keep focus in
+                                                              // place while another submenu is taking over.
+                                                              if (nestedControlIdRef.current !== null) {
+                                                                  event.preventDefault();
+                                                              }
+                                                          }}
+                                                          onPointerDownOutside={(event) => {
+                                                              const target = event.target;
+                                                              if (
+                                                                  target instanceof Node &&
+                                                                  buttonsRef.current.get(control.id)?.contains(target)
+                                                              ) {
+                                                                  // The trigger's click handler owns toggling. Radix's
+                                                                  // deferred outside pointer event would otherwise close
+                                                                  // the submenu immediately after that click reopened it.
+                                                                  event.preventDefault();
+                                                              }
+                                                          }}
+                                                          onOpenAutoFocus={preventOverlayOpenAutoFocus}
+                                                          onPointerEnter={() => {
+                                                              setHovered(true);
+                                                              hoverHandlers.keepOpen();
+                                                          }}
+                                                          onPointerLeave={() => {
+                                                              setHovered(false);
+                                                              if (focusOnOpen) {
+                                                                  return;
+                                                              }
+                                                              hoverHandlers.scheduleClose();
+                                                          }}
+                                                          role="dialog"
+                                                          // Open to the right by default. Radix flips the
+                                                          // placement to the left when the remaining viewport
+                                                          // space cannot fit the panel.
+                                                          avoidCollisions
+                                                          side="right"
+                                                          sideOffset={overlayTriggerOffsetPx}
+                                                      >
+                                                          <SettingPicker
+                                                              control={control}
+                                                              focusOnOpen={focusOnOpen}
+                                                              id={`${pickerId}-${control.id}`}
+                                                              nested
+                                                              onSelect={(value) => {
+                                                                  if (value !== control.value) {
+                                                                      control.onValueChange(value);
+                                                                  }
+                                                                  close();
+                                                              }}
+                                                          />
+                                                      </Popover.Content>
+                                                  )
+                                                : undefined
+                                        }
                                         pickerId={pickerId}
                                         mutedWhenDisabled={loadingControlId === undefined}
                                         valueLoading={settingsLoading || control.id === loadingControlId}

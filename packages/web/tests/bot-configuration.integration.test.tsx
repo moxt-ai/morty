@@ -1,4 +1,4 @@
-import { getAllByRole, getByRole, queryByRole } from "@testing-library/dom";
+import { getAllByRole, getByRole, queryAllByRole, queryByRole } from "@testing-library/dom";
 import type { DetachedWindowAPI } from "happy-dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
@@ -31,14 +31,16 @@ test("Given full harness settings, When the user searches and edits them with th
     await openAgentModelPicker(app);
     const search = getByRole(document.body, "searchbox", { name: "Search models" });
     await app.user.type(search, "unmatched model");
-    expect(getByRole(getByRole(document.body, "dialog", { name: "Agent configuration" }), "status").textContent).toBe(
+    expect(getByRole(getByRole(document.body, "dialog", { name: "Model options" }), "status").textContent).toBe(
         "No models found.",
     );
     await app.user.keyboard("{Escape}");
     const model = getByRole(document.body, "combobox", { name: "Model" });
     await app.waitForView(() => expect(document.activeElement).toBe(model));
     await app.user.keyboard("{ArrowDown}");
-    await app.user.type(getByRole(document.body, "searchbox", { name: "Search models" }), "large");
+    const keyboardSearch = getByRole(document.body, "searchbox", { name: "Search models" });
+    await app.waitForView(() => expect(document.activeElement).toBe(keyboardSearch));
+    await app.user.type(keyboardSearch, "large");
     await app.user.keyboard("{ArrowDown}{Enter}");
     await app.waitForView(() => {
         const updatedModel = getByRole(document.body, "combobox", { name: "Model" });
@@ -68,6 +70,158 @@ test("Given full harness settings, When the user searches and edits them with th
         expect(getByRole(document.body, "combobox", { name: "Effort" }).textContent).toContain("Low");
         expect(getByRole(document.body, "switch", { name: "Fast mode" }).getAttribute("aria-checked")).toBe("true");
     });
+});
+
+test("Given a paired Bot on desktop, When the user hovers Mode, Then its options expand to the left and clicking keeps them open", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: { id: "configuration-test", label: "Settings Agent" },
+    });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.getAttribute("data-connection-status") === "connected",
+    );
+
+    const trigger = await app.queryElementByTestId(dataTestId.agentConfiguration);
+    await app.user.click(trigger);
+    const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
+    const mode = getByRole(configuration, "combobox", { name: "Mode" });
+    await app.user.pointer({ target: mode });
+    const modeMenu = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Mode options" }));
+    expect(modeMenu.getAttribute("data-side")).toBe("right");
+    expect(mode.getAttribute("aria-expanded")).toBe("true");
+
+    await app.user.click(mode);
+    expect(getByRole(document.body, "dialog", { name: "Mode options" })).toBe(modeMenu);
+    await app.user.keyboard("{Escape}");
+    await app.waitForView(() => expect(queryByRole(document.body, "dialog", { name: "Mode options" })).toBeNull());
+    // Escape closes only the submenu; the panel stays open so the next setting is reachable.
+    expect(getByRole(document.body, "dialog", { name: "Agent configuration" })).toBeDefined();
+
+    const model = getByRole(configuration, "combobox", { name: "Model" });
+    await app.user.pointer({ target: model });
+    await app.waitForView(() => getByRole(document.body, "dialog", { name: "Model options" }));
+    await app.user.pointer({ target: mode });
+    await app.waitForView(() => {
+        expect(queryByRole(document.body, "dialog", { name: "Model options" })).toBeNull();
+        expect(getByRole(document.body, "dialog", { name: "Mode options" })).toBeDefined();
+    });
+
+    // Moving straight from one row to the next must hand the submenu over in
+    // place, like a conventional hover menu, instead of closing and reopening.
+    const effort = getByRole(configuration, "combobox", { name: "Effort" });
+    for (const [row, name] of [
+        [model, "Model options"],
+        [effort, "Effort options"],
+        [mode, "Mode options"],
+    ] as const) {
+        await app.user.pointer({ target: row });
+        await app.waitForView(() => {
+            expect(getByRole(document.body, "dialog", { name })).toBeDefined();
+            expect(queryAllByRole(document.body, "dialog", { name: / options$/ })).toHaveLength(1);
+        });
+    }
+});
+
+test("Given a paired Bot on desktop, When the user opens Model, Then its options expand to the left while the configuration panel remains", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.getAttribute("data-connection-status") === "connected",
+    );
+
+    const trigger = await app.queryElementByTestId(dataTestId.agentConfiguration);
+    await app.user.click(trigger);
+    const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
+    const model = getByRole(configuration, "combobox", { name: "Model" });
+    await app.user.click(model);
+
+    const modelMenu = getByRole(document.body, "dialog", { name: "Model options" });
+    expect(modelMenu.getAttribute("data-side")).toBe("right");
+    expect(getByRole(configuration, "combobox", { name: "Model" })).toBeDefined();
+    expect(model.querySelector(".lucide-chevron-right")).not.toBeNull();
+    expect(model.querySelector(".lucide-chevron-right")?.classList.contains("text-morty-text-3")).toBe(true);
+    expect(model.querySelector(".lucide-chevron-right")?.classList.contains("group-hover:text-foreground")).toBe(true);
+    const modelValue = model.querySelector("span.min-w-0.truncate");
+    expect(modelValue?.classList.contains("text-copy-secondary")).toBe(true);
+    expect(modelValue?.classList.contains("group-hover:text-secondary-foreground")).toBe(true);
+    expect(modelValue?.classList.contains("group-active:text-foreground")).toBe(true);
+    expect(modelValue?.classList.contains("group-data-[state=open]:text-foreground")).toBe(true);
+    const search = getByRole(modelMenu, "searchbox", { name: "Search models" });
+    expect(search.classList.contains("h-9")).toBe(true);
+    expect(search.classList.contains("focus:border-ring")).toBe(true);
+    expect(search.classList.contains("focus:ring-[3px]")).toBe(true);
+    // Opening with the pointer keeps the search field idle: no focus ring
+    // until the user explicitly clicks into it.
+    expect(document.activeElement).not.toBe(search);
+    await app.user.click(search);
+    expect(document.activeElement).toBe(search);
+
+    await app.user.click(getByRole(modelMenu, "option", { name: "Test Large" }));
+    await app.waitForView(() => {
+        expect(queryByRole(document.body, "dialog", { name: "Model options" })).toBeNull();
+        expect(getByRole(configuration, "combobox", { name: "Model" }).textContent).toContain("Test Large");
+        expect(document.activeElement).toBe(getByRole(configuration, "combobox", { name: "Model" }));
+    });
+});
+
+test("Given full harness settings, When one setting changes, Then only that setting shows loading while the others stay interactive", {
+    timeout: 30_000,
+}, async () => {
+    const configurationCanFinish = Promise.withResolvers<void>();
+    const configurationStarted = Promise.withResolvers<void>();
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: {
+            beforeConfigurationApplied: async (configId, value) => {
+                if (configId === "mode" && value === "plan") {
+                    configurationStarted.resolve();
+                    await configurationCanFinish.promise;
+                }
+            },
+            id: "configuration-test",
+            label: "Settings Agent",
+        },
+    });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.getAttribute("data-connection-status") === "connected",
+    );
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Start a session");
+    await app.waitForView(() => {
+        expect(app.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain("Start a session");
+        expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
+    });
+    await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
+    const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
+    const mode = getByRole(configuration, "combobox", { name: "Mode" });
+    const model = getByRole(configuration, "combobox", { name: "Model" });
+    const effort = getByRole(configuration, "combobox", { name: "Effort" });
+
+    await app.user.click(mode);
+    await app.user.click(getByRole(document.body, "option", { name: "Plan" }));
+    await configurationStarted.promise;
+    await app.waitForView(() => {
+        expect(getByRole(configuration, "combobox", { name: "Mode" }).getAttribute("aria-busy")).toBe("true");
+        expect(getByRole(configuration, "combobox", { name: "Mode" }).hasAttribute("disabled")).toBe(true);
+        expect(getByRole(configuration, "status", { name: "Loading Mode" })).toBeDefined();
+        expect(getByRole(configuration, "combobox", { name: "Model" }).getAttribute("aria-busy")).toBeNull();
+        expect(getByRole(configuration, "combobox", { name: "Effort" }).getAttribute("aria-busy")).toBeNull();
+        expect(queryAllByRole(configuration, "status", { name: /^Loading / })).toHaveLength(1);
+    });
+
+    configurationCanFinish.resolve();
+    await app.waitForView(() => {
+        expect(getByRole(configuration, "combobox", { name: "Mode" }).textContent).toContain("Plan");
+        expect(getByRole(configuration, "combobox", { name: "Mode" }).getAttribute("aria-busy")).toBeNull();
+        expect(queryAllByRole(configuration, "status", { name: /^Loading / })).toHaveLength(0);
+    });
+    expect(model.getAttribute("aria-busy")).toBeNull();
+    expect(effort.getAttribute("aria-busy")).toBeNull();
 });
 
 test("Given Morty has no paired agent, When the setup page opens, Then it offers the current-origin setup instruction without a data region selector", {

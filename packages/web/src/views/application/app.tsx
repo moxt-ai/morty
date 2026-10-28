@@ -1,12 +1,12 @@
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
 import { ArrowLeft, Unplug } from "lucide-react";
 import { SetupConnectionGraphic } from "../../components/setup/setup-connection-graphic.tsx";
-import { LoadingWave } from "../../components/ui/loading-wave.tsx";
 import { MortyAlert } from "../../components/ui/morty-alert.tsx";
 import { Button, Spinner } from "../../index.ts";
 import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-store.ts";
 import { PairingInstruction } from "../chat/pairing-instruction.tsx";
 import { BugReportButton, BugReportDialogHost } from "../diagnostics/bug-report-button.tsx";
+import { GlobalLoadingPage } from "../setup/global-loading-page.tsx";
 import {
     SetupCardAlert,
     SetupCardDescription,
@@ -14,7 +14,6 @@ import {
     SetupCardSection,
     SetupCardShell,
     SetupCardTitle,
-    SetupPageWithHeader,
     setupPrimaryButtonClassName,
     setupPrimaryButtonSize,
 } from "../setup/setup-card-shell.tsx";
@@ -60,13 +59,7 @@ export function App({
 function ApplicationContent({ state }: { readonly state: AppState }) {
     switch (state.kind) {
         case "loading":
-            return (
-                <SetupPageWithHeader>
-                    <span role="status" aria-label="Loading Morty">
-                        <LoadingWave size="lg" />
-                    </span>
-                </SetupPageWithHeader>
-            );
+            return <GlobalLoadingPage label="Loading Morty" />;
         case "failed":
             return (
                 <SetupCardShell

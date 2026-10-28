@@ -133,24 +133,6 @@ export function SetupCardSection({
     return <div className={cn(setupContentStackClassName, className)}>{children}</div>;
 }
 
-export function SetupCardOpeningStatus({
-    ariaLabel,
-    children,
-}: {
-    readonly ariaLabel: string;
-    readonly children: ReactNode;
-}) {
-    return (
-        <p
-            role="status"
-            aria-label={ariaLabel}
-            className="mt-2 flex max-w-xl items-start gap-2 text-16 leading-[26px] text-muted-foreground [&>span:first-child]:h-[26px]"
-        >
-            {children}
-        </p>
-    );
-}
-
 export function SetupCardShell({
     cardClassName = "",
     cardLeading,

@@ -3,7 +3,12 @@ import type { ReactNode } from "react";
 import type { StoreApi } from "zustand/vanilla";
 import { mortyThinScrollbarClassName } from "../../components/chat/chat-session-layout.ts";
 import { NativeSessionDirectoryPlaceholder } from "../../components/chat/native-session-directory-placeholder.tsx";
-import { SessionAgentTabs } from "../../components/chat/session-agent-tabs.tsx";
+import {
+    SessionAgentTabs,
+    sessionAgentTabInactiveLayoutClassName,
+    sessionAgentTabSelectedLayoutClassName,
+    sessionAgentTabsListClassName,
+} from "../../components/chat/session-agent-tabs.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { Select } from "../../components/ui/option-select.tsx";
@@ -59,20 +64,39 @@ function NativeSessionAgentTabsSkeleton() {
     return (
         <div
             aria-hidden="true"
-            className="flex h-9 animate-pulse gap-0.5 rounded-full bg-morty-fill-opacity-2 p-0.5 motion-reduce:animate-none sm:mx-2.5"
+            className={cn(
+                sessionAgentTabsListClassName,
+                "animate-pulse motion-reduce:animate-none sm:ml-0.5 sm:mr-2.5",
+            )}
         >
-            <div className="h-full w-10 rounded-full bg-morty-fill-opacity-3" />
-            <div className="h-full w-10 rounded-full bg-morty-fill-opacity-3" />
-            <div className="h-full w-10 rounded-full bg-morty-fill-opacity-3" />
+            {/* The first tab is selected, so it takes the remaining width instead of an icon-only slot. */}
+            <div className={cn(sessionAgentTabSelectedLayoutClassName, "gap-1.5 border border-transparent bg-card")}>
+                <div className="size-4 shrink-0 rounded-sm bg-morty-fill-opacity-3" />
+                <div className="h-3 min-w-0 flex-1 rounded-full bg-morty-fill-opacity-3" />
+            </div>
+            <div className={sessionAgentTabInactiveLayoutClassName}>
+                <div className="size-4 rounded-sm bg-morty-fill-opacity-3" />
+            </div>
+            <div className={sessionAgentTabInactiveLayoutClassName}>
+                <div className="size-4 rounded-sm bg-morty-fill-opacity-3" />
+            </div>
         </div>
     );
 }
 
 function NativeSessionFooterSkeleton() {
     return (
-        <div aria-hidden="true" className="flex animate-pulse justify-end gap-2 motion-reduce:animate-none">
-            <div className="h-9 w-[4.5rem] rounded-full bg-morty-fill-opacity-3" />
-            <div className="h-9 w-[4.5rem] rounded-full bg-morty-fill-opacity-3" />
+        <div aria-hidden="true" className="flex w-full animate-pulse justify-end gap-2 motion-reduce:animate-none">
+            {/* Render the real buttons as inert blocks so the placeholder keeps their exact box. */}
+            {["Open", "Fork"].map((label) => (
+                <Button
+                    className="border-transparent bg-morty-fill-opacity-3 disabled:opacity-100"
+                    disabled
+                    key={label}
+                >
+                    <span className="invisible">{label}</span>
+                </Button>
+            ))}
         </div>
     );
 }
@@ -197,7 +221,7 @@ export function NativeSessionDialog({
                                     {agents.length > 0 && (
                                         <SessionAgentTabs
                                             agents={agents}
-                                            className="sm:mx-2.5"
+                                            className="sm:ml-0.5 sm:mr-2.5"
                                             dimInactive={
                                                 !(
                                                     model.directory.kind === "loading" &&
@@ -308,7 +332,7 @@ export function NativeSessionDialog({
                                             }}
                                             frameClassName="hidden min-h-0 flex-1 sm:flex sm:flex-col"
                                             className={cn(
-                                                "min-h-0 flex-1 space-y-0 overflow-y-auto pr-3 pb-2 pl-1",
+                                                "min-h-0 flex-1 space-y-0 overflow-y-auto pr-3 pb-2",
                                                 mortyThinScrollbarClassName,
                                             )}
                                         >
@@ -437,33 +461,40 @@ export function NativeSessionDialog({
                                         {reportButton}
                                     </div>
                                 )}
-                                <footer className="flex shrink-0 justify-end gap-2 px-4 py-3 sm:px-5">
-                                    <Button
-                                        data-testid={dataTestId.importLocalSession}
-                                        variant="outline"
-                                        disabled={
-                                            model.preview.kind !== "ready" ||
-                                            model.operation !== "idle" ||
-                                            model.directory.kind !== "ready" ||
-                                            (!model.directory.capabilities.loadSession &&
-                                                !model.directory.capabilities.resumeSession)
-                                        }
-                                        onClick={() =>
-                                            withSignal(async (signal) => await store.getState().open("import", signal))
-                                        }
-                                    >
-                                        {model.operation === "import" ? "Opening…" : "Open"}
-                                    </Button>
-                                    <Button
-                                        data-testid={dataTestId.forkLocalSession}
-                                        disabled={model.preview.kind !== "ready" || model.operation !== "idle"}
-                                        onClick={() =>
-                                            withSignal(async (signal) => await store.getState().open("fork", signal))
-                                        }
-                                    >
-                                        {model.operation === "fork" ? "Forking…" : "Fork"}
-                                    </Button>
-                                </footer>
+                                {/* Both actions need a session: with nothing previewed they would be dead controls. */}
+                                {model.preview.kind !== "empty" && (
+                                    <footer className="flex shrink-0 justify-end gap-2 px-4 py-3 sm:px-5">
+                                        <Button
+                                            data-testid={dataTestId.importLocalSession}
+                                            variant="outline"
+                                            disabled={
+                                                model.preview.kind !== "ready" ||
+                                                model.operation !== "idle" ||
+                                                model.directory.kind !== "ready" ||
+                                                (!model.directory.capabilities.loadSession &&
+                                                    !model.directory.capabilities.resumeSession)
+                                            }
+                                            onClick={() =>
+                                                withSignal(
+                                                    async (signal) => await store.getState().open("import", signal),
+                                                )
+                                            }
+                                        >
+                                            {model.operation === "import" ? "Opening…" : "Open"}
+                                        </Button>
+                                        <Button
+                                            data-testid={dataTestId.forkLocalSession}
+                                            disabled={model.preview.kind !== "ready" || model.operation !== "idle"}
+                                            onClick={() =>
+                                                withSignal(
+                                                    async (signal) => await store.getState().open("fork", signal),
+                                                )
+                                            }
+                                        >
+                                            {model.operation === "fork" ? "Forking…" : "Fork"}
+                                        </Button>
+                                    </footer>
+                                )}
                             </div>
                         </div>
                     )}

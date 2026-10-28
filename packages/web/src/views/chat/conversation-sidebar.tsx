@@ -80,7 +80,7 @@ function SidebarSessionOption({
             className={
                 variant === "card"
                     ? mobileDrawerCardRowClassName
-                    : "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 active:bg-morty-fill-opacity-3 active:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-copy-secondary disabled:active:text-copy-secondary motion-reduce:transition-none"
+                    : "flex w-full items-center gap-3 rounded-lg px-3.5 py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 active:bg-morty-fill-opacity-3 active:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-copy-secondary disabled:active:text-copy-secondary motion-reduce:transition-none"
             }
             data-testid={testId}
             disabled={disabled}
@@ -181,7 +181,7 @@ function ManagedSessionDirectoryList({
             )}
             {conversationGroups?.map((group) => (
                 <section className="mb-3 min-w-0 w-full space-y-0 last:mb-0" key={group.label}>
-                    <h3 className="sticky top-0 z-[1] -mx-2 mb-0 bg-card px-[22px] pb-1 pt-1 text-13 font-normal text-morty-text-3 sm:-mx-3 sm:bg-sidebar sm:text-11">
+                    <h3 className="sticky top-0 z-[1] -mx-2 mb-0 bg-card px-[22px] pb-1 pt-1 text-13 font-normal text-morty-text-3 sm:-mx-2.5 sm:bg-sidebar sm:px-6 sm:text-11">
                         {group.label}
                     </h3>
                     {group.sessions.map((session) => {
@@ -193,7 +193,7 @@ function ManagedSessionDirectoryList({
                                 aria-current={activeId === session.id ? "page" : undefined}
                                 disabled={connectionStatus.kind !== "connected"}
                                 onClick={() => onOpen(session)}
-                                className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-4 py-2 text-left text-15 font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 aria-[current=page]:hover:text-foreground aria-[current=page]:disabled:hover:text-foreground motion-reduce:transition-none sm:px-3 sm:text-13"
+                                className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-4 py-2 text-left text-15 font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 aria-[current=page]:hover:text-foreground aria-[current=page]:disabled:hover:text-foreground motion-reduce:transition-none sm:h-9 sm:px-3.5 sm:py-0 sm:text-13"
                             >
                                 <span className="min-w-0 truncate">{session.title}</span>
                                 {(sessionStatuses.get(session.id) ?? session.status).kind === "working" ? (
@@ -413,7 +413,7 @@ export function ConversationSidebar({
                                         ref={dialogs.getState().onAttach}
                                         id="conversation-sidebar-mobile-panel"
                                         aria-label="Morty navigation"
-                                        className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-card/90 px-3 pt-0 max-sm:overflow-visible sm:isolate sm:w-[264px] sm:gap-0 sm:bg-sidebar sm:pt-2 sm:pb-4"
+                                        className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-card/90 px-3 pt-0 max-sm:overflow-visible sm:isolate sm:w-[264px] sm:gap-0 sm:bg-sidebar sm:px-2.5 sm:pt-2 sm:pb-4"
                                     >
                                         <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-4 py-0 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:bg-card/90 sm:gap-3">
                                             <div
@@ -421,7 +421,10 @@ export function ConversationSidebar({
                                                     "relative z-[1] flex w-fit shrink-0 items-center gap-2 sm:w-full sm:pl-1",
                                                     desktop &&
                                                         workspace.computers !== null &&
-                                                        "sm:min-w-0 sm:shrink sm:pl-0",
+                                                        // The computer switcher bleeds left with a negative margin; this keeps its
+                                                        // mark on the same 16px optical gutter the sidebar had before the
+                                                        // outer padding tightened to 10px.
+                                                        "sm:min-w-0 sm:shrink sm:pl-0.5",
                                                 )}
                                             >
                                                 <button
@@ -595,7 +598,7 @@ export function ConversationSidebar({
                                             {desktop && (
                                                 <div className="hidden min-h-0 flex-1 sm:flex sm:min-h-0 sm:flex-col sm:gap-0">
                                                     <Tooltip.Provider delayDuration={150}>
-                                                        <div className="flex min-w-0 items-center justify-between gap-2.5 pl-2.5 sm:mb-0 sm:w-full">
+                                                        <div className="flex min-w-0 items-center justify-between gap-2.5 pl-2.5 sm:mb-0 sm:w-full sm:pl-3">
                                                             <h2 className="font-inter text-13 font-semibold tracking-normal text-copy-secondary">
                                                                 Recent sessions
                                                             </h2>
@@ -634,9 +637,9 @@ export function ConversationSidebar({
                                                             fadeFromClassName="from-sidebar"
                                                             fadeToClassName="to-sidebar/0"
                                                             topFadeClassName="top-6 h-6"
-                                                            frameClassName="col-span-2 -ml-3 -mr-3 box-border flex min-h-0 min-w-0 w-[calc(100%+24px)] max-w-none flex-1 flex-col max-sm:row-start-2"
+                                                            frameClassName="col-span-2 -ml-3 -mr-3 box-border flex min-h-0 min-w-0 w-[calc(100%+24px)] max-w-none flex-1 flex-col max-sm:row-start-2 sm:-ml-2.5 sm:-mr-2.5 sm:w-[calc(100%+20px)]"
                                                             className={cn(
-                                                                "min-h-0 flex-1 space-y-0 overflow-y-auto px-3",
+                                                                "min-h-0 flex-1 space-y-0 overflow-y-auto px-3 sm:px-2.5",
                                                                 mortyThinScrollbarClassName,
                                                             )}
                                                         >

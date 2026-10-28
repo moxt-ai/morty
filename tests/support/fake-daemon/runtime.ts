@@ -56,9 +56,12 @@ export interface ControlledAgent {
     readonly id: string;
     readonly label: string;
     readonly runtime?: ControlledRuntimeRelease;
+    /** Test control that holds a selected Agent configuration request before it is applied. */
+    readonly beforeConfigurationApplied?: ((configId: string, value: string | boolean) => Promise<void>) | undefined;
 }
 
 export interface ControlledAgentBehavior extends FakeAgentHarnessOptions {
+    readonly beforeConfigurationApplied?: ((configId: string, value: string | boolean) => Promise<void>) | undefined;
     readonly files?: ReadonlyMap<string, { readonly content: string | Uint8Array; readonly mediaType: string }>;
     readonly runtime?: ControlledRuntimeRelease;
 }
@@ -189,7 +192,10 @@ export function createMortyFakeDaemon(behavior: ControlledAgentBehavior, workspa
         return { ...harness, agents: [createInteractionAgent()] };
     }
     if (behavior.agentId === "configuration-test") {
-        return { ...harness, agents: [createSettingsAgent(defineCurrentAgent, "full")] };
+        return {
+            ...harness,
+            agents: [createSettingsAgent(defineCurrentAgent, "full", behavior.beforeConfigurationApplied)],
+        };
     }
     if (behavior.agentId === "settings-test") {
         return { ...harness, agents: [createSettingsAgent(defineCurrentAgent)] };

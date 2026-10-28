@@ -388,7 +388,7 @@ function SessionConversationTitleBar({
                     className={cn(
                         "flex min-w-0 items-center font-semibold",
                         titleTextClassName,
-                        centered ? "w-full max-w-full justify-center gap-1" : "gap-2",
+                        centered ? "w-full max-w-full justify-center gap-1" : "gap-2.5",
                     )}
                 >
                     {titleHarnessMark(true)}
@@ -410,7 +410,7 @@ function SessionConversationTitleBar({
                 className={cn(
                     "flex min-w-0 items-center font-semibold",
                     titleTextClassName,
-                    centered ? "w-full max-w-full justify-center gap-1" : "gap-2",
+                    centered ? "w-full max-w-full justify-center gap-1" : "gap-2.5",
                 )}
                 title={displayTitle}
             >
@@ -435,7 +435,7 @@ function SessionConversationTitleBar({
         <div
             className={cn(
                 "flex items-center",
-                centered ? "w-max min-w-[14rem] max-w-[70vw] justify-center gap-1" : "min-w-0 flex-1 gap-2",
+                centered ? "w-max min-w-[14rem] max-w-[70vw] justify-center gap-1" : "min-w-0 flex-1 gap-2.5",
             )}
         >
             {titleHarnessMark(false)}
@@ -727,6 +727,7 @@ function MobiusSessionPaneBody({
                                     <ReadonlyWorkingDirectory
                                         className="shrink-0"
                                         directoryLabel={workingDirectoryLabel}
+                                        iconClassName="size-3"
                                         tooltipSide="bottom"
                                     />
                                 )}
@@ -1003,7 +1004,9 @@ function MobiusSessionPaneBody({
                                               },
                                     ),
                                 ]}
-                                settingsLoading={model.operation.kind === "configuring"}
+                                {...(model.operation.kind === "configuring"
+                                    ? { loadingControlId: model.operation.configId }
+                                    : {})}
                             />
                             {model.operation.kind === "configuring" && (
                                 <span role="status" className="sr-only">
@@ -1026,7 +1029,7 @@ function MobiusSessionPaneBody({
                                     <WorkingDirectorySkeleton className="mt-0.5 h-5 max-w-full" />
                                 ) : (
                                     <ReadonlyWorkingDirectory
-                                        className="-mb-1.5 min-h-0 max-w-full gap-1 py-0 text-[11px] font-normal text-morty-text-3"
+                                        className="-mb-1.5 min-h-0 max-w-full gap-1 px-1 py-0 text-[11px] font-normal text-morty-text-3"
                                         clip="end"
                                         directoryLabel={workingDirectoryLabel}
                                         iconClassName="size-3"

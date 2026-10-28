@@ -3,11 +3,15 @@ import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
 import { HarnessMark } from "./harness-mark.tsx";
 
-const sessionAgentTabsListClassName = "flex h-9 min-w-0 gap-0.5 rounded-full bg-morty-fill-opacity-2 p-0.5";
+export const sessionAgentTabsListClassName = "flex h-9 min-w-0 gap-0.5 rounded-full bg-morty-fill-opacity-2 p-0.5";
 
-/** Icon-only tab footprint; keep in sync with `SessionAgentTabs` loading skeleton. */
-const sessionAgentTabInactiveLayoutClassName =
+/** Icon-only tab footprint; shared with the loading skeleton. */
+export const sessionAgentTabInactiveLayoutClassName =
     "box-border flex h-full w-14 min-w-0 shrink-0 grow-0 items-center justify-center px-1.5 sm:w-10";
+
+/** Selected tab footprint; mirrors the trigger's active state for the loading skeleton. */
+export const sessionAgentTabSelectedLayoutClassName =
+    "box-border flex h-full min-w-0 flex-1 shrink grow items-center justify-center rounded-full px-2.5";
 
 const sessionAgentTabTriggerClassName = cn(
     "group relative gap-1.5 rounded-full border border-transparent text-[13px] text-copy-secondary outline-none transition-[flex-grow,background-color,color,border-color] duration-200 hover:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:hover:bg-transparent data-[state=inactive]:hover:bg-morty-fill-opacity-3 data-[state=active]:border-white data-[state=active]:bg-card data-[state=active]:font-medium data-[state=active]:text-foreground motion-reduce:transition-none",

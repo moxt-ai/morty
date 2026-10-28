@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Info, LoaderCircle, Plus } from "lucide-react";
+import { Check, ChevronDown, LoaderCircle, MonitorCog, Plus } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { useStore } from "zustand";
 import { cn } from "@/lib/utils";
@@ -106,7 +106,7 @@ function ComputerChoiceContent({
 }
 
 const menuRowClassName =
-    "rounded-md px-3 py-2 cursor-pointer transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 data-[highlighted]:bg-accent motion-reduce:transition-none";
+    "h-9 rounded-full px-3 cursor-pointer transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 data-[highlighted]:bg-accent motion-reduce:transition-none";
 
 function ComputerMenuChoice({ activeKey, choice }: { readonly activeKey: string; readonly choice: ComputerChoice }) {
     const current = choice.key === activeKey;
@@ -227,7 +227,7 @@ export function ComputerSwitcher({
                             onClick={openDetails}
                             type="button"
                         >
-                            <Info aria-hidden="true" className="size-5 shrink-0 text-copy-secondary" />
+                            <MonitorCog aria-hidden="true" className="size-5 shrink-0 text-copy-secondary" />
                             View execution details
                         </button>
                         <div className={cn(mobileDrawerOptionDividerClassName, "border-t-[0.5px] border-black/[0.06]")}>
@@ -281,14 +281,14 @@ export function ComputerSwitcher({
                             className="group -mr-1 -ml-1.5 flex h-[50px] w-[calc(100%+0.625rem)] min-w-0 items-center gap-2 rounded-[16px] py-1.5 pr-3 pl-0.5 text-left outline-none transition-colors hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 data-[state=open]:bg-morty-fill-opacity-3 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 motion-reduce:transition-none"
                         >
                             <MortyLogoMark className="ml-2" size={30} />
-                            <span className="flex min-w-0 flex-1 flex-col">
+                            <span className="mr-1.5 flex min-w-0 flex-1 flex-col">
                                 <span
                                     className="mb-0.5 truncate font-inter text-15 leading-5 font-semibold tracking-[-0.01em] text-copy-secondary transition-colors duration-150 group-hover:text-foreground motion-reduce:transition-none"
                                     title={computerName}
                                 >
                                     {computerName}
                                 </span>
-                                <span className="-mb-0.5 flex min-w-0 items-center gap-1.5 text-12 leading-4 text-morty-text-3">
+                                <span className="-mb-0.5 flex min-w-0 items-center gap-1 text-12 leading-4 text-morty-text-3">
                                     <StatusDot
                                         className="size-1.5"
                                         online={status.kind === "connected"}
@@ -328,10 +328,10 @@ export function ComputerSwitcher({
                             {/* Details describe the computer shown on the trigger, so they sit right below it. */}
                             <DropdownMenu.Item
                                 aria-label={detailsLabel}
-                                className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md px-3 text-copy-secondary outline-none data-[highlighted]:bg-accent data-[highlighted]:text-foreground"
+                                className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-full px-3 text-copy-secondary outline-none data-[highlighted]:bg-accent data-[highlighted]:text-foreground"
                                 onSelect={openDetails}
                             >
-                                <Info aria-hidden="true" className="size-4 shrink-0" />
+                                <MonitorCog aria-hidden="true" className="size-4 shrink-0" />
                                 View execution details
                             </DropdownMenu.Item>
                             <DropdownMenu.Separator className={cn("-mx-1.5 my-1.5", overlayMenuSeparatorClassName)} />
@@ -368,7 +368,7 @@ export function ComputerSwitcher({
                             <DropdownMenu.Item asChild>
                                 <a
                                     href="/setup"
-                                    className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md px-3 outline-none data-[highlighted]:bg-accent"
+                                    className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-full px-3 outline-none data-[highlighted]:bg-accent"
                                 >
                                     <Plus aria-hidden="true" className="size-4" />
                                     Connect another computer

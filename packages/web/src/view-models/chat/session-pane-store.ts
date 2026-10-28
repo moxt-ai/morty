@@ -86,7 +86,7 @@ export type SessionPaneModel = ReturnType<typeof createSessionPaneModel>;
 /** A change to the Session's settings. */
 type Operation =
     | { readonly kind: "idle" }
-    | { readonly kind: "configuring" }
+    | { readonly kind: "configuring"; readonly configId: string }
     | { readonly kind: "failed"; readonly message: string };
 
 /** Renaming the Session. A failed rename closes the editor and keeps its failure until the next edit. */
@@ -1567,7 +1567,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 const connected = client;
-                set({ operation: { kind: "configuring" } });
+                set({ operation: { configId: option.id, kind: "configuring" } });
                 const reopeningsAtStart = reopenings;
                 try {
                     const result = await client.sessions.updateConfiguration(

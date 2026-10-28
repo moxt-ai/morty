@@ -34,6 +34,7 @@ export const defineCurrentAgent: DefineInProcessAgent<AcpAgentDefinition> = (id,
 export function createSettingsAgent<Definition>(
     define: DefineInProcessAgent<Definition>,
     profile: "model" | "full" = "model",
+    beforeConfigurationApplied?: (configId: string, value: string | boolean) => Promise<void>,
 ) {
     const sessions = new Map<string, acp.SessionConfigOption[]>();
     const histories = new Map<string, acp.SessionUpdate[]>();
@@ -118,8 +119,9 @@ export function createSettingsAgent<Definition>(
             .onRequest(acp.methods.agent.session.resume, (context) => ({
                 configOptions: configuration(context.params.sessionId),
             }))
-            .onRequest(acp.methods.agent.session.setConfigOption, (context) => {
+            .onRequest(acp.methods.agent.session.setConfigOption, async (context) => {
                 const { configId, value, sessionId } = context.params;
+                await beforeConfigurationApplied?.(configId, value);
                 const current = configuration(sessionId).find((option) => option.id === configId);
                 if (current === undefined) {
                     throw new Error("Unknown controlled setting");

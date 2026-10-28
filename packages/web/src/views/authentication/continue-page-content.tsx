@@ -1,12 +1,11 @@
 import type { ReactNode } from "react";
-import { LoadingWave } from "../../components/ui/loading-wave.tsx";
 import { Button } from "../../index.ts";
 import type { ContinueState } from "../../view-models/authentication/continue-store.ts";
 import { describePageFailure } from "../../view-models/format-error.ts";
+import { GlobalLoadingPage } from "../setup/global-loading-page.tsx";
 import {
     SetupCardDescription,
     SetupCardFailureIcon,
-    SetupCardOpeningStatus,
     SetupCardSection,
     SetupCardShell,
     SetupCardTitle,
@@ -68,18 +67,7 @@ export function ContinuePageContent({
     switch (state.kind) {
         case "session-opening":
         case "session-resuming":
-            return (
-                <SetupCardShell cardClassName="pb-10" showPageHeader titleId="continue-title">
-                    <SetupCardTitle id="continue-title">Continue native session</SetupCardTitle>
-                    <SetupCardDescription>Opening the original session in Morty.</SetupCardDescription>
-                    <SetupCardSection className="flex items-center justify-center gap-3 space-y-0">
-                        <span role="status" aria-label="Opening session">
-                            <LoadingWave size="inline" />
-                        </span>
-                        <span className="text-14 leading-none text-muted-foreground">Opening session…</span>
-                    </SetupCardSection>
-                </SetupCardShell>
-            );
+            return <GlobalLoadingPage label="Opening session" />;
         case "session-failed": {
             const copy = describePageFailure(state.message, "Couldn't open this session");
             return (
@@ -133,15 +121,7 @@ export function ContinuePageContent({
                 </ContinueError>
             );
         case "identity-redeeming":
-            return (
-                <SetupCardShell cardClassName="pb-10" showPageHeader titleId="continue-title">
-                    <SetupCardTitle id="continue-title">Continue in Morty</SetupCardTitle>
-                    <SetupCardOpeningStatus ariaLabel="Securely transferring Morty access">
-                        <LoadingWave size="inline" />
-                        <span>Securely transferring Morty access…</span>
-                    </SetupCardOpeningStatus>
-                </SetupCardShell>
-            );
+            return <GlobalLoadingPage label="Securely transferring Morty access" />;
         case "failed": {
             const copy = describePageFailure(state.message, "Couldn't continue");
             return (

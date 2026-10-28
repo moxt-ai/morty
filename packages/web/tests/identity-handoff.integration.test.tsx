@@ -34,7 +34,7 @@ test("Given a stored identity for the active project, When the user shares acces
     expect(queryByRole(sharing, "alert")).toBeNull();
 });
 
-test("Given a native session handoff, When the page loads, Then it tells the user the session is opening instead of offering choices and a QR code", {
+test("Given a native session handoff, When the page loads, Then it shows the shared centered loading mark instead of a continue card", {
     timeout: 30_000,
 }, async () => {
     const sessionId = "01a0d270-0d62-7003-98df-22a5d11dc644";
@@ -45,10 +45,12 @@ test("Given a native session handoff, When the page loads, Then it tells the use
         page: { harness: "pi", kind: "continue", sessionId },
     });
 
-    expect(await app.waitForView(() => getByRole(document.body, "status", { name: "Opening session" }))).toBeInstanceOf(
-        HTMLElement,
-    );
-    expect(document.body.textContent).toContain("Opening the original session in Morty.");
+    const loading = await app.waitForView(() => getByRole(document.body, "status", { name: "Opening session" }));
+    expect(loading).toBeInstanceOf(HTMLElement);
+    expect(loading.querySelectorAll("[data-loading-dot]")).toHaveLength(3);
+    expect(queryByRole(document.body, "heading", { name: "Continue native session" })).toBeNull();
+    expect(document.body.textContent).not.toContain("Opening the original session in Morty.");
+    expect(document.body.textContent).not.toContain("Opening session…");
     expect(queryByRole(document.body, "button", { name: "Open session" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Fork session" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Go to Morty" })).toBeNull();
@@ -67,7 +69,7 @@ test("Given a native session handoff, When the page loads, Then it shows only th
         page: { harness: "pi", kind: "continue", sessionId },
     });
 
-    await app.waitForView(() => getByRole(document.body, "heading", { name: "Continue native session" }));
+    await app.waitForView(() => getByRole(document.body, "status", { name: "Opening session" }));
     expect(document.body.textContent).not.toContain("Your agents. Connected.");
     expect(document.body.querySelector("header")).toBeInstanceOf(HTMLElement);
     expect(getByRole(document.body, "link", { name: "Morty home" })).toBeInstanceOf(HTMLAnchorElement);

@@ -18,7 +18,7 @@ import { ScrollEdgeFade } from "../utils/scroll-edge-fade.tsx";
 import { StartClippedLabel } from "../utils/start-clipped-label.tsx";
 
 const workingDirectoryLabelClassName =
-    "inline-flex min-h-9 min-w-0 max-w-[200px] shrink-0 items-center justify-center gap-2 rounded-lg border border-transparent px-1 py-1.5 text-[13px] font-medium text-muted-foreground outline-none";
+    "inline-flex min-h-9 min-w-0 max-w-[200px] shrink-0 items-center justify-center gap-1.5 rounded-lg border border-transparent px-2 py-1.5 text-[13px] font-normal text-morty-text-3 outline-none";
 
 export function WorkingDirectorySkeleton({ className }: { readonly className?: string }) {
     return (

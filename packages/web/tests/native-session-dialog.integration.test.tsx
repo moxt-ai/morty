@@ -35,14 +35,42 @@ test("Given Chat is ready, When the user views recent sessions and opens a local
         if (queryByRole(dialog, "status", { name: "Discovering native sessions" }) !== null) {
             throw new Error("The native session dialog is still discovering sessions.");
         }
-        return getByRole(dialog, "button", { name: "Open" });
+        return getByRole(dialog, "region", { name: "Selected session preview" });
     });
     expect(queryByRole(dialog, "button", { name: "Import" })).toBeNull();
-    const preview = getByRole(document.body, "region", {
+    const preview = getByRole(dialog, "region", {
         name: "Selected session preview",
     });
     expect(preview.textContent).toContain("Select a session");
     expect(preview.textContent).toContain("Preview its message history here.");
+    // Nothing is previewed, so the actions that need a session must not be offered.
+    expect(queryByRole(dialog, "button", { name: "Open" })).toBeNull();
+    expect(queryByRole(dialog, "button", { name: "Fork" })).toBeNull();
+});
+
+test("Given the first agent lists saved sessions, When the user opens Open Session, Then the first session is already previewed", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        connectAgent: true,
+        nativeSessionIds: new Set(["first-session", "second-session"]),
+    });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.getAttribute("data-connection-status") === "connected",
+    );
+    await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
+    const dialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
+    // The preview region is re-rendered while its content loads, so each assertion resolves it from the dialog.
+    await app.waitForView(() =>
+        getByRole(getByRole(dialog, "region", { name: "Selected session preview" }), "heading", {
+            name: "Native first-session",
+        }),
+    );
+    const first = getByRole(dialog, "button", { name: "Native first-session" });
+    expect(first.getAttribute("aria-pressed")).toBe("true");
+    expect(getByRole(dialog, "button", { name: "Native second-session" }).getAttribute("aria-pressed")).toBe("false");
+    expect(getByRole(dialog, "button", { name: "Open" }).hasAttribute("disabled")).toBe(false);
 });
 
 test("Given Pi is not installed on the Runtime, When the user opens Open Session and selects Pi, Then the dialog explains Pi is not installed", {

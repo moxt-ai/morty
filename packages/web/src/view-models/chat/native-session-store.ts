@@ -123,6 +123,8 @@ export const createNativeSessionStore = (
             discovery = attempt;
             const signal = AbortSignal.any([parent, attempt.signal]);
             const scope = get().selected === "" ? ("initial" as const) : ("refresh" as const);
+            const previewed = get().preview;
+            const previewedEntryId = previewed.kind === "empty" ? null : previewed.entry.entryId;
             set({ directory: { kind: "loading", scope, listing }, preview: { kind: "empty" }, error: "" });
             if (current === null) {
                 // The page has not heard from the Runtime yet; its first configuration starts the listing.
@@ -160,6 +162,7 @@ export const createNativeSessionStore = (
                 if (result.action !== "list") {
                     throw new Error("The agent returned an unexpected session directory.");
                 }
+                const entries = result.entries.map(present);
                 set({
                     directory: {
                         kind: "ready",
@@ -167,10 +170,19 @@ export const createNativeSessionStore = (
                         discoveryId: result.sessionId,
                         agentRef: agent.agentRef,
                         capabilities: result.capabilities,
-                        entries: result.entries.map(present),
+                        entries,
                         nextCursor: result.nextCursor,
                     },
                 });
+                // A listing always lands with a previewed session: the one the user was reading when it is still
+                // listed, else its first entry. Opening the dialog and switching agent tabs would otherwise leave
+                // the whole right pane empty even though there is a session to show.
+                const next = entries.find((entry) => entry.entryId === previewedEntryId) ?? entries[0];
+                if (next !== undefined) {
+                    // Only the dialog's lifetime cancels this preview. A discovery restart must not abort it, or a
+                    // Runtime configuration refresh right after opening would strand the pane on its skeleton.
+                    void get().select(next, lifetime.signal);
+                }
             } catch (cause) {
                 if (!signal.aborted) {
                     set({

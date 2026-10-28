@@ -58,6 +58,9 @@ export async function startTestPlatform(options: { readonly allowedOrigins?: Rea
                         agentName: agents[0]?.label ?? "Codex",
                         echoUserMessage: true,
                         additionalAgents: agents.slice(1).map((agent) => ({ id: agent.id, name: agent.label })),
+                        ...(agents[0]?.beforeConfigurationApplied === undefined
+                            ? {}
+                            : { beforeConfigurationApplied: agents[0].beforeConfigurationApplied }),
                         ...(agents[0]?.runtime === undefined ? {} : { runtime: agents[0].runtime }),
                         ...(nativeSessionIds === undefined ? {} : { nativeSessionIds }),
                     },

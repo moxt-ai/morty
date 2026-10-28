@@ -46,13 +46,13 @@ export function SetupConnectionGraphic({ className = "" }: { readonly className?
             </svg>
             <span
                 aria-hidden="true"
-                className="absolute top-6 left-[30%] flex size-11 -translate-x-1/2 items-center justify-center rounded-[14px] bg-white opacity-80"
+                className="absolute top-6 left-[30%] flex size-11 -translate-x-1/2 items-center justify-center rounded-[14px] bg-white/80"
             >
                 <HarnessMark agentRef="codex" appearance="line" className="size-[20px] text-[#171717]" label="Codex" />
             </span>
             <span
                 aria-hidden="true"
-                className="absolute top-6 left-1/2 flex size-11 -translate-x-1/2 items-center justify-center rounded-[14px] bg-white opacity-80"
+                className="absolute top-6 left-1/2 flex size-11 -translate-x-1/2 items-center justify-center rounded-[14px] bg-white/80"
             >
                 <HarnessMark
                     agentRef="claude"
@@ -63,7 +63,7 @@ export function SetupConnectionGraphic({ className = "" }: { readonly className?
             </span>
             <span
                 aria-hidden="true"
-                className="absolute top-6 left-[70%] flex size-11 -translate-x-1/2 items-center justify-center rounded-[14px] bg-white opacity-80"
+                className="absolute top-6 left-[70%] flex size-11 -translate-x-1/2 items-center justify-center rounded-[14px] bg-white/80"
             >
                 <HarnessMark
                     agentRef="pi"
