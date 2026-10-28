@@ -43,15 +43,16 @@ export function createSessionResourceStore(request: SessionResourceRequest, read
                     }
                     const file = await read(request.path, AbortSignal.any([signal, AbortSignal.timeout(20_000)]));
                     signal.throwIfAborted();
+                    const mediaType = request.mediaType ?? file.mediaType;
                     if (request.kind === "text") {
                         set({ state: { kind: "text", text: new TextDecoder().decode(file.bytes) } });
                     } else if (
-                        (request.kind === "image" && !isDisplayableImageType(file.mediaType)) ||
-                        (request.kind === "raster-image" && !isRasterImageType(file.mediaType))
+                        (request.kind === "image" && !isDisplayableImageType(mediaType)) ||
+                        (request.kind === "raster-image" && !isRasterImageType(mediaType))
                     ) {
                         set({ state: { kind: "failed" } });
                     } else {
-                        media = createFilePreviewImage(file.bytes, file.mediaType);
+                        media = createFilePreviewImage(file.bytes, mediaType);
                         set({ state: { kind: "media", source: media.source, blob: media.blob } });
                     }
                 } catch {

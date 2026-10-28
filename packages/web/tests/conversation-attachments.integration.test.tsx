@@ -256,4 +256,54 @@ test("Given an attachment is being read, When the user removes an earlier attach
     });
 });
 
+test("Given an SVG file, When the user sends it with a prompt, Then the Agent replies and the file is shown as an image", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3"/></svg>';
+    await app.user.upload(
+        getByLabelText(document.body, "Choose attachments"),
+        new File([svg], "diagram.svg", { type: "image/svg+xml" }),
+    );
+
+    const prompt = "Inspect this SVG file";
+    await sendPrompt(app, composer, prompt);
+    await app.waitForView(() => expect(document.body.textContent).toContain(`Codex turn 1: ${prompt}`));
+    const reloaded = await app.reload();
+    const source = await reloaded.waitForView(() => {
+        expect(document.body.textContent).toContain(prompt);
+        const image = getByRole(document.body, "img", { name: "Your attachment" });
+        expect(image.getAttribute("src")?.startsWith("blob:")).toBe(true);
+        return image.getAttribute("src");
+    });
+
+    expect(await renderedImageBytes([source])).toEqual([new TextEncoder().encode(svg)]);
+});
+
+test("Given a PDF file, When the user sends it with a prompt, Then the Agent replies and the file can be downloaded", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    const pdf = new TextEncoder().encode("%PDF-1.7\n% Morty attachment\n");
+    await app.user.upload(
+        getByLabelText(document.body, "Choose attachments"),
+        new File([pdf], "document.pdf", { type: "application/pdf" }),
+    );
+
+    const prompt = "Inspect this PDF file";
+    await sendPrompt(app, composer, prompt);
+    await app.waitForView(() => expect(document.body.textContent).toContain(`Codex turn 1: ${prompt}`));
+    const reloaded = await app.reload();
+    const source = await reloaded.waitForView(() => {
+        expect(document.body.textContent).toContain(prompt);
+        const link = getByRole(document.body, "link", { name: "Download document.pdf" });
+        expect(link.hasAttribute("download")).toBe(true);
+        return link.getAttribute("href");
+    });
+
+    expect(await renderedImageBytes([source])).toEqual([pdf]);
+});
+
 import { resolveObjectURL } from "node:buffer";

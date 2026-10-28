@@ -137,7 +137,7 @@ function relativeFilePath(href: string): string | null {
     }
 }
 
-function localFilePath(href: string): string | null {
+export function localFilePath(href: string): string | null {
     if (!href.startsWith(LOCAL_FILE_URL_ORIGIN)) {
         return fileSystemPath(href);
     }
