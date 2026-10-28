@@ -415,6 +415,44 @@ test("Given two Bots on the same Runtime, When a conversation ID is opened throu
     expect(await managed.json()).toEqual({ sessions: [] });
 });
 
+for (const operation of ["access", "managed-session"]) {
+    test(`Given a managed Chat session, When ${operation} and archival run concurrently, Then the archived session stays closed and cannot be reopened through Morty`, async ({
+        cloud,
+    }) => {
+        await using fixture = await createChatFixture(cloud);
+        const runtimeId = fixture.runtime.runtimeId;
+        expect(
+            (await fixture.request(`chat/bots/${fixture.botId}/setup`, { runtimeId, agentRef: "codex" })).status,
+        ).toBe(202);
+        const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+            agentRef: "codex",
+            configurations: [],
+            conversationKey: "concurrent-archive",
+            workspaceRef: "default",
+        });
+        const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
+
+        const [reopened, archived] = await Promise.all([
+            fixture.request(
+                `chat/bots/${fixture.botId}/${operation}`,
+                operation === "access" ? { conversationId: sessionId } : { sessionId },
+            ),
+            fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId }),
+        ]);
+
+        expect([200, 404]).toContain(reopened.status);
+        expect(archived.status).toBe(200);
+        expect(await archived.json()).toEqual({ close: "confirmed" });
+        await expect(
+            fixture.runtime.client.sessions.rename(runtimeId, sessionId, "Still closed", AbortSignal.timeout(10_000)),
+        ).rejects.toMatchObject({ code: "session_closed" });
+        const rejected = await fixture.request(`chat/bots/${fixture.botId}/access`, { conversationId: sessionId });
+        expect(rejected.status).toBe(404);
+        const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
+        expect(await managed.json()).toEqual({ sessions: [] });
+    });
+}
+
 test("Given a Runtime cannot complete Session close, When its owner archives a managed Chat session, Then Chat reports the unconfirmed close while preserving legacy archival", async ({
     cloud,
 }) => {

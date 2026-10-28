@@ -36,6 +36,7 @@ export interface ApplicationContext {
 export function createApplicationDependencies(bindings: CloudBindings): ApplicationContext {
     const infrastructure = {
         config: { bindings },
+        sessionOperations: bindings.CHAT_SESSION_OPERATIONS,
         gateways: { platformProjects: new PlatformProjectGateway(bindings) },
         logger,
     };

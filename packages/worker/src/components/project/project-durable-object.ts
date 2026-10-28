@@ -5,11 +5,13 @@ import type { CloudBindings } from "../../infra/cloud-bindings.ts";
 import { DurableObjectDatabase } from "../../infra/durable-object-database.ts";
 import { json } from "../../infra/http.ts";
 import { cloudProjectId } from "../../middleware/project-context.ts";
+import { ManagedSessionOperations } from "../chat/infra/managed-session-operations.ts";
 import { platformIdentifier } from "../management/entity/platform-project.ts";
 import { projectBootstrap } from "../management/entity/project-bootstrap.ts";
 
 export class ProjectDurableObject extends DurableObject<CloudBindings> {
     readonly #database: DurableObjectDatabase;
+    readonly #sessionOperations = new ManagedSessionOperations();
 
     constructor(state: DurableObjectState, environment: CloudBindings) {
         super(state, environment);
@@ -88,6 +90,7 @@ export class ProjectDurableObject extends DurableObject<CloudBindings> {
     readonly #bindings = (projectId: string): CloudBindings => ({
         ...this.env,
         CHAT_PROJECT_ID: projectId,
+        CHAT_SESSION_OPERATIONS: this.#sessionOperations,
         DATABASE: this.#database,
     });
 }

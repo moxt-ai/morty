@@ -12,6 +12,7 @@ import type { PlatformProjectGateway } from "../../../gateway/platform-project-g
 import { PlatformProjectError } from "../../management/entity/platform-project.ts";
 import type { IdentityStorage } from "../../management/storage/identity-storage.ts";
 import type { ManagedBotStorage } from "../../management/storage/managed-bot-storage.ts";
+import type { ManagedSessionOperations } from "../infra/managed-session-operations.ts";
 import type { ManagedSessionStorage } from "../storage/managed-session-storage.ts";
 
 const STATUS_LIVENESS_MILLISECONDS = 120_000;
@@ -93,8 +94,10 @@ export class ChatService {
     readonly #identities: IdentityStorage;
     readonly #managedBots: ManagedBotStorage;
     readonly #platform: PlatformProjectGateway;
+    readonly #sessionOperations: ManagedSessionOperations | undefined;
 
     constructor(cx: {
+        readonly sessionOperations: ManagedSessionOperations | undefined;
         readonly gateways: { readonly platformProjects: PlatformProjectGateway };
         readonly storages: {
             readonly chatSessions: ManagedSessionStorage;
@@ -106,6 +109,7 @@ export class ChatService {
         this.#identities = cx.storages.identities;
         this.#managedBots = cx.storages.managedBots;
         this.#platform = cx.gateways.platformProjects;
+        this.#sessionOperations = cx.sessionOperations;
     }
 
     readonly authorize = async (
@@ -192,6 +196,17 @@ export class ChatService {
 
     readonly #ownsManagedSession = (scope: ChatScope, sessionId: string): Promise<boolean> =>
         this.#chatSessions.ownsSession(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
+
+    readonly #withManagedSessionOperation = <Result>(
+        scope: ChatScope,
+        sessionId: string,
+        operation: () => Promise<Result>,
+    ): Promise<Result> => {
+        if (this.#sessionOperations === undefined) {
+            throw new PlatformProjectError("PROJECT_OBJECT_UNAVAILABLE", "Morty storage is unavailable.", 503);
+        }
+        return this.#sessionOperations.run(sessionId, scope.signal, operation);
+    };
 
     readonly #nativeSessionRuntime = async (scope: ChatScope, requestedRuntimeId: string) => {
         const runtime = await this.localRuntime(scope);
@@ -358,7 +373,12 @@ export class ChatService {
         return { settings: discovered };
     };
 
-    readonly openChat = async (scope: ChatScope, input: OpenChatInput) => {
+    readonly openChat = async (scope: ChatScope, input: OpenChatInput) =>
+        "conversationKey" in input
+            ? await this.#openChat(scope, input)
+            : await this.#withManagedSessionOperation(scope, input.conversationId, () => this.#openChat(scope, input));
+
+    readonly #openChat = async (scope: ChatScope, input: OpenChatInput) => {
         const bot = await this.#bot(scope);
         if (bot?.configuration === null || bot === null) {
             throw new PlatformProjectError("AGENT_REQUIRED", "Connect your local agent to start chatting.", 409);
@@ -431,37 +451,39 @@ export class ChatService {
         return access;
     };
 
-    readonly managedSession = async (scope: ChatScope, sessionId: string) => {
-        const bot = await this.#bot(scope);
-        if (!(await this.#ownsManagedSession(scope, sessionId))) {
-            throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
-        }
-        const runtime = await this.localRuntime(scope);
-        return {
-            ...(await this.#platform.readChatSession(scope.projectId, runtime, sessionId, scope.signal)),
-            instructions: bot.instructions,
-        };
-    };
+    readonly managedSession = async (scope: ChatScope, sessionId: string) =>
+        await this.#withManagedSessionOperation(scope, sessionId, async () => {
+            const bot = await this.#bot(scope);
+            if (!(await this.#ownsManagedSession(scope, sessionId))) {
+                throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
+            }
+            const runtime = await this.localRuntime(scope);
+            return {
+                ...(await this.#platform.readChatSession(scope.projectId, runtime, sessionId, scope.signal)),
+                instructions: bot.instructions,
+            };
+        });
 
     readonly archiveManagedSession = async (
         scope: ChatScope,
         sessionId: string,
-    ): Promise<{ readonly close: "confirmed" | "unconfirmed" }> => {
-        if (!(await this.#ownsManagedSession(scope, sessionId))) {
-            return { close: "unconfirmed" };
-        }
-        const runtime = await this.localRuntime(scope);
-        let close: "confirmed" | "unconfirmed" = "unconfirmed";
-        try {
-            await this.#platform.closeChatSession(scope.projectId, runtime.runtimeId, sessionId, scope.signal);
-            close = "confirmed";
-        } catch {
-            scope.signal.throwIfAborted();
-        }
-        // Archival stays available to offline and older Runtimes, but does not prove their process stopped.
-        await this.#chatSessions.archive(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
-        return { close };
-    };
+    ): Promise<{ readonly close: "confirmed" | "unconfirmed" }> =>
+        await this.#withManagedSessionOperation(scope, sessionId, async () => {
+            if (!(await this.#ownsManagedSession(scope, sessionId))) {
+                return { close: "unconfirmed" };
+            }
+            const runtime = await this.localRuntime(scope);
+            let close: "confirmed" | "unconfirmed" = "unconfirmed";
+            try {
+                await this.#platform.closeChatSession(scope.projectId, runtime.runtimeId, sessionId, scope.signal);
+                close = "confirmed";
+            } catch {
+                scope.signal.throwIfAborted();
+            }
+            // Archival stays available to offline and older Runtimes, but does not prove their process stopped.
+            await this.#chatSessions.archive(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
+            return { close };
+        });
 
     readonly nativeSessions = async (scope: ChatScope, requestedRuntimeId: string, input: NativeListInput) => {
         const runtime = await this.#nativeSessionRuntime(scope, requestedRuntimeId);
