@@ -1,4 +1,5 @@
-import { fireEvent, getByLabelText, getByRole } from "@testing-library/dom";
+import { resolveObjectURL } from "node:buffer";
+import { fireEvent, getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
@@ -164,6 +165,74 @@ test("Given a follow-up is queued and the user has started another draft, When t
         expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", `${queuedPrompt}\n\n${draft}`),
     );
     expect(document.body.textContent).not.toContain("Files attached to the queued message");
+});
+
+test("Given this browser queued an attachment and the queue refreshed, When I edit and resend it, Then the original file is restored and delivered", {
+    timeout: 30_000,
+}, async () => {
+    const queuedPrompt = "Describe the queued image";
+    const imageBytes = Uint8Array.from(
+        atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4oKAAAAM0ATE4/UtcAAAAAElFTkSuQmCC"),
+        (character) => character.charCodeAt(0),
+    );
+    const app = await createTestApp({ connectAgent: true });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
+    await app.queryElementByTestId(dataTestId.sessionStatus);
+    await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    await app.waitForView(() =>
+        expect(getByLabelText(document.body, "Choose attachments")).toHaveProperty("disabled", false),
+    );
+    await app.user.upload(
+        getByLabelText(document.body, "Choose attachments"),
+        new File([imageBytes], "queued.png", { type: "image/png" }),
+    );
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "list", { name: "Attachments" }).textContent).toContain("queued.png"),
+    );
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), queuedPrompt);
+    await app.queryElementByTestId(dataTestId.queuedMessage);
+    await app.waitForView(() => {
+        expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "");
+        expect(queryByRole(document.body, "list", { name: "Attachments" })).toBeNull();
+    });
+
+    // A second accepted message refreshes the authoritative queue, including the first message.
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Refresh the queue");
+    await app.waitForView(() => expect(app.elementsByTestId(dataTestId.queuedMessage)).toHaveLength(2));
+    await app.waitForView(() => expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", ""));
+    await app.user.click(getByLabelText(document.body, `Edit queued message: ${queuedPrompt}`));
+    await app.waitForView(() => {
+        expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", queuedPrompt);
+        expect(getByRole(document.body, "list", { name: "Attachments" }).textContent).toContain("queued.png");
+    });
+    expect(document.body.textContent).not.toContain("Files attached to the queued message could not be restored here.");
+
+    if (app.daemon === null) {
+        throw new Error("Expected a connected controlled Agent Runtime");
+    }
+    await app.daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    await app.user.click(getByRole(document.body, "button", { name: "Send message" }));
+    const source = await app.waitForView(() => {
+        expect(
+            app.elementsByTestId(dataTestId.agentResponse).some((item) => item.textContent?.includes(queuedPrompt)),
+        ).toBe(true);
+        const message = app
+            .elementsByTestId(dataTestId.userMessage)
+            .find((item) => item.textContent?.includes(queuedPrompt));
+        expect(message).toBeDefined();
+        const source = getByRole(message ?? document.body, "img", { name: "Your attachment" }).getAttribute("src");
+        expect(source?.startsWith("blob:")).toBe(true);
+        return source;
+    });
+    const image = source === null ? undefined : resolveObjectURL(source);
+    if (image === undefined) {
+        throw new Error("Expected the delivered attachment image");
+    }
+    expect(new Uint8Array(await image.arrayBuffer())).toEqual(imageBytes);
 });
 
 test("Given a follow-up with a file was queued from another browser, When this viewer edits it, Then its text returns and Chat explains that the file must be added again", {

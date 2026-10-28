@@ -58,6 +58,8 @@ function updateMessage(
 }
 
 export const createSessionMessageQueueStore = (options: { readonly port: SessionMessageQueuePort }) => {
+    // Runtime snapshots own queue membership; this browser owns the original attachment bytes.
+    const localAttachments = new Map<string, readonly ComposerAttachment[]>();
     return createStore<SessionMessageQueueStore>()((set, get) => ({
         feedback: { kind: "none" },
         messages: [],
@@ -75,6 +77,7 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
             try {
                 await options.port.cancel(message.turnId, crypto.randomUUID(), signal);
                 signal.throwIfAborted();
+                localAttachments.delete(commandId);
                 set((state) => {
                     const messages = state.messages.filter((candidate) => candidate.commandId !== commandId);
                     return { messages };
@@ -100,6 +103,7 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                 return null;
             }
             const commandId = crypto.randomUUID();
+            localAttachments.set(commandId, attachments);
             set({ feedback: { kind: "none" }, operation: { commandId, kind: "submitting" } });
             const signal = AbortSignal.any([parent, AbortSignal.timeout(45_000)]);
             try {
@@ -124,6 +128,9 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                 set({ operation: { kind: "idle" } });
                 return message;
             } catch (cause) {
+                if (!get().messages.some((message) => message.commandId === commandId)) {
+                    localAttachments.delete(commandId);
+                }
                 if (parent.aborted) {
                     throw cause;
                 }
@@ -147,6 +154,7 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
             try {
                 await options.port.steer(message.turnId, signal);
                 signal.throwIfAborted();
+                localAttachments.delete(commandId);
                 set((state) => {
                     const messages = state.messages.filter((candidate) => candidate.commandId !== commandId);
                     return { messages };
@@ -166,18 +174,37 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                 return null;
             }
         },
-        replace: (messages) =>
+        replace: (messages) => {
+            const operation = get().operation;
+            const queuedIds = new Set(messages.map((message) => message.commandId));
+            for (const commandId of localAttachments.keys()) {
+                if (
+                    !queuedIds.has(commandId) &&
+                    !(operation.kind === "submitting" && operation.commandId === commandId)
+                ) {
+                    localAttachments.delete(commandId);
+                }
+            }
             set((state) => ({
-                messages: messages.map((message) => ({
-                    commandId: message.commandId,
-                    turnId: message.commandId,
-                    summary: message.prompt,
-                    prompt: message.prompt,
-                    attachments: { kind: "unrestorable", count: message.attachments.length },
-                    kind: state.messages.find((current) => current.commandId === message.commandId)?.kind ?? "queued",
-                })),
-            })),
+                messages: messages.map((message) => {
+                    const attachments = localAttachments.get(message.commandId);
+                    return {
+                        commandId: message.commandId,
+                        turnId: message.commandId,
+                        summary: message.prompt || attachments?.map((attachment) => attachment.name).join(", ") || "",
+                        prompt: message.prompt,
+                        attachments:
+                            attachments === undefined
+                                ? { kind: "unrestorable", count: message.attachments.length }
+                                : { kind: "restorable", values: attachments },
+                        kind:
+                            state.messages.find((current) => current.commandId === message.commandId)?.kind ?? "queued",
+                    };
+                }),
+            }));
+        },
         takeStarted: (commandId) => {
+            localAttachments.delete(commandId);
             const message = get().messages.find((candidate) => candidate.commandId === commandId);
             if (message === undefined || message.kind !== "queued") {
                 return null;
