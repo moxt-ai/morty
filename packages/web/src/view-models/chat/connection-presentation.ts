@@ -41,7 +41,12 @@ export function connectionPresentation(
         lastConfirmed,
         connection,
         indicator,
-        feedback,
+        // Presence can change before the Session stream settles. Keep availability conservative, but let
+        // the Session's own recovery lifecycle decide when an interruption needs a composer notice.
+        feedback:
+            session?.kind === "ready" && home.networkAvailable && computer.kind !== "unpaired"
+                ? { kind: "hidden" }
+                : feedback,
         available: indicator.kind === "ready",
     });
     if (session?.kind === "closed") {
@@ -94,6 +99,9 @@ export function connectionPresentation(
                 description: "Connect your local agent to start chatting.",
             },
         );
+    }
+    if ((session?.kind === "disconnected" || session?.kind === "reconnecting") && session.notice === "quiet") {
+        return present({ kind: "recovering", label: "Reconnecting" }, { kind: "hidden" });
     }
     if (session?.kind === "disconnected") {
         return present(

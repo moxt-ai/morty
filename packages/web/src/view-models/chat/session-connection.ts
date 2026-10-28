@@ -7,11 +7,12 @@ export type SessionConnection =
     | { readonly kind: "loading" }
     | { readonly kind: "session-loading-after-create" }
     | { readonly kind: "ready"; readonly client: MobiusClient }
-    | { readonly kind: "reconnecting"; readonly message: string | null }
+    | { readonly kind: "reconnecting"; readonly message: string | null; readonly notice: "quiet" | "visible" }
     | {
           readonly kind: "disconnected";
           readonly message: string;
           readonly retry: SessionReconnectRetry;
+          readonly notice: "quiet" | "visible";
       }
     | {
           /** The Runtime closed the Session. Reopening it, which only the user chooses to do, resumes the connection. */
@@ -94,10 +95,15 @@ export function sessionReconnectAttempt(
 }
 
 /** The disconnected state while an automatic retry counts down, or after retries are exhausted. */
-export function disconnectedConnection(message: string, remainingMs: number | null): SessionConnection {
+export function disconnectedConnection(
+    message: string,
+    remainingMs: number | null,
+    notice: "quiet" | "visible",
+): SessionConnection {
     return {
         kind: "disconnected",
         message,
+        notice,
         retry:
             remainingMs === null
                 ? { kind: "exhausted" }

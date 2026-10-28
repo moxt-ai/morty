@@ -1,8 +1,9 @@
 import { getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
+import { TestClock } from "./infra/test-clock.ts";
 import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
 
 test("Given a running message whose admission response was lost, When Chat reconnects, Then delivery is confirmed without retrying or waiting for completion", {
@@ -10,7 +11,8 @@ test("Given a running message whose admission response was lost, When Chat recon
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
     onTestFinished(() => environment.close());
-    const app = await createTestApp({ environment, connectAgent: true });
+    const clock = new TestClock("2026-10-28T08:00:00Z");
+    const app = await createTestApp({ environment, connectAgent: true, clock });
     const network = app.network;
     if (network === null || app.daemon === null) {
         throw new Error("Expected the response-loss network and connected Runtime");
@@ -24,6 +26,7 @@ test("Given a running message whose admission response was lost, When Chat recon
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold after first delta");
     await app.waitForView(() => getByRole(document.body, "button", { name: "Retry message with unknown delivery" }));
     const submissions = network.submissions.length;
+    await showReconnectNotice(app, clock);
     network.reconnect();
     await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: "Retry now" })));
     await app.waitForView(() => {
@@ -52,7 +55,8 @@ for (const message of ["first", "subsequent"] as const) {
     }, async () => {
         const environment = await createChatWorkerEnvironment(true);
         onTestFinished(() => environment.close());
-        const app = await createTestApp({ environment, connectAgent: true });
+        const clock = new TestClock("2026-10-28T08:00:00Z");
+        const app = await createTestApp({ environment, connectAgent: true, clock });
         const network = app.network;
         if (network === null) {
             throw new Error("Expected the response-loss network");
@@ -81,9 +85,13 @@ for (const message of ["first", "subsequent"] as const) {
         );
         const original = network.submissions.at(-1);
         const submissions = network.submissions.length;
+        await showReconnectNotice(app, clock);
         network.reconnect();
         await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: "Retry now" })));
-        await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionReconnectNotice)).toBeNull());
+        await app.waitForView(() =>
+            getByRole(document.body, "button", { name: /Switch computer/, description: "Connection available" }),
+        );
+        expect(app.optionalElementByTestId(dataTestId.sessionReconnectNotice)).toBeNull();
 
         app.remount();
         const retry = await app.waitForView(() => {

@@ -78,7 +78,8 @@ export const createAnonymousSessionStore = (
                     onIdentityChanged(null);
                 }
                 try {
-                    if (window.location.pathname === "/setup" && !hasIdentityScope()) {
+                    const setupPath = window.location.pathname === "/setup" || window.location.pathname === "/setup/";
+                    if (setupPath && !hasIdentityScope()) {
                         set({
                             state: {
                                 kind: "setup",
@@ -104,6 +105,10 @@ export const createAnonymousSessionStore = (
                             return;
                         }
                         settleResumedComputer();
+                        if (setupPath) {
+                            set({ state: { kind: "setup", notice: "none", returnHref: "/" } });
+                            return;
+                        }
                         activate(identity, entry, null);
                         return;
                     }
