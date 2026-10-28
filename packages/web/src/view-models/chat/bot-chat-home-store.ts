@@ -126,8 +126,6 @@ export interface BotChatHomeStore {
     readonly creation: ConversationCreationState;
     /** First messages waiting to enter their Session's delivery workflow, whichever is on screen. */
     readonly firstMessages: FirstMessages;
-    readonly revision: number;
-    readonly directoryRevision: number;
     readonly draft: string;
     /** The draft the composer text belongs to. Only starting a new draft changes it. */
     readonly draftKey: string;
@@ -238,9 +236,9 @@ export const createBotChatHomeStore = (
         readonly url: string;
         readonly createId: () => string;
         readonly navigation: BotChatNavigation;
-        /** Announced after a transition that bumps the load revision: the owner restarts the home and directory loads. */
+        /** Announced when the owner must restart the home and directory loads. */
         readonly onRestart: () => void;
-        /** Announced when only the directory revision advances (a created conversation joins it) without reloading the home view. */
+        /** Announced when a created conversation joins the directory: the owner reloads it without reloading the home view. */
         readonly onDirectoryRefreshed: () => void;
         /** Announced with the first-prompt title of a conversation this page created, before the directory lists it. */
         readonly onConversationCreated: (conversationId: string, title: string) => void;
@@ -318,8 +316,6 @@ export const createBotChatHomeStore = (
             rememberedSession: null,
             creation: { kind: "draft" },
             firstMessages: new Map(),
-            revision: 0,
-            directoryRevision: 0,
             draft: "",
             draftKey: selection.kind === "draft" ? selection.key : options.createId(),
             scrollFollowRevision: 0,
@@ -654,7 +650,6 @@ export const createBotChatHomeStore = (
                         return;
                     }
                     if (cause instanceof DOMException && cause.name === "TimeoutError") {
-                        set((current) => ({ revision: current.revision + 1 }));
                         onRestart();
                         return;
                     }
@@ -687,7 +682,6 @@ export const createBotChatHomeStore = (
                         signal.throwIfAborted();
                         set((current) => ({
                             selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
-                            revision: current.revision + 1,
                         }));
                         onRestart();
                         return;
@@ -725,7 +719,6 @@ export const createBotChatHomeStore = (
                     draft: "",
                     draftKey,
                     scrollFollowRevision: state.scrollFollowRevision + 1,
-                    revision: restart ? state.revision + 1 : state.revision,
                 }));
                 onDraftSelected();
                 onSelectionTargeted(null);
@@ -744,7 +737,6 @@ export const createBotChatHomeStore = (
                     }),
                     creation: transitionConversationCreation(current.creation, { kind: "reset" }),
                     scrollFollowRevision: current.scrollFollowRevision + 1,
-                    revision: current.revision + 1,
                 }));
                 onSelectionTargeted(id);
                 onRestart();
@@ -752,7 +744,6 @@ export const createBotChatHomeStore = (
             retry: () => {
                 set((current) => ({
                     selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
-                    revision: current.revision + 1,
                 }));
                 onRestart();
             },
@@ -766,7 +757,6 @@ export const createBotChatHomeStore = (
                             kind: "target-selected",
                             target,
                         }),
-                        revision: state.revision + 1,
                     }));
                     onSelectionTargeted(selectedConversationId(get().selection));
                     onRestart();
@@ -904,7 +894,6 @@ export const createBotChatHomeStore = (
                         conversationId,
                         message: queuedMessage,
                     }),
-                    directoryRevision: state.directoryRevision + 1,
                     ...(session !== null
                         ? {
                               creation: transitionConversationCreation(state.creation, {

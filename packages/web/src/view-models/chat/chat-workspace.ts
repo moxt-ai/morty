@@ -125,10 +125,9 @@ function historyNavigation(onDraft: () => void) {
 /**
  * Composes the chat screen's collaborating stores — home selection, the
  * conversation directory, and conversation statuses — and owns their loading
- * lifetimes outside React. The home store's revision counters are the restart
- * signals; the store announces restarts and pane replacements through
- * explicit port callbacks, so a restart cancels the previous attempt without
- * any component effect.
+ * lifetimes outside React. The home store announces restarts and pane replacements
+ * through explicit port callbacks, so a restart cancels the previous attempt
+ * without any component effect.
  */
 export function createChatWorkspace(options: {
     readonly clock: Clock;
@@ -383,7 +382,7 @@ export function createChatWorkspace(options: {
     const announcedViews = new WeakSet<HTMLElement>();
     const loadSelectedSession = (target: SelectedConversationTarget): void => {
         const sessionId = target.kind === "conversation" ? target.conversationId : target.sessionId;
-        // Capture this attempt's signal: a navigation bumps the revision and
+        // Capture this attempt's signal: navigation restarts the home load and
         // replaces chatLifetime with a fresh controller while this request is
         // still in flight. Both callbacks must validate the attempt they were
         // issued with, so a superseded read can never publish state — least of
@@ -430,8 +429,8 @@ export function createChatWorkspace(options: {
                     selectedConversationId(current) === sessionId
                 ) {
                     // Surface the failure so the Reconnect control renders; its
-                    // retry transitions to loading and bumps the revision,
-                    // which restarts the full home load.
+                    // retry transitions to loading and announces a restart
+                    // of the full home load.
                     home.setState((state) => ({
                         selection: transitionConversationSelection(state.selection, {
                             kind: "session-load-failed",
