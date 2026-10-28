@@ -81,6 +81,10 @@ test("Given a loaded session whose initial user chunk is delayed, When its first
         getByRole(document.body, "button", { name: "Steer queued message: New steering requirement" }),
     );
     await app.user.click(steer);
+    const steeredProcess = await app.waitForView(() =>
+        getByRole(document.body, "button", { name: "1 step", expanded: false }),
+    );
+    await app.user.click(steeredProcess);
     await app.waitForView(() => {
         expect(getByLabelText(document.body, "Tool: Steered verification")).toBeDefined();
         expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
@@ -108,6 +112,10 @@ test("Given lifecycle events arrive before ACP output, When I queue a follow-up,
         "hold before first acp",
     ]);
     await app.user.click(steer);
+    const steeredProcess = await app.waitForView(() =>
+        getByRole(document.body, "button", { name: "1 step", expanded: false }),
+    );
+    await app.user.click(steeredProcess);
     await app.waitForView(() => {
         expect(getByLabelText(document.body, "Tool: Steered verification")).toBeDefined();
         expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([

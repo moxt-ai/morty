@@ -48,14 +48,14 @@ function textContent(content: readonly AgentDisplayContent[]): string | null {
     return parts.length === 0 ? null : parts.join("\n");
 }
 
-export function matchesCwdShellCommandToolCall({ input, output }: SessionToolPresentation): boolean {
+function matchesCwdShellCommandToolCall({ input, output }: SessionToolPresentation): boolean {
     return (
         v.safeParse(cwdRequestSchema, parseJson(input)).success ||
         (!isOversizedToolText(output) && v.safeParse(cwdOutputResponseSchema, parseJson(output)).success)
     );
 }
 
-export function matchesWorkdirShellCommandToolCall({ input }: SessionToolPresentation): boolean {
+function matchesWorkdirShellCommandToolCall({ input }: SessionToolPresentation): boolean {
     return v.safeParse(workdirRequestSchema, parseJson(input)).success;
 }
 

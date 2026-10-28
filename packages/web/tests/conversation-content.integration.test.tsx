@@ -13,7 +13,7 @@ import { render } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { renderRegisteredTool } from "../src/components/chat/tools/tool-renderer-registry.tsx";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { expandProcessSections, sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
 test("Given the agent references external content, When the user reads the response, Then Chat loads and renders the referenced file", {
@@ -25,6 +25,7 @@ test("Given the agent references external content, When the user reads the respo
         throw new Error("Expected the message composer");
     }
     await sendPrompt(app, composer, "show external content");
+    await expandProcessSections(app);
     const activity = await app.waitForView(() => getByRole(document.body, "group", { name: "Tool: External content" }));
     await app.user.click(getByRole(activity, "button", { name: "External content Tool succeeded" }));
     await app.waitForView(() => {
@@ -161,6 +162,7 @@ test("Given the agent sends separate reasoning messages, When the user reads the
         throw new Error("Expected the message composer");
     }
     await sendPrompt(app, composer, "separate reasoning paragraphs");
+    await expandProcessSections(app);
     const thinking = await app.queryElementByTestId(dataTestId.agentReasoning);
     await app.user.click(getByText(thinking, "Show Thinking"));
     await app.waitForView(() => {
@@ -175,6 +177,7 @@ test("Given the agent sends separate reasoning messages, When the user reads the
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
     );
     app.remount();
+    await expandProcessSections(app);
     const restoredThinking = await app.queryElementByTestId(dataTestId.agentReasoning);
     await app.user.click(getByText(restoredThinking, "Show Thinking"));
     await app.waitForView(() => {
@@ -199,6 +202,7 @@ test("Given reasoning exceeds 16K characters, When the user opens the intermedia
         throw new Error("Expected the message composer");
     }
     await sendPrompt(app, composer, "long reasoning");
+    await expandProcessSections(app);
     const thinking = await app.queryElementByTestId(dataTestId.agentReasoning);
     await app.user.click(getByText(thinking, "Show Thinking"));
     await app.waitForView(() => {
@@ -257,6 +261,7 @@ test("Given a file tool reports a rich diff, When the user opens it, Then Chat p
     }
 
     await sendPrompt(app, composer, "show generic file edit");
+    await expandProcessSections(app);
 
     const edit = await app.waitForView(() =>
         getByRole(document.body, "group", { name: "Edit: Write /workspace/style.css" }),
@@ -283,6 +288,7 @@ test("Given Pi reports write and edit tool results, When the user opens them, Th
     }
 
     await sendPrompt(app, composer, "show pi file tools");
+    await expandProcessSections(app);
 
     const write = await app.waitForView(() => getByRole(document.body, "group", { name: "Edit: write" }));
     const edit = getByRole(document.body, "group", { name: "Edit: edit" });
@@ -314,6 +320,7 @@ test("Given a changed-file summary repeats the rich diff path, When the user ope
     }
 
     await sendPrompt(app, composer, "change one file with a rich diff summary");
+    await expandProcessSections(app);
 
     const edit = await app.waitForView(() => getByRole(document.body, "group", { name: "Edit: /workspace/app.js" }));
     await app.user.click(getByRole(edit, "button", { name: "/workspace/app.js Tool succeeded" }));
@@ -335,6 +342,7 @@ test("Given a file-change tool repeats its rich diff in raw output, When the use
     }
 
     await sendPrompt(app, composer, "change one file with duplicate diffs");
+    await expandProcessSections(app);
 
     const edit = await app.waitForView(() =>
         getByRole(document.body, "group", {
@@ -359,6 +367,7 @@ test("Given a browser tool reports its tool-result schema, When the user opens i
     }
 
     await sendPrompt(app, composer, "inspect browser surfaces");
+    await expandProcessSections(app);
 
     const browserTools = await app.waitForView(() => {
         const tools = getAllByRole(document.body, "group", { name: "Browser: cua_repl/js" });
@@ -395,6 +404,7 @@ test("Given a shell tool completes, When the user views the conversation, Then t
     }
 
     await sendPrompt(app, composer, "run a quiet shell command");
+    await expandProcessSections(app);
 
     const shellTool = await app.waitForView(() =>
         getByRole(document.body, "group", { name: 'Shell command: /bin/zsh -lc "true"' }),
@@ -445,6 +455,7 @@ test("Given shell output contains ANSI styles, When the user opens it, Then Chat
     }
 
     await sendPrompt(app, composer, "run a colorful shell command");
+    await expandProcessSections(app);
 
     const shellTool = await app.waitForView(() =>
         getByRole(document.body, "group", { name: 'Shell command: /bin/zsh -lc "pnpm test"' }),
@@ -474,6 +485,7 @@ test("Given tool results exceed 32 KiB, When the user opens them, Then Chat rend
     }
 
     await sendPrompt(app, composer, "show huge tool outputs");
+    await expandProcessSections(app);
 
     const genericTool = await app.waitForView(() =>
         getByRole(document.body, "group", { name: "Tool: Huge diagnostic" }),
@@ -638,7 +650,7 @@ test("Given an expanded process segment whose tool is still generating, When the
 
     await sendPrompt(app, composer, "hold unfinished tools");
     const summary = await app.waitForView(() => {
-        const button = getByRole(document.body, "button", { name: "4 steps", expanded: false });
+        const button = getByRole(document.body, "button", { name: "4 steps · 1 failed", expanded: false });
         expect(button.querySelector(".animate-loading-text-shimmer")).not.toBeNull();
         return button;
     });
@@ -691,6 +703,7 @@ test("Given Codex generates an image, When the user opens the tool, Then Chat sh
     }
 
     await sendPrompt(app, composer, "generate an image");
+    await expandProcessSections(app);
 
     const imageTool = await app.waitForView(() => getByRole(document.body, "group", { name: "Tool: Generate image" }));
     const disclosure = getByRole(imageTool, "button", { name: "Generate image Tool succeeded" });
@@ -718,6 +731,7 @@ test("Given Codex views an image, When the user opens the tool, Then Chat shows 
     }
 
     await sendPrompt(app, composer, "view an image");
+    await expandProcessSections(app);
 
     const imageTool = await app.waitForView(() => getByRole(document.body, "group", { name: "Tool: View image" }));
     await app.user.click(getByRole(imageTool, "button", { name: "View image Tool succeeded" }));

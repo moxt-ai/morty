@@ -87,8 +87,7 @@ test("Given a pending permission, When Chat remounts and the user allows it and 
     const initial = getByRole(document.body, "alertdialog", { name: "Agent permission request" });
     expect(initial.textContent).toContain("pnpm test -- --reporter=verbose");
     expect(initial.textContent).toContain("src/<entry>.ts");
-    const pendingProcess = getByRole(document.body, "button", { name: "2 steps", expanded: false });
-    expect(pendingProcess.querySelector(".animate-loading-text-shimmer")).not.toBeNull();
+    expect(document.body.querySelector(".animate-loading-text-shimmer")).toBeNull();
     expect(getByRole(initial, "region", { name: "Session working directory" }).textContent).not.toBe("");
     app.remount();
     const permission = await app.waitForView(() =>

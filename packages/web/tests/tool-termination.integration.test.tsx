@@ -1,7 +1,7 @@
 import { getAllByLabelText, getByLabelText, getByRole, queryByLabelText } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { sendPrompt, withExpandedProcess } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 
 function readTool(app: TestApp, title: string) {
@@ -13,13 +13,18 @@ function readTool(app: TestApp, title: string) {
     }
     return entry;
 }
+
 async function tool(app: TestApp, title: string) {
-    return await app.waitForView(() => readTool(app, title));
+    return await withExpandedProcess(app, () => readTool(app, title));
 }
 async function assertSettled(app: TestApp) {
     for (const title of ["Unfinished verification", "Pending verification"]) {
-        await app.waitForView(() => expect(getByLabelText(readTool(app, title), "Tool interrupted")).toBeDefined());
-        expect(queryByLabelText(readTool(app, title), "Tool running")).toBeNull();
+        await withExpandedProcess(app, () => {
+            const entry = readTool(app, title);
+            expect(getByLabelText(entry, "Tool interrupted")).toBeDefined();
+            expect(queryByLabelText(entry, "Tool running")).toBeNull();
+            return entry;
+        });
     }
     expect(getByLabelText(await tool(app, "Completed verification"), "Tool succeeded")).toBeDefined();
     expect(getByLabelText(await tool(app, "Failed verification"), "Tool failed")).toBeDefined();
@@ -47,7 +52,10 @@ for (const prompt of ["fail unfinished tools", "complete unfinished tools"]) {
             await reloaded.queryElementByTestId(dataTestId.messageComposer),
             "hold unfinished tools",
         );
-        await reloaded.waitForView(() => expect(getAllByLabelText(document.body, "Tool running")).toHaveLength(2));
+        await withExpandedProcess(reloaded, () => {
+            expect(getAllByLabelText(document.body, "Tool running")).toHaveLength(2);
+            return undefined;
+        });
         expect(getAllByLabelText(document.body, "Tool interrupted")).toHaveLength(2);
         await reloaded.user.click(
             await reloaded.queryElementByTestId(
@@ -86,15 +94,17 @@ for (const prompt of ["hold unfinished tools", "hold steering acknowledgement"])
         );
         for (const current of [app, viewer]) {
             await assertSettled(current);
-            await current.waitForView(() =>
-                expect(getByLabelText(readTool(current, "Steered verification"), "Tool interrupted")).toBeDefined(),
-            );
+            await withExpandedProcess(current, () => {
+                expect(getByLabelText(readTool(current, "Steered verification"), "Tool interrupted")).toBeDefined();
+                return undefined;
+            });
         }
         await viewer.close();
         const reloaded = await app.reload();
-        await reloaded.waitForView(() =>
-            expect(getByLabelText(readTool(reloaded, "Steered verification"), "Tool interrupted")).toBeDefined(),
-        );
+        await withExpandedProcess(reloaded, () => {
+            expect(getByLabelText(readTool(reloaded, "Steered verification"), "Tool interrupted")).toBeDefined();
+            return undefined;
+        });
     });
 }
 
@@ -106,7 +116,10 @@ test("Given an idle conversation is being opened by another viewer, When a new t
     const viewer = await app.openViewer();
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold unfinished tools");
     for (const current of [app, viewer]) {
-        await current.waitForView(() => expect(current.elementsByTestId(dataTestId.agentToolCall)).toHaveLength(8));
+        await withExpandedProcess(current, () => {
+            expect(current.elementsByTestId(dataTestId.agentToolCall)).toHaveLength(8);
+            return undefined;
+        });
         const unfinished = current
             .elementsByTestId(dataTestId.agentToolCall)
             .filter((entry) => entry.getAttribute("aria-label") === "Tool: Unfinished verification");
