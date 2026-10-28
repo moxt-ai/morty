@@ -7,7 +7,9 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { WebSocketApiTransport } from "../src/services/api/websocket-api-transport.ts";
 import { createMortyApplication } from "../src/view-models/morty-application.ts";
 import { App } from "../src/views/application/app.tsx";
+import { showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
+import { TestClock } from "./infra/test-clock.ts";
 
 /**
  * A dependency-injected transport that touches nothing: measurements and
@@ -374,7 +376,8 @@ test("Given a connected Runtime, When the user reports a bug, Then the report au
 }, async () => {
     const inbox = await createReportInbox();
     try {
-        const app = await createTestApp({ connectAgent: true });
+        const clock = new TestClock("2026-10-28T08:00:00Z");
+        const app = await createTestApp({ connectAgent: true, clock });
         // The chat page's sidebar button, not the floating trigger the
         // loading page shows before the anonymous session resolves.
         await app.waitForView(() => {
@@ -399,6 +402,7 @@ test("Given a connected Runtime, When the user reports a bug, Then the report au
             throw new Error("Expected a connected Runtime");
         }
         await app.daemon.disconnect();
+        await showReconnectNotice(app, clock);
         await app.waitForView(() => getByRole(document.body, "button", { name: "Retry now" }));
         await app.daemon.reconnect();
         document.dispatchEvent(new Event("visibilitychange"));

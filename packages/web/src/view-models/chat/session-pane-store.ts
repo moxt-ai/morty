@@ -106,6 +106,7 @@ export type { SessionConnection } from "./session-connection.ts";
 
 const SESSION_EVENT_PAGE_LIMIT = 30;
 const HISTORY_MESSAGE_TARGET = 20;
+const SESSION_RECOVERY_NOTICE_DELAY_MS = 8_000;
 export interface SessionPaneStore {
     readonly connection: SessionConnection;
     readonly title: string;
@@ -600,6 +601,7 @@ export function createSessionPaneModel(options: {
     const connectionWaiters = new Set<() => void>();
     const store = createStore<SessionPaneStore>()((set, get) => {
         let connectionChangedAt = clock.now();
+        let recoveryNoticeDeadline: AbortController | null = null;
         const settleConnectionWaiters = (): void => {
             if (isConnectionSettled(get().connection)) {
                 for (const wake of connectionWaiters) {
@@ -616,7 +618,15 @@ export function createSessionPaneModel(options: {
         ): void => {
             const previous = get().connection.kind;
             set(partial);
-            const current = get().connection.kind;
+            const connection = get().connection;
+            const current = connection.kind;
+            if (
+                current !== "reconnecting" &&
+                (connection.kind !== "disconnected" || connection.retry.kind === "exhausted")
+            ) {
+                recoveryNoticeDeadline?.abort();
+                recoveryNoticeDeadline = null;
+            }
             if (current !== previous) {
                 const now = clock.now();
                 recordBrowserDiagnostic({
@@ -963,6 +973,36 @@ export function createSessionPaneModel(options: {
                 };
                 let consecutiveFailures = 0;
                 const paneSignal = signal;
+                // One grace period per interruption, shared by the bridge wait, backoff and reconciliation.
+                // Successful recovery or a terminal outcome cancels it in the connection transition above.
+                const recoveryNotice = (): "quiet" | "visible" => {
+                    const current = get().connection;
+                    if (recoveryNoticeDeadline !== null && !recoveryNoticeDeadline.signal.aborted) {
+                        return current.kind === "disconnected" || current.kind === "reconnecting"
+                            ? current.notice
+                            : "quiet";
+                    }
+                    const deadline = new AbortController();
+                    recoveryNoticeDeadline = deadline;
+                    paneSignal.addEventListener("abort", () => deadline.abort(), {
+                        once: true,
+                        signal: deadline.signal,
+                    });
+                    const noticeSignal = AbortSignal.any([paneSignal, deadline.signal]);
+                    void clock.sleep(SESSION_RECOVERY_NOTICE_DELAY_MS, noticeSignal).then(
+                        () => {
+                            if (noticeSignal.aborted) {
+                                return;
+                            }
+                            const connection = get().connection;
+                            if (connection.kind === "disconnected" || connection.kind === "reconnecting") {
+                                setAndSettle({ connection: { ...connection, notice: "visible" } });
+                            }
+                        },
+                        () => undefined,
+                    );
+                    return "quiet";
+                };
                 // The signal is this attempt's own: the pane's lifetime, and also the closing of the Session.
                 const observeSession = async (signal: AbortSignal): Promise<void> => {
                     client = await requests.connectSession(
@@ -1064,6 +1104,7 @@ export function createSessionPaneModel(options: {
                                     setAndSettle({
                                         connection: {
                                             kind: "reconnecting",
+                                            notice: recoveryNotice(),
                                             message: connectionFailure(get().connection),
                                         },
                                     });
@@ -1225,11 +1266,15 @@ export function createSessionPaneModel(options: {
                             return;
                         }
                         consecutiveFailures = 0;
-                        setAndSettle({ connection: { kind: "reconnecting", message: null } });
+                        setAndSettle({ connection: { kind: "reconnecting", message: null, notice: recoveryNotice() } });
                     }
                     if (consecutiveFailures > 0) {
                         setAndSettle({
-                            connection: { kind: "reconnecting", message: connectionFailure(get().connection) },
+                            connection: {
+                                kind: "reconnecting",
+                                message: connectionFailure(get().connection),
+                                notice: recoveryNotice(),
+                            },
                         });
                     }
                     const running = new AbortController();
@@ -1272,7 +1317,11 @@ export function createSessionPaneModel(options: {
                         const message = formatError(cause, "The Session could not be opened.");
                         setAndSettle({
                             connection: retryable
-                                ? disconnectedConnection(message, retry.kind === "scheduled" ? retry.delayMs : null)
+                                ? disconnectedConnection(
+                                      message,
+                                      retry.kind === "scheduled" ? retry.delayMs : null,
+                                      recoveryNotice(),
+                                  )
                                 : { kind: "failed", message },
                         });
                         countdownInterrupt = new AbortController();
@@ -1286,6 +1335,7 @@ export function createSessionPaneModel(options: {
                                         kind: "disconnected",
                                         message,
                                         retry: { kind: "waiting-for-bridge" },
+                                        notice: recoveryNotice(),
                                     },
                                 });
                                 await requests.waitForBridge(retrySignal);
@@ -1296,7 +1346,11 @@ export function createSessionPaneModel(options: {
                                     await clock.sleep(Math.min(1000, retryAt - clock.now()), retrySignal);
                                     retrySignal.throwIfAborted();
                                     setAndSettle({
-                                        connection: disconnectedConnection(message, retryAt - clock.now()),
+                                        connection: disconnectedConnection(
+                                            message,
+                                            retryAt - clock.now(),
+                                            recoveryNotice(),
+                                        ),
                                     });
                                 }
                             } else {

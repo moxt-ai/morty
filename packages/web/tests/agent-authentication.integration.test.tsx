@@ -1,8 +1,9 @@
 import { getByRole, getByText, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
+import { TestClock } from "./infra/test-clock.ts";
 
 for (const agent of [
     { id: "claude", label: "Claude Code", title: "Claude Code needs sign-in", command: "claude" },
@@ -12,7 +13,8 @@ for (const agent of [
     test(`Given ${agent.label} requires authentication, When I send a message and retry after reloading, Then one notice offers recovery steps and preserves my draft`, {
         timeout: 30_000,
     }, async () => {
-        const app = await createTestApp({ connectAgent: true, agent });
+        const clock = new TestClock("2026-10-28T08:00:00Z");
+        const app = await createTestApp({ connectAgent: true, agent, clock });
         const initialComposer = await app.queryElementByTestId(
             dataTestId.messageComposer,
             (element) => element instanceof HTMLTextAreaElement && !element.disabled,
@@ -52,12 +54,14 @@ for (const agent of [
                 throw new Error("Expected the connected Runtime");
             }
             await app.daemon.disconnect();
+            await showReconnectNotice(app, clock);
             await app.waitForView(() =>
                 expect(app.elementByTestId(dataTestId.sessionReconnectNotice).textContent).toContain("Retrying in"),
             );
             await app.daemon.reconnect();
             await app.user.click(getByRole(document.body, "button", { name: "Retry now" }));
             await app.waitForView(() => {
+                getByRole(document.body, "button", { name: /Switch computer/, description: "Connection available" });
                 expect(app.optionalElementByTestId(dataTestId.sessionReconnectNotice)).toBeNull();
                 expect(getByRole(document.body, "alert").textContent).toContain(agent.title);
             });

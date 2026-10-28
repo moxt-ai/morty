@@ -1,8 +1,9 @@
 import { getByRole } from "@testing-library/dom";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { openAgentModelPicker, sendPrompt } from "./infra/application-scenario.ts";
+import { openAgentModelPicker, sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
+import { TestClock } from "./infra/test-clock.ts";
 import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
 
 test("Given two clients of the current Runtime, When one changes the model and the other sends, Then the Session keeps the explicit choice", {
@@ -48,7 +49,9 @@ for (const delivery of ["before-acceptance", "after-acceptance"] as const) {
     }, async () => {
         const environment = await createChatWorkerEnvironment(true);
         onTestFinished(() => environment.close());
+        const clock = new TestClock("2026-10-28T08:00:00Z");
         const first = await createTestApp({
+            clock,
             environment,
             connectAgent: true,
             agent: { id: "settings-test", label: "Settings Agent", runtime: "current" },
@@ -74,6 +77,7 @@ for (const delivery of ["before-acceptance", "after-acceptance"] as const) {
             throw new Error("Expected the shared Session");
         }
         await first.daemon.selectModel(sessionId, "test-large");
+        await showReconnectNotice(first, clock);
         network.reconnect();
         await first.user.click(
             await first.waitForView(() => getByRole(document.body, "button", { name: "Retry now" })),

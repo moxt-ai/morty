@@ -2,7 +2,7 @@ import { getAllByRole, getByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 
@@ -172,6 +172,7 @@ test("Given an active Pi conversation, When the Runtime is offline while the new
         throw new Error("Expected a connected Runtime");
     }
     await app.daemon.disconnect();
+    await showReconnectNotice(app, clock);
     await app.queryElementByTestId(
         dataTestId.sessionReconnectNotice,
         (element) => element.textContent?.includes("Retry now") === true,

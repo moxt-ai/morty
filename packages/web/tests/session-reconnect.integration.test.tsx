@@ -2,7 +2,7 @@ import { getByLabelText, getByRole, queryAllByRole, queryAllByText, queryByRole 
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 
@@ -24,6 +24,67 @@ function retrySeconds(app: TestApp): number {
 
 const CLOCK_ORIGIN = "2026-10-13T08:00:00Z";
 
+test("Given an open conversation with a draft, When the Runtime briefly disconnects twice, Then recovery stays quiet without sending the draft", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const composer = await openSavedConversation(app, "Quiet recovery");
+    if (app.daemon === null) {
+        throw new Error("Expected the connected Runtime");
+    }
+    await app.user.type(composer, "Keep writing through recovery");
+    for (const cycle of [1, 2]) {
+        await app.daemon.disconnect();
+        await app.waitForView(() =>
+            getByRole(document.body, "button", { name: /Switch computer/, description: "Reconnecting" }),
+        );
+        expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true);
+        expect(reconnectStatusText(app), `interruption ${cycle}`).toBeNull();
+        expect(composer.disabled).toBe(false);
+        await app.daemon.reconnect();
+        document.dispatchEvent(new Event("visibilitychange"));
+        await app.waitForView(() =>
+            expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false),
+        );
+        await act(async () => clock.advanceBy(8_000));
+        expect(reconnectStatusText(app)).toBeNull();
+        expect(composer.value).toBe("Keep writing through recovery");
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain(composer.value);
+    }
+});
+
+test("Given an interrupted conversation, When recovery lasts eight seconds across attempts, Then one actionable notice appears and clears on recovery", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const composer = await openSavedConversation(app, "Persistent interruption");
+    if (app.daemon === null) {
+        throw new Error("Expected the connected Runtime");
+    }
+    await app.user.type(composer, "Still unsent");
+    await app.daemon.disconnect();
+    await app.waitForView(() =>
+        getByRole(document.body, "button", { name: /Switch computer/, description: "Reconnecting" }),
+    );
+    expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true);
+    expect(reconnectStatusText(app)).toBeNull();
+    await act(async () => clock.advanceBy(7_999));
+    expect(reconnectStatusText(app)).toBeNull();
+    await act(async () => clock.advanceBy(1));
+    await app.waitForView(() => expect(reconnectStatusText(app)).not.toBeNull());
+    expect(app.elementsByTestId(dataTestId.sessionReconnectNotice)).toHaveLength(1);
+    const retry = await app.waitForView(() => getByRole(document.body, "button", { name: "Retry now" }));
+    await app.daemon.reconnect();
+    await app.user.click(retry);
+    await app.waitForView(() =>
+        getByRole(document.body, "button", { name: /Switch computer/, description: "Connection available" }),
+    );
+    expect(reconnectStatusText(app)).toBeNull();
+    expect(composer.value).toBe("Still unsent");
+});
+
 test("Given an offline Runtime, When the retry deadline elapses, Then the countdown advances and automatic retries back off", {
     timeout: 30_000,
 }, async () => {
@@ -34,9 +95,10 @@ test("Given an offline Runtime, When the retry deadline elapses, Then the countd
         throw new Error("Expected the connected Runtime");
     }
     await app.daemon.disconnect();
+    await showReconnectNotice(app, clock);
     const firstDelay = await app.waitForView(() => retrySeconds(app));
-    expect(firstDelay).toBeGreaterThanOrEqual(3);
-    expect(firstDelay).toBeLessThanOrEqual(5);
+    expect(firstDelay).toBeGreaterThanOrEqual(5);
+    expect(firstDelay).toBeLessThanOrEqual(10);
     const notice = app.elementByTestId(dataTestId.sessionReconnectNotice);
     const form = notice.closest("form");
     if (form === null) {
@@ -49,13 +111,13 @@ test("Given an offline Runtime, When the retry deadline elapses, Then the countd
     expect(retrySeconds(app)).toBe(1);
     await act(async () => clock.advanceBy(1000));
     const secondDelay = await app.waitForView(() => retrySeconds(app));
-    expect(secondDelay).toBeGreaterThanOrEqual(5);
-    expect(secondDelay).toBeLessThanOrEqual(10);
+    expect(secondDelay).toBeGreaterThanOrEqual(10);
+    expect(secondDelay).toBeLessThanOrEqual(20);
     expect(queryByRole(form, "alert")).toBeNull();
     await act(async () => clock.advanceBy(secondDelay * 1000));
     const thirdDelay = await app.waitForView(() => retrySeconds(app));
-    expect(thirdDelay).toBeGreaterThanOrEqual(10);
-    expect(thirdDelay).toBeLessThanOrEqual(20);
+    expect(thirdDelay).toBeGreaterThanOrEqual(15);
+    expect(thirdDelay).toBeLessThanOrEqual(30);
 });
 
 async function openSavedConversation(app: TestApp, prompt: string): Promise<HTMLTextAreaElement> {
@@ -121,7 +183,7 @@ test("Given a failed Agent turn, When its Runtime reconnects and the conversatio
         expect(queryByRole(form, "alert")).toBeNull();
     });
     await app.daemon.disconnect();
-    await app.waitForView(() => expect(reconnectStatusText(app)).toContain("Retrying in"));
+    await showReconnectNotice(app, clock);
     expect(
         queryAllByText(document.body, "Internal error: The controlled Agent rejected this turn.", { exact: true }),
     ).toHaveLength(1);
@@ -132,6 +194,7 @@ test("Given a failed Agent turn, When its Runtime reconnects and the conversatio
     }
     await app.user.click(retry);
     await app.waitForView(() => {
+        getByRole(document.body, "button", { name: /Switch computer/, description: "Connection available" });
         expect(composer.disabled).toBe(false);
         expect(reconnectStatusText(app)).toBeNull();
     });
@@ -171,16 +234,18 @@ test("Given a recovered Runtime and an unsent draft, When the retry deadline arr
     await app.user.click(composer);
     await app.user.paste("Still unsent");
     await app.daemon.disconnect();
-    const delay = await app.waitForView(() => retrySeconds(app));
+    await app.waitForView(() =>
+        getByRole(document.body, "button", { name: /Switch computer/, description: "Reconnecting" }),
+    );
     await app.daemon.reconnect();
-    await act(async () => clock.advanceBy((delay - 1) * 1000));
     expect(composer.disabled).toBe(false);
     expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true);
-    expect(reconnectStatusText(app)).toContain("Retrying in 1 s");
-    await act(async () => clock.advanceBy(1000));
+    expect(reconnectStatusText(app)).toBeNull();
+    await act(async () => clock.advanceBy(5_000));
     await app.waitForView(() => {
         expect(reconnectStatusText(app)).toBeNull();
         expect(composer.disabled).toBe(false);
+        expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false);
     });
     expect(queryByRole(composer.closest("form") ?? document.body, "alert")).toBeNull();
     expect(composer.value).toBe("Still unsent");
@@ -201,7 +266,8 @@ test("Given an unavailable Runtime and an editable draft, When automatic retries
     }
     await app.user.type(composer, "Keep editing through failure");
     await app.daemon.disconnect();
-    for (let attempt = 0; attempt < 7; attempt += 1) {
+    await showReconnectNotice(app, clock);
+    for (let attempt = 0; attempt < 6; attempt += 1) {
         const seconds = await app.waitForView(() => retrySeconds(app));
         await act(async () => clock.advanceBy(seconds * 1000));
     }
@@ -221,7 +287,10 @@ test("Given an unavailable Runtime and an editable draft, When automatic retries
     ).toBeNull();
     await app.daemon.reconnect();
     await app.user.click(getByRole(document.body, "button", { name: "Retry now" }));
-    await app.waitForView(() => expect(reconnectStatusText(app)).toBeNull());
+    await app.waitForView(() =>
+        getByRole(document.body, "button", { name: /Switch computer/, description: "Connection available" }),
+    );
+    expect(reconnectStatusText(app)).toBeNull();
     expect(queryByRole(document.body, "alert")).toBeNull();
     expect(composer.value).toBe("Keep editing through failure even now");
     expect(getByRole(document.body, "list", { name: "Attachments" }).textContent).toContain("recovery-notes.json");
@@ -238,7 +307,10 @@ test("Given an active turn and an unsent follow-up, When connection freshness is
     const app = await createTestApp({ connectAgent: true, clock });
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
     await app.queryElementByTestId(dataTestId.sessionStatus);
-    await app.waitForView(() => expect(reconnectStatusText(app)).toBeNull());
+    await app.waitForView(() =>
+        getByRole(document.body, "button", { name: /Switch computer/, description: "Connection available" }),
+    );
+    expect(reconnectStatusText(app)).toBeNull();
     const composer = await app.queryElementByTestId(
         dataTestId.messageComposer,
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
@@ -247,11 +319,13 @@ test("Given an active turn and an unsent follow-up, When connection freshness is
     expect(composer).toHaveProperty("value", "Keep my follow-up");
     app.transport.disconnect();
     await app.waitForView(() => expect(app.elementByTestId(dataTestId.sendMessage)).toHaveProperty("disabled", true));
+    expect(reconnectStatusText(app)).toBeNull();
     await app.user.keyboard("{Enter}");
     expect(composer).toHaveProperty("value", "Keep my follow-up");
     expect(app.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull();
     await act(async () => clock.advanceBy(1_000));
-    await app.waitForView(() => expect(reconnectStatusText(app)).toBeNull());
+    await app.waitForView(() => expect(app.elementByTestId(dataTestId.sendMessage)).toHaveProperty("disabled", false));
+    expect(reconnectStatusText(app)).toBeNull();
     expect(composer).toHaveProperty("value", "Keep my follow-up");
     await app.user.keyboard("{Enter}");
     await app.queryElementByTestId(

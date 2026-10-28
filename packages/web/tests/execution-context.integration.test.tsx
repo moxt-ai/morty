@@ -2,7 +2,7 @@ import { getByRole, queryByRole } from "@testing-library/dom";
 import type { DetachedWindowAPI } from "happy-dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { openExecutionDetails, sendPrompt } from "./infra/application-scenario.ts";
+import { openExecutionDetails, sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 
@@ -82,7 +82,8 @@ test("Given a connected computer on mobile, When the user views the conversation
 test("Given a connected Runtime, When a saved conversation disconnects and recovers, Then its shared connection indicator and details follow the session without losing its directory", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({ connectAgent: true, clock: new TestClock("2026-10-21T08:00:00Z") });
+    const clock = new TestClock("2026-10-21T08:00:00Z");
+    const app = await createTestApp({ connectAgent: true, clock });
     await app.queryElementByTestId(
         dataTestId.messageComposer,
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
@@ -110,6 +111,7 @@ test("Given a connected Runtime, When a saved conversation disconnects and recov
         throw new Error("Expected a connected Runtime");
     }
     await app.daemon.disconnect();
+    await showReconnectNotice(app, clock);
     await app.queryElementByTestId(
         dataTestId.sessionReconnectNotice,
         (element) => element.textContent?.includes("Retry now") === true,

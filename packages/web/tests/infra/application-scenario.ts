@@ -1,6 +1,8 @@
 import { getByRole } from "@testing-library/dom";
+import { act } from "@testing-library/react";
 import { dataTestId } from "../../src/data-testid.ts";
 import type { TestApp } from "./test-app.tsx";
+import type { TestClock } from "./test-clock.ts";
 
 export async function openAgentModelPicker(app: TestApp): Promise<void> {
     await app.user.click(
@@ -43,4 +45,13 @@ export async function openExecutionDetails(app: TestApp): Promise<HTMLElement> {
         await app.waitForView(() => getByRole(document.body, "menuitem", { name: /View execution details/ })),
     );
     return app.waitForView(() => getByRole(document.body, "dialog", { name: "Execution details" }));
+}
+
+/** Observe recovery through the UI before advancing its uninterrupted grace period. */
+export async function showReconnectNotice(app: TestApp, clock: TestClock): Promise<void> {
+    await app.waitForView(() =>
+        getByRole(document.body, "button", { name: /Switch computer/, description: "Reconnecting" }),
+    );
+    await act(async () => clock.advanceBy(8_000));
+    await app.waitForView(() => getByRole(document.body, "button", { name: "Retry now" }));
 }

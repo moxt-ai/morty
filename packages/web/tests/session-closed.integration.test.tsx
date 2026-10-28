@@ -2,7 +2,7 @@ import { getByRole, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 
@@ -181,11 +181,12 @@ test("Given a conversation whose Runtime restarted and then closed its Session w
         throw new Error("The opened conversation must have an address");
     }
     await daemon.disconnect();
+    await showReconnectNotice(app, clock);
     await app.waitForView(() => expect(reconnectStatusText(app)).toContain("Retrying in"));
     await daemon.reconnect();
     await daemon.closeSession(sessionId);
 
-    await act(async () => clock.advanceBy(5000));
+    await act(async () => clock.advanceBy(10_000));
 
     // Chat may or may not hear the Runtime announce the closing, so the reason is not part of this scenario.
     await app.waitForView(() => expect(closedNoticeText(app)).toMatch(/^The session is closed\./));
