@@ -1330,7 +1330,7 @@ export function createSessionPaneModel(options: {
                     const started = clock.now();
                     const deadline = new AbortController();
                     const signal = AbortSignal.any([parent, running.signal, deadline.signal]);
-                    void clock.sleep(5_000, signal).then(
+                    void clock.sleep(10_000, signal).then(
                         () =>
                             deadline.abort(
                                 new MobiusError("service_unavailable", "The Session connection stopped responding."),
