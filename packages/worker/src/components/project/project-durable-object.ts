@@ -5,9 +5,8 @@ import type { CloudBindings } from "../../infra/cloud-bindings.ts";
 import { DurableObjectDatabase } from "../../infra/durable-object-database.ts";
 import { json } from "../../infra/http.ts";
 import { cloudProjectId } from "../../middleware/project-context.ts";
-import { platformIdentifier, platformProjectSchema } from "../management/entity/platform-project.ts";
-
-const bootstrapSchema = v.pipe(v.object({ project: platformProjectSchema, userId: platformIdentifier }), v.readonly());
+import { platformIdentifier } from "../management/entity/platform-project.ts";
+import { projectBootstrap } from "../management/entity/project-bootstrap.ts";
 
 export class ProjectDurableObject extends DurableObject<CloudBindings> {
     readonly #database: DurableObjectDatabase;
@@ -33,7 +32,7 @@ export class ProjectDurableObject extends DurableObject<CloudBindings> {
 
     readonly #bootstrap = async (request: Request): Promise<Response> => {
         const input: unknown = await request.json();
-        const parsed = v.parse(bootstrapSchema, input);
+        const parsed = v.parse(projectBootstrap, input);
         await this.#bindProject(parsed.project.projectId);
         return await application.fetch(
             new Request(request.url, {
@@ -42,8 +41,37 @@ export class ProjectDurableObject extends DurableObject<CloudBindings> {
                 method: "POST",
                 signal: request.signal,
             }),
-            this.#bindings(parsed.project.projectId),
+            {
+                ...this.#bindings(parsed.project.projectId),
+                ...(parsed.replacement === undefined
+                    ? {}
+                    : { CHAT_REPLACEMENT_KEY: await this.#replacementKey(request.signal) }),
+            },
         );
+    };
+
+    readonly #replacementKey = async (signal: AbortSignal): Promise<Uint8Array> => {
+        signal.throwIfAborted();
+        const result = await this.ctx.storage.transaction(async (storage) => {
+            const stored: unknown = await storage.get("replacement-key-v1");
+            signal.throwIfAborted();
+            if (stored !== undefined) {
+                return v.parse(
+                    v.pipe(
+                        v.instance(Uint8Array),
+                        v.check((key) => key.length === 32),
+                    ),
+                    stored,
+                );
+            }
+            // Independent server entropy keeps a retired predecessor token from deriving its successor offline.
+            // This key survives restarts, deployment credential rotation, and retries; no bearer token is stored.
+            const key = crypto.getRandomValues(new Uint8Array(32));
+            await storage.put("replacement-key-v1", key);
+            return key;
+        });
+        signal.throwIfAborted();
+        return result;
     };
 
     readonly #bindProject = async (projectId: string): Promise<void> => {

@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
 import { instructionDocumentRoutes } from "./components/instruction-documents/http/index.ts";
-import { platformIdentifier, platformProjectSchema } from "./components/management/entity/platform-project.ts";
+import { projectBootstrap } from "./components/management/entity/project-bootstrap.ts";
 import { createApplicationDependencies } from "./composition/application-context.ts";
 import { cloudRoutes, publicCloudRoutes } from "./composition/cloud-http.ts";
 import { createCloudWebSocketHandlers } from "./composition/cloud-websocket.ts";
@@ -19,8 +19,6 @@ const notFound = (): never => {
     throw new RequestError("NOT_FOUND", "Not found.", 404);
 };
 
-const projectBootstrap = v.pipe(v.object({ project: platformProjectSchema, userId: platformIdentifier }), v.readonly());
-
 async function bootstrapProject(request: Request, bindings: CloudBindings): Promise<Response> {
     const projectId = bindings.CHAT_PROJECT_ID;
     if (projectId === undefined) {
@@ -35,7 +33,12 @@ async function bootstrapProject(request: Request, bindings: CloudBindings): Prom
     const dependencies = createApplicationDependencies(bindings);
     return new Response(
         JSON.stringify(
-            await dependencies.services.management.initializeAnonymousUser(parsed.userId, parsed.project, signal),
+            await dependencies.services.management.initializeAnonymousUser(
+                parsed.userId,
+                parsed.project,
+                signal,
+                parsed.replacement,
+            ),
         ),
         {
             headers: { "Cache-Control": "no-store", "content-type": "application/json" },

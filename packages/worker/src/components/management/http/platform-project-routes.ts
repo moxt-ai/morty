@@ -59,9 +59,15 @@ export function createPlatformProjectRoutes() {
             context.env.logger.info({ ...audit, stage: "requested" }, "Project replacement requested");
             try {
                 const project = await management.replaceProject(local.userId, signal);
+                // Repeating the same saved local identity reuses its successor credential, even if bootstrap
+                // committed only part of its data. An explicitly revoked successor credential is never reissued.
                 const response = await projectObject(context.env.config.bindings, project.projectId).fetch(
                     new Request("https://project.internal/__project/bootstrap", {
-                        body: JSON.stringify({ project, userId: local.userId }),
+                        body: JSON.stringify({
+                            project,
+                            userId: local.userId,
+                            replacement: { previousProjectId: audit.previousProjectId, token: local.token },
+                        }),
                         headers: { "content-type": "application/json" },
                         method: "POST",
                         signal,

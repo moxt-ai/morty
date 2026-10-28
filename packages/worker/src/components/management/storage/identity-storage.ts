@@ -31,23 +31,42 @@ export class IdentityStorage {
         projectId: string,
         now: number,
         signal: AbortSignal,
-    ): Promise<AnonymousIdentity> => {
+        token = `mobius_anon_v2_${randomSecret()}`,
+    ): Promise<AnonymousIdentity | null> => {
         signal.throwIfAborted();
         const credentialId = `cred_${crypto.randomUUID()}`;
-        const token = `mobius_anon_v2_${randomSecret()}`;
+        const tokenHash = await digest(token);
+        signal.throwIfAborted();
         const database = requireIdentityDatabase(this.#database);
         await database.batch([
             database.insert(appUser).values({ id: userId, createdAt: now }).onConflictDoNothing(),
-            database.insert(anonymousCredential).values({
-                id: credentialId,
-                userId,
-                tokenHash: await digest(token),
-                kind: "local",
-                createdAt: now,
-            }),
+            database
+                .insert(anonymousCredential)
+                .values({
+                    id: credentialId,
+                    userId,
+                    tokenHash,
+                    kind: "local",
+                    createdAt: now,
+                })
+                .onConflictDoNothing({ target: anonymousCredential.tokenHash }),
         ]);
         signal.throwIfAborted();
-        return { token, userId, projectId };
+        // A retry reuses the committed row, including its revocation; it never resets or replaces it.
+        const credential = await database
+            .select({ id: anonymousCredential.id })
+            .from(anonymousCredential)
+            .where(
+                and(
+                    eq(anonymousCredential.tokenHash, tokenHash),
+                    eq(anonymousCredential.userId, userId),
+                    eq(anonymousCredential.kind, "local"),
+                    isNull(anonymousCredential.revokedAt),
+                ),
+            )
+            .get();
+        signal.throwIfAborted();
+        return credential === undefined ? null : { token, userId, projectId };
     };
 
     readonly findCredential = async (token: string, signal: AbortSignal) => {

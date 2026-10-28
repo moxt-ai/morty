@@ -1,6 +1,9 @@
+import * as v from "valibot";
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
+import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { type PlatformProject, PlatformProjectError } from "../entity/platform-project.ts";
+import type { ReplacementIdentity } from "../entity/project-bootstrap.ts";
 import { projectRegion } from "../entity/project-region.ts";
 import type { ManagedBotStorage } from "../storage/managed-bot-storage.ts";
 import type { PlatformProjectStorage } from "../storage/platform-project-storage.ts";
@@ -15,8 +18,10 @@ export class ManagementService {
     readonly #platformProjects: PlatformProjectStorage;
     readonly #platform: PlatformProjectGateway;
     readonly #scopeProject: (projectId: string, signal: AbortSignal) => Promise<ManagementService>;
+    readonly #replacementKey: unknown;
 
     constructor(cx: {
+        readonly config: { readonly bindings: CloudBindings };
         readonly services: { readonly authentication: AuthenticationService };
         readonly storages: {
             readonly managedBots: ManagedBotStorage;
@@ -30,6 +35,7 @@ export class ManagementService {
         this.#platformProjects = cx.storages.platformProjects;
         this.#platform = cx.gateways.platformProjects;
         this.#scopeProject = cx.scopeProject;
+        this.#replacementKey = cx.config.bindings.CHAT_REPLACEMENT_KEY;
     }
 
     readonly createAnonymousUser = async (location: LocationHint, signal: AbortSignal) => {
@@ -39,8 +45,17 @@ export class ManagementService {
         return await scoped.initializeAnonymousUser(userId, project, signal);
     };
 
-    readonly initializeAnonymousUser = async (userId: string, project: PlatformProject, signal: AbortSignal) => {
-        const identity = await this.#authentication.createAnonymous(userId, project.projectId, signal);
+    readonly initializeAnonymousUser = async (
+        userId: string,
+        project: PlatformProject,
+        signal: AbortSignal,
+        replacement?: ReplacementIdentity,
+    ) => {
+        const token =
+            replacement === undefined
+                ? undefined
+                : await replacementToken(this.#replacementKey, userId, project.projectId, replacement);
+        const identity = await this.#authentication.createAnonymous(userId, project.projectId, signal, token);
         const { appId } = this.#platform.configuration();
         await this.#platformProjects.save(userId, appId, project, signal);
         const bot = await this.provisionUserBot(identity.userId, undefined, signal);
@@ -190,4 +205,38 @@ export class ManagementService {
         }
         return project;
     };
+}
+
+// The version and input encoding are part of the persisted retry contract; keep them stable.
+async function replacementToken(
+    serverKey: unknown,
+    userId: string,
+    projectId: string,
+    replacement: ReplacementIdentity,
+) {
+    const secret = v.parse(v.instance(Uint8Array), serverKey);
+    const key = await crypto.subtle.importKey(
+        "raw",
+        Uint8Array.from(secret),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"],
+    );
+    const signed = await crypto.subtle.sign(
+        "HMAC",
+        key,
+        new TextEncoder().encode(
+            JSON.stringify([
+                "morty-project-replacement-v1",
+                userId,
+                replacement.previousProjectId,
+                projectId,
+                replacement.token,
+            ]),
+        ),
+    );
+    return `mobius_anon_v2_${btoa(String.fromCharCode(...new Uint8Array(signed)))
+        .replaceAll("+", "-")
+        .replaceAll("/", "_")
+        .replace(/=+$/u, "")}`;
 }

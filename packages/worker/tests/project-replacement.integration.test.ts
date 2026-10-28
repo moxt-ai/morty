@@ -1,19 +1,24 @@
+import { fileURLToPath } from "node:url";
 import * as v from "valibot";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import worker from "../src/application.ts";
+import { projectObject } from "../src/gateway/project-object-routing.ts";
 import { APP_ORIGIN, createIdentityFixture } from "./support/identity-fixture.ts";
 
 const replacementSchema = v.object({
     bot: v.object({ botId: v.string(), displayName: v.string() }),
     projectId: v.string(),
-    token: v.string(),
+    // Independently retained setup decoder from main at 81157fb4: no new token format is required.
+    token: v.pipe(v.string(), v.regex(/^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u)),
     userId: v.string(),
 });
 
 let fixture: Awaited<ReturnType<typeof createIdentityFixture>>;
 
 beforeAll(async () => {
-    fixture = await createIdentityFixture();
+    fixture = await createIdentityFixture({
+        workerEntryPoint: fileURLToPath(new URL("./support/credential-storage-worker.ts", import.meta.url)),
+    });
 });
 
 afterAll(async () => {
@@ -44,6 +49,7 @@ test("Given a saved Machine on a Project, When its Project is replaced, Then the
     const retry = v.parse(replacementSchema, await retryResponse.json());
     expect(retry.projectId).toBe(replacement.projectId);
     expect(retry.bot.botId).toBe(replacement.bot.botId);
+    expect(retry.token).toBe(replacement.token);
 
     const sessionResponse = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/projects/${replacement.projectId}/session`, {
@@ -72,12 +78,113 @@ test("Given a saved Machine on a Project, When its Project is replaced, Then the
     expect(await bindingResponse.json()).toMatchObject({ botId: replacement.bot.botId, runtimeId: null });
 });
 
+test("Given a saved Machine, When replacement requests overlap and are retried, Then every reply carries the same usable local credential", async () => {
+    const original = await fixture.createAnonymousUser();
+    const replace = () =>
+        worker.fetch(
+            projectRequest(original.projectId, "/management/project/replacement", original.token, "POST"),
+            fixture.environment(),
+        );
+    const responses = await Promise.all([replace(), replace(), replace()]);
+    const identities = await Promise.all(
+        responses.map(async (response) => {
+            expect(response.status).toBe(201);
+            return v.parse(replacementSchema, await response.json());
+        }),
+    );
+    const retryResponse = await replace();
+    expect(retryResponse.status).toBe(201);
+    const retry = v.parse(replacementSchema, await retryResponse.json());
+    for (const identity of identities) {
+        expect(identity).toEqual(retry);
+    }
+    expect(
+        (await worker.fetch(projectRequest(retry.projectId, "/session", retry.token), fixture.environment())).status,
+    ).toBe(200);
+});
+
+test("Given a revoked successor local credential, When the previous Machine retries replacement, Then it cannot reactivate that credential", async () => {
+    const original = await fixture.createAnonymousUser();
+    const replace = () =>
+        worker.fetch(
+            projectRequest(original.projectId, "/management/project/replacement", original.token, "POST"),
+            fixture.environment(),
+        );
+    const response = await replace();
+    expect(response.status).toBe(201);
+    const replacement = v.parse(replacementSchema, await response.json());
+    expect(
+        (
+            await worker.fetch(
+                projectRequest(replacement.projectId, "/identity/v1/local-credential", replacement.token, "DELETE"),
+                fixture.environment(),
+            )
+        ).status,
+    ).toBe(204);
+    const retry = await replace();
+    expect(retry.status).toBe(409);
+    expect(await retry.json()).toMatchObject({ error: { code: "LOCAL_CREDENTIAL_UNAVAILABLE" } });
+    expect(
+        (
+            await worker.fetch(
+                projectRequest(replacement.projectId, "/session", replacement.token),
+                fixture.environment(),
+            )
+        ).status,
+    ).toBe(401);
+});
+
 function projectRequest(projectId: string, path: string, token: string, method = "GET"): Request {
     return new Request(`${APP_ORIGIN}/morty/api/projects/${projectId}${path}`, {
         method,
         headers: { authorization: `Bearer ${token}` },
     });
 }
+
+test("Given bootstrap persisted only its local credential, When the saved Machine retries replacement, Then setup receives that credential and a completed Machine", async () => {
+    const original = await fixture.createAnonymousUser();
+    const replace = () =>
+        worker.fetch(
+            projectRequest(original.projectId, "/management/project/replacement", original.token, "POST"),
+            fixture.environment(),
+        );
+    const response = await replace();
+    expect(response.status).toBe(201);
+    const issued = v.parse(replacementSchema, await response.json());
+    const storage = projectObject(fixture.environment(), issued.projectId);
+    expect(
+        (await storage.fetch(new Request("https://project.internal/incomplete-bootstrap", { method: "DELETE" })))
+            .status,
+    ).toBe(204);
+    expect(
+        (await worker.fetch(projectRequest(issued.projectId, "/session", issued.token), fixture.environment())).status,
+    ).toBe(401);
+
+    // Reload the real Worker with its durable storage intact before resuming the incomplete bootstrap.
+    await fixture.changePlatformOrigin(fixture.baseConfiguration.MOBIUS_BASE_URL);
+
+    const retry = await replace();
+    expect(retry.status).toBe(201);
+    const completed = v.parse(replacementSchema, await retry.json());
+    expect(completed.token).toBe(issued.token);
+    expect(completed.projectId).toBe(issued.projectId);
+    expect(
+        (await worker.fetch(projectRequest(completed.projectId, "/session", completed.token), fixture.environment()))
+            .status,
+    ).toBe(200);
+    expect(
+        (
+            await worker.fetch(
+                projectRequest(
+                    completed.projectId,
+                    `/management/bots/${completed.bot.botId}/runtime-binding`,
+                    completed.token,
+                ),
+                fixture.environment(),
+            )
+        ).status,
+    ).toBe(200);
+});
 
 async function share(projectId: string, token: string): Promise<string> {
     const response = await worker.fetch(

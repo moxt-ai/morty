@@ -1,6 +1,7 @@
 import * as v from "valibot";
 import { anonymousToken, type Credential } from "../entity/authentication/credential.ts";
 import type { Session } from "../entity/authentication/session.ts";
+import { ManagementError } from "../entity/management-error.ts";
 import type { IdentityStorage, IdentityTransfer } from "../storage/identity-storage.ts";
 import type { AnonymousIdentity } from "../storage/identity-storage-common.ts";
 
@@ -79,7 +80,18 @@ export class AuthenticationService {
         userId: string,
         projectId: string,
         signal: AbortSignal,
-    ): Promise<AnonymousIdentity> => await this.identities.createAnonymous(userId, projectId, Date.now(), signal);
+        token?: string,
+    ): Promise<AnonymousIdentity> => {
+        const identity = await this.identities.createAnonymous(userId, projectId, Date.now(), signal, token);
+        if (identity === null) {
+            throw new ManagementError(
+                "LOCAL_CREDENTIAL_UNAVAILABLE",
+                "The replacement credential is no longer available.",
+                409,
+            );
+        }
+        return identity;
+    };
 
     readonly createTransfer = async (
         token: string | undefined,
