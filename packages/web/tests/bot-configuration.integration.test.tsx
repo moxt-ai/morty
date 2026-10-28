@@ -453,12 +453,21 @@ test("Given a paired Bot on mobile, When the user opens Agent configuration, The
             (element) => element instanceof HTMLTextAreaElement && !element.disabled,
         );
 
+        const navigationButton = getByRole(document.body, "button", { name: "Recent sessions" });
         await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
         const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
         await openAgentModelPicker(app);
         expect(await app.queryElementByTestId(dataTestId.modelSearch)).toBeDefined();
+        const back = getByRole(configuration, "button", { name: "Back to Agent configuration" });
         await app.user.keyboard("{Escape}");
         const close = getByRole(configuration, "button", { name: "Close Agent configuration" });
+        for (const className of ["size-10!", "rounded-full!", "border-[1px]!", "border-white!", "bg-surface-subtle"]) {
+            expect(navigationButton.classList.contains(className)).toBe(true);
+            expect(back.classList.contains(className)).toBe(true);
+            expect(close.classList.contains(className)).toBe(true);
+        }
+        expect(back.querySelector("svg")?.classList.contains("size-5")).toBe(true);
+        expect(close.querySelector("svg")?.classList.contains("size-5")).toBe(true);
         await app.user.click(close);
         expect(queryByRole(document.body, "dialog", { name: "Agent configuration" })).toBeNull();
     } finally {

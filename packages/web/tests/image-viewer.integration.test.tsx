@@ -35,6 +35,13 @@ test("Given two draft images, When the user opens, navigates and closes the view
     expect(getByRole(document.body, "textbox", { name: "Message" }).getAttribute("disabled")).toBeNull();
     expect(composer).toHaveProperty("value", "Please compare these screenshots");
     expect(getAllByRole(getByRole(document.body, "list", { name: "Attachments" }), "img")).toHaveLength(2);
+    const thumbnails = getAllByRole(getByRole(document.body, "list", { name: "Attachments" }), "img");
+    for (const thumbnail of thumbnails) {
+        expect(thumbnail.getAttribute("width")).toBe("44");
+        expect(thumbnail.getAttribute("height")).toBe("44");
+        expect(thumbnail.className).toContain("object-contain");
+        expect(thumbnail.closest("span")?.className).toContain("shrink-0");
+    }
     await app.user.click(getByRole(document.body, "button", { name: "Remove after.png" }));
     expect(queryByRole(document.body, "dialog", { name: "Image viewer" })).toBeNull();
     expect(getAllByRole(getByRole(document.body, "list", { name: "Attachments" }), "img")).toHaveLength(1);

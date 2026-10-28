@@ -16,6 +16,7 @@ import type { MouseEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useStore } from "zustand";
 import { MortyLogoMark } from "../../components/brand/morty-logo.tsx";
+import { mobileHeaderIconButtonClassName } from "../../components/chat/chat-header-control.ts";
 import { mortyThinScrollbarClassName } from "../../components/chat/chat-session-layout.ts";
 import { ComputerOfflineIcon } from "../../components/chat/computer-offline-icon.tsx";
 import { PanelPresence } from "../../components/chat/panel-presence.tsx";
@@ -55,9 +56,6 @@ function blurAfterPointerClick(event: MouseEvent<HTMLButtonElement>): void {
         event.currentTarget.blur();
     }
 }
-
-const mobileHeaderIconButtonClassName =
-    "size-10! rounded-full! border-transparent! bg-surface-subtle px-0 text-copy-secondary shadow-[0_2px_6px_rgba(23,30,36,0.08),0_10px_28px_rgba(23,30,36,0.14),inset_0_0_0_1px_#fff] transition-[transform,filter,background-color] duration-200 ease-out hover:bg-surface-subtle hover:text-foreground active:bg-morty-fill-opacity-3";
 
 function SidebarSessionOption({
     label,
@@ -421,7 +419,7 @@ export function ConversationSidebar({
                                         aria-label="Morty navigation"
                                         className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-card/90 px-3 pt-0 max-sm:overflow-visible sm:isolate sm:w-[264px] sm:gap-0 sm:bg-sidebar sm:px-2.5 sm:pt-2 sm:pb-4"
                                     >
-                                        <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-4 py-0 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:bg-card/90 sm:gap-3">
+                                        <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-4 py-0 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:bg-card/90 max-sm:py-2 sm:gap-3">
                                             <div
                                                 className={cn(
                                                     "relative z-[1] flex w-fit shrink-0 items-center gap-2 sm:w-full sm:pl-1",
@@ -454,7 +452,7 @@ export function ConversationSidebar({
                                                         dialogs.getState().closeMobileRecentSessions();
                                                     }}
                                                 >
-                                                    <MortyLogoMark size={28} />
+                                                    <MortyLogoMark size={24} />
                                                 </button>
                                                 {desktop && workspace.computers !== null ? (
                                                     <>

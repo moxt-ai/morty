@@ -566,52 +566,31 @@ function SessionConversationTitleBar({
     );
 }
 
-function MobiusSessionPaneShell({
-    title,
-    titleLoading = false,
-    mobileTitlePortaled = false,
-    children,
-    footer,
-}: {
-    readonly title?: string;
-    readonly titleLoading?: boolean;
-    readonly mobileTitlePortaled?: boolean;
-    readonly children: ReactNode;
-    readonly footer?: ReactNode;
-}) {
-    return (
-        <section className={chatSessionPaneFillClassName}>
-            <header
-                className={cn(chatSessionExecutionHeaderClassName, mobileTitlePortaled ? "hidden sm:flex" : "flex")}
-            >
-                {titleLoading ? (
-                    <SessionTitleSkeleton />
-                ) : (
-                    <h2 className="min-w-0 truncate text-sm font-semibold" title={title}>
-                        {title}
-                    </h2>
-                )}
-                {titleLoading ? <WorkingDirectorySkeleton /> : null}
-            </header>
-            {children}
-            {footer}
-        </section>
-    );
-}
-
-export function MobiusSessionPaneLoading({ footer, title }: { readonly footer?: ReactNode; readonly title: string }) {
+/**
+ * The conversation is being opened. Its title and messages arrive from the same
+ * read, so both stand in as skeletons: a title shown here would appear and then
+ * be withdrawn again while the loaded pane waits for that read.
+ */
+export function MobiusSessionPaneLoading({ footer }: { readonly footer?: ReactNode }) {
     return (
         <DesktopChatLayout>
             {(desktop) => (
                 <>
-                    <MobiusSessionPaneShell footer={footer} mobileTitlePortaled={!desktop} title={title}>
+                    <section className={chatSessionPaneFillClassName}>
+                        <header
+                            className={cn(chatSessionExecutionHeaderClassName, desktop ? "flex" : "hidden sm:flex")}
+                        >
+                            <SessionTitleSkeleton />
+                            <WorkingDirectorySkeleton />
+                        </header>
                         <div aria-label="Messages" className={chatSessionMessageScrollClassName} role="log">
                             <SessionMessageListSkeleton />
                         </div>
-                    </MobiusSessionPaneShell>
+                        {footer}
+                    </section>
                     {desktop ? null : (
                         <MobileSessionTitlePortal>
-                            <h2 className="min-w-0 truncate text-sm font-semibold">{title}</h2>
+                            <SessionTitleSkeleton centered />
                         </MobileSessionTitlePortal>
                     )}
                 </>

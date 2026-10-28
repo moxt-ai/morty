@@ -39,7 +39,15 @@ function AttachmentImage({ attachment }: { readonly attachment: ComposerAttachme
         return () => URL.revokeObjectURL(url);
     }, [attachment]);
     return source.length === 0 ? null : (
-        <PreviewImage alt={attachment.name} className="size-11 rounded-lg object-contain" src={source} />
+        <span className="inline-flex size-11 shrink-0 items-center justify-center">
+            <PreviewImage
+                alt={attachment.name}
+                className="size-11 rounded-lg object-contain"
+                height={44}
+                src={source}
+                width={44}
+            />
+        </span>
     );
 }
 

@@ -1,6 +1,6 @@
 import { getAllByRole, getByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
-import { expect, test } from "vitest";
+import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
@@ -18,6 +18,44 @@ async function waitForComposer(app: TestApp): Promise<void> {
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
     );
 }
+
+test("Given the draft agent settings are still loading, When they settle, Then the header stands in a skeleton for the agent mark instead of a spinner", {
+    timeout: 30_000,
+}, async () => {
+    const skeletonSelector = `[data-testid="${dataTestId.harnessMarkSkeleton}"]`;
+    const observedSkeletons: Element[] = [];
+    const observer = new MutationObserver((records) => {
+        for (const record of records) {
+            for (const node of record.addedNodes) {
+                if (!(node instanceof Element)) {
+                    continue;
+                }
+                if (node.matches(skeletonSelector)) {
+                    observedSkeletons.push(node);
+                }
+                observedSkeletons.push(...node.querySelectorAll(skeletonSelector));
+            }
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    onTestFinished(() => observer.disconnect());
+
+    const app = await createTestApp({ connectAgent: true });
+    await waitForComposer(app);
+    observer.disconnect();
+
+    expect(observedSkeletons.length).toBeGreaterThan(0);
+    const skeleton = observedSkeletons[0];
+    const titleMark = skeleton?.closest(`[data-testid="${dataTestId.sessionTitleHarnessMark}"]`) ?? null;
+    // The placeholder is a pulsing block that already occupies the glyph's footprint, so settling never shifts the title.
+    expect(skeleton?.className).toContain("animate-pulse");
+    expect(titleMark).not.toBeNull();
+    expect(titleMark?.getAttribute("data-harness-product")).toBeNull();
+
+    // The Runtime's first installed Agent is the draft's default; whatever it is, its mark replaces the skeleton.
+    await app.waitForView(() => expect(harnessProduct(app)).not.toBeNull());
+    expect(app.optionalElementByTestId(dataTestId.harnessMarkSkeleton)).toBeNull();
+});
 
 async function waitForHarness(app: TestApp, product: string): Promise<void> {
     await app.waitForView(() => expect(harnessProduct(app)).toBe(product));

@@ -13,6 +13,7 @@ import {
 import { Popover } from "../ui/popover.tsx";
 import { ScrollEdgeFade } from "../utils/scroll-edge-fade.tsx";
 import { useConfigurationViewport } from "./chat-configuration-viewport.ts";
+import { mobileHeaderIconButtonClassName } from "./chat-header-control.ts";
 import { mortyThinScrollbarClassName } from "./chat-session-layout.ts";
 import { HarnessMark } from "./harness-mark.tsx";
 
@@ -660,13 +661,13 @@ export function ChatConfigurationMenu({
                     aria-label="Back to Agent configuration"
                     className={cn(
                         "flex shrink-0 items-center justify-center rounded-lg outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50",
-                        desktop ? "size-9" : "size-11",
+                        desktop ? "size-9" : mobileHeaderIconButtonClassName,
                     )}
                     onClick={goBack}
                     ref={backRef}
                     type="button"
                 >
-                    <ArrowLeft aria-hidden="true" className="size-4" />
+                    <ArrowLeft aria-hidden="true" className={desktop ? "size-4" : "size-5"} />
                 </button>
             )}
             <span className="min-w-0 flex-1 px-1 text-16 font-semibold">{picker?.label ?? "Agent configuration"}</span>
@@ -674,12 +675,12 @@ export function ChatConfigurationMenu({
                 aria-label="Close Agent configuration"
                 className={cn(
                     "flex shrink-0 items-center justify-center rounded-lg text-copy-secondary outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50",
-                    desktop ? "size-9" : "size-11",
+                    desktop ? "size-9" : mobileHeaderIconButtonClassName,
                 )}
                 onClick={() => changeOpen(false)}
                 type="button"
             >
-                <X aria-hidden="true" className="size-4" />
+                <X aria-hidden="true" className={desktop ? "size-4" : "size-5"} />
             </button>
         </header>
     );

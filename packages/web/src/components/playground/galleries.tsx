@@ -834,18 +834,30 @@ function HarnessMarkGallery() {
         { agentRef: "local", label: "Local agent" },
     ] as const;
     return (
-        <Specimen title="Products">
-            {marks.map((mark) => (
-                <span className="inline-flex items-center gap-2 text-13" key={mark.agentRef}>
-                    <HarnessMark
-                        agentRef={mark.agentRef}
-                        label={mark.label}
-                        testId={`playground-harness-${mark.agentRef}`}
-                    />
-                    {mark.label}
+        <>
+            <Specimen title="Products">
+                {marks.map((mark) => (
+                    <span className="inline-flex items-center gap-2 text-13" key={mark.agentRef}>
+                        <HarnessMark
+                            agentRef={mark.agentRef}
+                            label={mark.label}
+                            testId={`playground-harness-${mark.agentRef}`}
+                        />
+                        {mark.label}
+                    </span>
+                ))}
+            </Specimen>
+            <Specimen title="Waiting for the agent">
+                <span className="inline-flex items-center gap-2 text-13">
+                    <HarnessMark agentRef="pi" appearance="line" label="Pi" loading />
+                    Line mark, still unknown
                 </span>
-            ))}
-        </Specimen>
+                <span className="inline-flex items-center gap-2 text-13">
+                    <HarnessMark agentRef="pi" label="Pi" loading />
+                    Badge mark, still unknown
+                </span>
+            </Specimen>
+        </>
     );
 }
 
