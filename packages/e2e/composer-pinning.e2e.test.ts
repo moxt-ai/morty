@@ -3,9 +3,9 @@ import { expect, test } from "./infra/test.ts";
 test.use({ runtimeAgent: { id: "interaction-test", name: "Interaction Agent" } });
 
 test.describe("composer stays pinned to the pane bottom", () => {
-    // A short window forces the session pane to clip: header, title, and the
-    // anchored composer cannot all fit, so the pane overflows its own box.
-    test("Given a short window with a pending answer, When I tab into the composer, Then the pane never scrolls away from its top", async ({
+    // A short window leaves no room for the header, the answer card, and the
+    // composer together, so the pane has to clip instead of scrolling.
+    test("Given a short window with a pending answer, When I tab across the answer card, Then the composer stays inside the pane", async ({
         runtime,
     }, testInfo) => {
         const { page } = runtime;
@@ -23,19 +23,35 @@ test.describe("composer stays pinned to the pane bottom", () => {
         await page.keyboard.press("Tab");
 
         const pane = page.locator(`section[aria-label="Conversation"] section`).first();
-        const composer = page.getByRole("textbox", { name: "Message" }).locator("xpath=ancestor::form[1]");
         const header = page.locator(`section[aria-label="Conversation"] header`).first();
+        const composer = page.getByRole("textbox", { name: "Message" }).locator("xpath=ancestor::form[1]");
+        const interactionScroller = card.locator("xpath=ancestor::div[contains(@class, 'overflow-y-auto')][1]");
         await page.screenshot({ animations: "disabled", path: testInfo.outputPath("after-tab.png") });
 
+        // The pane clips, so revealing a control can never scroll the header away.
         expect(await pane.evaluate((element) => element.scrollTop)).toBe(0);
+
         const headerBox = await header.boundingBox();
         const paneBox = await pane.boundingBox();
         const composerBox = await composer.boundingBox();
-        if (headerBox === null || paneBox === null || composerBox === null) {
-            throw new Error("Expected the header, pane, and composer to have layout boxes");
+        const scrollerBox = await interactionScroller.boundingBox();
+        if (headerBox === null || paneBox === null || composerBox === null || scrollerBox === null) {
+            throw new Error("Expected the header, pane, composer, and answer card to have layout boxes");
         }
-        // The header must stay at the pane's top edge, and the composer at its bottom.
+
+        // The header stays at the pane's top edge and the composer inside its bottom edge.
         expect(headerBox.y - paneBox.y).toBeLessThan(2);
+        expect(composerBox.y + composerBox.height).toBeLessThanOrEqual(paneBox.y + paneBox.height + 0.5);
         expect(paneBox.y + paneBox.height - (composerBox.y + composerBox.height)).toBeLessThan(16);
+
+        // The answer card yields the space the header and composer need: it ends
+        // above the composer and keeps its own scrolling for the clipped answers.
+        expect(scrollerBox.height).toBeGreaterThan(0);
+        expect(scrollerBox.y + scrollerBox.height).toBeLessThanOrEqual(composerBox.y + 0.5);
+        const scroll = await interactionScroller.evaluate((element) => ({
+            scrollHeight: element.scrollHeight,
+            clientHeight: element.clientHeight,
+        }));
+        expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
     });
 });

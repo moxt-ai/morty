@@ -1008,8 +1008,11 @@ function MobiusSessionPaneBody({
                             <ScrollEdgeFade
                                 fadeFromClassName="from-card"
                                 fadeToClassName="to-card/0"
-                                frameClassName={`${chatSessionInteractionColumnClassName} mt-4 mb-2 shrink-0 sm:mt-5`}
-                                className="max-h-[min(50vh,360px)] overflow-y-auto [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]"
+                                // The card yields the height the header and composer need: it shrinks inside
+                                // the clipped pane and keeps scrolling its own content instead of pushing
+                                // the composer below the pane's bottom edge.
+                                frameClassName={`${chatSessionInteractionColumnClassName} mt-4 mb-2 flex min-h-0 shrink flex-col sm:mt-5`}
+                                className="max-h-[min(50vh,360px)] min-h-0 flex-1 overflow-y-auto [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]"
                             >
                                 <SessionInteractionCards
                                     elicitations={interactions.elicitations}
