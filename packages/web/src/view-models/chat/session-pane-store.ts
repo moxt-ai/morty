@@ -413,7 +413,6 @@ export function createSessionPaneModel(options: {
             : idleTurn;
     const turns = createSessionTurnLedger();
     let client: MobiusClient | null = null;
-    let healthCheck: Promise<void> | null = null;
     let recoveryRequested = false;
     let countdownInterrupt: AbortController | null = null;
     // The Runtime closed the Session. The connect loop turns this into the closed connection state.
@@ -1164,16 +1163,12 @@ export function createSessionPaneModel(options: {
                     const monitorSignal = AbortSignal.any([signal, monitoring.signal]);
                     void (async () => {
                         try {
-                            for (;;) {
-                                await clock.sleep(25_000, monitorSignal);
-                                monitorSignal.throwIfAborted();
-                                await get().recover(monitorSignal);
-                                monitorSignal.throwIfAborted();
-                                // A short-lived subscription must not repeatedly reset the
-                                // backoff. Confirm it survives a scheduled liveness check.
-                                if (get().connection.kind === "ready" && client === connected) {
-                                    consecutiveFailures = 0;
-                                }
+                            await clock.sleep(25_000, monitorSignal);
+                            monitorSignal.throwIfAborted();
+                            // Reset backoff only after the subscription stays open; transport
+                            // heartbeats detect lost connections without polling Session execution.
+                            if (get().connection.kind === "ready" && client === connected) {
+                                consecutiveFailures = 0;
                             }
                         } catch {
                             // The subscription owns and cancels this monitor.
@@ -1318,60 +1313,6 @@ export function createSessionPaneModel(options: {
                     countdownInterrupt?.abort(new Error("The browser resumed."));
                     return;
                 }
-                if (get().connection.kind !== "ready" || client === null || attempt === null) {
-                    return;
-                }
-                if (healthCheck !== null) {
-                    return await healthCheck;
-                }
-                const connected = client;
-                const running = attempt;
-                healthCheck = (async () => {
-                    const started = clock.now();
-                    const deadline = new AbortController();
-                    const signal = AbortSignal.any([parent, running.signal, deadline.signal]);
-                    void clock.sleep(10_000, signal).then(
-                        () =>
-                            deadline.abort(
-                                new MobiusError("service_unavailable", "The Session connection stopped responding."),
-                            ),
-                        () => undefined,
-                    );
-                    try {
-                        await connected.sessions.readSessionExecution(sessionId, sessionIdentity, signal);
-                        signal.throwIfAborted();
-                        recordBrowserDiagnostic({
-                            at: new Date().toISOString(),
-                            component: "web",
-                            operation: "session-health",
-                            outcome: "healthy",
-                            elapsedMs: Math.max(0, clock.now() - started),
-                            requestId: "",
-                        });
-                    } catch (failure) {
-                        if (parent.aborted || running.signal.aborted || attempt !== running) {
-                            return;
-                        }
-                        const cause = deadline.signal.aborted ? deadline.signal.reason : failure;
-                        recordBrowserDiagnostic({
-                            at: new Date().toISOString(),
-                            component: "web",
-                            operation: "session-health",
-                            outcome: deadline.signal.aborted ? "timeout" : "error",
-                            elapsedMs: Math.max(0, clock.now() - started),
-                            requestId: "",
-                        });
-                        if (isRetryableRuntimeConnectionFailure(cause)) {
-                            requests.resetSessionConnections();
-                        }
-                        running.abort(cause);
-                    } finally {
-                        deadline.abort();
-                    }
-                })().finally(() => {
-                    healthCheck = null;
-                });
-                await healthCheck;
             },
             retryNow: () => {
                 recoveryRequested = true;
