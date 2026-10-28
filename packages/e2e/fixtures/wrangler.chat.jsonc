@@ -11,7 +11,13 @@
     },
     "r2_buckets": [{ "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-local-e2e-attachments" }],
     "durable_objects": {
-        "bindings": [{ "name": "CHAT_PROJECTS", "class_name": "ProjectDurableObject" }]
+        "bindings": [
+            { "name": "CHAT_PROJECTS", "class_name": "ProjectDurableObject" },
+            { "name": "CHAT_WEBSOCKETS", "class_name": "ChatWebSocketDurableObject" }
+        ]
     },
-    "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ProjectDurableObject"] }]
+    "migrations": [
+        { "tag": "v1", "new_sqlite_classes": ["ProjectDurableObject"] },
+        { "tag": "v2", "new_sqlite_classes": ["ChatWebSocketDurableObject"] }
+    ]
 }
