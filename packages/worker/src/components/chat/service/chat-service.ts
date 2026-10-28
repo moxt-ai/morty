@@ -190,6 +190,9 @@ export class ChatService {
         return bot.configuration;
     };
 
+    readonly #ownsManagedSession = (scope: ChatScope, sessionId: string): Promise<boolean> =>
+        this.#chatSessions.ownsSession(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
+
     readonly #nativeSessionRuntime = async (scope: ChatScope, requestedRuntimeId: string) => {
         const runtime = await this.localRuntime(scope);
         // Existing clients send the Runtime with their native-session identity. Keep it as a consistency check:
@@ -366,6 +369,8 @@ export class ChatService {
         }
         if ("conversationKey" in input) {
             await this.#requireRuntimeAgent(scope, runtime.runtimeId, input.agentRef);
+        } else if (!(await this.#ownsManagedSession(scope, input.conversationId))) {
+            throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
         }
         const access = await this.#platform.openChatSession(
             scope.projectId,
@@ -428,9 +433,7 @@ export class ChatService {
 
     readonly managedSession = async (scope: ChatScope, sessionId: string) => {
         const bot = await this.#bot(scope);
-        if (
-            !(await this.#chatSessions.ownsSession(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal))
-        ) {
+        if (!(await this.#ownsManagedSession(scope, sessionId))) {
             throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
         }
         const runtime = await this.localRuntime(scope);
@@ -444,9 +447,7 @@ export class ChatService {
         scope: ChatScope,
         sessionId: string,
     ): Promise<{ readonly close: "confirmed" | "unconfirmed" }> => {
-        if (
-            !(await this.#chatSessions.ownsSession(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal))
-        ) {
+        if (!(await this.#ownsManagedSession(scope, sessionId))) {
             return { close: "unconfirmed" };
         }
         const runtime = await this.localRuntime(scope);
