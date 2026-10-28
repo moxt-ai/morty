@@ -275,9 +275,6 @@ importers:
 
   packages/setup:
     dependencies:
-      '@moxt-ai/mobius':
-        specifier: workspace:*
-        version: link:../../third-party/mobius/packages/cli
       jsqr:
         specifier: 'catalog:'
         version: 1.4.0

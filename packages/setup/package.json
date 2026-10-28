@@ -9,8 +9,6 @@
         "typecheck": "tsc --project tsconfig.json"
     },
     "dependencies": {
-        "@moxt-ai/mobius": "workspace:*",
-
         "jsqr": "catalog:",
         "pngjs": "catalog:",
         "qrcode": "catalog:"
