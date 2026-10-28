@@ -457,7 +457,9 @@ function terminalCheck(summary, location) {
         const url = item.url === null || item.url === undefined ? "" : `; ${item.url}`;
         return `${location} check ${item.name} failed (${item.state}/${item.conclusion}${workflow}${url})`;
     }
-    if (summary.aggregate === "ERROR" || summary.aggregate === "FAILURE") {
+    // GitHub's rollup can include superseded cancelled/failed runs. Use the same
+    // latest contexts as the report; fall back to the rollup only without details.
+    if (summary.total === 0 && (summary.aggregate === "ERROR" || summary.aggregate === "FAILURE")) {
         return `${location} aggregate status is ${summary.aggregate}`;
     }
     return undefined;
