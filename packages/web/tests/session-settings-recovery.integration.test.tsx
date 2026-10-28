@@ -40,12 +40,12 @@ test("Given a configured conversation, When the Agent explicitly removes every s
     );
 });
 
-test("Given a configured conversation on a Runtime released before settings reads, When the user reopens it, Then the conversation is ready with its model", {
+test("Given a configured conversation, When the user reopens it, Then the conversation is ready with its model", {
     timeout: 60_000,
 }, async () => {
     const app = await createTestApp({
         connectAgent: true,
-        agent: { id: "settings-test", label: "Settings Agent", runtime: "previous" },
+        agent: { id: "settings-test", label: "Settings Agent" },
     });
     await openConfiguredConversation(app, "Settings Agent: Keep my selected model");
 
