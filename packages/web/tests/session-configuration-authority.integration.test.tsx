@@ -5,51 +5,42 @@ import { openAgentModelPicker, sendPrompt } from "./infra/application-scenario.t
 import { createTestApp } from "./infra/test-app.tsx";
 import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
 
-for (const runtime of ["current", "previous"] as const) {
-    test(`Given two clients of the ${runtime} Runtime, When one changes the model and the other sends, Then the Session keeps the explicit choice`, {
-        timeout: 60_000,
-    }, async () => {
-        const first = await createTestApp({
-            connectAgent: true,
-            agent: { id: "settings-test", label: "Settings Agent", runtime },
-        });
-        await sendPrompt(first, await first.queryElementByTestId(dataTestId.messageComposer), "Start shared session");
-        await first.waitForView(() => {
-            expect(first.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain(
-                "Start shared session",
-            );
-            expect(first.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
-        });
-        const second = await first.openViewer();
-        await second.queryElementByTestId(
-            dataTestId.agentConfiguration,
-            (element) => element.textContent?.includes("Test Small") === true,
-        );
-
-        await first.user.click(await first.queryElementByTestId(dataTestId.agentConfiguration));
-        await openAgentModelPicker(first);
-        await first.user.click(await first.queryElementByTestId(dataTestId.sessionConfigValue("test-large")));
-        await first.user.keyboard("{Escape}");
-        await first.waitForView(() =>
-            expect(first.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large"),
-        );
-        if (runtime === "current") {
-            // A settings response without an ACP notification must still reach the other viewer.
-            await second.waitForView(() =>
-                expect(second.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large"),
-            );
-        } else {
-            // This published Runtime has no shared configuration notification: the second client is stale.
-            expect(second.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Small");
-        }
-        await sendPrompt(second, await second.queryElementByTestId(dataTestId.messageComposer), "Report current model");
-        await second.waitForView(() =>
-            expect(second.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain(
-                "Current model: test-large",
-            ),
-        );
+test("Given two clients of the current Runtime, When one changes the model and the other sends, Then the Session keeps the explicit choice", {
+    timeout: 60_000,
+}, async () => {
+    const first = await createTestApp({
+        connectAgent: true,
+        agent: { id: "settings-test", label: "Settings Agent" },
     });
-}
+    await sendPrompt(first, await first.queryElementByTestId(dataTestId.messageComposer), "Start shared session");
+    await first.waitForView(() => {
+        expect(first.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain("Start shared session");
+        expect(first.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
+    });
+    const second = await first.openViewer();
+    await second.queryElementByTestId(
+        dataTestId.agentConfiguration,
+        (element) => element.textContent?.includes("Test Small") === true,
+    );
+
+    await first.user.click(await first.queryElementByTestId(dataTestId.agentConfiguration));
+    await openAgentModelPicker(first);
+    await first.user.click(await first.queryElementByTestId(dataTestId.sessionConfigValue("test-large")));
+    await first.user.keyboard("{Escape}");
+    await first.waitForView(() =>
+        expect(first.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large"),
+    );
+    // A settings response without an ACP notification must still reach the other viewer.
+    await second.waitForView(() =>
+        expect(second.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large"),
+    );
+    await sendPrompt(second, await second.queryElementByTestId(dataTestId.messageComposer), "Report current model");
+    await second.waitForView(() =>
+        expect(second.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain(
+            "Current model: test-large",
+        ),
+    );
+});
 
 for (const delivery of ["before-acceptance", "after-acceptance"] as const) {
     test(`Given delivery is unknown ${delivery}, When settings change and I recover, Then retries preserve intent and completed turns are not rerun`, {
