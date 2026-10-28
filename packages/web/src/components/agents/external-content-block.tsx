@@ -35,7 +35,7 @@ export function LinkedResourceBlock({
                     return <p className="text-sm text-muted-foreground">Loading content…</p>;
                 }
                 if (state.kind !== "media") {
-                    return <p className="text-sm text-muted-foreground">Content could not be loaded.</p>;
+                    return <p className="text-sm text-muted-foreground">Content could not be loaded: {name}</p>;
                 }
                 return mediaType === "image/svg+xml" ? (
                     <PreviewImage
