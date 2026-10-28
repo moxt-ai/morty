@@ -6,6 +6,7 @@ for (const width of [1280, 390]) {
     }, testInfo) => {
         const { page } = runtime;
         await page.setViewportSize({ width, height: 900 });
+        await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
         await page.clock.install({ time: new Date("2026-10-28T08:00:00Z") });
         await runtime.openPairedChat();
         const prompt = "Review the execution summary behavior";
@@ -15,6 +16,11 @@ for (const width of [1280, 390]) {
         const summary = history.getByRole("button", { name: "Show execution details" });
         await expect(summary).toContainText("3 steps");
         await expect(summary).toHaveAttribute("aria-expanded", "false");
+        const introduction = "I'll review the implementation and check the interactions.";
+        const progressMessage = page.getByRole("article", { name: "Agent response" }).filter({ hasText: introduction });
+        await progressMessage.getByRole("button", { name: "Copy response", exact: true }).click();
+        expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(introduction);
+        await page.clock.fastForward(2100);
         await expect(history.getByRole("group", { name: "Tool: Read the conversation layout" })).toBeHidden();
         await page.screenshot({
             path: testInfo.outputPath(`execution-collapsed-${width}.png`),
@@ -52,6 +58,14 @@ for (const width of [1280, 390]) {
         await expect(expanded).toHaveAttribute("aria-expanded", "true");
         await expect(history.getByRole("group", { name: "Tool: Review test results" })).toBeVisible();
         await expect(tool).toContainText("New calls preserve the user's expanded choice.");
+        const finalAnswer = page
+            .getByRole("article", { name: "Agent response" })
+            .filter({ hasText: "Review complete." });
+        await finalAnswer.getByRole("button", { name: "Copy response", exact: true }).click();
+        expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+            "Review complete. Execution details stay collapsed by default, expand on demand, and remain open when new calls arrive or the turn finishes.",
+        );
+        await page.clock.fastForward(2100);
         await expanded.click();
         await expect(summary).toContainText("Operations complete");
         await expect(summary).toContainText("4 steps");
