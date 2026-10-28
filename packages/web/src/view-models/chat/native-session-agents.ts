@@ -5,14 +5,22 @@ import {
     connectedChatRuntimeAgents,
 } from "../../services/chat/bot-chat-api.ts";
 
-export type NativeSessionAgent = ChatAgentSelection & { readonly installed: boolean };
+export type NativeSessionAgent = ChatAgentSelection & { readonly installed: boolean; readonly value: string };
+
+export function harnessValue(runtimeId: string, agentRef: string): string {
+    return `${runtimeId}:${agentRef}`;
+}
 
 const PI_AGENT_REF: Identifier = decodeIdentifier("pi");
 
 /** Runtime harness tabs: connected agents plus Pi when it is not on the Runtime. */
 export function nativeSessionAgentTabs(runtime: ChatRuntime): readonly NativeSessionAgent[] {
     const connected = connectedChatRuntimeAgents(runtime);
-    const installed = connected.map((agent) => ({ ...agent, installed: true as const }));
+    const installed = connected.map((agent) => ({
+        ...agent,
+        installed: true as const,
+        value: harnessValue(agent.runtimeId, agent.agentRef),
+    }));
     if (connected.length === 0 || connected.some((agent) => agent.agentRef === PI_AGENT_REF)) {
         return installed;
     }
@@ -28,6 +36,7 @@ export function nativeSessionAgentTabs(runtime: ChatRuntime): readonly NativeSes
             agentRef: PI_AGENT_REF,
             label: "Pi",
             installed: false,
+            value: harnessValue(anchor.runtimeId, PI_AGENT_REF),
         },
     ];
 }
@@ -48,6 +57,23 @@ export function harnessOptions(runtime: ChatRuntime | null): readonly HarnessOpt
         installed: agent.installed,
         label: agent.label,
         tabLabel: agent.label,
-        value: `${agent.runtimeId}:${agent.agentRef}`,
+        value: agent.value,
     }));
+}
+
+/** Existing sessions keep their Agent even if the Runtime no longer offers it. */
+export function sessionHarnessSelection(runtime: ChatRuntime | null, agentRef: string) {
+    const options = harnessOptions(runtime);
+    const selected = options.find((option) => option.agentRef === agentRef);
+    if (selected !== undefined) {
+        return { options, value: selected.value };
+    }
+    const fallback: HarnessOption = {
+        agentRef,
+        installed: false,
+        label: agentRef,
+        tabLabel: agentRef,
+        value: harnessValue(runtime?.runtimeId ?? "", agentRef),
+    };
+    return { options: [...options, fallback], value: fallback.value };
 }

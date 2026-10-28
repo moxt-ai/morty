@@ -5,7 +5,7 @@ import { dataTestId } from "@/data-testid";
 import { ChatConfigurationMenu } from "../../components/chat/chat-configuration-menu.tsx";
 import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.tsx";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
-import { harnessOptions } from "../../view-models/chat/native-session-agents.ts";
+import { draftHarnessSelection } from "../../view-models/chat/draft-controls-store.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
 import { runtimeDisconnectedMessage } from "../../view-models/format-error.ts";
 
@@ -79,9 +79,7 @@ export function DraftChatControls({
     }
     const switching = settings.kind === "switching";
     const settingsLoading = switching || settings.kind === "refreshing";
-    const selectedHarness = switching
-        ? `${runtimeConfiguration?.runtime.runtimeId ?? ""}:${settings.agentRef}`
-        : `${settings.selectedAgent.runtimeId}:${settings.selectedAgent.agentRef}`;
+    const harness = draftHarnessSelection(settings, runtimeConfiguration);
     const options = settings.kind === "ready" ? settings.options : [];
     const model = options.find((option) => option.category === "model" && option.type !== "boolean");
     return (
@@ -96,8 +94,8 @@ export function DraftChatControls({
                         onValueChange: (value) => {
                             void viewModel.selectHarness(value, disabled, signal);
                         },
-                        options: harnessOptions(runtimeConfiguration?.runtime ?? null),
-                        value: selectedHarness,
+                        options: harness.options,
+                        value: harness.value,
                     },
                     ...options.map((option) =>
                         option.type === "boolean"

@@ -206,12 +206,7 @@ export function NativeSessionDialog({
                                             }
                                             disabled={model.operation !== "idle"}
                                             onValueChange={store.getState().selectAgent}
-                                            value={
-                                                model.selected ||
-                                                (fallback === undefined
-                                                    ? ""
-                                                    : `${fallback.runtimeId}:${fallback.agentRef}`)
-                                            }
+                                            value={model.selected || fallback?.value || ""}
                                         />
                                     )}
                                     {model.directory.kind === "loading" && model.directory.scope === "refresh" && (

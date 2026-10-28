@@ -42,7 +42,7 @@ import { authenticationGuidance } from "../../view-models/chat/authentication-gu
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { canAddAttachments } from "../../view-models/chat/composer-attachment-store.ts";
 import { sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
-import { harnessOptions } from "../../view-models/chat/native-session-agents.ts";
+import { sessionHarnessSelection } from "../../view-models/chat/native-session-agents.ts";
 import { sessionInteractionPresentation } from "../../view-models/chat/session-interaction-store.ts";
 import {
     type SessionPaneModel,
@@ -640,7 +640,7 @@ function MobiusSessionPaneBody({
     const messageQueue = useStore(pane.messageQueue);
     const taskControls = useStore(pane.tasks);
     const welcome = useStore(pane.welcome, (state) => state.state);
-    const harnesses = harnessOptions(runtimeConfiguration?.runtime ?? null);
+    const harness = sessionHarnessSelection(runtimeConfiguration?.runtime ?? null, pane.agentRef);
 
     // The model owns the session connection through the same ref-cleanup
     // protocol the chat root uses: attach starts it, the cleanup detaches,
@@ -973,22 +973,8 @@ function MobiusSessionPaneBody({
                                         label: "Harness",
                                         locked: true,
                                         onValueChange: () => {},
-                                        options: harnesses.some(
-                                            (harness) => harness.value.split(":").at(-1) === pane.agentRef,
-                                        )
-                                            ? harnesses
-                                            : [
-                                                  ...harnesses,
-                                                  {
-                                                      agentRef: pane.agentRef,
-                                                      label: pane.agentRef,
-                                                      value: pane.agentRef,
-                                                  },
-                                              ],
-                                        value:
-                                            harnesses.find(
-                                                (harness) => harness.value.split(":").at(-1) === pane.agentRef,
-                                            )?.value ?? pane.agentRef,
+                                        options: harness.options,
+                                        value: harness.value,
                                     },
                                     ...settingsModel.options.map((option) =>
                                         option.type === "boolean"

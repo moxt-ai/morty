@@ -86,9 +86,9 @@ const agentOptions = [
 ] as const;
 
 const sessionAgents = [
-    { agentRef: "codex", label: "Codex", runtimeId: "runtime" },
-    { agentRef: "claude-code", label: "Claude Code", runtimeId: "runtime" },
-    { agentRef: "pi", label: "Pi", runtimeId: "runtime" },
+    { agentRef: "codex", label: "Codex", value: "runtime:codex" },
+    { agentRef: "claude-code", label: "Claude Code", value: "runtime:claude-code" },
+    { agentRef: "pi", label: "Pi", value: "runtime:pi" },
 ] as const;
 
 const toolStates = [
@@ -742,7 +742,7 @@ function NativeSessionDirectoryPlaceholderGallery() {
 function SessionAgentTabsGallery() {
     const [disabled, setDisabled] = useState(false);
     const [value, setValue] = useState("runtime:codex");
-    const selected = sessionAgents.find((agent) => `${agent.runtimeId}:${agent.agentRef}` === value);
+    const selected = sessionAgents.find((agent) => agent.value === value);
     return (
         <Specimen layout="stack" title="Try it">
             <Button onClick={() => setDisabled((current) => !current)} size="sm" variant="outline">

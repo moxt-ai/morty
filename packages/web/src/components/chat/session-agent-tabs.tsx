@@ -27,7 +27,7 @@ export function SessionAgentTabs({
         readonly agentRef: string;
         readonly installed?: boolean;
         readonly label: string;
-        readonly runtimeId: string;
+        readonly value: string;
     }[];
     readonly className?: string;
     /** When false, inactive tabs stay at full opacity (e.g. while the directory is refreshing). */
@@ -40,7 +40,7 @@ export function SessionAgentTabs({
         <Tabs.Root className={className} onValueChange={onValueChange} value={value}>
             <Tabs.List aria-label="Session agent" className={sessionAgentTabsListClassName}>
                 {agents.map((agent) => {
-                    const optionValue = `${agent.runtimeId}:${agent.agentRef}`;
+                    const optionValue = agent.value;
                     const installed = agent.installed !== false;
                     return (
                         <Tabs.Trigger

@@ -2,7 +2,9 @@ import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ManagedChatSession } from "@/services/chat/bot-chat-api";
 import { CloudApiError, isRuntimeConnectionFailure } from "@/services/management/management-api";
 import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
+import type { Clock } from "../../services/time/clock.ts";
 import { formatError } from "../format-error.ts";
+import { localCalendarDay } from "./conversation-groups.ts";
 
 type ConversationDirectoryState =
     | { readonly kind: "loading" }
@@ -25,6 +27,9 @@ type ArchiveOperation =
 export interface ConversationDirectoryStore {
     readonly state: ConversationDirectoryState;
     readonly archive: ArchiveOperation;
+    /** The local calendar day observed from the external clock; groups remain derived from it and the sessions. */
+    readonly calendarDay: number;
+    readonly followCalendar: (signal: AbortSignal) => Promise<void>;
     readonly archiveSession: (sessionId: string, signal: AbortSignal) => Promise<void>;
     readonly load: (signal: AbortSignal) => Promise<void>;
     /**
@@ -71,11 +76,13 @@ export const createConversationDirectoryStore = (
     requests: Pick<BotChatApi, "archiveManagedSession" | "managedSessions">,
     /** Announced when a load publishes a ready directory, so the owner re-scopes status watching without subscribing. */
     onLoaded: (sessions: readonly ManagedChatSession[]) => void,
+    clock: Clock,
 ) =>
     createStore<ConversationDirectoryStore>()((set, get) => {
         // The Runtime owns Session titles; the directory shows what its last load reported. A title this page learned
         // later is kept only until a load that started after it reports the Runtime's title.
         let loadsStarted = 0;
+        let calendarOperation: AbortController | null = null;
         const localTitles = new Map<string, LocalTitle>();
         const showTitle = (sessionId: string, local: LocalTitle): void => {
             localTitles.set(sessionId, local);
@@ -97,6 +104,35 @@ export const createConversationDirectoryStore = (
         return {
             state: { kind: "loading" },
             archive: { kind: "idle" },
+            calendarDay: localCalendarDay(new Date(clock.now())),
+            followCalendar: async (parent) => {
+                calendarOperation?.abort();
+                calendarOperation = new AbortController();
+                const signal = AbortSignal.any([parent, calendarOperation.signal]);
+                while (!signal.aborted) {
+                    const now = new Date(clock.now());
+                    const calendarDay = localCalendarDay(now);
+                    if (calendarDay !== get().calendarDay) {
+                        set({ calendarDay });
+                    }
+                    // Construct the next local midnight so daylight-saving days need not be 24 hours long.
+                    const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+                    const wake = new AbortController();
+                    const resumed = () => wake.abort();
+                    window.addEventListener("focus", resumed);
+                    document.addEventListener("visibilitychange", resumed);
+                    try {
+                        await clock.sleep(next.getTime() - now.getTime(), AbortSignal.any([signal, wake.signal]));
+                    } catch (cause) {
+                        if (!signal.aborted && !wake.signal.aborted) {
+                            throw cause;
+                        }
+                    } finally {
+                        window.removeEventListener("focus", resumed);
+                        document.removeEventListener("visibilitychange", resumed);
+                    }
+                }
+            },
             archiveSession: async (sessionId, signal) => {
                 set({ archive: { kind: "archiving", sessionId } });
                 try {

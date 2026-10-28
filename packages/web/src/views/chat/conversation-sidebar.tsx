@@ -34,6 +34,7 @@ import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-cha
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import type { ConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
+import { type ConversationGroup, groupConversationsByUpdatedAt } from "../../view-models/chat/conversation-groups.ts";
 import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
 import { pendingExecutionContext, sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { nativeSessionAgentTabs } from "../../view-models/chat/native-session-agents.ts";
@@ -114,54 +115,6 @@ function SidebarActionTooltip({
             </Tooltip.Portal>
         </Tooltip.Root>
     );
-}
-
-interface ConversationGroup {
-    readonly label: string;
-    readonly sessions: readonly ManagedChatSession[];
-}
-
-const DAY_MILLISECONDS = 24 * 60 * 60 * 1_000;
-
-function localCalendarDay(date: Date): number {
-    return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function conversationGroupLabel(updatedAt: Date, now: Date): string {
-    const daysAgo = Math.floor((localCalendarDay(now) - localCalendarDay(updatedAt)) / DAY_MILLISECONDS);
-    if (daysAgo <= 0) {
-        return "Today";
-    }
-    if (daysAgo === 1) {
-        return "Yesterday";
-    }
-    if (daysAgo <= 7) {
-        return "Previous 7 Days";
-    }
-    if (daysAgo <= 30) {
-        return "Previous 30 Days";
-    }
-    return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(updatedAt);
-}
-
-function groupConversationsByUpdatedAt(
-    sessions: readonly ManagedChatSession[],
-    now: Date,
-): readonly ConversationGroup[] {
-    const groups: ConversationGroup[] = [];
-    const sorted = sessions
-        .map((session) => ({ session, updatedAt: new Date(session.updatedAt) }))
-        .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
-    for (const { session, updatedAt } of sorted) {
-        const label = conversationGroupLabel(updatedAt, now);
-        const previous = groups.at(-1);
-        if (previous?.label === label) {
-            groups[groups.length - 1] = { label, sessions: [...previous.sessions, session] };
-        } else {
-            groups.push({ label, sessions: [session] });
-        }
-    }
-    return groups;
 }
 
 function ManagedSessionDirectoryList({
@@ -401,6 +354,7 @@ export function ConversationSidebar({
     const nativeAgents = runtime === null ? [] : nativeSessionAgentTabs(runtime);
     const directory = useStore(workspace.directory, (state) => state.state);
     const archive = useStore(workspace.directory, (state) => state.archive);
+    const calendarDay = useStore(workspace.directory, (state) => state.calendarDay);
 
     const sessionStatuses = useStore(workspace.statuses, (state) => state.statuses);
     const dialogState = useStore(dialogs);
@@ -424,12 +378,9 @@ export function ConversationSidebar({
     };
     const sessions =
         directory.kind === "ready" || directory.kind === "refreshing" || directory.kind === "stale"
-            ? directory.sessions.map((session) => ({
-                  ...session,
-                  title: session.title,
-              }))
+            ? directory.sessions
             : null;
-    const conversationGroups = sessions === null ? null : groupConversationsByUpdatedAt(sessions, new Date());
+    const conversationGroups = sessions === null ? null : groupConversationsByUpdatedAt(sessions, calendarDay);
     const refreshing = directory.kind === "refreshing";
     const openSession = (session: ManagedChatSession) => {
         onOpen(session);

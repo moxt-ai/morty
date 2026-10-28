@@ -2,7 +2,7 @@ import type { NativeSessionEntry, NativeSessionResult } from "@moxt-ai/mobius-sd
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ChatRuntime } from "../../services/chat/bot-chat-api.ts";
 import { formatError } from "../format-error.ts";
-import { type NativeSessionAgent, nativeSessionAgentTabs } from "./native-session-agents.ts";
+import { harnessValue, type NativeSessionAgent, nativeSessionAgentTabs } from "./native-session-agents.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { type SessionMessage, sessionEventLogPresentation } from "./session-presentation.ts";
 
@@ -69,18 +69,12 @@ export interface NativeSessionStore {
 
 /** The agent tab a listing is for: the chosen tab while the Runtime still offers it, else the first installed one. */
 function chosenAgent(agents: readonly NativeSessionAgent[], selected: string): NativeSessionAgent | undefined {
-    return (
-        agents.find((item) => `${item.runtimeId}:${item.agentRef}` === selected) ??
-        agents.find((item) => item.installed) ??
-        agents[0]
-    );
+    return agents.find((item) => item.value === selected) ?? agents.find((item) => item.installed) ?? agents[0];
 }
 
 /** What a listing shows for an agent, to tell whether the Runtime configuration still matches it. */
 function listingFor(agent: NativeSessionAgent | undefined): string {
-    return agent === undefined
-        ? "empty"
-        : `${agent.installed ? "ready" : "agent-unavailable"}:${agent.runtimeId}:${agent.agentRef}`;
+    return agent === undefined ? "empty" : `${agent.installed ? "ready" : "agent-unavailable"}:${agent.value}`;
 }
 
 export const createNativeSessionStore = (
@@ -139,7 +133,7 @@ export const createNativeSessionStore = (
                     set({ directory: { kind: "empty" } });
                     return;
                 }
-                const selected = `${agent.runtimeId}:${agent.agentRef}`;
+                const selected = agent.value;
                 if (!agent.installed) {
                     set({
                         selected,
@@ -210,7 +204,7 @@ export const createNativeSessionStore = (
                     : directory.kind === "agent-unavailable"
                       ? `agent-unavailable:${selected}`
                       : directory.kind === "ready"
-                        ? `ready:${directory.runtimeId}:${directory.agentRef}`
+                        ? `ready:${harnessValue(directory.runtimeId, directory.agentRef)}`
                         : directory.kind === "loading"
                           ? directory.listing
                           : null;

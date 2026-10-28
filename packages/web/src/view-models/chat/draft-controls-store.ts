@@ -20,6 +20,7 @@ import { readLastHarnessPreference, saveLastHarnessPreference } from "@/services
 import { pathDirectoryId } from "@/services/chat/workspace-directory-reference";
 import { isRuntimeConnectionFailure } from "@/services/management/management-api";
 import { formatError } from "../format-error.ts";
+import { harnessOptions, nativeSessionAgentTabs } from "./native-session-agents.ts";
 
 type DraftSettingsState =
     | { readonly kind: "loading" }
@@ -45,6 +46,17 @@ type DraftSettingsState =
       };
 
 type ReadyDraftSettings = Extract<DraftSettingsState, { readonly kind: "ready" }>;
+
+export function draftHarnessSelection(settings: DraftSettingsState, configuration: BotRuntimeConfiguration | null) {
+    const options = harnessOptions(configuration?.runtime ?? null);
+    const agentRef =
+        settings.kind === "switching"
+            ? settings.agentRef
+            : settings.kind === "ready" || settings.kind === "refreshing"
+              ? settings.selectedAgent.agentRef
+              : null;
+    return { options, value: options.find((option) => option.agentRef === agentRef)?.value ?? "" };
+}
 
 export function draftConfiguration(settings: DraftSettingsState): ChatDraftConfiguration | null {
     if (settings.kind !== "ready") {
@@ -597,8 +609,8 @@ export const createDraftControlsStore = (
                 }
                 // The Runtime's Agents can change while the draft is open; choose among those it offers now.
                 const configuration = runtimeConfiguration();
-                const agent = (configuration === null ? [] : connectedChatRuntimeAgents(configuration.runtime)).find(
-                    (item) => `${item.runtimeId}:${item.agentRef}` === value,
+                const agent = (configuration === null ? [] : nativeSessionAgentTabs(configuration.runtime)).find(
+                    (item) => item.installed && item.value === value,
                 );
                 if (agent === undefined) {
                     return;
