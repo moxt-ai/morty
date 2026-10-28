@@ -71,8 +71,11 @@ test("Given a saved title differs from the native session listing, When reopenin
     const app = await createTestApp({ connectAgent: true, nativeSessionIds: new Set(["title-review"]) });
     await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: "Open Session" })));
     const initialDialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
-    await app.user.click(
-        await app.waitForView(() => getByRole(initialDialog, "button", { name: "Native title-review" })),
+    // The first native session is selected and previewed automatically.
+    await app.waitForView(() =>
+        expect(getByRole(initialDialog, "button", { name: "Native title-review" }).getAttribute("aria-pressed")).toBe(
+            "true",
+        ),
     );
     await app.waitForView(() => getByRole(initialDialog, "heading", { name: "Native title-review" }));
     await app.user.click(getByRole(initialDialog, "button", { name: "Open" }));
@@ -90,8 +93,9 @@ test("Given a saved title differs from the native session listing, When reopenin
     await reopened.waitForView(() => expect(directoryTitles(reopened).some((item) => item.includes(title))).toBe(true));
     await reopened.user.click(getByRole(document.body, "button", { name: "Open Session" }));
     const dialog = await reopened.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
-    const entry = await reopened.waitForView(() => getByRole(dialog, "button", { name: title }));
-    await reopened.user.click(entry);
+    await reopened.waitForView(() =>
+        expect(getByRole(dialog, "button", { name: title }).getAttribute("aria-pressed")).toBe("true"),
+    );
     const preview = getByRole(dialog, "region", { name: "Selected session preview" });
     await reopened.waitForView(() => getByRole(preview, "heading", { name: title }));
 
@@ -107,8 +111,10 @@ test("Given a saved title differs from the native session listing, When reopenin
     const renamedDialog = await reopened.waitForView(() =>
         getByRole(document.body, "dialog", { name: "Open Session" }),
     );
-    await reopened.user.click(
-        await reopened.waitForView(() => getByRole(renamedDialog, "button", { name: "My renamed session" })),
+    await reopened.waitForView(() =>
+        expect(getByRole(renamedDialog, "button", { name: "My renamed session" }).getAttribute("aria-pressed")).toBe(
+            "true",
+        ),
     );
     await reopened.waitForView(() => getByRole(renamedDialog, "heading", { name: "My renamed session" }));
 });
