@@ -1,11 +1,15 @@
 import * as acp from "@agentclientprotocol/sdk";
-import { AcpAgentDefinition, type AcpEndpointTermination, type InProcessAcpEndpoint } from "@moxt-ai/mobius/runtime";
 import {
     ControlledEndpointConnection,
     type ControlledSessionUpdate,
     controlledSessionUpdates,
     fakeDaemonCapabilities,
 } from "@moxt-ai/mobius-test-support/fake-daemon";
+import { AcpAgentDefinition } from "../../../third-party/mobius/packages/cli/src/engine/acp/agent/agent-definition.ts";
+import type {
+    AcpEndpointTermination,
+    InProcessAcpEndpoint,
+} from "../../../third-party/mobius/packages/cli/src/engine/acp/agent/in-process-endpoint.ts";
 
 /** Stateful ACP peer that deliberately leaves tool status updates unfinished at turn termination. */
 export function createToolLifecycleAgent() {

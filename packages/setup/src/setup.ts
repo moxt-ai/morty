@@ -6,12 +6,17 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
-import { validateLocalPath } from "@moxt-ai/mobius/filesystem";
-import { executableLaunch, findExecutableOnPath, runBoundedProcess, stopProcessTree } from "@moxt-ai/mobius/process";
 import { decodeIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
 import QRCode from "qrcode";
+import { validateLocalPath } from "../../../third-party/mobius/packages/cli/src/engine/util/filesystem/private-path.ts";
+import {
+    executableLaunch,
+    findExecutableOnPath,
+    runBoundedProcess,
+    stopProcessTree,
+} from "../../../third-party/mobius/packages/cli/src/engine/util/process/executable.ts";
 import { resolveDocumentsDirectory, resolveStateDirectory } from "./platform/index.ts";
 
 export interface SetupRuntime {

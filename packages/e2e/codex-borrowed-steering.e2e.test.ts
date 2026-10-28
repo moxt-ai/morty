@@ -1,9 +1,9 @@
 import { join } from "node:path";
-import { stopProcessTree } from "@moxt-ai/mobius/process";
-import { MobiusRuntimeEngine, pairMobiusRuntime } from "@moxt-ai/mobius/runtime";
+import { MobiusRuntimeEngine, pairMobiusRuntime } from "@moxt-ai/mobius/engine";
 import { expect, test } from "@playwright/test";
-import { CodexAppServerClient } from "../../third-party/mobius/packages/cli/src/acp/harness/codex/app-server-client.ts";
 import { openMobiusCliInstallation } from "../../third-party/mobius/packages/cli/src/daemon/pairing/pair-local-machine.ts";
+import { CodexAppServerClient } from "../../third-party/mobius/packages/cli/src/engine/acp/harness/codex/app-server-client.ts";
+import { stopProcessTree } from "../../third-party/mobius/packages/cli/src/engine/util/process/executable.ts";
 import { CodexFixture } from "../../third-party/mobius/packages/cli/tests/support/agents/codex.ts";
 import { FakeOpenAiProvider } from "../../third-party/mobius/packages/cli/tests/support/llm/openai.ts";
 import { dataTestId } from "../web/src/data-testid.ts";

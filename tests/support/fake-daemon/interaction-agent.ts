@@ -1,11 +1,15 @@
 import * as acp from "@agentclientprotocol/sdk";
-import { AcpAgentDefinition, type AcpEndpointTermination, type InProcessAcpEndpoint } from "@moxt-ai/mobius/runtime";
 import {
     ControlledEndpointConnection,
     type ControlledSessionUpdate,
     controlledSessionUpdates,
     fakeDaemonCapabilities,
 } from "@moxt-ai/mobius-test-support/fake-daemon";
+import { AcpAgentDefinition } from "../../../third-party/mobius/packages/cli/src/engine/acp/agent/agent-definition.ts";
+import type {
+    AcpEndpointTermination,
+    InProcessAcpEndpoint,
+} from "../../../third-party/mobius/packages/cli/src/engine/acp/agent/in-process-endpoint.ts";
 
 /** A stateful ACP peer injected through the production daemon's Agent port. */
 export function createInteractionAgent() {

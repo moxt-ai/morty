@@ -161,7 +161,7 @@ function parseArguments(argv) {
 
 async function localLaunch(command, args) {
     const { executableLaunch, findExecutableOnPath, resolveExecutablePath } = await import(
-        pathToFileURL(path.join(MOBIUS_ROOT, "packages/cli/src/util/process/executable.ts")).href
+        pathToFileURL(path.join(MOBIUS_ROOT, "packages/cli/src/engine/util/process/executable.ts")).href
     );
     const executable = path.isAbsolute(command)
         ? await resolveExecutablePath(command)

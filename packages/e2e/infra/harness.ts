@@ -5,13 +5,13 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import type { Browser, BrowserContext, Page } from "playwright-core";
 import {
     executableLaunch,
     findExecutableOnPath,
     resolveExecutablePath,
     stopProcessTree,
-} from "@moxt-ai/mobius/process";
-import type { Browser, BrowserContext, Page } from "playwright-core";
+} from "../../../third-party/mobius/packages/cli/src/engine/util/process/executable.ts";
 
 interface ErrorRecord {
     readonly message: string;
