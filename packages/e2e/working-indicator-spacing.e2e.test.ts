@@ -9,6 +9,11 @@ test("Given generated Agent reply content, When it is running, Then Working has 
     await page.getByRole("textbox", { name: "Message" }).fill("interleaved compaction hold");
     await page.getByRole("button", { name: "Send message" }).click();
 
+    // Compaction renders inside a process segment that starts collapsed.
+    const processSummary = page.getByRole("button", { name: /^\d+ steps?/u });
+    await expect(processSummary).toBeVisible();
+    await processSummary.click();
+
     const compaction = page.getByRole("group", { name: "Context compaction" });
     const working = page.getByRole("status", { name: "Agent is working" });
     await expect(compaction).toBeVisible();
@@ -20,7 +25,12 @@ test("Given generated Agent reply content, When it is running, Then Working has 
         if (!(working instanceof HTMLElement) || !(precedingContent instanceof HTMLElement)) {
             throw new Error("Expected Working to follow rendered agent content");
         }
-        return working.getBoundingClientRect().top - precedingContent.getBoundingClientRect().bottom;
+        // The generated content may create the gap with bottom padding, which
+        // lives inside its border box: measure from its content edge.
+        const contentBottom =
+            precedingContent.getBoundingClientRect().bottom -
+            Number.parseFloat(getComputedStyle(precedingContent).paddingBottom);
+        return working.getBoundingClientRect().top - contentBottom;
     });
     // A larger bottom margin or padding on generated content is allowed; the
     // requirement is only that Working never sits closer than 12px.

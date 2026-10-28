@@ -197,10 +197,11 @@ export function BotChatComposer({
                         </ul>
                     </ImageGallery>
                 )}
-                <div className="relative min-h-0 flex-1">
+                <div className="relative flex min-h-0 flex-1 flex-col">
                     <ScrollArea
-                        className="-mx-3 min-h-0"
+                        className="-mx-3 flex min-h-0 flex-1 flex-col"
                         type="auto"
+                        viewportClassName="min-h-0 flex-1"
                         viewportRef={scrollViewport}
                         viewportStyle={{ maxHeight: composerTextareaMaxHeightPx }}
                     >

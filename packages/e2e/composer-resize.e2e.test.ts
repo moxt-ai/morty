@@ -79,4 +79,46 @@ test.describe("message composer resizing", () => {
         });
         expect(Math.abs(bottomFadeGap)).toBeLessThan(0.5);
     });
+
+    test("Given a long draft with an attachment, When the composer is at its cap, Then the text viewport ends above the toolbar", async ({
+        runtime,
+    }) => {
+        const { page } = runtime;
+        await runtime.openPairedChat();
+        const composer = page.getByRole("textbox", { name: "Message" });
+        await composer.fill("Attachment draft");
+        await page.getByLabel("Choose attachments").setInputFiles({
+            name: "notes.txt",
+            mimeType: "text/plain",
+            buffer: Buffer.from("Attachment contents for notes.txt"),
+        });
+        await expect(page.getByRole("list", { name: "Attachments" })).toContainText("notes.txt");
+
+        await composer.fill(Array.from({ length: 30 }, (_, index) => `line ${(index + 1).toString()}`).join("\n"));
+        const scrollArea = composer.locator("xpath=ancestor::*[@data-slot='scroll-area']");
+        const scrollViewport = scrollArea.locator('[data-slot="scroll-area-viewport"]');
+        const boxes = await scrollViewport.evaluate((element) => {
+            const surface = element.closest("div.max-h-64");
+            const toolbar = surface?.querySelector("div.mt-1");
+            if (!(surface instanceof HTMLElement) || !(toolbar instanceof HTMLElement)) {
+                return null;
+            }
+            return {
+                surfaceHeight: surface.getBoundingClientRect().height,
+                toolbarTop: toolbar.getBoundingClientRect().top,
+                viewportBottom: element.getBoundingClientRect().bottom,
+            };
+        });
+        if (boxes === null) {
+            throw new Error("Expected the composer surface and its toolbar to have layout boxes");
+        }
+        expect(boxes.surfaceHeight).toBe(composerMaxHeightPx);
+        expect(boxes.viewportBottom).toBeLessThanOrEqual(boxes.toolbarTop);
+        // The clipped draft still scrolls inside the reduced text region.
+        const scroll = await scrollViewport.evaluate((element) => ({
+            scrollHeight: element.scrollHeight,
+            clientHeight: element.clientHeight,
+        }));
+        expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
+    });
 });
