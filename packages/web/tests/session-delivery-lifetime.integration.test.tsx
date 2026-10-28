@@ -2,7 +2,7 @@ import { getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
-import { createTestApp } from "./infra/test-app.tsx";
+import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
 
 test("Given a running message whose admission response was lost, When Chat reconnects, Then delivery is confirmed without retrying or waiting for completion", {
@@ -106,3 +106,73 @@ for (const message of ["first", "subsequent"] as const) {
         expect(queryByRole(document.body, "button", { name: "Retry message with unknown delivery" })).toBeNull();
     });
 }
+
+function sessionEntry(app: TestApp, title: string): HTMLElement {
+    const entry = app
+        .elementsByTestId(dataTestId.managedConversation)
+        .find((element) => element.textContent?.includes(title));
+    if (entry === undefined) {
+        throw new Error(`Expected the ${title} Session in the sidebar`);
+    }
+    return entry;
+}
+
+test("Given a message the network has not delivered yet, When I switch to another Session, it finishes in the background and I switch back, Then it shows once with its reply and I can keep chatting", {
+    timeout: 60_000,
+}, async () => {
+    const environment = await createChatWorkerEnvironment(true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true });
+    const network = app.network;
+    const daemon = app.daemon;
+    if (network === null || daemon === null) {
+        throw new Error("Expected the controllable network and connected Runtime");
+    }
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Established session");
+    await app.waitForView(() => {
+        expect(app.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain("Established session");
+        expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
+    });
+    network.holdNextTurn();
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold after first delta");
+    await app.waitForView(() => expect(network.submissions.at(-1)).toContain("hold after first delta"));
+    const submissions = network.submissions.length;
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    network.releaseHeldTurn();
+    await daemon.continueReply("hold after first delta", {
+        outcome: "complete",
+        output: [{ kind: "text", text: "Finished while you were away" }],
+    });
+    await app.waitForView(() =>
+        expect(
+            sessionEntry(app, "Established session")
+                .querySelector(`[data-testid="${dataTestId.sessionStatus}"]`)
+                ?.getAttribute("aria-label"),
+        ).toBe("Unread response"),
+    );
+
+    await app.user.click(sessionEntry(app, "Established session"));
+    const composer = await app.waitForView(() => {
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
+            "Finished while you were away",
+        );
+        expect(queryByRole(document.body, "button", { name: "Retry message with unknown delivery" })).toBeNull();
+        const element = app.elementByTestId(dataTestId.messageComposer);
+        if (!(element instanceof HTMLTextAreaElement) || element.disabled) {
+            throw new Error("Expected an enabled message composer");
+        }
+        return element;
+    });
+    expect(
+        app
+            .elementsByTestId(dataTestId.userMessage)
+            .filter((element) => element.textContent?.includes("hold after first delta")),
+    ).toHaveLength(1);
+    expect(network.submissions).toHaveLength(submissions);
+    await sendPrompt(app, composer, "Keep chatting");
+    await app.waitForView(() => {
+        expect(app.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain("Keep chatting");
+        expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
+    });
+});

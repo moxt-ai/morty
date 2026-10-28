@@ -870,25 +870,20 @@ export function sessionEventLogPresentation(events: readonly SessionPresentation
     return { messages: sessionReductionMessages(reduceSessionEvents(events, "known")) };
 }
 
+/**
+ * The commands these events name. An Agent's user message identity is its own, not
+ * the command that submitted it, so only lifecycle events identify commands.
+ */
 export function sessionEventCommandIds(events: readonly SessionPresentationEvent[]): readonly string[] {
     const commandIds: string[] = [];
     for (const event of events) {
-        if (event.type === "lifecycle-metadata") {
-            if ("commandId" in event.payload && !commandIds.includes(event.payload.commandId)) {
-                commandIds.push(event.payload.commandId);
-            }
-            continue;
-        }
-        const update = event.payload;
         if (
-            update.sessionUpdate !== "user_message_chunk" ||
-            update.messageId === null ||
-            update.messageId === undefined ||
-            commandIds.includes(update.messageId)
+            event.type === "lifecycle-metadata" &&
+            "commandId" in event.payload &&
+            !commandIds.includes(event.payload.commandId)
         ) {
-            continue;
+            commandIds.push(event.payload.commandId);
         }
-        commandIds.push(update.messageId);
     }
     return commandIds;
 }

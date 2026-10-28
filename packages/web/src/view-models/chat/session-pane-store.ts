@@ -1073,12 +1073,26 @@ export function createSessionPaneModel(options: {
                             signal.throwIfAborted();
                             // Confirm execution after history is adopted. An earlier idle snapshot
                             // cannot settle work that started while those pages were loading.
+                            const submission = delivery.getState().state;
+                            const unconfirmedCommandId =
+                                submission.kind === "delivery-unknown" ? submission.journal.commandId : undefined;
                             const execution = await connected.sessions.readSessionExecution(
                                 sessionId,
                                 sessionIdentity,
                                 signal,
+                                unconfirmedCommandId,
                             );
                             signal.throwIfAborted();
+                            // Only the Runtime knows whether a submission arrived, including one that
+                            // finished while this pane was detached. A Runtime or Relay that cannot
+                            // report it omits the delivery, and the submission stays unconfirmed.
+                            if (
+                                unconfirmedCommandId !== undefined &&
+                                execution.command !== undefined &&
+                                execution.command.state !== "unknown"
+                            ) {
+                                delivery.getState().reconcile([unconfirmedCommandId]);
+                            }
                             const running = execution.turn;
                             if (running === null) {
                                 commitProjection({ kind: "execution-idle" });
