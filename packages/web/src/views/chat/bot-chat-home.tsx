@@ -224,8 +224,8 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                     <div className={chatSessionPaneEnterClassName} key={model.selection.session.result.ready.sessionId}>
                         <MobiusSessionPane workspace={workspace} />
                     </div>
-                ) : model.selection.kind === "loading" &&
-                  model.initialization.kind !== "failed" &&
+                ) : (model.selection.kind === "loading" ||
+                      (model.selection.kind === "pending" && model.initialization.kind === "loading")) &&
                   pendingConversation.recovery === null ? (
                     <MobiusSessionPaneLoading
                         title={pendingConversation.title}
@@ -278,8 +278,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                         </div>
                                         <Button onClick={store.getState().retry}>Reconnect</Button>
                                     </div>
-                                ) : (model.selection.kind === "loading" && model.initialization.kind !== "failed") ||
-                                  model.initialization.kind === "loading" ? (
+                                ) : model.selection.kind === "loading" || model.initialization.kind === "loading" ? (
                                     <SessionMessageListSkeleton />
                                 ) : model.initialization.kind === "failed" || model.selection.kind === "failed" ? (
                                     <div className="m-auto grid justify-items-center gap-4 text-center">

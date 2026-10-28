@@ -161,16 +161,16 @@ function initialSelection(urlValue: string, createId: () => string): Conversatio
         if (harness !== null && isIdentifier(harness)) {
             return requestedAction === null || requestedAction === "fork" || requestedAction === "import"
                 ? {
-                      kind: "loading",
+                      kind: "pending",
                       target: { kind: "continue", action: requestedAction ?? "fork", harness, sessionId },
                   }
                 : { kind: "draft", key: createId() };
         }
-        return { kind: "loading", target: { kind: "session", sessionId } };
+        return { kind: "pending", target: { kind: "session", sessionId } };
     }
     const conversationId = url.searchParams.get("conversationId");
     return conversationId !== null && isIdentifier(conversationId)
-        ? { kind: "loading", target: { kind: "conversation", conversationId } }
+        ? { kind: "pending", target: { kind: "conversation", conversationId } }
         : { kind: "draft", key: createId() };
 }
 
@@ -257,7 +257,7 @@ export const createBotChatHomeStore = (
     const conversations = createConversationSessionStore(requests);
     const selection = initialSelection(options.url, options.createId);
     let restoredSessionId =
-        options.entry === "restore" && selection.kind === "loading" && selection.target.kind === "session"
+        options.entry === "restore" && selection.kind === "pending" && selection.target.kind === "session"
             ? selection.target.sessionId
             : null;
     const {
@@ -344,7 +344,7 @@ export const createBotChatHomeStore = (
                     message: string,
                 ): void => {
                     const current = get();
-                    if (current.initialization.kind === "ready" && current.selection.kind === "loading") {
+                    if (current.selection.kind === "loading") {
                         set({
                             selection: transitionConversationSelection(current.selection, {
                                 kind: "session-load-failed",
@@ -485,10 +485,15 @@ export const createBotChatHomeStore = (
                     if (
                         homeCanStartConversation(current) &&
                         botConnectionStatus(current).kind === "connected" &&
-                        current.selection.kind === "loading" &&
+                        (current.selection.kind === "pending" || current.selection.kind === "loading") &&
                         current.selection.target.kind === "session"
                     ) {
                         const target = current.selection.target;
+                        set({
+                            selection: transitionConversationSelection(current.selection, {
+                                kind: "session-load-started",
+                            }),
+                        });
                         const session = await requests.managedSession(botId, target.sessionId, signal);
                         signal.throwIfAborted();
                         set((state) => ({
@@ -509,7 +514,7 @@ export const createBotChatHomeStore = (
                     if (!detail.configured) {
                         set((current) => ({
                             selection:
-                                current.selection.kind === "loading"
+                                current.selection.kind === "pending" || current.selection.kind === "loading"
                                     ? transitionConversationSelection(current.selection, {
                                           kind: "session-load-failed",
                                           failure: "unavailable",
@@ -533,7 +538,12 @@ export const createBotChatHomeStore = (
                     }
                     const configuration = await requests.runtimeConfiguration(botId, signal);
                     signal.throwIfAborted();
-                    set({ initialization: { kind: "ready" } });
+                    set((current) => ({
+                        initialization: { kind: "ready" },
+                        selection: transitionConversationSelection(current.selection, {
+                            kind: "session-load-started",
+                        }),
+                    }));
                     observeConfiguration(configuration, { kind: "read" });
                     const currentSelection = get().selection;
                     if (currentSelection.kind === "ready") {
@@ -633,7 +643,7 @@ export const createBotChatHomeStore = (
                     }
                     if (
                         restoredSessionId !== null &&
-                        failedTarget.kind === "loading" &&
+                        (failedTarget.kind === "pending" || failedTarget.kind === "loading") &&
                         failedTarget.target.kind === "session" &&
                         failedTarget.target.sessionId === restoredSessionId &&
                         cause instanceof CloudApiError &&
@@ -659,7 +669,7 @@ export const createBotChatHomeStore = (
                         console.error("The Chat WebSocket bridge failed to complete a request.", cause);
                         const message = formatError(cause, "Chat is unavailable.");
                         const current = get();
-                        if (current.selection.kind === "loading") {
+                        if (current.selection.kind === "pending" || current.selection.kind === "loading") {
                             // The selection never completed, so this load is a
                             // user request still in flight: it becomes an
                             // operable failure that keeps its target.
@@ -701,6 +711,7 @@ export const createBotChatHomeStore = (
                 // Leaving a pending selection releases its request, even when entry configuration is already ready.
                 const restart =
                     !homeCanStartConversation(current) ||
+                    current.selection.kind === "pending" ||
                     current.selection.kind === "loading" ||
                     current.selection.kind === "failed";
                 options.navigation.showDraft();

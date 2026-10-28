@@ -15,6 +15,8 @@ export type ConversationTarget =
 
 export type ConversationSelectionState =
     | { readonly kind: "draft"; readonly key: string }
+    /** A selected target waiting for entry prerequisites; no session request is in flight. */
+    | { readonly kind: "pending"; readonly target: ConversationTarget }
     | { readonly kind: "loading"; readonly target: ConversationTarget }
     | {
           readonly kind: "ready";
@@ -31,6 +33,7 @@ export type ConversationSelectionState =
 export type ConversationSelectionEvent =
     | { readonly kind: "draft-selected"; readonly key: string }
     | { readonly kind: "target-selected"; readonly target: ConversationTarget }
+    | { readonly kind: "session-load-started" }
     | {
           readonly kind: "session-loaded";
           readonly session: OpenMobiusSession;
@@ -79,17 +82,19 @@ export function transitionConversationSelection(
         case "draft-selected":
             return { key: event.key, kind: "draft" };
         case "target-selected":
-            return { kind: "loading", target: event.target };
+            return { kind: "pending", target: event.target };
+        case "session-load-started":
+            return state.kind === "pending" ? { kind: "loading", target: state.target } : state;
         case "session-loaded":
             return state.kind === "loading" && sameTarget(state.target, event.target)
                 ? { kind: "ready", session: event.session, target: event.target }
                 : state;
         case "session-load-failed":
-            return state.kind === "loading" && sameTarget(state.target, event.target)
+            return (state.kind === "pending" || state.kind === "loading") && sameTarget(state.target, event.target)
                 ? { kind: "failed", failure: event.failure, message: event.message, target: event.target }
                 : state;
         case "retry-requested":
-            return state.kind === "failed" ? { kind: "loading", target: state.target } : state;
+            return state.kind === "failed" ? { kind: "pending", target: state.target } : state;
         case "reload-requested":
             return state.kind === "ready" ? { kind: "loading", target: state.target } : state;
         case "session-title-updated":
