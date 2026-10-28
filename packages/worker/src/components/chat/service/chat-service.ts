@@ -190,6 +190,16 @@ export class ChatService {
         return bot.configuration;
     };
 
+    readonly #nativeSessionRuntime = async (scope: ChatScope, requestedRuntimeId: string) => {
+        const runtime = await this.localRuntime(scope);
+        // Existing clients send the Runtime with their native-session identity. Keep it as a consistency check:
+        // discovery and entry identifiers belong to that Runtime and must not be silently redirected elsewhere.
+        if (requestedRuntimeId !== runtime.runtimeId) {
+            throw new PlatformProjectError("BOT_RUNTIME_FIXED", "This Machine is bound to a different Runtime.", 409);
+        }
+        return runtime;
+    };
+
     readonly #requireRuntimeAgent = async (scope: ChatScope, runtimeId: string, agentRef: string) => {
         const runtime = await this.#platform.getChatRuntimeAgents(scope.projectId, runtimeId, scope.signal);
         if (!runtime.agents.some((agent) => agent.agentRef === agentRef)) {
@@ -446,8 +456,9 @@ export class ChatService {
         return {};
     };
 
-    readonly nativeSessions = async (scope: ChatScope, runtimeId: string, input: NativeListInput) => {
-        const result = await this.#platform.nativeSessions(scope.projectId, runtimeId, input, scope.signal);
+    readonly nativeSessions = async (scope: ChatScope, requestedRuntimeId: string, input: NativeListInput) => {
+        const runtime = await this.#nativeSessionRuntime(scope, requestedRuntimeId);
+        const result = await this.#platform.nativeSessions(scope.projectId, runtime.runtimeId, input, scope.signal);
         if (result.action !== "list") {
             throw new PlatformProjectError(
                 "PLATFORM_INVALID_RESPONSE",
@@ -518,10 +529,11 @@ export class ChatService {
         return stored;
     };
 
-    readonly previewNativeSession = async (scope: ChatScope, runtimeId: string, input: NativePreviewInput) => {
+    readonly previewNativeSession = async (scope: ChatScope, requestedRuntimeId: string, input: NativePreviewInput) => {
+        const runtime = await this.#nativeSessionRuntime(scope, requestedRuntimeId);
         const events = await this.#platform.previewRuntimeNativeEvents(
             scope.projectId,
-            runtimeId,
+            runtime.runtimeId,
             input.nativeSessionId,
             {
                 additionalDirectoryIds: input.additionalDirectoryIds,
@@ -550,14 +562,15 @@ export class ChatService {
 
     readonly #openNativeSession = async (
         scope: ChatScope,
-        runtimeId: string,
+        requestedRuntimeId: string,
         entryId: string,
         input: NativeEntryInput,
         action: "fork" | "import",
     ) => {
+        const runtime = await this.#nativeSessionRuntime(scope, requestedRuntimeId);
         const result = await this.#platform.nativeSessions(
             scope.projectId,
-            runtimeId,
+            runtime.runtimeId,
             { ...input, entryId, action },
             scope.signal,
         );

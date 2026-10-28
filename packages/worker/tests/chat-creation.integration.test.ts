@@ -59,6 +59,7 @@ async function createChatFixture(
     const { bots } = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await listed.json());
     return {
         botId: v.parse(v.string(), bots[0]?.botId),
+        projectId: identity.projectId,
         request,
         runtime,
         [Symbol.asyncDispose]: () => runtime[Symbol.asyncDispose](),
@@ -172,6 +173,68 @@ test("Given a draft Bot, When its owner configures and opens it, Then setup list
         ],
     });
 });
+
+for (const configured of [false, true]) {
+    test(`Given a Bot ${configured ? "bound to another Runtime" : "without a Runtime"}, When its owner browses or opens native sessions using a client-selected Runtime, Then Chat rejects every operation without creating sessions or ownership records`, async ({
+        cloud,
+    }) => {
+        const nativeSessionId = crypto.randomUUID();
+        await using fixture = await createChatFixture(cloud, false, new Set([nativeSessionId]));
+        await using bound = configured ? await cloud.connectAgent(fixture.projectId) : null;
+        if (bound !== null) {
+            expect(
+                (
+                    await fixture.request(`chat/bots/${fixture.botId}/setup`, {
+                        runtimeId: bound.runtimeId,
+                        agentRef: "codex",
+                    })
+                ).status,
+            ).toBe(202);
+        }
+        const runtimeId = fixture.runtime.runtimeId;
+        const identity = { agentId: "codex", directoryId: "default", additionalDirectoryIds: [] };
+        // Obtain a valid discovery on the other Runtime through its public Platform API, so rejection cannot be
+        // attributed to a nonexistent Runtime, entry, or discovery.
+        const found = await fixture.runtime.client.runtimes.findNativeSessionByNativeSessionId(
+            runtimeId,
+            { ...identity, nativeSessionId },
+            AbortSignal.timeout(10_000),
+        );
+        const before = await fixture.runtime.client.runtimes.listSessions(runtimeId, 100, AbortSignal.timeout(10_000));
+        const entry = { ...identity, runtimeId, directoryId: found.entry.directoryId };
+        const paths = [
+            { path: "native-sessions", input: { ...entry, action: "list", cursor: null, discoveryId: null } },
+            { path: `native-session/${found.entry.entryId}`, input: { ...entry, nativeSessionId } },
+            ...["import", "fork"].map((action) => ({
+                path: `native-session/${found.entry.entryId}/${action}`,
+                input: { ...entry, discoveryId: found.sessionId },
+            })),
+        ];
+        const responses = [];
+        for (const { path, input } of paths) {
+            const response = await fixture.request(`chat/bots/${fixture.botId}/${path}`, input);
+            responses.push({ path, status: response.status, body: await response.json() });
+        }
+        expect.soft(responses).toMatchObject(
+            paths.map(({ path }) => ({
+                path,
+                status: 409,
+                body: { error: { code: configured ? "BOT_RUNTIME_FIXED" : "AGENT_REQUIRED" } },
+            })),
+        );
+        expect
+            .soft(await fixture.runtime.client.runtimes.listSessions(runtimeId, 100, AbortSignal.timeout(10_000)))
+            .toEqual(before);
+        if (!configured) {
+            expect(
+                (await fixture.request(`chat/bots/${fixture.botId}/setup`, { runtimeId, agentRef: "codex" })).status,
+            ).toBe(202);
+        }
+        const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
+        expect(managed.status).toBe(200);
+        expect(await managed.json()).toEqual({ sessions: [] });
+    });
+}
 
 test("Given a Bot connected through one Agent, When a Session uses another Agent, Then that Session reopens with its own Agent", async ({
     cloud,
