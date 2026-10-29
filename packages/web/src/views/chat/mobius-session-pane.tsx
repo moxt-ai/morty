@@ -925,8 +925,8 @@ function MobiusSessionPaneBody({
                                             const sections = agentReplySections(group.items);
                                             const copyText = agentReplyCopyText(
                                                 replyMessagesByRenderGroupId.get(group.id) ?? [],
-                                                pane.botId,
                                                 execution,
+                                                replyActive,
                                             );
                                             // Flatten the article children so positional margin clearing sees the
                                             // laid-out order, including the trailing copy action row. Items inside a

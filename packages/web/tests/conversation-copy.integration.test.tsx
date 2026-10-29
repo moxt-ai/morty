@@ -14,6 +14,7 @@ test("Given a streaming response, When I stop the agent, Then I can copy the ret
     }
     await sendPrompt(app, composer, "hold with rich content");
     const response = await app.waitForView(() => getByRole(document.body, "article", { name: "Agent response" }));
+    await app.waitForView(() => getByText(response, "Partial rich reply"));
     expect(queryByRole(response, "button", { name: "Copy response" })).toBeNull();
     await app.user.click(
         await app.waitForView(() => getByRole(document.body, "button", { name: "Stop agent output" })),
@@ -34,7 +35,7 @@ test("Given a streaming response, When I stop the agent, Then I can copy the ret
     expect(await navigator.clipboard.readText()).toBe("Partial rich reply");
 });
 
-test("Given a settled response with copyable rich parts and ordinary tool output, When I copy the response, Then one button copies Markdown, Shell output, and no ordinary tool text", {
+test("Given a settled response with answer Markdown and tool output, When I copy the response, Then only the answer Markdown is copied", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -82,5 +83,42 @@ test("Given a settled response with copyable rich parts and ordinary tool output
     expect(queryByRole(response, "button", { name: "Copy shell output" })).toBeNull();
     await app.user.click(copy);
     await app.waitForView(() => expect(getByText(response, "Response copied to clipboard")).toBeDefined());
-    expect(await navigator.clipboard.readText()).toBe(`${markdown}\n\nPartial rich reply\n\nfailed\npassed`);
+    expect(await navigator.clipboard.readText()).toBe(`${markdown}\n\nPartial rich reply`);
 });
+
+test.each(["", " \n\t"])(
+    "Given tool output and no answer body (%j), When the turn finishes, Then no response copy button appears",
+    {
+        timeout: 30_000,
+    },
+    async (answer) => {
+        const app = await createTestApp({ connectAgent: true });
+        const daemon = app.daemon;
+        if (daemon === null) {
+            throw new Error("Expected a controlled Agent Runtime");
+        }
+        await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold reasoning only");
+        const response = await app.waitForView(() => getByRole(document.body, "article", { name: "Agent response" }));
+        expect(queryByRole(response, "button", { name: "Copy response" })).toBeNull();
+        await daemon.continueReply("hold reasoning only", {
+            outcome: "complete",
+            output: [
+                {
+                    activityType: "tool",
+                    content: [],
+                    kind: "activity",
+                    output: JSON.stringify({ exitCode: 0, output: "Shell output without an answer" }),
+                    title: '/bin/zsh -lc "pnpm test"',
+                },
+                ...(answer.length === 0 ? [] : [{ kind: "text" as const, text: answer }]),
+            ],
+        });
+        await app.waitForView(() =>
+            expect(queryByRole(document.body, "button", { name: "Stop agent output" })).toBeNull(),
+        );
+        expect(queryByRole(response, "button", { name: "Copy response" })).toBeNull();
+        app.remount();
+        const restored = await app.waitForView(() => getByRole(document.body, "article", { name: "Agent response" }));
+        expect(queryByRole(restored, "button", { name: "Copy response" })).toBeNull();
+    },
+);
