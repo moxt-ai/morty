@@ -54,7 +54,7 @@ for (const delivery of ["before-acceptance", "after-acceptance"] as const) {
             clock,
             environment,
             connectAgent: true,
-            agent: { id: "settings-test", label: "Settings Agent", runtime: "current" },
+            agent: { id: "settings-test", label: "Settings Agent" },
         });
         const network = first.network;
         if (network === null) {

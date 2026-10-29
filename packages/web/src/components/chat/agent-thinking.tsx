@@ -46,7 +46,7 @@ function ReasoningContent({ entry }: { readonly entry: ReasoningEntry }) {
     return (
         <div className="relative mb-1 ml-2 min-h-0">
             <FollowLatestScrollArea
-                className={agentThinkStepExpandedPanelClassName}
+                className={cn(agentThinkStepExpandedPanelClassName, "pt-1")}
                 container={content}
                 followThreshold={24}
                 followRevision={null}
@@ -61,7 +61,7 @@ function ReasoningContent({ entry }: { readonly entry: ReasoningEntry }) {
                         <p className="m-0 text-xs leading-5 text-copy-secondary">(Reasoning details were omitted.)</p>
                     )}
                     {entry.text.trim().length > 0 && (
-                        <pre className="m-0 whitespace-pre-wrap font-sans text-[13px] leading-[1.75] text-muted-foreground">
+                        <pre className="m-0 whitespace-pre-wrap font-sans text-12 text-muted-foreground">
                             {entry.text}
                         </pre>
                     )}

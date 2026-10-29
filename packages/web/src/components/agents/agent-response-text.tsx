@@ -27,7 +27,6 @@ const MarkdownPreview = memo(function MarkdownPreview({
 }: MarkdownPreviewProps) {
     return (
         <AgentMarkdown
-            className="[&_p]:my-0"
             createResourceStore={createResourceStore}
             markdown={text}
             openLocalFile={openLocalFile}

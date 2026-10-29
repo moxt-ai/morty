@@ -65,7 +65,6 @@ export async function startTestPlatform(
                         ...(agents[0]?.beforeConfigurationApplied === undefined
                             ? {}
                             : { beforeConfigurationApplied: agents[0].beforeConfigurationApplied }),
-                        ...(agents[0]?.runtime === undefined ? {} : { runtime: agents[0].runtime }),
                         ...(nativeSessionIds === undefined ? {} : { nativeSessionIds }),
                     },
                     origin: bindings.origin,

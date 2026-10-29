@@ -73,7 +73,6 @@ function MessageContentBlock({
         case "text": {
             const markdown = (
                 <AgentMarkdown
-                    className="[&_p]:my-0"
                     createResourceStore={createResourceStore}
                     markdown={content.text}
                     openLocalFile={openLocalFile}
@@ -95,7 +94,7 @@ function MessageContentBlock({
                 ) : (
                     <PreviewImage
                         alt="Agent-provided content"
-                        className="max-h-[480px] w-auto max-w-full rounded-xl border border-border object-contain"
+                        className="max-h-[min(60vh,360px)] w-auto max-w-full rounded-xl border border-border object-contain"
                         src={`data:${content.mimeType};base64,${content.data}`}
                     />
                 )

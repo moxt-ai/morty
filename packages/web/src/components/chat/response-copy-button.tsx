@@ -25,7 +25,7 @@ export function ResponseCopyButton({
     const copy = model.state.kind;
 
     return (
-        <div className="mt-2 flex flex-wrap items-center gap-x-3" ref={model.onAttach}>
+        <div className="mt-3 flex flex-wrap items-center gap-x-3" ref={model.onAttach}>
             <button
                 aria-label={copy === "copied" ? "Copied" : "Copy response"}
                 className="-ml-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-morty-text-3 transition-colors hover:bg-morty-fill-opacity-2 hover:text-foreground active:bg-morty-fill-opacity-3 active:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 motion-reduce:transition-none"
