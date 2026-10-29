@@ -47,10 +47,10 @@ export function PairingInstruction() {
                 <Copy aria-hidden="true" className="size-4" />
                 <span>Copy setup prompt</span>
             </CopyToClipboardButton>
-            <div className="mt-3 rounded-[16px] bg-muted/50 px-4 py-2 text-center text-xs leading-5 text-morty-text-3">
-                <p>Setup interrupts the agent's current task. Continue it in your browser afterwards.</p>
-                <p>Keep that computer awake and online while using Morty.</p>
-            </div>
+            <p className="mt-3 text-center text-xs leading-5 text-pretty text-morty-text-3">
+                Setup interrupts the agent's current task; continue it here afterwards. Keep that computer awake and
+                online.
+            </p>
             <details aria-label="Setup details" className="group w-full text-xs leading-5 text-morty-text-3">
                 <summary className="mt-5 flex h-6 cursor-pointer list-none items-center justify-center gap-1.5 rounded-lg outline-none hover:text-morty-text-2 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
                     Review what setup does
@@ -59,24 +59,20 @@ export function PairingInstruction() {
                 <div className="mt-1 rounded-[16px] border border-border/60 bg-muted/50 p-1 text-left">
                     <ul
                         aria-label="What setup does"
-                        className="list-disc space-y-1 py-2 pr-3 pl-7 text-morty-text-3 marker:text-morty-text-4"
+                        className="list-disc space-y-1 py-2 pr-3 pl-7 text-morty-text-3 marker:text-morty-text-4 [&_code]:whitespace-nowrap"
                     >
                         <li>
-                            Installs or updates the Mobius CLI (<code>@moxt-ai/mobius</code>) from npm. It updates
-                            itself after your Morty sessions have been idle for 30 minutes.
+                            Installs the Mobius CLI (<code>@moxt-ai/mobius</code>) from npm. It updates itself after 30
+                            idle minutes.
                         </li>
                         <li>
-                            Starts a background connection. It stops when the computer restarts; run{" "}
-                            <code>mobius quit</code> to stop it anytime.
+                            Runs a background connection until restart or <code>mobius quit</code>.
                         </li>
+                        <li>Keeps this computer's Morty identity in your user data folder.</li>
+                        <li>Asks before replacing a missing connection, which ends earlier shared access.</li>
                         <li>
-                            Saves this computer's Morty identity in your user data folder, protected by file
-                            permissions.
-                        </li>
-                        <li>Asks before replacing a missing connection, which ends all earlier shared access.</li>
-                        <li>
-                            Returns a private link. Treat it like a password: anyone who opens it within 24 hours can
-                            view and control this computer's agent sessions until you revoke access.
+                            Returns a private link. Anyone who opens it within 24 hours can control your agent until you
+                            revoke access.
                         </li>
                     </ul>
                     <p className="px-3 pb-2">

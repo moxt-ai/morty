@@ -23,7 +23,6 @@ for (const viewport of [
             const copy = page.getByRole("button", { name: "Copy setup prompt" });
             await expect(copy).toBeInViewport();
             await expect(page.getByRole("heading", { name: "Step away. Keep your agent working." })).toBeVisible();
-            await expect(page.getByRole("list", { name: "Why Morty" })).toBeVisible();
             await expect(page.getByText("Next: paste it into the agent running on your computer.")).toBeVisible();
             await expect(page.getByRole("heading")).toHaveCount(1);
             const details = page.getByText("Review what setup does", { exact: true });

@@ -1,5 +1,5 @@
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
-import { ArrowLeft, ArrowUpRight, Check, Unplug } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Unplug } from "lucide-react";
 import { SetupConnectionGraphic } from "../../components/setup/setup-connection-graphic.tsx";
 import { ExternalLink } from "../../components/ui/external-link.tsx";
 import { MortyAlert } from "../../components/ui/morty-alert.tsx";
@@ -208,22 +208,9 @@ function SetupApplication({
             </SetupCardTitle>
             <SetupCardDescription className="text-pretty">
                 {returnHref === null
-                    ? "Check progress, reply, and approve requests from any browser while Codex, Claude Code, or Pi keeps running on your computer."
+                    ? "Check in and reply from any browser. Your agent keeps running on your computer."
                     : "Run one setup prompt on the computer you want to add."}
             </SetupCardDescription>
-            {returnHref === null && (
-                <ul
-                    aria-label="Why Morty"
-                    className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs leading-5 text-morty-text-3"
-                >
-                    {["Runs on your computer", "Open source", "Access you can revoke"].map((reason) => (
-                        <li className="flex items-center gap-1" key={reason}>
-                            <Check aria-hidden="true" className="size-3.5 shrink-0" />
-                            {reason}
-                        </li>
-                    ))}
-                </ul>
-            )}
             <div className="mt-4 w-full">
                 <PairingInstruction />
             </div>

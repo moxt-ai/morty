@@ -22,13 +22,8 @@ test("Given a new visitor, When the setup page opens, Then it explains what Mort
         HTMLElement,
     );
     expect(document.body.textContent).toContain(
-        "Check progress, reply, and approve requests from any browser while Codex, Claude Code, or Pi keeps running on your computer.",
+        "Check in and reply from any browser. Your agent keeps running on your computer.",
     );
-    expect(
-        getAllByRole(getByRole(document.body, "list", { name: "Why Morty" }), "listitem").map(
-            (item) => item.textContent,
-        ),
-    ).toEqual(["Runs on your computer", "Open source", "Access you can revoke"]);
     const repository = "https://github.com/moxt-ai/morty";
     for (const [name, href] of [
         ["GitHub", repository],
@@ -43,9 +38,7 @@ test("Given a new visitor, When the setup page opens, Then it explains what Mort
     );
     const collapsedDetails = getByRole(document.body, "group", { name: "Setup details" });
     expect(collapsedDetails).toHaveProperty("open", false);
-    expect(
-        collapsedDetails.contains(getByText(document.body, "Keep that computer awake and online while using Morty.")),
-    ).toBe(false);
+    expect(collapsedDetails.contains(getByText(document.body, /Keep that computer awake and online\./))).toBe(false);
     expect(queryByRole(document.body, "status", { name: "Setup next step" })).toBeNull();
 });
 
@@ -58,11 +51,11 @@ test("Given a new visitor reviewing setup, When they expand its details, Then th
 
     const steps = getAllByRole(getByRole(document.body, "list", { name: "What setup does" }), "listitem");
     expect(steps.map((step) => step.textContent)).toEqual([
-        "Installs or updates the Mobius CLI (@moxt-ai/mobius) from npm. It updates itself after your Morty sessions have been idle for 30 minutes.",
-        "Starts a background connection. It stops when the computer restarts; run mobius quit to stop it anytime.",
-        "Saves this computer's Morty identity in your user data folder, protected by file permissions.",
-        "Asks before replacing a missing connection, which ends all earlier shared access.",
-        "Returns a private link. Treat it like a password: anyone who opens it within 24 hours can view and control this computer's agent sessions until you revoke access.",
+        "Installs the Mobius CLI (@moxt-ai/mobius) from npm. It updates itself after 30 idle minutes.",
+        "Runs a background connection until restart or mobius quit.",
+        "Keeps this computer's Morty identity in your user data folder.",
+        "Asks before replacing a missing connection, which ends earlier shared access.",
+        "Returns a private link. Anyone who opens it within 24 hours can control your agent until you revoke access.",
     ]);
     expect(getByRole(document.body, "link", { name: /^Read setup\.md/ })).toHaveProperty(
         "href",
@@ -78,7 +71,7 @@ test("Given a new visitor whose agent is busy, When the setup page opens, Then i
 
     const warning = getByText(
         document.body,
-        "Setup interrupts the agent's current task. Continue it in your browser afterwards.",
+        /^Setup interrupts the agent's current task; continue it here afterwards\./,
     );
     expect(getByRole(document.body, "group", { name: "Setup details" }).contains(warning)).toBe(false);
 });
@@ -137,7 +130,7 @@ test("Given a user wants to inspect or manually copy setup, When they expand the
     expect(pairing.value).toContain(`${window.location.origin}/setup.md`);
     expect(pairing.selectionStart).toBe(0);
     expect(pairing.selectionEnd).toBe(pairing.value.length);
-    expect(document.body.textContent).toContain("Keep that computer awake and online while using Morty.");
+    expect(document.body.textContent).toContain("Keep that computer awake and online.");
 });
 
 test("Given the first screen, When the user clicks Copy again after success, Then the instruction is copied again", {
