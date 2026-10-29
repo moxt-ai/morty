@@ -1,13 +1,53 @@
-import { Check, ChevronDown, Copy } from "lucide-react";
+import { Check, ChevronDown, Copy, Link, Send } from "lucide-react";
+import { Button } from "../../components/ui/cloud-button.tsx";
 import { CopyToClipboardButton } from "../../components/ui/copy-to-clipboard-button.tsx";
 import { ExternalLink } from "../../components/ui/external-link.tsx";
-import { SendLinkButton } from "../../components/ui/send-link-button.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
 import { dataTestId } from "../../data-testid.ts";
-import type { SetupHandoff } from "../../services/device/setup-handoff.ts";
+import { useExternalStore } from "../../view-models/external-store.ts";
+import type { SendLinkStoreApi, SetupHandoffModel } from "../../view-models/send-link-store.ts";
 import { setupPrimaryButtonClassName, setupPrimaryButtonSize } from "../setup/setup-card-shell.tsx";
 
-const copyPrompt: SetupHandoff = { kind: "copy-prompt" };
+const copyPrompt: SetupHandoffModel = { kind: "copy-prompt" };
+const handoffHint = "Setup runs on your computer. Open Morty there to copy the prompt.";
+const handoffHintClassName = "mt-3 min-h-10 text-center text-sm leading-5 text-morty-text-2";
+const unavailableLink = { description: "Copy this page's address from your browser instead.", title: "Could not send" };
+
+function mortyAddress(): string {
+    return `${window.location.origin}/`;
+}
+
+/** A phone or tablet cannot run setup, so it sends Morty's address to the computer through the share sheet. */
+function ShareSetupLink({ sendLink }: { readonly sendLink: SendLinkStoreApi }) {
+    const { send, state } = useExternalStore(sendLink);
+    return (
+        <>
+            <Button
+                aria-busy={state.kind === "sending"}
+                className={setupPrimaryButtonClassName}
+                disabled={state.kind === "sending"}
+                onClick={() =>
+                    send({
+                        text: "Set up Morty on the computer where your agent runs.",
+                        title: "Morty",
+                        url: mortyAddress(),
+                    })
+                }
+                size={setupPrimaryButtonSize}
+            >
+                <Send aria-hidden="true" className="size-4" />
+                <span>Send to my computer</span>
+            </Button>
+            {state.kind === "failed" ? (
+                <p className={handoffHintClassName} role="status">
+                    Could not open sharing. Copy this page's address from your browser instead.
+                </p>
+            ) : (
+                <p className={handoffHintClassName}>{handoffHint}</p>
+            )}
+        </>
+    );
+}
 
 export function PairingInstruction({
     handoff = copyPrompt,
@@ -15,30 +55,33 @@ export function PairingInstruction({
     onLinkSent = () => {},
 }: {
     /** How this device moves setup to the agent's computer; copying the prompt unless the caller knows better. */
-    readonly handoff?: SetupHandoff;
+    readonly handoff?: SetupHandoffModel;
     readonly onCopied?: () => void;
     readonly onLinkSent?: () => void;
 }) {
     const setupInstruction = `Fetch ${window.location.origin}/setup.md and set up Morty for me. You may install missing prerequisites and pair this machine. Complete setup without asking questions.`;
     return (
         <div>
-            {handoff.kind === "send-link" ? (
+            {handoff.kind === "share" ? (
+                <ShareSetupLink sendLink={handoff.sendLink} />
+            ) : handoff.kind === "copy-link" ? (
                 <>
-                    <SendLinkButton
+                    <CopyToClipboardButton
                         className={setupPrimaryButtonClassName}
-                        label={{ copy: "Copy link", share: "Send to my computer" }}
-                        onSent={onLinkSent}
-                        share={handoff.share}
-                        shareData={{
-                            text: "Set up Morty on the computer where your agent runs.",
-                            title: "Morty",
-                            url: `${window.location.origin}/`,
-                        }}
+                        failureToast={unavailableLink}
+                        label="Copy link"
+                        onCopied={onLinkSent}
                         size={setupPrimaryButtonSize}
-                    />
-                    <p className="mt-3 min-h-10 text-center text-sm leading-5 text-morty-text-2">
-                        Setup runs on your computer. Open Morty there to copy the prompt.
-                    </p>
+                        successToast={{
+                            description: "Open it on the computer where your agent runs.",
+                            title: "Link copied",
+                        }}
+                        value={mortyAddress()}
+                    >
+                        <Link aria-hidden="true" className="size-4" />
+                        <span>Copy link</span>
+                    </CopyToClipboardButton>
+                    <p className={handoffHintClassName}>{handoffHint}</p>
                 </>
             ) : (
                 <CopyToClipboardButton

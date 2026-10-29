@@ -4,8 +4,8 @@ import { SetupConnectionGraphic } from "../../components/setup/setup-connection-
 import { ExternalLink } from "../../components/ui/external-link.tsx";
 import { MortyAlert } from "../../components/ui/morty-alert.tsx";
 import { Button, Spinner } from "../../index.ts";
-import type { SetupHandoff } from "../../services/device/setup-handoff.ts";
 import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-store.ts";
+import type { SetupHandoffModel } from "../../view-models/send-link-store.ts";
 import { PairingInstruction } from "../chat/pairing-instruction.tsx";
 import { BugReportButton, BugReportDialogHost } from "../diagnostics/bug-report-button.tsx";
 import { GlobalLoadingPage } from "../setup/global-loading-page.tsx";
@@ -28,7 +28,7 @@ export type AppState =
           readonly kind: "setup";
           readonly notice: "access-ended" | "legacy" | "none";
           readonly returnHref: string | null;
-          readonly setupHandoff: SetupHandoff;
+          readonly setupHandoff: SetupHandoffModel;
           readonly onPromptCopied: () => void;
           readonly onLinkSent: () => void;
       }
@@ -151,7 +151,7 @@ function SetupApplication({
     readonly onLinkSent: () => void;
     readonly onPromptCopied: () => void;
     readonly returnHref: string | null;
-    readonly setupHandoff: SetupHandoff;
+    readonly setupHandoff: SetupHandoffModel;
 }) {
     const pageNotice =
         notice === "access-ended" ? (

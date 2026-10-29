@@ -13,6 +13,7 @@ import { createIdentityAccess, type IdentityAccess } from "./authentication/iden
 import { createBugReportDialogStore } from "./bug-report-dialog-store.ts";
 import { type ChatWorkspace, createChatWorkspace } from "./chat/chat-workspace.ts";
 import { createComputerSwitcher } from "./chat/computer-switcher-store.ts";
+import { type SetupHandoffModel, setupHandoffModel } from "./send-link-store.ts";
 
 /**
  * The scope fields that identify the Bot a chat workspace talks to. The token
@@ -39,7 +40,7 @@ export interface MortyApplication {
     /** Page and setup-step measurement; null when the deployment configures no analytics. */
     readonly analytics: PageAnalytics | null;
     /** How this device moves setup to the computer where the agent runs. */
-    readonly setupHandoff: SetupHandoff;
+    readonly setupHandoff: SetupHandoffModel;
     readonly anonymousSession: ReturnType<typeof createAnonymousSessionStore>;
     /** The shared bug-report dialog state for every bug-report entry point. */
     readonly bugReportDialog: ReturnType<typeof createBugReportDialogStore>;
@@ -99,6 +100,9 @@ export function createMortyApplication(options: {
         options.clock ?? systemClock,
     );
     const bugReportDialog = createBugReportDialogStore(() => (disposed ? null : transport));
+    const setupHandoff = setupHandoffModel(options.setupHandoff ?? browserSetupHandoff(), () =>
+        options.analytics?.trackEvent("setup_link_shared"),
+    );
     const sessionWorkspace = createSessionWorkspaceStore();
     const continuation = createContinueStore(transport.fetch);
     let workspace: ChatWorkspace | null = null;
@@ -263,7 +267,7 @@ export function createMortyApplication(options: {
     return {
         clock: options.clock ?? systemClock,
         analytics: options.analytics ?? null,
-        setupHandoff: options.setupHandoff ?? browserSetupHandoff(),
+        setupHandoff,
         anonymousSession,
         bugReportDialog,
         continuation,
@@ -292,6 +296,9 @@ export function createMortyApplication(options: {
             document.removeEventListener("resume", recover);
             lifetime.abort(new DOMException("The Morty application was disposed.", "AbortError"));
             continuation.getState().cancel();
+            if (setupHandoff.kind === "share") {
+                setupHandoff.sendLink.getState().close();
+            }
             releaseWorkspace();
             sessionWorkspace.setState({ workspace: null });
             transport.dispose();
