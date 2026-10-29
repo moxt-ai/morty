@@ -161,19 +161,8 @@ export function connectionPresentation(
             },
         );
     }
-    if (
-        session?.kind === "loading" ||
-        session?.kind === "session-loading-after-create" ||
-        (session === null && home.selection.kind === "loading")
-    ) {
-        return present(
-            { kind: "recovering", label: "Connecting" },
-            {
-                kind: "waiting",
-                title: "Connecting…",
-                description: "You can keep writing while we connect.",
-            },
-        );
+    if (session?.kind === "first-loading" || (session === null && home.selection.kind === "loading")) {
+        return present({ kind: "recovering", label: "Connecting" }, { kind: "hidden" });
     }
     if (session === null && home.selection.kind === "failed") {
         return present({ kind: "failed", label: "Session unavailable" }, { kind: "hidden" });
@@ -186,8 +175,7 @@ function sessionLabel(session: SessionConnection | null, draft: boolean): Execut
         return draft ? "Not started" : "Unavailable";
     }
     switch (session.kind) {
-        case "loading":
-        case "session-loading-after-create":
+        case "first-loading":
             return "Connecting";
         case "ready":
             return "Connected";
