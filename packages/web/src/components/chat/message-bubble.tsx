@@ -29,8 +29,11 @@ export function MessageBubble({
         // The copy button hangs below the bubble, outside this element's box, so the pointer would
         // leave 'group/message' before reaching it and the button would vanish mid-travel. This strip
         // bridges the gap; the button is raised above it so the overlap cannot swallow its clicks.
+        // mb-8 reserves the strip the button hangs through (`-bottom-8`), so whatever renders
+        // below the bubble — working indicator, replies, delivery alerts — starts under the
+        // button instead of behind it.
         "group/message relative min-w-0 [overflow-wrap:anywhere]",
-        messageCopyText !== null && "after:absolute after:inset-x-0 after:top-full after:h-2",
+        messageCopyText !== null && "after:absolute after:inset-x-0 after:top-full after:h-2 mb-8",
         speaker === "user"
             ? "flex w-fit max-w-full flex-col gap-1.5 rounded-md bg-user-message-surface px-4 py-3 text-base leading-6 whitespace-pre-wrap text-foreground"
             : "w-full min-w-0 text-base leading-6 text-foreground",
