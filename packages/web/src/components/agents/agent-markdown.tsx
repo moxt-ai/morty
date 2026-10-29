@@ -383,6 +383,8 @@ export function AgentMarkdownContent({
                     // a stale or competing candidate emitted later would otherwise override them.
                     // Hover/active fills stack as background-image layers over the opaque
                     // bg-background color, so the chip never lets content underneath show through.
+                    // A solid tint layer repeats its color stop: a one-stop linear-gradient is
+                    // invalid CSS and browsers would drop the whole background-image.
                     // The row itself is a 36px pill — 4px padding around the 28px buttons, so
                     // left/right padding equals the vertical padding, and the 10px radius is
                     // concentric with the buttons' 6px — wearing the same chip as the buttons.
