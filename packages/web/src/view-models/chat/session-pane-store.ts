@@ -1025,6 +1025,10 @@ export function createSessionPaneModel(options: {
                                     signal,
                                 );
                                 signal.throwIfAborted();
+                                commitProjection({
+                                    kind: "queue-observed",
+                                    commandIds: execution.queued.map((item) => item.commandId),
+                                });
                                 messageQueue.getState().replace(execution.queued);
                                 return;
                             }
@@ -1139,6 +1143,10 @@ export function createSessionPaneModel(options: {
                             } else {
                                 commitProjection({ kind: "execution-running", commandId: running.commandId });
                             }
+                            commitProjection({
+                                kind: "queue-observed",
+                                commandIds: execution.queued.map((item) => item.commandId),
+                            });
                             messageQueue.getState().replace(execution.queued);
                             if (running !== null) {
                                 // The execution receipt confirms delivery even when admission and live events were lost.

@@ -479,6 +479,7 @@ type ReducedSessionEntry =
     | ReducedSessionMessage
     | { readonly kind: "turn-started"; readonly commandId: string }
     | { readonly kind: "execution-idle" }
+    | { readonly kind: "queued-command"; readonly commandId: string }
     | {
           readonly kind: "execution-owner";
           readonly commandId: string;
@@ -771,6 +772,9 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
     const messages: SessionExecutionMessage[] = [];
     const unfinished = new Map<string | null, number[]>();
     const executionOwners = new Map<string, string>();
+    const queuedCommands = new Set(
+        reduction.entries.flatMap((entry) => (entry.kind === "queued-command" ? [entry.commandId] : [])),
+    );
     const startedCommands = new Set(
         reduction.entries.flatMap((entry) => (entry.kind === "turn-started" ? [entry.commandId] : [])),
     );
@@ -792,6 +796,9 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
         }
     };
     for (const entry of reduction.entries) {
+        if (entry.kind === "queued-command") {
+            continue;
+        }
         if (entry.kind === "execution-owner") {
             executionOwners.set(entry.commandId, entry.executionCommandId);
             continue;
@@ -816,14 +823,17 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
             continue;
         }
         let message = entry.message;
-        // A withdrawn queue item never owned an execution. Its cancellation must not
-        // end the active reply or mark that reply's tools as interrupted.
+        // Suppress only confirmed unstarted work. A history baseline omits lifecycle
+        // events, so an unknown command may be a real turn stopped during reconciliation.
         if (
             message.role === "assistant" &&
             message.presentation.kind === "completed" &&
             message.presentation.stopReason === "cancelled" &&
             message.commandId !== null &&
-            !startedCommands.has(message.commandId)
+            ((message.firstEvent.type === "lifecycle-metadata" &&
+                message.firstEvent.payload.kind === "prompt.completed" &&
+                message.firstEvent.payload.execution === "not-started") ||
+                (queuedCommands.has(message.commandId) && !startedCommands.has(message.commandId)))
         ) {
             continue;
         }

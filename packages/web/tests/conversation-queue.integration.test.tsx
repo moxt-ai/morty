@@ -1,10 +1,11 @@
 import { resolveObjectURL } from "node:buffer";
 import { fireEvent, getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
-import { expect, test } from "vitest";
+import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
+import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
 
 test("Given the daemon has queued work, When the user steers it into the active turn, Then every viewer sees the steered reply", {
     timeout: 30_000,
@@ -338,4 +339,100 @@ test("Given a follow-up with a file was queued from another browser, When this v
     await viewer.waitForView(() =>
         expect(document.body.textContent).toContain("Files attached to the queued message could not be restored here."),
     );
+});
+
+test("Given a viewer is loading running history, When another viewer stops before its execution read, Then the partial reply retains its stopped notice", {
+    timeout: 30_000,
+}, async () => {
+    const environment = await createChatWorkerEnvironment(false, true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
+    await app.queryElementByTestId(dataTestId.sessionStatus);
+    if (app.executionNetwork === null) {
+        throw new Error("Expected a real execution-read proxy");
+    }
+    const held = app.executionNetwork.holdNextExecution();
+    const viewer = await app.openViewer();
+    const release = await held;
+    try {
+        await app.user.click(
+            await app.queryElementByTestId(
+                dataTestId.sendMessage,
+                (element) => element.getAttribute("aria-label") === "Stop agent output",
+            ),
+        );
+        await app.waitForView(() =>
+            expect(app.elementsByTestId(dataTestId.agentReplyStatus).map((element) => element.textContent)).toContain(
+                "Turn stopped.",
+            ),
+        );
+    } finally {
+        release();
+    }
+    await viewer.waitForView(() =>
+        expect(viewer.elementsByTestId(dataTestId.agentReplyStatus).map((element) => element.textContent)).toContain(
+            "Turn stopped.",
+        ),
+    );
+    expect(
+        viewer
+            .elementsByTestId(dataTestId.agentResponse)
+            .some((element) => element.textContent?.includes("Waiting for steering")),
+    ).toBe(true);
+    await viewer.close();
+    await app.close();
+});
+
+test("Given a viewer is loading history before seeing a queue item, When another viewer withdraws that item, Then the running reply never gains a stopped notice", {
+    timeout: 30_000,
+}, async () => {
+    const environment = await createChatWorkerEnvironment(false, true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
+    await app.queryElementByTestId(dataTestId.sessionStatus);
+    await sendPrompt(
+        app,
+        await app.queryElementByTestId(dataTestId.messageComposer),
+        "WITHDRAW_BEFORE_VIEWER_RECONCILES",
+    );
+    const queued = await app.queryElementByTestId(dataTestId.queuedMessage);
+    if (app.executionNetwork === null || app.daemon === null) {
+        throw new Error("Expected a connected Runtime and real execution-read proxy");
+    }
+    const held = app.executionNetwork.holdNextExecution();
+    const viewer = await app.openViewer();
+    const release = await held;
+    try {
+        await app.user.click(getByLabelText(queued, "Edit queued message: WITHDRAW_BEFORE_VIEWER_RECONCILES"));
+        await app.waitForView(() =>
+            expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty(
+                "value",
+                "WITHDRAW_BEFORE_VIEWER_RECONCILES",
+            ),
+        );
+    } finally {
+        release();
+    }
+    await viewer.queryElementByTestId(dataTestId.sessionStatus);
+    await app.daemon.continueReply("wait for steering", {
+        outcome: "complete",
+        output: [{ kind: "text", text: "Original reply completed after withdrawal" }],
+    });
+    await viewer.waitForView(() =>
+        expect(
+            viewer
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes("Original reply completed after withdrawal")),
+        ).toBe(true),
+    );
+    expect(viewer.elementsByTestId(dataTestId.agentReplyStatus).map((element) => element.textContent)).not.toContain(
+        "Turn stopped.",
+    );
+    expect(viewer.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+        "wait for steering",
+    ]);
+    await viewer.close();
+    await app.close();
 });

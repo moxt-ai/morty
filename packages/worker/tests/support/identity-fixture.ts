@@ -6,6 +6,7 @@ import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as v from "valibot";
 import { expect } from "vitest";
+import { createSessionExecutionProxy } from "../../../../tests/support/session-execution-proxy.ts";
 import worker from "../../src/application.ts";
 import { startTestPlatform } from "./test-platform.ts";
 
@@ -52,6 +53,7 @@ type IdentityFixtureOptions = {
     /** Serve the Chat Worker on a free loopback port and use that origin as APP_ORIGIN. */
     readonly listenOnLoopback?: true;
     readonly loseTurnResponses?: true;
+    readonly delayExecutionReads?: true;
     readonly platformAllowedOrigins?: ReadonlySet<string>;
     readonly workerEntryPoint?: string;
     readonly wranglerConfiguration?: URL;
@@ -93,6 +95,8 @@ async function startIdentityFixture(
         createBindings,
     );
     const network = options.loseTurnResponses === true ? await createResponseLossProxy(platform.baseUrl) : null;
+    const executionNetwork =
+        options.delayExecutionReads === true ? await createSessionExecutionProxy(platform.baseUrl) : null;
     try {
         const startChatWorker = async () => {
             for (let attempt = 1; ; attempt += 1) {
@@ -104,7 +108,7 @@ async function startIdentityFixture(
                     AUTHENTICATION_BASE_URL: "https://identity.test",
                     MOBIUS_APP_ID: platform.appId,
                     MOBIUS_APP_SECRET: platform.appCredential,
-                    MOBIUS_BASE_URL: network?.origin ?? platform.baseUrl,
+                    MOBIUS_BASE_URL: executionNetwork?.origin ?? network?.origin ?? platform.baseUrl,
                 };
                 const runtimeOptions = {
                     ...(options.listenOnLoopback === true
@@ -189,6 +193,7 @@ async function startIdentityFixture(
             return {
                 baseConfiguration,
                 network,
+                executionNetwork,
                 connectAgent: platform.connectAgent,
                 platformRequest: platform.app.request,
                 createAnonymousUser,
@@ -205,6 +210,7 @@ async function startIdentityFixture(
                 },
                 close: async () => {
                     try {
+                        await executionNetwork?.close();
                         await network?.close();
                         await platform.close();
                     } finally {
@@ -217,6 +223,7 @@ async function startIdentityFixture(
             throw cause;
         }
     } catch (cause) {
+        await executionNetwork?.close();
         await network?.close();
         await platform.close();
         throw cause;

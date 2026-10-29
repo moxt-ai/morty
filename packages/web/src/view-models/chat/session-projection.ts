@@ -40,6 +40,7 @@ export type SessionProjectionInput =
     | { readonly event: SessionLiveEvent; readonly kind: "live-event" }
     | { readonly kind: "reconcile" }
     | { readonly kind: "execution-idle" }
+    | { readonly kind: "queue-observed"; readonly commandIds: readonly string[] }
     | { readonly kind: "execution-running"; readonly commandId: string }
     | { readonly history: SessionEventHistory; readonly kind: "history-loaded"; readonly revision: number }
     | { readonly kind: "older-page"; readonly page: SessionEventHistory; readonly revision: number };
@@ -163,6 +164,28 @@ export function transitionSessionProjection(
     input: SessionProjectionInput,
 ): SessionProjectionResult {
     switch (input.kind) {
+        case "queue-observed": {
+            if (state.kind !== "established") {
+                return { effects: [], state };
+            }
+            const known = new Set(
+                state.reduction.entries.flatMap((entry) => (entry.kind === "queued-command" ? [entry.commandId] : [])),
+            );
+            return {
+                effects: [],
+                state: {
+                    ...state,
+                    reduction: {
+                        entries: [
+                            ...state.reduction.entries,
+                            ...input.commandIds
+                                .filter((commandId) => !known.has(commandId))
+                                .map((commandId) => ({ kind: "queued-command" as const, commandId })),
+                        ],
+                    },
+                },
+            };
+        }
         case "execution-running":
             return {
                 effects: [],
