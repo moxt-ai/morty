@@ -167,6 +167,63 @@ test("Given a follow-up is queued and the user has started another draft, When t
     expect(document.body.textContent).not.toContain("Files attached to the queued message");
 });
 
+test("Given a reply is running with a queued follow-up, When I edit the follow-up, Then all viewers keep the reply running and only the revised message executes", {
+    timeout: 30_000,
+}, async () => {
+    const queuedPrompt = "OLD_QUEUED_INSTRUCTION";
+    const revisedPrompt = "REVISED_QUEUED_INSTRUCTION";
+    const app = await createTestApp({ connectAgent: true });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
+    await app.queryElementByTestId(dataTestId.sessionStatus);
+    const viewer = await app.openViewer();
+    await viewer.queryElementByTestId(dataTestId.sessionStatus);
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), queuedPrompt);
+    const queued = await app.queryElementByTestId(
+        dataTestId.queuedMessage,
+        (element) => element.textContent?.includes(queuedPrompt) === true,
+    );
+
+    await app.user.click(getByLabelText(queued, `Edit queued message: ${queuedPrompt}`));
+
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", queuedPrompt),
+    );
+    for (const current of [app, viewer]) {
+        await current.waitForView(() => expect(current.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
+        expect(current.optionalElementByTestId(dataTestId.sessionStatus)).not.toBeNull();
+        expect(
+            current.elementsByTestId(dataTestId.agentReplyStatus).map((element) => element.textContent),
+        ).not.toContain("Turn stopped.");
+    }
+    if (app.daemon === null) {
+        throw new Error("Expected a connected controlled Agent Runtime");
+    }
+    await app.daemon.continueReply("wait for steering", {
+        outcome: "complete",
+        output: [{ kind: "text", text: "Original reply completed" }],
+    });
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    await app.user.clear(app.elementByTestId(dataTestId.messageComposer));
+    await sendPrompt(app, app.elementByTestId(dataTestId.messageComposer), revisedPrompt);
+    for (const current of [app, viewer]) {
+        await current.waitForView(() =>
+            expect(
+                current
+                    .elementsByTestId(dataTestId.agentResponse)
+                    .some((item) => item.textContent?.includes(revisedPrompt)),
+            ).toBe(true),
+        );
+        expect(current.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+            "wait for steering",
+            revisedPrompt,
+        ]);
+        expect(
+            current.elementsByTestId(dataTestId.agentResponse).some((item) => item.textContent?.includes(queuedPrompt)),
+        ).toBe(false);
+    }
+    await viewer.close();
+});
+
 test("Given this browser queued an attachment and the queue refreshed, When I edit and resend it, Then the original file is restored and delivered", {
     timeout: 30_000,
 }, async () => {

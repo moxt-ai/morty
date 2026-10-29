@@ -771,6 +771,9 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
     const messages: SessionExecutionMessage[] = [];
     const unfinished = new Map<string | null, number[]>();
     const executionOwners = new Map<string, string>();
+    const startedCommands = new Set(
+        reduction.entries.flatMap((entry) => (entry.kind === "turn-started" ? [entry.commandId] : [])),
+    );
     let turn: { readonly kind: "unknown" } | { readonly kind: "active" | "terminal"; readonly commandId: string } = {
         kind: "unknown",
     };
@@ -813,6 +816,17 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
             continue;
         }
         let message = entry.message;
+        // A withdrawn queue item never owned an execution. Its cancellation must not
+        // end the active reply or mark that reply's tools as interrupted.
+        if (
+            message.role === "assistant" &&
+            message.presentation.kind === "completed" &&
+            message.presentation.stopReason === "cancelled" &&
+            message.commandId !== null &&
+            !startedCommands.has(message.commandId)
+        ) {
+            continue;
+        }
         if (message.role === "user" && message.firstEvent.type === "acp" && turn.kind === "terminal") {
             turn = { kind: "unknown" };
         }

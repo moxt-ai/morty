@@ -40,6 +40,7 @@ export type SessionProjectionInput =
     | { readonly event: SessionLiveEvent; readonly kind: "live-event" }
     | { readonly kind: "reconcile" }
     | { readonly kind: "execution-idle" }
+    | { readonly kind: "execution-running"; readonly commandId: string }
     | { readonly history: SessionEventHistory; readonly kind: "history-loaded"; readonly revision: number }
     | { readonly kind: "older-page"; readonly page: SessionEventHistory; readonly revision: number };
 
@@ -162,6 +163,28 @@ export function transitionSessionProjection(
     input: SessionProjectionInput,
 ): SessionProjectionResult {
     switch (input.kind) {
+        case "execution-running":
+            return {
+                effects: [],
+                state:
+                    state.kind === "established"
+                        ? {
+                              ...state,
+                              reduction: {
+                                  entries: [
+                                      ...state.reduction.entries,
+                                      {
+                                          kind: "execution-owner",
+                                          commandId: input.commandId,
+                                          executionCommandId: input.commandId,
+                                          execution: "starts",
+                                      },
+                                      { kind: "turn-started", commandId: input.commandId },
+                                  ],
+                              },
+                          }
+                        : state,
+            };
         case "execution-idle":
             // Native replay can retain unfinished tools without Mobius lifecycle metadata.
             // A confirmed idle snapshot settles only history already observed at this boundary.
