@@ -1,6 +1,6 @@
 import { type OpenMobiusSession, type SelectedMobiusSession, selectedSession } from "./open-session.ts";
 
-export type SelectedConversationTarget =
+type SelectedConversationTarget =
     | { readonly kind: "conversation"; readonly conversationId: string }
     | { readonly kind: "session"; readonly sessionId: string };
 
