@@ -539,7 +539,13 @@ test("Given the remembered conversation was closed elsewhere, When I return, The
     );
     window.location.href = explicit;
     const linked = await restored.reload();
-    await linked.waitForView(() => expect(document.body.textContent).toContain("Your Chat session was not found"));
+    await linked.waitForView(() => {
+        expect(document.body.textContent).toContain("This session is not in Morty Recent sessions");
+        expect(document.body.textContent).toContain(
+            'If you closed it in Morty, use "Open Session" to import or fork it again.',
+        );
+        expect(queryByRole(document.body, "button", { name: "Reopen it" })).toBeNull();
+    });
     expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
 });
 
@@ -769,7 +775,7 @@ test("Given a computer whose remembered conversation was closed elsewhere, When 
     await switched.waitForView(() => getByRole(document.body, "textbox", { name: "Message" }));
     await switched.waitForView(() => expect(new URL(window.location.href).searchParams.has("sessionId")).toBe(false));
     expect(new URL(window.location.href).searchParams.get("identity")).toBe(firstScope);
-    expect(document.body.textContent).not.toContain("Your Chat session was not found");
+    expect(document.body.textContent).not.toContain("This session is not in Morty Recent sessions");
 });
 
 test("Given a switch to a computer whose remembered conversation is gone, When opening the computer fails once and I retry, Then it still opens at its chat home", {
@@ -833,5 +839,5 @@ test("Given a switch to a computer whose remembered conversation is gone, When o
         expect(new URL(window.location.href).searchParams.has("sessionId")).toBe(false),
     );
     expect(new URL(window.location.href).searchParams.get("identity")).toBe(firstScope);
-    expect(document.body.textContent).not.toContain("Your Chat session was not found");
+    expect(document.body.textContent).not.toContain("This session is not in Morty Recent sessions");
 });

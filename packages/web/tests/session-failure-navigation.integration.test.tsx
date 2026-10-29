@@ -42,7 +42,11 @@ test("Given a saved-session link, When the bridge drops during entry initializat
         });
         await app.user.click(getByRole(document.body, "button", { name: "Reconnect" }));
         const failure = await app.queryElementByTestId(dataTestId.sessionLoadFailure);
-        expect(failure.textContent).toContain("Your Chat session was not found.");
+        expect(failure.textContent).toContain("This session is not in Morty Recent sessions");
+        expect(failure.textContent).toContain(
+            'If you closed it in Morty, use "Open Session" to import or fork it again.',
+        );
+        expect(queryByRole(document.body, "button", { name: "Reopen it" })).toBeNull();
         expect(new URL(window.location.href).searchParams.get("sessionId")).toBe("chat_unavailable_session");
     } finally {
         stopObserving();

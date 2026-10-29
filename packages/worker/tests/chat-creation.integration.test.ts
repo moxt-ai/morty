@@ -379,7 +379,13 @@ test("Given an idle managed Chat session, When its owner archives it, Then Chat 
     expect(await managed.json()).toEqual({ sessions: [] });
     const rejected = await fixture.request(`chat/bots/${fixture.botId}/access`, { conversationId: sessionId });
     expect(rejected.status).toBe(404);
-    expect(await rejected.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
+    expect(await rejected.json()).toMatchObject({
+        error: {
+            code: "NOT_FOUND",
+            message:
+                'This session is not in Morty Recent sessions. If you closed it in Morty, use "Open Session" to import or fork it again.',
+        },
+    });
     await expect(
         fixture.runtime.client.sessions.restore(runtimeId, sessionId, AbortSignal.timeout(10_000)),
     ).resolves.toMatchObject({ ready: { sessionId } });
