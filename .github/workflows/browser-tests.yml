@@ -27,8 +27,6 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup
-        with:
-          mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
 
       - name: Install browsers
         run: pnpm --filter @moxt-ai/morty-e2e exec playwright install --with-deps chromium webkit

@@ -32,7 +32,6 @@ jobs:
   macos-setup:
     if: github.event_name == 'workflow_dispatch' && inputs.verify_macos_setup
     uses: ./.github/workflows/setup-compatibility.yml
-    secrets: inherit
 
   validate-worker-config:
     name: Validate Worker config (${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }})
@@ -71,8 +70,6 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup
-        with:
-          mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
 
       - run: pnpm check:static
 
@@ -120,8 +117,6 @@ jobs:
           persist-credentials: false
 
       - uses: ./.github/actions/setup
-        with:
-          mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
 
       - name: Run integration tests with coverage
         working-directory: packages/${{ matrix.suite }}
@@ -196,8 +191,6 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
-        with:
-          mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
       - name: Verify native executable and private state boundaries
         run: >-
           pnpm --filter @moxt-ai/morty-worker exec vitest run

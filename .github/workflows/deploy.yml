@@ -41,7 +41,6 @@ jobs:
           ref: ${{ steps.mobius.outputs.revision }}
           path: third-party/mobius
           persist-credentials: false
-          token: ${{ secrets.MOBIUS_READ_TOKEN }}
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
