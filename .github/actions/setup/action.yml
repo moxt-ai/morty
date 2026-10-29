@@ -1,9 +1,5 @@
 name: Set up Chat workspace
 description: Check out the pinned Mobius revision and install workspace dependencies
-inputs:
-  mobius-read-token:
-    description: Token used to read the private Mobius repository
-    required: true
 runs:
   using: composite
   steps:
@@ -13,13 +9,13 @@ runs:
       run: echo "revision=$(git rev-parse HEAD:third-party/mobius)" >> "$GITHUB_OUTPUT"
 
     - name: Checkout Mobius
+      # Mobius is public; checkout uses the caller's read-only GITHUB_TOKEN.
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         repository: moxt-ai/mobius
         ref: ${{ steps.mobius.outputs.revision }}
         path: third-party/mobius
         persist-credentials: false
-        token: ${{ inputs.mobius-read-token }}
 
     - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with:
