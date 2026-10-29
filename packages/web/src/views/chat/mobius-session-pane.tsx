@@ -229,6 +229,30 @@ function isGeneratingProcessRenderItem(item: SessionRenderItem): boolean {
     );
 }
 
+/**
+ * Whether a reply still has process work in flight. A generation the Agent drives natively reports no Morty turn,
+ * so its reply settles only when every tool it started has an outcome; settled imports interrupt unresolved tools
+ * when the Session opens, so this stays false for finished history.
+ */
+function hasRunningProcessWork(items: readonly SessionRenderItem[]): boolean {
+    return items.some((item) => {
+        if (item.kind === "thinking") {
+            return item.entries.some(
+                (entry) =>
+                    entry.kind === "tool" &&
+                    (entry.state.kind === "running" ||
+                        (entry.state.kind === "background" && entry.state.status === "running")),
+            );
+        }
+        return (
+            item.kind === "event" &&
+            item.message.role === "assistant" &&
+            item.message.presentation.kind === "compaction" &&
+            item.message.presentation.status === "in_progress"
+        );
+    });
+}
+
 function processSummary(items: readonly SessionRenderItem[]): TurnWorkSummary {
     const entries = items.flatMap((item) => (item.kind === "thinking" ? item.entries : []));
     const tools = entries.filter((entry) => entry.kind === "tool");
@@ -931,10 +955,13 @@ function MobiusSessionPaneBody({
                                             };
                                             const execution = executionStateByItemId.get(group.id) ?? { kind: "open" };
                                             const sections = agentReplySections(group.items);
+                                            // A generation the Agent drives natively reports no Morty turn; its running
+                                            // tools are the only live signal that it is still working.
+                                            const replyGenerating = replyActive || hasRunningProcessWork(group.items);
                                             const copyText = agentReplyCopyText(
                                                 replyMessagesByRenderGroupId.get(group.id) ?? [],
                                                 execution,
-                                                replyActive,
+                                                replyGenerating,
                                             );
                                             // Flatten the article children so positional margin clearing sees the
                                             // laid-out order, including the trailing copy action row. Items inside a

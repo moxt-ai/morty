@@ -31,9 +31,9 @@ export function agentReplyMessageGroups(messages: readonly SessionMessage[]): re
 export function agentReplyCopyText(
     messages: readonly SessionMessage[],
     execution: SessionExecutionState,
-    active: boolean,
+    generating: boolean,
 ): string | null {
-    if (active || execution.kind === "open") {
+    if (generating || execution.kind === "open") {
         return null;
     }
     const parts: string[] = [];
