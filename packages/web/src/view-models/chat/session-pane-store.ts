@@ -533,22 +533,22 @@ export function createSessionPaneModel(options: {
         clock,
         steeringSupported: session.result.ready.capabilities.steering,
         port: {
-            cancel: noticingClosure(async (turnId, idempotencyKey, signal) => {
+            cancel: noticingClosure(async (turnId, signal) => {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }
-                return await client.turns.cancel(sessionId, turnId, { idempotencyKey }, signal);
+                await client.turns.cancel(sessionId, turnId, signal);
             }),
         },
         runningTurn: () => acceptedTurn(store.getState().turn),
     });
     const messageQueue = createSessionMessageQueueStore({
         port: {
-            cancel: noticingClosure(async (turnId, idempotencyKey, signal) => {
+            cancel: noticingClosure(async (turnId, signal) => {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }
-                await client.turns.cancelQueued(sessionId, turnId, { ...sessionIdentity, idempotencyKey }, signal);
+                await client.turns.cancelQueued(sessionId, turnId, sessionIdentity, signal);
             }),
             steer: noticingClosure(async (turnId, signal) => {
                 if (client === null) {

@@ -33,7 +33,7 @@ type QueueFeedback =
       };
 
 interface SessionMessageQueuePort {
-    readonly cancel: (turnId: string, idempotencyKey: string, signal: AbortSignal) => Promise<void>;
+    readonly cancel: (turnId: string, signal: AbortSignal) => Promise<void>;
     readonly steer: (turnId: string, signal: AbortSignal) => Promise<void>;
     readonly submit: (request: SubmitMobiusTurnRequest, signal: AbortSignal) => Promise<{ readonly turnId: string }>;
 }
@@ -90,7 +90,7 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
             }));
             const signal = AbortSignal.any([parent, AbortSignal.timeout(15_000)]);
             try {
-                await options.port.cancel(message.turnId, crypto.randomUUID(), signal);
+                await options.port.cancel(message.turnId, signal);
                 signal.throwIfAborted();
                 localAttachments.delete(commandId);
                 set((state) => {

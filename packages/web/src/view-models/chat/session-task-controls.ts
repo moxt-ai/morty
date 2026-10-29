@@ -1,4 +1,3 @@
-import type { MobiusTurn } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError } from "../format-error.ts";
@@ -14,7 +13,7 @@ type TaskControlFeedback =
     | { readonly kind: "failed"; readonly commandId: string; readonly message: string };
 
 interface TaskControlPort {
-    readonly cancel: (turnId: string, idempotencyKey: string, signal: AbortSignal) => Promise<MobiusTurn>;
+    readonly cancel: (turnId: string, signal: AbortSignal) => Promise<void>;
 }
 
 /**
@@ -81,7 +80,7 @@ export const createSessionTaskControlsStore = (options: {
             );
             set({ feedback: { kind: "none" }, stopRequest: request });
             try {
-                await options.port.cancel(running.turnId, crypto.randomUUID(), signal);
+                await options.port.cancel(running.turnId, signal);
             } catch (cause) {
                 if (signal.aborted && parent.aborted) {
                     throw cause;
