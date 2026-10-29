@@ -296,6 +296,52 @@ test("Given the agent sends separate reasoning messages, When the user reads the
     expect(restoredThinking.querySelector("code")).toBeNull();
 });
 
+test("Given reasoning is still streaming, When the user expands it and then starts answering, Then the explicit expansion survives the end of reasoning", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected a controlled Agent Runtime");
+    }
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    const prompt = "hold reasoning only";
+    await sendPrompt(app, composer, prompt);
+    await expandProcessSections(app);
+
+    const thinking = await app.waitForView(() => {
+        const disclosure = app.optionalElementByTestId(dataTestId.agentReasoning);
+        if (disclosure === null) {
+            throw new Error("Expected active reasoning");
+        }
+        if (!(disclosure instanceof HTMLDetailsElement) || !disclosure.open) {
+            throw new Error("Expected active reasoning to open by default");
+        }
+        return disclosure;
+    });
+    await app.user.click(getByText(thinking, "Show Thinking"));
+    await app.waitForView(() => expect(thinking.open).toBe(false));
+    await app.user.click(getByText(thinking, "Show Thinking"));
+    await app.waitForView(() => {
+        expect(thinking.open).toBe(true);
+        expect(thinking.textContent).toContain("Inspecting the workspace while holding.");
+    });
+
+    await daemon.continueReply(prompt, {
+        outcome: "complete",
+        output: [{ kind: "text", text: "Final answer after reasoning." }],
+    });
+
+    await app.waitForView(() => {
+        expect(document.body.textContent).toContain("Final answer after reasoning.");
+        expect(thinking.open).toBe(true);
+        expect(thinking.textContent).toContain("Inspecting the workspace while holding.");
+    });
+});
+
 test("Given reasoning exceeds 16K characters, When the user opens the intermediate steps, Then Chat shows the retained tail and a truncation notice", {
     timeout: 30_000,
 }, async () => {

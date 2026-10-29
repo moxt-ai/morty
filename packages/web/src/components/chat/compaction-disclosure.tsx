@@ -2,6 +2,7 @@ import { ChevronDown, FileText } from "lucide-react";
 import { useState } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
+import { type DisclosureChoice, disclosureOpen } from "./disclosure-choice.ts";
 import {
     AgentThinkStepExpandedPanel,
     agentThinkStepChevronClassName,
@@ -30,11 +31,6 @@ function compactionStatusToToolState(status: CompactionStatusState): ToolCallSta
     }
 }
 
-/** The user's disclosure choice. "unset" follows the status default: an
- *  in-progress compaction expands so the streaming summary is visible, a
- *  terminal one collapses. An explicit choice overrides both defaults. */
-type DisclosureChoice = "collapsed" | "expanded" | "unset";
-
 /** Renders one ID-addressed context compaction: a status disclosure whose body is
  *  the retained summary the Agent streamed while compacting. */
 export function CompactionDisclosure({
@@ -47,7 +43,7 @@ export function CompactionDisclosure({
     readonly summary: string;
 }) {
     const [choice, setChoice] = useState<DisclosureChoice>("unset");
-    const open = choice === "expanded" || (choice === "unset" && status === "in_progress");
+    const open = disclosureOpen(choice, status === "in_progress");
     const title = "Context compaction";
     return (
         <fieldset

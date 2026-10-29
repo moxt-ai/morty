@@ -1,6 +1,7 @@
 import { ChevronDown, ListChecks } from "lucide-react";
 import { Fragment, type ReactNode, useId, useState } from "react";
 import { cn } from "../../lib/utils.ts";
+import { type DisclosureChoice, disclosureOpen } from "./disclosure-choice.ts";
 import {
     agentThinkStepChevronClassName,
     agentThinkStepIconClassName,
@@ -40,8 +41,8 @@ export function TurnWorkDisclosure({
     readonly summary: TurnWorkSummary;
     readonly working?: boolean | undefined;
 }) {
-    const [internalOpen, setInternalOpen] = useState(false);
-    const open = requestedOpen ?? internalOpen;
+    const [choice, setChoice] = useState<DisclosureChoice>("unset");
+    const open = requestedOpen ?? disclosureOpen(choice, false);
     const contentId = useId();
     const parts: { readonly key: string; readonly text: string; readonly alert: boolean }[] = [
         { key: "steps", text: counted(summary.steps, "step", "steps"), alert: false },
@@ -75,7 +76,7 @@ export function TurnWorkDisclosure({
                 aria-controls={contentId}
                 aria-expanded={open}
                 className={cn(agentThinkStepTriggerClassName, working && "text-morty-text-3")}
-                onClick={() => setInternalOpen((current) => !current)}
+                onClick={() => setChoice(open ? "collapsed" : "expanded")}
                 type="button"
             >
                 <span className={agentThinkStepIconClassName}>
