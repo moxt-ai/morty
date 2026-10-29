@@ -585,10 +585,10 @@ function ComposerNoticeGallery() {
                     <ConnectionNotice feedback={failed} onRetryNow={noop} onReopen={noop} />
                 </MortyAlert>
             </Specimen>
-            <Specimen layout="stack" title="Informational: connecting">
-                <MortyAlert icon={WifiOff} tone="neutral">
+            <Specimen layout="stack" title="Informational: connecting (compact chip on the chat surface)">
+                <div className="rounded-xl bg-card p-4">
                     <ConnectionNotice feedback={waiting} onRetryNow={noop} onReopen={noop} />
-                </MortyAlert>
+                </div>
             </Specimen>
             <Specimen layout="stack" title="Informational: reconnecting">
                 <MortyAlert icon={WifiOff} tone="neutral">

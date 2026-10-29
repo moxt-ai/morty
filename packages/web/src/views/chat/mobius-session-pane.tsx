@@ -1138,6 +1138,7 @@ function MobiusSessionPaneBody({
                                       ? WifiOff
                                       : undefined
                             }
+                            statusCompact={executionContext.feedback.kind === "waiting"}
                             errorStatus={
                                 executionContext.feedback.kind !== "hidden" ? (
                                     <ConnectionNotice

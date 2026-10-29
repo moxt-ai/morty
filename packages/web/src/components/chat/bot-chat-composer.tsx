@@ -100,6 +100,7 @@ export function BotChatComposer({
     errorStatus,
     statusTone = "neutral",
     statusIcon,
+    statusCompact = false,
     onDraftChange,
     onStop,
     onSubmit,
@@ -124,6 +125,8 @@ export function BotChatComposer({
     readonly statusTone?: "error" | "neutral";
     /** Leading icon for an informational connection-status notice, matching the error tone's icon slot. */
     readonly statusIcon?: LucideIcon | undefined;
+    /** The status notice renders its own compact chip (waiting state): skip the alert card wrapper. */
+    readonly statusCompact?: boolean;
     readonly onDraftChange: (draft: string) => void;
     readonly onStop: () => void;
     readonly onSubmit: () => void;
@@ -196,6 +199,8 @@ export function BotChatComposer({
                 <div className="absolute inset-x-0 bottom-[calc(100%+8px)] z-10" ref={notice}>
                     {composerErrorMessage.length > 0 ? (
                         <MortyAlert description={errorStatus}>{composerErrorMessage}</MortyAlert>
+                    ) : statusCompact ? (
+                        errorStatus
                     ) : (
                         <MortyAlert tone={statusTone} icon={statusIcon}>
                             {errorStatus}

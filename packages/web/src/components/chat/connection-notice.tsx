@@ -43,6 +43,20 @@ export function ConnectionNotice({
         ) : null;
     const testId = feedback.kind === "closed" ? dataTestId.sessionClosedNotice : dataTestId.sessionReconnectNotice;
 
+    // The waiting state reads as a quiet chip, not a card: title only, in a
+    // button-like shape on the chat surface so it sits left-aligned with the
+    // composer instead of spanning the pane.
+    if (feedback.kind === "waiting" && !inline) {
+        return (
+            <div
+                className="inline-flex h-7 items-center rounded-full border-[0.5px] border-border bg-card px-3 text-12 font-medium text-muted-foreground"
+                data-testid={testId}
+            >
+                {feedback.title}
+            </div>
+        );
+    }
+
     if (inline) {
         return (
             <div
