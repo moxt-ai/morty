@@ -138,7 +138,7 @@ test("Given a Markdown horizontal rule, When the response is rendered, Then its 
     expect(rule.closest(".agent-markdown")?.className).toContain("[&_hr]:border-t-[0.5px]");
 });
 
-test("Given Markdown table and fenced code, When the response is rendered, Then their surfaces share the compact radii, the table renders without an internal scroll cap, and table actions reveal on hover", {
+test("Given Markdown table and fenced code, When the response is rendered, Then their surfaces share the compact radii, the table renders without an internal scroll cap, and table actions reveal on hover and open their menus", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -183,6 +183,27 @@ test("Given Markdown table and fenced code, When the response is rendered, Then 
         expect(icon.classList.contains("lucide")).toBe(true);
         expect(icon.classList.contains("size-3.5")).toBe(true);
     }
+    // The actions must work, not just carry classes: the download trigger opens
+    // the format menu, and the fullscreen trigger opens and closes its dialog.
+    const tableWrapper = document.querySelector('[data-streamdown="table-wrapper"]');
+    if (!(tableWrapper instanceof HTMLElement)) {
+        throw new Error("Expected the table wrapper");
+    }
+    await app.user.click(getByRole(tableWrapper, "button", { name: "Download table" }));
+    await app.waitForView(() => {
+        expect(getByText(tableWrapper, "CSV")).toBeDefined();
+        expect(getByText(tableWrapper, "Markdown")).toBeDefined();
+    });
+    await app.user.click(getByRole(tableWrapper, "button", { name: "View fullscreen" }));
+    await app.waitForView(() => {
+        const dialog = document.querySelector('[aria-modal="true"]');
+        expect(dialog).not.toBeNull();
+        expect(dialog?.querySelector('[data-streamdown="table"]')).not.toBeNull();
+    });
+    await app.user.click(getByRole(document.body, "button", { name: "Exit fullscreen" }));
+    await app.waitForView(() => {
+        expect(document.querySelector('[aria-modal="true"]')).toBeNull();
+    });
     expect(markdown?.className).toContain("[&_[data-streamdown=code-block-body]]:!rounded-[12px]");
 });
 
