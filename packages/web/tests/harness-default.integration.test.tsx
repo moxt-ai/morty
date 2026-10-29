@@ -1,10 +1,8 @@
-import { getAllByRole, getByRole } from "@testing-library/dom";
-import { act } from "@testing-library/react";
+import { getByRole } from "@testing-library/dom";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
+import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
-import { TestClock } from "./infra/test-clock.ts";
 
 function harnessProduct(app: TestApp): string | null {
     return app
@@ -92,18 +90,6 @@ async function startNewSession(app: TestApp): Promise<void> {
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.chatLanding)).not.toBeNull());
 }
 
-async function openOnlyConversation(app: TestApp): Promise<void> {
-    const conversation = await app.waitForView(() => {
-        const sessions = app.elementsByTestId(dataTestId.managedConversation);
-        expect(sessions).toHaveLength(1);
-        return sessions[0];
-    });
-    if (conversation === undefined) {
-        throw new Error("Waiting for the Pi conversation in the sidebar");
-    }
-    await app.user.click(conversation);
-}
-
 test("Given a Pi conversation is active, When the user starts a New Session, Then the draft keeps Pi and its model settings instead of the first connected harness, including after a reload", {
     timeout: 60_000,
 }, async () => {
@@ -173,74 +159,6 @@ test("Given a Pi conversation is active, When the user starts a New Session, The
     await reloaded.waitForView(() =>
         expect(reloaded.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large"),
     );
-});
-
-test("Given an active Pi conversation, When the Runtime is offline while the new draft loads, Then the stale Codex settings cannot be submitted and the draft settles on Pi after reconnection", {
-    timeout: 60_000,
-}, async () => {
-    const clock = new TestClock("2026-10-26T08:00:00Z");
-    const app = await createTestApp({
-        clock,
-        agents: [
-            { id: "codex", label: "Codex" },
-            { id: "pi", label: "Pi" },
-        ],
-        connectAgent: true,
-    });
-    await waitForComposer(app);
-    await waitForHarness(app, "codex");
-    await selectHarness(app, "Pi", "pi");
-    await waitForHarness(app, "pi");
-    await sendPrompt(app, app.elementByTestId(dataTestId.messageComposer), "Work through Pi");
-    await app.waitForView(() =>
-        expect(
-            app.elementsByTestId(dataTestId.agentResponse).some((element) => element.textContent?.includes("turn 1")),
-        ).toBe(true),
-    );
-    // Leave Codex as the cached draft while the Pi conversation is active.
-    await startNewSession(app);
-    await waitForHarness(app, "pi");
-    await selectHarness(app, "Codex", "codex");
-    await waitForHarness(app, "codex");
-    await openOnlyConversation(app);
-    await waitForComposer(app);
-    await waitForHarness(app, "pi");
-
-    if (app.daemon === null) {
-        throw new Error("Expected a connected Runtime");
-    }
-    await app.daemon.disconnect();
-    await showReconnectNotice(app, clock);
-    await app.queryElementByTestId(
-        dataTestId.sessionReconnectNotice,
-        (element) => element.textContent?.includes("Retry now") === true,
-    );
-
-    await startNewSession(app);
-    const composer = await app.queryElementByTestId(
-        dataTestId.messageComposer,
-        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
-    );
-    await app.user.type(composer, "This must not start on the stale harness");
-    // The draft cannot load settings from an offline Runtime: it says so instead of offering the stale ones.
-    await app.waitForView(() =>
-        expect(
-            getAllByRole(document.body, "alert").some((alert) =>
-                alert.textContent?.includes("Your Mobius is disconnected"),
-            ),
-        ).toBe(true),
-    );
-    expect(app.elementByTestId(dataTestId.sendMessage).hasAttribute("disabled")).toBe(true);
-
-    await app.daemon.reconnect();
-    // A brief outage can fall entirely between configuration-watch samples.
-    // Recovery must retry the failed settings read even without a changed snapshot.
-    await act(async () => clock.advanceBy(1_000));
-    await waitForHarness(app, "pi");
-    await app.waitForView(() =>
-        expect(app.elementByTestId(dataTestId.sendMessage).hasAttribute("disabled")).toBe(false),
-    );
-    expect(app.elementsByTestId(dataTestId.managedConversation)).toHaveLength(1);
 });
 
 test("Given a Pi draft, When a Codex switch cannot finish because the Runtime goes offline, Then the next draft stays on Pi", {

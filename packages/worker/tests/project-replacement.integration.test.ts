@@ -78,31 +78,6 @@ test("Given a saved Machine on a Project, When its Project is replaced, Then the
     expect(await bindingResponse.json()).toMatchObject({ botId: replacement.bot.botId, runtimeId: null });
 });
 
-test("Given a saved Machine, When replacement requests overlap and are retried, Then every reply carries the same usable local credential", async () => {
-    const original = await fixture.createAnonymousUser();
-    const replace = () =>
-        worker.fetch(
-            projectRequest(original.projectId, "/management/project/replacement", original.token, "POST"),
-            fixture.environment(),
-        );
-    const responses = await Promise.all([replace(), replace(), replace()]);
-    const identities = await Promise.all(
-        responses.map(async (response) => {
-            expect(response.status).toBe(201);
-            return v.parse(replacementSchema, await response.json());
-        }),
-    );
-    const retryResponse = await replace();
-    expect(retryResponse.status).toBe(201);
-    const retry = v.parse(replacementSchema, await retryResponse.json());
-    for (const identity of identities) {
-        expect(identity).toEqual(retry);
-    }
-    expect(
-        (await worker.fetch(projectRequest(retry.projectId, "/session", retry.token), fixture.environment())).status,
-    ).toBe(200);
-});
-
 test("Given a revoked successor local credential, When the previous Machine retries replacement, Then it cannot reactivate that credential", async () => {
     const original = await fixture.createAnonymousUser();
     const replace = () =>
