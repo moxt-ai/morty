@@ -20,9 +20,11 @@ const loadingWaveSizes = {
  */
 export function LoadingWave({
     className,
+    dotClassName,
     size = "sm",
 }: {
     readonly className?: string;
+    readonly dotClassName?: string;
     readonly size?: keyof typeof loadingWaveSizes;
 }) {
     const { dot, gap, rise } = loadingWaveSizes[size];
@@ -34,6 +36,7 @@ export function LoadingWave({
                         dot,
                         rise,
                         "animate-loading-wave rounded-full bg-morty-text-4 motion-reduce:animate-none",
+                        dotClassName,
                     )}
                     data-loading-dot=""
                     key={index}
