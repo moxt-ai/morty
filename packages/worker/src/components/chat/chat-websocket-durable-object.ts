@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import application from "../../application.ts";
 import { createApplicationDependencies } from "../../composition/application-context.ts";
 import { createCloudWebSocketHandlers } from "../../composition/cloud-websocket.ts";
+import { recordSetupFunnelStep } from "../../composition/setup-funnel.ts";
 import type { CloudBindings } from "../../infra/cloud-bindings.ts";
 import { json } from "../../infra/http.ts";
 import { toHttpError } from "../../infra/http-error.ts";
@@ -35,7 +36,12 @@ export class ChatWebSocketDurableObject extends DurableObject<CloudBindings> {
             return createWebSocketApiBridge(
                 request,
                 createCloudWebSocketHandlers({
-                    dispatch: async (dispatched) => await application.fetch(dispatched, this.env),
+                    dispatch: async (dispatched) => {
+                        const response = await application.fetch(dispatched, this.env);
+                        // Only the browser application talks to Morty over this bridge.
+                        recordSetupFunnelStep(logger, dispatched, response, "browser");
+                        return response;
+                    },
                     logger,
                 }),
                 logger,

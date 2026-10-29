@@ -5,7 +5,7 @@ import { Textarea } from "../../components/ui/textarea.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { setupPrimaryButtonClassName, setupPrimaryButtonSize } from "../setup/setup-card-shell.tsx";
 
-export function PairingInstruction() {
+export function PairingInstruction({ onCopied }: { readonly onCopied?: () => void }) {
     const setupInstruction = `Fetch ${window.location.origin}/setup.md and set up Morty for me. You may install missing prerequisites and pair this machine. Complete setup without asking questions.`;
     return (
         <div>
@@ -16,6 +16,7 @@ export function PairingInstruction() {
                     title: "Could not copy",
                 }}
                 label="Copy setup prompt"
+                {...(onCopied === undefined ? {} : { onCopied })}
                 size={setupPrimaryButtonSize}
                 successToast={{
                     description: "Paste into your agent, then open the link it returns.",

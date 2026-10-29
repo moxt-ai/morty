@@ -1,7 +1,11 @@
 import * as v from "valibot";
 
+/** Setup actions counted as conversion steps. They carry no parameters, so nothing identifies the visitor. */
+export type SetupEvent = "setup_prompt_copied" | "setup_link_shared";
+
 export interface PageAnalytics {
     readonly trackPageView: (pathname: string) => void;
+    readonly trackEvent: (event: SetupEvent) => void;
 }
 
 const configurationSchema = v.object({
@@ -64,6 +68,10 @@ function createGoogleAnalytics(options: {
                 page_path: path,
                 page_title: "Morty",
             });
+        },
+        // The page view's `config` already set the scrubbed page location these events report.
+        trackEvent: (event) => {
+            gtag("event", event);
         },
     };
 }

@@ -29,6 +29,7 @@ export function CopyToClipboardButton({
     copiedContent,
     children,
     className = "",
+    onCopied,
     size,
     variant = "primary",
 }: {
@@ -44,6 +45,8 @@ export function CopyToClipboardButton({
     readonly copiedContent?: ReactNode;
     readonly children?: ReactNode;
     readonly className?: string;
+    /** Called once the clipboard holds the value; a failed or denied write does not call it. */
+    readonly onCopied?: () => void;
     readonly size?: ComponentProps<typeof Button>["size"];
     readonly variant?: ComponentProps<typeof Button>["variant"];
 }) {
@@ -70,6 +73,7 @@ export function CopyToClipboardButton({
                 if (successContent === undefined) {
                     showToast(successToast);
                 }
+                onCopied?.();
             },
             () => showToast(failureToast),
         );

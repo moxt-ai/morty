@@ -27,6 +27,7 @@ export type AppState =
           readonly kind: "setup";
           readonly notice: "access-ended" | "legacy" | "none";
           readonly returnHref: string | null;
+          readonly onPromptCopied: () => void;
       }
     | { readonly kind: "authentication"; readonly router: AnyRouter }
     | {
@@ -111,7 +112,13 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
                 </SetupCardShell>
             );
         case "setup":
-            return <SetupApplication notice={state.notice} returnHref={state.returnHref} />;
+            return (
+                <SetupApplication
+                    notice={state.notice}
+                    onPromptCopied={state.onPromptCopied}
+                    returnHref={state.returnHref}
+                />
+            );
         case "authentication":
             return <RouterProvider router={state.router} />;
         case "signed-in":
@@ -130,9 +137,11 @@ const mortyResources = [
 
 function SetupApplication({
     notice,
+    onPromptCopied,
     returnHref,
 }: {
     readonly notice: "access-ended" | "legacy" | "none";
+    readonly onPromptCopied: () => void;
     readonly returnHref: string | null;
 }) {
     const pageNotice =
@@ -212,7 +221,7 @@ function SetupApplication({
                     : "Run one setup prompt on the computer you want to add."}
             </SetupCardDescription>
             <div className="mt-4 w-full">
-                <PairingInstruction />
+                <PairingInstruction onCopied={onPromptCopied} />
             </div>
         </SetupCardShell>
     );

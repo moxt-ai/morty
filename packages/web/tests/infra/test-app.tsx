@@ -6,6 +6,7 @@ import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { flushSync } from "react-dom";
 import { afterAll, afterEach } from "vitest";
 import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
+import type { PageAnalytics } from "../../src/services/analytics/google-analytics.ts";
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../../src/services/identity/identity-scope-url.ts";
@@ -52,6 +53,8 @@ export async function createTestApp(
         readonly environment?: Environment;
         readonly connectAgent?: boolean;
         readonly clock?: Clock;
+        /** Receives the page views and setup steps the application measures. */
+        readonly analytics?: PageAnalytics;
         readonly agent?: ControlledAgent;
         readonly agents?: readonly ControlledAgent[];
         readonly nativeSessionIds?: ReadonlySet<string>;
@@ -152,6 +155,7 @@ export async function createTestApp(
         origin: current.origin,
         transport: current.transport,
         ...(options.clock === undefined ? {} : { clock: options.clock }),
+        ...(options.analytics === undefined ? {} : { analytics: options.analytics }),
     });
     let rendered: { readonly unmount: () => void } = { unmount: () => {} };
     const mount = () => {
