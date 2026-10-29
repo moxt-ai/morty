@@ -12,7 +12,7 @@ import type {
 } from "../../../third-party/mobius/packages/cli/src/engine/acp/agent/in-process-endpoint.ts";
 
 /** Stateful ACP peer that deliberately leaves tool status updates unfinished at turn termination. */
-export function createToolLifecycleAgent() {
+export function createToolLifecycleAgent(beforeCancellationApplied?: () => Promise<void>) {
     const sessions = new Map<string, acp.SessionNotification[]>();
     const steeringToolCounts = new Map<string, number>();
     const heldSteering = new Set<string>();
@@ -281,7 +281,11 @@ export function createToolLifecycleAgent() {
                     return { outcome: "injected" };
                 },
             )
-            .onNotification(acp.methods.agent.session.cancel, (context) => turns.get(context.params.sessionId)?.abort())
+            .onNotification(acp.methods.agent.session.cancel, async (context) => {
+                const turn = turns.get(context.params.sessionId);
+                await beforeCancellationApplied?.();
+                turn?.abort();
+            })
             .onRequest(acp.methods.agent.session.close, (context) => {
                 turns.get(context.params.sessionId)?.abort();
                 return {};

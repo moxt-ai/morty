@@ -62,6 +62,7 @@ export async function startTestPlatform(
                         echoUserMessage: true,
                         additionalAgents: agents.slice(1).map((agent) => ({ id: agent.id, name: agent.label })),
                         beforeSessionCreated: agents[0]?.beforeSessionCreated,
+                        beforeCancellationApplied: agents[0]?.beforeCancellationApplied,
                         ...(agents[0]?.beforeConfigurationApplied === undefined
                             ? {}
                             : { beforeConfigurationApplied: agents[0].beforeConfigurationApplied }),
