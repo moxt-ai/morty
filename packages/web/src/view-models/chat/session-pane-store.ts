@@ -950,8 +950,7 @@ export function createSessionPaneModel(options: {
             }
         };
         return {
-            connection:
-                options.initialMessage === undefined ? { kind: "loading" } : { kind: "session-loading-after-create" },
+            connection: { kind: "first-loading" },
             title: session.entry.title,
             titleEdit: { kind: "closed" },
             messages: initialTimeline.messages,

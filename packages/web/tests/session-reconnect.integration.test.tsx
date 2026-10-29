@@ -1,10 +1,11 @@
 import { getByLabelText, getByRole, queryAllByRole, queryAllByText, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
-import { expect, test } from "vitest";
+import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
+import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
 
 function reconnectStatusText(app: TestApp): string | null {
     const notice = app.optionalElementByTestId(dataTestId.sessionReconnectNotice);
@@ -23,6 +24,35 @@ function retrySeconds(app: TestApp): number {
 }
 
 const CLOCK_ORIGIN = "2026-10-13T08:00:00Z";
+
+test("Given an online computer and a saved session, When the session first loads, Then the composer stays writable without a connection notice until sending becomes available", {
+    timeout: 30_000,
+}, async () => {
+    const environment = await createChatWorkerEnvironment(false, true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true, clock: new TestClock(CLOCK_ORIGIN) });
+    await openSavedConversation(app, "Quiet first loading");
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    if (app.executionNetwork === null) {
+        throw new Error("Expected a real execution-read proxy");
+    }
+    const held = app.executionNetwork.holdNextExecution();
+    await app.user.click(getByRole(document.body, "button", { name: "Open Quiet first loading" }));
+    const release = await held;
+    try {
+        expect(reconnectStatusText(app)).toBeNull();
+        expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true);
+        const composer = getByRole(document.body, "textbox", { name: "Message" });
+        await app.user.type(composer, "Draft while loading");
+        expect(composer).toHaveProperty("value", "Draft while loading");
+    } finally {
+        release();
+    }
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false),
+    );
+    expect(reconnectStatusText(app)).toBeNull();
+});
 
 test("Given an open conversation with a draft, When the Runtime briefly disconnects twice, Then recovery stays quiet without sending the draft", {
     timeout: 30_000,

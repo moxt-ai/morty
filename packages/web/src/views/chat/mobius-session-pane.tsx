@@ -749,7 +749,10 @@ function MobiusSessionPaneBody({
     );
     const lastRenderItemIndex = renderItems.length - 1;
     const generationActive = presentation.workingIndicatorVisible && presentation.activity.kind === "working";
-    const sessionMessagesLoading = model.connection.kind === "loading" && model.messages.length === 0;
+    const sessionMessagesLoading =
+        model.connection.kind === "first-loading" &&
+        model.messages.length === 0 &&
+        model.pendingInitialMessage === null;
     const initialMessage = model.pendingInitialMessage;
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
