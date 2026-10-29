@@ -1,4 +1,5 @@
 import { createStore } from "zustand/vanilla";
+import type { PageAnalytics } from "../services/analytics/google-analytics.ts";
 import type { ApiTransport } from "../services/api/api-transport.ts";
 import { BotChatApi } from "../services/chat/bot-chat-api.ts";
 import { recordBrowserDiagnostic } from "../services/diagnostics/browser-diagnostics.ts";
@@ -34,6 +35,8 @@ const createSessionWorkspaceStore = () => createStore<{ workspace: ChatWorkspace
 
 export interface MortyApplication {
     readonly clock: Clock;
+    /** Page and setup-step measurement; null when the deployment configures no analytics. */
+    readonly analytics: PageAnalytics | null;
     readonly anonymousSession: ReturnType<typeof createAnonymousSessionStore>;
     /** The shared bug-report dialog state for every bug-report entry point. */
     readonly bugReportDialog: ReturnType<typeof createBugReportDialogStore>;
@@ -70,6 +73,7 @@ export function createMortyApplication(options: {
     readonly transport: ApiTransport;
     readonly url?: string;
     readonly clock?: Clock;
+    readonly analytics?: PageAnalytics | null;
 }): MortyApplication {
     const lifetime = new AbortController();
     const transport = options.transport;
@@ -254,6 +258,7 @@ export function createMortyApplication(options: {
     }
     return {
         clock: options.clock ?? systemClock,
+        analytics: options.analytics ?? null,
         anonymousSession,
         bugReportDialog,
         continuation,

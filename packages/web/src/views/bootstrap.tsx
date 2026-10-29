@@ -40,19 +40,19 @@ export function assembleMorty(options: {
         origin: options.origin,
         transport: options.transport,
         ...(options.clock === undefined ? {} : { clock: options.clock }),
+        ...(options.analytics === undefined ? {} : { analytics: options.analytics }),
     });
     // The signed-in router is assembled once with the application: its inputs
     // (the stable authorize action, the application) are fixed for the
     // application's lifetime, so no component rebuilds it while rendering.
     const signedInRouter = createSignedInRouter(application);
     const continuationRouter = createContinuationRouter();
+    const analytics = application.analytics;
     const analyticsSubscriptions =
-        options.analytics === undefined || options.analytics === null
+        analytics === null
             ? []
             : [signedInRouter, continuationRouter].map((router) =>
-                  router.subscribe("onRendered", ({ toLocation }) =>
-                      options.analytics?.trackPageView(toLocation.pathname),
-                  ),
+                  router.subscribe("onRendered", ({ toLocation }) => analytics.trackPageView(toLocation.pathname)),
               );
     const element = (
         <MortyApplicationProvider application={application}>

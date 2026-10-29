@@ -1,6 +1,7 @@
 import { fireEvent, getAllByRole, getByRole, getByText, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
+import type { SetupEvent } from "../src/services/analytics/google-analytics.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
 test("Given a new visitor, When the setup page opens, Then it explains what Morty is for, why it can be trusted, and where to verify that", {
@@ -61,6 +62,27 @@ test("Given a new visitor reviewing setup, When they expand its details, Then th
         "href",
         `${window.location.origin}/setup.md`,
     );
+});
+
+test("Given a new visitor, When they copy the setup prompt, Then the copy is counted as a setup step", {
+    timeout: 30_000,
+}, async () => {
+    const setupSteps: SetupEvent[] = [];
+    const app = await createTestApp({
+        analytics: {
+            trackEvent: (event) => {
+                setupSteps.push(event);
+            },
+            trackPageView: () => {},
+        },
+        page: { kind: "bootstrap" },
+    });
+
+    await app.user.click(
+        await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup prompt" })),
+    );
+
+    await app.waitForView(() => expect(setupSteps).toEqual(["setup_prompt_copied"]));
 });
 
 test("Given a new visitor whose agent is busy, When the setup page opens, Then it warns before copying that setup interrupts the agent's current task", {

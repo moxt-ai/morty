@@ -83,7 +83,12 @@ export function SessionApplication({
         return (
             <App
                 bugReportDialog={application.bugReportDialog}
-                state={{ kind: "setup", notice: state.notice, returnHref: state.returnHref }}
+                state={{
+                    kind: "setup",
+                    notice: state.notice,
+                    returnHref: state.returnHref,
+                    onPromptCopied: () => application.analytics?.trackEvent("setup_prompt_copied"),
+                }}
             />
         );
     }

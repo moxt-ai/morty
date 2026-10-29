@@ -10,7 +10,7 @@ import { PlatformProjectGateway } from "../gateway/platform-project-gateway.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 import { projectBindings } from "./project-bindings.ts";
 
-const logger = pino({
+export const logger = pino({
     base: { service: "morty" },
     browser: { asObject: true },
     level: "info",
