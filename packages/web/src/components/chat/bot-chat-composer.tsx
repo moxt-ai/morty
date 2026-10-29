@@ -124,7 +124,7 @@ export function BotChatComposer({
     const notice = useRef<HTMLDivElement>(null);
     const textarea = useRef<HTMLTextAreaElement>(null);
     const scrollViewport = useRef<HTMLDivElement>(null);
-    useComposerFocus(textarea, focusScope);
+    const attachTextarea = useComposerFocus(textarea, focusScope);
     useAutoGrowingTextarea(textarea, draft, scrollViewport);
     const clipped = useScrollClippedEdges(scrollViewport, composerScrollEdgeThresholdPx);
     const { attachments, state: attachmentState } = attachmentModel;
@@ -220,7 +220,7 @@ export function BotChatComposer({
                             onKeyDown={handleKeyDown}
                             onPaste={handlePaste}
                             placeholder={placeholder}
-                            ref={textarea}
+                            ref={attachTextarea}
                             value={draft}
                         />
                     </ScrollArea>
