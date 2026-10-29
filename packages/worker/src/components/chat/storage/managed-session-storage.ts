@@ -1,7 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import * as v from "valibot";
 import { createDatabase, type Database } from "../../../schema/project-do/database.ts";
-import { chatManagedSession } from "../../../schema/project-do/index.ts";
+import { chatManagedSession, chatSessionOwnership } from "../../../schema/project-do/index.ts";
 import { PlatformProjectError, platformIdentifier } from "../../management/entity/platform-project.ts";
 
 const summarySchema = v.pipe(
@@ -35,7 +35,7 @@ export class ManagedSessionStorage {
                 createdAt: chatManagedSession.createdAt,
                 projectId: chatManagedSession.projectId,
                 userId: chatManagedSession.userId,
-                id: chatManagedSession.resourceId,
+                id: chatManagedSession.sessionId,
             })
             .from(chatManagedSession)
             .where(
@@ -45,7 +45,7 @@ export class ManagedSessionStorage {
                     eq(chatManagedSession.botId, botId),
                 ),
             )
-            .orderBy(desc(chatManagedSession.createdAt), chatManagedSession.resourceId);
+            .orderBy(desc(chatManagedSession.createdAt), chatManagedSession.sessionId);
         signal.throwIfAborted();
         return v.parse(v.array(summarySchema), result);
     };
@@ -70,7 +70,7 @@ export class ManagedSessionStorage {
                 projectId: value.projectId,
                 userId: value.userId,
                 botId,
-                resourceId: value.id,
+                sessionId: value.id,
                 createdAt: value.createdAt,
             })
             .onConflictDoNothing()
@@ -87,19 +87,35 @@ export class ManagedSessionStorage {
     ): Promise<boolean> => {
         signal.throwIfAborted();
         const result = await this.#requireDatabase()
-            .select({ id: chatManagedSession.resourceId })
+            .select({ id: chatManagedSession.sessionId })
             .from(chatManagedSession)
             .where(
                 and(
                     eq(chatManagedSession.projectId, projectId),
                     eq(chatManagedSession.userId, userId),
                     eq(chatManagedSession.botId, botId),
-                    eq(chatManagedSession.resourceId, v.parse(platformIdentifier, id)),
+                    eq(chatManagedSession.sessionId, v.parse(platformIdentifier, id)),
                 ),
             )
             .get();
         signal.throwIfAborted();
-        return result !== undefined;
+        if (result !== undefined) {
+            return true;
+        }
+        const retained = await this.#requireDatabase()
+            .select({ id: chatSessionOwnership.sessionId })
+            .from(chatSessionOwnership)
+            .where(
+                and(
+                    eq(chatSessionOwnership.projectId, projectId),
+                    eq(chatSessionOwnership.userId, userId),
+                    eq(chatSessionOwnership.botId, botId),
+                    eq(chatSessionOwnership.sessionId, v.parse(platformIdentifier, id)),
+                ),
+            )
+            .get();
+        signal.throwIfAborted();
+        return retained !== undefined;
     };
 
     readonly archive = async (
@@ -110,17 +126,22 @@ export class ManagedSessionStorage {
         signal: AbortSignal,
     ): Promise<void> => {
         signal.throwIfAborted();
-        await this.#requireDatabase()
-            .delete(chatManagedSession)
-            .where(
-                and(
-                    eq(chatManagedSession.projectId, projectId),
-                    eq(chatManagedSession.userId, userId),
-                    eq(chatManagedSession.botId, botId),
-                    eq(chatManagedSession.resourceId, v.parse(platformIdentifier, id)),
+        const database = this.#requireDatabase();
+        const sessionId = v.parse(platformIdentifier, id);
+        // Keep the recent-list representation unchanged for older Workers and supported rollback.
+        await database.batch([
+            database.insert(chatSessionOwnership).values({ projectId, userId, botId, sessionId }).onConflictDoNothing(),
+            database
+                .delete(chatManagedSession)
+                .where(
+                    and(
+                        eq(chatManagedSession.projectId, projectId),
+                        eq(chatManagedSession.userId, userId),
+                        eq(chatManagedSession.botId, botId),
+                        eq(chatManagedSession.sessionId, sessionId),
+                    ),
                 ),
-            )
-            .run();
+        ]);
         signal.throwIfAborted();
     };
 }

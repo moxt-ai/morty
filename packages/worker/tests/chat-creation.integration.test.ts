@@ -351,7 +351,7 @@ test("Given a managed Chat session is still running, When its owner archives it,
     expect(await managed.json()).toEqual({ sessions: [] });
 });
 
-test("Given an idle managed Chat session, When its owner archives it, Then Chat rejects reopening its old conversation ID even though Runtime history remains", async ({
+test("Given an idle managed Chat session, When its owner closes and reopens it, Then it leaves Recent sessions until the same conversation is reopened", async ({
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
@@ -377,12 +377,11 @@ test("Given an idle managed Chat session, When its owner archives it, Then Chat 
     expect(await archived.json()).toEqual({ close: "confirmed" });
     const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
     expect(await managed.json()).toEqual({ sessions: [] });
-    const rejected = await fixture.request(`chat/bots/${fixture.botId}/access`, { conversationId: sessionId });
-    expect(rejected.status).toBe(404);
-    expect(await rejected.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
-    await expect(
-        fixture.runtime.client.sessions.restore(runtimeId, sessionId, AbortSignal.timeout(10_000)),
-    ).resolves.toMatchObject({ ready: { sessionId } });
+    const restored = await fixture.request(`chat/bots/${fixture.botId}/access`, { conversationId: sessionId });
+    expect(restored.status).toBe(200);
+    expect(await restored.json()).toMatchObject({ conversationId: sessionId, sessionId });
+    const recent = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
+    expect(await recent.json()).toMatchObject({ sessions: [{ id: sessionId }] });
 });
 
 test("Given two Bots on the same Runtime, When a conversation ID is opened through the other Bot, Then Chat rejects it while its owner can still open it", async ({
@@ -404,10 +403,18 @@ test("Given two Bots on the same Runtime, When a conversation ID is opened throu
     expect(opened.status).toBe(200);
     const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
 
+    const closed = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
+    expect(closed.status).toBe(200);
     const rejected = await fixture.request(`chat/bots/${other.botId}/access`, { conversationId: sessionId });
 
     expect(rejected.status).toBe(404);
     expect(await rejected.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
+    const foreignClose = await fixture.request(`chat/bots/${other.botId}/managed-session/archive`, { sessionId });
+    expect(foreignClose.status).toBe(200);
+    expect(await foreignClose.json()).toEqual({ close: "unconfirmed" });
+    const rejectedRestore = await fixture.request(`chat/bots/${other.botId}/managed-session`, { sessionId });
+    expect(rejectedRestore.status).toBe(404);
+    expect(await rejectedRestore.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
     const reopened = await fixture.request(`chat/bots/${fixture.botId}/access`, { conversationId: sessionId });
     expect(reopened.status).toBe(200);
     expect(await reopened.json()).toMatchObject({ conversationId: sessionId, sessionId });
@@ -416,7 +423,7 @@ test("Given two Bots on the same Runtime, When a conversation ID is opened throu
 });
 
 for (const operation of ["access", "managed-session"]) {
-    test(`Given a managed Chat session, When ${operation} and archival run concurrently, Then the archived session stays closed and cannot be reopened through Morty`, async ({
+    test(`Given a managed Chat session, When ${operation} and closing run concurrently, Then the owner retains access and can explicitly reopen it`, async ({
         cloud,
     }) => {
         await using fixture = await createChatFixture(cloud);
@@ -440,16 +447,22 @@ for (const operation of ["access", "managed-session"]) {
             fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId }),
         ]);
 
-        expect([200, 404]).toContain(reopened.status);
+        expect(reopened.status).toBe(200);
         expect(archived.status).toBe(200);
         expect(await archived.json()).toEqual({ close: "confirmed" });
+        // Close once both operations have settled, regardless of which acquired the Session first.
+        const closed = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
+        expect(closed.status).toBe(200);
         await expect(
             fixture.runtime.client.sessions.rename(runtimeId, sessionId, "Still closed", AbortSignal.timeout(10_000)),
         ).rejects.toMatchObject({ code: "session_closed" });
-        const rejected = await fixture.request(`chat/bots/${fixture.botId}/access`, { conversationId: sessionId });
-        expect(rejected.status).toBe(404);
         const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
         expect(await managed.json()).toEqual({ sessions: [] });
+        const restored = await fixture.request(`chat/bots/${fixture.botId}/managed-session`, { sessionId });
+        expect(restored.status).toBe(200);
+        expect(await restored.json()).toMatchObject({ ready: { sessionId } });
+        const recent = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
+        expect(await recent.json()).toMatchObject({ sessions: [{ id: sessionId }] });
     });
 }
 
@@ -482,4 +495,8 @@ test("Given a Runtime cannot complete Session close, When its owner archives a m
     const repeated = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
     expect(repeated.status).toBe(200);
     expect(await repeated.json()).toEqual({ close: "unconfirmed" });
+    const reopened = await fixture.request(`chat/bots/${fixture.botId}/managed-session`, { sessionId });
+    expect(reopened.status).toBe(503);
+    const stillHidden = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
+    expect(await stillHidden.json()).toEqual({ sessions: [] });
 });

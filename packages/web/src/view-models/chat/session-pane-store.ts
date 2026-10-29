@@ -391,6 +391,7 @@ export function createSessionPaneModel(options: {
     /** Reports session activity transitions, such as a running turn, to the owner. */
     readonly onStatusChange?: ((status: SessionActivityState) => void) | undefined;
     readonly onTitleChange: (sessionId: string, title: string) => void;
+    readonly onReopened?: () => void;
 }) {
     const { session, botId, requests, clock, composerAttachments, delivery } = options;
     const sessionId = session.result.ready.sessionId;
@@ -1433,6 +1434,7 @@ export function createSessionPaneModel(options: {
                 tasks.getState().dismissFailure();
                 messageQueue.getState().dismissFailure();
                 reopenings += 1;
+                options.onReopened?.();
                 resumeAfterReopen?.();
             },
             setDraft: (draft) => {

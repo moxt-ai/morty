@@ -466,6 +466,57 @@ test("Given a saved Session, When the user opens its context menu, Then the Sess
     expect(queryByRole(document.body, "alert")).toBeNull();
 });
 
+test("Given an open saved Session, When the user closes it from Recent sessions and reopens it from the notice, Then it returns to Recent sessions and can continue the conversation", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const prompt = "Keep this closed conversation";
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), prompt);
+    await app.waitForView(() => {
+        expect(
+            app.elementsByTestId(dataTestId.agentResponse).some((element) => element.textContent?.includes(prompt)),
+        ).toBe(true);
+        expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
+    });
+    const conversation = await app.queryElementByTestId(dataTestId.managedConversation);
+    await app.user.pointer({ keys: "[MouseRight]", target: conversation });
+    await app.user.click(await app.waitForView(() => getByRole(document.body, "menuitem", { name: "Close session" })));
+    await app.waitForView(() => expect(app.elementsByTestId(dataTestId.managedConversation)).toHaveLength(0));
+    const notice = await app.queryElementByTestId(dataTestId.sessionClosedNotice);
+
+    await app.user.click(getByRole(notice, "button", { name: "Reopen it" }));
+
+    await app.waitForView(() => {
+        expect(app.optionalElementByTestId(dataTestId.sessionClosedNotice)).toBeNull();
+        expect(
+            app
+                .elementsByTestId(dataTestId.managedConversation)
+                .map((element) => element.textContent)
+                .join(" "),
+        ).toContain(prompt);
+    });
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    await sendPrompt(app, composer, "Continue after closing");
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes("Continue after closing")),
+        ).toBe(true),
+    );
+    const reloaded = await app.reload();
+    await reloaded.waitForView(() => {
+        expect(reloaded.elementsByTestId(dataTestId.managedConversation)).toHaveLength(1);
+        expect(reloaded.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+            prompt,
+            "Continue after closing",
+        ]);
+    });
+});
+
 test("Given a saved Session whose Runtime becomes unavailable, When the user closes it, Then the entry is removed and the unconfirmed close is visible", {
     timeout: 30_000,
 }, async () => {

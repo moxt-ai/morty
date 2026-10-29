@@ -428,15 +428,13 @@ export class ChatService {
             input.title ?? "New chat",
             scope.signal,
         );
-        if ("conversationKey" in input) {
-            await this.#chatSessions.save(
-                scope.projectId,
-                scope.userId,
-                scope.botId,
-                { id: access.conversationId },
-                scope.signal,
-            );
-        }
+        await this.#chatSessions.save(
+            scope.projectId,
+            scope.userId,
+            scope.botId,
+            { id: access.conversationId },
+            scope.signal,
+        );
         return { ...access, instructions: bot.instructions };
     };
 
@@ -458,8 +456,11 @@ export class ChatService {
                 throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
             }
             const runtime = await this.localRuntime(scope);
+            const restored = await this.#platform.readChatSession(scope.projectId, runtime, sessionId, scope.signal);
+            // Closing removes the recent entry, not ownership. Publish it again only after restoration succeeds.
+            await this.#chatSessions.save(scope.projectId, scope.userId, scope.botId, { id: sessionId }, scope.signal);
             return {
-                ...(await this.#platform.readChatSession(scope.projectId, runtime, sessionId, scope.signal)),
+                ...restored,
                 instructions: bot.instructions,
             };
         });

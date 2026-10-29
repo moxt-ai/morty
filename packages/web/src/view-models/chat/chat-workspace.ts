@@ -540,6 +540,7 @@ export function createChatWorkspace(options: {
             requests,
             initialMessage: firstMessage,
             onInitialMessageDequeued: (commandId) => home.getState().initialMessageDequeued(sessionId, commandId),
+            onReopened: () => startDirectoryLoad(),
             onStatusChange: (status) =>
                 statuses.getState().statusChanged(botId, sessionId, status, statusLifetime.signal),
             onTitleChange: (id, title) => {
