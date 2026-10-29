@@ -7,7 +7,7 @@ import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
 
-const recoveredFailure = "The local Agent could not complete the request";
+const recoveredFailure = "Internal error: The controlled Agent rejected this turn.";
 
 for (const submission of ["rejected", "upload-failed"] as const) {
     test(`Given a failed turn followed by a ${submission} message, When the Runtime silently reconnects, Then the latest submission result survives without reviving the old failure`, {
@@ -31,8 +31,13 @@ for (const submission of ["rejected", "upload-failed"] as const) {
         await sendPrompt(app, composer, "fail this turn explicitly");
         await app.waitForView(() => expect(entryStatus(app, "Established session")).toBe("Session failed"));
         if (submission === "upload-failed") {
+            const attachmentInput = await app.waitForView(() => {
+                const input = getByLabelText(document.body, "Choose attachments");
+                expect(input).toHaveProperty("disabled", false);
+                return input;
+            });
             await app.user.upload(
-                getByLabelText(document.body, "Choose attachments"),
+                attachmentInput,
                 new File(["Unsent attachment"], `${"notes".repeat(101)}.json`, { type: "text/plain" }),
             );
             await app.waitForView(() => getByRole(form, "list", { name: "Attachments" }));
