@@ -1,8 +1,9 @@
-import { CircleAlert, FileText, Inbox, MessageSquare, PackageOpen, Plus, Unplug } from "lucide-react";
+import { Archive, CircleAlert, FileText, Inbox, MessageSquare, PackageOpen, Plus, Unplug, WifiOff } from "lucide-react";
 import { Tooltip } from "radix-ui";
 import { type ComponentType, type ReactNode, useState } from "react";
 import { AttemptFailure } from "../chat/attempt-failure.tsx";
-import type { ExecutionContext } from "../chat/execution-context.ts";
+import { ConnectionNotice } from "../chat/connection-notice.tsx";
+import type { ConnectionFeedback, ExecutionContext } from "../chat/execution-context.ts";
 import { ExecutionDetailsDialog } from "../chat/execution-details-dialog.tsx";
 import { HarnessMark } from "../chat/harness-mark.tsx";
 import { MessageBubble } from "../chat/message-bubble.tsx";
@@ -533,6 +534,66 @@ function AlertGallery() {
     );
 }
 
+/**
+ * Every composer notice state on one page, built from the production
+ * components. Unified rules: failures use the error tone, informational
+ * connection states the neutral tone; line one carries the headline plus any
+ * countdown and action inline, line two an optional muted detail that never
+ * repeats the headline; a send failure combined with a connection status keeps
+ * the connection as a single inline line under the headline.
+ */
+function ComposerNoticeGallery() {
+    const noop = () => {};
+    const retrying: ConnectionFeedback = {
+        kind: "retrying",
+        description: "Updates are paused. We’ll retry automatically. Your draft is saved.",
+        remainingSeconds: 12,
+        title: "Reconnecting…",
+    };
+    const failed: ConnectionFeedback = {
+        kind: "failed",
+        description: "You can keep writing. Retry to check the connection.",
+        title: "Connection interrupted",
+    };
+    const closed: ConnectionFeedback = {
+        kind: "closed",
+        description: "Continue where you left off.",
+        reopen: "available",
+    };
+    return (
+        <div className="grid max-w-xl gap-6">
+            <Specimen layout="stack" title="Failure: runtime restarted mid-request">
+                <MortyAlert>The local runtime restarted while this request was running</MortyAlert>
+            </Specimen>
+            <Specimen layout="stack" title="Failure: attachment rejected">
+                <MortyAlert>Files must be between 1 byte and 32 MB.</MortyAlert>
+            </Specimen>
+            <Specimen layout="stack" title="Failure with connection status: inline line under the headline">
+                <MortyAlert
+                    description={<ConnectionNotice feedback={retrying} inline onRetryNow={noop} onReopen={noop} />}
+                >
+                    The message could not be sent.
+                </MortyAlert>
+            </Specimen>
+            <Specimen layout="stack" title="Failure: reconnect failed">
+                <MortyAlert tone="error">
+                    <ConnectionNotice feedback={failed} onRetryNow={noop} onReopen={noop} />
+                </MortyAlert>
+            </Specimen>
+            <Specimen layout="stack" title="Informational: reconnecting">
+                <MortyAlert icon={WifiOff} tone="neutral">
+                    <ConnectionNotice feedback={retrying} onRetryNow={noop} onReopen={noop} />
+                </MortyAlert>
+            </Specimen>
+            <Specimen layout="stack" title="Informational: session closed">
+                <MortyAlert icon={Archive} tone="neutral">
+                    <ConnectionNotice feedback={closed} onRetryNow={noop} onReopen={noop} />
+                </MortyAlert>
+            </Specimen>
+        </div>
+    );
+}
+
 function NavigationCardGallery() {
     return (
         <Specimen title="Pending while the route loads">
@@ -895,6 +956,7 @@ const galleries = {
     card: CardGallery,
     "cloud-button": CloudButtonGallery,
     color: ColorGallery,
+    "composer-notice": ComposerNoticeGallery,
     "copy-button": CopyButtonGallery,
     dialog: DialogGallery,
     "execution-details-dialog": ExecutionDetailsDialogGallery,

@@ -173,6 +173,14 @@ export const PLAYGROUND_ENTRIES = [
     },
     {
         group: "Chat",
+        id: "composer-notice",
+        source: "components/chat/connection-notice.tsx",
+        summary:
+            "Composer notice states: failure, failure with connection status, and informational connection states.",
+        title: "Composer notice",
+    },
+    {
+        group: "Chat",
         id: "tool-call",
         source: "components/chat/tools/tool-call-status.tsx",
         summary: "Tool step row for running, succeeded, failed, interrupted, and unknown.",

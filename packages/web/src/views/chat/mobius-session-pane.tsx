@@ -1,5 +1,5 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
-import { Check, CircleAlert, X } from "lucide-react";
+import { Archive, Check, CircleAlert, WifiOff, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
@@ -1122,10 +1122,27 @@ function MobiusSessionPaneBody({
                             disabled={presentation.composerInputDisabled}
                             draft={model.draft}
                             error={presentation.composerError}
+                            statusTone={
+                                executionContext.feedback.kind === "failed" ||
+                                (executionContext.feedback.kind === "closed" &&
+                                    executionContext.feedback.reopen === "failed")
+                                    ? "error"
+                                    : "neutral"
+                            }
+                            statusIcon={
+                                executionContext.feedback.kind === "closed" &&
+                                executionContext.feedback.reopen !== "failed"
+                                    ? Archive
+                                    : executionContext.feedback.kind === "retrying" ||
+                                        executionContext.feedback.kind === "waiting"
+                                      ? WifiOff
+                                      : undefined
+                            }
                             errorStatus={
                                 executionContext.feedback.kind !== "hidden" ? (
                                     <ConnectionNotice
                                         feedback={executionContext.feedback}
+                                        inline={presentation.composerError.length > 0}
                                         onRetryNow={pane.store.getState().retryNow}
                                         onReopen={() => run(pane.store.getState().reopen)}
                                     />

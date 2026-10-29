@@ -1,4 +1,4 @@
-import { ArrowUp, FileText, LoaderCircle, Plus, Square, X } from "lucide-react";
+import { ArrowUp, FileText, LoaderCircle, type LucideIcon, Plus, Square, X } from "lucide-react";
 import {
     type ClipboardEvent,
     type FormEvent,
@@ -98,6 +98,8 @@ export function BotChatComposer({
     draft,
     error,
     errorStatus,
+    statusTone = "neutral",
+    statusIcon,
     onDraftChange,
     onStop,
     onSubmit,
@@ -118,6 +120,10 @@ export function BotChatComposer({
     readonly draft: string;
     readonly error: string;
     readonly errorStatus?: ReactNode;
+    /** Surface for a connection-status notice shown on its own: failures read as error tone. */
+    readonly statusTone?: "error" | "neutral";
+    /** Leading icon for an informational connection-status notice, matching the error tone's icon slot. */
+    readonly statusIcon?: LucideIcon | undefined;
     readonly onDraftChange: (draft: string) => void;
     readonly onStop: () => void;
     readonly onSubmit: () => void;
@@ -191,7 +197,9 @@ export function BotChatComposer({
                     {composerErrorMessage.length > 0 ? (
                         <MortyAlert description={errorStatus}>{composerErrorMessage}</MortyAlert>
                     ) : (
-                        <MortyAlert tone="neutral">{errorStatus}</MortyAlert>
+                        <MortyAlert tone={statusTone} icon={statusIcon}>
+                            {errorStatus}
+                        </MortyAlert>
                     )}
                 </div>
             )}
