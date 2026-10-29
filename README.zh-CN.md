@@ -52,7 +52,20 @@ Complete setup without asking questions.
 - 电脑上装有并已登录 **Codex**、**Claude Code** 或 **Pi** 其中之一
 - **Node.js 22.19.0 或更高版本**
 - 连接的机器保持**唤醒并联网**。Morty 是你本地会话的一扇窗，不是云端沙箱；
-  电脑休眠时，会话也随之暂停。
+  电脑休眠时会话随之暂停，重新连上之前浏览器里看不到历史
+  （[#907](https://github.com/moxt-ai/morty/issues/907)）。
+
+## 已知限制
+
+- **不要在终端和 Morty 之间来回切换地操作同一个会话。** Morty 打开会话后，Mobius 会用本机上
+  一份常驻副本来服务它，不再重新读取 Agent 自己的原始记录。单向交接没问题；来回切换会让两边
+  各走各的：
+  - **Claude Code** 和 **Pi** 会悄悄分叉。一边发的消息在另一边看不到，Agent 的上下文里也没有。
+  - **Codex** 不分叉，但 Morty 打开过该 thread 之后，终端会被拒绝（`thread ... already has an
+    active writer`），最长两小时。执行 `mobius quit` 可以立即释放。
+
+  跟踪于 [#915](https://github.com/moxt-ai/morty/issues/915)。修复之前：在一侧做完再换到另一
+  侧；Codex 在终端恢复不了时执行 `mobius quit`。
 
 ## Morty 如何处理你的数据
 

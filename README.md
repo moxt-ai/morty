@@ -60,8 +60,25 @@ running it. Read it yourself before you paste the prompt.
 - One of **Codex**, **Claude Code**, or **Pi**, installed and signed in on your computer
 - **Node.js 22.19.0 or newer**
 - The connected machine **awake and online**. Morty is a window into a session running
-  on your computer, not a cloud sandbox. When the computer sleeps, the session pauses
-  with it.
+  on your computer, not a cloud sandbox. When the computer sleeps the session pauses with
+  it, and the browser shows no history until it reconnects
+  ([#907](https://github.com/moxt-ai/morty/issues/907)).
+
+## Known limitations
+
+- **Don't work a single session from the terminal and Morty at the same time, or alternate
+  between them.** Once Morty opens a session, Mobius serves it from a resident copy on your
+  machine and stops re-reading the agent's own record. Handing a session over in one
+  direction is fine; going back and forth makes the two sides drift:
+  - **Claude Code** and **Pi** fork silently. Messages sent on one side stop appearing on the
+    other, and the agent's context loses them.
+  - **Codex** does not fork, but once Morty has opened a thread the terminal is refused with
+    `thread ... already has an active writer`, for up to two hours. `mobius quit` releases it
+    immediately.
+
+  Tracked in [#915](https://github.com/moxt-ai/morty/issues/915). Until it is fixed: finish on
+  one side before picking up the other, and run `mobius quit` if Codex will not resume in the
+  terminal.
 
 ## What Morty does with your data
 
