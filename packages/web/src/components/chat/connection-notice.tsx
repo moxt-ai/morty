@@ -1,4 +1,3 @@
-import { LoaderCircle } from "lucide-react";
 import { dataTestId } from "../../data-testid.ts";
 import { LinkButton } from "../ui/link-button.tsx";
 import type { ConnectionFeedback } from "./execution-context.ts";
@@ -46,18 +45,24 @@ export function ConnectionNotice({
 
     // The waiting state reads as a quiet chip, not a card: title only, in a
     // button-like shape on the chat surface so it sits left-aligned with the
-    // composer instead of spanning the pane.
+    // composer instead of spanning the pane. The trailing ellipsis animates
+    // dot by dot; the clipped span keeps its full width so layout never shifts.
     if (feedback.kind === "waiting" && !inline) {
+        const title = feedback.title.endsWith("…") ? feedback.title.slice(0, -1) : feedback.title;
         return (
             <div
-                className="flex h-7 w-fit items-center gap-1 rounded-full bg-surface-elevated px-3 text-12 font-medium text-morty-text-2"
+                className="flex h-9 w-fit items-center rounded-[24px] bg-surface-elevated px-4 text-12 font-medium text-morty-text-2"
                 data-testid={testId}
             >
-                <LoaderCircle
-                    aria-hidden="true"
-                    className="size-3 animate-spin text-morty-text-3 motion-reduce:animate-none"
-                />
-                {feedback.title}
+                <span>{title}</span>
+                {title !== feedback.title && (
+                    // Three periods, not the single ellipsis glyph: the clip-path
+                    // thirds line up with each period's advance, so the loop
+                    // starts at exactly one dot.
+                    <span aria-hidden="true" className="animate-reconnect-ellipsis motion-reduce:animate-none">
+                        ...
+                    </span>
+                )}
             </div>
         );
     }
