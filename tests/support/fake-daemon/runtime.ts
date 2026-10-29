@@ -46,11 +46,14 @@ export interface ControlledRuntimeConnection {
 export interface ControlledAgent {
     readonly id: string;
     readonly label: string;
+    /** Holds or rejects the controlled Agent's next Session creation through its real ACP boundary. */
+    readonly beforeSessionCreated?: (() => Promise<void>) | undefined;
     /** Test control that holds a selected Agent configuration request before it is applied. */
     readonly beforeConfigurationApplied?: ((configId: string, value: string | boolean) => Promise<void>) | undefined;
 }
 
 export interface ControlledAgentBehavior extends FakeAgentHarnessOptions {
+    readonly beforeSessionCreated?: (() => Promise<void>) | undefined;
     readonly beforeConfigurationApplied?: ((configId: string, value: string | boolean) => Promise<void>) | undefined;
     readonly files?: ReadonlyMap<string, { readonly content: string | Uint8Array; readonly mediaType: string }>;
 }
@@ -144,11 +147,11 @@ export function createMortyFakeDaemon(behavior: ControlledAgentBehavior, workspa
     if (behavior.agentId === "configuration-test") {
         return {
             ...harness,
-            agents: [createSettingsAgent("full", behavior.beforeConfigurationApplied)],
+            agents: [createSettingsAgent("full", behavior.beforeConfigurationApplied, behavior.beforeSessionCreated)],
         };
     }
     if (behavior.agentId === "settings-test") {
-        return { ...harness, agents: [createSettingsAgent()] };
+        return { ...harness, agents: [createSettingsAgent("model", undefined, behavior.beforeSessionCreated)] };
     }
     if (behavior.agentId === "signed-out-test") {
         return { ...harness, agents: [createUnavailableAgent("signed-out-test", "Signed-out Agent", "signed-out")] };

@@ -5,7 +5,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 
-test("Given two idle viewers with drafts and attachments, When both submit before receiving live updates, Then the rejected draft remains editable and can be queued", {
+test("Given two idle viewers with drafts and attachments, When both submit before receiving live updates, Then the rejected message can be explicitly edited and queued", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -64,8 +64,10 @@ test("Given two idle viewers with drafts and attachments, When both submit befor
         }
     });
     const rejected = await app.waitForView(() => {
-        const participant = participants.find(({ form }) =>
-            queryByRole(form, "alert")?.textContent?.includes("Another prompt is already running"),
+        const participant = participants.find(({ app: viewer }) =>
+            viewer
+                .elementsByTestId(dataTestId.queuedMessage)
+                .some((element) => element.textContent?.includes("Another prompt is already running")),
         );
         if (participant === undefined) {
             throw new Error("Waiting for the authoritative concurrent submission rejection");
@@ -73,6 +75,14 @@ test("Given two idle viewers with drafts and attachments, When both submit befor
         return participant;
     });
     await rejected.app.waitForView(() => expect(rejected.composer.disabled).toBe(false));
+    expect(rejected.composer.value).toBe("");
+    const rejectedMessage = rejected.app
+        .elementsByTestId(dataTestId.queuedMessage)
+        .find((element) => element.textContent?.includes("Another prompt is already running"));
+    if (rejectedMessage === undefined) {
+        throw new Error("Expected the retained rejected message");
+    }
+    await rejected.app.user.click(getByRole(rejectedMessage, "button", { name: "Edit failed message" }));
     expect(rejected.composer.value).toBe(rejected.prompt);
     expect(getByRole(rejected.form, "list", { name: "Attachments" }).textContent).toContain(rejected.fileName);
     for (const participant of participants) {
@@ -109,6 +119,13 @@ test("Given two attachments in a message, When an attachment is removed while su
         app,
         await app.queryElementByTestId(dataTestId.messageComposer),
         "Open attachment ownership conversation",
+    );
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((message) => message.textContent?.includes("Open attachment ownership conversation")),
+        ).toBe(true),
     );
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     const composer = await app.queryElementByTestId(

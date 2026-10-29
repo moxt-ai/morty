@@ -122,6 +122,39 @@ export const sessionDraftEntry = (sessionId: string): SessionStorageEntry<string
         schema: messageDraftSchema,
     });
 
+/** A submitted message the Runtime never took; a reload returns it to the Session's composer. */
+export const sessionUnsentMessageEntry = (sessionId: string): SessionStorageEntry<string> =>
+    stringSessionStorageEntry({
+        key: scopedKey("morty:unsent-message:session:v1:", sessionId),
+        schema: messageDraftSchema,
+    });
+
+const unsentFirstMessageSchema = v.pipe(
+    v.object({
+        commandId: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
+        content: messageDraftSchema,
+    }),
+    v.readonly(),
+);
+
+type UnsentFirstMessage = v.InferOutput<typeof unsentFirstMessageSchema>;
+
+/** A first message whose Session does not exist yet; a reload returns it to the new-conversation composer. */
+export const newConversationUnsentMessageEntry = (botId: string): SessionStorageEntry<UnsentFirstMessage> =>
+    customSessionStorageEntry({
+        key: scopedKey("morty:unsent-message:new:v1:", botId),
+        schema: unsentFirstMessageSchema,
+        encode: (value) => JSON.stringify(v.parse(unsentFirstMessageSchema, value)),
+        decode: (raw) => {
+            try {
+                const parsed = v.safeParse(unsentFirstMessageSchema, JSON.parse(raw));
+                return parsed.success ? parsed.output : null;
+            } catch {
+                return null;
+            }
+        },
+    });
+
 const rememberedSessionSchema = v.pipe(
     v.object({
         id: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),

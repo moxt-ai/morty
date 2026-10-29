@@ -36,6 +36,7 @@ import { selectedConversationId } from "../../view-models/chat/conversation-sele
 import type { DraftControlsStore } from "../../view-models/chat/draft-controls-store.ts";
 import { activeHarnessMark, pendingExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { pendingConversationPresentation } from "../../view-models/chat/pending-conversation-presentation.ts";
+import { reportApplicationError } from "../../view-models/report-error.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { OnlineComputerAlternative } from "./computer-switcher.tsx";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
@@ -146,6 +147,18 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
     const connectionStatus = botConnectionStatus(model);
     const creationBusy = conversationCreationBusy(model.creation);
     const composerLocked = conversationComposerLocked(model.creation);
+    // Leaving the page cancels creation with the workspace; only other failures are unexpected.
+    const createConversation = () => {
+        const signal = workspace.operationsSignal();
+        void store
+            .getState()
+            .createConversation(signal)
+            .catch((cause: unknown) => {
+                if (!signal.aborted) {
+                    reportApplicationError(cause, "conversation-creation");
+                }
+            });
+    };
     const creationError = conversationCreationError(model.creation);
     const creationStatus = conversationCreationStatus(model.creation);
     const queuedInitialMessage = queuedDraftMessage(model.creation);
@@ -231,6 +244,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                         footer={
                             <BotChatComposer
                                 attachmentModel={attachmentModel}
+                                focusScope={workspace}
                                 canAttach={canAddAttachments(attachmentModel)}
                                 attachmentSignal={workspace.operationsSignal()}
                                 disabled
@@ -239,7 +253,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                 onDraftChange={() => {}}
                                 onStop={() => {}}
                                 onSubmit={() => {}}
-                                outputState="idle"
+                                outputState={creationBusy ? "sending" : "idle"}
                                 submitDisabled
                             >
                                 {null}
@@ -326,6 +340,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                                 role="alert"
                                             >
                                                 <span className="min-w-0 flex-1 break-words">{creationError}</span>
+                                                <Button onClick={createConversation}>Retry message</Button>
                                                 {reportButton}
                                             </div>
                                         )}
@@ -357,15 +372,14 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                         {model.runtimeConfiguration !== null && model.selection.kind === "draft" && (
                             <BotChatComposer
                                 attachmentModel={attachmentModel}
+                                focusScope={workspace}
                                 canAttach={canAddAttachments(attachmentModel)}
                                 attachmentSignal={workspace.operationsSignal()}
-                                disabled={composerLocked}
+                                disabled={false}
                                 draft={draft}
-                                error={creationError}
+                                error=""
                                 errorStatus={
-                                    creationError.length > 0 ? (
-                                        reportButton
-                                    ) : executionContext.feedback.kind === "hidden" ? undefined : (
+                                    executionContext.feedback.kind === "hidden" ? undefined : (
                                         <div className="w-full">
                                             <ConnectionNotice
                                                 feedback={executionContext.feedback}
@@ -380,14 +394,12 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                 }
                                 onDraftChange={store.getState().setDraft}
                                 onStop={() => {}}
-                                onSubmit={() => {
-                                    void store.getState().createConversation(workspace.operationsSignal());
-                                }}
-                                outputState="idle"
+                                onSubmit={createConversation}
+                                outputState={creationBusy ? "sending" : "idle"}
                                 submitDisabled={
                                     !executionContext.available ||
                                     !canStartConversation ||
-                                    creationBusy ||
+                                    composerLocked ||
                                     (draft.trim().length === 0 && attachmentModel.attachments.length === 0) ||
                                     draftControls.settings.kind !== "ready"
                                 }

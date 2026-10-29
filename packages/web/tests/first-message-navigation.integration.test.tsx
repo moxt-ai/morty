@@ -18,7 +18,7 @@ const moments = [
         name: "while its conversation is being created",
         reached: () =>
             document.querySelector(`[data-testid="${dataTestId.initialMessageStatus}"]`)?.textContent ===
-            "Session creating",
+            "Sending message",
     },
     {
         name: "as soon as its conversation appears",
@@ -87,7 +87,7 @@ test("Given a first prompt whose conversation is still being created, When I sta
         if (
             !restarted &&
             document.querySelector(`[data-testid="${dataTestId.initialMessageStatus}"]`)?.textContent ===
-                "Session creating"
+                "Sending message"
         ) {
             restarted = true;
             app.elementByTestId(dataTestId.newConversation).click();

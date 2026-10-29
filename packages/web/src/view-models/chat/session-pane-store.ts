@@ -50,7 +50,7 @@ import {
     turnActivity,
 } from "./session-current-turn.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
-import type { SessionDeliveryStore } from "./session-delivery-store.ts";
+import { prependToDraft, type SessionDeliveryStore } from "./session-delivery-store.ts";
 import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
 import { requestedInteraction, type SessionLifecycleFact, sessionLifecycleFact } from "./session-lifecycle.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
@@ -146,6 +146,9 @@ export interface SessionPaneStore {
     readonly send: (signal: AbortSignal) => Promise<void>;
     readonly removeUnknownDelivery: () => void;
     readonly retryUnknownDelivery: (signal: AbortSignal) => Promise<void>;
+    readonly retryFailedMessage: (signal: AbortSignal) => Promise<void>;
+    readonly editFailedMessage: () => void;
+    readonly discardFailedMessage: () => void;
     readonly queueDraft: (signal: AbortSignal) => Promise<void>;
     readonly steerQueued: (commandId: string, signal: AbortSignal) => Promise<void>;
     readonly deleteQueued: (commandId: string, signal: AbortSignal) => Promise<void>;
@@ -162,6 +165,12 @@ export interface SessionPaneStore {
     readonly confirmTitleEdit: (signal: AbortSignal) => Promise<void>;
     readonly cancelTitleEdit: () => void;
     readonly stop: (signal: AbortSignal) => Promise<void>;
+}
+
+function messageExecutionCommandId(message: SessionExecutionMessage): string | null {
+    return (
+        message.commandId ?? (message.executionContext.kind === "managed" ? message.executionContext.commandId : null)
+    );
 }
 
 export function sessionPanePresentation(
@@ -189,8 +198,7 @@ export function sessionPanePresentation(
     const composerDisabled =
         !connectionAvailable ||
         model.connection.kind !== "ready" ||
-        delivery.state.kind === "submitting" ||
-        delivery.state.kind === "delivery-unknown" ||
+        (delivery.state.kind !== "idle" && delivery.state.kind !== "confirmed") ||
         submitting ||
         model.operation.kind === "configuring" ||
         waitingForInput ||
@@ -198,9 +206,6 @@ export function sessionPanePresentation(
         stopping;
     const composerInputDisabled =
         model.connection.kind === "closed" ||
-        delivery.state.kind === "submitting" ||
-        delivery.state.kind === "delivery-unknown" ||
-        submitting ||
         model.operation.kind === "configuring" ||
         waitingForInput ||
         queue.operation.kind === "submitting" ||
@@ -222,12 +227,42 @@ export function sessionPanePresentation(
     const unconfirmed = delivery.state.kind === "delivery-unknown" ? delivery.state.journal : null;
     const unconfirmedDelivery =
         unconfirmed === null ||
-        model.messages.some((message) => message.role === "user" && message.commandId === unconfirmed.commandId)
+        model.messages.some(
+            (message) => message.role === "user" && messageExecutionCommandId(message) === unconfirmed.commandId,
+        )
             ? null
             : {
                   commandId: unconfirmed.commandId,
                   displayPrompt: unconfirmed.displayPrompt,
                   attachments: unconfirmed.attachments,
+              };
+    const pendingMessage =
+        delivery.state.kind === "preparing" || delivery.state.kind === "preparation-failed"
+            ? delivery.state.message
+            : delivery.state.kind === "submitting" ||
+                delivery.state.kind === "failed" ||
+                delivery.state.kind === "confirmed"
+              ? {
+                    commandId: delivery.state.journal.commandId,
+                    content: delivery.state.journal.request.content,
+                    attachments: delivery.state.journal.attachments,
+                }
+              : null;
+    const pendingDelivery =
+        pendingMessage === null ||
+        model.messages.some(
+            (message) => message.role === "user" && messageExecutionCommandId(message) === pendingMessage.commandId,
+        )
+            ? null
+            : {
+                  message: pendingMessage,
+                  sending: delivery.state.kind !== "confirmed",
+                  error:
+                      delivery.state.kind === "preparation-failed"
+                          ? delivery.state.error
+                          : delivery.state.kind === "failed"
+                            ? delivery.state.message
+                            : null,
               };
     const hasFailureCard =
         activity.kind === "failed" &&
@@ -261,7 +296,7 @@ export function sessionPanePresentation(
             attachments.state.kind !== "reading",
         // Operations that failed because the Session closed say nothing the closed notice does not already say.
         composerError:
-            model.connection.kind === "closed"
+            model.connection.kind === "closed" || pendingDelivery?.error != null
                 ? ""
                 : ([activity, model.titleEdit, model.olderHistory, model.operation, delivery.state]
                       .filter((state) => state.kind === "failed")
@@ -296,6 +331,7 @@ export function sessionPanePresentation(
             attachments.state.kind === "reading" ||
             (model.draft.trim() === "" && attachments.attachments.length === 0),
         unconfirmedDelivery,
+        pendingDelivery,
     } as const;
 }
 
@@ -386,7 +422,7 @@ export function createSessionPaneModel(options: {
         | "resetSessionConnections"
     >;
     readonly initialMessage?: QueuedDraftMessage | undefined;
-    /** Transfers the queued first message to delivery or the editable composer. */
+    /** Transfers the queued first message to delivery. */
     readonly onInitialMessageDequeued?: ((commandId: string) => void) | undefined;
     /** Reports session activity transitions, such as a running turn, to the owner. */
     readonly onStatusChange?: ((status: SessionActivityState) => void) | undefined;
@@ -444,7 +480,6 @@ export function createSessionPaneModel(options: {
         };
     let projection = createSessionProjection();
     let loadingOlderHistory = false;
-    let draftRevision = 0;
     // Creation owns the queued first message until the Session's delivery workflow takes its frozen request.
     const queuedInitialCommandId = options.initialMessage?.commandId ?? null;
     const isQueuedInitialMessage = (commandId: string): boolean => commandId === queuedInitialCommandId;
@@ -668,6 +703,15 @@ export function createSessionPaneModel(options: {
             projection = result.state;
             const pagination = sessionProjectionPagination(projection);
             const messages = sessionProjectionMessages(projection);
+            delivery
+                .getState()
+                .messagesObserved(
+                    messages.flatMap((message) =>
+                        message.role === "user"
+                            ? [messageExecutionCommandId(message)].filter((id): id is string => id !== null)
+                            : [],
+                    ),
+                );
             set({
                 hasOlderHistory: pagination !== null,
                 historyRevision: projection.revision,
@@ -780,8 +824,8 @@ export function createSessionPaneModel(options: {
         };
         /**
          * Submits a message: the composer's draft, or the queued first message this pane was opened with, exactly
-         * as the home store holds it. The submission owns the message until it is accepted, journaled, or returned
-         * to the composer by an authoritative rejection.
+         * as the home store holds it. Delivery owns that snapshot through preparation, sending, and recovery;
+         * completion never writes to the next draft.
          */
         const submit = async (
             message: {
@@ -792,6 +836,7 @@ export function createSessionPaneModel(options: {
             signal: AbortSignal,
         ): Promise<void> => {
             const current = get();
+            const currentDelivery = delivery.getState().state;
             // One turn at a time, and none while the Session's settings change.
             if (
                 current.connection.kind !== "ready" ||
@@ -812,7 +857,15 @@ export function createSessionPaneModel(options: {
             void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
             const prompt = message.content.trim();
             const displayPrompt = prompt || attachments.map((attachment) => attachment.name).join(", ");
-            const submittedDraftRevision = draftRevision;
+            delivery.getState().prepare(message);
+            if (queued) {
+                options.onInitialMessageDequeued?.(commandId);
+            } else if (currentDelivery.kind === "idle" || currentDelivery.kind === "confirmed") {
+                centralSessionStorage.remove(draftEntry);
+                composerAttachments.getState().clear();
+                set({ draft: "", queuedFilesNotice: false });
+            }
+            set({ pendingInitialMessage: null });
             updateTurn({ kind: "submitting", commandId, startedAt: sent.sentAt });
             const pending = deriveTimeline();
             set({
@@ -844,33 +897,17 @@ export function createSessionPaneModel(options: {
                 const sending = delivery
                     .getState()
                     .submit({ commandId, displayPrompt, request: submission, attachments }, submitTurn, signal);
-                // Delivery owns the only recovery journal before the draft or creation queue releases its message.
-                if (queued) {
-                    options.onInitialMessageDequeued?.(commandId);
-                } else {
-                    centralSessionStorage.remove(draftEntry);
-                    composerAttachments.getState().clear();
-                    set({ draft: "", queuedFilesNotice: false });
-                }
                 const outcome = await sending;
                 signal.throwIfAborted();
-                switch (outcome.kind) {
-                    case "accepted":
-                    case "delivered":
-                    case "delivery-unknown":
-                        break;
-                    case "rejected":
-                        // The rejected message becomes editable in the composer, unless the user has since
-                        // started another draft there.
-                        if (draftRevision === submittedDraftRevision) {
-                            set({ draft: message.content });
-                            composerAttachments.getState().restore(attachments);
-                            centralSessionStorage.write(draftEntry, message.content);
-                        }
-                        break;
-                    default:
-                        return outcome satisfies never;
-                }
+                delivery
+                    .getState()
+                    .messagesObserved(
+                        get().messages.flatMap((message) =>
+                            message.role === "user"
+                                ? [messageExecutionCommandId(message)].filter((id): id is string => id !== null)
+                                : [],
+                        ),
+                    );
                 if (outcome.kind === "accepted") {
                     updateTurn({ kind: "accepted", commandId, turnId: outcome.turn.turnId });
                     return;
@@ -881,22 +918,19 @@ export function createSessionPaneModel(options: {
                 announceActivity();
             } catch (cause) {
                 signal.throwIfAborted();
-                // Preparation can fail before delivery owns a frozen request. Keep that unsent message editable.
-                if (draftRevision === submittedDraftRevision) {
-                    set({ draft: message.content });
-                    composerAttachments.getState().restore(attachments);
-                    centralSessionStorage.write(draftEntry, message.content);
-                }
-                if (queued) {
-                    options.onInitialMessageDequeued?.(commandId);
-                }
                 const failureMessage = formatError(cause, "The agent could not complete the message.");
+                if (delivery.getState().state.kind === "preparing") {
+                    delivery.getState().preparationFailed(message, failureMessage);
+                } else {
+                    // Delivery already owns the frozen request, so its outcome is unknown rather than unsent.
+                    delivery.getState().submissionInterrupted();
+                }
                 updateTurn({
                     kind: "submission-ended",
                     commandId,
                     failure: { code: cause instanceof MobiusError ? cause.code : "", message: failureMessage },
                 });
-                // The ended turn keeps the failure; the composer shows it from there.
+                // The retained submission owns its failure; the composer keeps the next draft.
                 set({ pendingInitialMessage: null });
                 announceActivity();
             }
@@ -1439,15 +1473,12 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 // Failures the closing caused say nothing about the reopened Session.
-                delivery.getState().dismissFailure();
                 tasks.getState().dismissFailure();
                 messageQueue.getState().dismissFailure();
                 reopenings += 1;
                 resumeAfterReopen?.();
             },
             setDraft: (draft) => {
-                draftRevision += 1;
-                delivery.getState().dismissFailure();
                 tasks.getState().dismissFailure();
                 messageQueue.getState().dismissFailure();
                 if (draft === "") {
@@ -1461,6 +1492,10 @@ export function createSessionPaneModel(options: {
                 const { attachments, state: attachmentState } = composerAttachments.getState();
                 const draft = get().draft;
                 if (attachmentState.kind === "reading" || (draft.trim() === "" && attachments.length === 0)) {
+                    return;
+                }
+                const deliveryState = delivery.getState().state;
+                if (deliveryState.kind !== "idle" && deliveryState.kind !== "confirmed") {
                     return;
                 }
                 await submit({ commandId: crypto.randomUUID(), content: draft, attachments }, signal);
@@ -1497,12 +1532,8 @@ export function createSessionPaneModel(options: {
                         return;
                     case "delivered":
                         break;
-                    case "rejected": {
-                        composerAttachments.getState().restore(pending.attachments);
-                        centralSessionStorage.write(draftEntry, pending.request.content);
-                        set({ draft: pending.request.content });
+                    case "rejected":
                         break;
-                    }
                     case "delivery-unknown":
                         break;
                     case undefined:
@@ -1512,6 +1543,39 @@ export function createSessionPaneModel(options: {
                 }
                 updateTurn({ kind: "submission-ended", commandId: pending.commandId, failure: null });
                 announceActivity();
+            },
+            retryFailedMessage: async (signal) => {
+                const state = delivery.getState().state;
+                if (state.kind === "preparation-failed") {
+                    // Nothing reached the Runtime, so the message keeps its identity.
+                    await submit(state.message, signal);
+                } else if (state.kind === "failed") {
+                    // The Runtime definitively rejected this identity and will not run it again.
+                    await submit(
+                        {
+                            commandId: crypto.randomUUID(),
+                            content: state.journal.request.content,
+                            attachments: state.journal.attachments,
+                        },
+                        signal,
+                    );
+                }
+            },
+            editFailedMessage: () => {
+                if (composerAttachments.getState().state.kind === "reading") {
+                    return;
+                }
+                const message = delivery.getState().takeFailedMessage();
+                if (message === null) {
+                    return;
+                }
+                get().setDraft(prependToDraft(message.content, get().draft));
+                composerAttachments
+                    .getState()
+                    .restore([...message.attachments, ...composerAttachments.getState().attachments]);
+            },
+            discardFailedMessage: () => {
+                delivery.getState().takeFailedMessage();
             },
             queueDraft: async (signal) => {
                 const current = get();
@@ -1527,7 +1591,6 @@ export function createSessionPaneModel(options: {
                 }
                 const prompt = current.draft.trim();
                 const summary = prompt || attachments.map((attachment) => attachment.name).join(", ");
-                delivery.getState().dismissFailure();
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }

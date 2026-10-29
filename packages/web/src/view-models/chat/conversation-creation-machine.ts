@@ -140,7 +140,7 @@ export function conversationCreationStatus(state: ConversationCreationState): st
         case "draft":
             return null;
         case "session-creating":
-            return "Session creating";
+            return "Sending message";
         case "session-create-failed":
             return "Session creation failed";
         case "draft-message-sending":

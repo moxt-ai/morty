@@ -5,6 +5,10 @@ import type { IdentityTransfer } from "../../services/identity/anonymous-identit
 import { encodeIdentityScope, type IdentityScope } from "../../services/identity/identity-scope-url.ts";
 import { rememberComputerName, rememberComputerVisit } from "../../services/identity/remembered-computers.ts";
 import { isRuntimeConnectionFailure } from "../../services/management/management-api.ts";
+import {
+    centralSessionStorage,
+    sessionUnsentMessageEntry,
+} from "../../services/session-storage/central-session-storage.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import type { BugReportDialogStore } from "../bug-report-dialog-store.ts";
 import { formatError } from "../format-error.ts";
@@ -22,7 +26,7 @@ import type { OpenMobiusSession } from "./open-session.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
 import { createRuntimeRecovery } from "./runtime-recovery.ts";
 import type { SessionActivityState } from "./session-activity-machine.ts";
-import { createSessionDeliveryStore } from "./session-delivery-store.ts";
+import { createSessionDeliveryStore, prependToDraft } from "./session-delivery-store.ts";
 import { createSessionPaneModel, type SessionPaneModel } from "./session-pane-store.ts";
 import { createSidebarDialogs, type SidebarDialogs } from "./sidebar-dialogs.ts";
 
@@ -526,13 +530,30 @@ export function createChatWorkspace(options: {
         }
         const firstMessage = home.getState().firstMessages.get(sessionId);
         let composerAttachments = sessionAttachments.get(sessionId);
+        let nextDraft: string | null = null;
         if (composerAttachments === undefined) {
-            composerAttachments = createComposerAttachmentStore();
+            // Only the draft page that followed its first message here hands over the draft written meanwhile.
+            const handoff = firstMessage === undefined ? null : home.getState().takeNextDraft(firstMessage.commandId);
+            composerAttachments = handoff?.attachments ?? createComposerAttachmentStore();
+            nextDraft = handoff?.draft ?? null;
             sessionAttachments.set(sessionId, composerAttachments);
         }
         let delivery = sessionDeliveries.get(sessionId);
+        let unsent: string | null = null;
         if (delivery === undefined) {
-            delivery = createSessionDeliveryStore();
+            // A message an earlier page left unsent returns to the composer; it is never delivered implicitly.
+            const unsentEntry = sessionUnsentMessageEntry(sessionId);
+            unsent = centralSessionStorage.read(unsentEntry);
+            centralSessionStorage.remove(unsentEntry);
+            delivery = createSessionDeliveryStore({
+                unsentMessageChanged: (content) => {
+                    if (content === null) {
+                        centralSessionStorage.remove(unsentEntry);
+                    } else {
+                        centralSessionStorage.write(unsentEntry, content);
+                    }
+                },
+            });
             sessionDeliveries.set(sessionId, delivery);
         }
         const model = createSessionPaneModel({
@@ -553,6 +574,10 @@ export function createChatWorkspace(options: {
                 sidebar.dialogs.getState().nativeDialog?.getState().titlesChanged();
             },
         });
+        if (nextDraft !== null || unsent !== null) {
+            const draft = nextDraft ?? model.store.getState().draft;
+            model.store.getState().setDraft(unsent === null ? draft : prependToDraft(unsent, draft));
+        }
         paneEntry = { model, session: selection.session };
     };
 
