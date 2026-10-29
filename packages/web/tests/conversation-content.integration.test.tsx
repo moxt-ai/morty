@@ -211,6 +211,48 @@ test("Given an open code block, When the agent appends code, Then the visible bl
     expect(document.body.textContent).toContain('const label = "complete";');
 });
 
+test("Given an open code block without a language, When the agent appends code, Then the visible block updates before the response completes", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected a controlled Agent Runtime");
+    }
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+
+    await sendPrompt(app, composer, "hold after first delta");
+    await app.waitForView(() => expect(document.body.textContent).toContain("Partial reply"));
+    await daemon.continueReply("hold after first delta", {
+        outcome: "hold",
+        output: [{ kind: "text", text: "\n\n```\nThe setup prompt goes here.\n```\n\n" }],
+    });
+    await app.waitForView(() => expect(document.body.textContent).toContain("The setup prompt goes here."));
+
+    await daemon.continueReply("hold after first delta", {
+        outcome: "hold",
+        output: [{ kind: "text", text: "```\nDo not install" }],
+    });
+    await daemon.continueReply("hold after first delta", {
+        outcome: "hold",
+        output: [{ kind: "text", text: " it yourself.\nTell your agent to.\n" }],
+    });
+
+    await app.waitForView(() => expect(document.body.textContent).toContain("Do not install it yourself."));
+    expect(document.body.textContent).toContain("Tell your agent to.");
+
+    await daemon.continueReply("hold after first delta", {
+        outcome: "complete",
+        output: [{ kind: "text", text: "```\n" }],
+    });
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    expect(document.body.textContent).toContain("Do not install it yourself.");
+    expect(document.body.textContent).toContain("Tell your agent to.");
+});
+
 test("Given the agent sends separate reasoning messages, When the user reads the intermediate steps, Then they form paragraphs in one thinking block", {
     timeout: 30_000,
 }, async () => {
