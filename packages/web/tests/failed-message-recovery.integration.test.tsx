@@ -191,6 +191,21 @@ async function sendFirstMessage(app: TestApp, text: string, beforeSend: () => vo
     await app.user.click(send);
 }
 
+test("Given my first message is waiting for Session creation, When the creation fails, Then a failure mark replaces the sending spinner beside the message", {
+    timeout: 60_000,
+}, async () => {
+    const creation = heldSessionCreation();
+    const app = await createTestApp({ connectAgent: true, agent: creation.agent });
+    await sendFirstMessage(app, "Watch my first message", creation.hold);
+    const message = await app.queryElementByTestId(dataTestId.queuedMessage);
+    await app.waitForView(() => getByRole(message, "status", { name: "Sending message" }));
+    expect(message.textContent).not.toContain("Sending message");
+    creation.reject();
+    await app.waitForView(() => getByRole(message, "img", { name: "Session creation failed" }));
+    expect(queryByRole(message, "status", { name: "Sending message" })).toBeNull();
+    getByRole(document.body, "button", { name: "Retry message" });
+});
+
 test("Given Session creation failed for my first message and I wrote a next draft, When the page reloads, Then the first message returns to the composer ahead of the draft", {
     timeout: 60_000,
 }, async () => {
@@ -240,7 +255,7 @@ test("Given my first message is waiting for Session creation, When the page relo
     const app = await createTestApp({ connectAgent: true, agent: creation.agent });
     await sendFirstMessage(app, "Slow first message", creation.hold);
     await app.waitForView(() =>
-        expect(app.optionalElementByTestId(dataTestId.initialMessageStatus)?.textContent).toBe("Sending message"),
+        getByRole(app.elementByTestId(dataTestId.initialMessageStatus), "status", { name: "Sending message" }),
     );
     const reloaded = await app.reload();
     await reloaded.waitForView(() =>
@@ -282,7 +297,7 @@ test("Given I left a new conversation while it was being created, When I attach 
     await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
     await sendFirstMessage(app, "Created while away", creation.hold);
     await app.waitForView(() =>
-        expect(app.optionalElementByTestId(dataTestId.initialMessageStatus)?.textContent).toBe("Sending message"),
+        getByRole(app.elementByTestId(dataTestId.initialMessageStatus), "status", { name: "Sending message" }),
     );
     await openConversation(app, "Earlier conversation");
     creation.release();

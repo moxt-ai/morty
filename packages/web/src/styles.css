@@ -88,6 +88,8 @@
             opacity: 1;
         }
     }
+    /* Stays hidden through short waits so quick operations do not flash a pending state. */
+    --animate-delayed-reveal: cloud-enter 160ms ease-out 400ms both;
     --animate-reconnect-ellipsis: reconnect-ellipsis 1.2s step-end infinite;
     @keyframes reconnect-ellipsis {
         0% {

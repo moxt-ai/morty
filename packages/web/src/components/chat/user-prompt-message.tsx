@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { UserMessageShell } from "../../components/chat/user-message-shell.tsx";
@@ -10,6 +10,8 @@ import type { ComposerAttachment } from "./composer-attachment.ts";
 interface UserPromptMessageProps {
     readonly attachments: readonly ComposerAttachment[];
     readonly text: string;
+    /** Shown beside the bubble, such as the message's delivery state. */
+    readonly status?: ReactNode;
 }
 
 function PromptImage({ attachment }: { readonly attachment: ComposerAttachment }) {
@@ -29,7 +31,7 @@ function PromptImage({ attachment }: { readonly attachment: ComposerAttachment }
     );
 }
 
-export function UserPromptMessage({ attachments, text }: UserPromptMessageProps) {
+export function UserPromptMessage({ attachments, status, text }: UserPromptMessageProps) {
     if (text.length === 0 && attachments.length === 0) {
         return null;
     }
@@ -38,7 +40,7 @@ export function UserPromptMessage({ attachments, text }: UserPromptMessageProps)
     return (
         <ImageGallery>
             <UserMessageShell>
-                <MessageBubble copyText={text} data-testid={dataTestId.userMessage} speaker="user">
+                <MessageBubble copyText={text} data-testid={dataTestId.userMessage} speaker="user" status={status}>
                     <div className="grid min-w-0 gap-2">
                         {images.length > 0 && (
                             <div className={cn("grid min-w-0 gap-1.5", images.length > 1 && "grid-cols-2")}>
