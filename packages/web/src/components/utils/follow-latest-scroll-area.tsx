@@ -10,6 +10,23 @@ import {
 import { cn } from "@/lib/utils";
 import { useLoadMoreOnScroll } from "./load-more-trigger.tsx";
 
+const scrollAnchorTriggerAttribute = "data-scroll-anchor-trigger";
+const scrollAnchorTriggerSelector = `[${scrollAnchorTriggerAttribute}]`;
+
+/**
+ * Marks a control whose click resizes the content around it. While the content moves, the area holds the
+ * control where the reader clicked it instead of following the latest content or letting the viewport jump.
+ */
+export const scrollAnchorTriggerProps = { [scrollAnchorTriggerAttribute]: "" } as const;
+
+// A click starts a short hold. It lasts at least as long as the 200 ms disclosure slide, then ends once the
+// control has stayed put for a few frames; the cap keeps a control that never settles from holding forever.
+const anchorMinimumFrames = 15;
+const anchorSettledFrames = 4;
+const anchorMaximumFrames = 90;
+const anchorDriftEpsilonPx = 0.5;
+const anchorScrollKeys = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
+
 type FollowLatestScrollAreaProps = Omit<ComponentPropsWithoutRef<"div">, "ref"> & {
     /** Callers that need the element pass their ref; omitted, the area owns it. */
     readonly container?: RefObject<HTMLDivElement | null>;
@@ -54,6 +71,7 @@ export function FollowLatestScrollArea({
     const owned = useRef<HTMLDivElement | null>(null);
     const scrollArea = container ?? owned;
     const following = useRef(true);
+    const holdingAnchor = useRef(false);
     const lastTop = useRef(0);
     const pagination = useLoadMoreOnScroll({
         container: scrollArea,
@@ -63,6 +81,12 @@ export function FollowLatestScrollArea({
         revision: loadOlder?.revision ?? 0,
     });
     const [topFadeVisible, setTopFadeVisible] = useState(false);
+    const settleFollowing = useCallback(
+        (element: HTMLDivElement) => {
+            following.current = element.scrollHeight - element.scrollTop - element.clientHeight < followThreshold;
+        },
+        [followThreshold],
+    );
 
     const syncTopFade = useCallback(
         (element: HTMLDivElement) => {
@@ -120,6 +144,82 @@ export function FollowLatestScrollArea({
         };
     }, [syncTopFade, scrollArea.current]);
 
+    useEffect(() => {
+        const element = scrollArea.current;
+        if (element === null) {
+            return;
+        }
+        let releaseHold: (() => void) | null = null;
+        const hold = (trigger: HTMLElement) => {
+            releaseHold?.();
+            const offsetOf = () => trigger.getBoundingClientRect().top - element.getBoundingClientRect().top;
+            const anchoredOffset = offsetOf();
+            let frames = 0;
+            let quietFrames = 0;
+            let frame = 0;
+            const release = () => {
+                cancelAnimationFrame(frame);
+                releaseHold = null;
+                holdingAnchor.current = false;
+            };
+            const step = () => {
+                frames += 1;
+                const drift = offsetOf() - anchoredOffset;
+                if (Math.abs(drift) > anchorDriftEpsilonPx) {
+                    element.scrollTop += drift;
+                    quietFrames = 0;
+                } else {
+                    quietFrames += 1;
+                }
+                const settled = frames >= anchorMinimumFrames && quietFrames >= anchorSettledFrames;
+                if (!trigger.isConnected || settled || frames >= anchorMaximumFrames) {
+                    release();
+                    settleFollowing(element);
+                    return;
+                }
+                frame = requestAnimationFrame(step);
+            };
+            releaseHold = release;
+            holdingAnchor.current = true;
+            frame = requestAnimationFrame(step);
+        };
+        // The reader chose to look at this spot, so the latest content stops pulling the view away from it.
+        const onClick = (event: MouseEvent) => {
+            const trigger = event.target instanceof Element ? event.target.closest(scrollAnchorTriggerSelector) : null;
+            if (!(trigger instanceof HTMLElement) || !element.contains(trigger)) {
+                return;
+            }
+            following.current = false;
+            hold(trigger);
+        };
+        // Moving the view by hand ends the hold at once.
+        const cancelHold = () => releaseHold?.();
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (anchorScrollKeys.has(event.key)) {
+                cancelHold();
+            }
+        };
+        const onPointerDown = (event: PointerEvent) => {
+            // A press on the area itself rather than its content is a press on the scrollbar.
+            if (event.target === element) {
+                cancelHold();
+            }
+        };
+        element.addEventListener("click", onClick, { capture: true });
+        element.addEventListener("wheel", cancelHold, { passive: true });
+        element.addEventListener("touchstart", cancelHold, { passive: true });
+        element.addEventListener("keydown", onKeyDown);
+        element.addEventListener("pointerdown", onPointerDown, { passive: true });
+        return () => {
+            cancelHold();
+            element.removeEventListener("click", onClick, { capture: true });
+            element.removeEventListener("wheel", cancelHold);
+            element.removeEventListener("touchstart", cancelHold);
+            element.removeEventListener("keydown", onKeyDown);
+            element.removeEventListener("pointerdown", onPointerDown);
+        };
+    }, [settleFollowing, scrollArea.current]);
+
     const area = (
         <div
             {...props}
@@ -133,10 +233,14 @@ export function FollowLatestScrollArea({
                 // whole overflow fits inside the follow threshold; without this, a short conversation pins
                 // every user scroll back to the bottom. Programmatic pins and shrinking content land at the
                 // bottom (distance 0), so they keep following.
-                if (top < lastTop.current && distanceFromLatest > 0) {
-                    following.current = false;
-                } else if (distanceFromLatest < followThreshold) {
-                    following.current = true;
+                // While a click holds its control in place, the scrolling is the hold's own; it hands following back
+                // when it ends.
+                if (!holdingAnchor.current) {
+                    if (top < lastTop.current && distanceFromLatest > 0) {
+                        following.current = false;
+                    } else if (distanceFromLatest < followThreshold) {
+                        following.current = true;
+                    }
                 }
                 lastTop.current = top;
                 syncTopFade(element);

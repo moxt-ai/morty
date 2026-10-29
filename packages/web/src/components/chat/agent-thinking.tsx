@@ -6,7 +6,8 @@ import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
 import { AgentRichContent } from "../agents/agent-rich-content.tsx";
 import type { SessionResourceStoreFactory } from "../agents/resource-reader.ts";
-import { FollowLatestScrollArea } from "../utils/follow-latest-scroll-area.tsx";
+import { DisclosureReveal, useDisclosureReveal } from "../utils/disclosure-reveal.tsx";
+import { FollowLatestScrollArea, scrollAnchorTriggerProps } from "../utils/follow-latest-scroll-area.tsx";
 import { useScrollClippedEdges } from "../utils/use-scroll-clipped-edges.ts";
 import { type DisclosureChoice, disclosureOpen } from "./disclosure-choice.ts";
 import {
@@ -22,6 +23,7 @@ import {
 import { REASONING_CHARACTER_LIMIT, type SessionToolPresentation } from "./tools/tool-contract.ts";
 import { toolRichContent } from "./tools/tool-display-content.ts";
 import { renderRegisteredTool } from "./tools/tool-renderer-registry.tsx";
+import { useLingeringActive } from "./use-lingering-active.ts";
 
 export type AgentThinkingEntry =
     | {
@@ -39,6 +41,8 @@ type TimelineEntry =
     | { readonly entry: SessionToolPresentation; readonly kind: "tool" };
 
 const clippedEdgeThresholdPx = 4;
+/** How long finished reasoning stays open before it folds away, so the end of the stream is seen. */
+const reasoningCollapseDelayMs = 600;
 
 function ReasoningContent({ entry }: { readonly entry: ReasoningEntry }) {
     const content = useRef<HTMLDivElement>(null);
@@ -78,21 +82,25 @@ function ReasoningContent({ entry }: { readonly entry: ReasoningEntry }) {
 
 function ReasoningDisclosure({ active, entry }: { readonly active: boolean; readonly entry: ReasoningEntry }) {
     const [choice, setChoice] = useState<DisclosureChoice>("unset");
-    const open = disclosureOpen(choice, active);
+    const open = disclosureOpen(choice, useLingeringActive(active, reasoningCollapseDelayMs));
+    const reveal = useDisclosureReveal(open);
     return (
         <details
             aria-label="Agent thinking"
             className="group/thinking min-w-0"
             data-testid={dataTestId.agentReasoning}
-            onToggle={(event) => {
-                if (event.currentTarget.open !== open) {
-                    setChoice(event.currentTarget.open ? "expanded" : "collapsed");
-                }
-            }}
-            open={open}
+            // The panel stays open natively until the closing slide has finished.
+            open={reveal.present}
         >
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: a summary is natively interactive. */}
             <summary
                 className={`${agentThinkStepTriggerClassName} group/summary list-none [&::-webkit-details-marker]:hidden`}
+                onClick={(event) => {
+                    // The native toggle would hide the panel before it can slide shut.
+                    event.preventDefault();
+                    setChoice(open ? "collapsed" : "expanded");
+                }}
+                {...scrollAnchorTriggerProps}
             >
                 <span className={agentThinkStepIconClassName}>
                     <Brain aria-hidden="true" className="size-3.5 shrink-0" />
@@ -103,11 +111,15 @@ function ReasoningDisclosure({ active, entry }: { readonly active: boolean; read
                     </span>
                     <ChevronDown
                         aria-hidden="true"
-                        className={`${agentThinkStepChevronClassName} group-open/thinking:visible group-open/thinking:rotate-0`}
+                        className={cn(agentThinkStepChevronClassName, open && "visible rotate-0")}
                     />
                 </span>
             </summary>
-            {open && <ReasoningContent entry={entry} />}
+            {reveal.present && (
+                <DisclosureReveal reveal={reveal}>
+                    <ReasoningContent entry={entry} />
+                </DisclosureReveal>
+            )}
         </details>
     );
 }

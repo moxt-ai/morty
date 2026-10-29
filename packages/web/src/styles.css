@@ -135,6 +135,26 @@
             background-position: -200% 0;
         }
     }
+    /* Disclosure content slides its height open and shut. Both directions take the same time and easing as the
+       chevron turn beside them, and only the height moves: there is no fade. */
+    --animate-disclosure-reveal-open: disclosure-reveal-open 200ms ease-out;
+    --animate-disclosure-reveal-close: disclosure-reveal-close 200ms ease-out forwards;
+    @keyframes disclosure-reveal-open {
+        from {
+            grid-template-rows: 0fr;
+        }
+        to {
+            grid-template-rows: 1fr;
+        }
+    }
+    @keyframes disclosure-reveal-close {
+        from {
+            grid-template-rows: 1fr;
+        }
+        to {
+            grid-template-rows: 0fr;
+        }
+    }
     /* CSS owns the short-lived copy confirmation so the component needs no timer effect. */
     --animate-copy-confirmation: copy-confirmation 2s linear both;
     @keyframes copy-confirmation {
