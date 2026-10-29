@@ -1,0 +1,11 @@
+Morty
+Copyright 2026 Moxt
+
+This product includes software developed at Moxt (https://moxt.ai).
+
+--------------------------------------------------------------------------------
+
+Morty builds on Mobius (https://github.com/moxt-ai/mobius), which is included as
+the third-party/mobius submodule and is licensed under the Apache License,
+Version 2.0. Third-party components bundled by Mobius are listed in that
+repository's NOTICE file.
