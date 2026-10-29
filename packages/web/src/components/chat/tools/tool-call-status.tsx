@@ -21,7 +21,7 @@ export const agentThinkStepInlineLabelClassName = "flex min-w-0 flex-1 items-cen
 
 /** Chevron reserves fixed width and appears on hover, focus, or open without shifting the title. */
 export const agentThinkStepChevronClassName =
-    "invisible size-3.5 shrink-0 -rotate-90 transition-[transform,visibility] group-hover/process:visible group-focus-visible/process:visible motion-reduce:transition-none";
+    "invisible size-3.5 shrink-0 -rotate-90 transition-[rotate,transform,visibility] group-hover/process:visible group-focus-visible/process:visible motion-reduce:transition-none";
 
 export const agentThinkStepExpandedPanelClassName =
     "grid max-h-[280px] min-w-0 gap-2 overflow-y-auto overscroll-contain border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere] [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]";
