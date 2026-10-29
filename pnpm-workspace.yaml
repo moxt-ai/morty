@@ -7,7 +7,24 @@ minimumReleaseAgeExclude:
   - '@moxt-ai/mobius-sdk@0.0.39'
 
 overrides:
+  'source-map-js@>=1.0.0 <1.2.2': 1.2.2
+  'zod@>=4.0.0 <4.6.6': 4.6.7
+  # The current Vite plugin pins an older Miniflare; retain its API and apply
+  # patched leaf releases while its next version is inside the release-age gate.
+  'undici@>=7.0.0 <7.30.1': 7.30.1
+  'sharp@>=0.35.0 <0.35.5': 0.35.5
+  'brace-expansion@>=5.0.0 <5.0.12': 5.0.12
+  'seroval@>=1.0.0 <1.6.11': 1.6.11
+  # Enforce security floors for Claude SDK/MCP transitive dependencies.
+  'body-parser@>=2.0.0 <2.4.0': 2.4.0
+  'fast-uri@>=3.0.0 <3.1.9': 3.1.9
+  'qs@>=6.7.0 <=6.16.0': 6.16.2
   '@agentclientprotocol/sdk': 1.4.0
+  # Drizzle's archived loader only uses the transformer (GHSA-67mh-4wv8-2f99).
+  '@esbuild-kit/core-utils@3.3.2>esbuild': 0.25.12
+  # Math/Markdown plugins still request 0.16; keep their renderer and CSS on the
+  # official security release until upstream ranges advance (GHSA-238p-pmpm-9mq7).
+  'katex@<0.18.2': 0.18.2
 
 catalog:
   '@biomejs/biome': 2.5.12
@@ -17,31 +34,31 @@ catalog:
   '@sentry/react': ^10.73.0
   '@sentry/vite-plugin': ^5.4.0
   '@tailwindcss/vite': ^4.3.3
-  '@tanstack/react-router': 1.170.32
+  '@tanstack/react-router': 1.170.46
   '@types/node': ^24.13.3
   '@types/pngjs': ^6.0.5
   '@types/qrcode': ^1.5.6
   '@types/react': 19.2.18
   '@types/react-dom': 19.2.7
   '@vitejs/plugin-react': ^6.1.1
-  '@vitest/coverage-istanbul': 4.1.11
+  '@vitest/coverage-istanbul': 4.1.12
   class-variance-authority: ^0.7.1
   clsx: ^2.1.1
   dependency-cruiser: 18.2.0
   drizzle-kit: 0.31.8
   drizzle-orm: ^0.45.2
-  esbuild: 0.25.12
+  esbuild: 0.28.2
   happy-dom: 21.0.4
-  hono: ^4.13.5
+  hono: ^4.13.14
   istanbul-lib-coverage: 3.2.2
   istanbul-lib-report: 3.0.1
   istanbul-reports: 3.2.0
   jsqr: ^1.4.0
-  katex: 0.16.47
-  knip: ^6.32.2
+  katex: 0.18.2
+  knip: ^6.43.0
   lucide-react: 1.42.0
   marked: 18.1.1
-  miniflare: 5.20261019.2-beta
+  miniflare: 5.20261023.1-beta
   pino: ^10.3.1
   playwright-core: ^1.64.1
   pngjs: ^7.0.0
@@ -56,9 +73,9 @@ catalog:
   tailwindcss: 4.3.3
   typescript: ^7.0.2
   valibot: 1.4.2
-  vite: 8.2.2
-  vitest: ^4.1.11
-  wrangler: 4.152.0
+  vite: 8.3.5
+  vitest: ^4.1.12
+  wrangler: 4.154.0
   zustand: 5.0.15
   '@streamdown/mermaid': 1.0.3
   '@streamdown/math': 1.0.2

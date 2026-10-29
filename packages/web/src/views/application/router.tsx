@@ -80,11 +80,11 @@ function RouteFailureContent({ error, onRetry }: { readonly error: Error; readon
     );
 }
 
-function RouteFailure({ error, reset }: { readonly error: Error; readonly reset: () => void }) {
+function RouteFailure({ error, reset }: { readonly error: unknown; readonly reset: () => void }) {
     const router = useRouter();
     return (
         <RouteFailureContent
-            error={error}
+            error={error instanceof Error ? error : new Error("The application could not be loaded.")}
             onRetry={() => {
                 reset();
                 void router.invalidate();
