@@ -9,14 +9,10 @@ test("Given generated Agent reply content, When it is running, Then Working has 
     await page.getByRole("textbox", { name: "Message" }).fill("interleaved compaction hold");
     await page.getByRole("button", { name: "Send message" }).click();
 
-    // Compaction renders inside a process segment that starts collapsed.
-    const processSummary = page.getByRole("button", { name: /^\d+ steps?/u });
-    await expect(processSummary).toBeVisible();
-    await processSummary.click();
-
     const compaction = page.getByRole("group", { name: "Context compaction" });
     const working = page.getByRole("status", { name: "Agent is working" });
     await expect(compaction).toBeVisible();
+    await expect(page.getByRole("button", { name: /^\d+ steps?/u })).toHaveCount(0);
     await expect(working).toBeVisible();
 
     const gap = await page.evaluate(() => {
