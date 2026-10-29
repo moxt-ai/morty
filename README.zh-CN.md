@@ -57,15 +57,13 @@ Complete setup without asking questions.
 
 ## 已知限制
 
-- **不要在终端和 Morty 之间来回切换地操作同一个会话。** Morty 打开会话后，Mobius 会用本机上
-  一份常驻副本来服务它，不再重新读取 Agent 自己的原始记录。单向交接没问题；来回切换会让两边
-  各走各的：
-  - **Claude Code** 和 **Pi** 会悄悄分叉。一边发的消息在另一边看不到，Agent 的上下文里也没有。
-  - **Codex** 不分叉，但 Morty 打开过该 thread 之后，终端会被拒绝（`thread ... already has an
-    active writer`），最长两小时。执行 `mobius quit` 可以立即释放。
-
-  跟踪于 [#915](https://github.com/moxt-ai/morty/issues/915)。修复之前：在一侧做完再换到另一
-  侧；Codex 在终端恢复不了时执行 `mobius quit`。
+- **在 Morty 里继续之前，先退出终端里的会话；回到电脑后，再重新恢复它。** 用
+  `claude --resume`、`pi --continue` 或 `codex resume` 打开的终端会话里做的事，Morty
+  都能接上。但一直开着没退出的终端会话保留的是它自己的那份对话：看不到你在 Morty 里发的
+  消息，**Claude Code** 和 **Pi** 在那里发下一条消息时还会让对话分叉。
+- **Codex 同一时间只允许一个应用写入同一个 thread。** 在 Morty 里用过某个 thread 之后，
+  如果终端提示 `thread ... already has an active writer`，执行 `mobius release`。它会交还
+  闲置的会话，不会断开 Morty；之后在 Morty 里继续时会重新打开。
 
 ## Morty 如何处理你的数据
 
@@ -104,7 +102,8 @@ Morty 不会扣住你的会话。执行 `mobius quit`，这台电脑上所有 Mo
 | Claude Code | `claude --resume`，或用 `claude --continue` 直接接上最近一次 |
 | Pi | `pi --resume`，或用 `pi --continue` 直接接上最近一次 |
 
-之后执行 `mobius start` 即可重新连接 Morty。
+之后执行 `mobius start` 即可重新连接 Morty。如果只想把闲置的会话交还给终端、
+不断开 Morty，改用 `mobius release`。
 
 ## 安全
 
