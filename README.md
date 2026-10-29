@@ -104,12 +104,16 @@ running it. Read it yourself before you paste the prompt.
   (`@moxt-ai/mobius`) from npm. While it runs, Mobius checks npm for a new release
   every hour, installs it without running package scripts, and switches over once
   your Morty sessions have been idle for 30 minutes. `mobius quit` stops it.
-- **The website counts page views and reports errors.** morty.build sends page views
-  to Google Analytics and errors to Sentry. Both receive page paths without query
-  strings, so session IDs are not included, and Sentry events have user, cookie,
-  header, and request-body data removed. A bug report you choose to send also
-  includes diagnostics from your browser and your computer's daemon, plus any images
-  you attach.
+- **The website counts page views and setup steps, and reports errors.** morty.build
+  sends page views to Google Analytics and errors to Sentry. Both receive page paths
+  without query strings, so session IDs are not included, and Sentry events have user,
+  cookie, header, and request-body data removed. Google Analytics also receives two
+  setup clicks, copying the setup prompt and sending Morty's link to another device,
+  with no parameters. Morty's server counts each setup step (instructions fetched,
+  script downloaded, identity created, link issued, link opened) in its logs, recording
+  only the step and whether a browser or an agent made the request. A bug report you
+  choose to send also includes diagnostics from your browser and your computer's
+  daemon, plus any images you attach.
 
 ## Leaving
 

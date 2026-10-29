@@ -86,10 +86,13 @@ Complete setup without asking questions.
 - **Mobius 会自动更新。** 安装程序从 npm 安装 Mobius CLI（`@moxt-ai/mobius`）。运行期间，
   Mobius 每小时检查一次 npm 上的新版本，安装时不执行包脚本，并在你的 Morty 会话空闲
   30 分钟后切换到新版本。`mobius quit` 可以停止它。
-- **网站会统计页面访问并上报错误。** morty.build 把页面访问发送给 Google Analytics，把错误
-  发送给 Sentry。两者收到的页面路径都不带查询参数，因此不包含会话 ID；Sentry 事件还会去掉
-  用户、cookie、请求头和请求体数据。你主动提交的 bug 报告还会附带浏览器和你电脑上 daemon
-  的诊断信息，以及你附上的图片。
+- **网站会统计页面访问和 setup 步骤，并上报错误。** morty.build 把页面访问发送给 Google
+  Analytics，把错误发送给 Sentry。两者收到的页面路径都不带查询参数，因此不包含会话 ID；
+  Sentry 事件还会去掉用户、cookie、请求头和请求体数据。Google Analytics 还会收到两种不带
+  任何参数的 setup 点击：复制 setup 提示词，以及把 Morty 链接发送到另一台设备。Morty 的
+  服务器会在日志里统计每个 setup 步骤（获取说明、下载脚本、创建身份、签发链接、打开链接），
+  只记录步骤本身以及请求来自浏览器还是 Agent。你主动提交的 bug 报告还会附带浏览器和你电脑上
+  daemon 的诊断信息，以及你附上的图片。
 
 ## 离开
 
