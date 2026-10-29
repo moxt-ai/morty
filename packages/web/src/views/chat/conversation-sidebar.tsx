@@ -34,7 +34,10 @@ import { cn } from "../../lib/utils.ts";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
-import type { ConversationDirectoryStore } from "../../view-models/chat/conversation-directory-store.ts";
+import {
+    type ConversationDirectoryStore,
+    conversationDirectorySessions,
+} from "../../view-models/chat/conversation-directory-store.ts";
 import { type ConversationGroup, groupConversationsByUpdatedAt } from "../../view-models/chat/conversation-groups.ts";
 import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
 import { pendingExecutionContext, sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
@@ -358,6 +361,7 @@ export function ConversationSidebar({
     const nativeAgents = runtime === null ? [] : nativeSessionAgentTabs(runtime);
     const directory = useStore(workspace.directory, (state) => state.state);
     const archive = useStore(workspace.directory, (state) => state.archive);
+    const titles = useStore(workspace.titles, (state) => state.titles);
     const calendarDay = useStore(workspace.directory, (state) => state.calendarDay);
 
     const sessionStatuses = useStore(workspace.statuses, (state) => state.statuses);
@@ -380,10 +384,7 @@ export function ConversationSidebar({
     const measureNetwork = () => {
         void diagnostic.measure(workspace.operationsSignal()).catch(() => undefined);
     };
-    const sessions =
-        directory.kind === "ready" || directory.kind === "refreshing" || directory.kind === "stale"
-            ? directory.sessions
-            : null;
+    const sessions = conversationDirectorySessions(directory, titles);
     const conversationGroups = sessions === null ? null : groupConversationsByUpdatedAt(sessions, calendarDay);
     const refreshing = directory.kind === "refreshing";
     const openSession = (session: ManagedChatSession) => {
@@ -767,6 +768,7 @@ export function ConversationSidebar({
                                         {dialogStore !== null && (
                                             <NativeSessionDialog
                                                 store={dialogStore}
+                                                sessions={sessions ?? []}
                                                 agents={nativeAgents}
                                                 onClose={dialogs.getState().closeNativeDialog}
                                                 bugReportDialog={workspace.bugReportDialog}

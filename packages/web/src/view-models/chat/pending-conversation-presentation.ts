@@ -1,19 +1,18 @@
 import { type BotChatHomeStore, botConnectionStatus } from "./bot-chat-home-store.ts";
 import { selectedConversationId } from "./conversation-selection-machine.ts";
+import { type SessionTitles, sessionTitle } from "./session-titles-store.ts";
 
 /** A selected conversation is never presented as a new draft while its remote read is pending. */
-export function pendingConversationPresentation(home: BotChatHomeStore): {
+export function pendingConversationPresentation(
+    home: BotChatHomeStore,
+    titles: SessionTitles,
+): {
     readonly title: string;
     readonly recovery: { readonly title: string; readonly description: string } | null;
 } {
     const selection = home.selection;
     const id = selectedConversationId(selection);
-    const title =
-        selection.kind === "draft"
-            ? "New session"
-            : home.rememberedSession?.id === id
-              ? home.rememberedSession.title
-              : "Existing session";
+    const title = selection.kind === "draft" ? "New session" : sessionTitle(titles, id, "Existing session");
     if (
         selection.kind === "draft" ||
         selection.kind === "ready" ||

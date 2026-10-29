@@ -16,10 +16,11 @@ import { Spinner } from "../../components/ui/spinner.tsx";
 import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
+import type { ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { DaemonDiagnosticsSource } from "../../services/diagnostics/browser-diagnostics.ts";
 import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-store.ts";
 import type { NativeSessionAgent } from "../../view-models/chat/native-session-agents.ts";
-import type { NativeSessionStore } from "../../view-models/chat/native-session-store.ts";
+import { type NativeSessionStore, nativeSessionPresentation } from "../../view-models/chat/native-session-store.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { MobiusSessionMessage } from "./mobius-session-message.tsx";
@@ -168,6 +169,7 @@ function NativeSessionPreviewSkeleton() {
 
 export function NativeSessionDialog({
     store,
+    sessions,
     agents,
     onClose,
     bugReportDialog,
@@ -175,13 +177,14 @@ export function NativeSessionDialog({
 }: {
     /** Created by the owner when the dialog opens; it starts discovery itself. */
     readonly store: StoreApi<NativeSessionStore>;
+    readonly sessions: readonly ManagedChatSession[];
     /** The agent tabs, as the Runtime configuration the page follows offers them. */
     readonly agents: readonly NativeSessionAgent[];
     readonly onClose: () => void;
     readonly bugReportDialog: BugReportDialogStore;
     readonly daemonSource: DaemonDiagnosticsSource;
 }) {
-    const model = useExternalStore(store);
+    const model = nativeSessionPresentation(useExternalStore(store), sessions);
     const diagnostics: DaemonDiagnosticsSource = {
         ...daemonSource,
         sessionId: null,

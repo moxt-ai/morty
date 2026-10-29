@@ -12,8 +12,6 @@ import {
     centralSessionStorage,
     newConversationDraftEntry,
     newConversationUnsentMessageEntry,
-    type RememberedSession,
-    rememberedSessionEntry,
 } from "../../services/session-storage/central-session-storage.ts";
 import { formatError } from "../format-error.ts";
 import { createComposerAttachmentStore } from "./composer-attachment-store.ts";
@@ -25,6 +23,7 @@ import {
     transitionFirstMessages,
 } from "./conversation-creation-machine.ts";
 import {
+    type ConversationSelectionEvent,
     type ConversationSelectionState,
     type ConversationTarget,
     selectedConversationId,
@@ -34,8 +33,9 @@ import { createConversationSessionStore } from "./conversation-session-store.ts"
 import type { OpenMobiusSession } from "./open-session.ts";
 import type { RuntimeObservation } from "./runtime-recovery.ts";
 import { prependToDraft } from "./session-delivery-store.ts";
+import type { SessionTitles, SessionTitlesStore } from "./session-titles-store.ts";
 
-export type BotChatHomeStoreApi = ReturnType<typeof createBotChatHomeStore>;
+export type BotChatHomeStoreApi = Omit<ReturnType<typeof createBotChatHomeStore>, "setState">;
 
 type SetupReason = "unconfigured" | "agent-missing" | "runtime-offline" | "agent-required";
 
@@ -131,7 +131,6 @@ export interface BotChatHomeStore {
     readonly networkAvailable: boolean;
     readonly setNetworkAvailable: (available: boolean) => void;
     readonly selection: ConversationSelectionState;
-    readonly rememberedSession: RememberedSession | null;
     readonly creation: ConversationCreationState;
     /** First messages waiting to enter their Session's delivery workflow, whichever is on screen. */
     readonly firstMessages: FirstMessages;
@@ -153,7 +152,9 @@ export interface BotChatHomeStore {
     readonly setDraft: (draft: string) => void;
     readonly showPairingDialog: () => void;
     readonly closePairingDialog: () => void;
-    readonly updateConversationTitle: (sessionId: string, title: string) => void;
+    /** Releases a mounted view's selection so its next attachment reads a fresh Session. */
+    readonly releaseSelection: () => boolean;
+    readonly reloadSelection: (signal: AbortSignal) => Promise<void>;
     /** Releases the first message to delivery, or back to an editable composer if preparation failed. */
     readonly initialMessageDequeued: (conversationId: string, commandId: string) => void;
     readonly createConversation: (signal: AbortSignal) => Promise<boolean>;
@@ -239,7 +240,7 @@ export const createBotChatHomeStore = (
     >,
     options: {
         readonly botId: string;
-        readonly identityKey: string | null;
+        readonly titles: SessionTitlesStore;
         readonly draftConfiguration: () => ChatDraftConfiguration | null;
         readonly entry?: "address" | "restore";
         /**
@@ -250,7 +251,6 @@ export const createBotChatHomeStore = (
             configuration: BotRuntimeConfiguration,
             observation: RuntimeObservation,
         ) => void;
-        readonly onRuntimeConfigurationUnavailable: () => void;
         /** Announced when the view failed only because the Runtime was unreachable and waits for it to be retried. */
         readonly onWaitingForRuntime: () => void;
         readonly now: () => number;
@@ -261,8 +261,6 @@ export const createBotChatHomeStore = (
         readonly onRestart: () => void;
         /** Announced when a created conversation joins the directory: the owner reloads it without reloading the home view. */
         readonly onDirectoryRefreshed: () => void;
-        /** Announced with the first-prompt title of a conversation this page created, before the directory lists it. */
-        readonly onConversationCreated: (conversationId: string, title: string) => void;
         /** Announced after a transition that selects a new draft: the owner reloads the draft controls. */
         readonly onDraftSelected: () => void;
         /** Announced after a transition that targets another conversation: the owner re-scopes the status watch. */
@@ -273,19 +271,13 @@ export const createBotChatHomeStore = (
 ) => {
     const botId = options.botId;
     const conversations = createConversationSessionStore(requests);
+    const titles = options.titles;
     const selection = initialSelection(options.url, options.createId);
     let restoredSessionId =
         options.entry === "restore" && selection.kind === "pending" && selection.target.kind === "session"
             ? selection.target.sessionId
             : null;
-    const {
-        onRestart,
-        onDirectoryRefreshed,
-        onConversationCreated,
-        onDraftSelected,
-        onSelectionTargeted,
-        onSelectionReady,
-    } = options;
+    const { onRestart, onDirectoryRefreshed, onDraftSelected, onSelectionTargeted, onSelectionReady } = options;
     return createStore<BotChatHomeStore>()((set, get) => {
         // Announced from the explicit transition sites: a ready selection
         // builds the pane for it, and every selection transition re-scopes
@@ -296,16 +288,27 @@ export const createBotChatHomeStore = (
                 selectedConversationId(selection).length > 0 ? selectedConversationId(selection) : null,
             );
             if (selection.kind === "ready") {
-                const rememberedSession = {
-                    id: selectedConversationId(selection),
-                    title: selection.session.entry.title,
-                };
-                set({ rememberedSession });
-                if (options.identityKey !== null) {
-                    centralSessionStorage.write(rememberedSessionEntry(options.identityKey), rememberedSession);
-                }
+                titles.getState().remember(selectedConversationId(selection));
                 onSelectionReady(selection);
             }
+        };
+        const acceptLoadedSelection = (
+            event: Extract<
+                ConversationSelectionEvent,
+                { readonly kind: "session-loaded" | "continued-session-loaded" }
+            >,
+            startedWith: SessionTitles,
+        ): void => {
+            const previous = get().selection;
+            const selection = transitionConversationSelection(previous, event);
+            if (selection === previous) {
+                return;
+            }
+            titles
+                .getState()
+                .sessionLoaded(event.session.result.ready.sessionId, event.session.entry.title, startedWith);
+            set({ selection });
+            announceSelection();
         };
         // A first message's reload recovery ends once its Session owns it or the user leaves its draft.
         const releaseUnsentFirstMessage = (commandId: string): void => {
@@ -333,7 +336,6 @@ export const createBotChatHomeStore = (
                               : null,
                 },
             });
-            options.onRuntimeConfigurationUnavailable();
         };
         return {
             composerAttachments: createComposerAttachmentStore(),
@@ -347,7 +349,6 @@ export const createBotChatHomeStore = (
                 set({ networkAvailable: available });
             },
             selection,
-            rememberedSession: null,
             creation: { kind: "draft" },
             firstMessages: new Map(),
             draft: "",
@@ -358,9 +359,8 @@ export const createBotChatHomeStore = (
             dismissNotice: () => set((current) => ({ notices: { ...current.notices, pairing: { kind: "hidden" } } })),
             load: async (signal) => {
                 signal.throwIfAborted();
-                if (options.identityKey !== null) {
-                    set({ rememberedSession: centralSessionStorage.read(rememberedSessionEntry(options.identityKey)) });
-                }
+                titles.getState().restore();
+                const startedWith = titles.getState().titles;
                 const starting = get();
                 if (starting.initialization.kind !== "ready") {
                     set({ initialization: { kind: "loading" } });
@@ -536,14 +536,7 @@ export const createBotChatHomeStore = (
                         });
                         const session = await requests.managedSession(botId, target.sessionId, signal);
                         signal.throwIfAborted();
-                        set((state) => ({
-                            selection: transitionConversationSelection(state.selection, {
-                                kind: "session-loaded",
-                                session,
-                                target,
-                            }),
-                        }));
-                        announceSelection();
+                        acceptLoadedSelection({ kind: "session-loaded", session, target }, startedWith);
                         phase = "watch";
                         await followConfigurationChanges(signal);
                         return;
@@ -625,14 +618,10 @@ export const createBotChatHomeStore = (
                                   );
                         signal.throwIfAborted();
                         options.navigation.showContinuedSession(session.result.ready.sessionId);
-                        set({
-                            selection: transitionConversationSelection(get().selection, {
-                                kind: "continued-session-loaded",
-                                session,
-                                target: currentTarget,
-                            }),
-                        });
-                        announceSelection();
+                        acceptLoadedSelection(
+                            { kind: "continued-session-loaded", session, target: currentTarget },
+                            startedWith,
+                        );
                         phase = "watch";
                         await followConfigurationChanges(signal);
                         return;
@@ -640,14 +629,7 @@ export const createBotChatHomeStore = (
                     if (currentTarget?.kind === "session") {
                         const session = await requests.managedSession(botId, currentTarget.sessionId, signal);
                         signal.throwIfAborted();
-                        set((current) => ({
-                            selection: transitionConversationSelection(current.selection, {
-                                kind: "session-loaded",
-                                session,
-                                target: currentTarget,
-                            }),
-                        }));
-                        announceSelection();
+                        acceptLoadedSelection({ kind: "session-loaded", session, target: currentTarget }, startedWith);
                         phase = "watch";
                         await followConfigurationChanges(signal);
                         return;
@@ -673,14 +655,10 @@ export const createBotChatHomeStore = (
                                 : "The Session could not be opened.",
                         );
                     }
-                    set((current) => ({
-                        selection: transitionConversationSelection(current.selection, {
-                            kind: "session-loaded",
-                            session: openedConversation.session,
-                            target: currentTarget,
-                        }),
-                    }));
-                    announceSelection();
+                    acceptLoadedSelection(
+                        { kind: "session-loaded", session: openedConversation.session, target: currentTarget },
+                        startedWith,
+                    );
                     phase = "watch";
                     await followConfigurationChanges(signal);
                 } catch (cause) {
@@ -692,13 +670,9 @@ export const createBotChatHomeStore = (
                         cause instanceof CloudApiError &&
                         ["NOT_FOUND", "SESSION_NOT_FOUND", "FORBIDDEN", "UNAUTHENTICATED"].includes(
                             cause.code.toUpperCase(),
-                        ) &&
-                        get().rememberedSession?.id === selectedConversationId(failedTarget)
+                        )
                     ) {
-                        set({ rememberedSession: null });
-                        if (options.identityKey !== null) {
-                            centralSessionStorage.remove(rememberedSessionEntry(options.identityKey));
-                        }
+                        titles.getState().forget(selectedConversationId(failedTarget));
                     }
                     if (
                         restoredSessionId !== null &&
@@ -842,21 +816,43 @@ export const createBotChatHomeStore = (
             },
             showPairingDialog: () => set({ pairingDialogOpen: true }),
             closePairingDialog: () => set({ pairingDialogOpen: false }),
-            updateConversationTitle: (sessionId, title) => {
-                set((state) => ({
-                    selection: transitionConversationSelection(state.selection, {
-                        kind: "session-title-updated",
-                        sessionId,
-                        title,
-                    }),
-                }));
-                const selection = get().selection;
-                if (selection.kind === "ready" && selection.session.result.ready.sessionId === sessionId) {
-                    const rememberedSession = { id: selectedConversationId(selection), title };
-                    set({ rememberedSession });
-                    if (options.identityKey !== null) {
-                        centralSessionStorage.write(rememberedSessionEntry(options.identityKey), rememberedSession);
+            releaseSelection: () => {
+                const current = get().selection;
+                if (current.kind !== "ready") {
+                    return false;
+                }
+                set({ selection: transitionConversationSelection(current, { kind: "reload-requested" }) });
+                return true;
+            },
+            reloadSelection: async (signal) => {
+                const current = get().selection;
+                if (current.kind !== "loading" || current.target.kind === "continue") {
+                    return;
+                }
+                const target = current.target;
+                const startedWith = titles.getState().titles;
+                try {
+                    signal.throwIfAborted();
+                    const session = await requests.managedSession(botId, selectedConversationId(current), signal);
+                    signal.throwIfAborted();
+                    if (get().selection === current) {
+                        acceptLoadedSelection({ kind: "session-loaded", session, target }, startedWith);
                     }
+                } catch (cause) {
+                    if (signal.aborted || get().selection !== current) {
+                        return;
+                    }
+                    set({
+                        selection: transitionConversationSelection(current, {
+                            kind: "session-load-failed",
+                            failure:
+                                isRuntimeConnectionFailure(cause) || isChatBridgeError(cause)
+                                    ? "connection"
+                                    : "unavailable",
+                            message: formatError(cause, "The Session could not be loaded."),
+                            target,
+                        }),
+                    });
                 }
             },
             initialMessageDequeued: (conversationId, commandId) =>
@@ -952,6 +948,7 @@ export const createBotChatHomeStore = (
                 }
                 signal.throwIfAborted();
                 const conversationId = access.conversationId;
+                titles.getState().created(conversationId, queuedMessage.summary);
                 // The conversation exists, so its first message belongs to it from now on, whatever is on screen.
                 // The page follows it only if the user is still on this draft.
                 const sending = get().creation;
@@ -1009,7 +1006,6 @@ export const createBotChatHomeStore = (
                 if (following) {
                     announceSelection();
                 }
-                onConversationCreated(conversationId, queuedMessage.summary);
                 onDirectoryRefreshed();
                 return true;
             },

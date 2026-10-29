@@ -16,7 +16,11 @@ import {
 import { textLinkClassName } from "../../components/ui/text-link.ts";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
-import type { ComputerChoice, ComputerSwitcherModel } from "../../view-models/chat/computer-switcher-store.ts";
+import {
+    type ComputerChoice,
+    type ComputerSwitcherModel,
+    computerSwitcherChoices,
+} from "../../view-models/chat/computer-switcher-store.ts";
 
 function connectionLabel(status: BotConnectionStatus): string {
     switch (status.kind) {
@@ -42,6 +46,10 @@ function choiceStatusLabel(status: ComputerChoice["status"]): string | null {
             return "Offline";
         case "unavailable":
             return "Unavailable";
+        case "connecting":
+            return "Connecting";
+        case "unpaired":
+            return "Not set up";
     }
 }
 
@@ -210,7 +218,7 @@ export function ComputerSwitcher({
     readonly onChooseCurrent?: () => void;
 }) {
     const state = useStore(model.store);
-    const choices = state.choices;
+    const choices = computerSwitcherChoices(state, name, status);
     const activeKey = model.activeKey;
     const listLoading = state.kind === "loading";
     const active = choices.find((choice) => choice.key === activeKey);
@@ -385,7 +393,7 @@ export function ComputerSwitcher({
 
 export function OnlineComputerAlternative({ model }: { readonly model: ComputerSwitcherModel }) {
     const { choices } = useStore(model.store);
-    const alternative = choices.find((choice) => choice.key !== model.activeKey && choice.status === "online");
+    const alternative = choices.find((choice) => choice.kind === "other" && choice.status === "online");
     return alternative === undefined ? null : (
         <a className={`mt-2 inline-flex text-xs font-medium ${textLinkClassName}`} href={alternative.href}>
             Switch to {alternative.name}

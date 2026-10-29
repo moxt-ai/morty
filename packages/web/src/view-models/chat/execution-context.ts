@@ -4,7 +4,7 @@ import { type BotChatHomeStore, homeCanStartConversation } from "./bot-chat-home
 import { connectionPresentation } from "./connection-presentation.ts";
 import { directoryName } from "./directory-name.ts";
 import type { DraftControlsStore } from "./draft-controls-store.ts";
-import type { OpenMobiusSession } from "./open-session.ts";
+import type { SelectedMobiusSession } from "./open-session.ts";
 import type { SessionConnection } from "./session-pane-store.ts";
 
 export type { ExecutionContext };
@@ -52,7 +52,7 @@ export function pendingExecutionContext(
 }
 
 function sessionHarnessIdentity(
-    session: OpenMobiusSession,
+    session: SelectedMobiusSession,
     configuration: BotRuntimeConfiguration | null,
 ): { readonly agentRef: string; readonly agent: string } {
     const agent = configuration?.runtime.agents.find((candidate) => candidate.agentRef === session.agentRef);
@@ -75,7 +75,7 @@ export function activeHarnessMark(
 }
 
 export function sessionExecutionContext(
-    session: OpenMobiusSession,
+    session: SelectedMobiusSession,
     home: BotChatHomeStore,
     connection: SessionConnection,
 ): ExecutionContext {

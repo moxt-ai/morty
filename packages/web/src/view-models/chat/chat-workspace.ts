@@ -1,33 +1,31 @@
 import type { StoreApi } from "zustand/vanilla";
-import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope, type IdentityScope } from "../../services/identity/identity-scope-url.ts";
 import { rememberComputerName, rememberComputerVisit } from "../../services/identity/remembered-computers.ts";
-import { isRuntimeConnectionFailure } from "../../services/management/management-api.ts";
 import {
     centralSessionStorage,
     sessionUnsentMessageEntry,
 } from "../../services/session-storage/central-session-storage.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import type { BugReportDialogStore } from "../bug-report-dialog-store.ts";
-import { formatError } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
 import { type BotChatHomeStoreApi, createBotChatHomeStore, homeWaitsForRuntime } from "./bot-chat-home-store.ts";
 import { createComposerAttachmentStore } from "./composer-attachment-store.ts";
 import type { ComputerSwitcherModel } from "./computer-switcher-store.ts";
 import { type ConversationDirectoryStore, createConversationDirectoryStore } from "./conversation-directory-store.ts";
-import type { ConversationSelectionState, SelectedConversationTarget } from "./conversation-selection-machine.ts";
-import { selectedConversationId, transitionConversationSelection } from "./conversation-selection-machine.ts";
+import type { ConversationSelectionState } from "./conversation-selection-machine.ts";
+import { selectedConversationId } from "./conversation-selection-machine.ts";
 import { type ConversationStatusStoreApi, createConversationStatusStore } from "./conversation-status-store.ts";
 import { createDraftControlsStore, type DraftControlsStore, draftConfiguration } from "./draft-controls-store.ts";
 import { createNetworkDiagnosticStore, type NetworkDiagnosticStore } from "./network-diagnostic-store.ts";
-import type { OpenMobiusSession } from "./open-session.ts";
+import type { SelectedMobiusSession } from "./open-session.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
 import { createRuntimeRecovery } from "./runtime-recovery.ts";
 import type { SessionActivityState } from "./session-activity-machine.ts";
 import { createSessionDeliveryStore, prependToDraft } from "./session-delivery-store.ts";
 import { createSessionPaneModel, type SessionPaneModel } from "./session-pane-store.ts";
+import { createSessionTitlesStore, type SessionTitlesStore } from "./session-titles-store.ts";
 import { createSidebarDialogs, type SidebarDialogs } from "./sidebar-dialogs.ts";
 
 interface ChatWorkspaceSidebar {
@@ -37,7 +35,7 @@ interface ChatWorkspaceSidebar {
 }
 
 interface ChatWorkspacePaneEntry {
-    readonly session: OpenMobiusSession;
+    readonly session: SelectedMobiusSession;
     readonly model: SessionPaneModel;
 }
 
@@ -53,6 +51,7 @@ export interface ChatWorkspace {
     /** The project location label source for the sidebar, when known. */
     readonly projectId: string | null;
     readonly home: BotChatHomeStoreApi;
+    readonly titles: SessionTitlesStore;
     readonly directory: StoreApi<ConversationDirectoryStore>;
     readonly statuses: ConversationStatusStoreApi;
     /** Harness and working-directory settings for the next draft message. */
@@ -159,18 +158,19 @@ export function createChatWorkspace(options: {
             rememberComputerVisit(options.rememberedIdentity, options.clock.now(), { kind: "home" });
         }
     };
-    const home = createBotChatHomeStore(requests, {
+    const titles: SessionTitlesStore = createSessionTitlesStore(
+        options.rememberedIdentity === undefined ? null : encodeIdentityScope(options.rememberedIdentity),
+    );
+    const home: BotChatHomeStoreApi = createBotChatHomeStore(requests, {
         botId,
-        identityKey: options.rememberedIdentity === undefined ? null : encodeIdentityScope(options.rememberedIdentity),
+        titles,
         draftConfiguration: () => draftConfiguration(draftControls.getState().settings),
         now: options.clock.now,
-        onRuntimeConfigurationUnavailable: () => options.computers?.invalidateCurrent(),
         onWaitingForRuntime: () => runtimeRecovery.failed(),
         createId: () => crypto.randomUUID(),
         navigation: historyNavigation(recordHome),
         entry: options.entry ?? "address",
         onRuntimeConfiguration: (configuration, observation) => {
-            options.computers?.updateCurrent(configuration);
             sidebar.dialogs.getState().runtimeChanged();
             void draftControls
                 .getState()
@@ -198,8 +198,6 @@ export function createChatWorkspace(options: {
             startDirectoryLoad();
         },
         onDirectoryRefreshed: () => startDirectoryLoad(),
-        onConversationCreated: (conversationId, title) =>
-            directory.getState().conversationCreated(conversationId, title),
         onSelectionReady: (selection) => {
             runtimeRecovery.working();
             replacePane(selection);
@@ -212,9 +210,9 @@ export function createChatWorkspace(options: {
         requests,
         (sessions) => {
             statuses.getState().directoryLoaded(botId, sessions, statusLifetime.signal);
-            sidebar.dialogs.getState().nativeDialog?.getState().titlesChanged();
         },
         options.clock,
+        titles,
         (sessionId) => {
             if (selectedConversationId(home.getState().selection) !== sessionId) {
                 return;
@@ -250,21 +248,6 @@ export function createChatWorkspace(options: {
             botId,
             requests,
             runtime: () => home.getState().runtimeConfiguration?.runtime ?? null,
-            nativeSessionTitle: (entry) => {
-                const current = directory.getState().state;
-                const sessions =
-                    current.kind === "ready" || current.kind === "refreshing" || current.kind === "stale"
-                        ? current.sessions
-                        : [];
-                // Several Morty sessions can link to one native session; prefer the most recently updated title.
-                const linked = sessions
-                    .filter((session) => entry.mobiusSessionIds.includes(session.id) && session.title.trim().length > 0)
-                    .sort(
-                        (left, right) =>
-                            right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id),
-                    );
-                return linked[0]?.title ?? (entry.title || "Untitled session");
-            },
             createTransfer: (signal) => {
                 if (options.createTransfer === undefined) {
                     return Promise.reject(new Error("Identity sharing is unavailable."));
@@ -394,71 +377,6 @@ export function createChatWorkspace(options: {
         },
     });
     const announcedViews = new WeakSet<HTMLElement>();
-    const loadSelectedSession = (target: SelectedConversationTarget): void => {
-        const sessionId = target.kind === "conversation" ? target.conversationId : target.sessionId;
-        // Capture this attempt's signal: navigation restarts the home load and
-        // replaces chatLifetime with a fresh controller while this request is
-        // still in flight. Both callbacks must validate the attempt they were
-        // issued with, so a superseded read can never publish state — least of
-        // all a failure — for the newer attempt that replaced it.
-        const attempt = chatLifetime.signal;
-        void requests
-            .managedSession(botId, sessionId, attempt)
-            .then((session) => {
-                if (attempt.aborted) {
-                    return;
-                }
-                const current = home.getState().selection;
-                if (
-                    current.kind === "loading" &&
-                    current.target.kind !== "continue" &&
-                    selectedConversationId(current) === sessionId
-                ) {
-                    home.setState((state) => ({
-                        selection: transitionConversationSelection(state.selection, {
-                            kind: "session-loaded",
-                            session,
-                            target,
-                        }),
-                    }));
-                    // The re-attach read replaces the pane through the same
-                    // entry as a ready transition inside home.load(): the
-                    // previous pane may hold operation locks cancelled by its
-                    // own stop(), and the freshly read session record must
-                    // build the next model instead of the stopped one.
-                    const ready = home.getState().selection;
-                    if (ready.kind === "ready") {
-                        replacePane(ready);
-                    }
-                }
-            })
-            .catch((cause: unknown) => {
-                if (attempt.aborted) {
-                    return;
-                }
-                const current = home.getState().selection;
-                if (
-                    current.kind === "loading" &&
-                    current.target.kind !== "continue" &&
-                    selectedConversationId(current) === sessionId
-                ) {
-                    // Surface the failure so the Reconnect control renders; its
-                    // retry transitions to loading and announces a restart
-                    // of the full home load.
-                    home.setState((state) => ({
-                        selection: transitionConversationSelection(state.selection, {
-                            kind: "session-load-failed",
-                            failure:
-                                isRuntimeConnectionFailure(cause) || isChatBridgeError(cause)
-                                    ? "connection"
-                                    : "unavailable",
-                            message: formatError(cause, "The Session could not be loaded."),
-                            target: current.target,
-                        }),
-                    }));
-                }
-            });
-    };
     // A loading selection at attach time means a previous view released it on
     // detach — the initial entry load is owned by home.load, so only a
     // re-attach re-reads the session itself. This gates the second read so a
@@ -486,19 +404,15 @@ export function createChatWorkspace(options: {
             // omits the creation-time access envelope — the pane's live
             // reconciliation restores running-turn state from the service.
             releasedByDetach = false;
-            loadSelectedSession(selection.target);
+            void home.getState().reloadSelection(chatLifetime.signal);
         }
         return () => {
             announcedViews.delete(node);
             // A chat view detaching releases its ready selection so the next
             // attached view re-reads the session instead of rendering the
             // snapshot captured by the view instance that just went away.
-            const current = home.getState().selection;
-            if (current.kind === "ready") {
+            if (home.getState().releaseSelection()) {
                 releasedByDetach = true;
-                home.setState((state) => ({
-                    selection: transitionConversationSelection(state.selection, { kind: "reload-requested" }),
-                }));
             }
         };
     };
@@ -568,11 +482,7 @@ export function createChatWorkspace(options: {
             onInitialMessageDequeued: (commandId) => home.getState().initialMessageDequeued(sessionId, commandId),
             onStatusChange: (status) =>
                 statuses.getState().statusChanged(botId, sessionId, status, statusLifetime.signal),
-            onTitleChange: (id, title) => {
-                home.getState().updateConversationTitle(id, title);
-                directory.getState().titleObserved(id, title);
-                sidebar.dialogs.getState().nativeDialog?.getState().titlesChanged();
-            },
+            titles,
         });
         if (nextDraft !== null || unsent !== null) {
             const draft = nextDraft ?? model.store.getState().draft;
@@ -620,6 +530,7 @@ export function createChatWorkspace(options: {
         projectId: options.projectId ?? null,
         directory,
         home,
+        titles,
         statuses,
         draftControls,
         sidebar,

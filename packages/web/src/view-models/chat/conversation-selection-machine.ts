@@ -1,6 +1,6 @@
-import type { OpenMobiusSession } from "./open-session.ts";
+import { type OpenMobiusSession, type SelectedMobiusSession, selectedSession } from "./open-session.ts";
 
-export type SelectedConversationTarget =
+type SelectedConversationTarget =
     | { readonly kind: "conversation"; readonly conversationId: string }
     | { readonly kind: "session"; readonly sessionId: string };
 
@@ -25,7 +25,7 @@ export type ConversationSelectionState =
     | { readonly kind: "loading"; readonly target: ConversationTarget }
     | {
           readonly kind: "ready";
-          readonly session: OpenMobiusSession;
+          readonly session: SelectedMobiusSession;
           readonly target: SelectedConversationTarget;
       }
     | {
@@ -52,7 +52,6 @@ export type ConversationSelectionEvent =
       }
     | { readonly kind: "retry-requested" }
     | { readonly kind: "reload-requested" }
-    | { readonly kind: "session-title-updated"; readonly sessionId: string; readonly title: string }
     | {
           readonly kind: "continued-session-loaded";
           readonly session: OpenMobiusSession;
@@ -92,7 +91,7 @@ export function transitionConversationSelection(
             return state.kind === "pending" ? { kind: "loading", target: state.target } : state;
         case "session-loaded":
             return state.kind === "loading" && sameTarget(state.target, event.target)
-                ? { kind: "ready", session: event.session, target: event.target }
+                ? { kind: "ready", session: selectedSession(event.session), target: event.target }
                 : state;
         case "session-load-failed":
             return (state.kind === "pending" || state.kind === "loading") && sameTarget(state.target, event.target)
@@ -102,23 +101,13 @@ export function transitionConversationSelection(
             return state.kind === "failed" ? { kind: "pending", target: state.target } : state;
         case "reload-requested":
             return state.kind === "ready" ? { kind: "loading", target: state.target } : state;
-        case "session-title-updated":
-            return state.kind === "ready" && state.session.result.ready.sessionId === event.sessionId
-                ? {
-                      ...state,
-                      session: {
-                          ...state.session,
-                          entry: { ...state.session.entry, title: event.title },
-                      },
-                  }
-                : state;
         case "continued-session-loaded":
             return state.kind === "loading" &&
                 state.target.kind === "continue" &&
                 sameTarget(state.target, event.target)
                 ? {
                       kind: "ready",
-                      session: event.session,
+                      session: selectedSession(event.session),
                       target: { kind: "session", sessionId: event.session.result.ready.sessionId },
                   }
                 : state;
@@ -126,7 +115,7 @@ export function transitionConversationSelection(
             return state.kind === "draft"
                 ? {
                       kind: "ready",
-                      session: event.session,
+                      session: selectedSession(event.session),
                       target: { conversationId: event.conversationId, kind: "conversation" },
                   }
                 : state;
