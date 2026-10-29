@@ -1,4 +1,4 @@
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Download, Maximize2 } from "lucide-react";
 import { Lexer } from "marked";
 import {
     defaultRehypePlugins,
@@ -48,9 +48,19 @@ function StreamdownCheckIcon({ className, size: _size, ...props }: StreamdownIco
     return <Check aria-hidden="true" className={cn("size-3.5", className)} {...props} />;
 }
 
+function StreamdownDownloadIcon({ className, size: _size, ...props }: StreamdownIconProps) {
+    return <Download aria-hidden="true" className={cn("size-3.5", className)} {...props} />;
+}
+
+function StreamdownMaximize2Icon({ className, size: _size, ...props }: StreamdownIconProps) {
+    return <Maximize2 aria-hidden="true" className={cn("size-3.5", className)} {...props} />;
+}
+
 const STREAMDOWN_ICONS = Object.freeze({
     CheckIcon: StreamdownCheckIcon,
     CopyIcon: StreamdownCopyIcon,
+    DownloadIcon: StreamdownDownloadIcon,
+    Maximize2Icon: StreamdownMaximize2Icon,
 });
 
 const STREAMDOWN_FENCED_CODE_BLOCK_CLASSES = [
@@ -362,9 +372,45 @@ export function AgentMarkdownContent({
                     "[&_hr]:border-t-[0.5px]",
                     "[&_a]:font-medium [&_a]:text-primary [&_a]:transition-colors [&_a]:hover:text-primary-hover [&_a]:active:text-primary-active",
                     "[&_code]:font-mono",
-                    "[&_table]:text-[13px] [&_th]:text-[13px] [&_th]:px-2.5 [&_th]:py-1.5 [&_td]:text-[13px] [&_td]:px-2.5 [&_td]:py-1.5",
-                    "[&_[data-streamdown=table-wrapper]]:!border-0 [&_[data-streamdown=table-wrapper]]:!bg-muted",
-                    "[&_[data-streamdown=table-wrapper]>div:last-child]:!border-0",
+                    "[&_table]:text-[13px] [&_th]:text-[13px] [&_th]:px-2.5 [&_[data-streamdown=table-header-cell]]:py-2.5 [&_td]:text-[13px] [&_td]:px-2.5 [&_[data-streamdown=table-cell]]:py-2.5",
+                    "[&_[data-streamdown=table-wrapper]]:relative [&_[data-streamdown=table-wrapper]]:!border-0 [&_[data-streamdown=table-wrapper]]:!bg-transparent [&_[data-streamdown=table-wrapper]]:!p-0",
+                    // The download/fullscreen actions float over the table's top-right
+                    // corner and appear on wrapper hover or keyboard focus. `:not(:last-child)`
+                    // keeps the selector off the scroll container when no action row renders,
+                    // and the chip background matches the header cells. `.flex` (the row's own
+                    // streamdown class) makes these rules win on specificity, not on stylesheet
+                    // order: Tailwind sorts equal-specificity utilities by its own criteria, so
+                    // a stale or competing candidate emitted later would otherwise override them.
+                    // Hover/active fills stack as background-image layers over the opaque
+                    // bg-background color, so the chip never lets content underneath show through.
+                    // A solid tint layer repeats its color stop: a one-stop linear-gradient is
+                    // invalid CSS and browsers would drop the whole background-image.
+                    // The row itself is a 36px pill — 4px padding around the 28px buttons, so
+                    // left/right padding equals the vertical padding, and the 10px radius is
+                    // concentric with the buttons' 6px — wearing the same chip as the buttons.
+                    // !top/!right keep the centered placement against stale-cache candidates
+                    // holding the older 6px offsets at equal specificity.
+                    "[&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)]:absolute [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)]:!top-0.5 [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)]:!right-0.5 [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)]:z-20 [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)]:h-9 [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)]:rounded-[10px] [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)]:bg-background [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)]:bg-[linear-gradient(color-mix(in_oklab,var(--muted)_80%,transparent),color-mix(in_oklab,var(--muted)_80%,transparent))] [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)]:px-1 [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)]:opacity-0 [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)]:pointer-events-none [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)]:transition-opacity [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)]:duration-150 [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)]:motion-reduce:transition-none",
+                    "[&_[data-streamdown=table-wrapper]:hover>div.flex:first-child:not(:last-child)]:opacity-100 [&_[data-streamdown=table-wrapper]:hover>div.flex:first-child:not(:last-child)]:pointer-events-auto [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)]:focus-within:opacity-100",
+                    "[&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_button:has(svg)]:flex [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_button:has(svg)]:size-7 [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_button:has(svg)]:items-center [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_button:has(svg)]:justify-center [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_button:has(svg)]:!p-0 [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_button:has(svg)]:rounded-md [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_button:has(svg)]:bg-background [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_button:has(svg)]:bg-[linear-gradient(color-mix(in_oklab,var(--muted)_80%,transparent),color-mix(in_oklab,var(--muted)_80%,transparent))] [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_button:has(svg)]:text-morty-text-3 [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_button:has(svg)]:hover:bg-[linear-gradient(var(--morty-fill-opacity-2),var(--morty-fill-opacity-2)),linear-gradient(color-mix(in_oklab,var(--muted)_80%,transparent),color-mix(in_oklab,var(--muted)_80%,transparent)),linear-gradient(var(--background),var(--background))] [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_button:has(svg)]:hover:text-foreground [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_button:has(svg)]:active:bg-[linear-gradient(var(--morty-fill-opacity-3),var(--morty-fill-opacity-3)),linear-gradient(color-mix(in_oklab,var(--muted)_80%,transparent),color-mix(in_oklab,var(--muted)_80%,transparent)),linear-gradient(var(--background),var(--background))] [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_button:has(svg)]:active:text-foreground [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_button:has(svg)]:keyboard-focus:focus-visible:ring-[3px] [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_button:has(svg)]:keyboard-focus:focus-visible:ring-ring/60",
+                    // The download dropdown (CSV/Markdown) is plain streamdown markup inside the
+                    // action row; restyle it to the app menu recipe: overlay-surface panel
+                    // (border-white, overlay radius + shadow, 6px trigger offset) with the
+                    // rounded-full h-9 items and morty-fill hover/active used by app menus.
+                    "[&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute]:mt-1.5 [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute]:rounded-overlay [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute]:border-white [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute]:p-1.5 [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute]:text-foreground [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute]:shadow-[0_16px_42px_rgba(0,0,0,0.14)] [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute]:animate-cloud-enter [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute]:motion-reduce:animate-none",
+                    "[&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute>button]:flex [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute>button]:h-9 [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute>button]:w-full [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute>button]:items-center [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute>button]:justify-start [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute>button]:!px-3 [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute>button]:rounded-full [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute>button]:bg-transparent [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute>button]:bg-none [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute>button]:text-foreground [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute>button]:hover:bg-morty-fill-opacity-2 [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute>button]:active:bg-morty-fill-opacity-3 [&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute>button]:motion-reduce:transition-none",
+                    // No height cap: the table renders at full height and vertical scrolling
+                    // belongs to the message list, so no internal vertical scrollbar appears.
+                    // The container keeps overflow-x as the safety net for wide tables.
+                    "[&_[data-streamdown=table-wrapper]>div:last-child]:!border-border/50 [&_[data-streamdown=table-wrapper]>div:last-child]:!max-h-none",
+                    "[&_[data-streamdown=table-row]]:!border-border/50",
+                    // Collapsed grid borders paint on the table grid rather than on the header
+                    // cells, so the divider under the header is an inset shadow instead, and the
+                    // header tint stacks on an opaque background matching what bg-muted/80 over
+                    // the container's bg-background renders.
+                    "[&_[data-streamdown=table-header]]:border-b-0",
+                    "[&_[data-streamdown=table-header-cell]]:bg-background [&_[data-streamdown=table-header-cell]]:bg-[linear-gradient(color-mix(in_oklab,var(--muted)_80%,transparent),color-mix(in_oklab,var(--muted)_80%,transparent))]",
+                    "[&_[data-streamdown=table-header-cell]]:shadow-[inset_0_-0.5px_0_color-mix(in_oklab,var(--border)_50%,transparent)]",
                     STREAMDOWN_FENCED_CODE_BLOCK_CLASSES,
                     className,
                 )}
