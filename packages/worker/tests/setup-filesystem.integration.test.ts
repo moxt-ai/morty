@@ -482,7 +482,6 @@ for (const [failure, scenario] of starterFailures) {
                         agent_ref: "codex",
                         agent_config_revision: 1,
                         workspace: directory,
-                        entry: "setup",
                     }),
                     { mode: 0o600 },
                 );

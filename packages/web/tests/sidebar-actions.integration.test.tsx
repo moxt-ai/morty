@@ -2,7 +2,7 @@ import { getByRole } from "@testing-library/dom";
 import { act, fireEvent } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { createTestApp } from "./infra/test-app.tsx";
+import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 
 test("Given the chat sidebar, When the user clicks an icon action and closes what it opened, Then the action releases focus", {
     timeout: 30_000,
@@ -47,4 +47,28 @@ test("Given the chat sidebar, When a keyboard user opens and closes sharing, The
     await app.user.keyboard("{Escape}");
     expect(document.body.contains(sharing)).toBe(false);
     expect(document.activeElement).toBe(share);
+});
+
+test("Given the mobile chat navigation, When its header renders, Then it leaves eight pixels above and below the controls", {
+    timeout: 30_000,
+}, async () => {
+    const desktopViewport = { height: window.innerHeight, width: window.innerWidth };
+    window.happyDOM.setViewport({ height: 844, width: 413 });
+    let app: TestApp | null = null;
+    try {
+        app = await createTestApp({ connectAgent: true });
+        await app.queryElementByTestId(dataTestId.messageComposer);
+        const header = getByRole(document.body, "button", { name: "New Session" }).closest("header");
+        expect(header).toBeInstanceOf(HTMLElement);
+        if (!(header instanceof HTMLElement)) {
+            throw new Error("Expected the mobile chat navigation header");
+        }
+        expect(header.classList.contains("py-0")).toBe(true);
+        expect(header.classList.contains("max-sm:py-2")).toBe(true);
+    } finally {
+        if (app !== null) {
+            await app.close();
+        }
+        window.happyDOM.setViewport(desktopViewport);
+    }
 });

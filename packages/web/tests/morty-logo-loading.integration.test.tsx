@@ -1,7 +1,7 @@
 import { fireEvent, getByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { createTestApp } from "./infra/test-app.tsx";
+import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 
 test("Given the Morty logo is still loading, When it finishes loading, Then the placeholder is replaced by the mark without moving the navigation", async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -22,4 +22,32 @@ test("Given the Morty logo is still loading, When it finishes loading, Then the 
     expect(logo?.getAttribute("data-state")).toBe("loaded");
     expect(logo?.querySelector('[aria-hidden="true"]')).toBeNull();
     expect(mark.className).toContain("opacity-100");
+});
+
+test("Given the mobile chat navigation, When the Morty mark renders, Then the logo is 24 by 24", {
+    timeout: 30_000,
+}, async () => {
+    const desktopViewport = { height: window.innerHeight, width: window.innerWidth };
+    window.happyDOM.setViewport({ height: 844, width: 413 });
+    let app: TestApp | null = null;
+    try {
+        app = await createTestApp({ connectAgent: true });
+        await app.queryElementByTestId(dataTestId.messageComposer);
+        const navigationButton = getByRole(document.body, "button", { name: "Open navigation" });
+        const logo = navigationButton.querySelector(`[data-testid="${dataTestId.mortyLogo}"]`);
+        expect(logo).toBeInstanceOf(HTMLElement);
+        if (!(logo instanceof HTMLElement)) {
+            throw new Error("Expected the mobile Morty mark");
+        }
+        expect(logo.style.width).toBe("24px");
+        expect(logo.style.height).toBe("24px");
+        const mark = logo.querySelector("img");
+        expect(mark?.getAttribute("width")).toBe("24");
+        expect(mark?.getAttribute("height")).toBe("24");
+    } finally {
+        if (app !== null) {
+            await app.close();
+        }
+        window.happyDOM.setViewport(desktopViewport);
+    }
 });

@@ -54,6 +54,7 @@ export function FollowLatestScrollArea({
     const owned = useRef<HTMLDivElement | null>(null);
     const scrollArea = container ?? owned;
     const following = useRef(true);
+    const lastTop = useRef(0);
     const pagination = useLoadMoreOnScroll({
         container: scrollArea,
         hasMore: loadOlder?.hasMore ?? false,
@@ -126,7 +127,18 @@ export function FollowLatestScrollArea({
             ref={scrollArea}
             onScroll={(event) => {
                 const element = event.currentTarget;
-                following.current = element.scrollHeight - element.scrollTop - element.clientHeight < followThreshold;
+                const top = element.scrollTop;
+                const distanceFromLatest = element.scrollHeight - top - element.clientHeight;
+                // Any upward move away from the bottom is the user leaving the latest content, even when the
+                // whole overflow fits inside the follow threshold; without this, a short conversation pins
+                // every user scroll back to the bottom. Programmatic pins and shrinking content land at the
+                // bottom (distance 0), so they keep following.
+                if (top < lastTop.current && distanceFromLatest > 0) {
+                    following.current = false;
+                } else if (distanceFromLatest < followThreshold) {
+                    following.current = true;
+                }
+                lastTop.current = top;
                 syncTopFade(element);
                 if (loadOlder !== undefined) {
                     pagination.checkScrollEdge(element, false);

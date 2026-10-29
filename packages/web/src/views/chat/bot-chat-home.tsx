@@ -228,7 +228,6 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                       (model.selection.kind === "pending" && model.initialization.kind === "loading")) &&
                   pendingConversation.recovery === null ? (
                     <MobiusSessionPaneLoading
-                        title={pendingConversation.title}
                         footer={
                             <BotChatComposer
                                 attachmentModel={attachmentModel}

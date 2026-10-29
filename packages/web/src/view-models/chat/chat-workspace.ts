@@ -211,6 +211,14 @@ export function createChatWorkspace(options: {
             sidebar.dialogs.getState().nativeDialog?.getState().titlesChanged();
         },
         options.clock,
+        (sessionId) => {
+            if (selectedConversationId(home.getState().selection) !== sessionId) {
+                return;
+            }
+            paneEntry?.model.stop();
+            paneEntry = null;
+            home.getState().newConversation();
+        },
     );
     const statuses = createConversationStatusStore(
         requests,

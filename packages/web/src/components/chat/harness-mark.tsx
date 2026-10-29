@@ -1,5 +1,6 @@
-import { LoaderCircle, SquareTerminal } from "lucide-react";
+import { SquareTerminal } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { dataTestId } from "../../data-testid.ts";
 
 /** Agent harness products with a distinct brand mark. */
 export type HarnessProduct = "claude" | "codex" | "pi" | "generic";
@@ -74,15 +75,24 @@ export function HarnessMark({
 }) {
     if (loading) {
         return (
-            <LoaderCircle
+            <span
                 aria-hidden="true"
                 className={cn(
-                    "shrink-0 animate-spin motion-reduce:animate-none",
+                    "inline-flex shrink-0 items-center justify-center",
                     appearance === "line" ? "size-4" : "size-5",
                     className,
                 )}
                 data-testid={testId}
-            />
+            >
+                {/* The mark occupies the same footprint the loaded glyph will, so settling does not move the title. */}
+                <span
+                    className={cn(
+                        "size-full animate-pulse bg-muted motion-reduce:animate-none",
+                        appearance === "line" ? "rounded-[4px]" : "rounded-[6px]",
+                    )}
+                    data-testid={dataTestId.harnessMarkSkeleton}
+                />
+            </span>
         );
     }
     const product = identifyHarnessProduct(agentRef, label);

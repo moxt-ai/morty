@@ -1,5 +1,5 @@
 import { getByRole, queryByRole } from "@testing-library/dom";
-import { expect, test } from "vitest";
+import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
@@ -117,4 +117,59 @@ test("Given a saved title differs from the native session listing, When reopenin
         ),
     );
     await reopened.waitForView(() => getByRole(renamedDialog, "heading", { name: "My renamed session" }));
+});
+
+test("Given a conversation is being reopened, When the title has not loaded yet, Then the header shows a skeleton instead of naming the conversation and withdrawing it", {
+    timeout: 60_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await sendPrompt(app, await readyComposer(app), "Reopen this conversation");
+    await app.waitForView(() => expect(directoryTitles(app)).toHaveLength(1));
+    const conversation = app.elementsByTestId(dataTestId.managedConversation)[0];
+    if (conversation === undefined) {
+        throw new Error("Expected the conversation in the directory");
+    }
+    await app.user.click(conversation);
+    await app.waitForView(() => expect(app.elementsByTestId(dataTestId.userMessage).length).toBeGreaterThan(0));
+
+    // A title that is already on screen while the messages are still loading is
+    // withdrawn again as soon as the loaded pane waits for its own read.
+    const statedTitles: string[] = [];
+    const read = () => {
+        const section = document.querySelector('section[aria-label="Conversation"]');
+        const header = section?.querySelector("header") ?? null;
+        if (header === null) {
+            return;
+        }
+        const messagesLoading =
+            section?.querySelector('[role="log"] [role="status"][aria-label="Loading messages"]') !== null;
+        const titleLoading = header.querySelector('[aria-label="Loading conversation title"]') !== null;
+        const stated = (header.textContent ?? "").trim();
+        if (messagesLoading === true && titleLoading === false && stated.length > 0 && !statedTitles.includes(stated)) {
+            statedTitles.push(stated);
+        }
+    };
+    const observer = new MutationObserver(read);
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    onTestFinished(() => observer.disconnect());
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.chatLanding)).not.toBeNull());
+    const reopened = app.elementsByTestId(dataTestId.managedConversation)[0];
+    if (reopened === undefined) {
+        throw new Error("Expected the conversation in the directory");
+    }
+    await app.user.click(reopened);
+    // The title is stated only once the same read that loads the messages has settled.
+    await app.waitForView(
+        () =>
+            expect(
+                document.querySelector(
+                    'section[aria-label="Conversation"] header [aria-label="Loading conversation title"]',
+                ),
+            ).toBeNull(),
+        30_000,
+    );
+    observer.disconnect();
+    expect(statedTitles).toEqual([]);
 });

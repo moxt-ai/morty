@@ -110,6 +110,68 @@ test("Given the agent sends separate adjacent messages, When the user reads the 
     });
 });
 
+test("Given a Markdown horizontal rule, When the response is rendered, Then its divider uses a half-pixel border", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected a controlled Agent Runtime");
+    }
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, "hold after first delta");
+    await app.waitForView(() => expect(document.body.textContent).toContain("Partial reply"));
+    await daemon.continueReply("hold after first delta", {
+        outcome: "complete",
+        output: [{ kind: "text", text: "\n\nAbove\n\n---\n\nBelow" }],
+    });
+    const rule = await app.waitForView(() => {
+        const element = document.querySelector('[data-streamdown="horizontal-rule"]');
+        if (!(element instanceof HTMLElement)) {
+            throw new Error("Expected the Markdown horizontal rule");
+        }
+        return element;
+    });
+    expect(rule.closest(".agent-markdown")?.className).toContain("[&_hr]:border-t-[0.5px]");
+});
+
+test("Given Markdown table and fenced code, When the response is rendered, Then their surfaces share the compact radii", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected a controlled Agent Runtime");
+    }
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    await sendPrompt(app, composer, "hold after first delta");
+    await app.waitForView(() => expect(document.body.textContent).toContain("Partial reply"));
+    await daemon.continueReply("hold after first delta", {
+        outcome: "complete",
+        output: [
+            {
+                kind: "text",
+                text: "\n\n| Syntax | Output |\n| --- | --- |\n| `code` | code |\n\n```text\n+------+\n| HTML |\n+------+\n```",
+            },
+        ],
+    });
+    await app.waitForView(() => {
+        expect(document.querySelector('[data-streamdown="table-wrapper"]')).not.toBeNull();
+        expect(document.querySelector('[data-streamdown="code-block-body"]')).not.toBeNull();
+    });
+    const markdown = document.querySelector(".agent-markdown");
+    expect(markdown?.className).toContain("[&_[data-streamdown=table-wrapper]]:!border-0");
+    expect(markdown?.className).toContain("[&_[data-streamdown=table-wrapper]]:!bg-muted");
+    expect(markdown?.className).toContain("[&_[data-streamdown=table-wrapper]>div:last-child]:!border-0");
+    expect(markdown?.className).toContain("[&_[data-streamdown=code-block-body]]:!rounded-[12px]");
+});
+
 test("Given an open code block, When the agent appends code, Then the visible block updates before the response completes", {
     timeout: 30_000,
 }, async () => {

@@ -351,7 +351,7 @@ test("Given an anonymous user, When machine access is shared, Then its expiring 
         await recoveryResponse.json(),
     ).token;
     const ended = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/remote-access`, {
+        new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/v1/browser-access`, {
             method: "DELETE",
             headers: { authorization: `Bearer ${remoteTokens[0]}` },
         }),
@@ -421,7 +421,7 @@ test("Given an anonymous user with a Machine, When a transfer link is redeemed, 
     });
 });
 
-test("Given the first browser for Morty, When remote access ends after a recovery token is created, Then the browser credential is revoked and recovery remains available", async () => {
+test("Given the first browser for Morty, When it retires its local credential after a recovery token is created, Then that credential is revoked and recovery remains available", async () => {
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
     const recoveryResponse = await worker.fetch(
@@ -435,7 +435,7 @@ test("Given the first browser for Morty, When remote access ends after a recover
     const recoveryToken = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
 
     const ended = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/identity/remote-access`, {
+        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/identity/v1/local-credential`, {
             method: "DELETE",
             headers: { authorization: `Bearer ${identity.token}` },
         }),
@@ -506,7 +506,7 @@ test("Given a browser that opened one link, When it opens another link for the s
     expect((await request("/session", later)).status).toBe(200);
     expect((await request("/session", phone)).status).toBe(200);
 
-    expect((await request("/identity/remote-access", later, { method: "DELETE" })).status).toBe(204);
+    expect((await request("/identity/v1/browser-access", later, { method: "DELETE" })).status).toBe(204);
 
     // Ending this browser's access ends every link it joined through, and what they granted.
     for (const code of [firstLink, secondLink]) {
@@ -557,7 +557,7 @@ test("Given two tabs of one browser open new links at once, When the browser lat
     ]);
 
     expect((await request("/session", held)).status).toBe(401);
-    expect((await request("/identity/remote-access", second, { method: "DELETE" })).status).toBe(204);
+    expect((await request("/identity/v1/browser-access", second, { method: "DELETE" })).status).toBe(204);
     for (const code of links) {
         expect((await redeem(code)).status).toBe(410);
     }

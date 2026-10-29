@@ -376,7 +376,11 @@ export class ChatService {
         if ("conversationKey" in input) {
             await this.#requireRuntimeAgent(scope, runtime.runtimeId, input.agentRef);
         } else if (!(await this.#ownsManagedSession(scope, input.conversationId))) {
-            throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
+            throw new PlatformProjectError(
+                "NOT_FOUND",
+                'This session is not in Morty Recent sessions. If you closed it in Morty, use "Open Session" to import or fork it again.',
+                404,
+            );
         }
         const access = await this.#platform.openChatSession(
             scope.projectId,
@@ -440,7 +444,11 @@ export class ChatService {
         await this.#withManagedSessionOperation(scope, sessionId, async () => {
             const bot = await this.#bot(scope);
             if (!(await this.#ownsManagedSession(scope, sessionId))) {
-                throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
+                throw new PlatformProjectError(
+                    "NOT_FOUND",
+                    'This session is not in Morty Recent sessions. If you closed it in Morty, use "Open Session" to import or fork it again.',
+                    404,
+                );
             }
             const runtime = await this.localRuntime(scope);
             return {
