@@ -90,6 +90,7 @@ jobs:
           VITE_SENTRY_DSN: ${{ vars.SENTRY_DSN }}
           VITE_SENTRY_ENVIRONMENT: ${{ inputs.environment }}
           VITE_SENTRY_RELEASE: morty@${{ inputs.revision }}
+          MORTY_SETUP_REVISION: ${{ inputs.revision }}
           VITE_GA_MEASUREMENT_ID: ${{ inputs.environment == 'production' && vars.GA_MEASUREMENT_ID || '' }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
