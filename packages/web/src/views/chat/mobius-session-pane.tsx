@@ -806,6 +806,10 @@ function MobiusSessionPaneBody({
                             role="log"
                             followThreshold={80}
                             followRevision={model.followRevision}
+                            jumpToLatest={{
+                                label: "Jump to latest message",
+                                working: presentation.workingIndicatorVisible,
+                            }}
                             showTopFade
                             aria-label="Messages"
                             className={chatSessionMessageScrollClassName}

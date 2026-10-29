@@ -48,7 +48,7 @@ function SetupPageHeader({ headerAction }: { readonly headerAction: ReactNode })
 }
 
 /** Top logo bar plus a centered content column; pairs with a single card section surface. */
-export function SetupPageWithHeader({
+function SetupPageWithHeader({
     children,
     headerAction,
     pageAction,

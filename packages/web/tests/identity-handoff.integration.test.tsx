@@ -47,7 +47,7 @@ test("Given a native session handoff, When the page loads, Then it shows the sha
 
     const loading = await app.waitForView(() => getByRole(document.body, "status", { name: "Opening session" }));
     expect(loading).toBeInstanceOf(HTMLElement);
-    expect(loading.querySelectorAll("[data-loading-dot]")).toHaveLength(3);
+    expect(loading.querySelectorAll("[data-loading-petal]")).toHaveLength(4);
     expect(queryByRole(document.body, "heading", { name: "Continue native session" })).toBeNull();
     expect(document.body.textContent).not.toContain("Opening the original session in Morty.");
     expect(document.body.textContent).not.toContain("Opening session…");
@@ -58,7 +58,7 @@ test("Given a native session handoff, When the page loads, Then it shows the sha
     expect(queryByRole(document.body, "button", { name: "Show QR code" })).toBeNull();
 });
 
-test("Given a native session handoff, When the page loads, Then it shows only the Morty logo navigation and no site account chrome", {
+test("Given a native session handoff, When the page loads, Then the loading surface has no top navigation", {
     timeout: 30_000,
 }, async () => {
     const sessionId = "01a0d270-0d62-7003-98df-22a5d11dc644";
@@ -71,9 +71,8 @@ test("Given a native session handoff, When the page loads, Then it shows only th
 
     await app.waitForView(() => getByRole(document.body, "status", { name: "Opening session" }));
     expect(document.body.textContent).not.toContain("Your agents. Connected.");
-    expect(document.body.querySelector("header")).toBeInstanceOf(HTMLElement);
-    expect(getByRole(document.body, "link", { name: "Morty home" })).toBeInstanceOf(HTMLAnchorElement);
-    expect(document.body.querySelectorAll("header a")).toHaveLength(1);
+    expect(document.body.querySelector("header")).toBeNull();
+    expect(queryByRole(document.body, "link", { name: "Morty home" })).toBeNull();
 });
 
 test("Given a new browser, When Morty loads, Then Morty opens without presenting a workspace concept", {

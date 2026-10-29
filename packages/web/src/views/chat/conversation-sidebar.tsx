@@ -227,7 +227,7 @@ function ManagedSessionDirectoryList({
                                 ) : sessionStatuses.get(session.id)?.kind === "unread" ? (
                                     <span
                                         aria-label="Unread response"
-                                        className="inline-flex size-4 items-center justify-center"
+                                        className="inline-flex -mr-[3px] size-4 items-center justify-center"
                                         data-testid={dataTestId.sessionStatus}
                                         role="status"
                                     >

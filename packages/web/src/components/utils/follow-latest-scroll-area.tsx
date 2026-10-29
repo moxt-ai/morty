@@ -1,3 +1,4 @@
+import { ArrowDown } from "lucide-react";
 import {
     type ComponentPropsWithoutRef,
     type RefObject,
@@ -8,6 +9,8 @@ import {
     useState,
 } from "react";
 import { cn } from "@/lib/utils";
+import { Button } from "../ui/cloud-button.tsx";
+import { LoadingWave } from "../ui/loading-wave.tsx";
 import { useLoadMoreOnScroll } from "./load-more-trigger.tsx";
 
 type FollowLatestScrollAreaProps = Omit<ComponentPropsWithoutRef<"div">, "ref"> & {
@@ -31,6 +34,11 @@ type FollowLatestScrollAreaProps = Omit<ComponentPropsWithoutRef<"div">, "ref"> 
      * re-arms.
      */
     readonly followRevision: number | null;
+    /** Shows a floating jump control while the latest content is out of view. */
+    readonly jumpToLatest?: {
+        readonly label: string;
+        readonly working: boolean;
+    };
     readonly showTopFade?: boolean;
     /** `from-<surface> to-<surface>/0` for the opaque surface behind this scroller. */
     readonly topFadeClassName?: string;
@@ -45,6 +53,7 @@ export function FollowLatestScrollArea({
     loadOlder,
     followThreshold = 1,
     followRevision = null,
+    jumpToLatest,
     showTopFade = false,
     topFadeClassName = "from-card to-card/0",
     className,
@@ -63,15 +72,26 @@ export function FollowLatestScrollArea({
         revision: loadOlder?.revision ?? 0,
     });
     const [topFadeVisible, setTopFadeVisible] = useState(false);
+    const [jumpToLatestVisible, setJumpToLatestVisible] = useState(false);
+    const jumpToLatestEnabled = jumpToLatest !== undefined;
+    const jumpToLatestWorking = jumpToLatest?.working === true;
+    // Visibility can use a forgiving threshold. Following must require the true
+    // bottom: otherwise a scroll that merely enters the button threshold flips
+    // this state and the next render snaps the user to the end.
+    const isAtLatest = (element: HTMLDivElement) =>
+        element.scrollHeight - element.scrollTop - element.clientHeight <= 1;
 
-    const syncTopFade = useCallback(
+    const syncScrollChrome = useCallback(
         (element: HTMLDivElement) => {
-            if (!showTopFade) {
-                return;
+            setJumpToLatestVisible(
+                jumpToLatestEnabled &&
+                    element.scrollHeight - element.scrollTop - element.clientHeight > followThreshold,
+            );
+            if (showTopFade) {
+                setTopFadeVisible(element.scrollTop > 4);
             }
-            setTopFadeVisible(element.scrollTop > 4);
         },
-        [showTopFade],
+        [followThreshold, jumpToLatestEnabled, showTopFade],
     );
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: followRevision is the deliberate re-arm trigger.
@@ -80,16 +100,21 @@ export function FollowLatestScrollArea({
         const element = scrollArea.current;
         if (element !== null) {
             element.scrollTop = element.scrollHeight;
-            syncTopFade(element);
+            lastTop.current = element.scrollTop;
+            syncScrollChrome(element);
         }
     }, [container, followRevision]);
     useLayoutEffect(() => {
         const element = scrollArea.current;
         if (following.current && element !== null) {
             element.scrollTop = element.scrollHeight;
+            lastTop.current = element.scrollTop;
         }
         if (element !== null) {
-            syncTopFade(element);
+            syncScrollChrome(element);
+        }
+        if (following.current && element !== null) {
+            following.current = isAtLatest(element);
         }
     });
 
@@ -101,8 +126,9 @@ export function FollowLatestScrollArea({
         const keepLatestVisible = () => {
             if (following.current) {
                 element.scrollTop = element.scrollHeight;
+                lastTop.current = element.scrollTop;
             }
-            syncTopFade(element);
+            syncScrollChrome(element);
         };
         // Content changes (streaming, replacing branches) and pure layout
         // changes (window resizing, images loading, reflowed text) both move
@@ -118,7 +144,7 @@ export function FollowLatestScrollArea({
             mutations.disconnect();
             resizes.disconnect();
         };
-    }, [syncTopFade, scrollArea.current]);
+    }, [syncScrollChrome, scrollArea.current]);
 
     const area = (
         <div
@@ -132,14 +158,15 @@ export function FollowLatestScrollArea({
                 // Any upward move away from the bottom is the user leaving the latest content, even when the
                 // whole overflow fits inside the follow threshold; without this, a short conversation pins
                 // every user scroll back to the bottom. Programmatic pins and shrinking content land at the
-                // bottom (distance 0), so they keep following.
+                // bottom (distance 0), so they keep following. Only the true bottom re-arms following; the
+                // jump control's wider threshold is only for deciding when to show its affordance.
                 if (top < lastTop.current && distanceFromLatest > 0) {
                     following.current = false;
-                } else if (distanceFromLatest < followThreshold) {
+                } else if (isAtLatest(element)) {
                     following.current = true;
                 }
                 lastTop.current = top;
-                syncTopFade(element);
+                syncScrollChrome(element);
                 if (loadOlder !== undefined) {
                     pagination.checkScrollEdge(element, false);
                 }
@@ -148,21 +175,60 @@ export function FollowLatestScrollArea({
         />
     );
 
-    if (!showTopFade) {
+    if (!showTopFade && jumpToLatest === undefined) {
         return area;
     }
 
     return (
         <div className="relative flex min-h-0 flex-1 flex-col">
             {area}
-            <div
-                aria-hidden="true"
-                className={cn(
-                    "pointer-events-none absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b transition-opacity duration-150 motion-reduce:transition-none",
-                    topFadeClassName,
-                    topFadeVisible ? "opacity-100" : "opacity-0",
-                )}
-            />
+            {showTopFade && (
+                <div
+                    aria-hidden="true"
+                    className={cn(
+                        "pointer-events-none absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b transition-opacity duration-150 motion-reduce:transition-none",
+                        topFadeClassName,
+                        topFadeVisible ? "opacity-100" : "opacity-0",
+                    )}
+                />
+            )}
+            {jumpToLatest !== undefined && (
+                <Button
+                    aria-hidden={!jumpToLatestVisible}
+                    aria-label={
+                        jumpToLatestWorking ? "Jump to latest message while Agent is working" : jumpToLatest.label
+                    }
+                    className={`group/jump pointer-events-auto absolute bottom-[calc(0.75rem+var(--composer-overlay-block,0px))] left-1/2 z-30 size-8! -translate-x-1/2 rounded-full border-[0.5px] bg-card! text-foreground shadow-[0_4px_18px_rgba(23,30,36,0.14)] transition-[opacity,scale,background-color] duration-150 ease-out hover:bg-[#f1f2f3]! active:bg-[#e6e8eb]! motion-reduce:transition-none ${jumpToLatestVisible ? "scale-100 opacity-100" : "pointer-events-none scale-90 opacity-0"}`}
+                    onClick={() => {
+                        const element = scrollArea.current;
+                        if (element === null) {
+                            return;
+                        }
+                        element.scrollTo({
+                            behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+                            top: element.scrollHeight,
+                        });
+                        following.current = true;
+                        setJumpToLatestVisible(false);
+                    }}
+                    size="icon"
+                    tabIndex={jumpToLatestVisible ? undefined : -1}
+                    variant="outline"
+                >
+                    {jumpToLatestWorking ? (
+                        <>
+                            <LoadingWave
+                                className="gap-[3px] group-hover/jump:hidden"
+                                dotClassName="bg-morty-text-3!"
+                                size="inline"
+                            />
+                            <ArrowDown aria-hidden="true" className="hidden size-4 group-hover/jump:block" />
+                        </>
+                    ) : (
+                        <ArrowDown aria-hidden="true" className="size-4" />
+                    )}
+                </Button>
+            )}
         </div>
     );
 }

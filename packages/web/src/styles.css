@@ -135,6 +135,55 @@
             background-position: -200% 0;
         }
     }
+    --animate-morty-loading-petal: morty-loading-petal 2s linear infinite;
+    @keyframes morty-loading-petal {
+        0% {
+            transform: scaleX(1.006) scaleY(1.006);
+        }
+        3.11% {
+            transform: scaleX(1.018) scaleY(1.016);
+        }
+        8.29% {
+            transform: scaleX(1.07) scaleY(1.063);
+        }
+        14.52% {
+            transform: scaleX(1.175) scaleY(1.161);
+        }
+        19.69% {
+            transform: scaleX(1.27) scaleY(1.252);
+        }
+        22.8% {
+            transform: scaleX(1.285) scaleY(1.267);
+        }
+        25.91% {
+            transform: scaleX(1.27) scaleY(1.253);
+        }
+        32.13% {
+            transform: scaleX(1.2) scaleY(1.185);
+        }
+        39.4% {
+            transform: scaleX(1.11) scaleY(1.101);
+        }
+        46.65% {
+            transform: scaleX(1.055) scaleY(1.049);
+        }
+        53.92% {
+            transform: scaleX(1.03) scaleY(1.027);
+        }
+        62.2% {
+            transform: scaleX(1.018) scaleY(1.016);
+        }
+        71.54% {
+            transform: scaleX(1.011) scaleY(1.01);
+        }
+        78.79% {
+            transform: scaleX(1.007) scaleY(1.0065);
+        }
+        85%,
+        100% {
+            transform: scaleX(1.006) scaleY(1.006);
+        }
+    }
     /* CSS owns the short-lived copy confirmation so the component needs no timer effect. */
     --animate-copy-confirmation: copy-confirmation 2s linear both;
     @keyframes copy-confirmation {
