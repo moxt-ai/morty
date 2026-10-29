@@ -13,6 +13,11 @@ type SubmissionOutcome =
     | { readonly kind: "delivered" }
     | { readonly kind: "rejected" }
     | { readonly kind: "delivery-unknown" };
+export interface SubmittedMessage {
+    readonly attachments: readonly ComposerAttachment[];
+    readonly commandId: string;
+    readonly content: string;
+}
 export type Journal = {
     readonly attachments: readonly ComposerAttachment[];
     readonly commandId: string;
@@ -21,17 +26,23 @@ export type Journal = {
 };
 type DeliveryState =
     | { readonly kind: "idle" }
+    | { readonly kind: "preparing"; readonly message: SubmittedMessage }
+    | { readonly kind: "preparation-failed"; readonly message: SubmittedMessage; readonly error: string }
     | { readonly kind: "submitting"; readonly journal: Journal; readonly confirmation: "unknown" | "delivered" }
+    | { readonly kind: "confirmed"; readonly journal: Journal }
     | { readonly kind: "delivery-unknown"; readonly journal: Journal }
-    | { readonly kind: "failed"; readonly message: string };
+    | { readonly kind: "failed"; readonly message: string; readonly journal: Journal };
 
 export interface SessionDeliveryStore {
     readonly state: DeliveryState;
     readonly discardUnknown: () => string | null;
-    readonly dismissFailure: () => void;
+    readonly prepare: (message: SubmittedMessage) => void;
+    readonly preparationFailed: (message: SubmittedMessage, error: string) => void;
+    readonly takeFailedMessage: () => SubmittedMessage | null;
     /** Losing an attempt's connection does not discard its submitted intent. */
     readonly submissionInterrupted: () => void;
     readonly reconcile: (commandIds: readonly string[]) => void;
+    readonly messagesObserved: (commandIds: readonly string[]) => void;
     readonly submit: (journal: Journal, submit: SubmitTurn, signal: AbortSignal) => Promise<SubmissionOutcome>;
     readonly retry: (submit: SubmitTurn, signal: AbortSignal) => Promise<SubmissionOutcome | null>;
 }
@@ -62,7 +73,7 @@ export const createSessionDeliveryStore = () => {
                 signal,
             );
             signal.throwIfAborted();
-            set({ state: { kind: "idle" } });
+            set({ state: { kind: "confirmed", journal } });
             return { kind: "accepted", turn: accepted };
         } catch (cause) {
             if (signal.aborted || cause instanceof MobiusCancellationError) {
@@ -72,6 +83,7 @@ export const createSessionDeliveryStore = () => {
                 set({
                     state: {
                         kind: "failed",
+                        journal,
                         message: formatError(cause, "The message was rejected."),
                     },
                 });
@@ -79,7 +91,7 @@ export const createSessionDeliveryStore = () => {
             }
             const state = get().state;
             if (state.kind === "submitting" && state.confirmation === "delivered") {
-                set({ state: { kind: "idle" } });
+                set({ state: { kind: "confirmed", journal } });
                 return { kind: "delivered" };
             }
             set({ state: { kind: "delivery-unknown", journal } });
@@ -96,14 +108,36 @@ export const createSessionDeliveryStore = () => {
             set({ state: { kind: "idle" } });
             return state.journal.commandId;
         },
-        dismissFailure: () => {
-            if (get().state.kind === "failed") {
+        prepare: (message) => set({ state: { kind: "preparing", message } }),
+        preparationFailed: (message, error) => set({ state: { kind: "preparation-failed", message, error } }),
+        takeFailedMessage: () => {
+            const state = get().state;
+            const message =
+                state.kind === "preparation-failed"
+                    ? state.message
+                    : state.kind === "failed"
+                      ? {
+                            commandId: state.journal.commandId,
+                            content: state.journal.request.content,
+                            attachments: state.journal.attachments,
+                        }
+                      : null;
+            if (message !== null) {
                 set({ state: { kind: "idle" } });
             }
+            return message;
         },
         submissionInterrupted: () => {
             const state = get().state;
-            if (state.kind === "submitting") {
+            if (state.kind === "preparing") {
+                set({
+                    state: {
+                        kind: "preparation-failed",
+                        message: state.message,
+                        error: "Message preparation was interrupted. Retry when connected.",
+                    },
+                });
+            } else if (state.kind === "submitting") {
                 set({
                     state:
                         state.confirmation === "delivered"
@@ -112,10 +146,15 @@ export const createSessionDeliveryStore = () => {
                 });
             }
         },
+        messagesObserved: (commandIds) => {
+            const state = get().state;
+            if (state.kind === "confirmed" && commandIds.includes(state.journal.commandId)) {
+                set({ state: { kind: "idle" } });
+            }
+        },
         reconcile: (commandIds) => {
             const state = get().state;
-            // An in-flight request owns the disabled composer until it settles;
-            // a live event must not expose the submitted draft to another send.
+            // Confirmation belongs to the submitted message, independently of the next editable draft.
             if (state.kind === "submitting" && commandIds.includes(state.journal.commandId)) {
                 set({ state: { ...state, confirmation: "delivered" } });
             }
@@ -126,7 +165,9 @@ export const createSessionDeliveryStore = () => {
         submit: async (journal, submit, signal) => await send(journal, submit, signal, set, get),
         retry: async (submit, signal) => {
             const state = get().state;
-            return state.kind === "delivery-unknown" ? await send(state.journal, submit, signal, set, get) : null;
+            return state.kind === "delivery-unknown" || state.kind === "failed"
+                ? await send(state.journal, submit, signal, set, get)
+                : null;
         },
     }));
 };

@@ -955,6 +955,49 @@ function MobiusSessionPaneBody({
                                             );
                                         });
                                     })()}
+                                    {presentation.pendingDelivery !== null && (
+                                        <div
+                                            className={chatSessionMessageItemClassName}
+                                            data-testid={dataTestId.queuedMessage}
+                                        >
+                                            <UserPromptMessage
+                                                attachments={presentation.pendingDelivery.message.attachments}
+                                                text={presentation.pendingDelivery.message.content}
+                                            />
+                                            {presentation.pendingDelivery.error === null ? (
+                                                presentation.pendingDelivery.sending && (
+                                                    <p
+                                                        className="text-right text-xs text-muted-foreground"
+                                                        role="status"
+                                                    >
+                                                        Sending message
+                                                    </p>
+                                                )
+                                            ) : (
+                                                <div
+                                                    className="ml-auto flex max-w-[85%] items-center gap-3 text-xs text-destructive"
+                                                    role="alert"
+                                                >
+                                                    <span>{presentation.pendingDelivery.error}</span>
+                                                    <Button
+                                                        disabled={
+                                                            model.connection.kind !== "ready" ||
+                                                            model.turn.kind === "current"
+                                                        }
+                                                        onClick={() => run(pane.store.getState().retryFailedMessage)}
+                                                    >
+                                                        Retry message
+                                                    </Button>
+                                                    <Button
+                                                        disabled={attachmentModel.state.kind === "reading"}
+                                                        onClick={pane.store.getState().editFailedMessage}
+                                                    >
+                                                        Edit failed message
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                     {presentation.unconfirmedDelivery !== null && (
                                         <UnconfirmedDeliveryCard
                                             delivery={presentation.unconfirmedDelivery}
@@ -1027,10 +1070,11 @@ function MobiusSessionPaneBody({
                         )}
                         <BotChatComposer
                             attachmentModel={attachmentModel}
+                            focusScope={workspace}
                             canAttach={canAddAttachments(attachmentModel)}
                             attachmentSignal={pane.attachmentSignal}
                             disabled={presentation.composerInputDisabled}
-                            draft={model.connection.kind === "session-loading-after-create" ? "" : model.draft}
+                            draft={model.draft}
                             error={presentation.composerError}
                             errorStatus={
                                 executionContext.feedback.kind !== "hidden" ? (

@@ -16,6 +16,7 @@ import { MortyAlert } from "../ui/morty-alert.tsx";
 import { ScrollArea } from "../ui/scroll-area.tsx";
 import { Textarea } from "../ui/textarea.tsx";
 import { useAutoGrowingTextarea } from "../utils/use-auto-growing-textarea.ts";
+import { useComposerFocus } from "../utils/use-composer-focus.ts";
 import { useComposerNoticeLayout } from "../utils/use-composer-notice-layout.ts";
 import { useScrollClippedEdges } from "../utils/use-scroll-clipped-edges.ts";
 import { chatSessionComposerClassName } from "./chat-session-layout.ts";
@@ -81,6 +82,7 @@ function AttachmentPreview({
 
 export function BotChatComposer({
     attachmentModel,
+    focusScope,
     canAttach,
     attachmentSignal,
     children,
@@ -99,6 +101,7 @@ export function BotChatComposer({
     stopDisabled = false,
 }: {
     readonly attachmentModel: ComposerAttachmentStore;
+    readonly focusScope?: object;
     /** Whether the attachment rules admit another file now. */
     readonly canAttach: boolean;
     readonly attachmentSignal: AbortSignal;
@@ -121,6 +124,7 @@ export function BotChatComposer({
     const notice = useRef<HTMLDivElement>(null);
     const textarea = useRef<HTMLTextAreaElement>(null);
     const scrollViewport = useRef<HTMLDivElement>(null);
+    useComposerFocus(textarea, focusScope);
     useAutoGrowingTextarea(textarea, draft, scrollViewport);
     const clipped = useScrollClippedEdges(scrollViewport, composerScrollEdgeThresholdPx);
     const { attachments, state: attachmentState } = attachmentModel;
@@ -129,6 +133,7 @@ export function BotChatComposer({
         event.preventDefault();
         if (!submitDisabled && attachmentState.kind !== "reading") {
             onSubmit();
+            textarea.current?.focus({ preventScroll: true });
         }
     };
 

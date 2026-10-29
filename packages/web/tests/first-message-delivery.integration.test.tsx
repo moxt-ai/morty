@@ -67,7 +67,7 @@ test("Given a first prompt with an attachment, When it creates the conversation,
     expect(document.querySelector(REMOVE_ATTACHMENT)).toBeNull();
 });
 
-test("Given an attachment upload is rejected before turn submission, When I send my first message, Then my unsent text and attachment remain editable", {
+test("Given an attachment upload is rejected before turn submission, When I send my first message, Then the failed message remains recoverable without replacing my next draft", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -92,7 +92,13 @@ test("Given an attachment upload is rejected before turn submission, When I send
             throw new Error("Expected an editable composer");
         }
         expect(draft.disabled).toBe(false);
-        expect(draft.value).toBe("Keep this unsent message");
-        expect(getByRole(document.body, "button", { name: `Remove ${name}` }).hasAttribute("disabled")).toBe(false);
+        expect(draft.value).toBe("");
+        expect(getByRole(document.body, "button", { name: "Edit failed message" })).toHaveProperty("disabled", false);
     });
+    const next = app.elementByTestId(dataTestId.messageComposer);
+    await app.user.click(next);
+    await app.user.paste("My next draft");
+    await app.user.click(getByRole(document.body, "button", { name: "Edit failed message" }));
+    expect(next).toHaveProperty("value", "Keep this unsent message\n\nMy next draft");
+    expect(getByRole(document.body, "button", { name: `Remove ${name}` })).toHaveProperty("disabled", false);
 });

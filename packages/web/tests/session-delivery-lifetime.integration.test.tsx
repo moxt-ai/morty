@@ -93,6 +93,9 @@ for (const message of ["first", "subsequent"] as const) {
         );
         expect(app.optionalElementByTestId(dataTestId.sessionReconnectNotice)).toBeNull();
 
+        const nextDraft = app.elementByTestId(dataTestId.messageComposer);
+        await app.user.click(nextDraft);
+        await app.user.paste("Next draft survives retry");
         app.remount();
         const retry = await app.waitForView(() => {
             const button = getByRole(document.body, "button", { name: "Retry message with unknown delivery" });
@@ -111,6 +114,7 @@ for (const message of ["first", "subsequent"] as const) {
         });
         expect(network.submissions).toHaveLength(submissions + 1);
         expect(network.submissions.at(-1)).toBe(original);
+        expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "Next draft survives retry");
         expect(queryByRole(document.body, "button", { name: "Retry message with unknown delivery" })).toBeNull();
     });
 }

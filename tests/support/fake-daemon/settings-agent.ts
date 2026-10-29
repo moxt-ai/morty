@@ -39,6 +39,7 @@ export function createSettingsAgent<Definition>(
     define: DefineInProcessAgent<Definition>,
     profile: "model" | "full" = "model",
     beforeConfigurationApplied?: (configId: string, value: string | boolean) => Promise<void>,
+    beforeSessionCreated?: () => Promise<void>,
 ) {
     const sessions = new Map<string, acp.SessionConfigOption[]>();
     const histories = new Map<string, acp.SessionUpdate[]>();
@@ -59,7 +60,8 @@ export function createSettingsAgent<Definition>(
                 authMethods: [],
                 protocolVersion: acp.PROTOCOL_VERSION,
             }))
-            .onRequest(acp.methods.agent.session.new, () => {
+            .onRequest(acp.methods.agent.session.new, async () => {
+                await beforeSessionCreated?.();
                 const sessionId = crypto.randomUUID();
                 histories.set(sessionId, []);
                 sessions.set(sessionId, [

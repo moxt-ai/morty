@@ -522,7 +522,10 @@ export function createChatWorkspace(options: {
         const firstMessage = home.getState().firstMessages.get(sessionId);
         let composerAttachments = sessionAttachments.get(sessionId);
         if (composerAttachments === undefined) {
-            composerAttachments = createComposerAttachmentStore();
+            composerAttachments =
+                firstMessage !== undefined && home.getState().draftKey === firstMessage.commandId
+                    ? home.getState().composerAttachments
+                    : createComposerAttachmentStore();
             sessionAttachments.set(sessionId, composerAttachments);
         }
         let delivery = sessionDeliveries.get(sessionId);
@@ -548,6 +551,9 @@ export function createChatWorkspace(options: {
                 sidebar.dialogs.getState().nativeDialog?.getState().titlesChanged();
             },
         });
+        if (firstMessage !== undefined && home.getState().draftKey === firstMessage.commandId) {
+            model.store.getState().setDraft(home.getState().draft);
+        }
         paneEntry = { model, session: selection.session };
     };
 

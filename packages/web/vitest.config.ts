@@ -3,6 +3,8 @@ import { coverageConfigDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
     resolve: {
+        // In-process ACP endpoints and the real daemon share the SDK's builder symbols.
+        dedupe: ["@agentclientprotocol/sdk"],
         alias: [{ find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) }],
     },
     test: {

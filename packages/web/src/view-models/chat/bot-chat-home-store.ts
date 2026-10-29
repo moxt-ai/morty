@@ -261,7 +261,6 @@ export const createBotChatHomeStore = (
     },
 ) => {
     const botId = options.botId;
-    const composerAttachments = createComposerAttachmentStore();
     const conversations = createConversationSessionStore(requests);
     const selection = initialSelection(options.url, options.createId);
     let restoredSessionId =
@@ -313,7 +312,7 @@ export const createBotChatHomeStore = (
             options.onRuntimeConfigurationUnavailable();
         };
         return {
-            composerAttachments,
+            composerAttachments: createComposerAttachmentStore(),
             initialization: { kind: "loading" },
             pairing: { kind: "checking" },
             runtimeConfiguration: null,
@@ -728,7 +727,7 @@ export const createBotChatHomeStore = (
             },
             newConversation: () => {
                 restoredSessionId = null;
-                composerAttachments.getState().clear();
+                get().composerAttachments.getState().clear();
                 const current = get();
                 centralSessionStorage.remove(newConversationDraftEntry(botId));
                 // Leaving a pending selection releases its request, even when entry configuration is already ready.
@@ -757,7 +756,7 @@ export const createBotChatHomeStore = (
             },
             openManaged: (isExternal, id) => {
                 restoredSessionId = null;
-                composerAttachments.getState().clear();
+                get().composerAttachments.getState().clear();
                 options.navigation.showManaged(isExternal, id);
                 set((current) => ({
                     selection: transitionConversationSelection(current.selection, {
@@ -833,26 +832,42 @@ export const createBotChatHomeStore = (
                 })),
             createConversation: async (signal) => {
                 const current = get();
-                const { attachments, state: attachmentState } = composerAttachments.getState();
+                const { attachments, state: attachmentState } = get().composerAttachments.getState();
                 const draft = current.draft;
                 const settings = options.draftConfiguration();
                 if (
-                    attachmentState.kind === "reading" ||
+                    (current.creation.kind === "draft" && attachmentState.kind === "reading") ||
                     !homeCanStartConversation(current) ||
                     current.selection.kind !== "draft" ||
-                    settings === null
+                    settings === null ||
+                    current.creation.kind === "session-creating" ||
+                    current.creation.kind === "draft-message-sending"
                 ) {
                     return false;
                 }
                 const commandId = current.selection.key;
                 const content = draft.trim();
-                const title = (content || attachments.map((attachment) => attachment.name).join(", ")).slice(0, 500);
-                const queuedMessage = {
-                    attachments,
-                    commandId,
-                    content,
-                    summary: title,
-                };
+                if (current.creation.kind === "draft" && content.length === 0 && attachments.length === 0) {
+                    return false;
+                }
+                const queuedMessage =
+                    current.creation.kind === "draft"
+                        ? {
+                              attachments,
+                              commandId,
+                              content,
+                              summary: (content || attachments.map((attachment) => attachment.name).join(", ")).slice(
+                                  0,
+                                  500,
+                              ),
+                          }
+                        : current.creation.message;
+                const title = queuedMessage.summary;
+                if (current.creation.kind === "draft") {
+                    // The submitted snapshot owns its content before any network work begins.
+                    get().composerAttachments.getState().clear();
+                    centralSessionStorage.remove(newConversationDraftEntry(botId));
+                }
                 let access: ChatAccess;
                 if (
                     current.creation.kind === "draft-message-send-failed" &&
@@ -871,6 +886,7 @@ export const createBotChatHomeStore = (
                             kind: "draft-message-queued",
                             message: queuedMessage,
                         }),
+                        ...(current.creation.kind === "draft" ? { draft: "" } : {}),
                     }));
                     try {
                         access = await requests.createConversation(botId, commandId, settings, signal, title);
@@ -933,7 +949,6 @@ export const createBotChatHomeStore = (
                                   commandId,
                                   kind: "conversation-created",
                               }),
-                              draft: "",
                               scrollFollowRevision: state.scrollFollowRevision + 1,
                               selection: transitionConversationSelection(state.selection, {
                                   kind: "conversation-created",
@@ -941,11 +956,7 @@ export const createBotChatHomeStore = (
                                   session,
                               }),
                           }
-                        : // The draft text was sent with this conversation, so it must not be offered again. A
-                          // new draft started meanwhile owns whatever text the composer holds now.
-                          state.draftKey === commandId
-                          ? { draft: "" }
-                          : {}),
+                        : {}),
                 }));
                 if (following) {
                     announceSelection();
@@ -953,9 +964,8 @@ export const createBotChatHomeStore = (
                 onConversationCreated(conversationId, queuedMessage.summary);
                 onDirectoryRefreshed();
                 if (following) {
-                    composerAttachments.getState().clear();
-                }
-                if (get().draftKey === commandId) {
+                    // The pane took the next draft, including any attachment read still in progress.
+                    set({ draft: "", composerAttachments: createComposerAttachmentStore() });
                     centralSessionStorage.remove(newConversationDraftEntry(botId));
                 }
                 return true;

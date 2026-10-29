@@ -232,6 +232,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                         footer={
                             <BotChatComposer
                                 attachmentModel={attachmentModel}
+                                focusScope={workspace}
                                 canAttach={canAddAttachments(attachmentModel)}
                                 attachmentSignal={workspace.operationsSignal()}
                                 disabled
@@ -240,7 +241,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                 onDraftChange={() => {}}
                                 onStop={() => {}}
                                 onSubmit={() => {}}
-                                outputState="idle"
+                                outputState={creationBusy ? "sending" : "idle"}
                                 submitDisabled
                             >
                                 {null}
@@ -327,6 +328,15 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                                 role="alert"
                                             >
                                                 <span className="min-w-0 flex-1 break-words">{creationError}</span>
+                                                <Button
+                                                    onClick={() =>
+                                                        void store
+                                                            .getState()
+                                                            .createConversation(workspace.operationsSignal())
+                                                    }
+                                                >
+                                                    Retry message
+                                                </Button>
                                                 {reportButton}
                                             </div>
                                         )}
@@ -358,15 +368,14 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                         {model.runtimeConfiguration !== null && model.selection.kind === "draft" && (
                             <BotChatComposer
                                 attachmentModel={attachmentModel}
+                                focusScope={workspace}
                                 canAttach={canAddAttachments(attachmentModel)}
                                 attachmentSignal={workspace.operationsSignal()}
-                                disabled={composerLocked}
+                                disabled={false}
                                 draft={draft}
-                                error={creationError}
+                                error=""
                                 errorStatus={
-                                    creationError.length > 0 ? (
-                                        reportButton
-                                    ) : executionContext.feedback.kind === "hidden" ? undefined : (
+                                    executionContext.feedback.kind === "hidden" ? undefined : (
                                         <div className="w-full">
                                             <ConnectionNotice
                                                 feedback={executionContext.feedback}
@@ -384,11 +393,11 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                 onSubmit={() => {
                                     void store.getState().createConversation(workspace.operationsSignal());
                                 }}
-                                outputState="idle"
+                                outputState={creationBusy ? "sending" : "idle"}
                                 submitDisabled={
                                     !executionContext.available ||
                                     !canStartConversation ||
-                                    creationBusy ||
+                                    composerLocked ||
                                     (draft.trim().length === 0 && attachmentModel.attachments.length === 0) ||
                                     draftControls.settings.kind !== "ready"
                                 }
