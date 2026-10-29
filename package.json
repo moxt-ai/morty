@@ -64,6 +64,7 @@
         "@vitest/coverage-istanbul": "catalog:",
         "dependency-cruiser": "catalog:",
         "drizzle-kit": "catalog:",
+        "esbuild": "catalog:",
         "happy-dom": "catalog:",
         "istanbul-lib-coverage": "catalog:",
         "istanbul-lib-report": "catalog:",
