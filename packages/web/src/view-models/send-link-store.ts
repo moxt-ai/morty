@@ -15,7 +15,7 @@ export type SetupHandoffModel =
  * Sends Morty's address to another device through the system share sheet. The application owns it: `close` ends
  * its lifetime, after which a share sheet that is still open can no longer change state or count a send.
  */
-export function createSendLinkStore(port: {
+function createSendLinkStore(port: {
     readonly share: (data: ShareData) => Promise<void>;
     readonly onSent: () => void;
 }) {
