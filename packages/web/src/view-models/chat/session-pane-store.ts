@@ -6,6 +6,7 @@ import {
     MobiusPageRequest,
     MobiusPermissionResponseRequest,
     type MobiusSessionEventObserver,
+    MobiusTimeoutError,
     type PromptAttachment,
     SESSION_CLOSED_ERROR_CODE,
     type SessionConfigOption,
@@ -741,6 +742,12 @@ export function createSessionPaneModel(options: {
             const controller = new AbortController();
             historyLoadController = controller;
             const revision = projection.revision;
+            const deadline = new AbortController();
+            const signal = AbortSignal.any([parentSignal, controller.signal, deadline.signal]);
+            void clock.sleep(45_000, signal).then(
+                () => deadline.abort(new DOMException("The Session history read timed out.", "TimeoutError")),
+                () => undefined,
+            );
             try {
                 const history = await readSessionHistory(
                     connected,
@@ -748,7 +755,7 @@ export function createSessionPaneModel(options: {
                     null,
                     [],
                     effect.generation,
-                    AbortSignal.any([parentSignal, controller.signal, AbortSignal.timeout(45_000)]),
+                    signal,
                     projection.kind === "established" ? projection : null,
                 );
                 parentSignal.throwIfAborted();
@@ -770,8 +777,14 @@ export function createSessionPaneModel(options: {
                 if (controller.signal.aborted || projection.revision !== revision) {
                     return;
                 }
+                // This pane owns the history deadline. The SDK only sees an aborted
+                // caller signal, so retain timeout semantics for subscription recovery.
+                if (deadline.signal.aborted) {
+                    throw new MobiusTimeoutError({ cause });
+                }
                 throw cause;
             } finally {
+                deadline.abort();
                 if (historyLoadController === controller) {
                     historyLoadController = null;
                 }
