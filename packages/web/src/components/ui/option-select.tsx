@@ -27,6 +27,7 @@ export function Select({
     testId,
     mutedWhenDisabled = true,
     valueLoading = false,
+    className = "",
 }: {
     readonly label: string;
     readonly value: string;
@@ -50,6 +51,8 @@ export function Select({
     readonly mutedWhenDisabled?: boolean;
     /** The selected label is still being filled in. The field stays; only the value shows a skeleton. */
     readonly valueLoading?: boolean;
+    /** Extra trigger classes, e.g. a caller's height or radius override. */
+    readonly className?: string;
 }) {
     const [search, setSearch] = useState("");
     const [topFadeVisible, setTopFadeVisible] = useState(false);
@@ -133,6 +136,7 @@ export function Select({
                     compact
                         ? "w-auto max-w-48 border-transparent bg-transparent px-2"
                         : "w-full gap-2 border border-border bg-background px-3",
+                    className,
                 )}
                 data-testid={testId}
             >

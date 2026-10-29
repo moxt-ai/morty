@@ -67,7 +67,7 @@ test("Given the agent asks a question, When the user reads and answers it, Then 
     timeout: 30_000,
 }, async () => {
     const app = await requestInput();
-    await app.user.click(getByRole(document.body, "button", { name: "Allow: Yes" }));
+    await app.user.click(getByRole(document.body, "button", { name: "Allow" }));
     const form = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Agent information request" }));
     expect(getByRole(form, "status", { name: "Waiting for your answer" }).textContent).toBe("Waiting for your answer");
     expect(queryByRole(document.body, "status", { name: "Agent is working" })).toBeNull();
@@ -85,17 +85,18 @@ test("Given a pending permission, When Chat remounts and the user allows it and 
 }, async () => {
     const app = await requestInput();
     const initial = getByRole(document.body, "alertdialog", { name: "Agent permission request" });
-    expect(initial.textContent).toContain("pnpm test -- --reporter=verbose");
-    expect(initial.textContent).toContain("src/<entry>.ts");
+    expect(initial.textContent).toContain("$ pnpm test -- --reporter=verbose");
     expect(document.body.querySelector(".animate-loading-text-shimmer")).toBeNull();
-    expect(getByRole(initial, "region", { name: "Session working directory" }).textContent).not.toBe("");
+    await app.user.click(getByRole(initial, "button", { name: /Details ·/ }));
+    expect(initial.textContent).toContain("src/<entry>.ts");
     app.remount();
     const permission = await app.waitForView(() =>
         getByRole(document.body, "alertdialog", { name: "Agent permission request" }),
     );
-    expect(permission.textContent).toContain("pnpm test -- --reporter=verbose");
+    expect(permission.textContent).toContain("$ pnpm test -- --reporter=verbose");
+    await app.user.click(getByRole(permission, "button", { name: /Details ·/ }));
     expect(permission.textContent).toContain("src/<entry>.ts");
-    await app.user.click(getByRole(permission, "button", { name: "Allow: Yes" }));
+    await app.user.click(getByRole(permission, "button", { name: "Allow" }));
     const form = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Agent information request" }));
     await app.user.type(getByRole(form, "textbox", { name: "Branch" }), "feature/separation");
     await app.user.click(getByRole(form, "button", { name: "Continue" }));
@@ -108,7 +109,7 @@ test("Given a pending permission, When the user rejects it, Then the agent recei
     timeout: 30_000,
 }, async () => {
     const app = await requestInput();
-    await app.user.click(getByRole(document.body, "button", { name: "Deny: No" }));
+    await app.user.click(getByRole(document.body, "button", { name: "Deny" }));
     await app.waitForView(() => expect(document.body.textContent).toContain("Permission rejected"));
     expect(queryByRole(document.body, "dialog", { name: "Agent information request" })).toBeNull();
 });
@@ -117,7 +118,7 @@ test("Given an information request, When the user declines it, Then the agent re
     timeout: 30_000,
 }, async () => {
     const app = await requestInput();
-    await app.user.click(getByRole(document.body, "button", { name: "Allow: Yes" }));
+    await app.user.click(getByRole(document.body, "button", { name: "Allow" }));
     const form = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Agent information request" }));
     await app.user.click(getByRole(form, "button", { name: "Decline" }));
     await app.waitForView(() => expect(document.body.textContent).toContain("Input decline"));
@@ -150,8 +151,8 @@ test("Given a permission decision changes the agent's workflow, When the user re
 });
 
 for (const [label, optionId] of [
-    ["Allow: Allow for this session", "allow-session"],
-    ["Deny: Deny for this session", "deny-session"],
+    ["Allow for this session", "allow-session"],
+    ["Deny for this session", "deny-session"],
 ] as const) {
     test(`Given session-scoped permission choices, When I select ${label}, Then the scope remains accurate and the original decision reaches the agent`, {
         timeout: 30_000,
