@@ -37,7 +37,7 @@ export function SidebarUserMenu({
                     <DropdownMenu.Trigger asChild>
                         <Button
                             aria-label="User menu"
-                            className="shrink-0 rounded-full border-[1px] border-white bg-black/[0.08] text-copy-secondary hover:bg-black/[0.12] active:bg-black/[0.16] data-[state=open]:bg-black/[0.16]"
+                            className="ml-1 shrink-0 rounded-full border-[1px] border-white bg-black/[0.08] text-copy-secondary hover:bg-black/[0.12] active:bg-black/[0.16] data-[state=open]:bg-black/[0.16]"
                             data-testid={dataTestId.userMenu}
                             disabled={disabled}
                             onPointerDown={() => {
