@@ -27,6 +27,23 @@ function languageRegistration(language: string) {
     return Object.entries(bundledLanguages).find(([name]) => name === language)?.[1] ?? null;
 }
 
+/**
+ * Tokens that carry code no bundled grammar can highlight. Streamdown keeps the
+ * last result the plugin delivered for a block, so a `null` answer that no
+ * callback ever follows freezes that block at the code it held when it mounted.
+ * `null` means a result is still coming; a language we cannot highlight needs
+ * unstyled tokens instead, which the theme colors as ordinary code.
+ */
+function unhighlightedTokens(code: string): TokensResult {
+    let offset = 0;
+    const tokens = code.split("\n").map((line) => {
+        const token = { bgColor: "transparent", color: "inherit", content: line, offset };
+        offset += line.length + 1;
+        return [token];
+    });
+    return { bg: "transparent", fg: "inherit", tokens };
+}
+
 function resultKey(options: HighlightOptions): string {
     const [lightTheme, darkTheme] = options.themes;
     const themeName = (theme: typeof lightTheme): string =>
@@ -136,7 +153,7 @@ export const boundedCodeHighlighter: CodeHighlighterPlugin = {
         }
         const requestedHighlighter = highlighter(options.language);
         if (requestedHighlighter === null) {
-            return null;
+            return unhighlightedTokens(options.code);
         }
         const callbacks = new Set<(result: TokensResult) => void>();
         if (callback !== undefined) {
