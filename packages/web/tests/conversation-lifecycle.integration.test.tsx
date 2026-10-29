@@ -64,7 +64,7 @@ test("Given a new conversation, When I send its first prompt, Then its preview a
     );
 });
 
-test("Given a loaded session whose initial user chunk is delayed, When its first ACP event arrives and I steer, Then the preview disappears and native chunks appear without duplicates", async () => {
+test("Given a loaded session whose initial user chunk is delayed, When its first ACP event arrives and I steer, Then the submitted message stays visible until native chunks replace it without duplicates", async () => {
     const app = await createTestApp({
         connectAgent: true,
         agent: { id: "tool-lifecycle-test", label: "Tool Lifecycle Agent" },
@@ -73,7 +73,9 @@ test("Given a loaded session whose initial user chunk is delayed, When its first
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold delayed initial message");
     await app.waitForView(() => {
         expect(getByRole(document.body, "button", { name: "Stop agent output" })).toBeDefined();
-        expect(app.elementsByTestId(dataTestId.userMessage)).toHaveLength(0);
+        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+            "hold delayed initial message",
+        ]);
         expect(app.optionalElementByTestId(dataTestId.sessionStatus)).not.toBeNull();
     });
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "New steering requirement");
@@ -449,6 +451,9 @@ test("Given a saved Session, When the user opens its context menu, Then the Sess
         throw new Error("Expected the message composer");
     }
     await sendPrompt(app, composer, prompt);
+    await app.waitForView(() =>
+        expect(app.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain(prompt),
+    );
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     const conversation = await app.queryElementByTestId(
         dataTestId.managedConversation,

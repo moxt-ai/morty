@@ -47,14 +47,18 @@ for (const submission of ["rejected", "upload-failed"] as const) {
         await sendPrompt(app, composer, prompt);
         const submissionError = await app.waitForView(() => {
             expect(composer).toHaveProperty("disabled", false);
-            expect(composer).toHaveProperty("value", prompt);
-            const message = getByRole(form, "alert").textContent;
+            expect(composer).toHaveProperty("value", "");
+            const failedMessage = app.elementByTestId(dataTestId.queuedMessage);
+            expect(failedMessage.textContent).toContain(prompt);
+            const message = getByRole(failedMessage, "alert").textContent;
             expect(message).toBeTruthy();
             expect(message).not.toContain(recoveredFailure);
             return message;
         });
         const status = submission === "rejected" ? null : "Session failed";
         expect(entryStatus(app, "Established session")).toBe(status);
+        await app.user.click(composer);
+        await app.user.paste("Next draft survives reconnect");
 
         await daemon.disconnect();
         await app.waitForView(() =>
@@ -64,13 +68,14 @@ for (const submission of ["rejected", "upload-failed"] as const) {
         await daemon.reconnect();
         document.dispatchEvent(new Event("visibilitychange"));
         await app.waitForView(() =>
-            expect(getByRole(form, "button", { name: "Send message" })).toHaveProperty("disabled", false),
+            expect(getByRole(document.body, "button", { name: "Retry message" })).toHaveProperty("disabled", false),
         );
         expect(app.optionalElementByTestId(dataTestId.sessionReconnectNotice)).toBeNull();
         expect(entryStatus(app, "Established session")).toBe(status);
-        expect(getByRole(form, "alert").textContent).toBe(submissionError);
+        expect(getByRole(app.elementByTestId(dataTestId.queuedMessage), "alert").textContent).toBe(submissionError);
         expect(queryAllByText(document.body, recoveredFailure, { exact: true })).toHaveLength(0);
-        expect(composer).toHaveProperty("value", prompt);
+        expect(composer).toHaveProperty("value", "Next draft survives reconnect");
+        expect(app.elementByTestId(dataTestId.queuedMessage).textContent).toContain(prompt);
     });
 }
 
@@ -94,7 +99,7 @@ test("Given a rejected submission after an earlier failure, When another viewer'
     await sendPrompt(app, composer, "x".repeat(100_001));
     await app.waitForView(() => {
         expect(entryStatus(app, "Established session")).toBeNull();
-        expect(getByRole(form, "alert").textContent).toBeTruthy();
+        expect(getByRole(app.elementByTestId(dataTestId.queuedMessage), "alert").textContent).toBeTruthy();
     });
     const other = await app.openViewer();
     const otherComposer = await other.queryElementByTestId(
@@ -115,8 +120,8 @@ test("Given a rejected submission after an earlier failure, When another viewer'
     expect(entryStatus(app, "Established session")).toBeNull();
     await act(async () => clock.advanceBy(1_000));
     await app.waitForView(() => {
-        expect(getByRole(form, "button", { name: "Send message" })).toHaveProperty("disabled", false);
-        expect(getByRole(form, "alert").textContent).toBe("Internal error: The controlled Agent rejected this turn.");
+        expect(getByRole(document.body, "button", { name: "Retry message" })).toHaveProperty("disabled", false);
+        expect(queryAllByText(document.body, recoveredFailure, { exact: true })).toHaveLength(1);
         expect(entryStatus(app, "Established session")).toBe("Session failed");
     });
 });

@@ -13,7 +13,7 @@ type SubmissionOutcome =
     | { readonly kind: "delivered" }
     | { readonly kind: "rejected" }
     | { readonly kind: "delivery-unknown" };
-export interface SubmittedMessage {
+interface SubmittedMessage {
     readonly attachments: readonly ComposerAttachment[];
     readonly commandId: string;
     readonly content: string;
