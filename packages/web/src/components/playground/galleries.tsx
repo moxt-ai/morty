@@ -555,6 +555,11 @@ function ComposerNoticeGallery() {
         description: "You can keep writing. Retry to check the connection.",
         title: "Connection interrupted",
     };
+    const waiting: ConnectionFeedback = {
+        kind: "waiting",
+        description: "You can keep writing while we connect.",
+        title: "Connecting…",
+    };
     const closed: ConnectionFeedback = {
         kind: "closed",
         description: "Continue where you left off.",
@@ -578,6 +583,11 @@ function ComposerNoticeGallery() {
             <Specimen layout="stack" title="Failure: reconnect failed">
                 <MortyAlert tone="error">
                     <ConnectionNotice feedback={failed} onRetryNow={noop} onReopen={noop} />
+                </MortyAlert>
+            </Specimen>
+            <Specimen layout="stack" title="Informational: connecting">
+                <MortyAlert icon={WifiOff} tone="neutral">
+                    <ConnectionNotice feedback={waiting} onRetryNow={noop} onReopen={noop} />
                 </MortyAlert>
             </Specimen>
             <Specimen layout="stack" title="Informational: reconnecting">
