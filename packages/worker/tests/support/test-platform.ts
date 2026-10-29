@@ -55,7 +55,7 @@ export async function startTestPlatform(
                 const runtime = await createControlledAgentRuntime({
                     credential,
                     behavior: {
-                        reply: mortyReply,
+                        reply: agents[0]?.reply ?? mortyReply,
                         files: mortyFiles,
                         agentId: agents[0]?.id ?? "codex",
                         agentName: agents[0]?.label ?? "Codex",

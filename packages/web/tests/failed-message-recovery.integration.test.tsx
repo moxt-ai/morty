@@ -1,6 +1,7 @@
 import { fireEvent, getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, onTestFinished, test } from "vitest";
+import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
@@ -9,7 +10,6 @@ interface Participant {
     readonly app: TestApp;
     readonly composer: HTMLTextAreaElement;
     readonly form: HTMLFormElement;
-    readonly prompt: string;
 }
 
 function answered(app: TestApp, text: string): boolean {
@@ -35,16 +35,24 @@ async function editableComposer(app: TestApp): Promise<HTMLTextAreaElement> {
 
 /** Two viewers send at once; the Runtime rejects one message, and the accepted turn is then stopped. */
 async function rejectConcurrentMessage(rejectedPrompt: string): Promise<Participant> {
-    const app = await createTestApp({ connectAgent: true });
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: {
+            id: "concurrent-rejection-test",
+            label: "Concurrent rejection Agent",
+            // Hold whichever concurrent submission reaches the Agent first, then let the retry complete.
+            reply: (prompt, turnNumber, mode) =>
+                turnNumber === 2
+                    ? { outcome: "hold", output: [{ kind: "text", text: "The accepted turn is running." }] }
+                    : mortyReply(prompt, turnNumber, mode),
+        },
+    });
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Open a shared conversation");
     await app.waitForView(() => expect(answered(app, "Open a shared conversation")).toBe(true));
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
     const viewer = await app.openViewer();
     const participants: Participant[] = [];
-    for (const [current, prompt] of [
-        [app, "hold after first delta"],
-        [viewer, rejectedPrompt],
-    ] as const) {
+    for (const current of [app, viewer]) {
         const composer = await editableComposer(current);
         if (composer.form === null) {
             throw new Error("Expected the message composer form");
@@ -52,11 +60,11 @@ async function rejectConcurrentMessage(rejectedPrompt: string): Promise<Particip
         const form = composer.form;
         await current.user.clear(composer);
         await current.user.click(composer);
-        await current.user.paste(prompt);
+        await current.user.paste(rejectedPrompt);
         await current.waitForView(() =>
             expect(getByRole(form, "button", { name: "Send message" })).toHaveProperty("disabled", false),
         );
-        participants.push({ app: current, composer, form, prompt });
+        participants.push({ app: current, composer, form });
     }
     // Submit both forms before either viewer observes the other's turn.
     act(() => {

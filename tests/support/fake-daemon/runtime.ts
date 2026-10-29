@@ -46,6 +46,8 @@ export interface ControlledRuntimeConnection {
 export interface ControlledAgent {
     readonly id: string;
     readonly label: string;
+    /** Controls replies through the real daemon's Agent dependency. */
+    readonly reply?: FakeAgentHarnessOptions["reply"];
     /** Holds or rejects the controlled Agent's next Session creation through its real ACP boundary. */
     readonly beforeSessionCreated?: (() => Promise<void>) | undefined;
     /** Test control that holds a selected Agent configuration request before it is applied. */
