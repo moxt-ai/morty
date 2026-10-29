@@ -36,12 +36,14 @@ for (const eventOrder of ["before refusal", "after refusal"] as const) {
             if (eventOrder === "before refusal") {
                 await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
             }
-            // The pinned, unmodified Runtime returns its released generic operation failure.
+            // The Runtime refuses the late steer because the message already left the queue.
             const response = await release();
-            expect(response).toMatchObject({ kind: "http.response", status: 503 });
+            expect(response).toMatchObject({ kind: "http.response", status: 409 });
             if (eventOrder === "after refusal") {
                 await app.waitForView(() =>
-                    expect(document.body.textContent).toContain("The local agent operation could not be completed"),
+                    expect(document.body.textContent).toContain(
+                        "The message already left the queue and could not be steered",
+                    ),
                 );
             }
         } finally {
