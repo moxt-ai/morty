@@ -145,6 +145,18 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     { kind: "text", text: "Partial rich reply" },
                 ],
             };
+        case "hold reasoning only":
+            return {
+                outcome: "hold",
+                output: [
+                    {
+                        kind: "activity",
+                        activityType: "reasoning",
+                        title: "Thinking",
+                        output: "Inspecting the workspace while holding.",
+                    },
+                ],
+            };
         case "wait for steering":
             return { outcome: "hold", output: [{ kind: "text", text: "Waiting for steering" }] };
         case "compact the conversation":

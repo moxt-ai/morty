@@ -1,5 +1,5 @@
 import { Brain, ChevronDown, Wrench } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { MarkdownImageReader } from "../../components/agents/agent-markdown.tsx";
 import { ToolTextPreview } from "../../components/chat/tool-text-preview.tsx";
 import { dataTestId } from "../../data-testid.ts";
@@ -8,6 +8,7 @@ import { AgentRichContent } from "../agents/agent-rich-content.tsx";
 import type { SessionResourceStoreFactory } from "../agents/resource-reader.ts";
 import { FollowLatestScrollArea } from "../utils/follow-latest-scroll-area.tsx";
 import { useScrollClippedEdges } from "../utils/use-scroll-clipped-edges.ts";
+import { type DisclosureChoice, disclosureOpen } from "./disclosure-choice.ts";
 import {
     agentThinkStepChevronClassName,
     agentThinkStepExpandedPanelClassName,
@@ -80,36 +81,19 @@ function ReasoningContent({ entry }: { readonly entry: ReasoningEntry }) {
 }
 
 function ReasoningDisclosure({ active, entry }: { readonly active: boolean; readonly entry: ReasoningEntry }) {
-    const disclosure = useRef<HTMLDetailsElement>(null);
-    const [contentVisible, setContentVisible] = useState(active);
-    // `active` opens the disclosure while a turn is running. Once the user
-    // toggles it, that choice stays until `active` changes; the mount sync can
-    // otherwise land after the click and close what the user just opened.
-    const interaction = useRef({ active, userToggled: false });
-    useEffect(() => {
-        if (interaction.current.active !== active) {
-            interaction.current = { active, userToggled: false };
-        }
-        if (interaction.current.userToggled) {
-            return;
-        }
-        const element = disclosure.current;
-        if (element === null) {
-            return;
-        }
-        element.open = active;
-        setContentVisible(active);
-    }, [active]);
+    const [choice, setChoice] = useState<DisclosureChoice>("unset");
+    const open = disclosureOpen(choice, active);
     return (
         <details
             aria-label="Agent thinking"
             className="group/thinking min-w-0"
             data-testid={dataTestId.agentReasoning}
             onToggle={(event) => {
-                interaction.current = { active, userToggled: true };
-                setContentVisible(event.currentTarget.open);
+                if (event.currentTarget.open !== open) {
+                    setChoice(event.currentTarget.open ? "expanded" : "collapsed");
+                }
             }}
-            ref={disclosure}
+            open={open}
         >
             <summary
                 className={`${agentThinkStepTriggerClassName} group/summary list-none [&::-webkit-details-marker]:hidden`}
@@ -127,7 +111,7 @@ function ReasoningDisclosure({ active, entry }: { readonly active: boolean; read
                     />
                 </span>
             </summary>
-            {contentVisible && <ReasoningContent entry={entry} />}
+            {open && <ReasoningContent entry={entry} />}
         </details>
     );
 }
