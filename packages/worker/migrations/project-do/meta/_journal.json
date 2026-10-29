@@ -169,6 +169,13 @@
             "when": 1793117352999,
             "tag": "0035_anonymous_credential_kind",
             "breakpoints": true
+        },
+        {
+            "idx": 36,
+            "version": "6",
+            "when": 1793288468615,
+            "tag": "0036_drop_app_user",
+            "breakpoints": true
         }
     ]
 }
