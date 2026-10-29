@@ -525,6 +525,7 @@ export function createSessionPaneModel(options: {
         messages: sessionProjectionMessages(projection),
     });
     const tasks = createSessionTaskControlsStore({
+        clock,
         steeringSupported: session.result.ready.capabilities.steering,
         port: {
             cancel: noticingClosure(async (turnId, idempotencyKey, signal) => {
@@ -693,8 +694,8 @@ export function createSessionPaneModel(options: {
             }
             set({ turn });
             const running = acceptedTurn(turn);
-            if (running !== null && running.commandId !== acceptedTurn(previous)?.commandId) {
-                tasks.getState().turnRunning(running.commandId);
+            if (running?.commandId !== acceptedTurn(previous)?.commandId) {
+                tasks.getState().turnChanged(running?.commandId ?? null);
             }
         };
         let historyLoadController: AbortController | null = null;
