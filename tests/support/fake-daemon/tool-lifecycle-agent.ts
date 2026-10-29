@@ -130,6 +130,20 @@ export function createToolLifecycleAgent(beforeCancellationApplied?: () => Promi
                         });
                         return { stopReason: "end_turn", _meta: { messageId } };
                     }
+                    if (prompt === "update one tool in place") {
+                        const toolCallId = crypto.randomUUID();
+                        await emit({
+                            sessionUpdate: "tool_call",
+                            toolCallId,
+                            title: "Updated verification",
+                            status: "in_progress",
+                            kind: "other",
+                            rawInput: { task: "Updated verification" },
+                        });
+                        await emit({ sessionUpdate: "tool_call_update", toolCallId, status: "completed" });
+                        await emitText("The updated tool finished.");
+                        return { stopReason: "end_turn", _meta: { messageId } };
+                    }
                     if (prompt === "answer after verification" || prompt === "answer then hold") {
                         await emitTool("Completed verification", "completed", []);
                         if (prompt === "answer then hold") {
