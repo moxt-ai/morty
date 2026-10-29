@@ -49,7 +49,7 @@ export function ConnectionNotice({
     if (feedback.kind === "waiting" && !inline) {
         return (
             <div
-                className="inline-flex h-7 items-center rounded-full bg-card px-3 text-12 font-medium text-copy-secondary"
+                className="inline-flex h-7 items-center rounded-full bg-card px-3 text-12 font-medium text-morty-text-2"
                 data-testid={testId}
             >
                 {feedback.title}
