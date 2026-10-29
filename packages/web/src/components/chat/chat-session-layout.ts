@@ -46,7 +46,8 @@ export const chatSessionMessageItemClassName = "mt-4 first:mt-0";
  * Agent output for one user turn (text, tools, thinking, completion notices).
  * Children carry per-type vertical margins (see replyItemMarginClassName in
  * the session pane) instead of a uniform gap, so adjacent margins collapse to
- * the larger value. The 10px top margin keeps the reply tight under its user
- * message; `pb-8` (12px while generating) is the turn's bottom breathing room.
+ * the larger value. The 10px top margin keeps the reply tight under the strip
+ * the user message reserves for its copy button; `pb-8` (12px while
+ * generating) is the turn's bottom breathing room.
  */
 export const chatSessionAgentReplyGroupClassName = "mt-2.5 first:mt-0 pb-8";
