@@ -14,7 +14,7 @@ afterAll(async () => {
     await fixture.close();
 });
 
-test.each(["v1", "legacy", "migrated"] as const)(
+test.each(["v1", "migrated"] as const)(
     "Given local, browser and recovery credentials, When their %s operations end access, Then each preserves the other credential kinds and only browser access closes its links",
     async (version) => {
         const owner = await fixture.createAnonymousUser();
@@ -61,13 +61,11 @@ test.each(["v1", "legacy", "migrated"] as const)(
         for (const operation of operations) {
             const session = await request("/session", operation.token);
             expect(session.status).toBe(200);
-            if (version !== "legacy") {
-                expect(session.headers.get("Morty-Credential-Revocation")).toBe(operation.path);
-                for (const other of operations.filter((entry) => entry.path !== operation.path)) {
-                    const rejected = await request(other.path, operation.token, "DELETE");
-                    expect(rejected.status).toBe(403);
-                    expect(await rejected.json()).toMatchObject({ error: { code: "CREDENTIAL_KIND_REQUIRED" } });
-                }
+            expect(session.headers.get("Morty-Credential-Revocation")).toBe(operation.path);
+            for (const other of operations.filter((entry) => entry.path !== operation.path)) {
+                const rejected = await request(other.path, operation.token, "DELETE");
+                expect(rejected.status).toBe(403);
+                expect(await rejected.json()).toMatchObject({ error: { code: "CREDENTIAL_KIND_REQUIRED" } });
             }
         }
         if (version === "migrated") {
@@ -77,10 +75,9 @@ test.each(["v1", "legacy", "migrated"] as const)(
             expect((await request("/identity/revoke-all-access", token, "POST")).status).toBe(403);
         }
         for (const [index, operation] of operations.entries()) {
-            const path = version === "legacy" ? "/identity/remote-access" : operation.path;
-            expect((await request(path, operation.token, "DELETE")).status).toBe(204);
+            expect((await request(operation.path, operation.token, "DELETE")).status).toBe(204);
             expect((await request("/session", operation.token)).status).toBe(401);
-            expect((await request(path, operation.token, "DELETE")).status).toBe(401);
+            expect((await request(operation.path, operation.token, "DELETE")).status).toBe(401);
             for (const remaining of operations.slice(index + 1)) {
                 expect((await request("/session", remaining.token)).status).toBe(200);
             }

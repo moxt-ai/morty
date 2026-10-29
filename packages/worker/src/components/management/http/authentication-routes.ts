@@ -134,13 +134,6 @@ export function createAuthenticationRoutes() {
                     );
             }
         })
-        .delete("/identity/remote-access", async (context) => {
-            const result = await context.env.services.authentication.endLegacyRemoteAccess(
-                context.get("bearerToken"),
-                context.req.raw.signal,
-            );
-            return endAccessResponse(result);
-        })
         .delete(credentialRevocationPaths.browser, async (context) => {
             return endAccessResponse(
                 await context.env.services.authentication.endBrowserAccess(
@@ -167,7 +160,8 @@ export function createAuthenticationRoutes() {
         });
 }
 
-// Successful deletion keeps the old 204/401 retry contract. A timeout is ambiguous: retry the same operation.
+// Deletion answers 204; a credential that no longer authenticates answers 401, so a retry after a lost reply is safe.
+// A timeout is ambiguous: retry the same operation.
 function endAccessResponse(result: { readonly kind: "ended" | "unauthenticated" | "forbidden" }): Response {
     switch (result.kind) {
         case "ended":

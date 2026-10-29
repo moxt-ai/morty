@@ -60,6 +60,11 @@ const transferSchema = v.pipe(
     v.object({ expiresAt: v.pipe(v.string(), v.isoTimestamp()), url: v.pipe(v.string(), v.url()) }),
     v.readonly(),
 );
+const credentialRevocationPathSchema = v.picklist([
+    "/identity/v1/local-credential",
+    "/identity/v1/browser-access",
+    "/identity/v1/recovery-credential",
+]);
 export type AnonymousIdentity = v.InferOutput<typeof identitySchema>;
 export type IdentityTransfer = v.InferOutput<typeof transferSchema>;
 
@@ -227,19 +232,8 @@ export class AnonymousIdentityApi {
         const headers = { authorization: `Bearer ${v.parse(tokenSchema, token)}` };
         const session = await this.#response("/session", { method: "GET", headers }, signal);
         await session.body?.cancel();
-        // Negotiate before mutating. Missing support is the old contract; a failed deletion never changes paths.
-        const advertised = session.headers.get("Morty-Credential-Revocation");
-        const path =
-            advertised === null
-                ? "/identity/remote-access"
-                : v.parse(
-                      v.picklist([
-                          "/identity/v1/local-credential",
-                          "/identity/v1/browser-access",
-                          "/identity/v1/recovery-credential",
-                      ]),
-                      advertised,
-                  );
+        // The Worker names the deletion that ends this credential's kind.
+        const path = v.parse(credentialRevocationPathSchema, session.headers.get("Morty-Credential-Revocation"));
         await this.#request(path, { method: "DELETE", headers }, signal);
         const scope = readIdentityScope();
         if (scope !== null) {

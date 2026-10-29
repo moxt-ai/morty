@@ -375,7 +375,7 @@ test("Given an end confirmation for revoked access, When the API rejects the req
     });
     const signal = new AbortController().signal;
     const revoked = await app.transport.fetch(
-        new Request(`${app.origin}/morty/api/projects/${app.identity.projectId}/identity/remote-access`, {
+        new Request(`${app.origin}/morty/api/projects/${app.identity.projectId}/identity/v1/local-credential`, {
             method: "DELETE",
             headers: { authorization: `Bearer ${await app.identity.getToken(signal)}` },
             signal,

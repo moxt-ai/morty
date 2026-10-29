@@ -363,7 +363,7 @@ interface ErrorCause {
 
 function sanitizeErrorText(value: string) {
     return value
-        .replace(/mobius_(?:anon|pair|transfer)_v2\.[A-Za-z0-9._-]+/gu, "[REDACTED]")
+        .replace(/mobius_anon_v2_[A-Za-z0-9_-]+|mobius_(?:transfer_v2|recovery_v1)\.[A-Za-z0-9._-]+/gu, "[REDACTED]")
         .replace(/([?&](?:token|code)=)[^&\s#]+/giu, "$1[REDACTED]");
 }
 
@@ -835,26 +835,15 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return context;
         }
         const { projectId, token } = replacement.previous;
-        const options = {
-            headers: { authorization: `Bearer ${credential(token)}` },
-            redirect: "error",
-            signal: AbortSignal.any([signal, AbortSignal.timeout(45000)]),
-        } as const;
-        const projectPath = `/morty/api/projects/${identifier(projectId)}`;
-        const session = await fetch(new URL(`${projectPath}/session`, context.base), options);
-        let response = session;
-        if (session.ok) {
-            await session.body?.cancel();
-            // Old Workers omit the capability. Select the operation before writing, never after an ambiguous failure.
-            const advertised = session.headers.get("Morty-Credential-Revocation");
-            if (advertised !== null && advertised !== "/identity/v1/local-credential") {
-                fail("LOCAL_IDENTITY_REQUIRED", new RemoteError("Only the saved local identity can be retired."));
-            }
-            response = await fetch(new URL(`${projectPath}${advertised ?? "/identity/remote-access"}`, context.base), {
-                ...options,
+        const response = await fetch(
+            new URL(`/morty/api/projects/${identifier(projectId)}/identity/v1/local-credential`, context.base),
+            {
                 method: "DELETE",
-            });
-        }
+                headers: { authorization: `Bearer ${credential(token)}` },
+                redirect: "error",
+                signal: AbortSignal.any([signal, AbortSignal.timeout(45000)]),
+            },
+        );
         // A credential that no longer authenticates was ended by an earlier run that stopped before saving it.
         if (!response.ok && response.status !== 401) {
             remoteFailure(object(await response.json()), response.status);
@@ -875,7 +864,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const { values } = parseArgs({
             args: [...commandArgs],
             options: {
-                token: { type: "string" },
                 cwd: { type: "string" },
                 harness: { type: "string" },
                 "base-url": { type: "string" },
@@ -891,9 +879,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         if (values.cwd === undefined) {
             fail("WORKING_DIRECTORY_REQUIRED");
-        }
-        if (values.token !== undefined) {
-            fail("INVALID_ARGUMENTS");
         }
         const harness = identifier(values.harness);
         return {
@@ -960,7 +945,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             user_id: identifier(identity["userId"]),
             bot_id: identifier(object(identity["bot"])["botId"]),
             project_id: identifier(identity["projectId"]),
-            entry: "setup",
         });
         return { kind: "setup", context: saved, project: "created" };
     }
@@ -1169,7 +1153,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 // The replacement Machine starts unbound; drop the previous Machine's Agent binding.
                 agent_ref: undefined,
                 pairing_runtime_id: undefined,
-                entry: "setup",
             },
         );
         emit({ status: "project_replaced", botId: saved.config["bot_id"], projectId: saved.config["project_id"] });

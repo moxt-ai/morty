@@ -197,23 +197,4 @@ export class AuthenticationService {
                 : "unauthenticated",
         };
     };
-
-    /** Compatibility for old browsers and setup executables; keep their existing revocation scope. */
-    readonly endLegacyRemoteAccess = async (
-        token: string | undefined,
-        signal: AbortSignal,
-    ): Promise<EndAccessResult> => {
-        const credential = await this.#credential(token, signal);
-        if (credential === null) {
-            return { kind: "unauthenticated" };
-        }
-        switch (credential.kind) {
-            case "browser":
-                return await this.endBrowserAccess(token, signal);
-            case "local":
-                return await this.retireLocalCredential(token, signal);
-            case "recovery":
-                return await this.revokeRecoveryCredential(token, signal);
-        }
-    };
 }
