@@ -7,6 +7,67 @@ import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
 
+for (const eventOrder of ["before refusal", "after refusal"] as const) {
+    test(`Given a released Runtime starts queued work before a delayed steer arrives, When its lifecycle arrives ${eventOrder}, Then the completed reply has no stale queue error`, {
+        timeout: 30_000,
+    }, async () => {
+        const environment = await createChatWorkerEnvironment(false, true);
+        onTestFinished(() => environment.close());
+        const app = await createTestApp({ environment, connectAgent: true });
+        const { daemon, executionNetwork } = app;
+        if (daemon === null || executionNetwork === null) {
+            throw new Error("Expected a real Runtime and the execution transport proxy");
+        }
+        await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
+        await app.queryElementByTestId(dataTestId.sessionStatus);
+        await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold after first delta");
+        const queued = await app.queryElementByTestId(dataTestId.queuedMessage);
+        const held = executionNetwork.holdNextSteer();
+        await app.user.click(getByLabelText(queued, "Steer queued message: hold after first delta"));
+        const release = await held;
+        const releaseEvents = eventOrder === "after refusal" ? executionNetwork.holdSessionEvents() : () => {};
+        try {
+            await daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
+            // This control waits for the queued prompt to reach the real ACP harness before continuing it.
+            await daemon.continueReply("hold after first delta", {
+                outcome: "hold",
+                output: [{ kind: "text", text: "Queued work is now running" }],
+            });
+            if (eventOrder === "before refusal") {
+                await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
+            }
+            // The pinned, unmodified Runtime returns its released generic operation failure.
+            const response = await release();
+            expect(response).toMatchObject({ kind: "http.response", status: 503 });
+            if (eventOrder === "after refusal") {
+                await app.waitForView(() =>
+                    expect(document.body.textContent).toContain("The local agent operation could not be completed"),
+                );
+            }
+        } finally {
+            releaseEvents();
+        }
+        await daemon.continueReply("hold after first delta", {
+            outcome: "complete",
+            output: [{ kind: "text", text: "Queued work completed after the late steer" }],
+        });
+        await app.waitForView(() =>
+            expect(
+                app
+                    .elementsByTestId(dataTestId.agentResponse)
+                    .some((element) => element.textContent?.includes("Queued work completed after the late steer")),
+            ).toBe(true),
+        );
+        await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+        expect(document.body.textContent).not.toContain("The local agent operation could not be completed");
+        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+            "wait for steering",
+            "hold after first delta",
+        ]);
+        await app.close();
+    });
+}
+
 test("Given the daemon has queued work, When the user steers it into the active turn, Then every viewer sees the steered reply", {
     timeout: 30_000,
 }, async () => {

@@ -23,7 +23,14 @@ export type ChatQueuedMessage =
     | ({ readonly kind: "deleting" } & QueuedMessageValue);
 
 type QueueOperation = { readonly kind: "idle" } | { readonly kind: "submitting"; readonly commandId: string };
-type QueueFeedback = { readonly kind: "none" } | { readonly kind: "failed"; readonly message: string };
+type QueueFeedback =
+    | { readonly kind: "none" }
+    | {
+          readonly kind: "failed";
+          readonly operation: "submit" | "delete" | "steer";
+          readonly commandId: string;
+          readonly message: string;
+      };
 
 interface SessionMessageQueuePort {
     readonly cancel: (turnId: string, idempotencyKey: string, signal: AbortSignal) => Promise<void>;
@@ -55,6 +62,14 @@ function updateMessage(
     kind: ChatQueuedMessage["kind"],
 ): readonly ChatQueuedMessage[] {
     return messages.map((message) => (message.commandId === commandId ? { ...message, kind } : message));
+}
+
+function reconcileFeedback(feedback: QueueFeedback, messages: readonly ChatQueuedMessage[]): QueueFeedback {
+    return feedback.kind === "failed" &&
+        feedback.operation === "steer" &&
+        !messages.some((message) => message.commandId === feedback.commandId)
+        ? { kind: "none" }
+        : feedback;
 }
 
 export const createSessionMessageQueueStore = (options: { readonly port: SessionMessageQueuePort }) => {
@@ -90,6 +105,8 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                 set((state) => ({
                     feedback: {
                         kind: "failed",
+                        operation: "delete",
+                        commandId,
                         message: formatError(cause, "The queued message could not be deleted."),
                     },
                     messages: updateMessage(state.messages, commandId, "queued"),
@@ -135,7 +152,12 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                     throw cause;
                 }
                 set({
-                    feedback: { kind: "failed", message: formatError(cause, "The message could not be queued.") },
+                    feedback: {
+                        kind: "failed",
+                        operation: "submit",
+                        commandId,
+                        message: formatError(cause, "The message could not be queued."),
+                    },
                     operation: { kind: "idle" },
                 });
                 return null;
@@ -164,13 +186,22 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                 if (parent.aborted) {
                     throw cause;
                 }
-                set((state) => ({
-                    feedback: {
-                        kind: "failed",
-                        message: formatError(cause, "The queued message could not steer the task."),
-                    },
-                    messages: updateMessage(state.messages, commandId, "queued"),
-                }));
+                set((state) => {
+                    // Execution events and queue snapshots may arrive before the HTTP refusal,
+                    // including the generic refusal returned by older Runtimes.
+                    if (!state.messages.some((candidate) => candidate.commandId === commandId)) {
+                        return state;
+                    }
+                    return {
+                        feedback: {
+                            kind: "failed",
+                            operation: "steer",
+                            commandId,
+                            message: formatError(cause, "The queued message could not steer the task."),
+                        },
+                        messages: updateMessage(state.messages, commandId, "queued"),
+                    };
+                });
                 return null;
             }
         },
@@ -185,8 +216,8 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                     localAttachments.delete(commandId);
                 }
             }
-            set((state) => ({
-                messages: messages.map((message) => {
+            set((state) => {
+                const next: readonly ChatQueuedMessage[] = messages.map((message) => {
                     const attachments = localAttachments.get(message.commandId);
                     return {
                         commandId: message.commandId,
@@ -200,20 +231,18 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                         kind:
                             state.messages.find((current) => current.commandId === message.commandId)?.kind ?? "queued",
                     };
-                }),
-            }));
+                });
+                return { messages: next, feedback: reconcileFeedback(state.feedback, next) };
+            });
         },
         takeStarted: (commandId) => {
             localAttachments.delete(commandId);
             const message = get().messages.find((candidate) => candidate.commandId === commandId);
-            if (message === undefined) {
-                return null;
-            }
             set((state) => {
                 const messages = state.messages.filter((candidate) => candidate.commandId !== commandId);
-                return { messages };
+                return { messages, feedback: reconcileFeedback(state.feedback, messages) };
             });
-            return message;
+            return message ?? null;
         },
     }));
 };
