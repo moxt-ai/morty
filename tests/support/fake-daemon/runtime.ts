@@ -1,14 +1,11 @@
-/// <reference path="./previous-runtime.d.ts" />
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import * as previousRuntime from "@moxt-ai/mobius-previous/runtime";
 import { MobiusClient, StaticMobiusCredentialProvider } from "@moxt-ai/mobius-sdk/server";
 import {
     createFakeDaemon,
     type FakeAgentHarnessOptions,
-    fakeDaemonCapabilities,
     type HarnessReplyPlan,
 } from "@moxt-ai/mobius-test-support/fake-daemon";
 import * as v from "valibot";
@@ -20,7 +17,7 @@ import {
 } from "../../../third-party/mobius/packages/cli/src/engine/runtime/config.ts";
 import { RuntimeLoop } from "../../../third-party/mobius/packages/cli/src/engine/runtime/runtime-loop.ts";
 import { createInteractionAgent } from "./interaction-agent.ts";
-import { createSettingsAgent, createUnavailableAgent, defineCurrentAgent } from "./settings-agent.ts";
+import { createSettingsAgent, createUnavailableAgent } from "./settings-agent.ts";
 import { createToolLifecycleAgent } from "./tool-lifecycle-agent.ts";
 
 type TestServerApp = { readonly request: (request: Request) => Response | Promise<Response> };
@@ -45,17 +42,10 @@ export interface ControlledRuntimeConnection {
     readonly runtimeCredential: string;
 }
 
-/**
- * The production daemon release that runs the controlled Agent. "previous" is the
- * pinned earlier npm release, for scenarios where users have not upgraded yet.
- */
-type ControlledRuntimeRelease = "current" | "previous";
-
-/** An Agent the controlled Runtime exposes, and the daemon release that runs it. */
+/** An Agent the controlled Runtime exposes. */
 export interface ControlledAgent {
     readonly id: string;
     readonly label: string;
-    readonly runtime?: ControlledRuntimeRelease;
     /** Test control that holds a selected Agent configuration request before it is applied. */
     readonly beforeConfigurationApplied?: ((configId: string, value: string | boolean) => Promise<void>) | undefined;
 }
@@ -63,87 +53,47 @@ export interface ControlledAgent {
 export interface ControlledAgentBehavior extends FakeAgentHarnessOptions {
     readonly beforeConfigurationApplied?: ((configId: string, value: string | boolean) => Promise<void>) | undefined;
     readonly files?: ReadonlyMap<string, { readonly content: string | Uint8Array; readonly mediaType: string }>;
-    readonly runtime?: ControlledRuntimeRelease;
-}
-
-interface ControlledRuntimeEngine {
-    readonly run: (signal: AbortSignal) => Promise<void>;
 }
 
 type RuntimeConnectionOptions = Parameters<typeof createRuntimeConfig>[0];
 
 /** Creates the daemon configuration once, so Agent state survives restarts of its engine. */
 function controlledRuntime(
-    behavior: ControlledAgentBehavior,
     agents: ReturnType<typeof createMortyFakeDaemon>["agents"],
     connection: RuntimeConnectionOptions,
     directory: string,
-): { readonly start: (onConnectionStatus: (status: "online" | "reconnecting") => void) => ControlledRuntimeEngine } {
-    const release = behavior.runtime ?? "current";
-    switch (release) {
-        case "current": {
-            const config = createRuntimeConfig(
-                connection,
-                new RuntimeAgentDependencies(agents),
-                new RuntimeLocalContext(directory, process.env),
-            );
-            return {
-                start: (onConnectionStatus) =>
-                    new RuntimeLoop(
-                        async () => ({
-                            ...config,
-                            // Every injected peer speaks ACP, regardless of its catalog label. Use the production
-                            // ACP history adapter rather than a vendor-native reader or an unregistered adapter ID.
-                            // Alias only adapter selection; catalog and session identities stay intact.
-                            adapters: (agent, dependencies) =>
-                                config.adapters(
-                                    new AcpAgentDefinition(
-                                        "claude",
-                                        agent.label,
-                                        agent.command,
-                                        (options) => agent.createConnection(options),
-                                        agent.environment,
-                                        agent.agentVersion,
-                                        agent.agentIdentity,
-                                        agent.capabilities,
-                                    ),
-                                    dependencies,
-                                ),
-                        }),
-                        { onConnectionStatus },
-                    ),
-            };
-        }
-        case "previous": {
-            if (behavior.agentId !== "settings-test") {
-                throw new Error("The previous daemon release only runs the settings test Agent");
-            }
-            const config = previousRuntime.createRuntimeConfig(
-                connection,
-                [
-                    createSettingsAgent(
-                        (id, label, createEndpoint) =>
-                            new previousRuntime.InProcessAcpAgentDefinition(
-                                id,
-                                label,
-                                process.execPath,
-                                () => createEndpoint(),
-                                {},
-                                "controlled-harness",
-                                undefined,
-                                fakeDaemonCapabilities,
+): { readonly start: (onConnectionStatus: (status: "online" | "reconnecting") => void) => RuntimeLoop } {
+    const config = createRuntimeConfig(
+        connection,
+        new RuntimeAgentDependencies(agents),
+        new RuntimeLocalContext(directory, process.env),
+    );
+    return {
+        start: (onConnectionStatus) =>
+            new RuntimeLoop(
+                async () => ({
+                    ...config,
+                    // Every injected peer speaks ACP, regardless of its catalog label. Use the production
+                    // ACP history adapter rather than a vendor-native reader or an unregistered adapter ID.
+                    // Alias only adapter selection; catalog and session identities stay intact.
+                    adapters: (agent, dependencies) =>
+                        config.adapters(
+                            new AcpAgentDefinition(
+                                "claude",
+                                agent.label,
+                                agent.command,
+                                (options) => agent.createConnection(options),
+                                agent.environment,
+                                agent.agentVersion,
+                                agent.agentIdentity,
+                                agent.capabilities,
                             ),
-                    ),
-                ],
-                new previousRuntime.RuntimeLocalContext(directory, process.env),
-            );
-            return {
-                start: (onConnectionStatus) => new previousRuntime.MobiusRuntimeEngine(config, { onConnectionStatus }),
-            };
-        }
-        default:
-            return release satisfies never;
-    }
+                            dependencies,
+                        ),
+                }),
+                { onConnectionStatus },
+            ),
+    };
 }
 
 function workspaceReply(behavior: ControlledAgentBehavior, workspace: string): FakeAgentHarnessOptions["reply"] {
@@ -194,11 +144,11 @@ export function createMortyFakeDaemon(behavior: ControlledAgentBehavior, workspa
     if (behavior.agentId === "configuration-test") {
         return {
             ...harness,
-            agents: [createSettingsAgent(defineCurrentAgent, "full", behavior.beforeConfigurationApplied)],
+            agents: [createSettingsAgent("full", behavior.beforeConfigurationApplied)],
         };
     }
     if (behavior.agentId === "settings-test") {
-        return { ...harness, agents: [createSettingsAgent(defineCurrentAgent)] };
+        return { ...harness, agents: [createSettingsAgent()] };
     }
     if (behavior.agentId === "signed-out-test") {
         return { ...harness, agents: [createUnavailableAgent("signed-out-test", "Signed-out Agent", "signed-out")] };
@@ -226,7 +176,6 @@ export async function connectControlledAgentRuntime(options: {
     const configure = (behavior: ControlledAgentBehavior) => {
         const harness = createMortyFakeDaemon(behavior, workspace);
         const runtime = controlledRuntime(
-            behavior,
             harness.agents,
             { channelId: options.connection.channelId, defaultWorkspace: workspace, relayUrl },
             directory,

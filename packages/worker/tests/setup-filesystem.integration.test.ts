@@ -881,17 +881,18 @@ async function withUpgradeMachine(
             readonly dispatch: (request: Request) => Promise<Response>;
         },
     ) => Promise<void>,
-    /** The daemon release the machine runs before setup. Only the current release can run Agents other than settings. */
-    release: "previous" | "current" = "previous",
+    /** The release the machine's daemon runs before setup. */
+    release: ConstructorParameters<typeof ControlledSetupRuntime>[3] = "latest",
 ): Promise<void> {
     const root = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-upgrade-")));
     const workspace = join(root, "workspace");
     await mkdir(workspace, { recursive: true });
     const fixture = await createIdentityFixture();
     const runtime = new ControlledSetupRuntime(
-        { agentId: "settings-test", agentName: "Settings Agent", reply: mortyReply, runtime: release },
+        { agentId: "settings-test", agentName: "Settings Agent", reply: mortyReply },
         "Setup test Runtime",
         upgrade,
+        release,
     );
     try {
         await scenario(runtime, {
@@ -908,21 +909,25 @@ async function withUpgradeMachine(
     }
 }
 
-test("Given a paired machine whose online daemon runs a previous release, When the user reruns setup and an upgrade is available, Then setup reuses the Runtime on the newest release", {
+test("Given a paired machine whose online daemon runs an outdated release, When the user reruns setup and an upgrade is available, Then setup reuses the Runtime on the newest release", {
     timeout: 90_000,
 }, async () => {
-    await withUpgradeMachine("unavailable", async (runtime, paths) => {
-        const first = await setupMachine(runtime, paths);
-        expect(first.code, JSON.stringify(first.events)).toBe(0);
-        expect(runtime.daemonRelease()).toBe("previous");
+    await withUpgradeMachine(
+        "unavailable",
+        async (runtime, paths) => {
+            const first = await setupMachine(runtime, paths);
+            expect(first.code, JSON.stringify(first.events)).toBe(0);
+            expect(runtime.daemonRelease()).toBe("outdated");
 
-        runtime.setUpgrade("available");
-        const rerun = await setupMachine(runtime, paths);
-        expect(rerun.code, JSON.stringify(rerun.events)).toBe(0);
-        expect(rerun.events).toContainEqual(expect.objectContaining({ status: "runtime_already_online" }));
-        expect(rerun.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-        expect(runtime.daemonRelease()).toBe("current");
-    });
+            runtime.setUpgrade("available");
+            const rerun = await setupMachine(runtime, paths);
+            expect(rerun.code, JSON.stringify(rerun.events)).toBe(0);
+            expect(rerun.events).toContainEqual(expect.objectContaining({ status: "runtime_already_online" }));
+            expect(rerun.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
+            expect(runtime.daemonRelease()).toBe("latest");
+        },
+        "outdated",
+    );
 });
 
 test("Given setup was stopped after pairing its Runtime, When the user runs setup again and again, Then each run continues on that Runtime and setup finishes", {
@@ -1209,76 +1214,62 @@ test.each(["notice-only", "access-only"] as const)(
 test("Given the agent's shell exposes its current Pi session, When setup runs without --session-id, Then the link continues that session", {
     timeout: 120_000,
 }, async () => {
-    await withUpgradeMachine(
-        "unavailable",
-        async (runtime, paths) => {
-            await runtime.installAgents({
-                agentId: "pi",
-                agentName: "Pi",
-                additionalAgents: [{ id: "settings-test", name: "Settings Agent" }],
-            });
-            const finished = await setupMachine(runtime, paths, undefined, {
-                harness: "pi",
-                sessionArgument: null,
-                agentEnvironment: { PI_SESSION_ID: "pi-shell-session" },
-            });
-            expect(finished.code, JSON.stringify(finished.events)).toBe(0);
-            const ready = finished.events.at(-1);
-            expect(ready).toMatchObject({ status: "ready" });
-            expect(new URL(String(ready?.["url"])).searchParams.get("sessionId")).toBe("pi-shell-session");
-        },
-        "current",
-    );
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        await runtime.installAgents({
+            agentId: "pi",
+            agentName: "Pi",
+            additionalAgents: [{ id: "settings-test", name: "Settings Agent" }],
+        });
+        const finished = await setupMachine(runtime, paths, undefined, {
+            harness: "pi",
+            sessionArgument: null,
+            agentEnvironment: { PI_SESSION_ID: "pi-shell-session" },
+        });
+        expect(finished.code, JSON.stringify(finished.events)).toBe(0);
+        const ready = finished.events.at(-1);
+        expect(ready).toMatchObject({ status: "ready" });
+        expect(new URL(String(ready?.["url"])).searchParams.get("sessionId")).toBe("pi-shell-session");
+    });
 });
 
 test("Given an agent passes a session ID its shell does not expose, When setup runs, Then the link continues the shell's session and setup reports the mismatch", {
     timeout: 120_000,
 }, async () => {
-    await withUpgradeMachine(
-        "unavailable",
-        async (runtime, paths) => {
-            await runtime.installAgents({
-                agentId: "pi",
-                agentName: "Pi",
-                additionalAgents: [{ id: "settings-test", name: "Settings Agent" }],
-            });
-            const finished = await setupMachine(runtime, paths, undefined, {
-                harness: "pi",
-                sessionArgument: "agent-guessed-session",
-                agentEnvironment: { PI_SESSION_ID: "pi-shell-session" },
-            });
-            expect(finished.code, JSON.stringify(finished.events)).toBe(0);
-            expect(finished.events).toContainEqual(
-                expect.objectContaining({ status: "session_id_mismatch", harness: "pi", variable: "PI_SESSION_ID" }),
-            );
-            expect(new URL(String(finished.events.at(-1)?.["url"])).searchParams.get("sessionId")).toBe(
-                "pi-shell-session",
-            );
-        },
-        "current",
-    );
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        await runtime.installAgents({
+            agentId: "pi",
+            agentName: "Pi",
+            additionalAgents: [{ id: "settings-test", name: "Settings Agent" }],
+        });
+        const finished = await setupMachine(runtime, paths, undefined, {
+            harness: "pi",
+            sessionArgument: "agent-guessed-session",
+            agentEnvironment: { PI_SESSION_ID: "pi-shell-session" },
+        });
+        expect(finished.code, JSON.stringify(finished.events)).toBe(0);
+        expect(finished.events).toContainEqual(
+            expect.objectContaining({ status: "session_id_mismatch", harness: "pi", variable: "PI_SESSION_ID" }),
+        );
+        expect(new URL(String(finished.events.at(-1)?.["url"])).searchParams.get("sessionId")).toBe("pi-shell-session");
+    });
 });
 
 test("Given neither the agent's shell nor its arguments name a session, When setup runs, Then it fails before creating an identity and names the variable it looked for", {
     timeout: 120_000,
 }, async () => {
-    await withUpgradeMachine(
-        "unavailable",
-        async (runtime, paths) => {
-            const failed = await setupMachine(runtime, paths, undefined, {
-                harness: "pi",
-                sessionArgument: null,
-                agentEnvironment: { CLAUDE_CODE_SESSION_ID: "an-outer-claude-session" },
-            });
-            expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
-            expect(failed.events).toContainEqual(
-                expect.objectContaining({ status: "session_unavailable", harness: "pi", variable: "PI_SESSION_ID" }),
-            );
-            expect(failed.events.at(-1)).toMatchObject({ error: { code: "SESSION_ID_REQUIRED" } });
-            expect(failed.events).not.toContainEqual(expect.objectContaining({ status: "identity_ready" }));
-        },
-        "current",
-    );
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        const failed = await setupMachine(runtime, paths, undefined, {
+            harness: "pi",
+            sessionArgument: null,
+            agentEnvironment: { CLAUDE_CODE_SESSION_ID: "an-outer-claude-session" },
+        });
+        expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
+        expect(failed.events).toContainEqual(
+            expect.objectContaining({ status: "session_unavailable", harness: "pi", variable: "PI_SESSION_ID" }),
+        );
+        expect(failed.events.at(-1)).toMatchObject({ error: { code: "SESSION_ID_REQUIRED" } });
+        expect(failed.events).not.toContainEqual(expect.objectContaining({ status: "identity_ready" }));
+    });
 });
 
 test("Given the chosen harness is not installed, When the user reruns setup with it, Then each run reports it unavailable and setup finishes once an installed harness is chosen", {
@@ -1314,31 +1305,27 @@ function machineOf(events: readonly Readonly<Record<string, unknown>>[]) {
 test("Given the chosen agent is installed but signed out, When setup connects it, Then setup asks the user to sign in and finishes on the same Machine afterwards", {
     timeout: 120_000,
 }, async () => {
-    await withUpgradeMachine(
-        "unavailable",
-        async (runtime, paths) => {
-            await runtime.installAgents({ agentId: "signed-out-test", agentName: "Signed-out Agent" });
-            const failed = await setupMachine(runtime, paths, undefined, { harness: "signed-out-test" });
-            expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
-            expect(failed.events.at(-1)?.["error"]).toMatchObject({
-                code: "authentication_required",
-                binding: {
-                    harness: "signed-out-test",
-                    nextStep: expect.stringContaining(
-                        "Ask the user to sign in to signed-out-test on this computer; you cannot sign in for them.",
-                    ),
-                },
-            });
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        await runtime.installAgents({ agentId: "signed-out-test", agentName: "Signed-out Agent" });
+        const failed = await setupMachine(runtime, paths, undefined, { harness: "signed-out-test" });
+        expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
+        expect(failed.events.at(-1)?.["error"]).toMatchObject({
+            code: "authentication_required",
+            binding: {
+                harness: "signed-out-test",
+                nextStep: expect.stringContaining(
+                    "Ask the user to sign in to signed-out-test on this computer; you cannot sign in for them.",
+                ),
+            },
+        });
 
-            // The user signs in, so the same harness now opens sessions.
-            await runtime.installAgents({ agentId: "settings-test", agentName: "Settings Agent" });
-            const finished = await setupMachine(runtime, paths, undefined, { harness: "settings-test" });
-            expect(finished.code, JSON.stringify(finished.events)).toBe(0);
-            expect(machineOf(finished.events)).toBe(machineOf(failed.events));
-            expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "reused" });
-        },
-        "current",
-    );
+        // The user signs in, so the same harness now opens sessions.
+        await runtime.installAgents({ agentId: "settings-test", agentName: "Settings Agent" });
+        const finished = await setupMachine(runtime, paths, undefined, { harness: "settings-test" });
+        expect(finished.code, JSON.stringify(finished.events)).toBe(0);
+        expect(machineOf(finished.events)).toBe(machineOf(failed.events));
+        expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "reused" });
+    });
 });
 
 test("Given the network stalls while setup connects the agent, When the request times out, Then setup tells the agent to rerun unchanged and the rerun finishes on the same Machine", {
@@ -1367,129 +1354,111 @@ test("Given the network stalls while setup connects the agent, When the request 
 test("Given the chosen agent cannot open a session for another reason, When setup connects it, Then setup asks the agent to check the harness instead of guessing a fix", {
     timeout: 120_000,
 }, async () => {
-    await withUpgradeMachine(
-        "unavailable",
-        async (runtime, paths) => {
-            await runtime.installAgents({ agentId: "broken-test", agentName: "Broken Agent" });
-            const failed = await setupMachine(runtime, paths, undefined, { harness: "broken-test" });
-            expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
-            const failure = failed.events.at(-1)?.["error"];
-            expect(failure).toMatchObject({
-                binding: {
-                    harness: "broken-test",
-                    nextStep: expect.stringContaining("Confirm broken-test answers a prompt in the working directory"),
-                },
-            });
-            expect(failure).not.toMatchObject({ code: "SETUP_FAILED" });
-            expect(JSON.stringify(failure)).not.toMatch(/sign in|update/u);
-        },
-        "current",
-    );
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        await runtime.installAgents({ agentId: "broken-test", agentName: "Broken Agent" });
+        const failed = await setupMachine(runtime, paths, undefined, { harness: "broken-test" });
+        expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
+        const failure = failed.events.at(-1)?.["error"];
+        expect(failure).toMatchObject({
+            binding: {
+                harness: "broken-test",
+                nextStep: expect.stringContaining("Confirm broken-test answers a prompt in the working directory"),
+            },
+        });
+        expect(failure).not.toMatchObject({ code: "SETUP_FAILED" });
+        expect(JSON.stringify(failure)).not.toMatch(/sign in|update/u);
+    });
 });
 
 test("Given Pi is installed but signed out, so the Runtime does not offer it, When setup runs with Pi, Then setup asks the user to sign in with Pi's own command and finishes on the same Machine afterwards", {
     timeout: 120_000,
 }, async () => {
-    await withUpgradeMachine(
-        "unavailable",
-        async (runtime, paths) => {
-            runtime.reportAgentInventory([
-                {
-                    id: "pi",
-                    label: "Pi",
-                    status: "authentication_required",
-                    code: "authentication_required",
-                    message: "Agent authentication is required",
-                    recoveryCommand: "pi",
-                },
-            ]);
-            const failed = await setupMachine(runtime, paths, undefined, { harness: "pi" });
-            expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
-            expect(failed.events.at(-1)?.["error"]).toMatchObject({
-                code: "HARNESS_UNAVAILABLE",
-                harness: {
-                    harness: "pi",
-                    status: "authentication_required",
-                    nextStep: expect.stringContaining(
-                        "Ask the user to sign in to Pi on this computer by running `pi` in a terminal; you cannot sign in for them.",
-                    ),
-                },
-            });
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        runtime.reportAgentInventory([
+            {
+                id: "pi",
+                label: "Pi",
+                status: "authentication_required",
+                code: "authentication_required",
+                message: "Agent authentication is required",
+                recoveryCommand: "pi",
+            },
+        ]);
+        const failed = await setupMachine(runtime, paths, undefined, { harness: "pi" });
+        expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
+        expect(failed.events.at(-1)?.["error"]).toMatchObject({
+            code: "HARNESS_UNAVAILABLE",
+            harness: {
+                harness: "pi",
+                status: "authentication_required",
+                nextStep: expect.stringContaining(
+                    "Ask the user to sign in to Pi on this computer by running `pi` in a terminal; you cannot sign in for them.",
+                ),
+            },
+        });
 
-            // The user signs in, so this computer's Mobius offers Pi again.
-            runtime.reportAgentInventory([]);
-            await runtime.installAgents({
-                agentId: "pi",
-                agentName: "Pi",
-                additionalAgents: [{ id: "settings-test", name: "Settings Agent" }],
-            });
-            const finished = await setupMachine(runtime, paths, undefined, { harness: "pi" });
-            expect(finished.code, JSON.stringify(finished.events)).toBe(0);
-            expect(machineOf(finished.events)).toBe(machineOf(failed.events));
-            expect(finished.events.at(-1)).toMatchObject({ status: "ready" });
-        },
-        "current",
-    );
+        // The user signs in, so this computer's Mobius offers Pi again.
+        runtime.reportAgentInventory([]);
+        await runtime.installAgents({
+            agentId: "pi",
+            agentName: "Pi",
+            additionalAgents: [{ id: "settings-test", name: "Settings Agent" }],
+        });
+        const finished = await setupMachine(runtime, paths, undefined, { harness: "pi" });
+        expect(finished.code, JSON.stringify(finished.events)).toBe(0);
+        expect(machineOf(finished.events)).toBe(machineOf(failed.events));
+        expect(finished.events.at(-1)).toMatchObject({ status: "ready" });
+    });
 });
 
 test("Given Pi became ready after the running Runtime published its Agents, When setup runs with Pi and the Runtime still omits it, Then setup asks to rerun once and to get the user's consent before restarting Mobius", {
     timeout: 120_000,
 }, async () => {
-    await withUpgradeMachine(
-        "unavailable",
-        async (runtime, paths) => {
-            runtime.reportAgentInventory([], [{ id: "pi", label: "Pi" }]);
-            const failed = await setupMachine(runtime, paths, undefined, { harness: "pi" });
-            expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
-            const failure = failed.events.at(-1)?.["error"];
-            expect(failure).toMatchObject({
-                code: "HARNESS_UNAVAILABLE",
-                harness: {
-                    harness: "pi",
-                    status: "ready",
-                    nextStep: expect.stringContaining(
-                        "ask the user before running `mobius quit`, because it stops every Morty session on this computer",
-                    ),
-                },
-            });
-            expect(JSON.stringify(failure)).toContain("Rerun setup once.");
-        },
-        "current",
-    );
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        runtime.reportAgentInventory([], [{ id: "pi", label: "Pi" }]);
+        const failed = await setupMachine(runtime, paths, undefined, { harness: "pi" });
+        expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
+        const failure = failed.events.at(-1)?.["error"];
+        expect(failure).toMatchObject({
+            code: "HARNESS_UNAVAILABLE",
+            harness: {
+                harness: "pi",
+                status: "ready",
+                nextStep: expect.stringContaining(
+                    "ask the user before running `mobius quit`, because it stops every Morty session on this computer",
+                ),
+            },
+        });
+        expect(JSON.stringify(failure)).toContain("Rerun setup once.");
+    });
 });
 
 test("Given setup continues on a Runtime that does not offer the chosen harness yet, When the user installs it while setup waits, Then setup finishes once the Runtime publishes it", {
     timeout: 120_000,
 }, async () => {
-    await withUpgradeMachine(
-        "unavailable",
-        async (runtime, paths) => {
-            const missing = await setupMachine(runtime, paths, undefined, { harness: "pi" });
-            expect(missing.code, JSON.stringify(missing.events)).not.toBe(0);
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        const missing = await setupMachine(runtime, paths, undefined, { harness: "pi" });
+        expect(missing.code, JSON.stringify(missing.events)).not.toBe(0);
 
-            // The Runtime is online with its earlier catalog until it republishes the newly installed harness.
-            let installing: Promise<void> | null = null;
-            const installed = await setupMachine(runtime, paths, undefined, {
-                harness: "pi",
-                whileWaiting: async (events) => {
-                    if (events.some((event) => event["status"] === "runtime_reused") && installing === null) {
-                        installing = runtime.installAgents({
-                            agentId: "pi",
-                            agentName: "Pi",
-                            additionalAgents: [{ id: "settings-test", name: "Settings Agent" }],
-                        });
-                    }
-                    await installing;
-                },
-            });
-            expect(installed.code, JSON.stringify(installed.events)).toBe(0);
-            expect(installed.events).toContainEqual(
-                expect.objectContaining({ status: "runtime_online", harness: "pi" }),
-            );
-            expect(installed.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-        },
-        "current",
-    );
+        // The Runtime is online with its earlier catalog until it republishes the newly installed harness.
+        let installing: Promise<void> | null = null;
+        const installed = await setupMachine(runtime, paths, undefined, {
+            harness: "pi",
+            whileWaiting: async (events) => {
+                if (events.some((event) => event["status"] === "runtime_reused") && installing === null) {
+                    installing = runtime.installAgents({
+                        agentId: "pi",
+                        agentName: "Pi",
+                        additionalAgents: [{ id: "settings-test", name: "Settings Agent" }],
+                    });
+                }
+                await installing;
+            },
+        });
+        expect(installed.code, JSON.stringify(installed.events)).toBe(0);
+        expect(installed.events).toContainEqual(expect.objectContaining({ status: "runtime_online", harness: "pi" }));
+        expect(installed.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
+    });
 });
 
 test("Given setup bound the Machine but never received the reply, When the user runs setup again, Then setup finishes on the bound Runtime", {
@@ -1517,68 +1486,80 @@ test("Given setup bound the Machine but never received the reply, When the user 
     });
 });
 
-test("Given a machine runs a previous daemon release and no upgrade is reachable, When setup prepares the Runtime, Then setup completes on the running release and reports why", {
+test("Given a machine runs an outdated daemon release and no upgrade is reachable, When setup prepares the Runtime, Then setup completes on the running release and reports why", {
     timeout: 60_000,
 }, async () => {
-    await withUpgradeMachine("unavailable", async (runtime, paths) => {
-        const { code, events } = await setupMachine(runtime, paths);
-        expect(code, JSON.stringify(events)).toBe(0);
-        expect(events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-        expect(runtime.daemonRelease()).toBe("previous");
-        expect(events).toContainEqual(
-            expect.objectContaining({
-                status: "runtime_upgrade_skipped",
-                error: expect.objectContaining({ code: "RUNTIME_UPGRADE_FAILED" }),
-            }),
-        );
-    });
+    await withUpgradeMachine(
+        "unavailable",
+        async (runtime, paths) => {
+            const { code, events } = await setupMachine(runtime, paths);
+            expect(code, JSON.stringify(events)).toBe(0);
+            expect(events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
+            expect(runtime.daemonRelease()).toBe("outdated");
+            expect(events).toContainEqual(
+                expect.objectContaining({
+                    status: "runtime_upgrade_skipped",
+                    error: expect.objectContaining({ code: "RUNTIME_UPGRADE_FAILED" }),
+                }),
+            );
+        },
+        "outdated",
+    );
 });
 
 test("Given a daemon upgrade stops responding, When its budget expires, Then setup completes on the running daemon and reports the timeout", {
     timeout: 60_000,
 }, async () => {
-    await withUpgradeMachine("unresponsive", async (runtime, paths) => {
-        const budget = upgradeBudget();
-        const setup = setupMachine(runtime, paths, budget.deadline);
-        await runtime.upgradeRequested;
-        budget.elapse();
-        const { code, events } = await setup;
-        expect(code, JSON.stringify(events)).toBe(0);
-        expect(events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-        expect(runtime.daemonRelease()).toBe("previous");
-        expect(events).toContainEqual(
-            expect.objectContaining({
-                status: "runtime_upgrade_skipped",
-                error: expect.objectContaining({ code: "RUNTIME_UPGRADE_TIMEOUT" }),
-            }),
-        );
-    });
+    await withUpgradeMachine(
+        "unresponsive",
+        async (runtime, paths) => {
+            const budget = upgradeBudget();
+            const setup = setupMachine(runtime, paths, budget.deadline);
+            await runtime.upgradeRequested;
+            budget.elapse();
+            const { code, events } = await setup;
+            expect(code, JSON.stringify(events)).toBe(0);
+            expect(events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
+            expect(runtime.daemonRelease()).toBe("outdated");
+            expect(events).toContainEqual(
+                expect.objectContaining({
+                    status: "runtime_upgrade_skipped",
+                    error: expect.objectContaining({ code: "RUNTIME_UPGRADE_TIMEOUT" }),
+                }),
+            );
+        },
+        "outdated",
+    );
 });
 
 test("Given a daemon upgrade is still switching releases when its budget expires, When the manager finishes the switch, Then setup waits for the Runtime and completes on the newest release", {
     timeout: 60_000,
 }, async () => {
-    await withUpgradeMachine("interrupted-switch", async (runtime, paths) => {
-        const budget = upgradeBudget();
-        const setup = setupMachine(runtime, paths, budget.deadline);
-        await runtime.upgradeRequested;
-        budget.elapse();
-        const { code, events } = await setup;
-        expect(code, JSON.stringify(events)).toBe(0);
-        expect(events).toContainEqual(
-            expect.objectContaining({
-                status: "runtime_upgrade_skipped",
-                error: expect.objectContaining({ code: "RUNTIME_UPGRADE_TIMEOUT" }),
-            }),
-        );
-        const skipped = events.findIndex((event) => event["status"] === "runtime_upgrade_skipped");
-        const online = events.findIndex((event, index) => index > skipped && event["status"] === "runtime_online");
-        const bound = events.findIndex((event) => event["status"] === "binding_activated");
-        expect(online, JSON.stringify(events)).toBeGreaterThan(skipped);
-        expect(bound, JSON.stringify(events)).toBeGreaterThan(online);
-        expect(events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-        expect(runtime.daemonRelease()).toBe("current");
-    });
+    await withUpgradeMachine(
+        "interrupted-switch",
+        async (runtime, paths) => {
+            const budget = upgradeBudget();
+            const setup = setupMachine(runtime, paths, budget.deadline);
+            await runtime.upgradeRequested;
+            budget.elapse();
+            const { code, events } = await setup;
+            expect(code, JSON.stringify(events)).toBe(0);
+            expect(events).toContainEqual(
+                expect.objectContaining({
+                    status: "runtime_upgrade_skipped",
+                    error: expect.objectContaining({ code: "RUNTIME_UPGRADE_TIMEOUT" }),
+                }),
+            );
+            const skipped = events.findIndex((event) => event["status"] === "runtime_upgrade_skipped");
+            const online = events.findIndex((event, index) => index > skipped && event["status"] === "runtime_online");
+            const bound = events.findIndex((event) => event["status"] === "binding_activated");
+            expect(online, JSON.stringify(events)).toBeGreaterThan(skipped);
+            expect(bound, JSON.stringify(events)).toBeGreaterThan(online);
+            expect(events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
+            expect(runtime.daemonRelease()).toBe("latest");
+        },
+        "outdated",
+    );
 });
 
 test("Given two shared links and redeemed access, When the local owner revokes all access, Then previous links and credentials fail while local setup and another machine remain usable", async () => {
@@ -1744,10 +1725,7 @@ test("Given two computers share a synced Documents folder holding the first one'
     const documents = join(root, "Documents");
     const fixture = await createIdentityFixture();
     const computer = (name: string) =>
-        new ControlledSetupRuntime(
-            { agentId: "settings-test", agentName: "Settings Agent", reply: mortyReply, runtime: "current" },
-            name,
-        );
+        new ControlledSetupRuntime({ agentId: "settings-test", agentName: "Settings Agent", reply: mortyReply }, name);
     const first = computer("Computer A");
     const second = computer("Computer B");
     const opens = async (link: unknown) => {
@@ -1828,7 +1806,7 @@ test("Given an earlier release kept this computer's identity in Documents, When 
     const state = join(root, "state");
     const fixture = await createIdentityFixture();
     const runtime = new ControlledSetupRuntime(
-        { agentId: "settings-test", agentName: "Settings Agent", reply: mortyReply, runtime: "current" },
+        { agentId: "settings-test", agentName: "Settings Agent", reply: mortyReply },
         "Setup test Runtime",
     );
     try {

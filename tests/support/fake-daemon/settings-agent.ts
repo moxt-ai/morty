@@ -11,13 +11,12 @@ import type {
     InProcessAcpEndpoint,
 } from "../../../third-party/mobius/packages/cli/src/engine/acp/agent/in-process-endpoint.ts";
 
-export type DefineInProcessAgent<Definition> = (
+/** Registers an in-process ACP Agent with the daemon. */
+const defineAgent = (
     id: string,
     label: string,
-    createEndpoint: (onSessionUpdate?: ControlledSessionUpdate) => InProcessAcpEndpoint,
-) => Definition;
-
-export const defineCurrentAgent: DefineInProcessAgent<AcpAgentDefinition> = (id, label, createEndpoint) =>
+    createEndpoint: (onSessionUpdate: ControlledSessionUpdate) => InProcessAcpEndpoint,
+): AcpAgentDefinition =>
     new AcpAgentDefinition(
         id,
         label,
@@ -33,10 +32,8 @@ export const defineCurrentAgent: DefineInProcessAgent<AcpAgentDefinition> = (id,
 /**
  * A stateful Agent with one model setting. Asked to "Remove settings", it removes
  * its configuration through a real ACP update; it answers any other prompt.
- * `define` registers it with the daemon release under test.
  */
-export function createSettingsAgent<Definition>(
-    define: DefineInProcessAgent<Definition>,
+export function createSettingsAgent(
     profile: "model" | "full" = "model",
     beforeConfigurationApplied?: (configId: string, value: string | boolean) => Promise<void>,
 ) {
@@ -49,7 +46,7 @@ export function createSettingsAgent<Definition>(
         }
         return options;
     };
-    const createEndpoint = (onSessionUpdate?: ControlledSessionUpdate): InProcessAcpEndpoint => {
+    const createEndpoint = (onSessionUpdate: ControlledSessionUpdate): InProcessAcpEndpoint => {
         const termination = Promise.withResolvers<AcpEndpointTermination>();
         const app = acp
             .agent({ name: "morty-settings-agent" })
@@ -112,11 +109,7 @@ export function createSettingsAgent<Definition>(
             .onRequest(acp.methods.agent.session.load, async (context) => {
                 const sessionId = context.params.sessionId;
                 for (const update of histories.get(sessionId) ?? []) {
-                    if (onSessionUpdate === undefined) {
-                        await context.client.notify(acp.methods.client.session.update, { sessionId, update });
-                    } else {
-                        await onSessionUpdate({ sessionId, update });
-                    }
+                    await onSessionUpdate({ sessionId, update });
                 }
                 return { configOptions: configuration(sessionId) };
             })
@@ -164,11 +157,7 @@ export function createSettingsAgent<Definition>(
                     const update: acp.SessionUpdate = { sessionUpdate: "user_message_chunk", content, messageId };
                     history.push(update);
                     const notification: acp.SessionNotification = { sessionId, update };
-                    if (onSessionUpdate === undefined) {
-                        await context.client.notify(acp.methods.client.session.update, notification);
-                    } else {
-                        await onSessionUpdate(notification);
-                    }
+                    await onSessionUpdate(notification);
                 }
                 if (prompt === "hold with consecutive user messages") {
                     const update: acp.SessionUpdate = {
@@ -178,11 +167,7 @@ export function createSettingsAgent<Definition>(
                     };
                     history.push(update);
                     const notification: acp.SessionNotification = { sessionId, update };
-                    if (onSessionUpdate === undefined) {
-                        await context.client.notify(acp.methods.client.session.update, notification);
-                    } else {
-                        await onSessionUpdate(notification);
-                    }
+                    await onSessionUpdate(notification);
                     return { stopReason: "end_turn" };
                 }
                 if (prompt !== "Remove settings") {
@@ -198,11 +183,7 @@ export function createSettingsAgent<Definition>(
                         },
                     };
                     history.push(update);
-                    if (onSessionUpdate === undefined) {
-                        await context.client.notify(acp.methods.client.session.update, { sessionId, update });
-                    } else {
-                        await onSessionUpdate({ sessionId, update });
-                    }
+                    await onSessionUpdate({ sessionId, update });
                     return { stopReason: "end_turn" };
                 }
                 sessions.set(sessionId, []);
@@ -216,11 +197,7 @@ export function createSettingsAgent<Definition>(
                 ];
                 history.push(...updates);
                 for (const update of updates) {
-                    if (onSessionUpdate === undefined) {
-                        await context.client.notify(acp.methods.client.session.update, { sessionId, update });
-                    } else {
-                        await onSessionUpdate({ sessionId, update });
-                    }
+                    await onSessionUpdate({ sessionId, update });
                 }
                 return { stopReason: "end_turn" };
             })
@@ -232,7 +209,7 @@ export function createSettingsAgent<Definition>(
             close: async () => termination.resolve({ kind: "closed" }),
         };
     };
-    return define(profile === "full" ? "configuration-test" : "settings-test", "Settings Agent", createEndpoint);
+    return defineAgent(profile === "full" ? "configuration-test" : "settings-test", "Settings Agent", createEndpoint);
 }
 
 /** How an installed Agent fails to open a session: signed out like a real harness, or broken. */
@@ -268,5 +245,5 @@ export function createUnavailableAgent(id: string, name: string, failure: Unavai
             close: async () => termination.resolve({ kind: "closed" }),
         };
     };
-    return defineCurrentAgent(id, name, createEndpoint);
+    return defineAgent(id, name, createEndpoint);
 }

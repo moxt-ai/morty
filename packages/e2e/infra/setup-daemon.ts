@@ -31,6 +31,13 @@ export interface UnavailableAgentReport {
 /** How `mobius upgrade` behaves on the controlled machine. */
 type ControlledUpgrade = "available" | "unavailable" | "unresponsive" | "interrupted-switch";
 
+/**
+ * The Mobius release the machine's daemon runs: an outdated one that `mobius upgrade` switches to the
+ * latest, or the latest already. Only the release switch is modeled; the Agent always runs on this
+ * checkout's daemon engine.
+ */
+type DaemonRelease = "outdated" | "latest";
+
 /** Setup CLI test port backed by the production daemon and a controlled Agent harness. */
 export class ControlledSetupRuntime implements SetupRuntime {
     readonly #saved = new Map<string, Connection>();
@@ -45,19 +52,23 @@ export class ControlledSetupRuntime implements SetupRuntime {
     #unpublishedReadyAgents: readonly { readonly id: string; readonly label: string }[] = [];
     readonly #machineName: string;
     #upgrade: ControlledUpgrade;
-    #release: NonNullable<ControlledAgentBehavior["runtime"]>;
+    #release: DaemonRelease;
     readonly #upgradeRequested = Promise.withResolvers<void>();
     /** Settles when setup first asks for an upgrade. */
     readonly upgradeRequested = this.#upgradeRequested.promise;
     /**
-     * `options.runtime` is the release the machine's daemon runs before setup.
-     * `upgrade` says how `mobius upgrade` behaves.
+     * `upgrade` says how `mobius upgrade` behaves; `release` is the release the machine's daemon runs before setup.
      */
-    constructor(options: ControlledAgentBehavior, machineName: string, upgrade: ControlledUpgrade = "available") {
+    constructor(
+        options: ControlledAgentBehavior,
+        machineName: string,
+        upgrade: ControlledUpgrade = "available",
+        release: DaemonRelease = "latest",
+    ) {
         this.#machineName = machineName;
         this.#options = options;
         this.#upgrade = upgrade;
-        this.#release = options.runtime ?? "current";
+        this.#release = release;
         // The fixture races failures against the browser scenario; retain early failures too.
         void this.failure.catch(() => undefined);
     }
@@ -177,8 +188,8 @@ export class ControlledSetupRuntime implements SetupRuntime {
         this.#upgrade = upgrade;
     };
 
-    /** The daemon release `mobius --version` reports. */
-    readonly daemonRelease = (): NonNullable<ControlledAgentBehavior["runtime"]> => this.#release;
+    /** The release the machine's daemon runs, as `mobius --version` reports it. */
+    readonly daemonRelease = (): DaemonRelease => this.#release;
 
     // Like `mobius upgrade`: the running daemon switches to the newest release, and
     // its active connections come back on it.
@@ -216,13 +227,13 @@ export class ControlledSetupRuntime implements SetupRuntime {
     readonly #switchStarted = Promise.withResolvers<void>();
     #pendingSwitch: Promise<void> = Promise.resolve();
 
-    // Stops the running daemon and brings its connections back on the newest release.
+    // Stops the running daemon and brings its connections back on the latest release.
     async #switchRelease(signal: AbortSignal): Promise<void> {
-        if (this.#release === "current") {
+        if (this.#release === "latest") {
             this.#switchStarted.resolve();
             return;
         }
-        this.#release = "current";
+        this.#release = "latest";
         const reconnecting = Array.from(this.#active.keys(), (id) => this.#saved.get(id)).filter(
             (connection) => connection !== undefined,
         );
@@ -247,7 +258,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
             return;
         }
         const daemon = await connectControlledAgentRuntime({
-            behavior: { ...this.#options, runtime: this.#release },
+            behavior: this.#options,
             connection: {
                 channelId: connection.channel_id,
                 origin: connection.origin,
