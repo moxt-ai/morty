@@ -9,8 +9,8 @@ import {
     queryByRole,
     queryByText,
 } from "@testing-library/dom";
-import { render } from "@testing-library/react";
-import { expect, test } from "vitest";
+import { act, render } from "@testing-library/react";
+import { expect, onTestFinished, test, vi } from "vitest";
 import { renderRegisteredTool } from "../src/components/chat/tools/tool-renderer-registry.tsx";
 import { dataTestId } from "../src/data-testid.ts";
 import { expandProcessSections, sendPrompt } from "./infra/application-scenario.ts";
@@ -340,6 +340,56 @@ test("Given reasoning is still streaming, When the user expands it and then star
         expect(thinking.open).toBe(true);
         expect(thinking.textContent).toContain("Inspecting the workspace while holding.");
     });
+});
+
+test("Given reasoning streamed open by default, When the agent starts answering, Then thinking stays open for 600 ms before collapsing", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected a controlled Agent Runtime");
+    }
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the message composer");
+    }
+    const prompt = "hold reasoning only";
+    await sendPrompt(app, composer, prompt);
+    await expandProcessSections(app);
+    const thinking = await app.waitForView(() => {
+        const disclosure = app.optionalElementByTestId(dataTestId.agentReasoning);
+        if (!(disclosure instanceof HTMLDetailsElement) || !disclosure.open) {
+            throw new Error("Expected active reasoning to open by default");
+        }
+        return disclosure;
+    });
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    onTestFinished(() => {
+        vi.useRealTimers();
+    });
+    const reply = daemon.continueReply(prompt, {
+        outcome: "complete",
+        output: [{ kind: "text", text: "Final answer after reasoning." }],
+    });
+    // The harness, the transport and the view all schedule their handoffs on the faked clock, so the clock is
+    // what moves the reply to the screen. Step it a millisecond at a time until the answer is visible.
+    for (let elapsed = 0; !(document.body.textContent ?? "").includes("Final answer after reasoning."); elapsed += 1) {
+        if (elapsed > 2_000) {
+            throw new Error("The answer did not reach the screen");
+        }
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(1);
+        });
+    }
+    await reply;
+    expect(thinking.open).toBe(true);
+
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+    });
+    expect(thinking.open).toBe(false);
 });
 
 test("Given reasoning exceeds 16K characters, When the user opens the intermediate steps, Then Chat shows the retained tail and a truncation notice", {

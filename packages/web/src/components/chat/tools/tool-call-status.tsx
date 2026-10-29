@@ -1,6 +1,8 @@
 import { Check, ChevronDown, CircleMinus, X } from "lucide-react";
 import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
 import { cn } from "../../../lib/utils.ts";
+import { DisclosureReveal, useDisclosureReveal } from "../../utils/disclosure-reveal.tsx";
+import { scrollAnchorTriggerProps } from "../../utils/follow-latest-scroll-area.tsx";
 import { ScrollEdgeFade } from "../../utils/scroll-edge-fade.tsx";
 import type { ToolCallState } from "./tool-renderer.ts";
 
@@ -19,9 +21,12 @@ export const agentThinkStepWorkingTextClassName =
 
 export const agentThinkStepInlineLabelClassName = "flex min-w-0 flex-1 items-center gap-1";
 
-/** Chevron reserves fixed width and appears on hover, focus, or open without shifting the title. */
+/**
+ * Chevron reserves fixed width and appears on hover, focus, or open without shifting the title. It turns over the
+ * same 200 ms as the content slides, so the two read as one motion.
+ */
 export const agentThinkStepChevronClassName =
-    "invisible size-3.5 shrink-0 -rotate-90 transition-[transform,visibility] group-hover/process:visible group-focus-visible/process:visible motion-reduce:transition-none";
+    "invisible size-3.5 shrink-0 -rotate-90 transition-[transform,visibility] duration-200 ease-out group-hover/process:visible group-focus-visible/process:visible motion-reduce:transition-none";
 
 export const agentThinkStepExpandedPanelClassName =
     "grid max-h-[280px] min-w-0 gap-2 overflow-y-auto overscroll-contain border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere] [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]";
@@ -67,6 +72,7 @@ export function ToolCallDisclosure({
     readonly title: string;
 }) {
     const [open, setOpen] = useState(autoOpen);
+    const reveal = useDisclosureReveal(open);
     const supplementalContent = useContext(ToolCallSupplementalContent);
     useEffect(() => {
         if (autoOpen) {
@@ -81,6 +87,7 @@ export function ToolCallDisclosure({
                 onClick={() => setOpen((current) => !current)}
                 title={title}
                 type="button"
+                {...scrollAnchorTriggerProps}
             >
                 <span className={agentThinkStepIconClassName}>{icon}</span>
                 <span className={cn(agentThinkStepInlineLabelClassName, "overflow-hidden leading-[22px]")}>
@@ -94,11 +101,13 @@ export function ToolCallDisclosure({
                     />
                 </span>
             </button>
-            {open && (
-                <AgentThinkStepExpandedPanel>
-                    {children}
-                    {supplementalContent}
-                </AgentThinkStepExpandedPanel>
+            {reveal.present && (
+                <DisclosureReveal reveal={reveal}>
+                    <AgentThinkStepExpandedPanel>
+                        {children}
+                        {supplementalContent}
+                    </AgentThinkStepExpandedPanel>
+                </DisclosureReveal>
             )}
         </fieldset>
     );

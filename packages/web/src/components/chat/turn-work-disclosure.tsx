@@ -1,6 +1,8 @@
 import { ChevronDown, ListChecks } from "lucide-react";
 import { Fragment, type ReactNode, useId, useState } from "react";
 import { cn } from "../../lib/utils.ts";
+import { DisclosureReveal, useDisclosureReveal } from "../utils/disclosure-reveal.tsx";
+import { scrollAnchorTriggerProps } from "../utils/follow-latest-scroll-area.tsx";
 import { type DisclosureChoice, disclosureOpen } from "./disclosure-choice.ts";
 import {
     agentThinkStepChevronClassName,
@@ -43,6 +45,7 @@ export function TurnWorkDisclosure({
 }) {
     const [choice, setChoice] = useState<DisclosureChoice>("unset");
     const open = requestedOpen ?? disclosureOpen(choice, false);
+    const reveal = useDisclosureReveal(open);
     const contentId = useId();
     const parts: { readonly key: string; readonly text: string; readonly alert: boolean }[] = [
         { key: "steps", text: counted(summary.steps, "step", "steps"), alert: false },
@@ -78,6 +81,7 @@ export function TurnWorkDisclosure({
                 className={cn(agentThinkStepTriggerClassName, working && "text-morty-text-3")}
                 onClick={() => setChoice(open ? "collapsed" : "expanded")}
                 type="button"
+                {...scrollAnchorTriggerProps}
             >
                 <span className={agentThinkStepIconClassName}>
                     <ListChecks aria-hidden="true" className="size-3.5 shrink-0" />
@@ -99,10 +103,10 @@ export function TurnWorkDisclosure({
                     />
                 </span>
             </button>
-            {open && (
-                <div className="min-w-0" id={contentId}>
+            {reveal.present && (
+                <DisclosureReveal id={contentId} reveal={reveal}>
                     {children}
-                </div>
+                </DisclosureReveal>
             )}
         </div>
     );

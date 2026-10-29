@@ -2,6 +2,8 @@ import { ChevronDown, FileText } from "lucide-react";
 import { useState } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
+import { DisclosureReveal, useDisclosureReveal } from "../utils/disclosure-reveal.tsx";
+import { scrollAnchorTriggerProps } from "../utils/follow-latest-scroll-area.tsx";
 import { type DisclosureChoice, disclosureOpen } from "./disclosure-choice.ts";
 import {
     AgentThinkStepExpandedPanel,
@@ -44,6 +46,7 @@ export function CompactionDisclosure({
 }) {
     const [choice, setChoice] = useState<DisclosureChoice>("unset");
     const open = disclosureOpen(choice, status === "in_progress");
+    const reveal = useDisclosureReveal(open);
     const title = "Context compaction";
     return (
         <fieldset
@@ -57,6 +60,7 @@ export function CompactionDisclosure({
                 onClick={() => setChoice(open ? "collapsed" : "expanded")}
                 title={title}
                 type="button"
+                {...scrollAnchorTriggerProps}
             >
                 <span className={agentThinkStepIconClassName}>
                     <FileText aria-hidden="true" className="size-3.5 shrink-0" />
@@ -72,21 +76,23 @@ export function CompactionDisclosure({
                     />
                 </span>
             </button>
-            {open && (
-                <AgentThinkStepExpandedPanel>
-                    <section className="grid min-w-0 gap-2">
-                        {error !== null && error.length > 0 && (
-                            <p className="m-0 text-xs text-destructive" role="alert">
-                                {error}
-                            </p>
-                        )}
-                        {summary.trim().length > 0 && (
-                            <pre className="m-0 whitespace-pre-wrap font-sans text-xs leading-5 text-copy-secondary [overflow-wrap:anywhere]">
-                                {summary}
-                            </pre>
-                        )}
-                    </section>
-                </AgentThinkStepExpandedPanel>
+            {reveal.present && (
+                <DisclosureReveal reveal={reveal}>
+                    <AgentThinkStepExpandedPanel>
+                        <section className="grid min-w-0 gap-2">
+                            {error !== null && error.length > 0 && (
+                                <p className="m-0 text-xs text-destructive" role="alert">
+                                    {error}
+                                </p>
+                            )}
+                            {summary.trim().length > 0 && (
+                                <pre className="m-0 whitespace-pre-wrap font-sans text-xs leading-5 text-copy-secondary [overflow-wrap:anywhere]">
+                                    {summary}
+                                </pre>
+                            )}
+                        </section>
+                    </AgentThinkStepExpandedPanel>
+                </DisclosureReveal>
             )}
         </fieldset>
     );
