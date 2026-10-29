@@ -3,7 +3,7 @@ import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { createTestApp } from "./infra/test-app.tsx";
 
-test("Given a new visitor, When the setup page opens, Then it presents one clear setup flow and keeps installation details reviewable", {
+test("Given a new visitor, When the setup page opens, Then it explains what Morty is for, why it can be trusted, and where to verify that", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap" } });
@@ -12,32 +12,55 @@ test("Given a new visitor, When the setup page opens, Then it presents one clear
     expect(getAllByRole(document.body, "heading")).toHaveLength(1);
     expect(getByRole(document.body, "heading", { level: 1 })).toHaveProperty(
         "textContent",
-        "Connect your agent to Morty",
+        "Step away. Keep your agent working.",
     );
-    expect(getByRole(document.body, "region", { name: "Connect your agent to Morty" })).toHaveProperty(
+    expect(getByRole(document.body, "region", { name: "Step away. Keep your agent working." })).toHaveProperty(
         "className",
         expect.stringContaining("max-w-[460px]"),
     );
     expect(getByRole(document.body, "figure", { name: "Codex, Claude Code, and Pi connect to Morty" })).toBeInstanceOf(
         HTMLElement,
     );
-    expect(document.body.textContent).toContain("Run one setup prompt in Codex, Claude Code, or Pi.");
-    expect(document.body.textContent).not.toContain("Works with Codex, Claude Code, and Pi.");
+    expect(document.body.textContent).toContain(
+        "Check in and reply from any browser. Your agent keeps running on your computer.",
+    );
+    const repository = "https://github.com/moxt-ai/morty";
+    for (const [name, href] of [
+        ["GitHub", repository],
+        ["How Morty handles data", `${repository}#what-morty-does-with-your-data`],
+        ["Security", `${repository}/blob/main/SECURITY.md`],
+        ["Report an issue", `${repository}/issues/new`],
+    ]) {
+        expect(getByRole(document.body, "link", { name: new RegExp(`^${name}`) })).toHaveProperty("href", href);
+    }
     expect(getByText(document.body, "Next: paste it into the agent running on your computer.")).toBeInstanceOf(
         HTMLElement,
     );
-    expect(queryByRole(document.body, "list", { name: "Connect your session" })).toBeNull();
     const collapsedDetails = getByRole(document.body, "group", { name: "Setup details" });
     expect(collapsedDetails).toHaveProperty("open", false);
-    expect(
-        collapsedDetails.contains(getByText(document.body, "Keep that computer awake and online while using Morty.")),
-    ).toBe(false);
-    expect(
-        collapsedDetails.contains(
-            getByText(document.body, "Setup may install or update Morty's local connection software."),
-        ),
-    ).toBe(true);
+    expect(collapsedDetails.contains(getByText(document.body, /Keep that computer awake and online\./))).toBe(false);
     expect(queryByRole(document.body, "status", { name: "Setup next step" })).toBeNull();
+});
+
+test("Given a new visitor reviewing setup, When they expand its details, Then they read what it installs, runs, stores and shares before copying the prompt", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ page: { kind: "bootstrap" } });
+    await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup prompt" }));
+    await app.user.click(getByText(document.body, "Review what setup does", { exact: true }));
+
+    const steps = getAllByRole(getByRole(document.body, "list", { name: "What setup does" }), "listitem");
+    expect(steps.map((step) => step.textContent)).toEqual([
+        "Installs the Mobius CLI (@moxt-ai/mobius) from npm. It updates itself after 30 idle minutes.",
+        "Runs a background connection until restart or mobius quit.",
+        "Keeps this computer's Morty identity in your user data folder.",
+        "Asks before replacing a missing connection, which ends earlier shared access.",
+        "Returns a private link. Anyone who opens it within 24 hours can control your agent until you revoke access.",
+    ]);
+    expect(getByRole(document.body, "link", { name: /^Read setup\.md/ })).toHaveProperty(
+        "href",
+        `${window.location.origin}/setup.md`,
+    );
 });
 
 test("Given a new visitor whose agent is busy, When the setup page opens, Then it warns before copying that setup interrupts the agent's current task", {
@@ -48,7 +71,7 @@ test("Given a new visitor whose agent is busy, When the setup page opens, Then i
 
     const warning = getByText(
         document.body,
-        "Setup interrupts the agent's current task. Continue it in your browser afterwards.",
+        /^Setup interrupts the agent's current task; continue it here afterwards\./,
     );
     expect(getByRole(document.body, "group", { name: "Setup details" }).contains(warning)).toBe(false);
 });
@@ -64,7 +87,7 @@ test("Given a new visitor, When they copy the instruction, Then the clipboard ho
     expect(instruction).toContain(`${window.location.origin}/setup.md`);
     const nextStep = getByRole(document.body, "status", { name: "Setup next step" });
     expect(nextStep.textContent).toContain("Paste into your agent, then open the link it returns.");
-    await app.user.click(getByText(document.body, "Review setup details", { exact: true }));
+    await app.user.click(getByText(document.body, "Review what setup does", { exact: true }));
     const pairing = getByRole(document.body, "textbox", { name: "Agent setup prompt" });
     expect(pairing).toHaveProperty("value", instruction);
     await app.user.click(pairing);
@@ -83,7 +106,7 @@ test("Given the first screen, When the user reaches the copy button by keyboard 
 
     const instruction = await navigator.clipboard.readText();
     expect(instruction).toContain(`${window.location.origin}/setup.md`);
-    await app.user.click(getByText(document.body, "Review setup details", { exact: true }));
+    await app.user.click(getByText(document.body, "Review what setup does", { exact: true }));
     expect(getByRole(document.body, "textbox", { name: "Agent setup prompt" })).toHaveProperty("value", instruction);
     expect(getByRole(document.body, "button", { name: "Copied" })).toBeInstanceOf(HTMLButtonElement);
     expect(document.body.textContent).toContain("Paste into your agent, then open the link it returns.");
@@ -94,7 +117,7 @@ test("Given a user wants to inspect or manually copy setup, When they expand the
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap" } });
     await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup prompt" }));
-    await app.user.click(getByText(document.body, "Review setup details", { exact: true }));
+    await app.user.click(getByText(document.body, "Review what setup does", { exact: true }));
     expect(getByRole(document.body, "group", { name: "Setup details" })).toHaveProperty("open", true);
 
     const pairing = getByRole(document.body, "textbox", { name: "Agent setup prompt" });
@@ -107,8 +130,7 @@ test("Given a user wants to inspect or manually copy setup, When they expand the
     expect(pairing.value).toContain(`${window.location.origin}/setup.md`);
     expect(pairing.selectionStart).toBe(0);
     expect(pairing.selectionEnd).toBe(pairing.value.length);
-    expect(document.body.textContent).toContain("Keep that computer awake and online while using Morty.");
-    expect(document.body.textContent).toContain("Setup may install or update Morty's local connection software.");
+    expect(document.body.textContent).toContain("Keep that computer awake and online.");
 });
 
 test("Given the first screen, When the user clicks Copy again after success, Then the instruction is copied again", {

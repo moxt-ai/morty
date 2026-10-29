@@ -237,7 +237,7 @@ test("Given Morty has no paired agent, When the setup page opens, Then it offers
     expect(queryByRole(document.body, "button", { name: "Refresh pairing instruction" })).toBeNull();
     const dialog = getByRole(document.body, "dialog", { name: "Connect agent" });
     expect(getByRole(dialog, "button", { name: "Copy setup prompt" })).toBeInstanceOf(HTMLButtonElement);
-    expect(dialog.textContent).not.toContain("Connect your agent to Morty");
+    expect(dialog.textContent).not.toContain("Step away. Keep your agent working.");
     expect(dialog.textContent).not.toContain("Works with Codex, Claude Code, and Pi.");
     expect(dialog.textContent).not.toContain("Local execution. Remote access you can revoke.");
 });

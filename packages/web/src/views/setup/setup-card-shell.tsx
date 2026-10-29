@@ -29,10 +29,10 @@ function SetupCardLogo() {
     return <MortyLogoMark className="mb-6" size={56} />;
 }
 
-function SetupPageHeader() {
+function SetupPageHeader({ headerAction }: { readonly headerAction: ReactNode }) {
     return (
         <header className="w-full shrink-0">
-            <div className="flex min-h-16 w-full items-center px-4 py-3 sm:px-6">
+            <div className="flex min-h-16 w-full items-center justify-between px-4 py-3 sm:px-6">
                 <a
                     className="flex items-center gap-2 text-16 font-semibold tracking-tight"
                     href="/"
@@ -41,6 +41,7 @@ function SetupPageHeader() {
                     <MortyLogoMark size={28} />
                     Morty
                 </a>
+                {headerAction}
             </div>
         </header>
     );
@@ -49,17 +50,21 @@ function SetupPageHeader() {
 /** Top logo bar plus a centered content column; pairs with a single card section surface. */
 export function SetupPageWithHeader({
     children,
+    headerAction,
     pageAction,
+    pageFooter,
     pageNotice,
 }: {
     readonly children: ReactNode;
+    readonly headerAction?: ReactNode;
     readonly pageAction?: ReactNode;
+    readonly pageFooter?: ReactNode;
     readonly pageNotice?: ReactNode;
 }) {
     const hasPageLeading = pageNotice !== undefined || pageAction !== undefined;
     return (
         <main className={`flex min-h-screen flex-col overflow-y-auto ${setupPageBackgroundClassName} text-foreground`}>
-            <SetupPageHeader />
+            <SetupPageHeader headerAction={headerAction} />
             {pageNotice !== undefined && <div className="w-full px-6">{pageNotice}</div>}
             <div
                 className={
@@ -71,6 +76,7 @@ export function SetupPageWithHeader({
                 {pageAction !== undefined && <div className="mb-6">{pageAction}</div>}
                 {children}
             </div>
+            {pageFooter}
         </main>
     );
 }
@@ -136,7 +142,9 @@ export function SetupCardSection({
 export function SetupCardShell({
     cardClassName = "",
     cardLeading,
+    headerAction,
     pageAction,
+    pageFooter,
     pageNotice,
     showPageHeader = false,
     titleId,
@@ -145,7 +153,11 @@ export function SetupCardShell({
 }: {
     readonly cardClassName?: string;
     readonly cardLeading?: ReactNode | null;
+    /** Trailing header content; only rendered with the page header. */
+    readonly headerAction?: ReactNode;
     readonly pageAction?: ReactNode;
+    /** Content below the card; only rendered with the page header. */
+    readonly pageFooter?: ReactNode;
     readonly pageNotice?: ReactNode;
     readonly showPageHeader?: boolean;
     readonly titleId: string;
@@ -177,7 +189,12 @@ export function SetupCardShell({
     );
     if (showPageHeader) {
         return (
-            <SetupPageWithHeader pageAction={pageAction} pageNotice={pageNotice}>
+            <SetupPageWithHeader
+                headerAction={headerAction}
+                pageAction={pageAction}
+                pageFooter={pageFooter}
+                pageNotice={pageNotice}
+            >
                 {card}
             </SetupPageWithHeader>
         );
