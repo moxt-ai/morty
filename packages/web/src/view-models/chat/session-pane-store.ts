@@ -65,6 +65,7 @@ import {
 import {
     createSessionProjection,
     type SessionEventHistory,
+    type SessionProjection,
     type SessionProjectionEffect,
     type SessionProjectionInput,
     sessionProjectionExecutionOwner,
@@ -522,8 +523,11 @@ export function createSessionPaneModel(options: {
         return await client.turns.submit(sessionId, request, signal);
     });
     const lastSentMessageEntry = sessionLastSentMessageEntry(sessionId);
-    const deriveTimeline = (): { readonly messages: readonly SessionExecutionMessage[] } => ({
-        messages: sessionProjectionMessages(projection),
+    // The projection is the only source of the timeline; every change to it updates all three fields together.
+    const projectedTimeline = (state: SessionProjection) => ({
+        hasOlderHistory: sessionProjectionPagination(state) !== null,
+        historyRevision: state.revision,
+        messages: sessionProjectionMessages(state),
     });
     const tasks = createSessionTaskControlsStore({
         clock,
@@ -580,7 +584,6 @@ export function createSessionPaneModel(options: {
         directoryId: session.result.ready.directoryId,
     };
     const draftEntry = sessionDraftEntry(sessionId);
-    const initialTimeline = deriveTimeline();
 
     const respondToPermission = async (response: PermissionInteractionResponse, signal: AbortSignal): Promise<void> => {
         if (client === null || store.getState().connection.kind !== "ready") {
@@ -703,21 +706,18 @@ export function createSessionPaneModel(options: {
         const commitProjection = (input: SessionProjectionInput): readonly SessionProjectionEffect[] => {
             const result = transitionSessionProjection(projection, input);
             projection = result.state;
-            const pagination = sessionProjectionPagination(projection);
-            const messages = sessionProjectionMessages(projection);
+            const timeline = projectedTimeline(projection);
             delivery
                 .getState()
                 .messagesObserved(
-                    messages.flatMap((message) =>
+                    timeline.messages.flatMap((message) =>
                         message.role === "user"
                             ? [messageExecutionCommandId(message)].filter((id): id is string => id !== null)
                             : [],
                     ),
                 );
             set({
-                hasOlderHistory: pagination !== null,
-                historyRevision: projection.revision,
-                messages,
+                ...timeline,
                 // Lifecycle bookkeeping does not replace the preview; wait for Agent output.
                 pendingInitialMessage:
                     input.kind === "live-event" && input.event.type === "acp" ? null : get().pendingInitialMessage,
@@ -880,11 +880,7 @@ export function createSessionPaneModel(options: {
             }
             set({ pendingInitialMessage: null });
             updateTurn({ kind: "submitting", commandId, startedAt: sent.sentAt });
-            const pending = deriveTimeline();
-            set({
-                followRevision: get().followRevision + 1,
-                messages: pending.messages,
-            });
+            set({ followRevision: get().followRevision + 1 });
             try {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
@@ -926,8 +922,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 updateTurn({ kind: "submission-ended", commandId, failure: null });
-                const restored = deriveTimeline();
-                set({ messages: restored.messages, pendingInitialMessage: null });
+                set({ pendingInitialMessage: null });
                 announceActivity();
             } catch (cause) {
                 signal.throwIfAborted();
@@ -951,11 +946,9 @@ export function createSessionPaneModel(options: {
         return {
             connection: { kind: "first-loading" },
             titleEdit: { kind: "closed" },
-            messages: initialTimeline.messages,
+            ...projectedTimeline(projection),
             pendingInitialMessage: options.initialMessage ?? null,
             olderHistory: { kind: "idle" },
-            historyRevision: 0,
-            hasOlderHistory: false,
             draft: centralSessionStorage.read(draftEntry) ?? "",
             queuedFilesNotice: false,
             followRevision: 0,
@@ -1004,7 +997,7 @@ export function createSessionPaneModel(options: {
                 // reload re-reads persisted events, so a re-attached view never renders stale
                 // in-memory content the service no longer returns.
                 projection = createSessionProjection();
-                set({ messages: sessionProjectionMessages(projection) });
+                set(projectedTimeline(projection));
                 const readStoredLastSentMessage = (): void => {
                     const revision = turns.lastSentRevision();
                     void centralIndexedDB.get(lastSentMessageEntry, signal).then((stored) => {
@@ -1115,8 +1108,6 @@ export function createSessionPaneModel(options: {
                                             turnId: running.commandId,
                                             startedAt: turns.startedAt(running.commandId, Date.now()),
                                         });
-                                        const timeline = deriveTimeline();
-                                        set({ messages: timeline.messages });
                                         announceActivity();
                                         return;
                                     }
@@ -1127,8 +1118,6 @@ export function createSessionPaneModel(options: {
                                     failure:
                                         fact.kind === "turn-failed" ? { code: fact.code, message: fact.message } : null,
                                 });
-                                const completed = deriveTimeline();
-                                set({ messages: completed.messages });
                                 announceActivity();
                                 return;
                             }
@@ -1517,8 +1506,6 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 updateTurn({ kind: "submission-ended", commandId, failure: null });
-                const restored = deriveTimeline();
-                set({ messages: restored.messages });
                 announceActivity();
             },
             retryUnknownDelivery: async (signal) => {
@@ -1532,8 +1519,6 @@ export function createSessionPaneModel(options: {
                     commandId: pending.commandId,
                     startedAt: turns.startedAt(pending.commandId, Date.now()),
                 });
-                const retried = deriveTimeline();
-                set({ messages: retried.messages });
                 announceActivity();
                 const outcome = await delivery.getState().retry(submitTurn, signal);
                 signal.throwIfAborted();
@@ -1636,8 +1621,7 @@ export function createSessionPaneModel(options: {
                 const steered = await messageQueue.getState().steerMessage(commandId, signal);
                 signal.throwIfAborted();
                 if (steered !== null) {
-                    const timeline = deriveTimeline();
-                    set({ messages: timeline.messages, followRevision: get().followRevision + 1 });
+                    set({ followRevision: get().followRevision + 1 });
                 }
             },
             deleteQueued: async (commandId, signal) => {
