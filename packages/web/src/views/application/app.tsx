@@ -1,6 +1,7 @@
 import { type AnyRouter, RouterProvider } from "@tanstack/react-router";
-import { ArrowLeft, Unplug } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Check, Unplug } from "lucide-react";
 import { SetupConnectionGraphic } from "../../components/setup/setup-connection-graphic.tsx";
+import { ExternalLink } from "../../components/ui/external-link.tsx";
 import { MortyAlert } from "../../components/ui/morty-alert.tsx";
 import { Button, Spinner } from "../../index.ts";
 import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-store.ts";
@@ -118,6 +119,15 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
     }
 }
 
+const mortyRepository = "https://github.com/moxt-ai/morty";
+
+/** Where a visitor verifies what Morty does before running setup. */
+const mortyResources = [
+    ["How Morty handles data", `${mortyRepository}#what-morty-does-with-your-data`],
+    ["Security", `${mortyRepository}/blob/main/SECURITY.md`],
+    ["Report an issue", `${mortyRepository}/issues/new`],
+] as const;
+
 function SetupApplication({
     notice,
     returnHref,
@@ -162,16 +172,58 @@ function SetupApplication({
         );
 
     return (
-        <SetupCardShell pageAction={pageAction} pageNotice={pageNotice} showPageHeader titleId="setup-title">
+        <SetupCardShell
+            headerAction={
+                <ExternalLink
+                    className="text-14 font-medium text-morty-text-2 hover:text-foreground"
+                    href={mortyRepository}
+                >
+                    GitHub
+                    <ArrowUpRight aria-hidden="true" className="size-3.5" />
+                </ExternalLink>
+            }
+            pageAction={pageAction}
+            pageFooter={
+                <footer className="shrink-0 px-6 pb-6">
+                    <nav aria-label="About Morty">
+                        <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs leading-5">
+                            {mortyResources.map(([label, href]) => (
+                                <li key={label}>
+                                    <ExternalLink className="text-morty-text-3 hover:text-morty-text-2" href={href}>
+                                        {label}
+                                    </ExternalLink>
+                                </li>
+                            ))}
+                        </ul>
+                    </nav>
+                </footer>
+            }
+            pageNotice={pageNotice}
+            showPageHeader
+            titleId="setup-title"
+        >
             <SetupConnectionGraphic />
-            <SetupCardTitle id="setup-title">
-                {returnHref === null ? "Connect your agent to Morty" : "Connect another computer"}
+            <SetupCardTitle className="text-balance" id="setup-title">
+                {returnHref === null ? "Step away. Keep your agent working." : "Connect another computer"}
             </SetupCardTitle>
-            <SetupCardDescription>
+            <SetupCardDescription className="text-pretty">
                 {returnHref === null
-                    ? "Run one setup prompt in Codex, Claude Code, or Pi."
+                    ? "Check progress, reply, and approve requests from any browser while Codex, Claude Code, or Pi keeps running on your computer."
                     : "Run one setup prompt on the computer you want to add."}
             </SetupCardDescription>
+            {returnHref === null && (
+                <ul
+                    aria-label="Why Morty"
+                    className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs leading-5 text-morty-text-3"
+                >
+                    {["Runs on your computer", "Open source", "Access you can revoke"].map((reason) => (
+                        <li className="flex items-center gap-1" key={reason}>
+                            <Check aria-hidden="true" className="size-3.5 shrink-0" />
+                            {reason}
+                        </li>
+                    ))}
+                </ul>
+            )}
             <div className="mt-4 w-full">
                 <PairingInstruction />
             </div>

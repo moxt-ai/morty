@@ -22,12 +22,11 @@ for (const viewport of [
             await page.goto(runtime.origin);
             const copy = page.getByRole("button", { name: "Copy setup prompt" });
             await expect(copy).toBeInViewport();
-            await expect(page.getByRole("heading", { name: "Just one prompt." })).toBeVisible();
-            await expect(page.getByText("Connect your agent. Continue from any browser.")).toBeVisible();
-            await expect(page.getByText("Paste the prompt into the agent on your computer.")).toBeVisible();
-            await expect(page.getByRole("figure")).toHaveCount(0);
+            await expect(page.getByRole("heading", { name: "Step away. Keep your agent working." })).toBeVisible();
+            await expect(page.getByRole("list", { name: "Why Morty" })).toBeVisible();
+            await expect(page.getByText("Next: paste it into the agent running on your computer.")).toBeVisible();
             await expect(page.getByRole("heading")).toHaveCount(1);
-            const details = page.getByText("View setup prompt", { exact: true });
+            const details = page.getByText("Review what setup does", { exact: true });
             const setupText = page.getByRole("textbox", { name: "Agent setup prompt" });
             await expect(details).toBeInViewport();
             await expect(setupText).toBeHidden();

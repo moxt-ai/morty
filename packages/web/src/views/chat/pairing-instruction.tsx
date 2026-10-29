@@ -1,5 +1,6 @@
 import { Check, ChevronDown, Copy } from "lucide-react";
 import { CopyToClipboardButton } from "../../components/ui/copy-to-clipboard-button.tsx";
+import { ExternalLink } from "../../components/ui/external-link.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { setupPrimaryButtonClassName, setupPrimaryButtonSize } from "../setup/setup-card-shell.tsx";
@@ -52,12 +53,39 @@ export function PairingInstruction() {
             </div>
             <details aria-label="Setup details" className="group w-full text-xs leading-5 text-morty-text-3">
                 <summary className="mt-5 flex h-6 cursor-pointer list-none items-center justify-center gap-1.5 rounded-lg outline-none hover:text-morty-text-2 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-                    Review setup details
+                    Review what setup does
                     <ChevronDown aria-hidden="true" className="size-3.5 group-open:rotate-180" />
                 </summary>
                 <div className="mt-1 rounded-[16px] border border-border/60 bg-muted/50 p-1 text-left">
-                    <p className="px-3 py-1 text-morty-text-3">
-                        Setup may install or update Morty's local connection software.
+                    <ul
+                        aria-label="What setup does"
+                        className="list-disc space-y-1 py-2 pr-3 pl-7 text-morty-text-3 marker:text-morty-text-4"
+                    >
+                        <li>
+                            Installs or updates the Mobius CLI (<code>@moxt-ai/mobius</code>) from npm. It updates
+                            itself after your Morty sessions have been idle for 30 minutes.
+                        </li>
+                        <li>
+                            Starts a background connection. It stops when the computer restarts; run{" "}
+                            <code>mobius quit</code> to stop it anytime.
+                        </li>
+                        <li>
+                            Saves this computer's Morty identity in your user data folder, protected by file
+                            permissions.
+                        </li>
+                        <li>Asks before replacing a missing connection, which ends all earlier shared access.</li>
+                        <li>
+                            Returns a private link. Treat it like a password: anyone who opens it within 24 hours can
+                            view and control this computer's agent sessions until you revoke access.
+                        </li>
+                    </ul>
+                    <p className="px-3 pb-2">
+                        <ExternalLink
+                            className="text-morty-text-2 hover:text-foreground"
+                            href={`${window.location.origin}/setup.md`}
+                        >
+                            Read setup.md
+                        </ExternalLink>
                     </p>
                     <div className="overflow-hidden rounded-[12px] bg-muted">
                         <Textarea
