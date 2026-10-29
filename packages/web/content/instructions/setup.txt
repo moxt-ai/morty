@@ -16,8 +16,10 @@ Chat origin: {{BASE_URL}}
    Setup reads the current session from the harness itself; do not look up or ask
    for a session ID.
 3. Download {{BASE_URL}}/setup.mjs to a private temporary directory, with a finite
-   timeout and no redirects. Inspect it before running. Use commands appropriate
-   to the current shell; stop if installation or download fails.
+   timeout and no redirects. Inspect it before running. Its header names the public
+   source revision it was built from and the command that rebuilds the same file.
+   Use commands appropriate to the current shell; stop if installation or download
+   fails.
    Make the temporary directory private with native filesystem permissions.
 4. Run the following command with real values and shell-appropriate quoting.
    Use the original absolute working directory, not the download directory.
