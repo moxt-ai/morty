@@ -34,7 +34,7 @@ const defineAgent = (
  * its configuration through a real ACP update; it answers any other prompt.
  */
 export function createSettingsAgent(
-    profile: "model" | "full" = "model",
+    profile: "model" | "full" | "dependent" = "model",
     beforeConfigurationApplied?: (configId: string, value: string | boolean) => Promise<void>,
     beforeSessionCreated?: () => Promise<void>,
 ) {
@@ -71,7 +71,7 @@ export function createSettingsAgent(
                         options: [
                             { value: "test-small", name: "Test Small" },
                             { value: "test-large", name: "Test Large" },
-                            ...(profile === "full"
+                            ...(profile !== "model"
                                 ? Array.from({ length: 20 }, (_, index) => ({
                                       value: `test-model-${index}`,
                                       name: `Test model ${index} with a descriptive name`,
@@ -80,7 +80,7 @@ export function createSettingsAgent(
                         ],
                     },
                 ]);
-                if (profile === "full") {
+                if (profile !== "model") {
                     sessions.set(sessionId, [
                         {
                             id: "mode",
@@ -126,6 +126,16 @@ export function createSettingsAgent(
                     throw new Error("Unknown controlled setting");
                 }
                 const options = configuration(sessionId).map((option) => {
+                    // This Agent's plan mode constrains its model, as real settings can depend on one another.
+                    if (
+                        profile === "dependent" &&
+                        configId === "mode" &&
+                        value === "plan" &&
+                        option.id === "model" &&
+                        option.type === "select"
+                    ) {
+                        return { ...option, currentValue: "test-small" };
+                    }
                     if (option.id !== configId) {
                         return option;
                     }
@@ -211,7 +221,9 @@ export function createSettingsAgent(
             close: async () => termination.resolve({ kind: "closed" }),
         };
     };
-    return defineAgent(profile === "full" ? "configuration-test" : "settings-test", "Settings Agent", createEndpoint);
+    const id =
+        profile === "model" ? "settings-test" : profile === "full" ? "configuration-test" : "dependent-settings-test";
+    return defineAgent(id, "Settings Agent", createEndpoint);
 }
 
 /** How an installed Agent fails to open a session: signed out like a real harness, or broken. */

@@ -6,7 +6,13 @@ import {
     MobiusPlatformAppClient,
     MobiusTimeoutError,
 } from "@moxt-ai/mobius-sdk/platform";
-import { decodeRuntimeDiagnosticsResult, type SessionReadyEvent } from "@moxt-ai/mobius-sdk/protocol";
+import {
+    decodeRuntimeDiagnosticsResult,
+    RUNTIME_WORKSPACE_BINDING_ID,
+    type SessionConfigOption,
+    type SessionConfigurationSelection,
+    type SessionReadyEvent,
+} from "@moxt-ai/mobius-sdk/protocol";
 import { MobiusClient, MobiusRuntimePairingRequest } from "@moxt-ai/mobius-sdk/server";
 import * as v from "valibot";
 import {
@@ -34,7 +40,6 @@ export type ChatConversationInput =
     | {
           readonly kind: "new";
           readonly conversationKey: string;
-          readonly bindingId: string;
           readonly runtimeId: string;
           readonly agentRef: string;
           readonly configurations: readonly {
@@ -62,6 +67,19 @@ const discoveredRuntimeSchema = v.object({
 const runtimeLatencySchema = v.strictObject({
     latencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
 });
+
+function configurationMatches(
+    option: SessionConfigOption | undefined,
+    selection: SessionConfigurationSelection,
+): boolean {
+    return (
+        option !== undefined &&
+        option.type === selection.valueType &&
+        (option.type === "boolean"
+            ? option.booleanValue === selection.booleanValue
+            : option.currentValue === selection.value)
+    );
+}
 
 export class PlatformProjectGateway {
     readonly #bindings: CloudBindings;
@@ -358,7 +376,7 @@ export class PlatformProjectGateway {
                               {
                                   additionalDirectoryIds,
                                   agentId: input.agentRef,
-                                  bindingId: input.bindingId,
+                                  bindingId: RUNTIME_WORKSPACE_BINDING_ID,
                                   directoryId: input.workspaceRef,
                                   runtimeId: input.runtimeId,
                                   sessionId,
@@ -395,12 +413,13 @@ export class PlatformProjectGateway {
                             (option.type === "select" &&
                                 !option.values.some((value) => value.value === selection.value))
                         ) {
-                            continue;
+                            throw new PlatformProjectError(
+                                "session_configuration_conflict",
+                                `The selected Agent setting "${selection.configId}" is no longer available. Refresh the settings and try again.`,
+                                409,
+                            );
                         }
-                        if (option.type === "boolean" && option.booleanValue === selection.booleanValue) {
-                            continue;
-                        }
-                        if (option.type === "select" && option.currentValue === selection.value) {
+                        if (configurationMatches(option, selection)) {
                             continue;
                         }
                         configuration = await client.sessions.updateConfiguration(
@@ -414,6 +433,19 @@ export class PlatformProjectGateway {
                             },
                             signal,
                         );
+                    }
+                    // A later setting can change an earlier one. Access is ready only when all selections still match.
+                    for (const selection of input.configurations) {
+                        const option = configuration.configOptions.find(
+                            (candidate) => candidate.id === selection.configId,
+                        );
+                        if (!configurationMatches(option, selection)) {
+                            throw new PlatformProjectError(
+                                "session_configuration_conflict",
+                                `The Agent did not retain the selected setting "${selection.configId}". Review the settings and try again.`,
+                                409,
+                            );
+                        }
                     }
                 }
                 const access = await client.sessions.createAccess(input.runtimeId, sessionId, 900, signal);

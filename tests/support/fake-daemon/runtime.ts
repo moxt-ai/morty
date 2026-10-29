@@ -155,6 +155,9 @@ export function createMortyFakeDaemon(behavior: ControlledAgentBehavior, workspa
             agents: [createSettingsAgent("full", behavior.beforeConfigurationApplied, behavior.beforeSessionCreated)],
         };
     }
+    if (behavior.agentId === "dependent-settings-test") {
+        return { ...harness, agents: [createSettingsAgent("dependent")] };
+    }
     if (behavior.agentId === "settings-test") {
         return { ...harness, agents: [createSettingsAgent("model", undefined, behavior.beforeSessionCreated)] };
     }
