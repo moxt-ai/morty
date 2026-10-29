@@ -66,19 +66,15 @@ running it. Read it yourself before you paste the prompt.
 
 ## Known limitations
 
-- **Don't work a single session from the terminal and Morty at the same time, or alternate
-  between them.** Once Morty opens a session, Mobius serves it from a resident copy on your
-  machine and stops re-reading the agent's own record. Handing a session over in one
-  direction is fine; going back and forth makes the two sides drift:
-  - **Claude Code** and **Pi** fork silently. Messages sent on one side stop appearing on the
-    other, and the agent's context loses them.
-  - **Codex** does not fork, but once Morty has opened a thread the terminal is refused with
-    `thread ... already has an active writer`, for up to two hours. `mobius quit` releases it
-    immediately.
-
-  Tracked in [#915](https://github.com/moxt-ai/morty/issues/915). Until it is fixed: finish on
-  one side before picking up the other, and run `mobius quit` if Codex will not resume in the
-  terminal.
+- **Exit a terminal session before you continue it in Morty, and resume it again when you
+  come back.** Morty picks up the turns you make after `claude --resume`, `pi --continue`,
+  or `codex resume`. A terminal session that stays open keeps its own copy of the
+  conversation: it does not see what you send from Morty, and with **Claude Code** or
+  **Pi** its next message forks the conversation.
+- **Codex lets one app write to a thread at a time.** If the terminal reports
+  `thread ... already has an active writer` after you used the thread in Morty, run
+  `mobius release`. It hands idle sessions back without disconnecting Morty; continuing
+  in Morty reopens them.
 
 ## What Morty does with your data
 
@@ -115,7 +111,8 @@ the conversation back up natively:
 | Claude Code | `claude --resume`, or `claude --continue` for the most recent one |
 | Pi | `pi --resume`, or `pi --continue` for the most recent one |
 
-`mobius start` reconnects Morty later.
+`mobius start` reconnects Morty later. To hand idle sessions back to the terminal
+without disconnecting Morty, run `mobius release` instead.
 
 ## Security
 
