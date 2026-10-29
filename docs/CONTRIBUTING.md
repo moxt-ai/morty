@@ -9,7 +9,8 @@ metadata:
 # Contributing to Morty
 
 This guide is for developing Morty itself. To connect your Agent and use Morty,
-start with the [README](../README.md) and [usage guide](GUIDE.md). See
+start with the [README](../README.md) and [usage guide](GUIDE.md). Contributors should
+use the [glossary](GLOSSARY.md) for Morty's application and Session terminology. See
 [AGENTS.md](../AGENTS.md) for engineering rules and [TESTING.md](TESTING.md) for verification.
 
 ## Issues and pull requests
