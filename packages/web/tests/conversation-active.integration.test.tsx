@@ -259,6 +259,10 @@ test("Given a running reply, When the user reads the conversation, Then its work
             throw new Error("Expected the submitted user message");
         }
         expect(userMessage.compareDocumentPosition(indicator) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+        // The bubble reserves the 32px strip its copy button hangs through, and the
+        // indicator keeps 4px of air below that strip, so they can never overlap.
+        expect(userMessage.classList.contains("mb-8")).toBe(true);
+        expect(indicator.parentElement?.classList.contains("mt-1")).toBe(true);
         expect(indicator.textContent).toBe("Working for 0s");
         expect(app.elementsByTestId(dataTestId.workingIndicator)).toHaveLength(1);
     });

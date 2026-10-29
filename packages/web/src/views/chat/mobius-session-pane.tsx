@@ -871,7 +871,10 @@ function MobiusSessionPaneBody({
                                                         key={group.id}
                                                         className={cn(
                                                             chatSessionMessageItemClassName,
-                                                            followsUserMessage && "mt-9",
+                                                            // The previous bubble already reserves its 32px
+                                                            // copy-button strip; mt-1 keeps the former 36px
+                                                            // bubble-to-bubble total.
+                                                            followsUserMessage && "mt-1",
                                                         )}
                                                     >
                                                         <SessionRenderItemContent
@@ -1063,7 +1066,9 @@ function MobiusSessionPaneBody({
                                     {presentation.workingIndicatorVisible &&
                                         presentation.outputState !== "idle" &&
                                         presentation.activity.kind === "working" && (
-                                            <div>
+                                            // mt-1 keeps 4px of air under the previous bubble's reserved
+                                            // copy-button strip, matching the consecutive-message rhythm.
+                                            <div className="mt-1">
                                                 <WorkingIndicator startedAt={presentation.activity.startedAt} />
                                             </div>
                                         )}
