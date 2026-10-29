@@ -1,14 +1,20 @@
 import { dataTestId } from "../../data-testid.ts";
-import { cn } from "../../lib/utils.ts";
 import { LinkButton } from "../ui/link-button.tsx";
 import type { ConnectionFeedback } from "./execution-context.ts";
 
 export function ConnectionNotice({
     feedback,
+    inline = false,
     onRetryNow,
     onReopen,
 }: {
     readonly feedback: ConnectionFeedback;
+    /**
+     * Single muted status line for embedding inside another notice: the host
+     * notice already carries the headline, so the title and block chrome here
+     * would only repeat it and stack a second hierarchy inside the first.
+     */
+    readonly inline?: boolean;
     readonly onRetryNow: () => void;
     readonly onReopen: () => void;
 }) {
@@ -16,39 +22,85 @@ export function ConnectionNotice({
         return null;
     }
     const failed = feedback.kind === "failed" || (feedback.kind === "closed" && feedback.reopen === "failed");
-    return (
-        <div
-            data-testid={
-                feedback.kind === "closed" ? dataTestId.sessionClosedNotice : dataTestId.sessionReconnectNotice
-            }
-            className={cn(
-                "min-w-0 w-full text-sm",
-                failed ? "rounded-xl bg-destructive/5 px-3 py-2" : "text-muted-foreground",
-            )}
-        >
-            <div role={failed ? "alert" : "status"} aria-live={failed ? "assertive" : "polite"} aria-atomic="true">
-                <p className={cn("font-medium", failed && "text-destructive")}>
-                    {feedback.kind === "closed" ? "The session is closed." : feedback.title}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">{feedback.description}</p>
+    // No text size here: the row already sets text-12, and passing a custom text-*
+    // token through LinkButton's tailwind-merge would evict its text-primary color.
+    const actionClassName = inline ? "min-h-5" : "min-h-11 sm:min-h-5";
+    const retry =
+        feedback.kind === "retrying" || feedback.kind === "failed" ? (
+            <LinkButton className={actionClassName} onClick={onRetryNow}>
+                Retry now
+            </LinkButton>
+        ) : null;
+    const reopen =
+        feedback.kind === "closed" ? (
+            <LinkButton
+                className={actionClassName}
+                disabled={feedback.reopen === "reopening" || feedback.reopen === "offline"}
+                onClick={onReopen}
+            >
+                {feedback.reopen === "reopening" ? "Reopening…" : "Reopen it"}
+            </LinkButton>
+        ) : null;
+    const testId = feedback.kind === "closed" ? dataTestId.sessionClosedNotice : dataTestId.sessionReconnectNotice;
+
+    // The waiting state reads as a quiet chip, not a card: title only, in a
+    // button-like shape on the chat surface so it sits left-aligned with the
+    // composer instead of spanning the pane. The trailing ellipsis animates
+    // dot by dot; the clipped span keeps its full width so layout never shifts.
+    if (feedback.kind === "waiting" && !inline) {
+        const title = feedback.title.endsWith("…") ? feedback.title.slice(0, -1) : feedback.title;
+        return (
+            <div
+                className="flex h-9 w-fit items-center rounded-[24px] bg-surface-elevated px-4 text-12 font-medium text-morty-text-2"
+                data-testid={testId}
+            >
+                <span>{title}</span>
+                {title !== feedback.title && (
+                    // Three periods, not the single ellipsis glyph: the clip-path
+                    // thirds line up with each period's advance, so the loop
+                    // starts at exactly one dot.
+                    <span aria-hidden="true" className="animate-reconnect-ellipsis motion-reduce:animate-none">
+                        ...
+                    </span>
+                )}
             </div>
-            {feedback.kind === "retrying" && feedback.remainingSeconds !== null && (
-                <span className="mr-2 text-xs tabular-nums">Retrying in {feedback.remainingSeconds} s</span>
-            )}
-            {(feedback.kind === "retrying" || feedback.kind === "failed") && (
-                <LinkButton className="min-h-11" onClick={onRetryNow}>
-                    Retry now
-                </LinkButton>
-            )}
-            {feedback.kind === "closed" && (
-                <LinkButton
-                    className="min-h-11"
-                    disabled={feedback.reopen === "reopening" || feedback.reopen === "offline"}
-                    onClick={onReopen}
-                >
-                    {feedback.reopen === "reopening" ? "Reopening…" : "Reopen it"}
-                </LinkButton>
-            )}
+        );
+    }
+
+    if (inline) {
+        return (
+            <div
+                className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-12 font-normal"
+                data-testid={testId}
+            >
+                <span className="min-w-0">
+                    {feedback.kind === "closed" ? "The session is closed." : feedback.description}
+                </span>
+                {feedback.kind === "retrying" && feedback.remainingSeconds !== null && (
+                    <span className="tabular-nums">Retrying in {feedback.remainingSeconds} s</span>
+                )}
+                {retry}
+                {reopen}
+            </div>
+        );
+    }
+
+    return (
+        // The host notice owns the surface and the live region: a failure reads
+        // through the host's error tone instead of a nested red block here.
+        // Plain string, not cn(): tailwind-merge reads the custom text-13 token as a
+        // text color and would evict it in favor of text-muted-foreground.
+        <div className={`min-w-0 w-full text-13${failed ? "" : " text-muted-foreground"}`} data-testid={testId}>
+            {/* Headline stands alone; countdown and action sit with the detail line. */}
+            <p className="font-medium">{feedback.kind === "closed" ? "The session is closed." : feedback.title}</p>
+            <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-12 font-normal text-muted-foreground">
+                <span className="min-w-0">{feedback.description}</span>
+                {feedback.kind === "retrying" && feedback.remainingSeconds !== null && (
+                    <span className="tabular-nums">Retrying in {feedback.remainingSeconds} s</span>
+                )}
+                {retry}
+                {reopen}
+            </div>
         </div>
     );
 }
