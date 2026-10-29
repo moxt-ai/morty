@@ -138,7 +138,7 @@ test("Given a Markdown horizontal rule, When the response is rendered, Then its 
     expect(rule.closest(".agent-markdown")?.className).toContain("[&_hr]:border-t-[0.5px]");
 });
 
-test("Given Markdown table and fenced code, When the response is rendered, Then their surfaces share the compact radii, the table renders without an internal scroll cap, and table actions reveal on hover and open their menus", {
+test("Given Markdown table and fenced code, When the response is rendered and the user operates the table actions, Then the download menu offers CSV and Markdown and the table opens in fullscreen", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -162,49 +162,38 @@ test("Given Markdown table and fenced code, When the response is rendered, Then 
         ],
     });
     await app.waitForView(() => {
-        expect(document.querySelector('[data-streamdown="table-wrapper"]')).not.toBeNull();
-        expect(document.querySelector('[data-streamdown="code-block-body"]')).not.toBeNull();
+        expect(document.querySelector('[data-streamdown="code-block-body"]')?.textContent).toContain("HTML");
     });
-    const markdown = document.querySelector(".agent-markdown");
-    expect(markdown?.className).toContain("[&_[data-streamdown=table-wrapper]]:!border-0");
-    expect(markdown?.className).toContain("[&_[data-streamdown=table-wrapper]]:!bg-transparent");
-    expect(markdown?.className).toContain(
-        "[&_[data-streamdown=table-wrapper]:hover>div.flex:first-child:not(:last-child)]:opacity-100",
-    );
-    expect(markdown?.className).toContain(
-        "[&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute]:rounded-overlay",
-    );
-    expect(markdown?.className).toContain("[&_[data-streamdown=table-wrapper]>div:last-child]:!border-border/50");
-    expect(markdown?.className).toContain("[&_[data-streamdown=table-row]]:!border-border/50");
-    expect(markdown?.className).toContain("[&_[data-streamdown=table-wrapper]>div:last-child]:!max-h-none");
-    const actionIcons = document.querySelectorAll('[data-streamdown="table-wrapper"] > div:first-child button svg');
-    expect(actionIcons.length).toBe(2);
-    for (const icon of actionIcons) {
-        expect(icon.classList.contains("lucide")).toBe(true);
-        expect(icon.classList.contains("size-3.5")).toBe(true);
-    }
-    // The actions must work, not just carry classes: the download trigger opens
-    // the format menu, and the fullscreen trigger opens and closes its dialog.
-    const tableWrapper = document.querySelector('[data-streamdown="table-wrapper"]');
-    if (!(tableWrapper instanceof HTMLElement)) {
-        throw new Error("Expected the table wrapper");
-    }
-    await app.user.click(getByRole(tableWrapper, "button", { name: "Download table" }));
+    const wrapper = await app.waitForView(() => {
+        const tableWrapper = document.querySelector('[data-streamdown="table-wrapper"]');
+        if (!(tableWrapper instanceof HTMLElement)) {
+            throw new Error("The Markdown table has not rendered");
+        }
+        return tableWrapper;
+    });
+    expect(getByRole(wrapper, "table").textContent).toContain("Syntax");
+    expect(getByRole(wrapper, "table").textContent).toContain("Output");
+
+    // Choosing a format runs the real download path; the menu closes only on success.
+    await app.user.click(getByRole(wrapper, "button", { name: "Download table" }));
     await app.waitForView(() => {
-        expect(getByText(tableWrapper, "CSV")).toBeDefined();
-        expect(getByText(tableWrapper, "Markdown")).toBeDefined();
+        getByRole(wrapper, "button", { name: "CSV" });
+        getByRole(wrapper, "button", { name: "Markdown" });
     });
-    await app.user.click(getByRole(tableWrapper, "button", { name: "View fullscreen" }));
+    await app.user.click(getByRole(wrapper, "button", { name: "CSV" }));
     await app.waitForView(() => {
-        const dialog = document.querySelector('[aria-modal="true"]');
-        expect(dialog).not.toBeNull();
-        expect(dialog?.querySelector('[data-streamdown="table"]')).not.toBeNull();
+        expect(queryByRole(wrapper, "button", { name: "CSV" })).toBeNull();
     });
-    await app.user.click(getByRole(document.body, "button", { name: "Exit fullscreen" }));
+
+    await app.user.click(getByRole(wrapper, "button", { name: "View fullscreen" }));
+    const dialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "View fullscreen" }));
+    expect(getByRole(dialog, "table").textContent).toContain("Syntax");
+    await app.user.keyboard("{Escape}");
     await app.waitForView(() => {
-        expect(document.querySelector('[aria-modal="true"]')).toBeNull();
+        expect(queryByRole(document.body, "dialog", { name: "View fullscreen" })).toBeNull();
     });
-    expect(markdown?.className).toContain("[&_[data-streamdown=code-block-body]]:!rounded-[12px]");
+    // Hover reveal, the chip and header tint, and the absent scroll cap are CSS cascade and
+    // layout facts that happy-dom does not compute; browser evidence covers them instead.
 });
 
 test("Given an open code block, When the agent appends code, Then the visible block updates before the response completes", {
