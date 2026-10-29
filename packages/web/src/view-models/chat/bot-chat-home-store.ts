@@ -20,6 +20,7 @@ import { createComposerAttachmentStore } from "./composer-attachment-store.ts";
 import {
     type ConversationCreationState,
     type FirstMessages,
+    queuedDraftMessage,
     transitionConversationCreation,
     transitionFirstMessages,
 } from "./conversation-creation-machine.ts";
@@ -307,6 +308,19 @@ export const createBotChatHomeStore = (
                     centralSessionStorage.write(rememberedSessionEntry(options.identityKey), rememberedSession);
                 }
                 onSelectionReady(selection);
+            }
+        };
+        // A first message's reload recovery ends once its Session owns it or the user leaves its draft.
+        const releaseUnsentFirstMessage = (commandId: string): void => {
+            const entry = newConversationUnsentMessageEntry(botId);
+            if (centralSessionStorage.read(entry)?.commandId === commandId) {
+                centralSessionStorage.remove(entry);
+            }
+        };
+        const abandonFirstMessage = (): void => {
+            const abandoned = queuedDraftMessage(get().creation);
+            if (abandoned !== null) {
+                releaseUnsentFirstMessage(abandoned.commandId);
             }
         };
         const configurationUnavailable = (): void => {
@@ -751,6 +765,7 @@ export const createBotChatHomeStore = (
             },
             newConversation: () => {
                 restoredSessionId = null;
+                abandonFirstMessage();
                 get().composerAttachments.getState().clear();
                 const current = get();
                 centralSessionStorage.remove(newConversationDraftEntry(botId));
@@ -780,6 +795,7 @@ export const createBotChatHomeStore = (
             },
             openManaged: (isExternal, id) => {
                 restoredSessionId = null;
+                abandonFirstMessage();
                 get().composerAttachments.getState().clear();
                 options.navigation.showManaged(isExternal, id);
                 set((current) => ({
@@ -992,10 +1008,7 @@ export const createBotChatHomeStore = (
                 if (session !== null) {
                     centralSessionStorage.remove(newConversationDraftEntry(botId));
                 }
-                // The Session now owns the first message, including its recovery.
-                if (centralSessionStorage.read(newConversationUnsentMessageEntry(botId))?.commandId === commandId) {
-                    centralSessionStorage.remove(newConversationUnsentMessageEntry(botId));
-                }
+                releaseUnsentFirstMessage(commandId);
                 if (following) {
                     announceSelection();
                 }

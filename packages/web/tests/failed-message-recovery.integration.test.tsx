@@ -201,6 +201,30 @@ test("Given Session creation failed for my first message and I wrote a next draf
     );
 });
 
+test("Given Session creation failed for my first message, When I start a new conversation, write an unrelated draft, and reload, Then only that draft returns", {
+    timeout: 60_000,
+}, async () => {
+    const creation = heldSessionCreation();
+    const app = await createTestApp({ connectAgent: true, agent: creation.agent });
+    await sendFirstMessage(app, "Abandoned first message", creation.hold);
+    creation.reject();
+    await app.waitForView(() => getByRole(document.body, "button", { name: "Retry message" }));
+    await app.user.click(app.elementByTestId(dataTestId.newConversation));
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) =>
+            element instanceof HTMLTextAreaElement &&
+            !element.disabled &&
+            queryByRole(document.body, "button", { name: "Retry message" }) === null,
+    );
+    await app.user.click(composer);
+    await app.user.paste("Unrelated draft");
+    const reloaded = await app.reload();
+    await reloaded.waitForView(() =>
+        expect(reloaded.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "Unrelated draft"),
+    );
+});
+
 test("Given my first message is waiting for Session creation, When the page reloads, Then the message returns to the composer", {
     timeout: 60_000,
 }, async () => {
