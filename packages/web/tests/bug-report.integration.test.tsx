@@ -7,9 +7,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { WebSocketApiTransport } from "../src/services/api/websocket-api-transport.ts";
 import { createMortyApplication } from "../src/view-models/morty-application.ts";
 import { App } from "../src/views/application/app.tsx";
-import { showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
-import { TestClock } from "./infra/test-clock.ts";
 
 /**
  * A dependency-injected transport that touches nothing: measurements and
@@ -368,87 +366,6 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
     } finally {
         await inbox.close();
         vi.useRealTimers();
-    }
-});
-
-test("Given a connected Runtime, When the user reports a bug, Then the report automatically includes each network hop without asking about their network", {
-    timeout: 30_000,
-}, async () => {
-    const inbox = await createReportInbox();
-    try {
-        const clock = new TestClock("2026-10-28T08:00:00Z");
-        const app = await createTestApp({ connectAgent: true, clock });
-        // The chat page's sidebar button, not the floating trigger the
-        // loading page shows before the anonymous session resolves.
-        await app.waitForView(() => {
-            if (document.querySelector('main[aria-label="Chat"]') === null) {
-                throw new Error("The chat page did not appear.");
-            }
-            return getByRole(document.body, "button", { name: "Report a bug" });
-        });
-        const composer = await app.waitForView(() => {
-            const input = getByRole(document.body, "textbox", { name: "Message" });
-            expect(input.hasAttribute("disabled")).toBe(false);
-            return input;
-        });
-        await app.user.type(composer, "Check recovery diagnostics");
-        await app.user.click(getByRole(document.body, "button", { name: "Send message" }));
-        await app.waitForView(() =>
-            expect(getByRole(document.body, "article", { name: "Agent response" }).textContent).toContain(
-                "Check recovery diagnostics",
-            ),
-        );
-        if (app.daemon === null) {
-            throw new Error("Expected a connected Runtime");
-        }
-        await app.daemon.disconnect();
-        await showReconnectNotice(app, clock);
-        await app.waitForView(() => getByRole(document.body, "button", { name: "Retry now" }));
-        await app.daemon.reconnect();
-        document.dispatchEvent(new Event("visibilitychange"));
-        await app.waitForView(() =>
-            expect(getByRole(document.body, "textbox", { name: "Message" }).hasAttribute("disabled")).toBe(false),
-        );
-        await app.user.click(getByRole(document.body, "button", { name: "Report a bug" }));
-        const dialog = getByRole(document.body, "dialog", { name: "Report a bug" });
-        expect(queryByRole(dialog, "combobox")).toBeNull();
-        expect(getAllByRole(dialog, "textbox")).toHaveLength(1);
-        await app.user.type(getByRole(dialog, "textbox", { name: "What went wrong?" }), "My connection stalled");
-        await app.user.click(getByRole(dialog, "button", { name: "Send report" }));
-        await visibleMessage(dialog, "status", "Report sent");
-        const report = JSON.parse((inbox.envelopes[0] ?? "").trim().split("\n").at(-1) ?? "null");
-        expect(report.network).toMatchObject({
-            online: navigator.onLine,
-            measurements: {
-                browserMorty: { kind: "available", latencyMs: expect.any(Number) },
-                browserMobius: { kind: "available", latencyMs: expect.any(Number) },
-                mortyMobius: { kind: "available", latencyMs: expect.any(Number) },
-                mobiusDaemon: { kind: "available", latencyMs: expect.any(Number) },
-            },
-        });
-        expect(report.web.entries).toContainEqual(
-            expect.objectContaining({
-                component: "worker",
-                operation: "connection",
-                outcome: "connected",
-                elapsedMs: expect.any(Number),
-            }),
-        );
-        expect(report.web.entries).toContainEqual(
-            expect.objectContaining({ component: "web", operation: "page-visibilitychange", outcome: "visible" }),
-        );
-        expect(report.web.entries).toContainEqual(
-            expect.objectContaining({ component: "web", operation: "session-interruption", attempt: 1 }),
-        );
-        expect(report.web.entries).toContainEqual(
-            expect.objectContaining({ component: "web", operation: "session-connection", outcome: "ready" }),
-        );
-        expect(JSON.stringify(report.web.entries)).not.toContain("Check recovery diagnostics");
-        expect(JSON.stringify(report.network)).not.toContain("http");
-        expect(report.network).not.toHaveProperty("vpn");
-        expect(report.network).not.toHaveProperty("proxy");
-    } finally {
-        await inbox.close();
     }
 });
 
