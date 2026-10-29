@@ -164,7 +164,8 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
     const creationStatus = conversationCreationStatus(model.creation);
     const queuedInitialMessage = queuedDraftMessage(model.creation);
     const draft = model.draft;
-    const pendingConversation = pendingConversationPresentation(model);
+    const titles = useStore(workspace.titles, (state) => state.titles);
+    const pendingConversation = pendingConversationPresentation(model, titles);
     const canStartConversation = homeCanStartConversation(model);
     const pairingNotice = model.notices.pairing.kind === "visible" || model.pairingDialogOpen;
 

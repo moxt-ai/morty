@@ -5,15 +5,18 @@ import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError } from "../format-error.ts";
 import { localCalendarDay } from "./conversation-groups.ts";
+import { type SessionTitles, type SessionTitlesStore, sessionTitle } from "./session-titles-store.ts";
+
+type DirectorySession = Omit<ManagedChatSession, "title">;
 
 type ConversationDirectoryState =
     | { readonly kind: "loading" }
-    | { readonly kind: "ready"; readonly sessions: readonly ManagedChatSession[] }
-    | { readonly kind: "refreshing"; readonly sessions: readonly ManagedChatSession[] }
+    | { readonly kind: "ready"; readonly sessions: readonly DirectorySession[] }
+    | { readonly kind: "refreshing"; readonly sessions: readonly DirectorySession[] }
     | { readonly kind: "setup-required" }
     | {
           readonly kind: "stale";
-          readonly sessions: readonly ManagedChatSession[];
+          readonly sessions: readonly DirectorySession[];
           readonly message: string;
           readonly failure: "connection" | "unavailable";
       }
@@ -33,43 +36,23 @@ export interface ConversationDirectoryStore {
     readonly followCalendar: (signal: AbortSignal) => Promise<void>;
     readonly archiveSession: (sessionId: string, signal: AbortSignal) => Promise<void>;
     readonly load: (signal: AbortSignal) => Promise<void>;
-    /**
-     * Shows a title this page learned before the directory reports it, such as a rename or an Agent-generated
-     * title. A load that was already running keeps it; a load that starts afterwards reports the Runtime's title.
-     */
-    readonly titleObserved: (sessionId: string, title: string) => void;
-    /**
-     * Shows a new conversation's first-prompt title. The Runtime titles a Session once its first prompt arrives and
-     * lists a placeholder until then, so this title stays until a load reports the Session as prompted.
-     */
-    readonly conversationCreated: (sessionId: string, title: string) => void;
 }
 
-/** A title this page shows before the directory's Runtime listing does. */
-type LocalTitle =
-    /** Learned from the Session itself; loads that start after it report the Runtime's title. */
-    | { readonly kind: "observed"; readonly title: string; readonly keptByLoad: number }
-    /** A new conversation's first-prompt title, kept until the listing reports the Session as prompted. */
-    | { readonly kind: "created"; readonly title: string };
-
-/** Whether a finished load keeps a local title, or reports the Runtime's title instead. */
-function keepsLocalTitle(local: LocalTitle, reported: ManagedChatSession | undefined, load: number): boolean {
-    switch (local.kind) {
-        case "observed":
-            return local.keptByLoad >= load;
-        case "created":
-            return reported === undefined || !reported.prompted;
-        default:
-            return local satisfies never;
+/** Titles are joined at read time, so the list, pane and dialogs share the same Session fact. */
+export function conversationDirectorySessions(
+    state: ConversationDirectoryState,
+    titles: SessionTitles,
+): readonly ManagedChatSession[] | null {
+    switch (state.kind) {
+        case "ready":
+        case "refreshing":
+        case "stale":
+            return state.sessions.map((session) => ({ ...session, title: sessionTitle(titles, session.id) }));
+        case "loading":
+        case "setup-required":
+        case "failed":
+            return null;
     }
-}
-
-function withTitle(
-    sessions: readonly ManagedChatSession[],
-    sessionId: string,
-    title: string,
-): readonly ManagedChatSession[] {
-    return sessions.map((session) => (session.id === sessionId ? { ...session, title } : session));
 }
 
 export const createConversationDirectoryStore = (
@@ -78,31 +61,11 @@ export const createConversationDirectoryStore = (
     /** Announced when a load publishes a ready directory, so the owner re-scopes status watching without subscribing. */
     onLoaded: (sessions: readonly ManagedChatSession[]) => void,
     clock: Clock,
+    titles: SessionTitlesStore,
     onArchived: (sessionId: string) => void,
 ) =>
     createStore<ConversationDirectoryStore>()((set, get) => {
-        // The Runtime owns Session titles; the directory shows what its last load reported. A title this page learned
-        // later is kept only until a load that started after it reports the Runtime's title.
-        let loadsStarted = 0;
         let calendarOperation: AbortController | null = null;
-        const localTitles = new Map<string, LocalTitle>();
-        const showTitle = (sessionId: string, local: LocalTitle): void => {
-            localTitles.set(sessionId, local);
-            const title = local.title;
-            set((current) => {
-                const state = current.state;
-                switch (state.kind) {
-                    case "ready":
-                    case "refreshing":
-                    case "stale":
-                        return { state: { ...state, sessions: withTitle(state.sessions, sessionId, title) } };
-                    case "loading":
-                    case "setup-required":
-                    case "failed":
-                        return {};
-                }
-            });
-        };
         return {
             state: { kind: "loading" },
             archive: { kind: "idle" },
@@ -197,25 +160,14 @@ export const createConversationDirectoryStore = (
                         ? current.sessions
                         : null;
                 set({ state: cached === null ? { kind: "loading" } : { kind: "refreshing", sessions: cached } });
-                loadsStarted += 1;
-                const load = loadsStarted;
+                const startedWith = titles.getState().titles;
                 try {
                     const reported = await requests.managedSessions(botId, signal);
                     signal.throwIfAborted();
-                    const reportedById = new Map<string, ManagedChatSession>(
-                        reported.map((session) => [session.id, session]),
-                    );
-                    for (const [sessionId, local] of localTitles) {
-                        if (!keepsLocalTitle(local, reportedById.get(sessionId), load)) {
-                            localTitles.delete(sessionId);
-                        }
-                    }
-                    const sessions = reported.map((session) => {
-                        const local = localTitles.get(session.id);
-                        return local === undefined ? session : { ...session, title: local.title };
-                    });
+                    titles.getState().directoryLoaded(reported, startedWith);
+                    const sessions = reported.map(({ title: _title, ...session }) => session);
                     set({ state: { kind: "ready", sessions } });
-                    onLoaded(sessions);
+                    onLoaded(reported);
                 } catch (cause) {
                     if (!signal.aborted) {
                         if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {
@@ -231,8 +183,6 @@ export const createConversationDirectoryStore = (
                             isRuntimeConnectionFailure(cause) || isChatBridgeError(cause)
                                 ? ("connection" as const)
                                 : ("unavailable" as const);
-                        // Keep the list as it is now, with titles shown while the load ran, rather than the list it
-                        // started from.
                         set((current) => {
                             const state = current.state;
                             switch (state.kind) {
@@ -249,8 +199,5 @@ export const createConversationDirectoryStore = (
                     }
                 }
             },
-            titleObserved: (sessionId, title) =>
-                showTitle(sessionId, { kind: "observed", title, keptByLoad: loadsStarted }),
-            conversationCreated: (sessionId, title) => showTitle(sessionId, { kind: "created", title }),
         };
     });

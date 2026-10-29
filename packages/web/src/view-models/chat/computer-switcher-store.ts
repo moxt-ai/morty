@@ -1,5 +1,5 @@
 import { createStore } from "zustand/vanilla";
-import type { BotChatApi, BotRuntimeConfiguration } from "../../services/chat/bot-chat-api.ts";
+import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { type AnonymousIdentity, AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
 import type { IdentityScope } from "../../services/identity/identity-scope-url.ts";
 import {
@@ -8,25 +8,47 @@ import {
     rememberedComputers,
     resumeComputerAddress,
 } from "../../services/identity/remembered-computers.ts";
+import type { BotConnectionStatus } from "./bot-chat-home-store.ts";
 
 export interface ComputerChoice {
     readonly key: string;
     readonly name: string;
     readonly href: string;
-    readonly status: "online" | "offline" | "unavailable";
+    readonly status: "online" | "offline" | "unavailable" | "connecting" | "unpaired";
 }
 
-/**
- * Stable by name, so a computer keeps its place when the current computer or a status changes. Keys only break
- * ties between computers with the same name.
- */
-function inStableOrder(choices: readonly ComputerChoice[]): readonly ComputerChoice[] {
-    return [...choices].sort((left, right) => left.name.localeCompare(right.name) || left.key.localeCompare(right.key));
-}
+type RememberedComputerChoice = Omit<ComputerChoice, "status"> &
+    ({ readonly kind: "current" } | { readonly kind: "other"; readonly status: "online" | "offline" | "unavailable" });
 
 type ComputerChoicesState =
-    | { readonly kind: "loading"; readonly choices: readonly ComputerChoice[] }
-    | { readonly kind: "ready"; readonly choices: readonly ComputerChoice[] };
+    | { readonly kind: "loading"; readonly choices: readonly RememberedComputerChoice[] }
+    | { readonly kind: "ready"; readonly choices: readonly RememberedComputerChoice[] };
+
+/** The current computer follows home directly; only other computers need independent status reads. */
+export function computerSwitcherChoices(
+    state: ComputerChoicesState,
+    name: string,
+    connection: BotConnectionStatus,
+): readonly ComputerChoice[] {
+    return state.choices
+        .map((choice): ComputerChoice => {
+            if (choice.kind === "other") {
+                return choice;
+            }
+            return {
+                key: choice.key,
+                href: choice.href,
+                name: name || choice.name,
+                status:
+                    connection.kind === "connected"
+                        ? "online"
+                        : connection.kind === "disconnected"
+                          ? "offline"
+                          : connection.kind,
+            };
+        })
+        .sort((left, right) => left.name.localeCompare(right.name) || left.key.localeCompare(right.key));
+}
 
 export type ComputerSwitcherModel = ReturnType<typeof createComputerSwitcher>;
 
@@ -41,37 +63,9 @@ export function createComputerSwitcher(options: {
     const activeKey = computerKey(options.active);
     let attempt: AbortController | null = null;
     let disposed = false;
-    let current: BotRuntimeConfiguration | null = null;
-    const applyCurrent = (choices: readonly ComputerChoice[]): readonly ComputerChoice[] =>
-        inStableOrder(
-            choices.map((choice) => {
-                if (choice.key !== activeKey || current === null) {
-                    return choice;
-                }
-                return {
-                    ...choice,
-                    name: current.runtime.machineName || choice.name,
-                    status: current.runtime.online ? "online" : "offline",
-                };
-            }),
-        );
     return {
         store,
         activeKey,
-        invalidateCurrent: () => {
-            current = null;
-            store.setState((state) => ({
-                ...state,
-                choices: state.choices.map((choice) =>
-                    choice.key === activeKey ? { ...choice, status: "unavailable" } : choice,
-                ),
-            }));
-        },
-        updateCurrent: (configuration: BotRuntimeConfiguration) => {
-            current = configuration;
-            rememberComputerName(options.active, configuration.runtime.machineName);
-            store.setState((state) => ({ ...state, choices: applyCurrent(state.choices) }));
-        },
         refresh: async (): Promise<void> => {
             if (disposed) {
                 return;
@@ -83,11 +77,18 @@ export function createComputerSwitcher(options: {
             store.setState((state) => ({ kind: "loading", choices: state.choices }));
             try {
                 const choices = await Promise.all(
-                    rememberedComputers().map(async (computer): Promise<ComputerChoice | null> => {
-                        const choice: ComputerChoice = {
+                    rememberedComputers().map(async (computer): Promise<RememberedComputerChoice | null> => {
+                        const address = {
                             key: computerKey(computer.scope),
                             name: computer.name || "Computer",
                             href: resumeComputerAddress(computer.scope, computer.destination),
+                        };
+                        if (address.key === activeKey) {
+                            return { ...address, kind: "current" };
+                        }
+                        const choice: RememberedComputerChoice = {
+                            ...address,
+                            kind: "other",
                             status: "unavailable",
                         };
                         try {
@@ -122,7 +123,7 @@ export function createComputerSwitcher(options: {
                     }),
                 );
                 controller.signal.throwIfAborted();
-                store.setState({ kind: "ready", choices: applyCurrent(choices.filter((choice) => choice !== null)) });
+                store.setState({ kind: "ready", choices: choices.filter((choice) => choice !== null) });
             } catch {
                 if (!controller.signal.aborted) {
                     store.setState((state) => ({ kind: "ready", choices: state.choices }));

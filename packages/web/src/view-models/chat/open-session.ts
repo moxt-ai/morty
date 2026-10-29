@@ -20,3 +20,13 @@ export interface OpenMobiusSession {
           };
     readonly entry: NativeSessionEntry;
 }
+
+/** The selected Session retains its connection metadata; its display title belongs to the title store. */
+export type SelectedMobiusSession = Omit<OpenMobiusSession, "entry"> & {
+    readonly entry: Omit<NativeSessionEntry, "title">;
+};
+
+export function selectedSession(session: OpenMobiusSession): SelectedMobiusSession {
+    const { title: _title, ...entry } = session.entry;
+    return { ...session, entry };
+}

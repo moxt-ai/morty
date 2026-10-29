@@ -1,4 +1,3 @@
-import type { NativeSessionEntry } from "@moxt-ai/mobius-sdk/channel";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { BotChatApi, ChatRuntime } from "../../services/chat/bot-chat-api.ts";
 import type { IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
@@ -55,7 +54,6 @@ export function createSidebarDialogs(options: {
     readonly requests: Pick<BotChatApi, "nativeSessions" | "nativeSession" | "forkNativeSession">;
     /** The Runtime the page follows. */
     readonly runtime: () => ChatRuntime | null;
-    readonly nativeSessionTitle: (entry: NativeSessionEntry) => string;
     readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly onOpenSession: (session: OpenMobiusSession) => void;
     readonly onOpenedSession: () => void;
@@ -87,7 +85,7 @@ export function createSidebarDialogs(options: {
             if (get().nativeDialog !== null) {
                 return;
             }
-            const store = createNativeSessionStore(botId, requests, runtime, options.nativeSessionTitle, (session) => {
+            const store = createNativeSessionStore(botId, requests, runtime, (session) => {
                 onOpenSession(session);
                 get().closeNativeDialog();
                 onOpenedSession();

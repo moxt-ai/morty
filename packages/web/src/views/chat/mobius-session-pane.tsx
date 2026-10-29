@@ -60,6 +60,7 @@ import {
     sessionTextValue,
 } from "../../view-models/chat/session-presentation.ts";
 import { createSessionResourceStore } from "../../view-models/chat/session-resource-store.ts";
+import { sessionTitle } from "../../view-models/chat/session-titles-store.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { ChatMessageQueue } from "./chat-message-queue.tsx";
 import { FilePreview } from "./file-preview.tsx";
@@ -689,6 +690,9 @@ function MobiusSessionPaneBody({
     const home = useStore(workspace.home);
     const runtimeConfiguration = home.runtimeConfiguration;
     const model = useStore(pane.store);
+    const title = useStore(workspace.titles, (state) =>
+        sessionTitle(state.titles, pane.session.result.ready.sessionId),
+    );
     const attachmentModel = useStore(pane.composerAttachments);
     const interactionModel = useStore(pane.interactions);
     const settingsModel = useStore(pane.settings);
@@ -765,7 +769,7 @@ function MobiusSessionPaneBody({
 
     const workingDirectoryLabel = executionContext.directory ?? executionContext.directoryPlaceholder;
     const titleBarProps = {
-        title: model.title,
+        title,
         titleEdit: model.titleEdit,
         titleLoading: sessionMessagesLoading,
         agentRef: executionContext.agentRef,

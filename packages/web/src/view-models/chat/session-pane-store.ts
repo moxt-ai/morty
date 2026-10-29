@@ -28,7 +28,7 @@ import { reportApplicationError } from "../report-error.ts";
 import type { ComposerAttachmentStore } from "./composer-attachment-store.ts";
 import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
-import type { OpenMobiusSession } from "./open-session.ts";
+import type { SelectedMobiusSession } from "./open-session.ts";
 import { uploadPromptAttachment, uploadPromptAttachments } from "./prompt-attachment-upload.ts";
 import { type SessionActivityState, sameSessionActivity, workingCommandId } from "./session-activity-machine.ts";
 import {
@@ -79,6 +79,7 @@ import {
     stopFailure,
     stopRequested,
 } from "./session-task-controls.ts";
+import { type SessionTitlesStore, sessionTitle } from "./session-titles-store.ts";
 import { createSessionTurnLedger } from "./session-turn-ledger.ts";
 import { createSessionWelcomeStore } from "./session-welcome-store.ts";
 
@@ -110,7 +111,6 @@ const HISTORY_MESSAGE_TARGET = 20;
 const SESSION_RECOVERY_NOTICE_DELAY_MS = 8_000;
 export interface SessionPaneStore {
     readonly connection: SessionConnection;
-    readonly title: string;
     readonly titleEdit: TitleEdit;
     readonly messages: readonly SessionExecutionMessage[];
     readonly pendingInitialMessage: QueuedDraftMessage | null;
@@ -408,7 +408,7 @@ function mergeSessionEvents(
 
 export function createSessionPaneModel(options: {
     readonly clock: Clock;
-    readonly session: OpenMobiusSession;
+    readonly session: SelectedMobiusSession;
     readonly composerAttachments: StoreApi<ComposerAttachmentStore>;
     readonly attachmentSignal: AbortSignal;
     readonly delivery: StoreApi<SessionDeliveryStore>;
@@ -427,9 +427,9 @@ export function createSessionPaneModel(options: {
     readonly onInitialMessageDequeued?: ((commandId: string) => void) | undefined;
     /** Reports session activity transitions, such as a running turn, to the owner. */
     readonly onStatusChange?: ((status: SessionActivityState) => void) | undefined;
-    readonly onTitleChange: (sessionId: string, title: string) => void;
+    readonly titles: SessionTitlesStore;
 }) {
-    const { session, botId, requests, clock, composerAttachments, delivery } = options;
+    const { session, botId, requests, clock, composerAttachments, delivery, titles } = options;
     const sessionId = session.result.ready.sessionId;
     // Working in a conversation makes it the reference for the next draft: its
     // harness and the settings it runs with carry into New Session.
@@ -727,8 +727,7 @@ export function createSessionPaneModel(options: {
                     continue;
                 }
                 if (effect.title !== undefined) {
-                    set({ title: effect.title });
-                    options.onTitleChange(sessionId, effect.title);
+                    titles.getState().observed(sessionId, effect.title);
                 }
             }
             return result.effects;
@@ -951,7 +950,6 @@ export function createSessionPaneModel(options: {
         };
         return {
             connection: { kind: "first-loading" },
-            title: session.entry.title,
             titleEdit: { kind: "closed" },
             messages: initialTimeline.messages,
             pendingInitialMessage: options.initialMessage ?? null,
@@ -1730,7 +1728,7 @@ export function createSessionPaneModel(options: {
                 }
             },
             openTitleEdit: () => {
-                set({ titleEdit: { draft: get().title, kind: "editing" } });
+                set({ titleEdit: { draft: sessionTitle(titles.getState().titles, sessionId), kind: "editing" } });
             },
             setTitleDraft: (draft) => {
                 if (get().titleEdit.kind === "editing") {
@@ -1748,7 +1746,7 @@ export function createSessionPaneModel(options: {
                 const trimmed = edit.draft.trim();
                 if (
                     trimmed.length === 0 ||
-                    trimmed === get().title ||
+                    trimmed === sessionTitle(titles.getState().titles, sessionId) ||
                     client === null ||
                     get().connection.kind !== "ready"
                 ) {
@@ -1764,8 +1762,8 @@ export function createSessionPaneModel(options: {
                         AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
                     );
                     signal.throwIfAborted();
-                    set({ title: result.title, titleEdit: { kind: "closed" } });
-                    options.onTitleChange(sessionId, result.title);
+                    titles.getState().observed(sessionId, result.title);
+                    set({ titleEdit: { kind: "closed" } });
                 } catch (cause) {
                     signal.throwIfAborted();
                     if (closedNow(cause, reopeningsAtStart)) {
