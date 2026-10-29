@@ -1,11 +1,6 @@
 import { and, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import * as v from "valibot";
-import {
-    anonymousCredential,
-    appUser,
-    continueLink,
-    platformProjectMapping,
-} from "../../../schema/project-do/index.ts";
+import { anonymousCredential, continueLink, platformProjectMapping } from "../../../schema/project-do/index.ts";
 import type { Credential } from "../entity/authentication/credential.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
 import { type AnonymousIdentity, digest, randomSecret, requireIdentityDatabase } from "./identity-storage-common.ts";
@@ -38,19 +33,17 @@ export class IdentityStorage {
         const tokenHash = await digest(token);
         signal.throwIfAborted();
         const database = requireIdentityDatabase(this.#database);
-        await database.batch([
-            database.insert(appUser).values({ id: userId, createdAt: now }).onConflictDoNothing(),
-            database
-                .insert(anonymousCredential)
-                .values({
-                    id: credentialId,
-                    userId,
-                    tokenHash,
-                    kind: "local",
-                    createdAt: now,
-                })
-                .onConflictDoNothing({ target: anonymousCredential.tokenHash }),
-        ]);
+        await database
+            .insert(anonymousCredential)
+            .values({
+                id: credentialId,
+                userId,
+                tokenHash,
+                kind: "local",
+                createdAt: now,
+            })
+            .onConflictDoNothing({ target: anonymousCredential.tokenHash })
+            .run();
         signal.throwIfAborted();
         // A retry reuses the committed row, including its revocation; it never resets or replaces it.
         const credential = await database
