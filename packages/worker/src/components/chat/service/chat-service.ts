@@ -388,7 +388,6 @@ export class ChatService {
                 ? {
                       ...input,
                       kind: "new",
-                      bindingId: `binding_${crypto.randomUUID()}`,
                       runtimeId: runtime.runtimeId,
                       conversationKey: await chatSessionId(scope.botId, input.conversationKey),
                   }

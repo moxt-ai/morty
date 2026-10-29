@@ -1,5 +1,6 @@
 import * as v from "valibot";
 import { afterEach, test as baseTest, beforeEach, expect, vi } from "vitest";
+import type { ControlledAgent } from "../../../tests/support/fake-daemon/runtime.ts";
 import worker from "../src/application.ts";
 import { APP_ORIGIN, AUTH_TIME, createIdentityFixture } from "./support/identity-fixture.ts";
 
@@ -30,15 +31,11 @@ test.beforeAll(async ({ cloud }) => {
 
 async function createChatFixture(
     cloud: Awaited<ReturnType<typeof createIdentityFixture>>,
-    includePi = false,
+    agents: readonly ControlledAgent[] = [{ id: "codex", label: "Codex" }],
     nativeSessionIds: ReadonlySet<string> = new Set(),
 ) {
     const identity = await cloud.createAnonymousUser();
-    const runtime = await cloud.connectAgent(
-        identity.projectId,
-        [{ id: "codex", label: "Codex" }, ...(includePi ? [{ id: "pi", label: "Pi" }] : [])],
-        nativeSessionIds,
-    );
+    const runtime = await cloud.connectAgent(identity.projectId, agents, nativeSessionIds);
     const environment = cloud.environment();
     const request = (path: string, body?: object, method = body === undefined ? "GET" : "POST") =>
         worker.fetch(
@@ -175,12 +172,100 @@ test("Given a draft Bot, When its owner configures and opens it, Then setup list
     });
 });
 
+for (const { reason, ...configuration } of [
+    { reason: "missing", configId: "removed-setting", valueType: "select", value: "default", booleanValue: false },
+    { reason: "changed type", configId: "model", valueType: "boolean", value: "", booleanValue: true },
+    { reason: "removed value", configId: "model", valueType: "select", value: "removed-model", booleanValue: false },
+]) {
+    test(`Given a ${reason} Agent setting, When Chat creates a conversation, Then it reports a conflict and a corrected retry opens one fully configured session`, async ({
+        cloud,
+    }) => {
+        await using fixture = await createChatFixture(cloud, [{ id: "configuration-test", label: "Settings Agent" }]);
+        const runtimeId = fixture.runtime.runtimeId;
+        expect(
+            (await fixture.request(`chat/bots/${fixture.botId}/setup`, { runtimeId, agentRef: "configuration-test" }))
+                .status,
+        ).toBe(202);
+        const input = {
+            agentRef: "configuration-test",
+            conversationKey: "configuration-retry",
+            title: "New chat",
+            workspaceRef: "default",
+        };
+        const rejected = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+            ...input,
+            configurations: [configuration],
+        });
+        expect(rejected.status).toBe(409);
+        expect(await rejected.json()).toMatchObject({ error: { code: "session_configuration_conflict" } });
+        expect(await (await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {})).json()).toEqual({
+            sessions: [],
+        });
+
+        const configurations = [
+            { configId: "model", valueType: "select", value: "test-large", booleanValue: false },
+            { configId: "fast", valueType: "boolean", value: "", booleanValue: true },
+            { configId: "effort", valueType: "select", value: "high", booleanValue: false },
+        ];
+        const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, { ...input, configurations });
+        expect(opened.status).toBe(200);
+        const access = v.parse(
+            v.object({ sessionId: v.string(), credential: v.string(), ready: v.unknown() }),
+            await opened.json(),
+        );
+        expect(access.credential).toMatch(/^msession_/u);
+        const expectedReady = {
+            configOptions: expect.arrayContaining([
+                expect.objectContaining({ id: "model", currentValue: "test-large" }),
+                expect.objectContaining({ id: "fast", booleanValue: true }),
+                expect.objectContaining({ id: "effort", currentValue: "high" }),
+            ]),
+        };
+        expect(access.ready).toMatchObject(expectedReady);
+        const retried = await fixture.request(`chat/bots/${fixture.botId}/access`, { ...input, configurations });
+        expect(retried.status).toBe(200);
+        expect(await retried.json()).toMatchObject({ sessionId: access.sessionId, ready: expectedReady });
+        expect(await (await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {})).json()).toMatchObject({
+            sessions: [{ id: access.sessionId }],
+        });
+    });
+}
+
+test("Given dependent Agent settings, When applying a later selection changes an earlier one, Then Chat rejects creation instead of returning partially configured access", async ({
+    cloud,
+}) => {
+    await using fixture = await createChatFixture(cloud, [{ id: "dependent-settings-test", label: "Settings Agent" }]);
+    expect(
+        (
+            await fixture.request(`chat/bots/${fixture.botId}/setup`, {
+                runtimeId: fixture.runtime.runtimeId,
+                agentRef: "dependent-settings-test",
+            })
+        ).status,
+    ).toBe(202);
+    const response = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+        agentRef: "dependent-settings-test",
+        conversationKey: "dependent-settings",
+        title: "New chat",
+        workspaceRef: "default",
+        configurations: [
+            { configId: "model", valueType: "select", value: "test-large", booleanValue: false },
+            { configId: "mode", valueType: "select", value: "plan", booleanValue: false },
+        ],
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "session_configuration_conflict" } });
+    expect(await (await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {})).json()).toEqual({
+        sessions: [],
+    });
+});
+
 for (const configured of [false, true]) {
     test(`Given a Bot ${configured ? "bound to another Runtime" : "without a Runtime"}, When its owner browses or opens native sessions using a client-selected Runtime, Then Chat rejects every operation without creating sessions or ownership records`, async ({
         cloud,
     }) => {
         const nativeSessionId = crypto.randomUUID();
-        await using fixture = await createChatFixture(cloud, false, new Set([nativeSessionId]));
+        await using fixture = await createChatFixture(cloud, undefined, new Set([nativeSessionId]));
         await using bound = configured ? await cloud.connectAgent(fixture.projectId) : null;
         if (bound !== null) {
             expect(
@@ -240,7 +325,10 @@ for (const configured of [false, true]) {
 test("Given a Bot connected through one Agent, When a Session uses another Agent, Then that Session reopens with its own Agent", async ({
     cloud,
 }) => {
-    await using fixture = await createChatFixture(cloud, true);
+    await using fixture = await createChatFixture(cloud, [
+        { id: "codex", label: "Codex" },
+        { id: "pi", label: "Pi" },
+    ]);
     const setup = { runtimeId: fixture.runtime.runtimeId, agentRef: "codex" };
     expect((await fixture.request(`chat/bots/${fixture.botId}/setup`, setup)).status).toBe(202);
 
@@ -276,7 +364,7 @@ test("Given an imported native session, When its owner imports it again, Then Ch
     cloud,
 }) => {
     const nativeId = crypto.randomUUID();
-    await using fixture = await createChatFixture(cloud, false, new Set([nativeId]));
+    await using fixture = await createChatFixture(cloud, undefined, new Set([nativeId]));
     const runtimeId = fixture.runtime.runtimeId;
     expect((await fixture.request(`chat/bots/${fixture.botId}/setup`, { runtimeId, agentRef: "codex" })).status).toBe(
         202,
