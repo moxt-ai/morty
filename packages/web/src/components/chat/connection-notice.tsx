@@ -1,3 +1,4 @@
+import { LoaderCircle } from "lucide-react";
 import { dataTestId } from "../../data-testid.ts";
 import { LinkButton } from "../ui/link-button.tsx";
 import type { ConnectionFeedback } from "./execution-context.ts";
@@ -49,9 +50,10 @@ export function ConnectionNotice({
     if (feedback.kind === "waiting" && !inline) {
         return (
             <div
-                className="flex h-7 w-fit items-center rounded-full bg-surface-elevated px-3 text-12 font-medium text-morty-text-2"
+                className="flex h-7 w-fit items-center gap-1 rounded-full bg-surface-elevated px-3 text-12 font-medium text-morty-text-2"
                 data-testid={testId}
             >
+                <LoaderCircle aria-hidden="true" className="size-3 animate-spin motion-reduce:animate-none" />
                 {feedback.title}
             </div>
         );
