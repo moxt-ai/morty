@@ -85,6 +85,42 @@ test("Given a new visitor, When they copy the setup prompt, Then the copy is cou
     await app.waitForView(() => expect(setupSteps).toEqual(["setup_prompt_copied"]));
 });
 
+test("Given a new visitor on a phone, When they send Morty to their computer, Then the share sheet receives Morty's address and the send is counted as a setup step", {
+    timeout: 30_000,
+}, async () => {
+    const shared: ShareData[] = [];
+    const setupSteps: SetupEvent[] = [];
+    const app = await createTestApp({
+        analytics: {
+            trackEvent: (event) => {
+                setupSteps.push(event);
+            },
+            trackPageView: () => {},
+        },
+        page: { kind: "bootstrap" },
+        setupHandoff: {
+            kind: "send-link",
+            share: async (data) => {
+                shared.push(data);
+            },
+        },
+    });
+    const send = await app.waitForView(() => getByRole(document.body, "button", { name: "Send to my computer" }));
+    expect(queryByRole(document.body, "button", { name: "Copy setup prompt" })).toBeNull();
+    expect(document.body.textContent).toContain("Setup runs on your computer. Open Morty there to copy the prompt.");
+
+    await app.user.click(send);
+
+    await app.waitForView(() => expect(setupSteps).toEqual(["setup_link_shared"]));
+    expect(shared).toEqual([
+        {
+            text: "Set up Morty on the computer where your agent runs.",
+            title: "Morty",
+            url: `${window.location.origin}/`,
+        },
+    ]);
+});
+
 test("Given a new visitor whose agent is busy, When the setup page opens, Then it warns before copying that setup interrupts the agent's current task", {
     timeout: 30_000,
 }, async () => {

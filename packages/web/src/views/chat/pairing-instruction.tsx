@@ -1,53 +1,86 @@
 import { Check, ChevronDown, Copy } from "lucide-react";
 import { CopyToClipboardButton } from "../../components/ui/copy-to-clipboard-button.tsx";
 import { ExternalLink } from "../../components/ui/external-link.tsx";
+import { SendLinkButton } from "../../components/ui/send-link-button.tsx";
 import { Textarea } from "../../components/ui/textarea.tsx";
 import { dataTestId } from "../../data-testid.ts";
+import type { SetupHandoff } from "../../services/device/setup-handoff.ts";
 import { setupPrimaryButtonClassName, setupPrimaryButtonSize } from "../setup/setup-card-shell.tsx";
 
-export function PairingInstruction({ onCopied }: { readonly onCopied?: () => void }) {
+const copyPrompt: SetupHandoff = { kind: "copy-prompt" };
+
+export function PairingInstruction({
+    handoff = copyPrompt,
+    onCopied,
+    onLinkSent = () => {},
+}: {
+    /** How this device moves setup to the agent's computer; copying the prompt unless the caller knows better. */
+    readonly handoff?: SetupHandoff;
+    readonly onCopied?: () => void;
+    readonly onLinkSent?: () => void;
+}) {
     const setupInstruction = `Fetch ${window.location.origin}/setup.md and set up Morty for me. You may install missing prerequisites and pair this machine. Complete setup without asking questions.`;
     return (
         <div>
-            <CopyToClipboardButton
-                className={setupPrimaryButtonClassName}
-                failureToast={{
-                    description: "Expand setup details to copy the prompt manually.",
-                    title: "Could not copy",
-                }}
-                label="Copy setup prompt"
-                {...(onCopied === undefined ? {} : { onCopied })}
-                size={setupPrimaryButtonSize}
-                successToast={{
-                    description: "Paste into your agent, then open the link it returns.",
-                    title: "Copied",
-                }}
-                idleContent={
+            {handoff.kind === "send-link" ? (
+                <>
+                    <SendLinkButton
+                        className={setupPrimaryButtonClassName}
+                        label={{ copy: "Copy link", share: "Send to my computer" }}
+                        onSent={onLinkSent}
+                        share={handoff.share}
+                        shareData={{
+                            text: "Set up Morty on the computer where your agent runs.",
+                            title: "Morty",
+                            url: `${window.location.origin}/`,
+                        }}
+                        size={setupPrimaryButtonSize}
+                    />
                     <p className="mt-3 min-h-10 text-center text-sm leading-5 text-morty-text-2">
-                        Next: paste it into the agent running on your computer.
+                        Setup runs on your computer. Open Morty there to copy the prompt.
                     </p>
-                }
-                copiedContent={
-                    <>
-                        <Check aria-hidden="true" className="size-4" />
-                        Copied
-                    </>
-                }
-                successContent={
-                    <p
-                        aria-label="Setup next step"
-                        aria-atomic="true"
-                        className="mt-3 min-h-10 text-center text-sm leading-5 text-morty-text-2"
-                        role="status"
-                    >
-                        Paste into your agent, then open the link it returns.
-                    </p>
-                }
-                value={setupInstruction}
-            >
-                <Copy aria-hidden="true" className="size-4" />
-                <span>Copy setup prompt</span>
-            </CopyToClipboardButton>
+                </>
+            ) : (
+                <CopyToClipboardButton
+                    className={setupPrimaryButtonClassName}
+                    failureToast={{
+                        description: "Expand setup details to copy the prompt manually.",
+                        title: "Could not copy",
+                    }}
+                    label="Copy setup prompt"
+                    {...(onCopied === undefined ? {} : { onCopied })}
+                    size={setupPrimaryButtonSize}
+                    successToast={{
+                        description: "Paste into your agent, then open the link it returns.",
+                        title: "Copied",
+                    }}
+                    idleContent={
+                        <p className="mt-3 min-h-10 text-center text-sm leading-5 text-morty-text-2">
+                            Next: paste it into the agent running on your computer.
+                        </p>
+                    }
+                    copiedContent={
+                        <>
+                            <Check aria-hidden="true" className="size-4" />
+                            Copied
+                        </>
+                    }
+                    successContent={
+                        <p
+                            aria-label="Setup next step"
+                            aria-atomic="true"
+                            className="mt-3 min-h-10 text-center text-sm leading-5 text-morty-text-2"
+                            role="status"
+                        >
+                            Paste into your agent, then open the link it returns.
+                        </p>
+                    }
+                    value={setupInstruction}
+                >
+                    <Copy aria-hidden="true" className="size-4" />
+                    <span>Copy setup prompt</span>
+                </CopyToClipboardButton>
+            )}
             <p className="mt-3 text-center text-xs leading-5 text-pretty text-morty-text-3">
                 Setup interrupts the agent's current task; continue it here afterwards. Keep that computer awake and
                 online.

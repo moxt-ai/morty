@@ -2,6 +2,7 @@ import { createStore } from "zustand/vanilla";
 import type { PageAnalytics } from "../services/analytics/google-analytics.ts";
 import type { ApiTransport } from "../services/api/api-transport.ts";
 import { BotChatApi } from "../services/chat/bot-chat-api.ts";
+import { browserSetupHandoff, type SetupHandoff } from "../services/device/setup-handoff.ts";
 import { recordBrowserDiagnostic } from "../services/diagnostics/browser-diagnostics.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../services/identity/anonymous-identity-api.ts";
 import { replacedToken, storedToken } from "../services/identity/remembered-computers.ts";
@@ -37,6 +38,8 @@ export interface MortyApplication {
     readonly clock: Clock;
     /** Page and setup-step measurement; null when the deployment configures no analytics. */
     readonly analytics: PageAnalytics | null;
+    /** How this device moves setup to the computer where the agent runs. */
+    readonly setupHandoff: SetupHandoff;
     readonly anonymousSession: ReturnType<typeof createAnonymousSessionStore>;
     /** The shared bug-report dialog state for every bug-report entry point. */
     readonly bugReportDialog: ReturnType<typeof createBugReportDialogStore>;
@@ -74,6 +77,7 @@ export function createMortyApplication(options: {
     readonly url?: string;
     readonly clock?: Clock;
     readonly analytics?: PageAnalytics | null;
+    readonly setupHandoff?: SetupHandoff;
 }): MortyApplication {
     const lifetime = new AbortController();
     const transport = options.transport;
@@ -259,6 +263,7 @@ export function createMortyApplication(options: {
     return {
         clock: options.clock ?? systemClock,
         analytics: options.analytics ?? null,
+        setupHandoff: options.setupHandoff ?? browserSetupHandoff(),
         anonymousSession,
         bugReportDialog,
         continuation,

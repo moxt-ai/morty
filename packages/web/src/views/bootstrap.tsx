@@ -6,6 +6,7 @@ import { ToastProvider } from "../components/ui/toast.tsx";
 import { installInputModalityTracking } from "../input-modality.ts";
 import type { PageAnalytics } from "../services/analytics/google-analytics.ts";
 import type { WebSocketApiTransport } from "../services/api/websocket-api-transport.ts";
+import type { SetupHandoff } from "../services/device/setup-handoff.ts";
 import type { Clock } from "../services/time/clock.ts";
 import { createImageDownloadStore } from "../view-models/chat/image-download-store.ts";
 import { createMortyApplication, type MortyApplication } from "../view-models/morty-application.ts";
@@ -26,6 +27,7 @@ export function assembleMorty(options: {
     readonly transport: WebSocketApiTransport;
     readonly origin: string;
     readonly clock?: Clock;
+    readonly setupHandoff?: SetupHandoff;
 }): {
     readonly application: MortyApplication;
     readonly disposeAnalytics: () => void;
@@ -41,6 +43,7 @@ export function assembleMorty(options: {
         transport: options.transport,
         ...(options.clock === undefined ? {} : { clock: options.clock }),
         ...(options.analytics === undefined ? {} : { analytics: options.analytics }),
+        ...(options.setupHandoff === undefined ? {} : { setupHandoff: options.setupHandoff }),
     });
     // The signed-in router is assembled once with the application: its inputs
     // (the stable authorize action, the application) are fixed for the

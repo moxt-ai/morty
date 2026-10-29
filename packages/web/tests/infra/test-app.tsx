@@ -8,6 +8,7 @@ import { afterAll, afterEach } from "vitest";
 import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
 import type { PageAnalytics } from "../../src/services/analytics/google-analytics.ts";
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
+import type { SetupHandoff } from "../../src/services/device/setup-handoff.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../../src/services/identity/identity-scope-url.ts";
 import {
@@ -55,6 +56,8 @@ export async function createTestApp(
         readonly clock?: Clock;
         /** Receives the page views and setup steps the application measures. */
         readonly analytics?: PageAnalytics;
+        /** How the device moves setup to the agent's computer; defaults to the test browser's own. */
+        readonly setupHandoff?: SetupHandoff;
         readonly agent?: ControlledAgent;
         readonly agents?: readonly ControlledAgent[];
         readonly nativeSessionIds?: ReadonlySet<string>;
@@ -156,6 +159,7 @@ export async function createTestApp(
         transport: current.transport,
         ...(options.clock === undefined ? {} : { clock: options.clock }),
         ...(options.analytics === undefined ? {} : { analytics: options.analytics }),
+        ...(options.setupHandoff === undefined ? {} : { setupHandoff: options.setupHandoff }),
     });
     let rendered: { readonly unmount: () => void } = { unmount: () => {} };
     const mount = () => {
