@@ -5,6 +5,7 @@ import { ExternalLink } from "../../components/ui/external-link.tsx";
 import { MortyAlert } from "../../components/ui/morty-alert.tsx";
 import { Button, Spinner } from "../../index.ts";
 import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-store.ts";
+import type { SetupHandoffModel } from "../../view-models/send-link-store.ts";
 import { PairingInstruction } from "../chat/pairing-instruction.tsx";
 import { BugReportButton, BugReportDialogHost } from "../diagnostics/bug-report-button.tsx";
 import { GlobalLoadingPage } from "../setup/global-loading-page.tsx";
@@ -27,7 +28,9 @@ export type AppState =
           readonly kind: "setup";
           readonly notice: "access-ended" | "legacy" | "none";
           readonly returnHref: string | null;
+          readonly setupHandoff: SetupHandoffModel;
           readonly onPromptCopied: () => void;
+          readonly onLinkSent: () => void;
       }
     | { readonly kind: "authentication"; readonly router: AnyRouter }
     | {
@@ -115,8 +118,10 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
             return (
                 <SetupApplication
                     notice={state.notice}
+                    onLinkSent={state.onLinkSent}
                     onPromptCopied={state.onPromptCopied}
                     returnHref={state.returnHref}
+                    setupHandoff={state.setupHandoff}
                 />
             );
         case "authentication":
@@ -137,12 +142,16 @@ const mortyResources = [
 
 function SetupApplication({
     notice,
+    onLinkSent,
     onPromptCopied,
     returnHref,
+    setupHandoff,
 }: {
     readonly notice: "access-ended" | "legacy" | "none";
+    readonly onLinkSent: () => void;
     readonly onPromptCopied: () => void;
     readonly returnHref: string | null;
+    readonly setupHandoff: SetupHandoffModel;
 }) {
     const pageNotice =
         notice === "access-ended" ? (
@@ -221,7 +230,7 @@ function SetupApplication({
                     : "Run one setup prompt on the computer you want to add."}
             </SetupCardDescription>
             <div className="mt-4 w-full">
-                <PairingInstruction onCopied={onPromptCopied} />
+                <PairingInstruction handoff={setupHandoff} onCopied={onPromptCopied} onLinkSent={onLinkSent} />
             </div>
         </SetupCardShell>
     );

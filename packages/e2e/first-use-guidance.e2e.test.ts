@@ -20,35 +20,61 @@ for (const viewport of [
             const { page } = runtime;
             await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
             await page.goto(runtime.origin);
-            const copy = page.getByRole("button", { name: "Copy setup prompt" });
-            await expect(copy).toBeInViewport();
             await expect(page.getByRole("heading", { name: "Step away. Keep your agent working." })).toBeVisible();
-            await expect(page.getByText("Next: paste it into the agent running on your computer.")).toBeVisible();
             await expect(page.getByRole("heading")).toHaveCount(1);
             const details = page.getByText("Review what setup does", { exact: true });
             const setupText = page.getByRole("textbox", { name: "Agent setup prompt" });
-            await expect(details).toBeInViewport();
-            await expect(setupText).toBeHidden();
-            await page.screenshot({ path: testInfo.outputPath(`01-home-${viewport.name}.png`), fullPage: true });
+            if (viewport.name === "desktop") {
+                const copy = page.getByRole("button", { name: "Copy setup prompt" });
+                await expect(copy).toBeInViewport();
+                await expect(page.getByText("Next: paste it into the agent running on your computer.")).toBeVisible();
+                await expect(details).toBeInViewport();
+                await expect(setupText).toBeHidden();
+                await page.screenshot({ path: testInfo.outputPath(`01-home-${viewport.name}.png`), fullPage: true });
 
-            await copy.click();
-            const instruction = await page.evaluate(() => navigator.clipboard.readText());
-            expect(instruction).toContain(`${runtime.origin}/setup.md`);
-            await expect(page.getByRole("status", { name: "Setup next step" })).toContainText(
-                "Paste into your agent, then open the link it returns.",
-            );
-            await details.click();
-            await expect(setupText).toBeVisible();
-            await expect(setupText).toHaveValue(instruction);
-            await page.screenshot({
-                path: testInfo.outputPath(`07-setup-prompt-${viewport.name}.png`),
-                fullPage: true,
-            });
-            await setupText.click();
-            await expect(page.getByRole("status", { name: "Setup next step" })).toBeVisible();
-            await details.click();
-            await expect(setupText).toBeHidden();
-            await page.screenshot({ path: testInfo.outputPath(`02-next-step-${viewport.name}.png`), fullPage: true });
+                await copy.click();
+                const instruction = await page.evaluate(() => navigator.clipboard.readText());
+                expect(instruction).toContain(`${runtime.origin}/setup.md`);
+                await expect(page.getByRole("status", { name: "Setup next step" })).toContainText(
+                    "Paste into your agent, then open the link it returns.",
+                );
+                await details.click();
+                await expect(setupText).toBeVisible();
+                await expect(setupText).toHaveValue(instruction);
+                await page.screenshot({
+                    path: testInfo.outputPath(`07-setup-prompt-${viewport.name}.png`),
+                    fullPage: true,
+                });
+                await setupText.click();
+                await expect(page.getByRole("status", { name: "Setup next step" })).toBeVisible();
+                await details.click();
+                await expect(setupText).toBeHidden();
+                await page.screenshot({
+                    path: testInfo.outputPath(`02-next-step-${viewport.name}.png`),
+                    fullPage: true,
+                });
+            } else {
+                // A phone cannot run setup, so the homepage sends Morty's address to the computer instead. Headless
+                // Chromium's phone emulation has no system share sheet, so it offers the copy fallback.
+                const sendLink = page.getByRole("button", { name: "Copy link" });
+                await expect(sendLink).toBeInViewport();
+                await expect(page.getByRole("button", { name: "Copy setup prompt" })).toHaveCount(0);
+                await expect(
+                    page.getByText("Setup runs on your computer. Open Morty there to copy the prompt."),
+                ).toBeVisible();
+                await expect(details).toBeInViewport();
+                await page.screenshot({ path: testInfo.outputPath(`01-home-${viewport.name}.png`), fullPage: true });
+
+                await sendLink.click();
+                expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${runtime.origin}/`);
+                await details.click();
+                await expect(setupText).toHaveValue(new RegExp(`${runtime.origin}/setup\\.md`, "u"));
+                await page.screenshot({
+                    path: testInfo.outputPath(`07-setup-prompt-${viewport.name}.png`),
+                    fullPage: true,
+                });
+                await details.click();
+            }
 
             // The controlled Agent follows the served instructions through the
             // real setup, Chat, Platform and daemon, returning the user's link.

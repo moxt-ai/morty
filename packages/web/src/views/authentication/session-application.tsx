@@ -87,7 +87,9 @@ export function SessionApplication({
                     kind: "setup",
                     notice: state.notice,
                     returnHref: state.returnHref,
+                    setupHandoff: application.setupHandoff,
                     onPromptCopied: () => application.analytics?.trackEvent("setup_prompt_copied"),
+                    onLinkSent: () => application.analytics?.trackEvent("setup_link_shared"),
                 }}
             />
         );
