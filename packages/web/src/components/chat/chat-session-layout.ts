@@ -9,7 +9,11 @@ export const chatSessionColumnClassName = `mx-auto w-full min-w-0 max-w-[920px] 
 /** Interaction cards keep a 12px inset at every breakpoint. */
 export const chatSessionInteractionColumnClassName = "mx-auto w-full min-w-0 max-w-[920px] px-3";
 
-export const chatSessionMessageScrollClassName = `min-h-0 flex-1 overflow-y-auto pt-6 pb-[calc(72px+var(--composer-overlay-block,0px))] -mb-4 ${mortyThinScrollbarClassName} sm:pt-10`;
+/**
+ * `--composer-notice-tuck` sinks the message tail under the frosted composer
+ * notice while one is up; the variable stays 0 otherwise.
+ */
+export const chatSessionMessageScrollClassName = `min-h-0 flex-1 overflow-y-auto pt-6 pb-[72px] -mb-4 [&>:last-child]:mb-[var(--composer-notice-tuck,0px)] ${mortyThinScrollbarClassName} sm:pt-10`;
 
 export const chatSessionMessageColumnClassName = `${chatSessionColumnClassName} font-inter text-foreground`;
 

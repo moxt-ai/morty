@@ -1,6 +1,10 @@
 import { type RefObject, useLayoutEffect } from "react";
 
-/** Positions the composer notice above the form and reserves log padding for its overlap. */
+/**
+ * Positions the composer notice above the form, keeping its 8px gap. While the
+ * notice overlaps the message log it sinks the message tail below the log edge,
+ * so reply text fills the notice's frosted blur instead of empty reserved space.
+ */
 export function useComposerNoticeLayout(noticeRef: RefObject<HTMLDivElement | null>, enabled: boolean): void {
     // biome-ignore lint/correctness/useExhaustiveDependencies: re-bind layout when the notice mounts or unmounts.
     useLayoutEffect(() => {
@@ -14,7 +18,8 @@ export function useComposerNoticeLayout(noticeRef: RefObject<HTMLDivElement | nu
             return;
         }
         const gapPx = 8;
-        const tuckPx = 48;
+        /** Reply tail chrome (trailing padding plus copy row) sunk below the log edge. */
+        const tuckPx = 60;
         const resizes = new ResizeObserver(() => {
             sync();
         });
@@ -29,18 +34,22 @@ export function useComposerNoticeLayout(noticeRef: RefObject<HTMLDivElement | nu
             const formTop = form.getBoundingClientRect().top;
             const queueTop = queue instanceof HTMLElement ? queue.getBoundingClientRect().top : formTop;
             const aboveForm = Math.max(0, Math.round(formTop - queueTop));
-            element.style.bottom = `calc(100% + ${aboveForm + gapPx}px)`;
             const log = pane.querySelector('[role="log"]');
             const atBottom = log instanceof HTMLElement && log.scrollHeight - log.scrollTop - log.clientHeight < 80;
-            const applied = Number.parseFloat(pane.style.getPropertyValue("--composer-overlay-block")) || 0;
+            // The gap above the composer is constant, so the notice rect is stable
+            // to measure against the log edge.
+            element.style.bottom = `calc(100% + ${aboveForm + gapPx}px)`;
             const overlap =
                 log instanceof HTMLElement
                     ? Math.max(0, log.getBoundingClientRect().bottom - element.getBoundingClientRect().top)
-                    : element.offsetHeight + gapPx;
-            const basePad =
-                log instanceof HTMLElement ? Number.parseFloat(getComputedStyle(log).paddingBottom) - applied : 0;
-            const overlay = Math.max(0, Math.round(overlap - basePad - tuckPx));
-            pane.style.setProperty("--composer-overlay-block", `${overlay}px`);
+                    : 0;
+            const tucked = overlap > gapPx;
+            if (tucked && log instanceof HTMLElement) {
+                const basePad = Number.parseFloat(getComputedStyle(log).paddingBottom) || 0;
+                pane.style.setProperty("--composer-notice-tuck", `${-(basePad + tuckPx)}px`);
+            } else {
+                pane.style.removeProperty("--composer-notice-tuck");
+            }
             if (atBottom && log instanceof HTMLElement) {
                 log.scrollTop = log.scrollHeight;
             }
@@ -54,7 +63,7 @@ export function useComposerNoticeLayout(noticeRef: RefObject<HTMLDivElement | nu
             resizes.disconnect();
             mutations.disconnect();
             element.style.removeProperty("bottom");
-            pane.style.removeProperty("--composer-overlay-block");
+            pane.style.removeProperty("--composer-notice-tuck");
         };
     }, [enabled]);
 }

@@ -79,7 +79,10 @@
 @theme inline {
     --default-border-width: 0.5px;
     --default-divide-width: 0.5px;
-    --animate-cloud-enter: cloud-enter 160ms ease-out both;
+    /* No fill mode: a persisted opacity effect keeps Chromium from compositing
+       backdrop-filter anywhere inside the animated subtree (session pane
+       notice, dialog surfaces), which would silently drop their frost. */
+    --animate-cloud-enter: cloud-enter 160ms ease-out;
     @keyframes cloud-enter {
         from {
             opacity: 0;
