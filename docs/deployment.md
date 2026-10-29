@@ -31,9 +31,19 @@ Configure these **GitHub Environment secrets** individually:
 
 - `MOBIUS_APP_SECRET` — full `mapp_…` AppCredential.
 
-Retain the deployment secrets `CLOUDFLARE_API_TOKEN`, `MOBIUS_READ_TOKEN`, and
-`SENTRY_AUTH_TOKEN`, and the variables `SENTRY_DSN`, `SENTRY_ORG`, and
-`SENTRY_PROJECT`. These are CD/build settings, not Worker bindings.
+Retain the deployment secrets `CLOUDFLARE_API_TOKEN` and `SENTRY_AUTH_TOKEN`,
+and the variables `SENTRY_DSN`, `SENTRY_ORG`, and `SENTRY_PROJECT`. These are
+CD/build settings, not Worker bindings.
+
+Public Mobius checkout should use GitHub's automatic `GITHUB_TOKEN` with
+`contents: read` and without persisting Git credentials. Fork pull requests
+must be able to build and test without repository or environment secrets.
+Keep deployment credentials in the controlled deployment jobs, and keep the
+required approval for external contributors' workflow runs.
+
+Retire `MOBIUS_READ_TOKEN` after all checkout workflows use the default token,
+validation has passed, and older workflow runs that require it have finished.
+Check other consumers before revoking the underlying token.
 
 CD assembles a private temporary JSON file from the individual runtime secrets
 and uploads it with the Worker version using Wrangler's `--secrets-file`. The
