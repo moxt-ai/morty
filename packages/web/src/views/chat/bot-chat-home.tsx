@@ -12,6 +12,7 @@ import { ComputerOfflineIcon } from "../../components/chat/computer-offline-icon
 import { ConnectionNotice } from "../../components/chat/connection-notice.tsx";
 import { CwdSelector } from "../../components/chat/cwd-selector.tsx";
 import { HarnessMark } from "../../components/chat/harness-mark.tsx";
+import { MessageDeliveryStatus } from "../../components/chat/message-delivery-status.tsx";
 import { MobileSessionTitlePortal } from "../../components/chat/mobile-session-title-portal.tsx";
 import { SessionLoadFailure } from "../../components/chat/session-load-failure.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
@@ -322,17 +323,16 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                         <div data-testid={dataTestId.queuedMessage}>
                                             <UserPromptMessage
                                                 attachments={queuedInitialMessage.attachments}
+                                                status={
+                                                    <MessageDeliveryStatus
+                                                        data-testid={dataTestId.initialMessageStatus}
+                                                        delivery={creationBusy ? "sending" : "failed"}
+                                                        label={creationStatus}
+                                                    />
+                                                }
                                                 text={queuedInitialMessage.content}
                                             />
                                         </div>
-                                        <p
-                                            aria-live="polite"
-                                            className={`text-right text-xs ${creationError.length > 0 ? "text-destructive" : "text-muted-foreground"}`}
-                                            data-testid={dataTestId.initialMessageStatus}
-                                            role="status"
-                                        >
-                                            {creationStatus}
-                                        </p>
                                         {creationError.length > 0 && (
                                             <div
                                                 aria-live="assertive"

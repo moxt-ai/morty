@@ -22,6 +22,7 @@ import type { ComposerAttachment } from "../../components/chat/composer-attachme
 import { ConnectionNotice } from "../../components/chat/connection-notice.tsx";
 import { ReadonlyWorkingDirectory, WorkingDirectorySkeleton } from "../../components/chat/cwd-selector.tsx";
 import { HarnessMark } from "../../components/chat/harness-mark.tsx";
+import { MessageDeliveryStatus } from "../../components/chat/message-delivery-status.tsx";
 import { MobileSessionTitlePortal } from "../../components/chat/mobile-session-title-portal.tsx";
 import { ResponseCopyButton } from "../../components/chat/response-copy-button.tsx";
 import {
@@ -1005,18 +1006,22 @@ function MobiusSessionPaneBody({
                                         >
                                             <UserPromptMessage
                                                 attachments={presentation.pendingDelivery.message.attachments}
+                                                status={
+                                                    presentation.pendingDelivery.error !== null ? (
+                                                        <MessageDeliveryStatus
+                                                            delivery="failed"
+                                                            label="Message failed to send"
+                                                        />
+                                                    ) : presentation.pendingDelivery.sending ? (
+                                                        <MessageDeliveryStatus
+                                                            delivery="sending"
+                                                            label="Sending message"
+                                                        />
+                                                    ) : undefined
+                                                }
                                                 text={presentation.pendingDelivery.message.content}
                                             />
-                                            {presentation.pendingDelivery.error === null ? (
-                                                presentation.pendingDelivery.sending && (
-                                                    <p
-                                                        className="text-right text-xs text-muted-foreground"
-                                                        role="status"
-                                                    >
-                                                        Sending message
-                                                    </p>
-                                                )
-                                            ) : (
+                                            {presentation.pendingDelivery.error !== null && (
                                                 <div
                                                     className="ml-auto flex max-w-[85%] items-center gap-3 text-xs text-destructive"
                                                     role="alert"
