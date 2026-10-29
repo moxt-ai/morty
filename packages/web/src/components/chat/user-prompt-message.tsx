@@ -59,7 +59,7 @@ export function UserPromptMessage({ attachments, text }: UserPromptMessageProps)
                                 ))}
                             </div>
                         )}
-                        {text.length > 0 && <AgentMarkdown className="[&_p]:my-0" markdown={text} streaming={false} />}
+                        {text.length > 0 && <AgentMarkdown markdown={text} streaming={false} />}
                     </div>
                 </MessageBubble>
             </UserMessageShell>

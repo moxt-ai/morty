@@ -55,6 +55,7 @@ const STREAMDOWN_ICONS = Object.freeze({
 
 const STREAMDOWN_FENCED_CODE_BLOCK_CLASSES = [
     "[&_[data-streamdown=code-block]]:!overflow-hidden",
+    "[&_[data-streamdown=code-block]]:my-2",
     "[&_[data-streamdown=code-block]]:rounded-[16px]",
     "[&_[data-streamdown=code-block]]:!border-0",
     "[&_[data-streamdown=code-block]]:!bg-muted",
@@ -63,7 +64,7 @@ const STREAMDOWN_FENCED_CODE_BLOCK_CLASSES = [
     "[&_[data-streamdown=code-block-body]]:!border-0",
     "[&_[data-streamdown=code-block-body]]:!bg-background",
     "[&_[data-streamdown=code-block-body]]:!p-3",
-    "[&_[data-streamdown=code-block-body]]:!text-[13px]",
+    "[&_[data-streamdown=code-block-body]]:!text-xs",
     "[&_[data-streamdown=code-block-body]_pre]:min-h-0 [&_[data-streamdown=code-block-body]_pre]:flex-1 [&_[data-streamdown=code-block-body]_pre]:overflow-auto",
     "[&_[data-streamdown=code-block-actions]]:!border-0",
     "[&_[data-streamdown=code-block-actions]]:!bg-transparent",
@@ -84,7 +85,7 @@ const STREAMDOWN_FENCED_CODE_BLOCK_CLASSES = [
     "[&_[data-streamdown=code-block-copy-button]]:keyboard-focus:focus-visible:ring-[3px]",
     "[&_[data-streamdown=code-block-copy-button]]:keyboard-focus:focus-visible:ring-ring/60",
     "[&_[data-streamdown=code-block-copy-button]_svg]:size-3.5",
-    "[&_[data-streamdown=inline-code]]:text-[13px] [&_[data-streamdown=inline-code]]:text-copy-secondary",
+    "[&_[data-streamdown=inline-code]]:text-xs [&_[data-streamdown=inline-code]]:py-[1px] [&_[data-streamdown=inline-code]]:text-copy-secondary",
 ].join(" ");
 const LOCAL_FILE_URL_ORIGIN = "https://local-file.morty.invalid";
 const LATEX_DELIMITER_PATTERN = /(^|[^\\$])(?:\$\$[\s\S]+?\$\$|\$(?!\$)[^\n$]+\$)/u;
@@ -239,7 +240,15 @@ function AgentMarkdownImage({ alt, className, src, title }: ComponentProps<"img"
     const directSource = typeof src === "string" ? directImageSource(src) : "";
     const requestedSource = typeof src === "string" ? (localFilePath(src) ?? src) : "";
     if (directSource.length > 0) {
-        return <PreviewImage alt={alt ?? ""} className={className} loading="lazy" src={directSource} title={title} />;
+        return (
+            <PreviewImage
+                alt={alt ?? ""}
+                className={cn("max-h-[min(60vh,360px)]", className)}
+                loading="lazy"
+                src={directSource}
+                title={title}
+            />
+        );
     }
     if (createResourceStore === undefined || readImage === undefined) {
         return <span className="text-xs text-muted-foreground">Image not available</span>;
@@ -261,7 +270,7 @@ function AgentMarkdownImage({ alt, className, src, title }: ComponentProps<"img"
                 return (
                     <PreviewImage
                         alt={alt ?? ""}
-                        className={className}
+                        className={cn("max-h-[min(60vh,360px)]", className)}
                         loading="lazy"
                         blob={state.blob}
                         src={state.source}
@@ -333,17 +342,25 @@ export function AgentMarkdownContent({
                 className={cn(
                     "agent-markdown min-w-0 text-base leading-6 text-foreground [overflow-wrap:anywhere]",
                     "[&_p]:my-2 [&_p]:whitespace-pre-line",
-                    "[&_h1]:mt-6 [&_h1]:mb-3 [&_h1]:text-[21px] [&_h1]:leading-7 [&_h1]:font-semibold md:[&_h1]:mt-7 md:[&_h1]:text-2xl md:[&_h1]:leading-8",
-                    "[&_h2]:mt-5 [&_h2]:mb-3 [&_h2]:text-lg [&_h2]:leading-7 [&_h2]:font-semibold md:[&_h2]:mt-6 md:[&_h2]:text-xl",
-                    "[&_h3]:mt-5 [&_h3]:mb-2 [&_h3]:text-base [&_h3]:leading-6 [&_h3]:font-semibold",
-                    "[&_h4]:mt-4 [&_h4]:mb-2 [&_h4]:font-semibold",
-                    "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5",
-                    "[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:space-y-1 [&_ol]:pl-5",
+                    "[&_h1]:mt-10 [&_h1]:mb-5 [&_h1]:text-[24px] [&_h1]:leading-[30px] [&_h1]:font-semibold",
+                    "[&_h2]:mt-8 [&_h2]:mb-4 [&_h2]:text-[20px] [&_h2]:leading-[26px] [&_h2]:font-semibold",
+                    "[&_h3]:mt-6 [&_h3]:mb-3 [&_h3]:text-[16px] [&_h3]:leading-6 [&_h3]:font-semibold",
+                    "[&_h4]:mt-4 [&_h4]:mb-2 [&_h4]:text-base [&_h4]:leading-6 [&_h4]:font-semibold",
+                    "[&_h5]:mt-4 [&_h5]:mb-2 [&_h5]:text-base [&_h5]:leading-6 [&_h5]:font-semibold",
+                    "[&_h6]:mt-4 [&_h6]:mb-2 [&_h6]:text-base [&_h6]:leading-6 [&_h6]:font-semibold",
+                    "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5",
+                    "[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5",
+                    "[&_li]:py-0",
+                    // Explicit margins instead of space-y: nested-list rules must beat
+                    // top-level ones by specificity, not Tailwind's output order.
+                    "[&_ul>li:not(:last-child)]:mb-1.5 [&_ol>li:not(:last-child)]:mb-1.5",
+                    "[&_li_ul>li:not(:last-child)]:mb-1 [&_li_ol>li:not(:last-child)]:mb-1",
+                    "[&_li_ul]:mt-1 [&_li_ul]:mb-0 [&_li_ol]:mt-1 [&_li_ol]:mb-0",
                     "[&_li>p]:my-0",
-                    "[&_blockquote]:my-3 [&_blockquote]:border-l-[3px] [&_blockquote]:border-black/12 [&_blockquote]:pl-3 [&_blockquote]:text-[#454959]",
+                    "[&_blockquote]:my-4 [&_blockquote]:border-l-[3px] [&_blockquote]:border-black/12 [&_blockquote]:py-2 [&_blockquote]:pl-3 [&_blockquote]:leading-6 [&_blockquote]:not-italic [&_blockquote]:text-[#454959] [&_blockquote_p]:my-0",
                     "[&_a]:font-medium [&_a]:text-primary [&_a]:transition-colors [&_a]:hover:text-primary-hover [&_a]:active:text-primary-active",
                     "[&_code]:font-mono",
-                    "[&_table]:text-sm",
+                    "[&_table]:text-[13px] [&_th]:text-[13px] [&_th]:px-2.5 [&_th]:py-1.5 [&_td]:text-[13px] [&_td]:px-2.5 [&_td]:py-1.5",
                     STREAMDOWN_FENCED_CODE_BLOCK_CLASSES,
                     className,
                 )}

@@ -29,11 +29,13 @@ function counted(count: number, singular: string, plural: string): string {
  */
 export function TurnWorkDisclosure({
     children,
+    className,
     open: requestedOpen,
     summary,
     working = false,
 }: {
     readonly children: ReactNode;
+    readonly className?: string | undefined;
     readonly open?: boolean | undefined;
     readonly summary: TurnWorkSummary;
     readonly working?: boolean | undefined;
@@ -68,7 +70,7 @@ export function TurnWorkDisclosure({
         parts.push({ key: "interrupted", text: `${summary.interrupted.toString()} interrupted`, alert: true });
     }
     return (
-        <div className="min-w-0">
+        <div className={cn("min-w-0", className)}>
             <button
                 aria-controls={contentId}
                 aria-expanded={open}
@@ -97,7 +99,7 @@ export function TurnWorkDisclosure({
                 </span>
             </button>
             {open && (
-                <div className="min-w-0 space-y-4" id={contentId}>
+                <div className="min-w-0" id={contentId}>
                     {children}
                 </div>
             )}

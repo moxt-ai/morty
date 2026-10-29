@@ -1,6 +1,6 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
 import { Check, CircleAlert, X } from "lucide-react";
-import { Fragment, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
 import { AgentThinking, type AgentThinkingEntry } from "../../components/chat/agent-thinking.tsx";
@@ -296,6 +296,35 @@ function agentReplySections(items: readonly SessionRenderItem[]): readonly Reply
         });
     }
     return sections;
+}
+
+/**
+ * Vertical spacing class per reply display item: answer text carries no block
+ * margin, process groups and notices declare 12px, failure cards 16px. The
+ * article is a plain block flow, so adjacent declared margins collapse to the
+ * larger value; first and last edges stay clear.
+ */
+type ReplyItemSpacing = "alert" | "block" | "text";
+
+function replyItemSpacing(item: SessionRenderItem): ReplyItemSpacing {
+    if (item.kind === "assistant-text") {
+        return "text";
+    }
+    if (item.kind === "event" && item.message.role === "assistant" && item.message.presentation.kind === "failure") {
+        return "alert";
+    }
+    return "block";
+}
+
+const replyItemSpacingMargins: Record<ReplyItemSpacing, { readonly mb: string; readonly mt: string }> = {
+    alert: { mb: "mb-4", mt: "mt-4" },
+    block: { mb: "mb-3", mt: "mt-3" },
+    text: { mb: "", mt: "" },
+};
+
+function replyItemMarginClassName(spacing: ReplyItemSpacing, first: boolean, last: boolean): string {
+    const margins = replyItemSpacingMargins[spacing];
+    return cn(first ? "" : margins.mt, last ? "" : margins.mb);
 }
 
 function SessionRenderItemContent({
@@ -889,10 +918,10 @@ function MobiusSessionPaneBody({
                                             const isRenderItemActive = (item: SessionRenderItem) =>
                                                 replyActive &&
                                                 firstIndex + group.items.indexOf(item) === lastRenderItemIndex;
-                                            const renderItem = (item: SessionRenderItem) => {
+                                            const renderItem = (item: SessionRenderItem, spacingClassName: string) => {
                                                 const active = isRenderItemActive(item);
                                                 return (
-                                                    <div key={sessionRenderItemId(item)}>
+                                                    <div className={spacingClassName} key={sessionRenderItemId(item)}>
                                                         <SessionRenderItemContent
                                                             active={active}
                                                             item={item}
@@ -917,6 +946,55 @@ function MobiusSessionPaneBody({
                                                 pane.botId,
                                                 execution,
                                             );
+                                            // Flatten the article children so positional margin clearing sees the
+                                            // laid-out order, including the trailing copy action row. Items inside a
+                                            // process disclosure clear first/last within the disclosure body instead.
+                                            const replyChildren: {
+                                                readonly key: string;
+                                                readonly render: (spacingClassName: string) => ReactNode;
+                                                readonly spacing: ReplyItemSpacing;
+                                            }[] = [];
+                                            sections.forEach((section, sectionIndex) => {
+                                                if (section.kind === "process") {
+                                                    replyChildren.push({
+                                                        key: section.id,
+                                                        render: (spacingClassName) => (
+                                                            <TurnWorkDisclosure
+                                                                className={spacingClassName}
+                                                                key={section.id}
+                                                                summary={section.summary}
+                                                                working={
+                                                                    replyActive &&
+                                                                    sectionIndex === sections.length - 1 &&
+                                                                    section.items.some(isGeneratingProcessRenderItem)
+                                                                }
+                                                            >
+                                                                {section.items.map((item, index) =>
+                                                                    renderItem(
+                                                                        item,
+                                                                        replyItemMarginClassName(
+                                                                            replyItemSpacing(item),
+                                                                            index === 0,
+                                                                            index === section.items.length - 1,
+                                                                        ),
+                                                                    ),
+                                                                )}
+                                                            </TurnWorkDisclosure>
+                                                        ),
+                                                        spacing: "block",
+                                                    });
+                                                    return;
+                                                }
+                                                for (const item of section.items) {
+                                                    replyChildren.push({
+                                                        key: sessionRenderItemId(item),
+                                                        render: (spacingClassName) =>
+                                                            renderItem(item, spacingClassName),
+                                                        spacing: replyItemSpacing(item),
+                                                    });
+                                                }
+                                            });
+                                            const replyChildCount = replyChildren.length + (copyText === null ? 0 : 1);
                                             return (
                                                 <article
                                                     key={group.id}
@@ -926,23 +1004,13 @@ function MobiusSessionPaneBody({
                                                         replyActive && "pb-3",
                                                     )}
                                                 >
-                                                    {sections.map((section, sectionIndex) =>
-                                                        section.kind === "process" ? (
-                                                            <TurnWorkDisclosure
-                                                                key={section.id}
-                                                                summary={section.summary}
-                                                                working={
-                                                                    replyActive &&
-                                                                    sectionIndex === sections.length - 1 &&
-                                                                    section.items.some(isGeneratingProcessRenderItem)
-                                                                }
-                                                            >
-                                                                {section.items.map(renderItem)}
-                                                            </TurnWorkDisclosure>
-                                                        ) : (
-                                                            <Fragment key={section.id}>
-                                                                {section.items.map(renderItem)}
-                                                            </Fragment>
+                                                    {replyChildren.map((child, index) =>
+                                                        child.render(
+                                                            replyItemMarginClassName(
+                                                                child.spacing,
+                                                                index === 0,
+                                                                index === replyChildCount - 1,
+                                                            ),
                                                         ),
                                                     )}
                                                     {copyText !== null && (
