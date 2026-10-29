@@ -2,17 +2,9 @@ import { getByRole, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { openExecutionDetails, sendPrompt } from "./infra/application-scenario.ts";
-import { createTestApp, type TestApp } from "./infra/test-app.tsx";
+import { openExecutionDetails, recoverChat, sendPrompt } from "./infra/application-scenario.ts";
+import { createTestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
-
-async function recoverChat(app: TestApp, clock: TestClock, delayMs = 1_000): Promise<void> {
-    await act(async () => {
-        const connected = app.transport.waitForBridge(AbortSignal.timeout(10_000));
-        clock.advanceBy(delayMs);
-        await connected;
-    });
-}
 
 test("Given a connected Chat with an unsent draft, When its network drops and returns, Then it recovers without a blocking dialog or sending the draft and still reports Runtime changes", {
     timeout: 45_000,

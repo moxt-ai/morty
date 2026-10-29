@@ -11,7 +11,7 @@ import {
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
+import { recoverChat, sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 
@@ -82,6 +82,8 @@ test("Given a turn streams text and several tools, When it completes and the pag
     });
 });
 
+// Documents current behavior, not a product decision: a steer message is a user message, so it ends
+// the Agent response before it and starts another after it, while the execution stays one.
 test("Given a running turn, When the user steers it, Then the steer message sits between two Agent responses and one Working indicator runs the whole execution", {
     timeout: 30_000,
 }, async () => {
@@ -131,7 +133,11 @@ test("Given a tool starts and is later updated, When the turn completes, Then th
     });
     await app.user.click(summary);
     await app.waitForView(() => {
-        expect(queryAllByLabelText(document.body, "Tool: Updated verification")).toHaveLength(1);
+        const rows = queryAllByLabelText(document.body, "Tool: Updated verification");
+        expect(rows).toHaveLength(1);
+        // The in-progress call settled through its update instead of staying running.
+        expect(queryAllByLabelText(rows[0] ?? document.body, "Tool succeeded")).toHaveLength(1);
+        expect(queryAllByLabelText(rows[0] ?? document.body, "Tool running")).toHaveLength(0);
     });
 });
 
@@ -175,6 +181,8 @@ test("Given the agent asks for permission mid-turn, When the request is waiting,
     expect(workingIndicators(app)).toHaveLength(0);
 });
 
+// A regression guard: the process summary has no status default today, so an explicit expansion
+// survives trivially. It must keep surviving if one is ever added.
 test("Given a user expands the process summary while the turn runs, When more tools arrive and the turn completes, Then the explicit expansion survives", {
     timeout: 30_000,
 }, async () => {
@@ -206,6 +214,8 @@ test("Given a user expands the process summary while the turn runs, When more to
     });
 });
 
+// The step counts come from the four tools the "fail unfinished tools" scenario emits:
+// completed, failed, in progress and pending, the last two interrupted by the failure.
 test("Given tools were unfinished when the turn fails, When the failure arrives, Then the process stays behind its summary beside the failure card", {
     timeout: 30_000,
 }, async () => {
@@ -222,14 +232,6 @@ test("Given tools were unfinished when the turn fails, When the failure arrives,
         expect(getByText(document.body, "Response failed")).toBeDefined();
     });
 });
-
-async function recoverChat(app: TestApp, clock: TestClock): Promise<void> {
-    await act(async () => {
-        const connected = app.transport.waitForBridge(AbortSignal.timeout(10_000));
-        clock.advanceBy(1_000);
-        await connected;
-    });
-}
 
 test("Given a reply is streaming, When Chat loses its connection and recovers, Then the partial reply is not repeated and the finished reply joins the same Agent response", {
     timeout: 30_000,

@@ -82,6 +82,15 @@ export async function openExecutionDetails(app: TestApp): Promise<HTMLElement> {
     return app.waitForView(() => getByRole(document.body, "dialog", { name: "Execution details" }));
 }
 
+/** Advances the clock past the bridge retry delay and waits for Chat's bridge to reconnect. */
+export async function recoverChat(app: TestApp, clock: TestClock, delayMs = 1_000): Promise<void> {
+    await act(async () => {
+        const connected = app.transport.waitForBridge(AbortSignal.timeout(10_000));
+        clock.advanceBy(delayMs);
+        await connected;
+    });
+}
+
 /** Observe recovery through the UI before advancing its uninterrupted grace period. */
 export async function showReconnectNotice(app: TestApp, clock: TestClock): Promise<void> {
     await app.waitForView(() =>
