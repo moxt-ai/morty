@@ -47,7 +47,7 @@ function SetupPageHeader() {
 }
 
 /** Top logo bar plus a centered content column; pairs with a single card section surface. */
-export function SetupPageWithHeader({
+function SetupPageWithHeader({
     children,
     pageAction,
     pageNotice,
