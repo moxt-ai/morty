@@ -7,7 +7,7 @@ import {
     MobiusTimeoutError,
 } from "@moxt-ai/mobius-sdk/platform";
 import { decodeRuntimeDiagnosticsResult, type SessionReadyEvent } from "@moxt-ai/mobius-sdk/protocol";
-import { AGENT_DEFAULT_EXECUTION_SETTING, MobiusClient, MobiusRuntimePairingRequest } from "@moxt-ai/mobius-sdk/server";
+import { MobiusClient, MobiusRuntimePairingRequest } from "@moxt-ai/mobius-sdk/server";
 import * as v from "valibot";
 import {
     PlatformProjectError,
@@ -43,23 +43,8 @@ export type ChatConversationInput =
               readonly value: string;
               readonly valueType: "select" | "boolean";
           }[];
+          readonly title: string;
           readonly workspaceRef: string;
-      }
-    | {
-          readonly kind: "new";
-          readonly conversationKey: string;
-          readonly bindingId: string;
-          readonly runtimeId: string;
-          readonly agentRef: string;
-          readonly workspaceRef: string;
-          readonly permissionMode: string;
-          readonly configuration: {
-              readonly additionalDirectoryIds: readonly string[];
-              readonly booleanValue: boolean;
-              readonly configId: string;
-              readonly value: string;
-              readonly valueType: "select" | "boolean";
-          };
       };
 
 const discoveredRuntimeSchema = v.object({
@@ -360,23 +345,13 @@ export class PlatformProjectGateway {
             120000,
         );
 
-    readonly openChatSession = async (
-        projectId: string,
-        input: ChatConversationInput,
-        title: string,
-        signal: AbortSignal,
-    ) =>
+    readonly openChatSession = async (projectId: string, input: ChatConversationInput, signal: AbortSignal) =>
         await this.#withProject(
             projectId,
             signal,
             async (client) => {
                 const sessionId = input.kind === "existing" ? input.conversationId : input.conversationKey;
-                const additionalDirectoryIds =
-                    input.kind === "new" && "configuration" in input
-                        ? input.configuration.additionalDirectoryIds
-                        : input.kind === "existing"
-                          ? input.additionalDirectoryIds
-                          : [];
+                const additionalDirectoryIds = input.kind === "existing" ? input.additionalDirectoryIds : [];
                 const ready =
                     input.kind === "new"
                         ? await client.sessions.create(
@@ -387,7 +362,7 @@ export class PlatformProjectGateway {
                                   directoryId: input.workspaceRef,
                                   runtimeId: input.runtimeId,
                                   sessionId,
-                                  title,
+                                  title: input.title,
                               },
                               signal,
                           )
@@ -409,7 +384,7 @@ export class PlatformProjectGateway {
                     );
                 }
                 let configuration: Pick<SessionReadyEvent, "configOptions" | "configurationRevision"> = ready;
-                if (input.kind === "new" && "configurations" in input) {
+                if (input.kind === "new") {
                     for (const selection of input.configurations) {
                         const option = configuration.configOptions.find(
                             (candidate) => candidate.id === selection.configId,
@@ -440,68 +415,6 @@ export class PlatformProjectGateway {
                             signal,
                         );
                     }
-                } else if (input.kind === "new" && "configuration" in input) {
-                    if (input.permissionMode !== AGENT_DEFAULT_EXECUTION_SETTING) {
-                        const permission = configuration.configOptions.find(
-                            (option) => option.id === "permission_mode",
-                        );
-                        if (
-                            permission === undefined ||
-                            permission.type !== "select" ||
-                            !permission.values.some((value) => value.value === input.permissionMode)
-                        ) {
-                            throw new PlatformProjectError(
-                                "AGENT_CONFIGURATION_REJECTED",
-                                "The harness did not offer the selected permission mode.",
-                                409,
-                            );
-                        }
-                        if (permission.currentValue !== input.permissionMode) {
-                            configuration = await client.sessions.updateConfiguration(
-                                input.runtimeId,
-                                sessionId,
-                                {
-                                    agentId: input.agentRef,
-                                    directoryId: input.workspaceRef,
-                                    additionalDirectoryIds,
-                                    configId: permission.id,
-                                    value: input.permissionMode,
-                                    booleanValue: false,
-                                    valueType: "select",
-                                },
-                                signal,
-                            );
-                        }
-                    }
-                    const option = configuration.configOptions.find(
-                        (candidate) => candidate.id === input.configuration.configId,
-                    );
-                    if (
-                        option === undefined ||
-                        option.type !== input.configuration.valueType ||
-                        (option.type === "select" &&
-                            !option.values.some((value) => value.value === input.configuration.value))
-                    ) {
-                        throw new PlatformProjectError(
-                            "AGENT_CONFIGURATION_REJECTED",
-                            "The harness did not offer the selected model.",
-                            409,
-                        );
-                    }
-                    configuration = await client.sessions.updateConfiguration(
-                        input.runtimeId,
-                        sessionId,
-                        {
-                            agentId: input.agentRef,
-                            directoryId: input.workspaceRef,
-                            additionalDirectoryIds,
-                            configId: input.configuration.configId,
-                            value: input.configuration.value,
-                            booleanValue: input.configuration.booleanValue,
-                            valueType: input.configuration.valueType,
-                        },
-                        signal,
-                    );
                 }
                 const access = await client.sessions.createAccess(input.runtimeId, sessionId, 900, signal);
                 return {

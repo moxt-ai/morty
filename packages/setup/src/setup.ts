@@ -690,7 +690,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return retiring === null ? { kind: "unchanged" } : { kind: "retiring", previous: retiring };
     }
 
-    /** Old setup executables share this file. Derive their fields here so rollback can still finish recovery. */
+    /** Encode the replacement state so `readReplacementState` decodes it again on the next run. */
     function replacementFields(replacement: ReplacementState, projectId: unknown): Readonly<Record<string, unknown>> {
         switch (replacement.kind) {
             case "unchanged":
@@ -704,10 +704,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 };
             case "revoked":
                 return {
-                    replacement_notice: "pending",
-                    // The old structured decoder requires a previous ID; notice-only files never had one.
+                    // Notice-only files never recorded the previous Project, which `replacement_access` requires.
                     ...(replacement.previous.projectId === null
-                        ? {}
+                        ? { replacement_notice: "pending" }
                         : {
                               replacement_access: {
                                   kind: "revoked",

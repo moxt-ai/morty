@@ -325,7 +325,6 @@ export function MobiusSessionMessage({
                             id: message.firstEvent.eventId,
                             kind: "reasoning",
                             messageId: presentation.messageId,
-                            omitted: presentation.omitted,
                             text: sessionTextValue(presentation.content.text),
                             truncated: presentation.content.text.truncated,
                         },

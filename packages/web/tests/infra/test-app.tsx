@@ -1,3 +1,5 @@
+import { realpath } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { getByTestId, getConfig, queryAllByTestId } from "@testing-library/dom";
 import { act, render } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
@@ -58,6 +60,7 @@ export async function createTestApp(
                   readonly kind: "continue";
                   readonly harness: string;
                   readonly sessionId: string;
+                  /** The directory setup ran in; defaults to the system temporary directory. */
                   readonly workspace?: string;
                   /** Replaces the created transfer code, for example with one that cannot be redeemed. */
                   readonly code?: (application: Application) => string;
@@ -87,9 +90,7 @@ export async function createTestApp(
         if (page.kind === "continue") {
             transfer.searchParams.set("harness", page.harness);
             transfer.searchParams.set("sessionId", page.sessionId);
-            if (page.workspace !== undefined) {
-                transfer.searchParams.set("workspace", page.workspace);
-            }
+            transfer.searchParams.set("workspace", page.workspace ?? (await realpath(tmpdir())));
         }
         if (page.code !== undefined) {
             transfer.hash = `code=${page.code(current)}`;

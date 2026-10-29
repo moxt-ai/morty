@@ -52,7 +52,7 @@ type NativeEntryInput = {
 };
 type NativePreviewInput = Omit<NativeEntryInput, "discoveryId"> & { readonly nativeSessionId: string };
 type OpenChatInput =
-    | { readonly conversationId: string; readonly title?: string }
+    | { readonly conversationId: string }
     | {
           readonly agentRef: string;
           readonly conversationKey: string;
@@ -62,21 +62,7 @@ type OpenChatInput =
               readonly value: string;
               readonly valueType: "select" | "boolean";
           }[];
-          readonly title?: string;
-          readonly workspaceRef: string;
-      }
-    | {
-          readonly agentRef: string;
-          readonly conversationKey: string;
-          readonly permissionMode: string;
-          readonly title?: string;
-          readonly configuration: {
-              readonly additionalDirectoryIds: readonly string[];
-              readonly booleanValue: boolean;
-              readonly configId: string;
-              readonly value: string;
-              readonly valueType: "select" | "boolean";
-          };
+          readonly title: string;
           readonly workspaceRef: string;
       };
 type ConfigureBotInput = {
@@ -390,7 +376,11 @@ export class ChatService {
         if ("conversationKey" in input) {
             await this.#requireRuntimeAgent(scope, runtime.runtimeId, input.agentRef);
         } else if (!(await this.#ownsManagedSession(scope, input.conversationId))) {
-            throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
+            throw new PlatformProjectError(
+                "NOT_FOUND",
+                'This session is not in Morty Recent sessions. If you closed it in Morty, use "Open Session" to import or fork it again.',
+                404,
+            );
         }
         const access = await this.#platform.openChatSession(
             scope.projectId,
@@ -425,7 +415,6 @@ export class ChatService {
                           ),
                       };
                   })(),
-            input.title ?? "New chat",
             scope.signal,
         );
         if ("conversationKey" in input) {
@@ -455,7 +444,11 @@ export class ChatService {
         await this.#withManagedSessionOperation(scope, sessionId, async () => {
             const bot = await this.#bot(scope);
             if (!(await this.#ownsManagedSession(scope, sessionId))) {
-                throw new PlatformProjectError("NOT_FOUND", "Your Chat session was not found.", 404);
+                throw new PlatformProjectError(
+                    "NOT_FOUND",
+                    'This session is not in Morty Recent sessions. If you closed it in Morty, use "Open Session" to import or fork it again.',
+                    404,
+                );
             }
             const runtime = await this.localRuntime(scope);
             return {

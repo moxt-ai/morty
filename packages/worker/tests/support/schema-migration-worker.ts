@@ -23,10 +23,6 @@ export class ProjectSchema extends DurableObject {
                     "SELECT m.name AS table_name, c.name, c.type, c.\"notnull\", c.pk FROM sqlite_master m JOIN pragma_table_info(m.name) c WHERE m.type = 'table' AND m.name NOT LIKE '_cf_%' ORDER BY m.name, c.name",
                 )
                 .toArray(),
-            positions: sql
-                .exec("SELECT version FROM _chat_schema_migration ORDER BY version")
-                .toArray()
-                .map((row) => row["version"]),
             tags: sql
                 .exec("SELECT tag FROM _project_schema_migration ORDER BY tag")
                 .toArray()

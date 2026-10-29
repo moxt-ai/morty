@@ -315,7 +315,7 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
     try {
         const app = await createTestApp({ page: { kind: "continue", harness: "pi", sessionId: "native-session" } });
         await app.waitForView(() => {
-            expect(getByRole(document.body, "alert").textContent).toContain("handoff harness is unavailable");
+            expect(getByRole(document.body, "alert").textContent).toContain("Connect an Agent to this Machine first.");
         });
         await app.user.click(getByRole(document.body, "button", { name: "Report a bug" }));
         await app.user.type(getByRole(document.body, "textbox", { name: "What went wrong?" }), "Cannot continue Pi");
@@ -339,11 +339,11 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
             expect.objectContaining({
                 component: "web",
                 operation: "continue-native-session",
-                outcome: "HARNESS_UNAVAILABLE",
+                outcome: "AGENT_REQUIRED",
                 requestId: expect.stringMatching(/^[a-f0-9-]{36}$/u),
             }),
         );
-        expect(envelope).not.toContain("The handoff harness is unavailable.");
+        expect(envelope).not.toContain("Connect an Agent to this Machine first.");
         await app.close();
         render(
             <App

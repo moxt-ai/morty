@@ -53,12 +53,7 @@ export type SessionMessage =
           readonly commandId: string | null;
           readonly presentation:
               | { readonly kind: "message"; readonly content: SessionContentBlock; readonly messageId: string | null }
-              | {
-                    readonly kind: "thought";
-                    readonly content: SessionContentBlock;
-                    readonly messageId: string | null;
-                    readonly omitted: boolean;
-                }
+              | { readonly kind: "thought"; readonly content: SessionContentBlock; readonly messageId: string | null }
               | { readonly kind: "tool"; readonly entry: SessionToolPresentation }
               | {
                     readonly kind: "compaction";
@@ -376,7 +371,6 @@ function messageFromAcpUpdate(event: SessionPresentationEvent, update: AcpSessio
                     content: sessionContent(update.content, REASONING_CHARACTER_LIMIT),
                     kind: "thought",
                     messageId: update.messageId ?? null,
-                    omitted: event.mobiusMetadata?.omitted === true,
                 },
                 role: "assistant",
             };
@@ -438,9 +432,6 @@ function mergeAdjacentText(previous: SessionMessage | undefined, incoming: Sessi
         ...previous,
         presentation: {
             ...incoming.presentation,
-            ...(incoming.presentation.kind === "thought" && previous.presentation.kind === "thought"
-                ? { omitted: previous.presentation.omitted || incoming.presentation.omitted }
-                : {}),
             content: {
                 ...incoming.presentation.content,
                 text: appendSessionText(
@@ -479,6 +470,7 @@ type ReducedSessionEntry =
     | ReducedSessionMessage
     | { readonly kind: "turn-started"; readonly commandId: string }
     | { readonly kind: "execution-idle" }
+    | { readonly kind: "queued-command"; readonly commandId: string }
     | {
           readonly kind: "execution-owner";
           readonly commandId: string;
@@ -771,6 +763,12 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
     const messages: SessionExecutionMessage[] = [];
     const unfinished = new Map<string | null, number[]>();
     const executionOwners = new Map<string, string>();
+    const queuedCommands = new Set(
+        reduction.entries.flatMap((entry) => (entry.kind === "queued-command" ? [entry.commandId] : [])),
+    );
+    const startedCommands = new Set(
+        reduction.entries.flatMap((entry) => (entry.kind === "turn-started" ? [entry.commandId] : [])),
+    );
     let turn: { readonly kind: "unknown" } | { readonly kind: "active" | "terminal"; readonly commandId: string } = {
         kind: "unknown",
     };
@@ -789,6 +787,9 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
         }
     };
     for (const entry of reduction.entries) {
+        if (entry.kind === "queued-command") {
+            continue;
+        }
         if (entry.kind === "execution-owner") {
             executionOwners.set(entry.commandId, entry.executionCommandId);
             continue;
@@ -813,6 +814,20 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
             continue;
         }
         let message = entry.message;
+        // Suppress only confirmed unstarted work. A history baseline omits lifecycle
+        // events, so an unknown command may be a real turn stopped during reconciliation.
+        if (
+            message.role === "assistant" &&
+            message.presentation.kind === "completed" &&
+            message.presentation.stopReason === "cancelled" &&
+            message.commandId !== null &&
+            ((message.firstEvent.type === "lifecycle-metadata" &&
+                message.firstEvent.payload.kind === "prompt.completed" &&
+                message.firstEvent.payload.execution === "not-started") ||
+                (queuedCommands.has(message.commandId) && !startedCommands.has(message.commandId)))
+        ) {
+            continue;
+        }
         if (message.role === "user" && message.firstEvent.type === "acp" && turn.kind === "terminal") {
             turn = { kind: "unknown" };
         }

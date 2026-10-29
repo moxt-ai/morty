@@ -1,4 +1,4 @@
-import type { MobiusTurn, SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
+import type { SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
 import { SessionPromptDisposition } from "@moxt-ai/mobius-sdk";
 import type { NativeSessionResult } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
@@ -26,7 +26,7 @@ type QueueOperation = { readonly kind: "idle" } | { readonly kind: "submitting";
 type QueueFeedback = { readonly kind: "none" } | { readonly kind: "failed"; readonly message: string };
 
 interface SessionMessageQueuePort {
-    readonly cancel: (turnId: string, idempotencyKey: string, signal: AbortSignal) => Promise<MobiusTurn>;
+    readonly cancel: (turnId: string, idempotencyKey: string, signal: AbortSignal) => Promise<void>;
     readonly steer: (turnId: string, signal: AbortSignal) => Promise<void>;
     readonly submit: (request: SubmitMobiusTurnRequest, signal: AbortSignal) => Promise<{ readonly turnId: string }>;
 }
@@ -206,7 +206,7 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
         takeStarted: (commandId) => {
             localAttachments.delete(commandId);
             const message = get().messages.find((candidate) => candidate.commandId === commandId);
-            if (message === undefined || message.kind !== "queued") {
+            if (message === undefined) {
                 return null;
             }
             set((state) => {

@@ -242,7 +242,7 @@ export class AnonymousIdentityApi {
         clearIdentityScope();
         const destination = new URL(window.location.href);
         destination.pathname = "/chat";
-        for (const key of ["sessionId", "conversationId", "conversation", "harness", "nativeSessionAction"]) {
+        for (const key of ["sessionId", "harness", "nativeSessionAction"]) {
             destination.searchParams.delete(key);
         }
         destination.hash = "";

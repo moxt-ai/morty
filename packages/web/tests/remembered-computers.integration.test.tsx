@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import { getAllByRole, getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
@@ -474,7 +475,7 @@ test("Given saved access for the same computer, When an old native handoff link 
 }, async () => {
     const app = await createTestApp({ agent: { id: "pi", label: "Pi" }, connectAgent: true });
     await startConversation(app, "Keep the issued grant");
-    window.location.href = `${app.origin}/continue?harness=pi&sessionId=missing-session#code=mobius_transfer_v2.${app.identity.projectId}.${"a".repeat(43)}`;
+    window.location.href = `${app.origin}/continue?harness=pi&sessionId=missing-session&workspace=${encodeURIComponent(tmpdir())}#code=mobius_transfer_v2.${app.identity.projectId}.${"a".repeat(43)}`;
     const continued = await app.reload();
     await continued.waitForView(() =>
         expect(getByRole(document.body, "alert").textContent).toContain("The native session was not found"),
@@ -539,7 +540,13 @@ test("Given the remembered conversation was closed elsewhere, When I return, The
     );
     window.location.href = explicit;
     const linked = await restored.reload();
-    await linked.waitForView(() => expect(document.body.textContent).toContain("Your Chat session was not found"));
+    await linked.waitForView(() => {
+        expect(document.body.textContent).toContain("This session is not in Morty Recent sessions");
+        expect(document.body.textContent).toContain(
+            'If you closed it in Morty, use "Open Session" to import or fork it again.',
+        );
+        expect(queryByRole(document.body, "button", { name: "Reopen it" })).toBeNull();
+    });
     expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
 });
 
@@ -769,7 +776,7 @@ test("Given a computer whose remembered conversation was closed elsewhere, When 
     await switched.waitForView(() => getByRole(document.body, "textbox", { name: "Message" }));
     await switched.waitForView(() => expect(new URL(window.location.href).searchParams.has("sessionId")).toBe(false));
     expect(new URL(window.location.href).searchParams.get("identity")).toBe(firstScope);
-    expect(document.body.textContent).not.toContain("Your Chat session was not found");
+    expect(document.body.textContent).not.toContain("This session is not in Morty Recent sessions");
 });
 
 test("Given a switch to a computer whose remembered conversation is gone, When opening the computer fails once and I retry, Then it still opens at its chat home", {
@@ -833,5 +840,5 @@ test("Given a switch to a computer whose remembered conversation is gone, When o
         expect(new URL(window.location.href).searchParams.has("sessionId")).toBe(false),
     );
     expect(new URL(window.location.href).searchParams.get("identity")).toBe(firstScope);
-    expect(document.body.textContent).not.toContain("Your Chat session was not found");
+    expect(document.body.textContent).not.toContain("This session is not in Morty Recent sessions");
 });

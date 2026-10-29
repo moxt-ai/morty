@@ -67,21 +67,7 @@ const accessInput = v.union([
         agentRef: platformIdentifier,
         conversationKey: platformIdentifier,
         configurations: sessionConfigurations,
-        title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)), "New chat"),
-        workspaceRef: nativeDirectoryId,
-    }),
-    v.strictObject({
-        agentRef: platformIdentifier,
-        conversationKey: platformIdentifier,
-        permissionMode: v.pipe(v.string(), v.minLength(1), v.maxLength(500)),
-        title: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)), "New chat"),
-        configuration: v.strictObject({
-            additionalDirectoryIds: v.pipe(v.array(nativeDirectoryId), v.maxLength(16)),
-            booleanValue: v.boolean(),
-            configId: platformIdentifier,
-            value: v.pipe(v.string(), v.maxLength(500)),
-            valueType: v.picklist(["select", "boolean"]),
-        }),
+        title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
         workspaceRef: nativeDirectoryId,
     }),
 ]);

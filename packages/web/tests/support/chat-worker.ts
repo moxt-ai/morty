@@ -6,10 +6,11 @@ import { createIdentityFixture } from "../../../worker/tests/support/identity-fi
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 import type { Clock } from "../../src/services/time/clock.ts";
 
-export async function createChatWorkerEnvironment(loseTurnResponses = false) {
+export async function createChatWorkerEnvironment(loseTurnResponses = false, delayExecutionReads = false) {
     const cloud = await createIdentityFixture({
         listenOnLoopback: true,
         ...(loseTurnResponses ? { loseTurnResponses: true as const } : {}),
+        ...(delayExecutionReads ? { delayExecutionReads: true as const } : {}),
         platformAllowedOrigins: new Set(["*"]),
         workerEntryPoint: resolve(process.cwd(), "../worker/src/index.ts"),
         wranglerConfiguration: pathToFileURL(resolve(process.cwd(), "../../wrangler.jsonc")),
@@ -112,6 +113,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false) {
         return {
             botId,
             network: cloud.network,
+            executionNetwork: cloud.executionNetwork,
             connectAgent: async (
                 agent: ControlledAgent = { id: "claude", label: "Codex" },
                 nativeSessionIds?: ReadonlySet<string>,

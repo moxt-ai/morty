@@ -20,7 +20,7 @@ export type ContinueStoreApi = ReturnType<typeof createContinueStore>;
 type SessionHandoff = {
     readonly harness: string;
     readonly sessionId: string;
-    readonly workspace?: string;
+    readonly workspace: string;
 };
 export type ContinueState =
     | {
@@ -72,27 +72,25 @@ function initialState(): ContinueState {
     const harness = query.get("harness");
     const sessionId = query.get("sessionId");
     const workspace = query.get("workspace");
+    if (code === null || code.length === 0) {
+        return { kind: "invalid" };
+    }
+    if (harness === null && sessionId === null && workspace === null) {
+        return { code, kind: "identity-redeeming" };
+    }
     if (
-        code === null ||
-        code.length === 0 ||
-        (workspace !== null &&
-            (harness === null ||
-                workspace.length === 0 ||
-                workspace.length > MAX_WORKSPACE_PATH_LENGTH ||
-                workspace.includes("\0"))) ||
-        (harness === null) !== (sessionId === null) ||
-        (harness !== null && (!isIdentifier(harness) || sessionId === null || !isIdentifier(sessionId)))
+        harness === null ||
+        !isIdentifier(harness) ||
+        sessionId === null ||
+        !isIdentifier(sessionId) ||
+        workspace === null ||
+        workspace.length === 0 ||
+        workspace.length > MAX_WORKSPACE_PATH_LENGTH ||
+        workspace.includes("\0")
     ) {
         return { kind: "invalid" };
     }
-    if (harness !== null && sessionId !== null) {
-        return {
-            code,
-            handoff: { harness, sessionId, ...(workspace === null ? {} : { workspace }) },
-            kind: "session-opening",
-        };
-    }
-    return { code, kind: "identity-redeeming" };
+    return { code, handoff: { harness, sessionId, workspace }, kind: "session-opening" };
 }
 
 /** A same-origin destination that carries the redeemed identity in its query string. */
@@ -170,23 +168,21 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 },
             });
             try {
-                if (handoff.workspace !== undefined) {
-                    // A handoff supplies a requested path, never filesystem authority.
-                    // Resolve it through the Runtime before recording a browser preference.
-                    const configuration = await chat.runtimeConfiguration(identity.botId, signal);
-                    const directory = await chat.directory(identity.botId, pathDirectoryId(handoff.workspace), signal);
-                    signal.throwIfAborted();
-                    saveLastCwdPreference(
-                        identity.botId,
-                        configuration.runtime.runtimeId,
-                        handoff.harness,
-                        directory.directoryId,
-                    );
-                    saveRecentCwdPreference(identity.botId, {
-                        directoryId: directory.directoryId,
-                        directoryLabel: directory.directoryLabel,
-                    });
-                }
+                // A handoff supplies a requested path, never filesystem authority.
+                // Resolve it through the Runtime before recording a browser preference.
+                const configuration = await chat.runtimeConfiguration(identity.botId, signal);
+                const directory = await chat.directory(identity.botId, pathDirectoryId(handoff.workspace), signal);
+                signal.throwIfAborted();
+                saveLastCwdPreference(
+                    identity.botId,
+                    configuration.runtime.runtimeId,
+                    handoff.harness,
+                    directory.directoryId,
+                );
+                saveRecentCwdPreference(identity.botId, {
+                    directoryId: directory.directoryId,
+                    directoryLabel: directory.directoryLabel,
+                });
                 const session = await chat.continueNativeSession(
                     identity.botId,
                     handoff.harness,

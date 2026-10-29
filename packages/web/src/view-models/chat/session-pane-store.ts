@@ -507,7 +507,7 @@ export function createSessionPaneModel(options: {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }
-                return await client.turns.cancel(sessionId, turnId, { idempotencyKey }, signal);
+                await client.turns.cancelQueued(sessionId, turnId, { ...sessionIdentity, idempotencyKey }, signal);
             }),
             steer: noticingClosure(async (turnId, signal) => {
                 if (client === null) {
@@ -1025,6 +1025,10 @@ export function createSessionPaneModel(options: {
                                     signal,
                                 );
                                 signal.throwIfAborted();
+                                commitProjection({
+                                    kind: "queue-observed",
+                                    commandIds: execution.queued.map((item) => item.commandId),
+                                });
                                 messageQueue.getState().replace(execution.queued);
                                 return;
                             }
@@ -1136,7 +1140,13 @@ export function createSessionPaneModel(options: {
                             const running = execution.turn;
                             if (running === null) {
                                 commitProjection({ kind: "execution-idle" });
+                            } else {
+                                commitProjection({ kind: "execution-running", commandId: running.commandId });
                             }
+                            commitProjection({
+                                kind: "queue-observed",
+                                commandIds: execution.queued.map((item) => item.commandId),
+                            });
                             messageQueue.getState().replace(execution.queued);
                             if (running !== null) {
                                 // The execution receipt confirms delivery even when admission and live events were lost.

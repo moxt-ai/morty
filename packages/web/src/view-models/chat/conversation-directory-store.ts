@@ -78,6 +78,7 @@ export const createConversationDirectoryStore = (
     /** Announced when a load publishes a ready directory, so the owner re-scopes status watching without subscribing. */
     onLoaded: (sessions: readonly ManagedChatSession[]) => void,
     clock: Clock,
+    onArchived: (sessionId: string) => void,
 ) =>
     createStore<ConversationDirectoryStore>()((set, get) => {
         // The Runtime owns Session titles; the directory shows what its last load reported. A title this page learned
@@ -176,6 +177,7 @@ export const createConversationDirectoryStore = (
                                 return { archive, state };
                         }
                     });
+                    onArchived(sessionId);
                 } catch (cause) {
                     if (!signal.aborted) {
                         set({

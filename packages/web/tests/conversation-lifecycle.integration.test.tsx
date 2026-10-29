@@ -435,7 +435,7 @@ test("Given a completed turn, When the user leaves and reopens it, Then daemon h
     expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
 });
 
-test("Given a saved Session, When the user opens its context menu, Then the Session can be closed", {
+test("Given the current saved Session, When the user closes it from its context menu, Then it leaves Recent sessions and the current session view is cleared", {
     timeout: 30_000,
 }, async () => {
     const prompt = "Show the close Session action";
@@ -463,7 +463,74 @@ test("Given a saved Session, When the user opens its context menu, Then the Sess
     });
     await app.user.click(getByRole(document.body, "menuitem", { name: "Close session" }));
     await app.waitForView(() => expect(app.elementsByTestId(dataTestId.managedConversation)).toHaveLength(0));
+    await app.waitForView(() => {
+        expect(new URL(window.location.href).searchParams.has("sessionId")).toBe(false);
+        expect(app.elementsByTestId(dataTestId.userMessage)).toHaveLength(0);
+        expect(app.elementsByTestId(dataTestId.agentResponse)).toHaveLength(0);
+        expect(app.optionalElementByTestId(dataTestId.sessionClosedNotice)).toBeNull();
+    });
     expect(queryByRole(document.body, "alert")).toBeNull();
+    const reloaded = await app.reload();
+    await reloaded.queryElementByTestId(dataTestId.messageComposer);
+    expect(new URL(window.location.href).searchParams.has("sessionId")).toBe(false);
+    expect(reloaded.elementsByTestId(dataTestId.managedConversation)).toHaveLength(0);
+    await sendPrompt(reloaded, await reloaded.queryElementByTestId(dataTestId.messageComposer), "Start after closing");
+    await reloaded.waitForView(() =>
+        expect(
+            reloaded
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes("Start after closing")),
+        ).toBe(true),
+    );
+});
+
+test("Given another Session is selected, When the user closes a background Session, Then the current conversation and its draft stay open", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Background conversation");
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes("Background conversation")),
+        ).toBe(true),
+    );
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Current conversation");
+    await app.waitForView(() =>
+        expect(
+            app
+                .elementsByTestId(dataTestId.agentResponse)
+                .some((element) => element.textContent?.includes("Current conversation")),
+        ).toBe(true),
+    );
+    const currentSessionId = new URL(window.location.href).searchParams.get("sessionId");
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    await app.user.click(composer);
+    await app.user.paste("Keep this draft");
+    const background = await app.waitForView(() => {
+        const entry = app
+            .elementsByTestId(dataTestId.managedConversation)
+            .find((element) => element.textContent?.includes("Background conversation"));
+        if (entry === undefined) {
+            throw new Error("Expected the background conversation");
+        }
+        return entry;
+    });
+    await app.user.pointer({ keys: "[MouseRight]", target: background });
+    await app.user.click(await app.waitForView(() => getByRole(document.body, "menuitem", { name: "Close session" })));
+    await app.waitForView(() => {
+        expect(app.elementsByTestId(dataTestId.managedConversation)).toHaveLength(1);
+        expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(currentSessionId);
+        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+            "Current conversation",
+        ]);
+        expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "Keep this draft");
+    });
 });
 
 test("Given a saved Session whose Runtime becomes unavailable, When the user closes it, Then the entry is removed and the unconfirmed close is visible", {
@@ -487,6 +554,8 @@ test("Given a saved Session whose Runtime becomes unavailable, When the user clo
 
     await app.waitForView(() => {
         expect(app.elementsByTestId(dataTestId.managedConversation)).toHaveLength(0);
+        expect(new URL(window.location.href).searchParams.has("sessionId")).toBe(false);
+        expect(app.elementsByTestId(dataTestId.userMessage)).toHaveLength(0);
         expect(getByRole(document.body, "alert").textContent).toBe(
             "Removed from the list, but stopping the session could not be confirmed. The agent may still be running on your computer.",
         );
@@ -721,9 +790,6 @@ test("Given more saved messages than one history page, When live output arrives 
                         reasoning.textContent.includes("Reasoning step 039."),
                 ),
             ).toBe(true);
-            for (const reasoning of reasoningItems) {
-                expect(reasoning.textContent).not.toContain("(Reasoning details were omitted.)");
-            }
         });
     };
     expect(page.prompts).not.toContain(prompts[0]);
