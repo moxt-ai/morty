@@ -98,10 +98,22 @@ running it. Read it yourself before you paste the prompt.
   Morty identity in your user's local application data directory, protected by
   filesystem permissions. It is not synced between computers, and each computer has
   its own.
-- **Sharing is explicit, and revocable.** A sharing link grants whoever holds it the
-  ability to view and control sessions in that project. To withdraw every link
-  previously shared from a machine, tell your agent:
-  *"Revoke all links I previously shared from this machine."*
+- **Sharing is explicit, and revocable.** Anyone who opens a sharing link within 24
+  hours can view and control sessions in that project, and keeps that access until
+  you revoke it, so treat the link like a password. To withdraw every link and browser
+  access previously shared from a machine, tell your agent:
+  *"Revoke all links I previously shared from this machine."* A browser already
+  connected to a session can keep it for up to an hour after you revoke.
+- **Mobius keeps itself up to date.** Setup installs the Mobius CLI
+  (`@moxt-ai/mobius`) from npm. While it runs, Mobius checks npm for a new release
+  every hour, installs it without running package scripts, and switches over once
+  your Morty sessions have been idle for 30 minutes. `mobius quit` stops it.
+- **The website counts page views and reports errors.** morty.build sends page views
+  to Google Analytics and errors to Sentry. Both receive page paths without query
+  strings, so session IDs are not included, and Sentry events have user, cookie,
+  header, and request-body data removed. A bug report you choose to send also
+  includes diagnostics from your browser and your computer's daemon, plus any images
+  you attach.
 
 ## Leaving
 

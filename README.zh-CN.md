@@ -80,9 +80,18 @@ Complete setup without asking questions.
   如果端到端加密是你的硬性要求，Morty 目前不满足。
 - **机器身份只留在本机。** 安装程序把这台电脑的 Morty 身份保存在当前用户的本地应用
   数据目录中，并用文件系统权限保护。它不会在电脑之间同步，每台电脑各有一份。
-- **分享是显式的，也是可撤销的。** 分享链接会让持有者能够查看并操作该项目下的会话。
-  要撤销此前从某台机器分享出去的全部链接，对你的 Agent 说：
-  *"Revoke all links I previously shared from this machine."*
+- **分享是显式的，也是可撤销的。** 任何人在 24 小时内打开分享链接，都能查看并操作该项目
+  下的会话，并且这份访问会一直保留到你撤销为止，所以请像对待密码一样对待这个链接。要撤销
+  此前从某台机器分享出去的全部链接和浏览器访问，对你的 Agent 说：
+  *"Revoke all links I previously shared from this machine."* 已经连上某个会话的浏览器，
+  在你撤销后最多还能继续使用一小时。
+- **Mobius 会自动更新。** 安装程序从 npm 安装 Mobius CLI（`@moxt-ai/mobius`）。运行期间，
+  Mobius 每小时检查一次 npm 上的新版本，安装时不执行包脚本，并在你的 Morty 会话空闲
+  30 分钟后切换到新版本。`mobius quit` 可以停止它。
+- **网站会统计页面访问并上报错误。** morty.build 把页面访问发送给 Google Analytics，把错误
+  发送给 Sentry。两者收到的页面路径都不带查询参数，因此不包含会话 ID；Sentry 事件还会去掉
+  用户、cookie、请求头和请求体数据。你主动提交的 bug 报告还会附带浏览器和你电脑上 daemon
+  的诊断信息，以及你附上的图片。
 
 ## 离开
 
