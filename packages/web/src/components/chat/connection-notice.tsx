@@ -53,7 +53,10 @@ export function ConnectionNotice({
                 className="flex h-7 w-fit items-center gap-1 rounded-full bg-surface-elevated px-3 text-12 font-medium text-morty-text-2"
                 data-testid={testId}
             >
-                <LoaderCircle aria-hidden="true" className="size-3 animate-spin motion-reduce:animate-none" />
+                <LoaderCircle
+                    aria-hidden="true"
+                    className="size-3 animate-spin text-morty-text-3 motion-reduce:animate-none"
+                />
                 {feedback.title}
             </div>
         );
