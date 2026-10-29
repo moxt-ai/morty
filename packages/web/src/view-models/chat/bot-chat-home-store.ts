@@ -11,6 +11,7 @@ import { CloudApiError, isRuntimeConnectionFailure } from "../../services/manage
 import {
     centralSessionStorage,
     newConversationDraftEntry,
+    newConversationUnsentMessageEntry,
     type RememberedSession,
     rememberedSessionEntry,
 } from "../../services/session-storage/central-session-storage.ts";
@@ -31,6 +32,7 @@ import {
 import { createConversationSessionStore } from "./conversation-session-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import type { RuntimeObservation } from "./runtime-recovery.ts";
+import { prependToDraft } from "./session-delivery-store.ts";
 
 export type BotChatHomeStoreApi = ReturnType<typeof createBotChatHomeStore>;
 
@@ -112,6 +114,12 @@ interface ChatEntryNotices {
 
 export interface BotChatHomeStore {
     readonly composerAttachments: ReturnType<typeof createComposerAttachmentStore>;
+    /** The draft written while creating the Session the page followed, until that Session's composer takes it. */
+    readonly draftHandoff: {
+        readonly commandId: string;
+        readonly draft: string;
+        readonly attachments: ReturnType<typeof createComposerAttachmentStore>;
+    } | null;
     readonly initialization: HomeInitialization;
     readonly pairing: BotPairing;
     readonly runtimeConfiguration: BotRuntimeConfiguration | null;
@@ -148,6 +156,11 @@ export interface BotChatHomeStore {
     /** Releases the first message to delivery, or back to an editable composer if preparation failed. */
     readonly initialMessageDequeued: (conversationId: string, commandId: string) => void;
     readonly createConversation: (signal: AbortSignal) => Promise<boolean>;
+    /** Hands the draft written during creation to the Session the page followed; null for any other Session. */
+    readonly takeNextDraft: (commandId: string) => {
+        readonly draft: string;
+        readonly attachments: ReturnType<typeof createComposerAttachmentStore>;
+    } | null;
 }
 
 function initialSelection(urlValue: string, createId: () => string): ConversationSelectionState {
@@ -313,6 +326,7 @@ export const createBotChatHomeStore = (
         };
         return {
             composerAttachments: createComposerAttachmentStore(),
+            draftHandoff: null,
             initialization: { kind: "loading" },
             pairing: { kind: "checking" },
             runtimeConfiguration: null,
@@ -341,7 +355,17 @@ export const createBotChatHomeStore = (
                     set({ initialization: { kind: "loading" } });
                 }
                 if (starting.initialization.kind === "loading" && starting.selection.kind === "draft") {
-                    set({ draft: centralSessionStorage.read(newConversationDraftEntry(botId)) ?? "" });
+                    const draft = centralSessionStorage.read(newConversationDraftEntry(botId)) ?? "";
+                    // A first message an earlier page could not hand to a Session returns ahead of the draft.
+                    const unsent = centralSessionStorage.read(newConversationUnsentMessageEntry(botId));
+                    if (unsent === null) {
+                        set({ draft });
+                    } else {
+                        const restored = prependToDraft(unsent.content, draft);
+                        centralSessionStorage.write(newConversationDraftEntry(botId), restored);
+                        centralSessionStorage.remove(newConversationUnsentMessageEntry(botId));
+                        set({ draft: restored });
+                    }
                 }
                 // Entry failures and session failures belong to the request that failed.
                 const failLoad = (
@@ -867,6 +891,9 @@ export const createBotChatHomeStore = (
                     // The submitted snapshot owns its content before any network work begins.
                     get().composerAttachments.getState().clear();
                     centralSessionStorage.remove(newConversationDraftEntry(botId));
+                    if (content.length > 0) {
+                        centralSessionStorage.write(newConversationUnsentMessageEntry(botId), { commandId, content });
+                    }
                 }
                 let access: ChatAccess;
                 if (
@@ -955,20 +982,34 @@ export const createBotChatHomeStore = (
                                   conversationId,
                                   session,
                               }),
+                              // The attachment store moves with the draft, including any read still in progress.
+                              draftHandoff: { commandId, draft: state.draft, attachments: state.composerAttachments },
+                              draft: "",
+                              composerAttachments: createComposerAttachmentStore(),
                           }
                         : {}),
                 }));
+                if (session !== null) {
+                    centralSessionStorage.remove(newConversationDraftEntry(botId));
+                }
+                // The Session now owns the first message, including its recovery.
+                if (centralSessionStorage.read(newConversationUnsentMessageEntry(botId))?.commandId === commandId) {
+                    centralSessionStorage.remove(newConversationUnsentMessageEntry(botId));
+                }
                 if (following) {
                     announceSelection();
                 }
                 onConversationCreated(conversationId, queuedMessage.summary);
                 onDirectoryRefreshed();
-                if (following) {
-                    // The pane took the next draft, including any attachment read still in progress.
-                    set({ draft: "", composerAttachments: createComposerAttachmentStore() });
-                    centralSessionStorage.remove(newConversationDraftEntry(botId));
-                }
                 return true;
+            },
+            takeNextDraft: (commandId) => {
+                const handoff = get().draftHandoff;
+                if (handoff === null || handoff.commandId !== commandId) {
+                    return null;
+                }
+                set({ draftHandoff: null });
+                return { draft: handoff.draft, attachments: handoff.attachments };
             },
         };
     });

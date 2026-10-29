@@ -50,7 +50,7 @@ import {
     turnActivity,
 } from "./session-current-turn.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
-import type { SessionDeliveryStore } from "./session-delivery-store.ts";
+import { prependToDraft, type SessionDeliveryStore } from "./session-delivery-store.ts";
 import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
 import { requestedInteraction, type SessionLifecycleFact, sessionLifecycleFact } from "./session-lifecycle.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
@@ -148,6 +148,7 @@ export interface SessionPaneStore {
     readonly retryUnknownDelivery: (signal: AbortSignal) => Promise<void>;
     readonly retryFailedMessage: (signal: AbortSignal) => Promise<void>;
     readonly editFailedMessage: () => void;
+    readonly discardFailedMessage: () => void;
     readonly queueDraft: (signal: AbortSignal) => Promise<void>;
     readonly steerQueued: (commandId: string, signal: AbortSignal) => Promise<void>;
     readonly deleteQueued: (commandId: string, signal: AbortSignal) => Promise<void>;
@@ -918,7 +919,12 @@ export function createSessionPaneModel(options: {
             } catch (cause) {
                 signal.throwIfAborted();
                 const failureMessage = formatError(cause, "The agent could not complete the message.");
-                delivery.getState().preparationFailed(message, failureMessage);
+                if (delivery.getState().state.kind === "preparing") {
+                    delivery.getState().preparationFailed(message, failureMessage);
+                } else {
+                    // Delivery already owns the frozen request, so its outcome is unknown rather than unsent.
+                    delivery.getState().submissionInterrupted();
+                }
                 updateTurn({
                     kind: "submission-ended",
                     commandId,
@@ -1496,10 +1502,7 @@ export function createSessionPaneModel(options: {
             },
             retryUnknownDelivery: async (signal) => {
                 const state = delivery.getState().state;
-                if (
-                    get().connection.kind !== "ready" ||
-                    (state.kind !== "delivery-unknown" && state.kind !== "failed")
-                ) {
+                if (get().connection.kind !== "ready" || state.kind !== "delivery-unknown") {
                     return;
                 }
                 const pending = state.journal;
@@ -1534,9 +1537,18 @@ export function createSessionPaneModel(options: {
             retryFailedMessage: async (signal) => {
                 const state = delivery.getState().state;
                 if (state.kind === "preparation-failed") {
+                    // Nothing reached the Runtime, so the message keeps its identity.
                     await submit(state.message, signal);
                 } else if (state.kind === "failed") {
-                    await get().retryUnknownDelivery(signal);
+                    // The Runtime definitively rejected this identity and will not run it again.
+                    await submit(
+                        {
+                            commandId: crypto.randomUUID(),
+                            content: state.journal.request.content,
+                            attachments: state.journal.attachments,
+                        },
+                        signal,
+                    );
                 }
             },
             editFailedMessage: () => {
@@ -1547,17 +1559,13 @@ export function createSessionPaneModel(options: {
                 if (message === null) {
                     return;
                 }
-                const draft = get().draft;
-                get().setDraft(
-                    draft.length === 0
-                        ? message.content
-                        : message.content.length === 0
-                          ? draft
-                          : `${message.content}\n\n${draft}`,
-                );
+                get().setDraft(prependToDraft(message.content, get().draft));
                 composerAttachments
                     .getState()
                     .restore([...message.attachments, ...composerAttachments.getState().attachments]);
+            },
+            discardFailedMessage: () => {
+                delivery.getState().takeFailedMessage();
             },
             queueDraft: async (signal) => {
                 const current = get();

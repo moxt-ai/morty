@@ -47,6 +47,32 @@ export interface SessionDeliveryStore {
     readonly retry: (submit: SubmitTurn, signal: AbortSignal) => Promise<SubmissionOutcome | null>;
 }
 
+/**
+ * Text the Runtime has not taken: a reload returns it to the composer. A message that may have been delivered is
+ * not unsent, because sending it again under a new identity could run it twice.
+ */
+function unsentContent(state: DeliveryState): string | null {
+    switch (state.kind) {
+        case "preparing":
+        case "preparation-failed":
+            return state.message.content.trim() === "" ? null : state.message.content;
+        case "failed":
+            return state.journal.request.content === "" ? null : state.journal.request.content;
+        case "idle":
+        case "submitting":
+        case "confirmed":
+        case "delivery-unknown":
+            return null;
+        default:
+            return state satisfies never;
+    }
+}
+
+/** Joins a message returned to the composer with the draft written after it. */
+export function prependToDraft(content: string, draft: string): string {
+    return draft.length === 0 ? content : content.length === 0 ? draft : `${content}\n\n${draft}`;
+}
+
 function isAuthoritativeFailure(cause: unknown): boolean {
     return (
         (cause instanceof MobiusApiError && cause.status >= 400 && cause.status < 500) ||
@@ -55,7 +81,10 @@ function isAuthoritativeFailure(cause: unknown): boolean {
 }
 
 /** The Session owns delivery; each attempt borrows the currently connected pane's submit port. */
-export const createSessionDeliveryStore = () => {
+export const createSessionDeliveryStore = (options: {
+    /** Persists the unsent message's text, or clears it with null. */
+    readonly unsentMessageChanged: (content: string | null) => void;
+}) => {
     const send = async (
         journal: Journal,
         submit: SubmitTurn,
@@ -98,76 +127,81 @@ export const createSessionDeliveryStore = () => {
             return { kind: "delivery-unknown" };
         }
     };
-    return createStore<SessionDeliveryStore>()((set, get) => ({
-        state: { kind: "idle" },
-        discardUnknown: () => {
-            const state = get().state;
-            if (state.kind !== "delivery-unknown") {
-                return null;
-            }
-            set({ state: { kind: "idle" } });
-            return state.journal.commandId;
-        },
-        prepare: (message) => set({ state: { kind: "preparing", message } }),
-        preparationFailed: (message, error) => set({ state: { kind: "preparation-failed", message, error } }),
-        takeFailedMessage: () => {
-            const state = get().state;
-            const message =
-                state.kind === "preparation-failed"
-                    ? state.message
-                    : state.kind === "failed"
-                      ? {
-                            commandId: state.journal.commandId,
-                            content: state.journal.request.content,
-                            attachments: state.journal.attachments,
-                        }
-                      : null;
-            if (message !== null) {
+    return createStore<SessionDeliveryStore>()((setState, get) => {
+        const set = (update: Pick<SessionDeliveryStore, "state">): void => {
+            setState(update);
+            options.unsentMessageChanged(unsentContent(update.state));
+        };
+        return {
+            state: { kind: "idle" },
+            discardUnknown: () => {
+                const state = get().state;
+                if (state.kind !== "delivery-unknown") {
+                    return null;
+                }
                 set({ state: { kind: "idle" } });
-            }
-            return message;
-        },
-        submissionInterrupted: () => {
-            const state = get().state;
-            if (state.kind === "preparing") {
-                set({
-                    state: {
-                        kind: "preparation-failed",
-                        message: state.message,
-                        error: "Message preparation was interrupted. Retry when connected.",
-                    },
-                });
-            } else if (state.kind === "submitting") {
-                set({
-                    state:
-                        state.confirmation === "delivered"
-                            ? { kind: "idle" }
-                            : { kind: "delivery-unknown", journal: state.journal },
-                });
-            }
-        },
-        messagesObserved: (commandIds) => {
-            const state = get().state;
-            if (state.kind === "confirmed" && commandIds.includes(state.journal.commandId)) {
-                set({ state: { kind: "idle" } });
-            }
-        },
-        reconcile: (commandIds) => {
-            const state = get().state;
-            // Confirmation belongs to the submitted message, independently of the next editable draft.
-            if (state.kind === "submitting" && commandIds.includes(state.journal.commandId)) {
-                set({ state: { ...state, confirmation: "delivered" } });
-            }
-            if (state.kind === "delivery-unknown" && commandIds.includes(state.journal.commandId)) {
-                set({ state: { kind: "idle" } });
-            }
-        },
-        submit: async (journal, submit, signal) => await send(journal, submit, signal, set, get),
-        retry: async (submit, signal) => {
-            const state = get().state;
-            return state.kind === "delivery-unknown" || state.kind === "failed"
-                ? await send(state.journal, submit, signal, set, get)
-                : null;
-        },
-    }));
+                return state.journal.commandId;
+            },
+            prepare: (message) => set({ state: { kind: "preparing", message } }),
+            preparationFailed: (message, error) => set({ state: { kind: "preparation-failed", message, error } }),
+            takeFailedMessage: () => {
+                const state = get().state;
+                const message =
+                    state.kind === "preparation-failed"
+                        ? state.message
+                        : state.kind === "failed"
+                          ? {
+                                commandId: state.journal.commandId,
+                                content: state.journal.request.content,
+                                attachments: state.journal.attachments,
+                            }
+                          : null;
+                if (message !== null) {
+                    set({ state: { kind: "idle" } });
+                }
+                return message;
+            },
+            submissionInterrupted: () => {
+                const state = get().state;
+                if (state.kind === "preparing") {
+                    set({
+                        state: {
+                            kind: "preparation-failed",
+                            message: state.message,
+                            error: "Message preparation was interrupted. Retry when connected.",
+                        },
+                    });
+                } else if (state.kind === "submitting") {
+                    set({
+                        state:
+                            state.confirmation === "delivered"
+                                ? { kind: "idle" }
+                                : { kind: "delivery-unknown", journal: state.journal },
+                    });
+                }
+            },
+            messagesObserved: (commandIds) => {
+                const state = get().state;
+                if (state.kind === "confirmed" && commandIds.includes(state.journal.commandId)) {
+                    set({ state: { kind: "idle" } });
+                }
+            },
+            reconcile: (commandIds) => {
+                const state = get().state;
+                // Confirmation belongs to the submitted message, independently of the next editable draft.
+                if (state.kind === "submitting" && commandIds.includes(state.journal.commandId)) {
+                    set({ state: { ...state, confirmation: "delivered" } });
+                }
+                if (state.kind === "delivery-unknown" && commandIds.includes(state.journal.commandId)) {
+                    set({ state: { kind: "idle" } });
+                }
+            },
+            submit: async (journal, submit, signal) => await send(journal, submit, signal, set, get),
+            // Only an unknown delivery repeats its identity; the Runtime never runs a rejected command identity again.
+            retry: async (submit, signal) => {
+                const state = get().state;
+                return state.kind === "delivery-unknown" ? await send(state.journal, submit, signal, set, get) : null;
+            },
+        };
+    });
 };

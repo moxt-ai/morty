@@ -994,6 +994,9 @@ function MobiusSessionPaneBody({
                                                     >
                                                         Edit failed message
                                                     </Button>
+                                                    <Button onClick={pane.store.getState().discardFailedMessage}>
+                                                        Discard failed message
+                                                    </Button>
                                                 </div>
                                             )}
                                         </div>
