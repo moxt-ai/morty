@@ -1,6 +1,3 @@
-import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
-import Anser from "anser";
-import { isShellCommandToolCall, shellCommandOutput } from "../../lib/shell-command.ts";
 import { type SessionExecutionState, type SessionMessage, sessionTextValue } from "./session-presentation.ts";
 
 export interface AgentReplyMessageGroup {
@@ -30,22 +27,13 @@ export function agentReplyMessageGroups(messages: readonly SessionMessage[]): re
     return groups;
 }
 
-function approvalCommand(message: SessionMessage, botId: string): string | null {
-    if (message.role !== "assistant" || message.presentation.kind !== "failure") {
-        return null;
-    }
-    return message.presentation.code === "binding_not_approved" && isIdentifier(botId)
-        ? `mobius bot approve --bot ${botId}`
-        : null;
-}
-
-/** Serializes every user-visible part of one settled Agent reply that could be copied from its controls. */
+/** Copies only nonempty answer Markdown after the owning reply has stopped generating. */
 export function agentReplyCopyText(
     messages: readonly SessionMessage[],
-    botId: string,
     execution: SessionExecutionState,
+    active: boolean,
 ): string | null {
-    if (execution.kind === "open") {
+    if (active || execution.kind === "open") {
         return null;
     }
     const parts: string[] = [];
@@ -59,17 +47,6 @@ export function agentReplyCopyText(
             if (text.length > 0) {
                 parts.push(text);
             }
-        }
-        if (presentation.kind === "tool") {
-            const entry = presentation.entry;
-            const output = isShellCommandToolCall(entry) ? shellCommandOutput(entry) : null;
-            if (output !== null && output.length > 0) {
-                parts.push(Anser.ansiToText(output));
-            }
-        }
-        const command = approvalCommand(message, botId);
-        if (command !== null) {
-            parts.push(command);
         }
     }
     const text = parts.join("\n\n");
