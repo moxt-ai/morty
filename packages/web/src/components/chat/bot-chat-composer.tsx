@@ -21,6 +21,8 @@ import { useComposerNoticeLayout } from "../utils/use-composer-notice-layout.ts"
 import { useScrollClippedEdges } from "../utils/use-scroll-clipped-edges.ts";
 import { chatSessionComposerClassName } from "./chat-session-layout.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
+// TEMP design-review import: remove with the forced connecting block in BotChatComposer.
+import { ConnectionNotice } from "./connection-notice.tsx";
 
 const composerMaxHeightPx = 256;
 /** Outer vertical padding and footer height. */
@@ -190,7 +192,22 @@ export function BotChatComposer({
     const submitAction = outputState === "idle" || (outputState === "running" && !submitDisabled);
     const composerErrorMessage =
         error.length > 0 ? error : attachmentState.kind === "failed" ? attachmentState.message : "";
-    const showComposerNotice = composerErrorMessage.length > 0 || errorStatus !== undefined;
+    // TEMP design review: keep the connecting chip on screen until this block,
+    // the ConnectionNotice import and the noticeStatus/noticeCompact uses below are removed.
+    const tempConnecting = (
+        <ConnectionNotice
+            feedback={{
+                kind: "waiting",
+                description: "You can keep writing while we connect.",
+                title: "Connecting…",
+            }}
+            onRetryNow={() => {}}
+            onReopen={() => {}}
+        />
+    );
+    const noticeStatus = tempConnecting ?? errorStatus;
+    const noticeCompact = statusCompact || tempConnecting !== undefined;
+    const showComposerNotice = composerErrorMessage.length > 0 || noticeStatus !== undefined;
     useComposerNoticeLayout(notice, showComposerNotice);
 
     return (
@@ -198,12 +215,12 @@ export function BotChatComposer({
             {showComposerNotice && (
                 <div className="absolute inset-x-0 bottom-[calc(100%+8px)] z-10" ref={notice}>
                     {composerErrorMessage.length > 0 ? (
-                        <MortyAlert description={errorStatus}>{composerErrorMessage}</MortyAlert>
-                    ) : statusCompact ? (
-                        errorStatus
+                        <MortyAlert description={noticeStatus}>{composerErrorMessage}</MortyAlert>
+                    ) : noticeCompact ? (
+                        noticeStatus
                     ) : (
                         <MortyAlert tone={statusTone} icon={statusIcon}>
-                            {errorStatus}
+                            {noticeStatus}
                         </MortyAlert>
                     )}
                 </div>
