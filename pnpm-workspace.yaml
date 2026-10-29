@@ -62,7 +62,7 @@ catalog:
   zustand: 5.0.15
   '@streamdown/mermaid': 1.0.3
   '@streamdown/math': 1.0.2
-  dompurify: 3.4.16
+  dompurify: 3.4.17
 
 # dependency-cruiser's parser uses the TypeScript 6 JavaScript compiler API.
 # Application compilation continues to use TypeScript 7.

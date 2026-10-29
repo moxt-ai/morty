@@ -37,7 +37,9 @@ jobs:
     name: Validate Worker config (${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }})
     if: >-
       !inputs.verify_macos_setup &&
-      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && vars.ENABLE_AUTOMATIC_MORTY_STAGING_DEPLOY == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }}
