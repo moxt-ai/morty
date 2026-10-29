@@ -128,6 +128,8 @@ test("Given a native session handoff without a matching Agent, When the page loa
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({
+        agent: { id: "codex", label: "Codex" },
+        connectAgent: true,
         page: {
             harness: "pi",
             kind: "continue",
@@ -152,10 +154,10 @@ test("Given opening a native session fails, When the user tries again, Then the 
         },
     });
     await app.waitForView(() => {
-        expect(getByRole(document.body, "alert").textContent).toContain("handoff harness is unavailable");
+        expect(getByRole(document.body, "alert").textContent).toContain("Connect an Agent to this Machine first.");
     });
 
-    // The retry must reach the open-session step again: once a Runtime answers
+    // The retry must run the whole open-session request again: once a Runtime answers
     // for the redeemed access, the failure moves from the missing Agent to the
     // missing native session.
     await app.connectAgent({ id: "pi", label: "Pi" });

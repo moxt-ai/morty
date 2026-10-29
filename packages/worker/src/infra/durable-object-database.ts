@@ -76,7 +76,7 @@ const migrations = [
 
 /**
  * Earlier Workers recorded a migration's position in their list, which never included 0023. Those positions are
- * history: they say which migrations an existing ledger applied, and a rolled-back Worker still reads them.
+ * history: they say which migrations an existing ledger applied before it recorded tags.
  */
 const positionLedger = migrations
     .map((migration) => migration.tag)
@@ -175,11 +175,6 @@ export class DurableObjectDatabase {
                 if (!applied.has(migration.tag)) {
                     this.#storage.sql.exec(migration.sql);
                     this.#storage.sql.exec("INSERT INTO _project_schema_migration (tag) VALUES (?)", migration.tag);
-                    // A rolled-back Worker reads only positions; without them it would replay applied migrations.
-                    const position = positionLedger.indexOf(migration.tag);
-                    if (position >= 0) {
-                        this.#storage.sql.exec("INSERT INTO _chat_schema_migration (version) VALUES (?)", position + 1);
-                    }
                 }
             }
         });

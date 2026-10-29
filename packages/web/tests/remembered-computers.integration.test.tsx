@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import { getAllByRole, getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
@@ -474,7 +475,7 @@ test("Given saved access for the same computer, When an old native handoff link 
 }, async () => {
     const app = await createTestApp({ agent: { id: "pi", label: "Pi" }, connectAgent: true });
     await startConversation(app, "Keep the issued grant");
-    window.location.href = `${app.origin}/continue?harness=pi&sessionId=missing-session#code=mobius_transfer_v2.${app.identity.projectId}.${"a".repeat(43)}`;
+    window.location.href = `${app.origin}/continue?harness=pi&sessionId=missing-session&workspace=${encodeURIComponent(tmpdir())}#code=mobius_transfer_v2.${app.identity.projectId}.${"a".repeat(43)}`;
     const continued = await app.reload();
     await continued.waitForView(() =>
         expect(getByRole(document.body, "alert").textContent).toContain("The native session was not found"),

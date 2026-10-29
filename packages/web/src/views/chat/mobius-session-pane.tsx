@@ -104,7 +104,6 @@ function thinkingEntry(message: SessionMessage): AgentThinkingEntry | null {
             id: message.firstEvent.eventId,
             kind: "reasoning",
             messageId: message.presentation.messageId,
-            omitted: message.presentation.omitted,
             text: sessionTextValue(message.presentation.content.text),
             truncated: message.presentation.content.text.truncated,
         };

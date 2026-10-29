@@ -244,13 +244,7 @@ export class IdentityStorage {
                 and(
                     eq(continueLink.codeHash, codeHash),
                     isNull(continueLink.revokedAt),
-                    or(
-                        gt(continueLink.expiresAt, now),
-                        and(
-                            eq(continueLink.expiresAt, 0),
-                            gt(sql`${continueLink.createdAt} + ${continueLinkLifetime}`, now),
-                        ),
-                    ),
+                    gt(continueLink.expiresAt, now),
                 ),
             );
         const replacedHash = replaces === null ? null : await digest(replaces);

@@ -175,10 +175,7 @@ function initialSelection(urlValue: string, createId: () => string): Conversatio
         }
         return { kind: "pending", target: { kind: "session", sessionId } };
     }
-    const conversationId = url.searchParams.get("conversationId");
-    return conversationId !== null && isIdentifier(conversationId)
-        ? { kind: "pending", target: { kind: "conversation", conversationId } }
-        : { kind: "draft", key: createId() };
+    return { kind: "draft", key: createId() };
 }
 
 /** Setup is a projection of its owning workflows, not a second stored configuration snapshot. */

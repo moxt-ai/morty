@@ -188,7 +188,6 @@ test("Given the agent sends separate reasoning messages, When the user reads the
         expect(restoredThinking.textContent).toContain("**Inspecting** the reported behavior.\n- keep this literal");
         expect(restoredThinking.textContent).toContain("`Checking` the message boundaries.");
     });
-    expect(restoredThinking.textContent).not.toContain("(Reasoning details were omitted.)");
     expect(restoredThinking.querySelector("strong")).toBeNull();
     expect(restoredThinking.querySelector("code")).toBeNull();
 });

@@ -53,12 +53,7 @@ export type SessionMessage =
           readonly commandId: string | null;
           readonly presentation:
               | { readonly kind: "message"; readonly content: SessionContentBlock; readonly messageId: string | null }
-              | {
-                    readonly kind: "thought";
-                    readonly content: SessionContentBlock;
-                    readonly messageId: string | null;
-                    readonly omitted: boolean;
-                }
+              | { readonly kind: "thought"; readonly content: SessionContentBlock; readonly messageId: string | null }
               | { readonly kind: "tool"; readonly entry: SessionToolPresentation }
               | {
                     readonly kind: "compaction";
@@ -376,7 +371,6 @@ function messageFromAcpUpdate(event: SessionPresentationEvent, update: AcpSessio
                     content: sessionContent(update.content, REASONING_CHARACTER_LIMIT),
                     kind: "thought",
                     messageId: update.messageId ?? null,
-                    omitted: event.mobiusMetadata?.omitted === true,
                 },
                 role: "assistant",
             };
@@ -438,9 +432,6 @@ function mergeAdjacentText(previous: SessionMessage | undefined, incoming: Sessi
         ...previous,
         presentation: {
             ...incoming.presentation,
-            ...(incoming.presentation.kind === "thought" && previous.presentation.kind === "thought"
-                ? { omitted: previous.presentation.omitted || incoming.presentation.omitted }
-                : {}),
             content: {
                 ...incoming.presentation.content,
                 text: appendSessionText(

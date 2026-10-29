@@ -105,8 +105,6 @@ function historyNavigation(onDraft: () => void) {
         showDraft: () => {
             onDraft();
             replace((url) => {
-                url.searchParams.delete("conversation");
-                url.searchParams.delete("conversationId");
                 url.searchParams.delete("sessionId");
             });
         },
@@ -116,7 +114,6 @@ function historyNavigation(onDraft: () => void) {
             }),
         showManaged: (_isExternal: boolean, id: string) =>
             replace((url) => {
-                url.searchParams.delete("conversationId");
                 url.searchParams.set("sessionId", id);
             }),
     };

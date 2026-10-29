@@ -52,7 +52,7 @@ type NativeEntryInput = {
 };
 type NativePreviewInput = Omit<NativeEntryInput, "discoveryId"> & { readonly nativeSessionId: string };
 type OpenChatInput =
-    | { readonly conversationId: string; readonly title?: string }
+    | { readonly conversationId: string }
     | {
           readonly agentRef: string;
           readonly conversationKey: string;
@@ -62,21 +62,7 @@ type OpenChatInput =
               readonly value: string;
               readonly valueType: "select" | "boolean";
           }[];
-          readonly title?: string;
-          readonly workspaceRef: string;
-      }
-    | {
-          readonly agentRef: string;
-          readonly conversationKey: string;
-          readonly permissionMode: string;
-          readonly title?: string;
-          readonly configuration: {
-              readonly additionalDirectoryIds: readonly string[];
-              readonly booleanValue: boolean;
-              readonly configId: string;
-              readonly value: string;
-              readonly valueType: "select" | "boolean";
-          };
+          readonly title: string;
           readonly workspaceRef: string;
       };
 type ConfigureBotInput = {
@@ -425,7 +411,6 @@ export class ChatService {
                           ),
                       };
                   })(),
-            input.title ?? "New chat",
             scope.signal,
         );
         if ("conversationKey" in input) {

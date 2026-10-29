@@ -26,11 +26,10 @@ if (output === undefined) {
 }
 const opened = v.object({
     columns: v.array(v.record(v.string(), v.unknown())),
-    positions: v.array(v.number()),
     tags: v.array(v.string()),
 });
 
-test("Given a Project recorded by migration position without 0023, When it opens, Then it reaches the schema of a new Project and a rolled-back Worker still finds every migration it knows applied", async () => {
+test("Given a Project recorded by migration position without 0023, When it opens, Then it reaches the schema of a new Project and records every migration by tag", async () => {
     // Earlier Workers applied these 33 migrations in this order; 0001_management never ran in a Project.
     const legacy = Object.keys(files)
         .filter((path) => !path.endsWith("/0001_management.sql") && !path.endsWith("/0023_smiling_zaladane.sql"))
@@ -61,7 +60,6 @@ test("Given a Project recorded by migration position without 0023, When it opens
         expect(existing.columns).toEqual(created.columns);
         for (const project of [existing, created]) {
             expect(project.tags).toEqual(expect.arrayContaining(journal.entries.map((entry) => entry.tag)));
-            expect(project.positions).toEqual(legacy.map((_, index) => index + 1));
         }
     } finally {
         await runtime.dispose();

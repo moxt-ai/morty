@@ -721,9 +721,6 @@ test("Given more saved messages than one history page, When live output arrives 
                         reasoning.textContent.includes("Reasoning step 039."),
                 ),
             ).toBe(true);
-            for (const reasoning of reasoningItems) {
-                expect(reasoning.textContent).not.toContain("(Reasoning details were omitted.)");
-            }
         });
     };
     expect(page.prompts).not.toContain(prompts[0]);

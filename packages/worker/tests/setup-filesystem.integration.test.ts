@@ -83,7 +83,6 @@ test.each(["fresh", "unknown", "revoked"] as const)(
                         base_url: fixture.origin,
                         project_id: current.projectId,
                         user_token: current.token,
-                        ...(replacementState === "revoked" ? { replacement_notice: "pending" } : {}),
                         replacement_access:
                             replacementState === "unknown"
                                 ? { kind: "unknown", previousProjectId: previous.projectId }
@@ -1112,7 +1111,6 @@ test.each(["replacement_access_revoked", "project_replaced"])(
                 },
             });
 
-            // Retain the on-disk contract read by setup at 102a93db (#899), including rollback recovery.
             const saved = JSON.parse(await readFile(join(paths.state, "config.json"), "utf8"));
             if (interruptAt === "replacement_access_revoked") {
                 expect(saved).toMatchObject({
@@ -1123,7 +1121,6 @@ test.each(["replacement_access_revoked", "project_replaced"])(
                 expect(saved).toMatchObject({
                     replaced_project_id: config.project_id,
                     replaced_user_token: config.user_token,
-                    replacement_notice: "pending",
                     replacement_access: {
                         kind: "revoked",
                         previousProjectId: config.project_id,
@@ -1190,10 +1187,16 @@ test.each(["notice-only", "access-only"] as const)(
                 },
             });
             const resumable = JSON.parse(await readFile(configPath, "utf8"));
-            expect(resumable.replacement_notice).toBe("pending");
             if (format === "notice-only") {
-                // #899 rejects null previousProjectId in replacement_access; retain its notice-only fallback.
+                // A notice-only file has no previous Project for `replacement_access`, so it keeps its notice.
+                expect(resumable.replacement_notice).toBe("pending");
                 expect(resumable).not.toHaveProperty("replacement_access");
+            } else {
+                expect(resumable).not.toHaveProperty("replacement_notice");
+                expect(resumable.replacement_access).toMatchObject({
+                    kind: "revoked",
+                    previousProjectId: "previous-project",
+                });
             }
 
             const finished = await setupMachine(runtime, paths);

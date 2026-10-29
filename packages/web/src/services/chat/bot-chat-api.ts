@@ -59,7 +59,7 @@ const managedSessionSchema = v.pipe(
         additionalDirectoryIds: v.array(v.string()),
         projectId: identifier,
         /** Whether the Runtime has received the Session's first prompt, which gives the Session its title. */
-        prompted: v.optional(v.boolean(), false),
+        prompted: v.boolean(),
         status: v.variant("kind", [
             v.pipe(v.object({ kind: v.literal("idle") }), v.readonly()),
             v.pipe(v.object({ commandId: identifier, kind: v.literal("working") }), v.readonly()),
@@ -410,13 +410,7 @@ export class BotChatApi {
     };
     readonly archiveManagedSession = async (botId: string, sessionId: string, signal: AbortSignal) =>
         v.parse(
-            v.pipe(
-                v.object({
-                    // Older Workers return only {} after their best-effort close.
-                    close: v.optional(v.picklist(["confirmed", "unconfirmed"]), "unconfirmed"),
-                }),
-                v.readonly(),
-            ),
+            v.pipe(v.object({ close: v.picklist(["confirmed", "unconfirmed"]) }), v.readonly()),
             await this.#request(
                 botId,
                 "managed-session/archive",
