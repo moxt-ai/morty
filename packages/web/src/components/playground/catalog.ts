@@ -181,6 +181,14 @@ export const PLAYGROUND_ENTRIES = [
     },
     {
         group: "Chat",
+        id: "session-interactions",
+        source: "components/chat/session-interactions.tsx",
+        summary:
+            "Permission and information requests an agent raises above the composer: pending, answered, busy, and failed responses.",
+        title: "Session interactions",
+    },
+    {
+        group: "Chat",
         id: "tool-call",
         source: "components/chat/tools/tool-call-status.tsx",
         summary: "Tool step row for running, succeeded, failed, interrupted, and unknown.",

@@ -1,3 +1,4 @@
+import type { SessionElicitationField } from "@moxt-ai/mobius-sdk";
 import { Archive, CircleAlert, FileText, Inbox, MessageSquare, PackageOpen, Plus, Unplug, WifiOff } from "lucide-react";
 import { Tooltip } from "radix-ui";
 import { type ComponentType, type ReactNode, useState } from "react";
@@ -9,6 +10,11 @@ import { HarnessMark } from "../chat/harness-mark.tsx";
 import { MessageBubble } from "../chat/message-bubble.tsx";
 import { NativeSessionDirectoryPlaceholder } from "../chat/native-session-directory-placeholder.tsx";
 import { SessionAgentTabs } from "../chat/session-agent-tabs.tsx";
+import {
+    type ElicitationInteraction,
+    type PermissionInteraction,
+    SessionInteractionCards,
+} from "../chat/session-interactions.tsx";
 import { ToolCallDisclosure } from "../chat/tools/tool-call-status.tsx";
 import type { ToolCallState } from "../chat/tools/tool-renderer.ts";
 import { UserMessageShell } from "../chat/user-message-shell.tsx";
@@ -957,6 +963,233 @@ function AttemptFailureGallery() {
     );
 }
 
+const previewSessionId = "preview-session";
+const noBusyInteractions: ReadonlySet<string> = new Set();
+
+const previewPermissionOptions = [
+    { kind: "allow_once", name: "Yes", optionId: "allow-once" },
+    { kind: "allow_always", name: "Allow for this session", optionId: "allow-always" },
+    { kind: "reject_once", name: "No", optionId: "reject-once" },
+] as const;
+
+const pendingPermission: PermissionInteraction = {
+    details: {
+        cwd: "/workspace/morty",
+        locations: [
+            { line: 42, path: "packages/web/src/components/chat/session-interactions.tsx" },
+            { path: "packages/web/src/styles.css" },
+        ],
+        rawInput: {
+            command: "pnpm --filter @moxt-ai/morty-web test -- --run tests/session-interactions.integration.test.tsx",
+            description: "Run the session interaction integration tests",
+        },
+    },
+    interactionId: "preview-permission",
+    options: previewPermissionOptions,
+    sessionId: previewSessionId,
+    state: { kind: "pending" },
+    title: "Run the session interaction tests",
+    toolCallId: "preview-tool-call",
+    toolKind: "execute",
+};
+
+const confirmedPermission: PermissionInteraction = {
+    ...pendingPermission,
+    interactionId: "preview-permission-confirmed",
+    state: { kind: "resolved", optionId: "allow-once", outcome: "selected" },
+};
+
+const permissionWithoutDetails: PermissionInteraction = {
+    interactionId: "preview-permission-without-details",
+    options: previewPermissionOptions,
+    sessionId: previewSessionId,
+    state: { kind: "pending" },
+    title: "Edit the project configuration",
+    toolCallId: "preview-tool-call-without-details",
+    toolKind: "edit",
+};
+
+function previewField({
+    defaultString = "",
+    description = "",
+    multiline = false,
+    name,
+    options = [],
+    required = false,
+    title,
+    type,
+}: {
+    readonly defaultString?: string;
+    readonly description?: string;
+    readonly multiline?: boolean;
+    readonly name: string;
+    readonly options?: SessionElicitationField["options"];
+    readonly required?: boolean;
+    readonly title: string;
+    readonly type: SessionElicitationField["type"];
+}): SessionElicitationField {
+    return {
+        defaultBooleanValue: false,
+        defaultNumberValue: 0,
+        defaultStringValue: defaultString,
+        description,
+        format: "",
+        hasDefaultValue: defaultString.length > 0,
+        maximum: "",
+        maximumLength: "",
+        minimum: "",
+        minimumLength: "",
+        ...(multiline ? { multiline: true } : {}),
+        name,
+        options,
+        pattern: "",
+        required,
+        title,
+        type,
+    };
+}
+
+const previewFormFields = [
+    previewField({
+        description: "The branch the agent should push to.",
+        name: "branch",
+        required: true,
+        title: "Branch",
+        type: "string",
+    }),
+    previewField({
+        name: "environment",
+        options: [
+            { description: "", label: "Staging", value: "staging" },
+            { description: "", label: "Production", value: "production" },
+        ],
+        title: "Environment",
+        type: "select",
+    }),
+    previewField({ name: "retries", title: "Retries", type: "integer" }),
+    previewField({ name: "notify", title: "Notify the team when it finishes", type: "boolean" }),
+    previewField({ multiline: true, name: "notes", title: "Notes", type: "string" }),
+] as const;
+
+const pendingElicitation: ElicitationInteraction = {
+    fields: previewFormFields,
+    interactionId: "preview-elicitation",
+    message: "Which branch should I deploy, and how should I report back?",
+    mode: "form",
+    sessionId: previewSessionId,
+    state: { kind: "pending" },
+    url: "",
+};
+
+const answeredElicitation: ElicitationInteraction = {
+    ...pendingElicitation,
+    interactionId: "preview-elicitation-answered",
+    state: {
+        action: "accept",
+        content: JSON.stringify({ branch: "feature/interactions", environment: "staging", notify: true, retries: 2 }),
+        kind: "resolved",
+    },
+};
+
+const pendingUrlElicitation: ElicitationInteraction = {
+    fields: [],
+    interactionId: "preview-elicitation-url",
+    message: "Sign in to the deployment service to continue.",
+    mode: "url",
+    sessionId: previewSessionId,
+    state: { kind: "pending" },
+    url: "https://deploy.example.com/authorize?session=preview-session",
+};
+
+const acceptedUrlElicitation: ElicitationInteraction = {
+    ...pendingUrlElicitation,
+    interactionId: "preview-elicitation-url-accepted",
+    state: { action: "accept", content: "", kind: "submitted" },
+};
+
+function SessionInteractionsGallery() {
+    const noop = () => {};
+    const specimens = [
+        { elicitations: [], error: "", permissions: [pendingPermission], title: "Permission: pending" },
+        {
+            busyInteractionIds: new Set([pendingPermission.interactionId]),
+            elicitations: [],
+            error: "",
+            permissions: [pendingPermission],
+            title: "Permission: responding (decisions disabled)",
+        },
+        {
+            elicitations: [],
+            error: "",
+            permissions: [confirmedPermission],
+            title: "Permission: confirmed",
+        },
+        {
+            elicitations: [],
+            error: "",
+            permissions: [permissionWithoutDetails],
+            title: "Permission: the agent sent no tool details",
+        },
+        { elicitations: [pendingElicitation], error: "", permissions: [], title: "Information request: form" },
+        {
+            busyInteractionIds: new Set([pendingElicitation.interactionId]),
+            elicitations: [pendingElicitation],
+            error: "",
+            permissions: [],
+            title: "Information request: form, responding",
+        },
+        {
+            elicitations: [answeredElicitation],
+            error: "",
+            permissions: [],
+            title: "Information request: form, answered",
+        },
+        {
+            elicitations: [pendingUrlElicitation],
+            error: "",
+            permissions: [],
+            title: "Information request: open a page",
+        },
+        {
+            elicitations: [acceptedUrlElicitation],
+            error: "",
+            permissions: [],
+            title: "Information request: page opened, waiting for the agent",
+        },
+        {
+            elicitations: [],
+            error: "The response could not be delivered. Try again.",
+            permissions: [pendingPermission],
+            title: "Permission with a failed response",
+        },
+        {
+            elicitations: [pendingElicitation],
+            error: "",
+            permissions: [pendingPermission],
+            title: "Stacked: permission above an information request",
+        },
+    ] as const;
+    return (
+        <div className="grid max-w-xl gap-6">
+            {specimens.map((specimen) => (
+                <Specimen key={specimen.title} layout="stack" title={specimen.title}>
+                    <SessionInteractionCards
+                        busyInteractionIds={
+                            "busyInteractionIds" in specimen ? specimen.busyInteractionIds : noBusyInteractions
+                        }
+                        elicitations={specimen.elicitations}
+                        error={specimen.error}
+                        onElicitationResponse={noop}
+                        onPermissionResponse={noop}
+                        onStop={noop}
+                        permissions={specimen.permissions}
+                    />
+                </Specimen>
+            ))}
+        </div>
+    );
+}
+
 const galleries = {
     alert: AlertGallery,
     "attempt-failure": AttemptFailureGallery,
@@ -981,6 +1214,7 @@ const galleries = {
     popover: PopoverGallery,
     radius: RadiusGallery,
     "session-agent-tabs": SessionAgentTabsGallery,
+    "session-interactions": SessionInteractionsGallery,
     spinner: SpinnerGallery,
     "text-link": TextLinkGallery,
     textarea: TextareaGallery,
