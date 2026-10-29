@@ -206,12 +206,9 @@ type ReplyContentSection =
       };
 
 function isProcessRenderItem(item: SessionRenderItem): boolean {
-    if (item.kind === "thinking") {
-        return true;
-    }
-    return (
-        item.kind === "event" && item.message.role === "assistant" && item.message.presentation.kind === "compaction"
-    );
+    // Compaction already has its own summary disclosure. Keep its marker visible
+    // at the native event position rather than burying it in a process group.
+    return item.kind === "thinking";
 }
 
 function isGeneratingProcessRenderItem(item: SessionRenderItem): boolean {
