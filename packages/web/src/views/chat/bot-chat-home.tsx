@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useStore } from "zustand";
 import { MortyLogoMark } from "../../components/brand/morty-logo.tsx";
 import { BotChatComposer } from "../../components/chat/bot-chat-composer.tsx";
@@ -23,6 +24,7 @@ import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scr
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
+import type { DaemonDiagnosticsSource } from "../../services/diagnostics/browser-diagnostics.ts";
 import { botConnectionStatus, homeCanStartConversation } from "../../view-models/chat/bot-chat-home-store.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { canAddAttachments } from "../../view-models/chat/composer-attachment-store.ts";
@@ -44,6 +46,28 @@ import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { MobiusSessionPane, MobiusSessionPaneLoading, SessionMessageListSkeleton } from "./mobius-session-pane.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
+
+/** The centered pre-session failure block: card, grouped action buttons and the report entry. */
+function PreSessionFailure({
+    action,
+    message,
+    report,
+}: {
+    readonly action: ReactNode;
+    readonly message: string;
+    readonly report: ReactNode;
+}) {
+    return (
+        <div className="m-auto grid justify-items-center gap-4 text-center">
+            <SessionLoadFailure message={message} />
+            {/* The recovery and report buttons form one group: stacked, with the group's 8px rhythm. */}
+            <div className="grid justify-items-center gap-2">
+                {action}
+                {report}
+            </div>
+        </div>
+    );
+}
 
 type BotChatHomeProps = {
     readonly requests: Pick<
@@ -175,18 +199,20 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
         draftControls.settings.kind === "switching";
     const showNewSessionTitle = model.selection.kind === "draft";
     const activeConversationId = selectedConversationId(model.selection);
+    const sessionDiagnostics: DaemonDiagnosticsSource = {
+        botId: workspace.botId,
+        sessionId: activeConversationId,
+        nativeSessionId: null,
+        read: (signal) => requests.daemonDiagnostics(workspace.botId, signal),
+        readNetwork: (signal) => requests.networkDiagnostic(workspace.botId, signal),
+    };
     const reportButton = (
-        <BugReportButton
-            appearance="icon"
-            daemonSource={{
-                botId: workspace.botId,
-                sessionId: activeConversationId,
-                nativeSessionId: null,
-                read: (signal) => requests.daemonDiagnostics(workspace.botId, signal),
-                readNetwork: (signal) => requests.networkDiagnostic(workspace.botId, signal),
-            }}
-            dialog={workspace.bugReportDialog}
-        />
+        <BugReportButton appearance="icon" daemonSource={sessionDiagnostics} dialog={workspace.bugReportDialog} />
+    );
+    // Centered failure cards keep every row on the midline, so their report entry is a
+    // labelled tertiary action below the recovery actions instead of an inline icon.
+    const reportEntry = (
+        <BugReportButton appearance="labelled" daemonSource={sessionDiagnostics} dialog={workspace.bugReportDialog} />
     );
     const newConversation = () => {
         store.getState().newConversation();
@@ -295,23 +321,17 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                 ) : model.selection.kind === "loading" || model.initialization.kind === "loading" ? (
                                     <SessionMessageListSkeleton />
                                 ) : model.initialization.kind === "failed" || model.selection.kind === "failed" ? (
-                                    <div className="m-auto grid justify-items-center gap-4 text-center">
-                                        <div className="flex items-start gap-2">
-                                            <SessionLoadFailure
-                                                message={
-                                                    model.selection.kind === "failed"
-                                                        ? model.selection.message
-                                                        : model.initialization.kind === "failed"
-                                                          ? model.initialization.message
-                                                          : "Chat is unavailable."
-                                                }
-                                            />
-                                            {reportButton}
-                                        </div>
-                                        <div className="flex flex-wrap justify-center gap-2">
-                                            <Button onClick={store.getState().retry}>Reconnect</Button>
-                                        </div>
-                                    </div>
+                                    <PreSessionFailure
+                                        action={<Button onClick={store.getState().retry}>Reconnect</Button>}
+                                        message={
+                                            model.selection.kind === "failed"
+                                                ? model.selection.message
+                                                : model.initialization.kind === "failed"
+                                                  ? model.initialization.message
+                                                  : "Chat is unavailable."
+                                        }
+                                        report={reportEntry}
+                                    />
                                 ) : queuedInitialMessage !== null && creationStatus !== null ? (
                                     <div className={`${chatSessionColumnClassName} flex flex-col gap-2`}>
                                         <div data-testid={dataTestId.queuedMessage}>
