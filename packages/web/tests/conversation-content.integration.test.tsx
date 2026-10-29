@@ -138,7 +138,7 @@ test("Given a Markdown horizontal rule, When the response is rendered, Then its 
     expect(rule.closest(".agent-markdown")?.className).toContain("[&_hr]:border-t-[0.5px]");
 });
 
-test("Given Markdown table and fenced code, When the response is rendered, Then their surfaces share the compact radii", {
+test("Given Markdown table and fenced code, When the response is rendered, Then their surfaces share the compact radii, the table renders without an internal scroll cap, and table actions reveal on hover", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -167,8 +167,22 @@ test("Given Markdown table and fenced code, When the response is rendered, Then 
     });
     const markdown = document.querySelector(".agent-markdown");
     expect(markdown?.className).toContain("[&_[data-streamdown=table-wrapper]]:!border-0");
-    expect(markdown?.className).toContain("[&_[data-streamdown=table-wrapper]]:!bg-muted");
-    expect(markdown?.className).toContain("[&_[data-streamdown=table-wrapper]>div:last-child]:!border-0");
+    expect(markdown?.className).toContain("[&_[data-streamdown=table-wrapper]]:!bg-transparent");
+    expect(markdown?.className).toContain(
+        "[&_[data-streamdown=table-wrapper]:hover>div.flex:first-child:not(:last-child)]:opacity-100",
+    );
+    expect(markdown?.className).toContain(
+        "[&_[data-streamdown=table-wrapper]>div.flex:first-child:not(:last-child)_div.absolute]:rounded-overlay",
+    );
+    expect(markdown?.className).toContain("[&_[data-streamdown=table-wrapper]>div:last-child]:!border-border/50");
+    expect(markdown?.className).toContain("[&_[data-streamdown=table-row]]:!border-border/50");
+    expect(markdown?.className).toContain("[&_[data-streamdown=table-wrapper]>div:last-child]:!max-h-none");
+    const actionIcons = document.querySelectorAll('[data-streamdown="table-wrapper"] > div:first-child button svg');
+    expect(actionIcons.length).toBe(2);
+    for (const icon of actionIcons) {
+        expect(icon.classList.contains("lucide")).toBe(true);
+        expect(icon.classList.contains("size-3.5")).toBe(true);
+    }
     expect(markdown?.className).toContain("[&_[data-streamdown=code-block-body]]:!rounded-[12px]");
 });
 
