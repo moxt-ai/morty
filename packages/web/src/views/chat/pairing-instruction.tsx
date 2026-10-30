@@ -59,7 +59,7 @@ export function PairingInstruction({
     readonly onCopied?: () => void;
     readonly onLinkSent?: () => void;
 }) {
-    const setupInstruction = `Fetch ${window.location.origin}/setup.md and set up Morty for me. You may install missing prerequisites and pair this machine. Complete setup without asking questions.`;
+    const setupInstruction = `Fetch ${window.location.origin}/setup.md and complete the Morty setup for me. You may install missing prerequisites and pair this machine.`;
     return (
         <div>
             {handoff.kind === "share" ? (
