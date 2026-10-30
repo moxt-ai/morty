@@ -42,7 +42,10 @@ test("Given a Project mapping saved under an old origin, When its schema is migr
     });
 });
 
-test("Given an existing Project and Machine, When the same Platform moves to another origin, Then the user keeps their Project and can pair and replace it", async () => {
+test("Given an existing Project and Machine, When the same Platform moves to another origin, Then the user keeps their Project and can pair and replace it", {
+    // This scenario builds and starts both real Workers, then reloads Chat at the new origin.
+    timeout: 30_000,
+}, async () => {
     const fixture = await createIdentityFixture();
     try {
         const identity = await fixture.createAnonymousUser();
