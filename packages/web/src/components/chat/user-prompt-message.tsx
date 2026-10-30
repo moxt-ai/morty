@@ -10,6 +10,7 @@ import type { ComposerAttachment } from "./composer-attachment.ts";
 interface UserPromptMessageProps {
     readonly attachments: readonly ComposerAttachment[];
     readonly text: string;
+    readonly attachmentLabels?: readonly { readonly name: string; readonly uri: string }[];
     /** Shown beside the bubble, such as the message's delivery state. */
     readonly status?: ReactNode;
 }
@@ -31,8 +32,8 @@ function PromptImage({ attachment }: { readonly attachment: ComposerAttachment }
     );
 }
 
-export function UserPromptMessage({ attachments, status, text }: UserPromptMessageProps) {
-    if (text.length === 0 && attachments.length === 0) {
+export function UserPromptMessage({ attachments, attachmentLabels = [], status, text }: UserPromptMessageProps) {
+    if (text.length === 0 && attachments.length === 0 && attachmentLabels.length === 0) {
         return null;
     }
     const images = attachments.filter((attachment) => attachment.kind === "image");
@@ -49,14 +50,14 @@ export function UserPromptMessage({ attachments, status, text }: UserPromptMessa
                                 ))}
                             </div>
                         )}
-                        {resources.length > 0 && (
+                        {(resources.length > 0 || attachmentLabels.length > 0) && (
                             <div className="flex flex-wrap gap-1.5">
-                                {resources.map((resource) => (
+                                {[...resources, ...attachmentLabels].map(({ name, uri }) => (
                                     <span
                                         className="rounded-md border border-black/[0.06] bg-muted/40 px-2 py-1 font-mono text-[10px]"
-                                        key={`${resource.uri}:${resource.name}`}
+                                        key={`${uri}:${name}`}
                                     >
-                                        {resource.name}
+                                        {name}
                                     </span>
                                 ))}
                             </div>

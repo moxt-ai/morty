@@ -1,3 +1,4 @@
+import { isDirectoryIdentifier, isIdentifier, MAX_PROMPT_ATTACHMENT_BYTES } from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
 
 /**
@@ -51,17 +52,14 @@ export const centralSessionStorage = {
             window.sessionStorage.removeItem(entry.key);
         } catch {}
     },
-    /** Encodes and stores; a failed encode or unavailable storage skips the write. */
-    write: <T>(entry: SessionStorageEntry<T>, value: T): void => {
-        let raw: string;
+    /** Encodes and stores; callers that require durability must handle false. */
+    write: <T>(entry: SessionStorageEntry<T>, value: T): boolean => {
         try {
-            raw = entry.encode(value);
+            window.sessionStorage.setItem(entry.key, entry.encode(value));
+            return true;
         } catch {
-            return;
+            return false;
         }
-        try {
-            window.sessionStorage.setItem(entry.key, raw);
-        } catch {}
     },
 };
 
@@ -180,3 +178,74 @@ export const rememberedSessionEntry = (identity: string): SessionStorageEntry<Re
             }
         },
     });
+
+const submissionIdentifier = v.custom<string>(isIdentifier);
+const uploadedAttachmentSchema = v.strictObject({
+    byteLength: v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(MAX_PROMPT_ATTACHMENT_BYTES)),
+    contentKey: v.pipe(v.string(), v.regex(/^[a-f0-9]{64}$/u)),
+    kind: v.picklist(["image", "resource"]),
+    mimeType: v.pipe(v.string(), v.minLength(1), v.maxLength(255)),
+    name: v.pipe(v.string(), v.minLength(1), v.maxLength(500)),
+    uri: v.pipe(v.string(), v.minLength(1), v.maxLength(4_096)),
+});
+const pendingRequestEntries = {
+    additionalDirectoryIds: v.pipe(v.array(v.custom<string>(isDirectoryIdentifier)), v.maxLength(16), v.readonly()),
+    agentId: v.exactOptional(submissionIdentifier),
+    directoryId: v.exactOptional(v.custom<string>(isDirectoryIdentifier)),
+    content: messageDraftSchema,
+    attachments: v.pipe(v.array(uploadedAttachmentSchema), v.maxLength(16), v.readonly()),
+    historyPolicy: v.exactOptional(v.picklist(["eager", "execution-only"])),
+    sessionConfigurations: v.exactOptional(
+        v.pipe(
+            v.array(
+                v.strictObject({
+                    booleanValue: v.boolean(),
+                    configId: submissionIdentifier,
+                    value: v.pipe(v.string(), v.maxLength(500)),
+                    valueType: v.picklist(["boolean", "select"]),
+                }),
+            ),
+            v.maxLength(100),
+            v.readonly(),
+        ),
+    ),
+};
+const pendingSubmissionSchema = v.strictObject({
+    commandId: submissionIdentifier,
+    request: v.variant("disposition", [
+        v.strictObject({ ...pendingRequestEntries, disposition: v.literal("reject"), targetCommandId: v.literal("") }),
+        v.strictObject({
+            ...pendingRequestEntries,
+            disposition: v.literal("queue"),
+            targetCommandId: submissionIdentifier,
+        }),
+    ]),
+});
+export type SessionPendingSubmission = v.InferOutput<typeof pendingSubmissionSchema>;
+
+/** The unconfirmed request is a historical intent, separate from the next editable draft. */
+export const sessionPendingSubmissionEntry = (
+    botId: string,
+    sessionId: string,
+): SessionStorageEntry<SessionPendingSubmission> =>
+    customSessionStorageEntry({
+        key: scopedKey("morty:pending-submission:v1:", botId, sessionId),
+        schema: pendingSubmissionSchema,
+        encode: (value) => JSON.stringify(v.parse(pendingSubmissionSchema, value)),
+        decode: (raw) => {
+            try {
+                const parsed = v.safeParse(pendingSubmissionSchema, JSON.parse(raw));
+                return parsed.success ? parsed.output : null;
+            } catch {
+                return null;
+            }
+        },
+    });
+
+export class SessionStorageWriteError extends Error {
+    readonly code = "pending_submission_storage_unavailable";
+    constructor() {
+        super("The message could not be saved for recovery. Allow browser storage or free some space, then retry.");
+        this.name = "SessionStorageWriteError";
+    }
+}

@@ -228,7 +228,7 @@ test("Given a follow-up is queued and the user has started another draft, When t
     await app.waitForView(() =>
         expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", `${queuedPrompt}\n\n${draft}`),
     );
-    expect(document.body.textContent).not.toContain("Files attached to the queued message");
+    expect(document.body.textContent).not.toContain("Files attached to this message");
 });
 
 test("Given a reply is running with a queued follow-up, When I edit the follow-up, Then all viewers keep the reply running and only the revised message executes", {
@@ -349,7 +349,7 @@ test("Given two queued submissions are accepted before their snapshot arrives, W
         expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", queuedPrompt);
         expect(getByRole(document.body, "list", { name: "Attachments" }).textContent).toContain("queued.png");
     });
-    expect(document.body.textContent).not.toContain("Files attached to the queued message could not be restored here.");
+    expect(document.body.textContent).not.toContain("Files attached to this message could not be restored here.");
 
     if (app.daemon === null) {
         throw new Error("Expected a connected controlled Agent Runtime");
@@ -420,7 +420,7 @@ test("Given a follow-up with a file was queued from another browser, When this v
     await viewer.waitForView(() => expect(viewerComposer).toHaveProperty("value", queuedPrompt));
     expect(viewerForm.querySelector('[aria-label="Attachments"]')).toBeNull();
     await viewer.waitForView(() =>
-        expect(document.body.textContent).toContain("Files attached to the queued message could not be restored here."),
+        expect(document.body.textContent).toContain("Files attached to this message could not be restored here."),
     );
 });
 

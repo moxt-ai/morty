@@ -1,4 +1,4 @@
-import { MobiusApiError, MobiusCancellationError, type MobiusClient } from "@moxt-ai/mobius-sdk";
+import { MobiusApiError, MobiusCancellationError, type MobiusClient, type PromptAttachment } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
@@ -19,25 +19,49 @@ export type DeliveryTarget =
 
 export interface SubmittedMessage {
     readonly target: DeliveryTarget;
-    readonly attachments: readonly ComposerAttachment[];
+    readonly attachments:
+        | { readonly kind: "local"; readonly values: readonly ComposerAttachment[] }
+        | { readonly kind: "uploaded"; readonly values: readonly PromptAttachment[] };
     readonly commandId: string;
     readonly content: string;
 }
 export type Journal = {
-    readonly attachments: readonly ComposerAttachment[];
+    /** Original local files are kept only in memory; the request already owns uploaded references. */
+    readonly attachments: readonly ComposerAttachment[] | null;
     readonly commandId: string;
-    readonly displayPrompt: string;
     readonly request: Omit<SubmitRequest, "idempotencyKey" | "disposition" | "targetCommandId"> & DeliveryTarget;
 };
 export function journalMessage(journal: Journal): SubmittedMessage {
     return {
         commandId: journal.commandId,
         content: journal.request.content,
-        attachments: journal.attachments,
+        attachments:
+            journal.attachments === null
+                ? { kind: "uploaded", values: journal.request.attachments }
+                : { kind: "local", values: journal.attachments },
         target:
             journal.request.disposition === "queue"
                 ? { disposition: "queue", targetCommandId: journal.request.targetCommandId }
                 : { disposition: "reject", targetCommandId: "" },
+    };
+}
+
+export function deliveryMessagePresentation(message: SubmittedMessage) {
+    return {
+        ...message,
+        displayPrompt:
+            message.content.trim() ||
+            message.attachments.values
+                .filter((attachment) => attachment.uri !== "morty://bot/instructions")
+                .map((attachment) => attachment.name)
+                .join(", "),
+        attachments: message.attachments.kind === "local" ? message.attachments.values : [],
+        attachmentLabels:
+            message.attachments.kind === "uploaded"
+                ? message.attachments.values
+                      .filter((attachment) => attachment.uri !== "morty://bot/instructions")
+                      .map((attachment) => ({ name: attachment.name, uri: attachment.uri }))
+                : [],
     };
 }
 
@@ -99,6 +123,9 @@ function isAuthoritativeFailure(cause: unknown): boolean {
 
 /** The Session owns delivery; each attempt borrows the currently connected pane's submit port. */
 export const createSessionDeliveryStore = (options: {
+    readonly pendingSubmission: Omit<Journal, "attachments"> | null;
+    /** Writes the frozen request before it can leave the browser; failure prevents submission. */
+    readonly pendingSubmissionChanged: (journal: Omit<Journal, "attachments"> | null) => void;
     /** Persists the unsent message's text, or clears it with null. */
     readonly unsentMessageChanged: (content: string | null) => void;
 }) => {
@@ -156,11 +183,20 @@ export const createSessionDeliveryStore = (options: {
     };
     return createStore<SessionDeliveryStore>()((setState, get) => {
         const set = (update: Update): void => {
+            const state = update.state;
+            options.pendingSubmissionChanged(
+                state.kind === "submitting" || state.kind === "delivery-unknown"
+                    ? { commandId: state.journal.commandId, request: state.journal.request }
+                    : null,
+            );
+            options.unsentMessageChanged(unsentContent(state));
             setState(update);
-            options.unsentMessageChanged(unsentContent(update.state));
         };
         return {
-            state: { kind: "idle" },
+            state:
+                options.pendingSubmission === null
+                    ? { kind: "idle" }
+                    : { kind: "delivery-unknown", journal: { ...options.pendingSubmission, attachments: null } },
             confirmedMessages: [],
             discardUnknown: () => {
                 const state = get().state;
