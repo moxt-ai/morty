@@ -215,7 +215,7 @@ test("Given a remembered computer, When I deliberately start a new conversation 
     expect(returned.elementsByTestId(dataTestId.agentResponse)).toHaveLength(0);
 });
 
-test("Given a browser without saved access, When I open a copied computer address, Then Morty explains that this browser is not paired and helps me pair again", {
+test("Given a browser without saved access, When I open a copied computer address, Then Morty explains that this browser is not paired and offers a link home", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -226,14 +226,11 @@ test("Given a browser without saved access, When I open a copied computer addres
     window.sessionStorage.clear();
     const unpaired = await app.reload();
     await unpaired.waitForView(() => getByRole(document.body, "heading", { name: "Browser not paired" }));
-    expect(document.body.textContent).toContain("Pair again with this computer.");
     expect(document.body.textContent).toContain("Copied browser URLs don’t grant access.");
-    expect(document.body.textContent?.indexOf("Copied browser URLs")).toBeLessThan(
-        document.body.textContent?.indexOf("Pair again with this computer") ?? -1,
-    );
+    expect(document.body.textContent).not.toContain("Pair again with this computer.");
     expect(document.body.textContent).toContain("Open your agent’s link or scan its QR code.");
-    await unpaired.user.click(getByRole(document.body, "button", { name: "Copy setup prompt" }));
-    expect(await navigator.clipboard.readText()).toContain(`${app.origin}/setup.md`);
+    expect(queryByRole(document.body, "button", { name: "Copy setup prompt" })).toBeNull();
+    expect(getByRole(document.body, "link", { name: "Go to morty" }).getAttribute("href")).toBe("/");
     expect(window.location.href).toBe(address);
     expect(queryByRole(document.body, "textbox", { name: "Message" })).toBeNull();
 });

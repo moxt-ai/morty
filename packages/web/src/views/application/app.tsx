@@ -98,10 +98,11 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
                 <SetupCardShell cardLeading={<SetupCardFailureIcon />} showPageHeader titleId="unpaired-title">
                     <SetupCardTitle id="unpaired-title">Browser not paired</SetupCardTitle>
                     <SetupCardDescription>Copied browser URLs don’t grant access.</SetupCardDescription>
-                    <SetupCardAlert>Pair again with this computer.</SetupCardAlert>
                     <SetupCardDescription>Open your agent’s link or scan its QR code.</SetupCardDescription>
                     <SetupCardSection className="mt-4">
-                        <PairingInstruction />
+                        <Button asChild className={setupPrimaryButtonClassName} size={setupPrimaryButtonSize}>
+                            <a href="/">Go to morty</a>
+                        </Button>
                     </SetupCardSection>
                 </SetupCardShell>
             );
