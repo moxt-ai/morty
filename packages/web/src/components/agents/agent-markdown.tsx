@@ -63,20 +63,27 @@ const STREAMDOWN_ICONS = Object.freeze({
     Maximize2Icon: StreamdownMaximize2Icon,
 });
 
+// Fenced code is one tinted surface, like inline code and tool output: the language label and
+// the code share it, without an inner frame. Radius and spacing follow tables.
 const STREAMDOWN_FENCED_CODE_BLOCK_CLASSES = [
     "[&_[data-streamdown=code-block]]:!overflow-hidden",
-    "[&_[data-streamdown=code-block]]:my-2",
+    "[&_[data-streamdown=code-block]]:my-4",
     "[&_[data-streamdown=code-block]]:rounded-[16px]",
+    "[&_[data-streamdown=code-block]]:!gap-0",
+    "[&_[data-streamdown=code-block]]:!p-0",
     "[&_[data-streamdown=code-block]]:!border-0",
     "[&_[data-streamdown=code-block]]:!bg-muted",
-    "[&_[data-streamdown=code-block-header]]:!h-6",
+    "[&_[data-streamdown=code-block-header]]:!h-auto [&_[data-streamdown=code-block-header]]:px-4 [&_[data-streamdown=code-block-header]]:pt-3",
+    "[&_[data-streamdown=code-block-header]>span]:!ml-0",
     "[&_[data-streamdown=code-block-body]]:flex [&_[data-streamdown=code-block-body]]:min-h-0 [&_[data-streamdown=code-block-body]]:flex-col [&_[data-streamdown=code-block-body]]:!overflow-hidden",
-    "[&_[data-streamdown=code-block-body]]:!rounded-[12px]",
+    "[&_[data-streamdown=code-block-body]]:!rounded-none",
     "[&_[data-streamdown=code-block-body]]:!border-0",
-    "[&_[data-streamdown=code-block-body]]:!bg-background",
-    "[&_[data-streamdown=code-block-body]]:!p-3",
-    "[&_[data-streamdown=code-block-body]]:!text-xs",
+    "[&_[data-streamdown=code-block-body]]:!bg-transparent",
+    "[&_[data-streamdown=code-block-body]]:!p-4",
+    "[&_[data-streamdown=code-block-body]]:!text-[13px] [&_[data-streamdown=code-block-body]]:!leading-[1.6]",
     "[&_[data-streamdown=code-block-body]_pre]:min-h-0 [&_[data-streamdown=code-block-body]_pre]:flex-1 [&_[data-streamdown=code-block-body]_pre]:overflow-auto",
+    // Prose has no column layout to preserve, so it wraps instead of hiding line ends behind a scrollbar.
+    "[&_[data-streamdown=code-block-body]:is([data-language=markdown],[data-language=md],[data-language=text],[data-language=txt],[data-language=plaintext])_pre]:whitespace-pre-wrap",
     "[&_[data-streamdown=code-block-actions]]:!border-0",
     "[&_[data-streamdown=code-block-actions]]:!bg-transparent",
     "[&_[data-streamdown=code-block-actions]]:shadow-none",
