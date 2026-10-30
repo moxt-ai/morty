@@ -1116,7 +1116,7 @@ function SessionInteractionsGallery() {
             elicitations: [],
             error: "",
             permissions: [pendingPermission],
-            title: "Permission: responding (decisions disabled)",
+            title: "Permission: responding (collapsed while the response sends)",
         },
         {
             elicitations: [],
