@@ -61,7 +61,7 @@ export function ContinuePageContent({
                 size={setupPrimaryButtonSize}
                 variant="outline"
             >
-                <a href={continueHref}>Continue on your last computer</a>
+                <a href={continueHref}>Back to your last computer</a>
             </Button>
         );
     switch (state.kind) {
