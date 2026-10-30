@@ -2,6 +2,7 @@ import { getByLabelText, getByRole, queryAllByRole, queryAllByText, queryByRole 
 import { act } from "@testing-library/react";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
+import { WebSocketApiTransport } from "../src/services/api/websocket-api-transport.ts";
 import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
@@ -102,6 +103,65 @@ test("Given a new session with an interrupted bridge, When recovery takes eight 
     expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain(
         "Keep editing through the interruption",
     );
+});
+
+test("Given a draft whose computer is removed during a bridge interruption, When the recovery read fails, Then Chat offers retry immediately instead of staying silently stuck", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    await app.user.type(composer, "Keep my draft after recovery fails");
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false),
+    );
+    const otherClient = new WebSocketApiTransport(app.origin, clock);
+    otherClient.open();
+    try {
+        const signal = AbortSignal.timeout(15_000);
+        const headers = {
+            authorization: `Bearer ${await app.identity.getToken(signal)}`,
+            "content-type": "application/json",
+        };
+        const bots = `${app.origin}/morty/api/projects/${app.identity.projectId}/management/bots`;
+        // The management contract preserves at least one computer, so another real client creates its replacement.
+        expect(
+            (
+                await otherClient.fetch(
+                    new Request(bots, {
+                        method: "POST",
+                        headers,
+                        body: JSON.stringify({ displayName: "Other computer" }),
+                        signal,
+                    }),
+                )
+            ).status,
+        ).toBe(201);
+        app.transport.disconnect();
+        await app.waitForView(() =>
+            expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true),
+        );
+        expect(reconnectStatusText(app)).toBeNull();
+        expect(
+            (
+                await otherClient.fetch(
+                    new Request(`${bots}/${app.botId}`, {
+                        method: "DELETE",
+                        headers,
+                        signal,
+                    }),
+                )
+            ).status,
+        ).toBe(204);
+        document.dispatchEvent(new Event("visibilitychange"));
+        await app.waitForView(() =>
+            expect(getByRole(document.body, "button", { name: "Retry now" })).toHaveProperty("disabled", false),
+        );
+        expect(reconnectStatusText(app)).toContain("Connection interrupted");
+        expect(composer).toHaveProperty("value", "Keep my draft after recovery fails");
+    } finally {
+        otherClient.dispose();
+    }
 });
 
 test("Given an online computer and a saved session, When the session first loads, Then the composer stays writable without a connection notice until sending becomes available", {

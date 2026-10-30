@@ -696,6 +696,12 @@ export const createBotChatHomeStore = (
                     }
                     failLoad("unavailable", message);
                 } finally {
+                    // Quiet feedback is owned by an active recovery. Once this load exits,
+                    // an unavailable watch needs the manual retry entry point immediately.
+                    const watch = get().configurationWatch;
+                    if (!signal.aborted && watch.kind === "unavailable") {
+                        set({ configurationWatch: { ...watch, notice: "visible" } });
+                    }
                     clearRecoveryNotice();
                 }
             },
