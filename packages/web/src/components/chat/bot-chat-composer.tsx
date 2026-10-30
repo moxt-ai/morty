@@ -19,6 +19,7 @@ import { useAutoGrowingTextarea } from "../utils/use-auto-growing-textarea.ts";
 import { useComposerFocus } from "../utils/use-composer-focus.ts";
 import { useComposerNoticeLayout } from "../utils/use-composer-notice-layout.ts";
 import { useScrollClippedEdges } from "../utils/use-scroll-clipped-edges.ts";
+import { useSoftwareKeyboardMarker } from "../utils/use-software-keyboard-marker.ts";
 import { chatSessionComposerClassName } from "./chat-session-layout.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 
@@ -215,9 +216,10 @@ export function BotChatComposer({
             </>
         );
     useComposerNoticeLayout(notice, showComposerNotice);
+    const attachKeyboardMarker = useSoftwareKeyboardMarker();
 
     return (
-        <form className={chatSessionComposerClassName} onSubmit={submit}>
+        <form className={chatSessionComposerClassName} onSubmit={submit} ref={attachKeyboardMarker}>
             {showComposerNotice && (
                 <div className="absolute inset-x-0 bottom-[calc(100%+8px)] z-10" ref={notice}>
                     {composerErrorMessage.length > 0 ? (
