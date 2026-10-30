@@ -64,9 +64,6 @@ export function TurnWorkDisclosure({
     if (summary.fileEdits > 0) {
         parts.push({ key: "edits", text: counted(summary.fileEdits, "file edit", "file edits"), alert: false });
     }
-    if (summary.failed > 0) {
-        parts.push({ key: "failed", text: `${summary.failed.toString()} failed`, alert: true });
-    }
     if (summary.interrupted > 0) {
         parts.push({ key: "interrupted", text: `${summary.interrupted.toString()} interrupted`, alert: true });
     }

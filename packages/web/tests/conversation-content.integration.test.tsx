@@ -827,7 +827,7 @@ test("Given an expanded process segment whose tool is still generating, When the
 
     await sendPrompt(app, composer, "hold unfinished tools");
     const summary = await app.waitForView(() => {
-        const button = getByRole(document.body, "button", { name: "4 steps · 1 failed", expanded: false });
+        const button = getByRole(document.body, "button", { name: "4 steps", expanded: false });
         expect(button.querySelector(".animate-loading-text-shimmer")).not.toBeNull();
         return button;
     });

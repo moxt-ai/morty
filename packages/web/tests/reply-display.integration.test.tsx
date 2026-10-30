@@ -223,7 +223,7 @@ test("Given tools were unfinished when the turn fails, When the failure arrives,
     const summary = await app.waitForView(() => {
         expect(getByText(document.body, "Response failed")).toBeDefined();
         expect(workingIndicators(app)).toHaveLength(0);
-        return getByRole(document.body, "button", { name: "4 steps · 1 failed · 2 interrupted", expanded: false });
+        return getByRole(document.body, "button", { name: "4 steps · 2 interrupted", expanded: false });
     });
     await app.user.click(summary);
     await app.waitForView(() => {
