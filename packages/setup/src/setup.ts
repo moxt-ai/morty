@@ -64,6 +64,11 @@ interface Context {
     readonly replacement: ReplacementState;
 }
 
+/** A Context whose Project's Machine the Worker has named for this run. Setup never chooses or saves a Machine. */
+interface MachineContext extends Context {
+    readonly botId: string;
+}
+
 interface RetiringIdentity {
     readonly kind: "pending";
     readonly projectId: string;
@@ -105,7 +110,7 @@ interface ManagedConnection {
 }
 
 interface VerifiedIdentity {
-    readonly context: Context;
+    readonly context: MachineContext;
     readonly expectedRuntimeId: string | null;
 }
 
@@ -517,17 +522,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         await writePrivateFile(path, JSON.stringify(value, null, 2));
     }
 
+    /** Earlier releases also saved a `bot_id`; the Worker now names the Machine, so the next save drops that key. */
     function savedIdentity(config: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
         return Object.fromEntries(
             Object.entries(config).filter(([key]) =>
-                [
-                    "identity_creation_key",
-                    "user_token",
-                    "user_id",
-                    "project_id",
-                    "bot_id",
-                    "pairing_runtime_id",
-                ].includes(key),
+                ["identity_creation_key", "user_token", "user_id", "project_id", "pairing_runtime_id"].includes(key),
             ),
         );
     }
@@ -660,7 +659,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         };
     }
 
-    async function saveConfiguration(context: Context, updates: Readonly<Record<string, unknown>>): Promise<Context> {
+    async function saveConfiguration<Saved extends Context>(
+        context: Saved,
+        updates: Readonly<Record<string, unknown>>,
+    ): Promise<Saved> {
         const config: Readonly<Record<string, unknown>> = { ...context.config, ...updates, base_url: context.base };
         const temporary = join(context.directory, `.config-${crypto.randomUUID()}`);
         try {
@@ -714,7 +716,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
      * then, so a run that stops on the way ends it next time instead of leaving a credential that opens the replaced
      * Project. Nothing else from that Project opens it: its replacement ended everything shared from it.
      */
-    async function retireReplacedIdentity(context: Context): Promise<Context> {
+    async function retireReplacedIdentity<Retiring extends Context>(context: Retiring): Promise<Retiring> {
         const replacement = context.replacement;
         if (replacement.kind !== "revoked" || replacement.previous.kind !== "pending") {
             return context;
@@ -840,7 +842,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             {
                 user_token: credential(identity["token"]),
                 user_id: identifier(identity["userId"]),
-                bot_id: identifier(object(identity["bot"])["botId"]),
                 project_id: identifier(identity["projectId"]),
             },
         );
@@ -849,26 +850,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     async function verifyIdentityAndBot(context: Context): Promise<VerifiedIdentity> {
         const session = await request(context, "/session");
-        identifier(session["userId"]);
-        const listed = await request(context, "/management/bots");
-        if (!Array.isArray(listed["bots"])) {
-            fail("INVALID_RESPONSE");
-        }
-        const bot = listed["bots"]
-            .map(object)
-            .find((item) => context.config["bot_id"] === undefined || item["botId"] === context.config["bot_id"]);
-        if (bot === undefined) {
-            fail("BOT_NOT_FOUND");
-        }
-        const botId = identifier(bot["botId"]);
-        const detail = await request(context, `/management/bots/${encodeURIComponent(botId)}/runtime-binding`);
-        if (identifier(detail["botId"]) !== botId) {
-            fail("INVALID_RESPONSE");
-        }
-        const expectedRuntimeId = detail["runtimeId"] === null ? null : identifier(detail["runtimeId"]);
+        const userId = identifier(session["userId"]);
+        // The Worker decides which Machine the user has, the same one every browser handoff opens.
+        const bot = await request(context, "/management/bot");
+        const saved = await saveConfiguration(context, { user_id: userId });
         return {
-            context: await saveConfiguration(context, { user_id: session["userId"], bot_id: botId }),
-            expectedRuntimeId,
+            context: { ...saved, botId: identifier(bot["botId"]) },
+            expectedRuntimeId: bot["runtimeId"] === null ? null : identifier(bot["runtimeId"]),
         };
     }
 
@@ -981,7 +969,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function createRuntimePairing(context: Context, appId: string): Promise<RuntimeSelection> {
+    async function createRuntimePairing(context: MachineContext, appId: string): Promise<RuntimeSelection> {
         const pairing = await request(context, "/management/runtime-pairings", {
             idempotencyKey: crypto.randomUUID(),
         });
@@ -998,11 +986,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (selection.appId !== appId || selection.projectId !== context.config["project_id"]) {
             fail("PROJECT_CONFLICT");
         }
-        emit({ status: "prepared", botId: context.config["bot_id"] });
+        emit({ status: "prepared", botId: context.botId });
         return selection;
     }
 
-    async function replaceProject(context: Context): Promise<Context> {
+    async function replaceProject(context: MachineContext): Promise<MachineContext> {
         const previousProjectId = identifier(context.config["project_id"]);
         const pending: ReplacementAccess = { kind: "unknown", previousProjectId };
         // Save before the request: a timeout or interrupted process cannot prove that access was not revoked.
@@ -1023,6 +1011,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const saved = await saveConfiguration(
             {
                 ...prepared,
+                // The successor Project's Machine, named by the Worker that bootstrapped it.
+                botId: identifier(object(replacement["bot"])["botId"]),
                 replacement: {
                     kind: "revoked",
                     previous: {
@@ -1035,21 +1025,20 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             {
                 user_token: credential(replacement["token"]),
                 user_id: identifier(replacement["userId"]),
-                bot_id: identifier(object(replacement["bot"])["botId"]),
                 project_id: projectId,
                 pairing_runtime_id: undefined,
             },
         );
-        emit({ status: "project_replaced", botId: saved.config["bot_id"], projectId: saved.config["project_id"] });
+        emit({ status: "project_replaced", botId: saved.botId, projectId: saved.config["project_id"] });
         return await retireReplacedIdentity(saved);
     }
 
     async function prepareRuntime(
-        context: Context,
+        context: MachineContext,
         cwd: string,
         expectedRuntimeId: string | null,
         confirmedProjectId: string | null,
-    ): Promise<{ readonly context: Context; readonly runtime: RuntimeSelection }> {
+    ): Promise<{ readonly context: MachineContext; readonly runtime: RuntimeSelection }> {
         progress("pairing", "Preparing the Runtime connection.");
         const project = await request(context, "/management/project");
         const appId = identifier(project["appId"]);
@@ -1116,9 +1105,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
      * stops at any later point leaves the next run a Runtime to continue on rather than another one to pair.
      */
     async function pairRuntime(
-        context: Context,
+        context: MachineContext,
         appId: string,
-    ): Promise<{ readonly context: Context; readonly runtime: RuntimeSelection }> {
+    ): Promise<{ readonly context: MachineContext; readonly runtime: RuntimeSelection }> {
         const runtime = await createRuntimePairing(context, appId);
         return { context: await saveConfiguration(context, { pairing_runtime_id: runtime.runtimeId }), runtime };
     }
@@ -1141,11 +1130,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function startRuntime(
-        context: Context,
+        context: MachineContext,
         runtime: RuntimeSelection,
         cwd: string,
         harness: string,
-    ): Promise<Context> {
+    ): Promise<MachineContext> {
         const reuseOnline = async () => {
             if (runtime.kind !== "existing" || !(await runtimeIsOnline(context, runtime, harness))) {
                 return false;
@@ -1198,8 +1187,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     /** The Agents the Runtime offers while it is online, or null while it is not. */
-    async function onlineRuntimeAgents(context: Context, runtime: RuntimeSelection): Promise<readonly string[] | null> {
-        const botPath = `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}`;
+    async function onlineRuntimeAgents(
+        context: MachineContext,
+        runtime: RuntimeSelection,
+    ): Promise<readonly string[] | null> {
+        const botPath = `/chat/projects/${context.config["project_id"]}/bots/${context.botId}`;
         // A bound Machine's Runtime is read through the Machine; an unbound one is among the setup candidates.
         const alreadyConfigured = runtime.kind === "existing" && runtime.bound;
         const state = await request(context, `${botPath}/${alreadyConfigured ? "workspace" : "setup/runtimes"}`, {});
@@ -1217,7 +1209,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return current["agents"].map((agent) => identifier(object(agent)["agentRef"]));
     }
 
-    async function runtimeIsOnline(context: Context, runtime: RuntimeSelection, harness: string): Promise<boolean> {
+    async function runtimeIsOnline(
+        context: MachineContext,
+        runtime: RuntimeSelection,
+        harness: string,
+    ): Promise<boolean> {
         return (await onlineRuntimeAgents(context, runtime))?.includes(harness) === true;
     }
 
@@ -1276,7 +1272,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function waitForRuntime(context: Context, runtime: RuntimeSelection, harness: string, cwd: string) {
+    async function waitForRuntime(context: MachineContext, runtime: RuntimeSelection, harness: string, cwd: string) {
         const runtimeId = runtime.runtimeId;
         let attempts = 0;
         if (runtime.kind === "pairing") {
@@ -1338,19 +1334,15 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function bindAgent(context: Context, runtime: RuntimeSelection, harness: string) {
+    async function bindAgent(context: MachineContext, runtime: RuntimeSelection, harness: string) {
         progress("binding", `Connecting the Machine to ${harness} in the default working directory.`);
         const runtimeId = runtime.runtimeId;
         const agentRef = identifier(harness);
         try {
-            await request(
-                context,
-                `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}/setup`,
-                {
-                    runtimeId,
-                    agentRef,
-                },
-            );
+            await request(context, `/chat/projects/${context.config["project_id"]}/bots/${context.botId}/setup`, {
+                runtimeId,
+                agentRef,
+            });
         } catch (cause) {
             // Cancellation and the setup budget keep their own codes.
             if (signal.aborted || !(cause instanceof Error)) {
@@ -1367,19 +1359,19 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         // The Machine now owns its Runtime, so the pairing record is no longer needed.
         const saved = await saveConfiguration(context, { pairing_runtime_id: undefined });
-        emit({ status: "binding_activated", botId: context.config["bot_id"], harness });
+        emit({ status: "binding_activated", botId: context.botId, harness });
         return saved;
     }
 
     /** Waits until the bound Machine's Runtime is online and offers the harness this run bound. */
-    async function waitForReadiness(context: Context, runtime: RuntimeSelection, harness: string) {
+    async function waitForReadiness(context: MachineContext, runtime: RuntimeSelection, harness: string) {
         const agentRef = identifier(harness);
         let attempts = 0;
         while (true) {
             signal.throwIfAborted();
             const configuration = await request(
                 context,
-                `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}/workspace`,
+                `/chat/projects/${context.config["project_id"]}/bots/${context.botId}/workspace`,
                 {},
             );
             if (hasOnlineRuntimeAgent(object(configuration["runtime"]), runtime.runtimeId, agentRef)) {
@@ -1422,13 +1414,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function finishSetup(
-        context: Context,
+        context: MachineContext,
         runtime: RuntimeSelection,
         options: SetupOptions,
         identity: SetupIdentity["project"],
     ) {
         await waitForReadiness(context, runtime, options.harness);
-        const botId = context.config["bot_id"];
+        const botId = context.botId;
         const workingDirectory = text(context.config["workspace"]);
         const transfer = await request(context, "/identity/transfers", {});
         const url = new URL(text(transfer["url"]));
@@ -1577,16 +1569,15 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         restoreReplacementAccess(context);
         context = await retireReplacedIdentity(context);
         const identity = await prepareIdentity(context);
-        context = identity.context;
-        const verified = await verifyIdentityAndBot(context);
-        context = verified.context;
-        emit({ status: "identity_ready", userId: context.config["user_id"], botId: context.config["bot_id"] });
-        const prepared = await prepareRuntime(context, cwd, verified.expectedRuntimeId, options.replaceProject);
-        context = prepared.context;
-        context = await startRuntime(context, prepared.runtime, cwd, options.harness);
-        await waitForRuntime(context, prepared.runtime, options.harness, cwd);
-        context = await bindAgent(context, prepared.runtime, options.harness);
-        await finishSetup(context, prepared.runtime, options, identity.project);
+        const verified = await verifyIdentityAndBot(identity.context);
+        let machine = verified.context;
+        emit({ status: "identity_ready", userId: machine.config["user_id"], botId: machine.botId });
+        const prepared = await prepareRuntime(machine, cwd, verified.expectedRuntimeId, options.replaceProject);
+        machine = prepared.context;
+        machine = await startRuntime(machine, prepared.runtime, cwd, options.harness);
+        await waitForRuntime(machine, prepared.runtime, options.harness, cwd);
+        machine = await bindAgent(machine, prepared.runtime, options.harness);
+        await finishSetup(machine, prepared.runtime, options, identity.project);
     }
 
     try {

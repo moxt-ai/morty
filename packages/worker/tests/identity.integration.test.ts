@@ -202,47 +202,25 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
         authentication: { kind: "anonymous" },
         userId: identity.userId,
     });
-    const bots = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bots`, {
+    const served = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bot`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         fixture.environment(),
     );
-    expect(bots.status).toBe(200);
-    const { bots: availableBots } = v.parse(
-        v.object({ bots: v.array(v.object({ botId: v.string(), displayName: v.string() })) }),
-        await bots.json(),
-    );
-    expect(availableBots).toHaveLength(1);
-    const bot = v.parse(v.object({ botId: v.string(), displayName: v.literal("My Machine") }), availableBots[0]);
-    const updated = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bots/${bot.botId}`, {
-            method: "PATCH",
-            headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
-            body: JSON.stringify({
-                displayName: "Research Assistant",
-                instructions: "Cite the source for every factual claim.",
-            }),
-        }),
-        fixture.environment(),
-    );
-    expect(updated.status).toBe(200);
-    expect(await updated.json()).toMatchObject({
-        botId: bot.botId,
-        configured: false,
-        displayName: "Research Assistant",
-        instructions: "Cite the source for every factual claim.",
-    });
+    expect(served.status).toBe(200);
+    const bot = v.parse(v.object({ botId: v.string(), runtimeId: v.null() }), await served.json());
     const persisted = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bots/${bot.botId}`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         fixture.environment(),
     );
-    expect(await persisted.json()).toMatchObject({
+    expect(await persisted.json()).toEqual({
         botId: bot.botId,
-        displayName: "Research Assistant",
-        instructions: "Cite the source for every factual claim.",
+        configured: false,
+        displayName: "My Machine",
+        instructions: "",
     });
     const projectResponse = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/project`, {
@@ -262,66 +240,25 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
     ).toBe(401);
 });
 
-test("Given a user with multiple Bots, When they remove one Bot, Then the other remains and the last Bot cannot be removed", async () => {
-    const identity = await fixture.createAnonymousUser();
-    const environment = fixture.environment();
-    const botsUrl = `${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bots`;
-    const headers = { authorization: `Bearer ${identity.token}` };
-    const initialResponse = await worker.fetch(new Request(botsUrl, { headers }), environment);
-    const initial = v.parse(
-        v.object({ bots: v.array(v.object({ botId: v.string(), displayName: v.string() })) }),
-        await initialResponse.json(),
-    ).bots;
-    const original = v.parse(v.object({ botId: v.string() }), initial[0]);
-
-    const blocked = await worker.fetch(
-        new Request(`${botsUrl}/${original.botId}`, { method: "DELETE", headers }),
-        environment,
-    );
-    expect(blocked.status).toBe(409);
-    expect(await blocked.json()).toMatchObject({ error: { code: "LAST_BOT_REQUIRED" } });
-
-    const createdResponse = await worker.fetch(
-        new Request(botsUrl, {
-            method: "POST",
-            headers: { ...headers, "content-type": "application/json" },
-            body: JSON.stringify({ displayName: "Laptop Bot" }),
-        }),
-        environment,
-    );
-    const created = v.parse(v.object({ botId: v.string() }), await createdResponse.json());
-    const removed = await worker.fetch(
-        new Request(`${botsUrl}/${created.botId}`, { method: "DELETE", headers }),
-        environment,
-    );
-    expect(removed.status).toBe(204);
-
-    const remainingResponse = await worker.fetch(new Request(botsUrl, { headers }), environment);
-    expect(await remainingResponse.json()).toEqual({ bots: initial });
-});
-
 test("Given a user with a draft Bot on a Project-scoped Platform, When setup lists Runtimes, Then the available Runtime options are returned", async () => {
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
-    const listed = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bots`, {
+    const served = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bot`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         environment,
     );
-    const { bots } = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await listed.json());
+    const { botId } = v.parse(v.object({ botId: v.string() }), await served.json());
     const response = await fetchPublicApplication(
-        new Request(
-            `${APP_ORIGIN}/morty/api/chat/projects/${identity.projectId}/bots/${bots[0]?.botId}/setup/runtimes`,
-            {
-                method: "POST",
-                headers: {
-                    authorization: `Bearer ${identity.token}`,
-                    "content-type": "application/json",
-                },
-                body: "{}",
+        new Request(`${APP_ORIGIN}/morty/api/chat/projects/${identity.projectId}/bots/${botId}/setup/runtimes`, {
+            method: "POST",
+            headers: {
+                authorization: `Bearer ${identity.token}`,
+                "content-type": "application/json",
             },
-        ),
+            body: "{}",
+        }),
         environment,
     );
     expect(response.status).toBe(200);
@@ -409,17 +346,14 @@ test("Given an anonymous user, When machine access is shared, Then its expiring 
 test("Given an anonymous user with a Machine, When a transfer link is redeemed, Then the redemption returns the user's Bot", async () => {
     const environment = fixture.environment();
     const identity = await fixture.createAnonymousUser();
-    const botsResponse = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bots`, {
+    const servedResponse = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bot`, {
             headers: { authorization: `Bearer ${identity.token}` },
         }),
         environment,
     );
-    expect(botsResponse.status).toBe(200);
-    const { bots } = v.parse(
-        v.object({ bots: v.array(v.object({ botId: v.string(), displayName: v.string() })) }),
-        await botsResponse.json(),
-    );
+    expect(servedResponse.status).toBe(200);
+    const served = v.parse(v.object({ botId: v.string() }), await servedResponse.json());
     const transfer = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/identity/transfers`, {
             method: "POST",
@@ -442,7 +376,7 @@ test("Given an anonymous user with a Machine, When a transfer link is redeemed, 
     expect(await redeemed.json()).toMatchObject({
         userId: identity.userId,
         projectId: identity.projectId,
-        botId: bots[0]?.botId,
+        botId: served.botId,
     });
 });
 

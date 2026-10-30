@@ -222,13 +222,12 @@ for (const scenario of scenarios) {
             budget.remaining = 1;
             const completed = await run();
             expect(completed.code, JSON.stringify(completed.events)).toBe(0);
-            expect(completed.events.at(-1)).toMatchObject({ status: "ready", workspace });
             const identity = v.parse(identitySchema, original);
+            expect(completed.events.at(-1)).toMatchObject({ status: "ready", workspace, botId: identity.bot.botId });
             expect(await configuration()).toMatchObject({
                 user_token: identity.token,
                 user_id: identity.userId,
                 project_id: identity.projectId,
-                bot_id: identity.bot.botId,
             });
             expect(await configuration()).not.toHaveProperty("identity_creation_key");
             expect(new Set(creationKeys)).toEqual(new Set([pending["identity_creation_key"]]));
