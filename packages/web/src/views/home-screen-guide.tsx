@@ -7,7 +7,7 @@ function Instructions({ platform }: { readonly platform: HomeScreenPlatform }) {
         case "ios":
             return (
                 <>
-                    <p>In Safari on your iPhone or iPad:</p>
+                    <p>In Safari or Chrome on your iPhone or iPad:</p>
                     <ol className="list-decimal space-y-3 pl-5 marker:text-muted-foreground">
                         <li>Tap Share, then Add to Home Screen.</li>
                         <li>If Open as Web App appears, turn it off.</li>
@@ -37,9 +37,9 @@ function Instructions({ platform }: { readonly platform: HomeScreenPlatform }) {
         case "other":
             return (
                 <p>
-                    Open Morty in Safari on iPhone or Chrome on Android, then choose Add to Home Screen in Morty’s
-                    navigation. If that browser needs access, use Continue on another device in your connected Morty
-                    browser first.
+                    Open Morty in Safari or Chrome on iPhone, or Chrome on Android, then choose Add to Home Screen in
+                    Morty’s navigation. If that browser needs access, use Continue on another device in your connected
+                    Morty browser first.
                 </p>
             );
     }
