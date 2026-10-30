@@ -17,8 +17,6 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
-        with:
-          mobius-read-token: ${{ secrets.MOBIUS_READ_TOKEN }}
       - name: Install real Agents
         run: >-
           npm install --global
