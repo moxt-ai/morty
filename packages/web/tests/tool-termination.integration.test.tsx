@@ -208,7 +208,7 @@ for (const [status, label] of [
     ["stopped", "Stopped"],
     ["unknown", "Status unknown"],
 ]) {
-    test(`Given a background task outlives its reply, When its ${status} notification arrives, Then its original card updates without an extra user message`, {
+    test(`Given a background task outlives its reply, When its ${status} notification arrives, Then its original card updates without an extra user message or a failed summary count`, {
         timeout: 30_000,
     }, async () => {
         const app = await start("start background verification");
@@ -226,19 +226,14 @@ for (const [status, label] of [
             `finish background verification ${status}`,
         );
         await app.waitForView(() => expect(readTool(app, "Background verification").textContent).toContain(label));
+        expect(getByRole(document.body, "button", { name: /^1 step/ }).textContent).not.toMatch(/\d+ failed/);
         expect(app.elementsByTestId(dataTestId.agentToolCall)).toHaveLength(1);
         const reloaded = await app.reload();
         const restoredSummary = await reloaded.waitForView(() =>
             getByRole(document.body, "button", { name: /^1 step/ }),
         );
         const summarySuffix =
-            status === "failed"
-                ? " · 1 failed"
-                : status === "stopped"
-                  ? " · 1 interrupted"
-                  : status === "unknown"
-                    ? " · 1 status unknown"
-                    : "";
+            status === "stopped" ? " · 1 interrupted" : status === "unknown" ? " · 1 status unknown" : "";
         expect(restoredSummary.textContent).toBe(`1 step${summarySuffix}`);
         await reloaded.user.click(restoredSummary);
         await reloaded.waitForView(() =>
