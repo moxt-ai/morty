@@ -1,3 +1,11 @@
+---
+metadata:
+  change-policy: >-
+    Do not modify this Markdown file together with source code or other non-Markdown
+    files. Submit changes in a separate documentation-only pull request for review
+    and approval. The recommended reviewer is taowen-paraflow.
+---
+
 <div align="center">
 
 # Morty
@@ -36,9 +44,8 @@ Morty 把正在进行的对话带到你手边。
 打开 [morty.build](https://morty.build) 复制设置提示词，或把下面的内容发给你的编程 Agent：
 
 ```text
-Fetch https://morty.build/setup.md and set up Morty for me.
+Fetch https://morty.build/setup.md and complete the Morty setup for me.
 You may install missing prerequisites and pair this machine.
-Complete setup without asking questions.
 ```
 
 打开 Agent 返回的链接，或用手机扫描二维码。无需安装手机 App。

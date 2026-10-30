@@ -1,3 +1,11 @@
+---
+metadata:
+  change-policy: >-
+    Do not modify this Markdown file together with source code or other non-Markdown
+    files. Submit changes in a separate documentation-only pull request for review
+    and approval. The recommended reviewer is taowen-paraflow.
+---
+
 <div align="center">
 
 # Morty
@@ -43,9 +51,8 @@ Open [morty.build](https://morty.build) and copy the setup prompt, or paste this
 into your coding agent:
 
 ```text
-Fetch https://morty.build/setup.md and set up Morty for me.
+Fetch https://morty.build/setup.md and complete the Morty setup for me.
 You may install missing prerequisites and pair this machine.
-Complete setup without asking questions.
 ```
 
 Open the link it returns, or scan the QR code on your phone. No mobile app required.
