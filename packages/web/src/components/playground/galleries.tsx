@@ -586,6 +586,28 @@ function ComposerNoticeGallery() {
                     The message could not be sent.
                 </MortyAlert>
             </Specimen>
+            <Specimen
+                layout="stack"
+                title="Failure with connection status: inline line keeps the switch-computer action"
+            >
+                <MortyAlert
+                    description={
+                        <ConnectionNotice
+                            feedback={waiting}
+                            footer={
+                                <a className={`inline-flex text-xs font-medium ${textLinkClassName}`} href="#computer">
+                                    Switch to Online computer
+                                </a>
+                            }
+                            inline
+                            onRetryNow={noop}
+                            onReopen={noop}
+                        />
+                    }
+                >
+                    Files must be between 1 byte and 32 MB.
+                </MortyAlert>
+            </Specimen>
             <Specimen layout="stack" title="Failure: reconnect failed">
                 <ConnectionNotice feedback={failed} onRetryNow={noop} onReopen={noop} />
             </Specimen>

@@ -1,4 +1,5 @@
-import { getByRole, queryAllByRole, queryByRole } from "@testing-library/dom";
+import { fireEvent, getByLabelText, getByRole, queryAllByRole, queryByRole } from "@testing-library/dom";
+import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -249,4 +250,43 @@ test("Given a remembered title for a session that no longer exists, When the ser
         expect(document.body.textContent).not.toContain("Stale unavailable title");
         expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain("will load when");
     });
+});
+
+test("Given the New Session page while the computer is offline, When an attachment is rejected, Then the connection status is detail inside that one alert", {
+    timeout: 90_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected a connected controlled Agent Runtime");
+    }
+    await daemon.disconnect();
+    const reopened = await app.reload();
+    await reopened.waitForView(
+        () => expect(connectionStatus(reopened)).toBe("disconnected"),
+        RUNTIME_CHANGE_TIMEOUT_MS,
+    );
+    const composer = await readyComposer(reopened);
+    if (!(composer instanceof HTMLTextAreaElement) || composer.form === null) {
+        throw new Error("Expected the New Session composer form");
+    }
+    const form = composer.form;
+    // An empty file is rejected by the same reader the composer uses for real picks.
+    fireEvent.change(getByLabelText(form, "Choose attachments"), {
+        target: { files: [new File([new Uint8Array(0)], "empty.txt", { type: "text/plain" })] },
+    });
+    await act(async () => {});
+    const alert = await reopened.waitForView(() => {
+        const alerts = queryAllByRole(form, "alert");
+        expect(alerts).toHaveLength(1);
+        expect(alerts[0]?.textContent).toContain("Files must be between 1 byte");
+        return alerts[0];
+    });
+    if (alert === undefined) {
+        throw new Error("Expected the attachment failure alert");
+    }
+    // One headline, one assertive region: the offline status is its inline detail.
+    expect(queryAllByRole(alert, "alert")).toHaveLength(0);
+    expect(queryAllByRole(alert, "status")).toHaveLength(0);
+    expect(alert.textContent).toContain("Start Morty on this computer to reconnect");
 });

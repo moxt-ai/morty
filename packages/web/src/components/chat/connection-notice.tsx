@@ -146,7 +146,7 @@ export function ConnectionNotice({
     }
 
     if (inline) {
-        return (
+        const line = (
             <div
                 className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-12 font-normal"
                 data-testid={testId}
@@ -157,6 +157,16 @@ export function ConnectionNotice({
                 {countdown(feedback)}
                 {retry}
                 {reopen}
+            </div>
+        );
+        // The host's own action (switching to another online computer) is part of the
+        // recovery the inline line describes, so it stays reachable inside the alert.
+        return footer === undefined ? (
+            line
+        ) : (
+            <div className="flex min-w-0 flex-col items-start">
+                {line}
+                {footer}
             </div>
         );
     }
