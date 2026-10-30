@@ -2,6 +2,7 @@ import { getByLabelText, getByRole, queryAllByRole, queryAllByText, queryByRole 
 import { act } from "@testing-library/react";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
+import { WebSocketApiTransport } from "../src/services/api/websocket-api-transport.ts";
 import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
@@ -24,6 +25,144 @@ function retrySeconds(app: TestApp): number {
 }
 
 const CLOCK_ORIGIN = "2026-10-13T08:00:00Z";
+
+test("Given a new session with an unsent draft, When the browser resumes after repeated background bridge drops, Then it reconnects without flashing a notice or sending the draft", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    await app.user.type(composer, "Keep this new session draft");
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false),
+    );
+    for (const cycle of [1, 2]) {
+        app.transport.disconnect();
+        await app.waitForView(() =>
+            expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true),
+        );
+        expect(reconnectStatusText(app), `interruption ${cycle}`).toBeNull();
+        expect(composer).toHaveProperty("disabled", false);
+        const notices: string[] = [];
+        const observer = new MutationObserver(() => {
+            const notice = reconnectStatusText(app);
+            if (notice !== null) {
+                notices.push(notice);
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+        try {
+            await act(async () => {
+                window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+                clock.advanceBy(30_000);
+                window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+            });
+            await app.waitForView(() =>
+                expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false),
+            );
+            expect(notices).toEqual([]);
+        } finally {
+            observer.disconnect();
+        }
+        await act(async () => clock.advanceBy(8_000));
+        expect(reconnectStatusText(app)).toBeNull();
+        expect(composer).toHaveProperty("value", "Keep this new session draft");
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain(
+            "Keep this new session draft",
+        );
+    }
+});
+
+test("Given a new session with an interrupted bridge, When recovery takes eight seconds, Then one retry notice appears and clears without sending the draft", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    await app.user.type(composer, "Keep editing through the interruption");
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false),
+    );
+    app.transport.disconnect();
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true),
+    );
+    expect(reconnectStatusText(app)).toBeNull();
+    // Observe the deadline before advancing the suspended page's clock; network I/O resumes afterwards.
+    const notice = app.waitForView(() => {
+        expect(reconnectStatusText(app)).toContain("Connection interrupted");
+        expect(getByRole(document.body, "button", { name: "Retry now" })).toBeDefined();
+    });
+    await act(async () => clock.advanceBy(8_000));
+    await notice;
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false),
+    );
+    expect(reconnectStatusText(app)).toBeNull();
+    expect(composer).toHaveProperty("value", "Keep editing through the interruption");
+    expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain(
+        "Keep editing through the interruption",
+    );
+});
+
+test("Given a draft whose computer is removed during a bridge interruption, When the recovery read fails, Then Chat offers retry immediately instead of staying silently stuck", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    await app.user.type(composer, "Keep my draft after recovery fails");
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false),
+    );
+    const otherClient = new WebSocketApiTransport(app.origin, clock);
+    otherClient.open();
+    try {
+        const signal = AbortSignal.timeout(15_000);
+        const headers = {
+            authorization: `Bearer ${await app.identity.getToken(signal)}`,
+            "content-type": "application/json",
+        };
+        const bots = `${app.origin}/morty/api/projects/${app.identity.projectId}/management/bots`;
+        // The management contract preserves at least one computer, so another real client creates its replacement.
+        expect(
+            (
+                await otherClient.fetch(
+                    new Request(bots, {
+                        method: "POST",
+                        headers,
+                        body: JSON.stringify({ displayName: "Other computer" }),
+                        signal,
+                    }),
+                )
+            ).status,
+        ).toBe(201);
+        app.transport.disconnect();
+        await app.waitForView(() =>
+            expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true),
+        );
+        expect(reconnectStatusText(app)).toBeNull();
+        expect(
+            (
+                await otherClient.fetch(
+                    new Request(`${bots}/${app.botId}`, {
+                        method: "DELETE",
+                        headers,
+                        signal,
+                    }),
+                )
+            ).status,
+        ).toBe(204);
+        document.dispatchEvent(new Event("visibilitychange"));
+        await app.waitForView(() =>
+            expect(getByRole(document.body, "button", { name: "Retry now" })).toHaveProperty("disabled", false),
+        );
+        expect(reconnectStatusText(app)).toContain("Connection interrupted");
+        expect(composer).toHaveProperty("value", "Keep my draft after recovery fails");
+    } finally {
+        otherClient.dispose();
+    }
+});
 
 test("Given an online computer and a saved session, When the session first loads, Then the composer stays writable without a connection notice until sending becomes available", {
     timeout: 30_000,
@@ -54,7 +193,7 @@ test("Given an online computer and a saved session, When the session first loads
     expect(reconnectStatusText(app)).toBeNull();
 });
 
-test("Given an open conversation with a draft, When the Runtime briefly disconnects twice, Then recovery stays quiet without sending the draft", {
+test("Given an open conversation with a draft, When the Runtime disconnects across two background suspensions, Then foreground recovery stays quiet without sending the draft", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
@@ -72,8 +211,13 @@ test("Given an open conversation with a draft, When the Runtime briefly disconne
         expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true);
         expect(reconnectStatusText(app), `interruption ${cycle}`).toBeNull();
         expect(composer.disabled).toBe(false);
+        await act(async () => {
+            window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+            clock.advanceBy(30_000);
+        });
         await app.daemon.reconnect();
-        document.dispatchEvent(new Event("visibilitychange"));
+        await act(async () => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
+        expect(reconnectStatusText(app)).toBeNull();
         await app.waitForView(() =>
             expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false),
         );

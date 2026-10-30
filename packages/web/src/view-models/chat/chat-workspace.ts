@@ -155,7 +155,7 @@ export function createChatWorkspace(options: {
         botId,
         titles,
         draftConfiguration: () => draftConfiguration(draftControls.getState().settings),
-        now: options.clock.now,
+        clock: options.clock,
         onWaitingForRuntime: () => runtimeRecovery.failed(),
         createId: () => crypto.randomUUID(),
         navigation: historyNavigation(recordHome),

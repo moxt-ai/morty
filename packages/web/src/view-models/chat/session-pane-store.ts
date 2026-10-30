@@ -30,6 +30,7 @@ import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
 import type { SelectedMobiusSession } from "./open-session.ts";
 import { uploadPromptAttachment, uploadPromptAttachments } from "./prompt-attachment-upload.ts";
+import { startRecoveryNotice } from "./recovery-notice.ts";
 import { type SessionActivityState, sameSessionActivity, workingCommandId } from "./session-activity-machine.ts";
 import {
     connectionFailure,
@@ -109,7 +110,6 @@ export type { SessionConnection } from "./session-connection.ts";
 
 const SESSION_EVENT_PAGE_LIMIT = 30;
 const HISTORY_MESSAGE_TARGET = 20;
-const SESSION_RECOVERY_NOTICE_DELAY_MS = 8_000;
 export interface SessionPaneStore {
     readonly connection: SessionConnection;
     readonly titleEdit: TitleEdit;
@@ -1019,25 +1019,16 @@ export function createSessionPaneModel(options: {
                             ? current.notice
                             : "quiet";
                     }
-                    const deadline = new AbortController();
-                    recoveryNoticeDeadline = deadline;
-                    paneSignal.addEventListener("abort", () => deadline.abort(), {
-                        once: true,
-                        signal: deadline.signal,
-                    });
-                    const noticeSignal = AbortSignal.any([paneSignal, deadline.signal]);
-                    void clock.sleep(SESSION_RECOVERY_NOTICE_DELAY_MS, noticeSignal).then(
-                        () => {
-                            if (noticeSignal.aborted) {
-                                return;
-                            }
+                    recoveryNoticeDeadline = startRecoveryNotice({
+                        clock,
+                        signal: paneSignal,
+                        onNotice: (notice) => {
                             const connection = get().connection;
                             if (connection.kind === "disconnected" || connection.kind === "reconnecting") {
-                                setAndSettle({ connection: { ...connection, notice: "visible" } });
+                                setAndSettle({ connection: { ...connection, notice } });
                             }
                         },
-                        () => undefined,
-                    );
+                    });
                     return "quiet";
                 };
                 // The signal is this attempt's own: the pane's lifetime, and also the closing of the Session.
