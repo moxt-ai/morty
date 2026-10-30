@@ -11,7 +11,7 @@ import {
 } from "./session-presentation.ts";
 
 export interface SessionEventHistory {
-    readonly throughPosition: string | null;
+    readonly throughPosition: string;
     readonly events: readonly SessionEvent[];
     readonly nextCursor: string | null;
     readonly sessionGenerationId: string;
@@ -29,7 +29,7 @@ export type SessionProjection =
           readonly eventIds: ReadonlySet<string>;
           readonly generation: string;
           readonly firstEventId: string | null;
-          readonly throughPosition: string | null;
+          readonly throughPosition: string;
           readonly pagination: { readonly nextCursor: string | null };
           readonly pending: PendingEvents | null;
           readonly reduction: SessionMessageReduction;
@@ -115,11 +115,6 @@ function baselineEffects(events: readonly SessionPresentationEvent[]): readonly 
     return [...(title === undefined ? [] : [{ kind: "adopted" as const, title }]), { kind: "read-settings" }];
 }
 
-/** Events a reload found after the ones the page saw apply as they would have live; the Runtime then confirms. */
-function catchUpEffects(events: readonly SessionPresentationEvent[]): readonly SessionProjectionEffect[] {
-    return baselineEffects(events);
-}
-
 function adoptGeneration(
     state: SessionProjection,
     history: SessionEventHistory,
@@ -136,27 +131,6 @@ function adoptGeneration(
         reduction: createSessionMessageReduction({ events, nextCursor: history.nextCursor }),
         revision: state.revision + 1,
     };
-}
-
-function applyNewerEvents(
-    state: Extract<SessionProjection, { readonly kind: "established" }>,
-    events: readonly SessionPresentationEvent[],
-): { readonly events: readonly SessionPresentationEvent[]; readonly state: SessionProjection } {
-    let next = { ...state, pending: null };
-    const applied: SessionPresentationEvent[] = [];
-    for (const event of events) {
-        if (next.eventIds.has(event.eventId)) {
-            continue;
-        }
-        next = {
-            ...next,
-            eventIds: new Set([...next.eventIds, event.eventId]),
-            firstEventId: next.firstEventId ?? event.eventId,
-            reduction: appendSessionMessageEvent(next.reduction, event),
-        };
-        applied.push(event);
-    }
-    return { events: applied, state: next };
 }
 
 export function transitionSessionProjection(
@@ -249,10 +223,7 @@ export function transitionSessionProjection(
                               },
                 };
             }
-            if (
-                (state.throughPosition !== null && BigInt(event.position) <= BigInt(state.throughPosition)) ||
-                state.eventIds.has(event.eventId)
-            ) {
+            if (BigInt(event.position) <= BigInt(state.throughPosition) || state.eventIds.has(event.eventId)) {
                 return { effects: [], state };
             }
             return {
@@ -276,29 +247,18 @@ export function transitionSessionProjection(
             if (state.pending === null || input.revision !== state.revision) {
                 return { effects: [], state };
             }
-            const replacing =
-                state.pending.generation !== null ||
-                state.kind === "pristine" ||
-                input.history.sessionGenerationId !== state.generation;
             const events = mergeSessionEvents(
                 input.history.events,
                 state.pending.buffer.filter(
                     (event) =>
                         event.sessionGenerationId === input.history.sessionGenerationId &&
-                        (input.history.throughPosition === null ||
-                            BigInt(event.position) > BigInt(input.history.throughPosition)),
+                        BigInt(event.position) > BigInt(input.history.throughPosition),
                 ),
             );
-            // Older Runtimes have no coverage boundary, so retain their existing
-            // append-only recovery until they are upgraded.
-            if (replacing || input.history.throughPosition !== null) {
-                return {
-                    effects: baselineEffects(events),
-                    state: adoptGeneration(state, input.history, events),
-                };
-            }
-            const merged = applyNewerEvents(state, events);
-            return { effects: catchUpEffects(merged.events), state: merged.state };
+            return {
+                effects: baselineEffects(events),
+                state: adoptGeneration(state, input.history, events),
+            };
         }
         case "older-page": {
             if (

@@ -370,7 +370,7 @@ async function readSessionHistory(
         signal.throwIfAborted();
         // Only the newest page defines which live deltas the snapshot covers.
         if (requestedCursor === initialCursor) {
-            throughPosition = page.throughPosition ?? null;
+            throughPosition = page.throughPosition;
         }
         if (sessionGenerationId !== null && page.sessionGenerationId !== sessionGenerationId) {
             throw new Error("The Session reloaded while message history was loading.");
@@ -390,7 +390,7 @@ async function readSessionHistory(
                 loadedRange.firstEventId !== null &&
                 !events.some((event) => event.eventId === loadedRange.firstEventId)))
     );
-    if (sessionGenerationId === null) {
+    if (sessionGenerationId === null || throughPosition === null) {
         throw new Error("The Runtime returned no Session history generation.");
     }
     return { events, nextCursor, sessionGenerationId, throughPosition };
@@ -548,7 +548,7 @@ export function createSessionPaneModel(options: {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }
-                await client.turns.cancelQueued(sessionId, turnId, sessionIdentity, signal);
+                await client.turns.cancelQueued(sessionId, turnId, signal);
             }),
             steer: noticingClosure(async (turnId, signal) => {
                 if (client === null) {
@@ -1673,12 +1673,7 @@ export function createSessionPaneModel(options: {
                             agentId: session.agentRef,
                             booleanValue,
                             configId: option.id,
-                            // Older Runtimes omit this token and retain explicit last-write-wins edits.
-                            ...(settings.getState().configurationRevision === undefined
-                                ? {}
-                                : {
-                                      expectedConfigurationRevision: settings.getState().configurationRevision,
-                                  }),
+                            expectedConfigurationRevision: settings.getState().configurationRevision,
                             directoryId: session.result.ready.directoryId,
                             value,
                             valueType: option.type,
