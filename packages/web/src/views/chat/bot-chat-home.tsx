@@ -394,19 +394,21 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                 disabled={false}
                                 draft={draft}
                                 error=""
-                                errorStatus={
-                                    executionContext.feedback.kind === "hidden" ? undefined : (
-                                        <ConnectionNotice
-                                            feedback={executionContext.feedback}
-                                            footer={
-                                                workspace.computers === null ? undefined : (
-                                                    <OnlineComputerAlternative model={workspace.computers} />
-                                                )
-                                            }
-                                            onRetryNow={store.getState().retry}
-                                            onReopen={store.getState().retry}
-                                        />
-                                    )
+                                connectionNotice={
+                                    executionContext.feedback.kind === "hidden"
+                                        ? undefined
+                                        : () => (
+                                              <ConnectionNotice
+                                                  feedback={executionContext.feedback}
+                                                  footer={
+                                                      workspace.computers === null ? undefined : (
+                                                          <OnlineComputerAlternative model={workspace.computers} />
+                                                      )
+                                                  }
+                                                  onRetryNow={store.getState().retry}
+                                                  onReopen={store.getState().retry}
+                                              />
+                                          )
                                 }
                                 onDraftChange={store.getState().setDraft}
                                 onStop={() => {}}

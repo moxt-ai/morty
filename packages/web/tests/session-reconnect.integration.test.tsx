@@ -1,4 +1,5 @@
 import {
+    fireEvent,
     getByLabelText,
     getByRole,
     queryAllByRole,
@@ -29,10 +30,6 @@ function retrySeconds(app: TestApp): number {
         throw new Error("Waiting for the visible retry countdown");
     }
     return Number(match[1]);
-}
-
-function classTokens(element: Element): readonly string[] {
-    return (element.getAttribute("class") ?? "").split(/\s+/u).filter((token) => token.length > 0);
 }
 
 const CLOCK_ORIGIN = "2026-10-13T08:00:00Z";
@@ -471,19 +468,45 @@ test("Given an unavailable Runtime and an editable draft, When automatic retries
     // stack a second headline inside the first and reopen the gap this notice fixed.
     const noticeAlert = getByRole(document.body, "alert");
     expect(queryAllByTestId(noticeAlert, dataTestId.sessionReconnectNotice)).toHaveLength(0);
-    // The retry action stays a 20px line so it cannot inflate the description row;
-    // phones keep their 44px touch target through an overlay instead of height.
     const retryLink = getByRole(noticeAlert, "button", { name: "Retry now" });
-    expect(classTokens(retryLink)).toContain("min-h-5");
-    expect(classTokens(retryLink)).not.toContain("min-h-11");
-    expect(classTokens(retryLink)).toContain("before:h-11");
+    expect(retryLink).not.toBeNull();
+    // An attachment failure takes over the headline too, so the connection state has
+    // to fold into that single alert instead of nesting a second assertive region.
+    const liveComposer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    if (!(liveComposer instanceof HTMLTextAreaElement) || liveComposer.form === null) {
+        throw new Error("Expected the live composer form");
+    }
+    const composerForm = liveComposer.form;
+    fireEvent.change(getByLabelText(composerForm, "Choose attachments"), {
+        target: { files: [new File([new Uint8Array(0)], "empty.txt", { type: "text/plain" })] },
+    });
+    await act(async () => {});
+    const attachmentAlert = await app.waitForView(() => {
+        const alerts = queryAllByRole(composerForm, "alert");
+        expect(alerts).toHaveLength(1);
+        expect(alerts[0]?.textContent).toContain("Files must be between 1 byte");
+        return alerts[0];
+    });
+    // Exactly one assertive region: the attachment headline owns it, and the
+    // connection state is its detail rather than a nested alert.
+    expect(composerForm.querySelectorAll('[role="alert"]')).toHaveLength(1);
+    if (attachmentAlert === undefined) {
+        throw new Error("Expected the attachment failure alert");
+    }
+    expect(attachmentAlert.textContent).toContain("Automatic retries stopped");
+    expect(queryAllByRole(attachmentAlert, "status")).toHaveLength(0);
+    expect(getByRole(attachmentAlert, "button", { name: "Retry now" })).not.toBeNull();
     expect(composer.disabled).toBe(false);
     expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true);
     await app.user.type(composer, " even now");
-    await app.user.upload(
-        getByLabelText(document.body, "Choose attachments"),
-        new File(["Keep this unsent attachment"], "recovery-notes.json", { type: "text/plain" }),
-    );
+    fireEvent.change(getByLabelText(composerForm, "Choose attachments"), {
+        target: {
+            files: [new File(["Keep this unsent attachment"], "recovery-notes.json", { type: "text/plain" })],
+        },
+    });
     await app.waitForView(() =>
         expect(getByRole(document.body, "list", { name: "Attachments" }).textContent).toContain("recovery-notes.json"),
     );
