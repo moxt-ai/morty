@@ -20,9 +20,7 @@ test("Given a streaming response, When I change its session model, Then the chan
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
     const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
     expect(getByRole(configuration, "combobox", { name: "Model" }).hasAttribute("disabled")).toBe(false);
-    expect(configuration.textContent).toContain(
-        "The current response may still use previous settings and permissions.",
-    );
+    expect(configuration.textContent).toContain("New settings may not affect this response.");
     await openAgentModelPicker(app);
     await app.user.click(await app.queryElementByTestId(dataTestId.sessionConfigValue("test-large")));
     await app.waitForView(() => {

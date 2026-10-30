@@ -307,9 +307,7 @@ export function sessionPanePresentation(
         composerDisabled,
         composerInputDisabled,
         settingsDisabled: !connectionAvailable || sessionSettingsDisabled(model, delivery, tasks),
-        settingsNotice: controlRunning
-            ? "Changes affect upcoming work. The current response may still use previous settings and permissions. Stop it before relying on reduced access."
-            : null,
+        settingsNotice: controlRunning ? "New settings may not affect this response." : null,
         settingsStopDisabled: !connectionAvailable || model.connection.kind !== "ready" || stopping,
         stopDisabled: !connectionAvailable || model.connection.kind !== "ready",
         canSuggestProgress:
