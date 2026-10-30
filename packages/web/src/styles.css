@@ -7,7 +7,25 @@
 
 @custom-variant keyboard-focus (&:where(html[data-input-modality="keyboard"] *));
 
+.agent-mermaid [data-streamdown="mermaid-block"] {
+    border-color: color-mix(in srgb, var(--border) 60%, transparent);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle);
+    padding: 0.75rem;
+}
+
+.agent-mermaid [data-streamdown="mermaid-block"] > :has(> [data-streamdown="mermaid"]) {
+    border: 0;
+    background: transparent;
+}
+
+.agent-mermaid [data-streamdown="mermaid-block-actions"] {
+    border: 0;
+    background: transparent;
+}
+
 .agent-mermaid [aria-label="Mermaid chart"] {
+    background: var(--surface-subtle);
     padding: 1rem 1rem 1rem 3.25rem;
 }
 
