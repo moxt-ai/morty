@@ -36,6 +36,9 @@ jobs:
           if (!token || /[\r\n]/.test(token)) {
             throw new Error('Expected one nonempty legacy credential. No credential was submitted.');
           }
+          if (token.startsWith('ghr_')) {
+            throw new Error('Refresh credentials cannot be verified through the access-token probe. Owner-account revocation is required.');
+          }
           const headers = { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}` };
           const inspect = () => fetch('https://api.github.com/user', {
             headers, redirect: 'error', signal: AbortSignal.timeout(20_000),
@@ -52,11 +55,13 @@ jobs:
           if (!before.ok) throw new Error(`Token inspection failed: HTTP ${before.status}`);
           const owner = (await before.json()).login;
           report(`Legacy token owner: ${owner}; OAuth scopes: ${before.headers.get('x-oauth-scopes') || '(fine-grained)'}`);
+          const supported = /^(gh[pou]_|github_pat_)/.test(token);
+          report(`Provider revocation API supports this credential format: ${supported ? 'yes' : 'no; owner-account revocation required'}.`);
           if (process.env.OPERATION === 'inspect') process.exit(0);
           if (process.env.OPERATION !== 'revoke' || owner !== process.env.EXPECTED_OWNER) {
             throw new Error('Revocation requires the owner confirmed by the inspection.');
           }
-          if (!/^(ghp_|github_pat_)/.test(token)) {
+          if (!supported) {
             throw new Error('The active token format requires revocation through its owner account.');
           }
           // This provider endpoint must be called without an Authorization header.
