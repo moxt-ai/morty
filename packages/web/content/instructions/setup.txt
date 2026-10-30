@@ -10,7 +10,9 @@ Chat origin: {{BASE_URL}}
 1. Identify the actual operating system, current shell, and original working directory.
    Keep Node, the Agent, and working directory in the same operating system. WSL is Linux;
    do not mix its executables or paths with native Windows ones.
-2. Ensure Node.js 22.19.0 or newer, npm, and the latest `@moxt-ai/mobius` are installed.
+2. Ensure Node.js 22.19.0 or newer and npm (including npx) are installed.
+   Setup runs every Mobius command using `npx --yes --prefer-online @moxt-ai/mobius@latest`.
+   Do not install Mobius globally.
    Choose your own harness: Codex = `codex`, Claude Code = `claude`, Pi = `pi`.
    Honor an explicit user choice; never substitute another harness.
    Setup reads the current session from the harness itself; do not look up or ask
@@ -52,7 +54,7 @@ Normal setup and reconnection need no registration, separate bind command, or co
 ## Finish
 
 Keep progress in this session and wait for `status: "ready"` or an error (at most
-five minutes). The manager keeps the Runtime online after the command exits.
+five minutes). The daemon keeps the Runtime online after the command exits.
 Only ready confirms setup; a working chat reply is a separate check.
 
 Return the exact clickable `url` and the working directory from the `workspace` field. Display the owner-only PNG at
@@ -92,6 +94,6 @@ Managing previously shared access:
 - Report success only after `status: "access_revoked"`. A missing local identity is an error; do not run setup or create a new identity to conceal it. This command is scoped to the Project saved in this local configuration, not other installations; a Project that setup replaced already ended everything shared from it.
 
 Returning Agent sessions to the computer:
-- When the user explicitly asks to release Morty Agent sessions so they can continue in the native Agent CLI or GUI, their request authorizes running `mobius release` as the same operating-system user as setup. Do not ask for a second confirmation. It releases every idle Morty Agent session on this computer while Morty stays connected and pairing and Agent-native history are retained. A session that is still working, including this one, is not released.
-- If `mobius` reports that `release` is an unknown command, install the latest `@moxt-ai/mobius` as in step 2 and run it again. If it reports that the running daemon must be updated, run `mobius start`, then `mobius release`.
-- After it succeeds, give recovery instructions in their language. Run the Agent CLI from the original working directory. Codex: `codex resume` opens its session picker; its GUI can be restarted and the conversation selected. Claude Code: `claude --resume` opens its picker, while `claude --continue` chooses the most recent conversation in that directory; restart its GUI and select the conversation if needed. Pi: `pi --resume` opens its picker, while `pi --continue` chooses the most recent session in that directory. A picker is safer than guessing a session ID. Tell the user to exit the native session before continuing it in Morty again; continuing in Morty reopens it. To continue this conversation natively, they can run `mobius release` in their terminal after this reply finishes.
+- When the user explicitly asks to release Morty Agent sessions so they can continue in the native Agent CLI or GUI, their request authorizes running `npx --yes --prefer-online @moxt-ai/mobius@latest release` as the same operating-system user as setup. Do not ask for a second confirmation. It releases every idle Morty Agent session on this computer while Morty stays connected and pairing and Agent-native history are retained. A session that is still working, including this one, is not released.
+- If the running daemon must be updated, run `npx --yes --prefer-online @moxt-ai/mobius@latest restart`, then retry release. Restart stops the running daemon and interrupts active work before starting the latest release. `start` only ensures a daemon is running and reuses an existing daemon without upgrading it.
+- After it succeeds, give recovery instructions in their language. Run the Agent CLI from the original working directory. Codex: `codex resume` opens its session picker; its GUI can be restarted and the conversation selected. Claude Code: `claude --resume` opens its picker, while `claude --continue` chooses the most recent conversation in that directory; restart its GUI and select the conversation if needed. Pi: `pi --resume` opens its picker, while `pi --continue` chooses the most recent session in that directory. A picker is safer than guessing a session ID. Tell the user to exit the native session before continuing it in Morty again; continuing in Morty reopens it. To continue this conversation natively, they can run `npx --yes --prefer-online @moxt-ai/mobius@latest release` in their terminal after this reply finishes.

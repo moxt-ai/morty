@@ -12,6 +12,22 @@ import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
 import worker from "../src/application.ts";
 import { prepareIdentityFixture } from "./support/identity-fixture.ts";
 
+// Exercise the package-runner boundary, including the production argument prefix.
+async function writeNpxFixture(bin: string, body: string): Promise<void> {
+    const script = `#!${process.execPath}\nif (JSON.stringify(process.argv.slice(2, 5)) !== JSON.stringify(['--yes', '--prefer-online', '@moxt-ai/mobius@latest'])) process.exit(64);\nprocess.argv.splice(2, 3);\n${body}`;
+    if (process.platform === "win32") {
+        const directory = join(bin, "node_modules", "npm", "bin");
+        await mkdir(directory, { recursive: true });
+        await writeFile(join(directory, "npx-cli.js"), script);
+        await writeFile(
+            join(bin, "npx.cmd"),
+            '@ECHO off\r\nSET "NODE_EXE=node.exe"\r\nSET "NPX_CLI_JS=%~dp0\\node_modules\\npm\\bin\\npx-cli.js"\r\n"%NODE_EXE%" "%NPX_CLI_JS%" %*\r\n',
+        );
+    } else {
+        await writeFile(join(bin, "npx"), script, { mode: 0o700 });
+    }
+}
+
 let createIdentityFixture: Awaited<ReturnType<typeof prepareIdentityFixture>>;
 beforeAll(async () => {
     createIdentityFixture = await prepareIdentityFixture({ listenOnLoopback: true });
@@ -98,13 +114,7 @@ test.each(["fresh", "unknown", "revoked"] as const)(
             // Mobius 0.0.315 and later refuse another root's installation data with EX_CONFIG.
             const refusal =
                 "MOBIUS_STATE_DIRECTORY is Mobius installation data, not a state root. Use the state root that owns it: MOBIUS_STATE_DIRECTORY=/owning-root";
-            await writeFile(
-                join(bin, process.platform === "win32" ? "mobius.cmd" : "mobius"),
-                process.platform === "win32"
-                    ? `@echo off\r\necho ${refusal} 1>&2\r\nexit /b 78\r\n`
-                    : `#!${process.execPath}\nprocess.stderr.write(${JSON.stringify(`${refusal}\n`)});\nprocess.exit(78);\n`,
-                { mode: 0o700 },
-            );
+            await writeNpxFixture(bin, `process.stderr.write(${JSON.stringify(`${refusal}\n`)}); process.exit(78);`);
             let output = "";
             const child = spawn(
                 process.execPath,
@@ -186,13 +196,7 @@ test.each(["missing", "unlaunchable", "npm-missing", "npm-unlaunchable"] as cons
                         { mode: 0o700 },
                     );
                 }
-                await writeFile(
-                    join(bin, process.platform === "win32" ? "mobius.cmd" : "mobius"),
-                    process.platform === "win32"
-                        ? `@echo off\r\n"${process.execPath}" "${entry}" %*\r\n`
-                        : `#!${process.execPath}\nimport ${JSON.stringify(pathToFileURL(entry).href)};\n`,
-                    { mode: 0o700 },
-                );
+                await writeNpxFixture(bin, `await import(${JSON.stringify(pathToFileURL(entry).href)});`);
             }
             let output = "";
             const child = spawn(
@@ -247,33 +251,67 @@ test("Given a local workspace and a private state directory, When setup creates 
     const workspace = join(directory, "workspace with spaces & quotes '");
     await mkdir(workspace);
     const fixture = await createIdentityFixture();
-    const cancellation = new AbortController();
-    const events: Readonly<Record<string, unknown>>[] = [];
-    try {
-        const code = await runSetup(
-            [
-                "setup",
-                "--base-url",
-                fixture.origin,
-                "--cwd",
-                workspace,
-                "--harness",
-                "codex",
-                "--session-id",
-                "native-setup",
-            ],
-            {
-                state,
-                agentEnvironment: {},
-                signal: cancellation.signal,
-                emit: (event) => {
-                    events.push(event);
-                    if (event["status"] === "identity_ready") {
-                        cancellation.abort(new Error("User cancelled setup"));
-                    }
-                },
+    const bin = join(directory, "bin");
+    await mkdir(bin);
+    await writeNpxFixture(
+        bin,
+        `await import(${JSON.stringify(new URL("../../../third-party/mobius/packages/cli/src/cli/entrypoint.ts", import.meta.url).href)});`,
+    );
+    const runner = join(directory, "setup.mjs");
+    await writeFile(
+        runner,
+        `
+import { runSetup } from ${JSON.stringify(new URL("../../setup/src/setup.ts", import.meta.url).href)};
+const cancellation = new AbortController();
+process.exitCode = await runSetup(process.argv.slice(2), {
+    state: process.env.MORTY_STATE_DIRECTORY,
+    agentEnvironment: {},
+    signal: cancellation.signal,
+    emit(event) {
+        console.log(JSON.stringify(event));
+        if (event.status === 'identity_ready') cancellation.abort(new Error('User cancelled setup'));
+    },
+});
+`,
+    );
+    const child = spawn(
+        process.execPath,
+        [
+            runner,
+            "setup",
+            "--base-url",
+            fixture.origin,
+            "--cwd",
+            workspace,
+            "--harness",
+            "codex",
+            "--session-id",
+            "native-setup",
+        ],
+        {
+            env: {
+                ...process.env,
+                MORTY_STATE_DIRECTORY: state,
+                MOBIUS_STATE_DIRECTORY: join(directory, "mobius-state"),
+                PATH: `${bin}${process.platform === "win32" ? ";" : ":"}${process.env["PATH"] ?? ""}`,
             },
-        );
+            stdio: ["ignore", "pipe", "pipe"],
+            windowsHide: true,
+            signal: AbortSignal.timeout(30000),
+        },
+    );
+    const exited = once(child, "exit");
+    let output = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+        output += chunk.toString();
+    });
+    child.stderr.resume();
+    try {
+        const [code] = await exited;
+        const events = output
+            .trim()
+            .split("\n")
+            .map((line) => v.parse(v.record(v.string(), v.unknown()), JSON.parse(line)));
         expect(code).toBe(1);
         expect(events).toContainEqual(expect.objectContaining({ status: "identity_ready" }));
         expect(events.at(-1)).toMatchObject({ error: { code: "CANCELLED" } });
@@ -305,6 +343,7 @@ test("Given a local workspace and a private state directory, When setup creates 
             expect((await stat(configPath)).mode & 0o777).toBe(0o600);
         }
     } finally {
+        child.kill();
         await fixture.close();
         await rm(directory, { recursive: true, force: true });
     }
@@ -357,6 +396,12 @@ test.runIf(process.platform !== "win32")(
                 : join(directory, ".local", "state", "morty");
         const workspace = join(directory, "workspace");
         await mkdir(workspace);
+        const bin = join(directory, "bin");
+        await mkdir(bin);
+        await writeNpxFixture(
+            bin,
+            `await import(${JSON.stringify(new URL("../../../third-party/mobius/packages/cli/src/cli/entrypoint.ts", import.meta.url).href)});`,
+        );
         const fixture = await createIdentityFixture();
         const environment = Object.fromEntries(
             Object.entries(process.env).filter(([name]) => !["MORTY_STATE_DIRECTORY", "XDG_STATE_HOME"].includes(name)),
@@ -376,7 +421,12 @@ test.runIf(process.platform !== "win32")(
                 "xdg-current-session",
             ],
             {
-                env: { ...environment, HOME: directory },
+                env: {
+                    ...environment,
+                    HOME: directory,
+                    MOBIUS_STATE_DIRECTORY: join(directory, "mobius-state"),
+                    PATH: `${bin}:${environment["PATH"] ?? ""}`,
+                },
                 stdio: ["ignore", "pipe", "pipe"],
                 signal: AbortSignal.timeout(30000),
             },
@@ -417,8 +467,8 @@ const starterFailures = [
     ],
     ["recover", "When its starter fails by recover, Then setup reports actionable diagnostics and bounds recovery"],
     [
-        "cancel-upgrade",
-        "When setup is cancelled while the daemon upgrade downloads, Then the upgrade stops the processes it started",
+        "cancel-download",
+        "When setup is cancelled while the starter downloads, Then setup stops the processes it started",
     ],
     ["stuck-start", "When setup is cancelled while its starter ignores SIGTERM, Then setup still stops the starter"],
 ] as const;
@@ -475,20 +525,19 @@ for (const [failure, scenario] of starterFailures) {
                 );
                 await writeFile(join(directory, "connections.json"), JSON.stringify([connection]));
                 await writeFile(join(directory, "attempts.txt"), "0");
-                await writeFile(
-                    join(bin, "mobius"),
-                    `#!${process.execPath}
+                await writeNpxFixture(
+                    bin,
+                    `
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 const output = process.argv.find(arg => arg.startsWith('--output-json='));
 if (process.argv[2] === '--version') { process.exit(0); }
-if (process.argv[2] === 'upgrade') {
+if (process.argv[2] === 'start' && ${JSON.stringify(failure === "cancel-download")}) {
     ${
-        failure === "cancel-upgrade"
-            ? `// Like npm downloading a release: a child the CLI stops when it is asked to stop.
+        failure === "cancel-download"
+            ? `// A package runner does not promise to forward termination to its children.
     const download = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
     writeFileSync('download.pid', String(download.pid));
-    process.on('SIGTERM', () => { download.kill('SIGTERM'); process.exit(143); });
     process.kill(process.ppid, 'SIGUSR2');
     setInterval(() => {}, 1000);`
             : "// The daemon already runs the newest release, so an upgrade has nothing to do.\n    process.exit(0);"
@@ -503,10 +552,9 @@ else if (${JSON.stringify(failure === "stuck-start")}) {
 } else {
     const attempts = Number(readFileSync('attempts.txt', 'utf8')) + 1;
     writeFileSync('attempts.txt', String(attempts));
-    ${failure === "signal" ? "process.kill(process.pid, 'SIGTERM');" : failure === "recover" ? "process.exit(attempts === 1 ? 42 : 0);" : failure === "cancel-upgrade" ? "process.exit(0);" : "process.exit(42);"}
+    ${failure === "signal" ? "process.kill(process.pid, 'SIGTERM');" : failure === "recover" ? "process.exit(attempts === 1 ? 42 : 0);" : failure === "cancel-download" ? "process.exit(0);" : "process.exit(42);"}
 }
 `,
-                    { mode: 0o700 },
                 );
                 const runner = join(directory, "run.mjs");
                 await writeFile(
@@ -551,9 +599,9 @@ process.exitCode = await runSetup(process.argv.slice(2), {
                 let recovery: Promise<void> | undefined;
                 child.stdout.on("data", (chunk) => {
                     output += chunk.toString();
-                    // The started daemon comes online, so setup proceeds to the upgrade or the handoff.
+                    // The started daemon comes online, so setup proceeds to the handoff.
                     if (
-                        (failure === "recover" || failure === "cancel-upgrade") &&
+                        (failure === "recover" || failure === "cancel-download") &&
                         recovery === undefined &&
                         output.includes('"status":"runtime_started"')
                     ) {
@@ -571,7 +619,7 @@ process.exitCode = await runSetup(process.argv.slice(2), {
                     .trim()
                     .split("\n")
                     .map((line) => v.parse(v.record(v.string(), v.unknown()), JSON.parse(line)));
-                if (failure === "cancel-upgrade" || failure === "stuck-start") {
+                if (failure === "cancel-download" || failure === "stuck-start") {
                     expect(events.at(-1)).toMatchObject({ error: { code: "CANCELLED" } });
                     const download = Number(
                         await readFile(
@@ -836,19 +884,6 @@ async function setupMachine(
     return { code, events };
 }
 
-/** Setup's daemon upgrade budget. */
-const upgradeBudgetMilliseconds = 180_000;
-
-/** Lets a scenario end setup's upgrade budget early; every other deadline keeps its own time. */
-function upgradeBudget() {
-    const budget = new AbortController();
-    return {
-        deadline: (milliseconds: number) =>
-            milliseconds === upgradeBudgetMilliseconds ? budget.signal : AbortSignal.timeout(milliseconds),
-        elapse: () => budget.abort(new DOMException("The upgrade budget elapsed", "TimeoutError")),
-    };
-}
-
 async function withUpgradeMachine(
     upgrade: ConstructorParameters<typeof ControlledSetupRuntime>[2],
     scenario: (
@@ -887,7 +922,7 @@ async function withUpgradeMachine(
     }
 }
 
-test("Given a paired machine whose online daemon runs an outdated release, When the user reruns setup and an upgrade is available, Then setup reuses the Runtime on the newest release", {
+test("Given a paired machine whose online daemon runs an outdated release, When the user reruns setup, Then setup reuses the running Runtime without restarting it", {
     timeout: 90_000,
 }, async () => {
     await withUpgradeMachine(
@@ -902,7 +937,7 @@ test("Given a paired machine whose online daemon runs an outdated release, When 
             expect(rerun.code, JSON.stringify(rerun.events)).toBe(0);
             expect(rerun.events).toContainEqual(expect.objectContaining({ status: "runtime_already_online" }));
             expect(rerun.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-            expect(runtime.daemonRelease()).toBe("latest");
+            expect(runtime.daemonRelease()).toBe("outdated");
         },
         "outdated",
     );
@@ -1144,82 +1179,6 @@ test("Given setup bound the Machine but never received the reply, When the user 
         expect(rerun.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
         expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({ agent_ref: "settings-test" });
     });
-});
-
-test("Given a machine runs an outdated daemon release and no upgrade is reachable, When setup prepares the Runtime, Then setup completes on the running release and reports why", {
-    timeout: 60_000,
-}, async () => {
-    await withUpgradeMachine(
-        "unavailable",
-        async (runtime, paths) => {
-            const { code, events } = await setupMachine(runtime, paths);
-            expect(code, JSON.stringify(events)).toBe(0);
-            expect(events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-            expect(runtime.daemonRelease()).toBe("outdated");
-            expect(events).toContainEqual(
-                expect.objectContaining({
-                    status: "runtime_upgrade_skipped",
-                    error: expect.objectContaining({ code: "RUNTIME_UPGRADE_FAILED" }),
-                }),
-            );
-        },
-        "outdated",
-    );
-});
-
-test("Given a daemon upgrade stops responding, When its budget expires, Then setup completes on the running daemon and reports the timeout", {
-    timeout: 60_000,
-}, async () => {
-    await withUpgradeMachine(
-        "unresponsive",
-        async (runtime, paths) => {
-            const budget = upgradeBudget();
-            const setup = setupMachine(runtime, paths, budget.deadline);
-            await runtime.upgradeRequested;
-            budget.elapse();
-            const { code, events } = await setup;
-            expect(code, JSON.stringify(events)).toBe(0);
-            expect(events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-            expect(runtime.daemonRelease()).toBe("outdated");
-            expect(events).toContainEqual(
-                expect.objectContaining({
-                    status: "runtime_upgrade_skipped",
-                    error: expect.objectContaining({ code: "RUNTIME_UPGRADE_TIMEOUT" }),
-                }),
-            );
-        },
-        "outdated",
-    );
-});
-
-test("Given a daemon upgrade is still switching releases when its budget expires, When the manager finishes the switch, Then setup waits for the Runtime and completes on the newest release", {
-    timeout: 60_000,
-}, async () => {
-    await withUpgradeMachine(
-        "interrupted-switch",
-        async (runtime, paths) => {
-            const budget = upgradeBudget();
-            const setup = setupMachine(runtime, paths, budget.deadline);
-            await runtime.upgradeRequested;
-            budget.elapse();
-            const { code, events } = await setup;
-            expect(code, JSON.stringify(events)).toBe(0);
-            expect(events).toContainEqual(
-                expect.objectContaining({
-                    status: "runtime_upgrade_skipped",
-                    error: expect.objectContaining({ code: "RUNTIME_UPGRADE_TIMEOUT" }),
-                }),
-            );
-            const skipped = events.findIndex((event) => event["status"] === "runtime_upgrade_skipped");
-            const online = events.findIndex((event, index) => index > skipped && event["status"] === "runtime_online");
-            const bound = events.findIndex((event) => event["status"] === "binding_activated");
-            expect(online, JSON.stringify(events)).toBeGreaterThan(skipped);
-            expect(bound, JSON.stringify(events)).toBeGreaterThan(online);
-            expect(events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-            expect(runtime.daemonRelease()).toBe("latest");
-        },
-        "outdated",
-    );
 });
 
 test("Given two shared links and redeemed access, When the local owner revokes all access, Then previous links and credentials fail while local setup and another machine remain usable", async () => {
