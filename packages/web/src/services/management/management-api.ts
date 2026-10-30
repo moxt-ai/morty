@@ -17,6 +17,23 @@ const projectSchema = v.pipe(
     v.readonly(),
 );
 export type ManagedProject = v.InferOutput<typeof projectSchema>;
+const runtimeBindingSchema = v.object({ botId: identifier, runtimeId: v.nullable(identifier) });
+
+/** Whether the Worker binds the Machine to a Runtime. The Worker's record is the only source of this fact. */
+export type RuntimeBinding = { readonly kind: "unbound" } | { readonly kind: "bound"; readonly runtimeId: Identifier };
+
+/** The Machine's Runtime binding resource, read by setup and the page and watched through the Chat bridge. */
+export function runtimeBindingUrl(origin: string, projectId: string, botId: string): URL {
+    return managementUrl(
+        origin,
+        decodeIdentifier(projectId),
+        `/bots/${encodeURIComponent(decodeIdentifier(botId))}/runtime-binding`,
+    );
+}
+
+function managementUrl(origin: string, projectId: Identifier, path: string): URL {
+    return new URL(`/morty/api/projects/${encodeURIComponent(projectId)}/management${path}`, origin);
+}
 
 export interface ManagementApiOptions {
     readonly projectId: string;
@@ -49,6 +66,23 @@ export class ManagementApi {
             await this.#request(`/bots/${encodeURIComponent(decodeIdentifier(botId))}`, "GET", undefined, signal),
         );
 
+    readonly readRuntimeBinding = async (botId: string, signal: AbortSignal): Promise<RuntimeBinding> => {
+        const requestedBotId = decodeIdentifier(botId);
+        const binding = v.parse(
+            runtimeBindingSchema,
+            await this.#request(
+                `/bots/${encodeURIComponent(requestedBotId)}/runtime-binding`,
+                "GET",
+                undefined,
+                signal,
+            ),
+        );
+        if (binding.botId !== requestedBotId) {
+            throw new CloudApiError("INVALID_RESPONSE", "Chat management returned another Machine.");
+        }
+        return binding.runtimeId === null ? { kind: "unbound" } : { kind: "bound", runtimeId: binding.runtimeId };
+    };
+
     readonly #request = async (
         path: string,
         method: "GET" | "POST",
@@ -61,18 +95,15 @@ export class ManagementApi {
             throw new CloudApiError("UNAUTHENTICATED", "Sign in to continue.");
         }
         const response = await this.#fetchRequest(
-            new Request(
-                new URL(`/morty/api/projects/${encodeURIComponent(this.#projectId)}/management${path}`, this.#origin),
-                {
-                    method,
-                    signal,
-                    headers: {
-                        authorization: `Bearer ${token}`,
-                        ...(body === undefined ? {} : { "content-type": "application/json" }),
-                    },
-                    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+            new Request(managementUrl(this.#origin, this.#projectId, path), {
+                method,
+                signal,
+                headers: {
+                    authorization: `Bearer ${token}`,
+                    ...(body === undefined ? {} : { "content-type": "application/json" }),
                 },
-            ),
+                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+            }),
         );
         const value: unknown = response.status === 204 ? null : await response.json();
         signal.throwIfAborted();

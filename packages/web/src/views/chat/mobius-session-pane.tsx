@@ -1220,6 +1220,21 @@ function MobiusSessionPaneBody({
                             submitDisabled={presentation.submitDisabled}
                         >
                             <ChatConfigurationMenu
+                                notice={
+                                    presentation.settingsNotice === null ? undefined : (
+                                        <div className="px-5 pb-3 text-xs leading-5 text-copy-secondary" role="note">
+                                            <p>{presentation.settingsNotice}</p>
+                                            <button
+                                                className="mt-1 rounded-sm text-foreground underline underline-offset-4 outline-none keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 disabled:opacity-50"
+                                                disabled={presentation.settingsStopDisabled}
+                                                onClick={() => run(pane.store.getState().stop)}
+                                                type="button"
+                                            >
+                                                Stop current response
+                                            </button>
+                                        </div>
+                                    )
+                                }
                                 controls={[
                                     {
                                         disabled: true,
@@ -1236,7 +1251,7 @@ function MobiusSessionPaneBody({
                                         option.type === "boolean"
                                             ? {
                                                   checked: option.booleanValue,
-                                                  disabled: presentation.busy,
+                                                  disabled: presentation.settingsDisabled,
                                                   id: option.id,
                                                   kind: "boolean" as const,
                                                   label: option.name,
@@ -1244,7 +1259,7 @@ function MobiusSessionPaneBody({
                                                   testId: dataTestId.agentSetting(option.id),
                                               }
                                             : {
-                                                  disabled: presentation.busy,
+                                                  disabled: presentation.settingsDisabled,
                                                   id: option.id,
                                                   kind: "select" as const,
                                                   label: option.name,

@@ -6,6 +6,9 @@
     "keep_vars": false,
     "workers_dev": true,
     "preview_urls": false,
+    "ratelimits": [
+        { "name": "ANONYMOUS_CREATION_LIMITER", "namespace_id": "103001", "simple": { "limit": 10, "period": 60 } }
+    ],
     "observability": {
         "enabled": true,
         "logs": {
@@ -37,6 +40,13 @@
     "env": {
         "staging": {
             "name": "morty-staging",
+            "ratelimits": [
+                {
+                    "name": "ANONYMOUS_CREATION_LIMITER",
+                    "namespace_id": "103002",
+                    "simple": { "limit": 10, "period": 60 }
+                }
+            ],
             "placement": { "mode": "off" },
             "secrets": { "required": ["MOBIUS_APP_SECRET"] },
             "routes": [
@@ -59,6 +69,13 @@
         },
         "production": {
             "name": "morty-production",
+            "ratelimits": [
+                {
+                    "name": "ANONYMOUS_CREATION_LIMITER",
+                    "namespace_id": "103003",
+                    "simple": { "limit": 10, "period": 60 }
+                }
+            ],
             "placement": { "mode": "off" },
             "secrets": { "required": ["MOBIUS_APP_SECRET"] },
             "routes": [

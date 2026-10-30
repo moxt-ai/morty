@@ -3,6 +3,9 @@
     "name": "morty-local-e2e",
     "main": "../../../dist/morty_local/index.js",
     "compatibility_date": "2026-09-07",
+    "ratelimits": [
+        { "name": "ANONYMOUS_CREATION_LIMITER", "namespace_id": "103004", "simple": { "limit": 1000, "period": 60 } }
+    ],
     "assets": {
         "binding": "ASSETS",
         "directory": "../../../dist/client",

@@ -126,6 +126,10 @@ async function startIdentityFixture(
                     ),
                     modules: true,
                     r2Buckets: ["CHAT_ATTACHMENTS_APAC"],
+                    // Suites create many independent visitors through one local test process.
+                    ratelimits: {
+                        ANONYMOUS_CREATION_LIMITER: { namespace_id: "103001", simple: { limit: 1_000, period: 60 } },
+                    },
                     script,
                 } satisfies Parameters<typeof convertV4MiniflareOptions>[0];
                 const runtime = new Miniflare(convertV4MiniflareOptions(runtimeOptions));
@@ -208,6 +212,22 @@ async function startIdentityFixture(
                 dispatchFetch: cloudflare.dispatchFetch.bind(cloudflare),
                 environment,
                 origin: ready.origin,
+                changeAppOrigin: async (origin: string) => {
+                    baseConfiguration.APP_ORIGIN = origin;
+                    await cloudflare.setOptions(
+                        convertV4MiniflareOptions({ ...runtimeOptions, bindings: baseConfiguration }),
+                    );
+                    cloudBindings = await cloudflare.getBindings();
+                    projectObjects = await cloudflare.getDurableObjectNamespace("CHAT_PROJECTS");
+                },
+                changePlatformCredential: async (credential: string) => {
+                    baseConfiguration.MOBIUS_APP_SECRET = credential;
+                    await cloudflare.setOptions(
+                        convertV4MiniflareOptions({ ...runtimeOptions, bindings: baseConfiguration }),
+                    );
+                    cloudBindings = await cloudflare.getBindings();
+                    projectObjects = await cloudflare.getDurableObjectNamespace("CHAT_PROJECTS");
+                },
                 changePlatformOrigin: async (origin: string) => {
                     baseConfiguration.MOBIUS_BASE_URL = origin;
                     await cloudflare.setOptions(

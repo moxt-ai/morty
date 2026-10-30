@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import * as v from "valibot";
+import { admitAnonymousCreation } from "../../../gateway/anonymous-creation-admission.ts";
 import { projectObject } from "../../../gateway/project-object-routing.ts";
 import { json } from "../../../infra/http.ts";
 import { bodyParser, readJsonBody } from "../../../middleware/body-parser.ts";
@@ -61,6 +62,8 @@ export function createAuthenticationRoutes() {
             const request = context.req.raw;
             const signal = AbortSignal.any([request.signal, AbortSignal.timeout(45000)]);
             const input = v.parse(anonymousUserInput, await readJsonBody(request));
+            signal.throwIfAborted();
+            await admitAnonymousCreation(request, context.env.config.bindings);
             signal.throwIfAborted();
             // Retrying the same creation key names the same user, whose Platform Project creation is idempotent and
             // whose bootstrap returns the identity an earlier attempt issued.
