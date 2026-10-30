@@ -535,10 +535,9 @@ if (process.argv[2] === '--version') { process.exit(0); }
 if (process.argv[2] === 'start' && ${JSON.stringify(failure === "cancel-download")}) {
     ${
         failure === "cancel-download"
-            ? `// Like npm downloading a release: a child the CLI stops when it is asked to stop.
+            ? `// A package runner does not promise to forward termination to its children.
     const download = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
     writeFileSync('download.pid', String(download.pid));
-    process.on('SIGTERM', () => { download.kill('SIGTERM'); process.exit(143); });
     process.kill(process.ppid, 'SIGUSR2');
     setInterval(() => {}, 1000);`
             : "// The daemon already runs the newest release, so an upgrade has nothing to do.\n    process.exit(0);"

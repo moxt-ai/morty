@@ -850,19 +850,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         };
     }
 
-    /**
-     * `stop` says how to end a command that is still running when its operation ends.
-     * "command" stops only the CLI: start and pair commands launch the daemon, which
-     * outlives them and must keep running. "process-tree" also stops the processes the
-     * command started, such as npm, for commands that never launch the daemon.
-     */
-    async function runMobius(
-        context: Context,
-        args: readonly string[],
-        cwd: string,
-        operation = signal,
-        stop: "command" | "process-tree" = "command",
-    ) {
+    async function runMobius(context: Context, args: readonly string[], cwd: string, operation = signal) {
         operation.throwIfAborted();
         if (host.runtime !== undefined) {
             return await host.runtime.run(context.directory, args, cwd, operation);
@@ -913,21 +901,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             // Only terminate the child this invocation still owns; an exited PID may be reused.
             if (child?.pid !== undefined && child.exitCode === null && child.signalCode === null) {
                 try {
-                    if (stop === "process-tree") {
-                        // Stops the command and its descendants gracefully, then forcibly, on every platform.
-                        await stopProcessTree(child);
-                    } else {
-                        // Ask the CLI to stop first so it can stop what it started, then force it.
-                        for (const termination of ["SIGTERM", "SIGKILL"] as const) {
-                            if (child.exitCode !== null || child.signalCode !== null) {
-                                break;
-                            }
-                            const exited = once(child, "exit", { signal: AbortSignal.timeout(10000) });
-                            child.kill(termination);
-                            // A command that ignores SIGTERM is killed in the next round.
-                            await exited.catch(() => undefined);
-                        }
-                    }
+                    // Cancel the whole invocation, including npm's shell and CLI descendants.
+                    await stopProcessTree(child);
                 } catch {
                     // Cleanup must not replace the launch failure or prevent its diagnostic from being written.
                 }
@@ -1241,7 +1216,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 ["agents", `--output-json=${outputPath}`],
                 cwd,
                 AbortSignal.any([signal, deadline(60_000)]),
-                "process-tree",
             );
             const inventory = object(JSON.parse(await readFile(outputPath, "utf8")));
             const entry = [inventory["unavailable"], inventory["available"]]
@@ -1546,7 +1520,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         try {
             // This uses the same executable resolution as start/pair, including the Node
             // selected by its launcher. A package's engines field is not proof it starts.
-            await runMobius(context, ["--version"], cwd, AbortSignal.any([signal, deadline(120_000)]), "process-tree");
+            await runMobius(context, ["--version"], cwd, AbortSignal.any([signal, deadline(120_000)]));
             if (host.runtime === undefined) {
                 const npm = await findExecutableOnPath("npm", process.env);
                 if (npm === null) {
