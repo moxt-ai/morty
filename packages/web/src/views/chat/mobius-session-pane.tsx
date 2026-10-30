@@ -49,6 +49,7 @@ import { sessionExecutionContext } from "../../view-models/chat/execution-contex
 import { sessionHarnessSelection } from "../../view-models/chat/native-session-agents.ts";
 import { createResponseCopyStore } from "../../view-models/chat/response-copy-store.ts";
 import { sessionInteractionPresentation } from "../../view-models/chat/session-interaction-store.ts";
+import { queuedMessages } from "../../view-models/chat/session-message-queue-store.ts";
 import {
     type SessionPaneModel,
     sessionPanePresentation,
@@ -1127,7 +1128,7 @@ function MobiusSessionPaneBody({
                             )}
                         </FollowLatestScrollArea>
                         <ChatMessageQueue
-                            messages={messageQueue.messages}
+                            messages={queuedMessages(model.queued, messageQueue)}
                             steeringSupported={taskControls.steeringSupported}
                             onDelete={(commandId) =>
                                 run(async (signal) => await pane.store.getState().deleteQueued(commandId, signal))

@@ -5,7 +5,7 @@ import type { SessionActivityState } from "./session-activity-machine.ts";
 // confirmed it and when it started. The working indicator, the stop control and the status the pane reports are all
 // derived from it, so they cannot disagree.
 
-type TurnFailure = { readonly code: string; readonly message: string };
+export type TurnFailure = { readonly code: string; readonly message: string };
 
 type TurnSubmission =
     /** The command is current, but this pane has not submitted it, as when it retries an unconfirmed delivery. */

@@ -472,8 +472,7 @@ export function createChatWorkspace(options: {
             requests,
             initialMessage: firstMessage,
             onInitialMessageDequeued: (commandId) => home.getState().initialMessageDequeued(sessionId, commandId),
-            onStatusChange: (status) =>
-                statuses.getState().statusChanged(botId, sessionId, status, statusLifetime.signal),
+            onReleased: (activity) => statuses.getState().paneReleased(sessionId, activity),
             titles,
         });
         if (nextDraft !== null || unsent !== null) {
