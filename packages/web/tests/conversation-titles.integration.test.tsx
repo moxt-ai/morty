@@ -239,3 +239,48 @@ test("Given a conversation is being reopened, When the title has not loaded yet,
     observer.disconnect();
     expect(statedTitles).toEqual([]);
 });
+
+test("Given an open session on a phone, When the user renames it from the header, Then the editor masks the conversation and saves or cancels through its buttons", {
+    timeout: 30_000,
+}, async () => {
+    const desktopViewport = { height: window.innerHeight, width: window.innerWidth };
+    window.happyDOM.setViewport({ height: 844, width: 390 });
+    const environment = await createChatWorkerEnvironment(false, true);
+    let app: TestApp | null = null;
+    try {
+        app = await createTestApp({ environment, connectAgent: true });
+        const original = "Phone rename target";
+        await sendPrompt(app, await readyComposer(app), original);
+        const slot = document.getElementById(dataTestId.mobileSessionTitleSlot);
+        if (!(slot instanceof HTMLElement)) {
+            throw new Error("Expected the mobile session title slot");
+        }
+        await app.waitForView(() => expect(getByRole(slot, "button", { name: original })).toBeTruthy());
+        await app.user.click(getByRole(slot, "button", { name: original }));
+        const editor = getByRole(document.body, "dialog", { name: "Rename conversation" });
+        // The mask dims everything else; tapping it dismisses the editor like the cancel button.
+        expect(app.optionalElementByTestId(dataTestId.mobileRenameMask)).not.toBeNull();
+        const input = getByRole(editor, "textbox", { name: "Conversation title" });
+        expect(document.activeElement).toBe(input);
+        await app.user.clear(input);
+        await app.user.type(input, "Phone rename edited");
+        await app.user.click(getByRole(editor, "button", { name: "Cancel rename" }));
+        await app.waitForView(() =>
+            expect(queryByRole(document.body, "dialog", { name: "Rename conversation" })).toBeNull(),
+        );
+        expect(getByRole(slot, "button", { name: original })).toBeTruthy();
+        await app.user.click(getByRole(slot, "button", { name: original }));
+        const second = getByRole(document.body, "dialog", { name: "Rename conversation" });
+        const secondInput = getByRole(second, "textbox", { name: "Conversation title" });
+        await app.user.clear(secondInput);
+        await app.user.type(secondInput, "Renamed on a phone");
+        await app.user.click(getByRole(second, "button", { name: "Save title" }));
+        await app.waitForView(() => expect(getByRole(slot, "button", { name: "Renamed on a phone" })).toBeTruthy());
+    } finally {
+        if (app !== null) {
+            await app.close();
+        }
+        await environment.close();
+        window.happyDOM.setViewport(desktopViewport);
+    }
+});

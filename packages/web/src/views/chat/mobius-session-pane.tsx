@@ -23,6 +23,7 @@ import { ConnectionNotice } from "../../components/chat/connection-notice.tsx";
 import { ReadonlyWorkingDirectory, WorkingDirectorySkeleton } from "../../components/chat/cwd-selector.tsx";
 import { HarnessMark } from "../../components/chat/harness-mark.tsx";
 import { MessageDeliveryStatus } from "../../components/chat/message-delivery-status.tsx";
+import { MobileRenameOverlay } from "../../components/chat/mobile-rename-overlay.tsx";
 import { MobileSessionTitlePortal } from "../../components/chat/mobile-session-title-portal.tsx";
 import { ResponseCopyButton } from "../../components/chat/response-copy-button.tsx";
 import {
@@ -449,6 +450,9 @@ function SessionTitleSkeleton({ centered = false }: { readonly centered?: boolea
         </h2>
     );
 }
+
+/** While the phone rename overlay is open, the header keeps stating the committed title. */
+const CLOSED_TITLE_EDIT: TitleEdit = { kind: "closed" };
 
 function SessionConversationTitleBar({
     title,
@@ -1293,28 +1297,38 @@ function MobiusSessionPaneBody({
                         </BotChatComposer>
                     </section>
                     {desktop ? null : (
-                        <MobileSessionTitlePortal
-                            variant={
-                                model.titleEdit.kind === "editing" || model.titleEdit.kind === "saving"
-                                    ? "editing"
-                                    : "default"
-                            }
-                        >
-                            <div className="flex min-w-0 w-full flex-col items-center">
-                                <SessionConversationTitleBar {...titleBarProps} centered />
-                                {sessionMessagesLoading ? (
-                                    <WorkingDirectorySkeleton className="mt-0.5 h-5 max-w-full" />
-                                ) : (
-                                    <ReadonlyWorkingDirectory
-                                        className="-mb-1.5 min-h-0 max-w-full gap-1 px-1 py-0 text-[11px] font-normal text-morty-text-3"
-                                        clip="end"
-                                        directoryLabel={workingDirectoryLabel}
-                                        iconClassName="size-3"
-                                        tooltipSide="bottom"
+                        <>
+                            {model.titleEdit.kind === "editing" || model.titleEdit.kind === "saving" ? (
+                                <MobileRenameOverlay
+                                    draft={model.titleEdit.draft}
+                                    saving={model.titleEdit.kind === "saving"}
+                                    onSetTitleDraft={titleBarProps.onSetTitleDraft}
+                                    onCancelTitleEdit={titleBarProps.onCancelTitleEdit}
+                                    onConfirmTitleEdit={titleBarProps.onConfirmTitleEdit}
+                                />
+                            ) : null}
+                            <MobileSessionTitlePortal>
+                                <div className="flex min-w-0 w-full flex-col items-center">
+                                    <SessionConversationTitleBar
+                                        {...(model.titleEdit.kind === "editing" || model.titleEdit.kind === "saving"
+                                            ? { ...titleBarProps, titleEdit: CLOSED_TITLE_EDIT }
+                                            : titleBarProps)}
+                                        centered
                                     />
-                                )}
-                            </div>
-                        </MobileSessionTitlePortal>
+                                    {sessionMessagesLoading ? (
+                                        <WorkingDirectorySkeleton className="mt-0.5 h-5 max-w-full" />
+                                    ) : (
+                                        <ReadonlyWorkingDirectory
+                                            className="-mb-1.5 min-h-0 max-w-full gap-1 px-1 py-0 text-[11px] font-normal text-morty-text-3"
+                                            clip="end"
+                                            directoryLabel={workingDirectoryLabel}
+                                            iconClassName="size-3"
+                                            tooltipSide="bottom"
+                                        />
+                                    )}
+                                </div>
+                            </MobileSessionTitlePortal>
+                        </>
                     )}
                     <FilePreview
                         onClose={preview.close}
