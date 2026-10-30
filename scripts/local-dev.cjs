@@ -176,6 +176,23 @@ async function localLaunch(command, args) {
 }
 
 async function run(command, args, options = {}) {
+    // Every caller owns CLI cancellation before resolving or spawning a detached
+    // command, including prepare's migrations, dependency installation and build.
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    const signal =
+        options.signal === undefined ? controller.signal : AbortSignal.any([controller.signal, options.signal]);
+    process.on("SIGINT", cancel);
+    process.on("SIGTERM", cancel);
+    try {
+        return await runOwnedCommand(command, args, { ...options, signal });
+    } finally {
+        process.removeListener("SIGINT", cancel);
+        process.removeListener("SIGTERM", cancel);
+    }
+}
+
+async function runOwnedCommand(command, args, options) {
     options.signal?.throwIfAborted();
     const launch = await localLaunch(command, args);
     const { stopProcessTree, platformSpawnOptions, ProcessExecutionError } = await import(
