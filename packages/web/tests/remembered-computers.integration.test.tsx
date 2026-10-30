@@ -244,7 +244,7 @@ test("Given a remembered computer, When I open an invalid explicit computer link
     const invalid = await app.reload();
     await invalid.waitForView(() => getByRole(document.body, "heading", { name: "This link is no longer valid" }));
     expect(queryByRole(document.body, "textbox", { name: "Message" })).toBeNull();
-    expect(getByRole(document.body, "link", { name: "Continue on your last computer" }).getAttribute("href")).toBe("/");
+    expect(getByRole(document.body, "link", { name: "Back to your last computer" }).getAttribute("href")).toBe("/");
     expect(new URL(window.location.href).searchParams.get("identity")).toBe("invalid");
 });
 
@@ -338,9 +338,7 @@ test("Given a revoked explicit computer link and another saved computer, When I 
     await revokeAccess(second);
     const returned = await second.reload();
     await returned.waitForView(() => getByRole(document.body, "heading", { name: "This link is no longer valid" }));
-    expect(getByRole(document.body, "link", { name: "Continue on your last computer" })).toBeInstanceOf(
-        HTMLAnchorElement,
-    );
+    expect(getByRole(document.body, "link", { name: "Back to your last computer" })).toBeInstanceOf(HTMLAnchorElement);
     expect(queryByRole(document.body, "textbox", { name: "Message" })).toBeNull();
 });
 
@@ -480,9 +478,7 @@ test("Given another saved computer, When a transfer link cannot be redeemed, The
     await other.waitForView(() =>
         expect(getByRole(document.body, "alert").textContent).toContain("expired or been revoked"),
     );
-    expect(getByRole(document.body, "link", { name: "Continue on your last computer" })).toBeInstanceOf(
-        HTMLAnchorElement,
-    );
+    expect(getByRole(document.body, "link", { name: "Back to your last computer" })).toBeInstanceOf(HTMLAnchorElement);
     expect(queryByRole(document.body, "button", { name: "Try again" })).toBeNull();
     expect(document.body.textContent).toContain("Run setup again on that computer to get a new link.");
     expect(window.location.pathname).toBe("/continue");

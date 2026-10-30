@@ -6,7 +6,7 @@ import { overlaySurfaceRadiusClassName } from "../../components/ui/overlay-surfa
 
 const setupPageBackgroundClassName = "bg-[radial-gradient(circle_at_top,_#f6f7f9_0%,_#f0f1f4_48%)]";
 
-const setupPageClassName = `flex min-h-screen flex-col items-center justify-center overflow-y-auto ${setupPageBackgroundClassName} px-6 py-12 text-foreground`;
+const setupPageClassName = `flex min-h-dvh flex-col items-center justify-center overflow-y-auto ${setupPageBackgroundClassName} px-6 py-12 text-foreground`;
 
 const setupSectionClassName = "mx-auto w-full max-w-[460px]";
 
@@ -63,18 +63,21 @@ function SetupPageWithHeader({
 }) {
     const hasPageLeading = pageNotice !== undefined || pageAction !== undefined;
     return (
-        <main className={`flex min-h-screen flex-col overflow-y-auto ${setupPageBackgroundClassName} text-foreground`}>
+        <main className={`flex min-h-dvh flex-col overflow-y-auto ${setupPageBackgroundClassName} text-foreground`}>
             <SetupPageHeader headerAction={headerAction} />
             {pageNotice !== undefined && <div className="w-full px-6">{pageNotice}</div>}
             <div
                 className={
                     hasPageLeading
                         ? "flex flex-1 flex-col items-center justify-center px-6 py-6"
-                        : "flex flex-1 flex-col items-center justify-center px-6 py-12"
+                        : "flex flex-1 flex-col items-center px-6 md:justify-center md:py-12"
                 }
             >
                 {pageAction !== undefined && <div className="mb-6">{pageAction}</div>}
+                {/* Mobile: the gap above the card is 40% of the space left after the header and card. */}
+                {!hasPageLeading && <div aria-hidden="true" className="grow-[40] basis-0 md:hidden" />}
                 {children}
+                {!hasPageLeading && <div aria-hidden="true" className="grow-[60] basis-0 md:hidden" />}
             </div>
             {pageFooter}
         </main>

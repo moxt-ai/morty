@@ -123,7 +123,7 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
                             size={setupPrimaryButtonSize}
                             variant="outline"
                         >
-                            <a href={state.continueHref}>Continue on your last computer</a>
+                            <a href={state.continueHref}>Back to your last computer</a>
                         </Button>
                     )}
                 </SetupCardShell>
