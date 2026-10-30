@@ -15,6 +15,7 @@ import { reportApplicationError } from "../report-error.ts";
 import { type BotChatHomeStoreApi, createBotChatHomeStore, homeWaitsForRuntime } from "./bot-chat-home-store.ts";
 import { createComposerAttachmentStore } from "./composer-attachment-store.ts";
 import type { ComputerSwitcherModel } from "./computer-switcher-store.ts";
+import { connectionPresentation } from "./connection-presentation.ts";
 import { type ConversationDirectoryStore, createConversationDirectoryStore } from "./conversation-directory-store.ts";
 import type { ConversationSelectionState } from "./conversation-selection-machine.ts";
 import { selectedConversationId } from "./conversation-selection-machine.ts";
@@ -485,6 +486,7 @@ export function createChatWorkspace(options: {
             onInitialMessageDequeued: (commandId) => home.getState().initialMessageDequeued(sessionId, commandId),
             onReleased: (activity) => statuses.getState().paneReleased(sessionId, activity),
             titles,
+            connectionAvailable: (connection) => connectionPresentation(home.getState(), connection).available,
         });
         if (nextDraft !== null || unsent !== null) {
             const draft = nextDraft ?? model.store.getState().draft;
