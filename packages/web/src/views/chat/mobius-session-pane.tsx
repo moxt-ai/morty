@@ -1070,10 +1070,7 @@ function MobiusSessionPaneBody({
                                                 >
                                                     <span>{presentation.pendingDelivery.error}</span>
                                                     <Button
-                                                        disabled={
-                                                            model.connection.kind !== "ready" ||
-                                                            model.turn.kind === "current"
-                                                        }
+                                                        disabled={presentation.retryFailedDisabled}
                                                         onClick={() => run(pane.store.getState().retryFailedMessage)}
                                                     >
                                                         Retry message

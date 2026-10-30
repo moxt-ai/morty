@@ -13,7 +13,12 @@ type SubmissionOutcome =
     | { readonly kind: "delivered" }
     | { readonly kind: "rejected" }
     | { readonly kind: "delivery-unknown" };
-interface SubmittedMessage {
+export type DeliveryTarget =
+    | { readonly disposition: "reject"; readonly targetCommandId: "" }
+    | { readonly disposition: "queue"; readonly targetCommandId: string };
+
+export interface SubmittedMessage {
+    readonly target: DeliveryTarget;
     readonly attachments: readonly ComposerAttachment[];
     readonly commandId: string;
     readonly content: string;
@@ -22,8 +27,20 @@ export type Journal = {
     readonly attachments: readonly ComposerAttachment[];
     readonly commandId: string;
     readonly displayPrompt: string;
-    readonly request: Omit<SubmitRequest, "idempotencyKey">;
+    readonly request: Omit<SubmitRequest, "idempotencyKey" | "disposition" | "targetCommandId"> & DeliveryTarget;
 };
+export function journalMessage(journal: Journal): SubmittedMessage {
+    return {
+        commandId: journal.commandId,
+        content: journal.request.content,
+        attachments: journal.attachments,
+        target:
+            journal.request.disposition === "queue"
+                ? { disposition: "queue", targetCommandId: journal.request.targetCommandId }
+                : { disposition: "reject", targetCommandId: "" },
+    };
+}
+
 type DeliveryState =
     | { readonly kind: "idle" }
     | { readonly kind: "preparing"; readonly message: SubmittedMessage }
@@ -150,11 +167,7 @@ export const createSessionDeliveryStore = (options: {
                     state.kind === "preparation-failed"
                         ? state.message
                         : state.kind === "failed"
-                          ? {
-                                commandId: state.journal.commandId,
-                                content: state.journal.request.content,
-                                attachments: state.journal.attachments,
-                            }
+                          ? journalMessage(state.journal)
                           : null;
                 if (message !== null) {
                     set({ state: { kind: "idle" } });

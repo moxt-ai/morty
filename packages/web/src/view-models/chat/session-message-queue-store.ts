@@ -1,5 +1,3 @@
-import type { SubmitMobiusTurnRequest } from "@moxt-ai/mobius-sdk";
-import { SessionPromptDisposition } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { formatError } from "../format-error.ts";
@@ -22,12 +20,11 @@ export type ChatQueuedMessage =
     | ({ readonly kind: "steering" } & QueuedMessageValue)
     | ({ readonly kind: "deleting" } & QueuedMessageValue);
 
-type QueueOperation = { readonly kind: "idle" } | { readonly kind: "submitting"; readonly commandId: string };
 type QueueFeedback =
     | { readonly kind: "none" }
     | {
           readonly kind: "failed";
-          readonly operation: "submit" | "delete" | "steer";
+          readonly operation: "delete" | "steer";
           readonly commandId: string;
           readonly message: string;
       };
@@ -35,7 +32,6 @@ type QueueFeedback =
 interface SessionMessageQueuePort {
     readonly cancel: (turnId: string, signal: AbortSignal) => Promise<void>;
     readonly steer: (turnId: string, signal: AbortSignal) => Promise<void>;
-    readonly submit: (request: SubmitMobiusTurnRequest, signal: AbortSignal) => Promise<{ readonly turnId: string }>;
 }
 
 /**
@@ -50,19 +46,12 @@ type QueuedMessageRequest = "steering" | "deleting" | "withdrawn";
  */
 export interface SessionMessageQueueStore {
     readonly feedback: QueueFeedback;
-    readonly operation: QueueOperation;
     readonly requests: ReadonlyMap<string, QueuedMessageRequest>;
     /** The original files this browser queued, by command; the Runtime keeps only their uploaded references. */
     readonly attachments: ReadonlyMap<string, readonly ComposerAttachment[]>;
     readonly deleteMessage: (commandId: string, signal: AbortSignal) => Promise<ChatQueuedMessage | null>;
     readonly dismissFailure: () => void;
-    readonly enqueue: (
-        targetCommandId: string,
-        summary: string,
-        request: Omit<SubmitMobiusTurnRequest, "disposition" | "idempotencyKey" | "targetCommandId">,
-        attachments: readonly ComposerAttachment[],
-        signal: AbortSignal,
-    ) => Promise<ChatQueuedMessage | null>;
+    readonly rememberAttachments: (commandId: string, attachments: readonly ComposerAttachment[]) => void;
     readonly steerMessage: (commandId: string, signal: AbortSignal) => Promise<ChatQueuedMessage | null>;
     /** The messages left the Runtime's queue: what this browser kept for them ends. */
     readonly left: (commandIds: readonly string[]) => void;
@@ -140,7 +129,6 @@ export const createSessionMessageQueueStore = (options: {
         };
         return {
             feedback: { kind: "none" },
-            operation: { kind: "idle" },
             requests: new Map(),
             attachments: new Map(),
             deleteMessage: async (commandId, parent) => {
@@ -175,56 +163,8 @@ export const createSessionMessageQueueStore = (options: {
                 }
             },
             dismissFailure: () => set({ feedback: { kind: "none" } }),
-            enqueue: async (targetCommandId, summary, request, attachments, parent) => {
-                if (get().operation.kind !== "idle") {
-                    return null;
-                }
-                const commandId = crypto.randomUUID();
-                set((state) => ({
-                    attachments: new Map(state.attachments).set(commandId, attachments),
-                    feedback: { kind: "none" },
-                    operation: { commandId, kind: "submitting" },
-                }));
-                const signal = AbortSignal.any([parent, AbortSignal.timeout(45_000)]);
-                try {
-                    const accepted = await options.port.submit(
-                        {
-                            ...request,
-                            disposition: SessionPromptDisposition.Queue,
-                            idempotencyKey: commandId,
-                            targetCommandId,
-                        },
-                        signal,
-                    );
-                    signal.throwIfAborted();
-                    const message: ChatQueuedMessage = {
-                        commandId,
-                        attachments: { kind: "restorable", values: attachments },
-                        kind: "queued",
-                        prompt: request.content,
-                        summary,
-                        turnId: accepted.turnId,
-                    };
-                    set({ operation: { kind: "idle" } });
-                    return message;
-                } catch (cause) {
-                    if (!listed(commandId)) {
-                        set((state) => ({ attachments: withoutAttachments(state.attachments, commandId) }));
-                    }
-                    if (parent.aborted) {
-                        throw cause;
-                    }
-                    set({
-                        feedback: {
-                            kind: "failed",
-                            operation: "submit",
-                            commandId,
-                            message: formatError(cause, "The message could not be queued."),
-                        },
-                        operation: { kind: "idle" },
-                    });
-                    return null;
-                }
+            rememberAttachments: (commandId, attachments) => {
+                set((state) => ({ attachments: new Map(state.attachments).set(commandId, attachments) }));
             },
             steerMessage: async (commandId, parent) => {
                 const message = queuedMessage(commandId);
