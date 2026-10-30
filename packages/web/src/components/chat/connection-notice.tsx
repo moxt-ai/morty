@@ -95,7 +95,15 @@ export function ConnectionNotice({
     }
     // No text size here: the row already sets text-12, and passing a custom text-*
     // token through LinkButton's tailwind-merge would evict its text-primary color.
-    const actionClassName = inline ? "min-h-5" : "min-h-11 sm:min-h-5";
+    //
+    // The action keeps a 20px box at every breakpoint, because a 44px box inside
+    // the detail row stretched that line and opened a 16px gap under the headline.
+    // Phones still get the 44px touch target, extended by a transparent overlay
+    // instead of by visual height. The inline variant sits inside another alert's
+    // description and keeps exactly the box it always had.
+    const actionClassName = inline
+        ? "min-h-5"
+        : "relative min-h-5 before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2 before:content-[''] sm:before:hidden";
     const retry = retryButton(feedback, onRetryNow, actionClassName);
     const reopen =
         feedback.kind === "closed" ? (
@@ -109,7 +117,7 @@ export function ConnectionNotice({
     // dot by dot; the clipped span keeps its full width so layout never shifts.
     if (feedback.kind === "waiting" && !inline) {
         const title = feedback.title.endsWith("…") ? feedback.title.slice(0, -1) : feedback.title;
-        return (
+        const chip = (
             <div
                 className="flex h-9 w-fit items-center rounded-[24px] bg-surface-elevated px-4 text-12 font-medium text-morty-text-2"
                 data-testid={testId}
@@ -123,6 +131,16 @@ export function ConnectionNotice({
                         ...
                     </span>
                 )}
+            </div>
+        );
+        // The chip has no description slot, so an extra action the host supplies (such
+        // as switching to another online computer) stacks under it instead of vanishing.
+        return footer === undefined ? (
+            chip
+        ) : (
+            <div className="flex min-w-0 flex-col items-start">
+                {chip}
+                {footer}
             </div>
         );
     }

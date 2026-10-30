@@ -422,6 +422,16 @@ test("Given a follow-up with a file was queued from another browser, When this v
     await viewer.waitForView(() =>
         expect(document.body.textContent).toContain("Files attached to this message could not be restored here."),
     );
+    // A later attachment failure takes over the headline; the standing explanation
+    // about the queued file must stay visible as its detail, or the draft could be
+    // sent without those files and with no explanation.
+    act(() => {
+        fireEvent.change(getByLabelText(viewerForm, "Choose attachments"), {
+            target: { files: [new File([], "empty.txt", { type: "text/plain" })] },
+        });
+    });
+    await viewer.waitForView(() => expect(document.body.textContent).toContain("Files must be between 1 byte"));
+    expect(document.body.textContent).toContain("Files attached to this message could not be restored here.");
 });
 
 test("Given a viewer is loading running history, When another viewer stops before its execution read, Then the partial reply retains its stopped notice", {

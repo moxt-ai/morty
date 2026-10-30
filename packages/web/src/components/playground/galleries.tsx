@@ -594,6 +594,20 @@ function ComposerNoticeGallery() {
                     <ConnectionNotice feedback={waiting} onRetryNow={noop} onReopen={noop} />
                 </div>
             </Specimen>
+            <Specimen layout="stack" title="Informational: computer offline with another online computer to switch to">
+                <div className="rounded-xl bg-card p-4">
+                    <ConnectionNotice
+                        feedback={waiting}
+                        footer={
+                            <a className={`inline-flex text-xs font-medium ${textLinkClassName}`} href="#computer">
+                                Switch to Online computer
+                            </a>
+                        }
+                        onRetryNow={noop}
+                        onReopen={noop}
+                    />
+                </div>
+            </Specimen>
             <Specimen layout="stack" title="Informational: reconnecting">
                 <ConnectionNotice feedback={retrying} onRetryNow={noop} onReopen={noop} />
             </Specimen>

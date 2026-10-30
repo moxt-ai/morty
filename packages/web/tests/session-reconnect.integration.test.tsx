@@ -1,4 +1,11 @@
-import { getByLabelText, getByRole, queryAllByRole, queryAllByText, queryByRole } from "@testing-library/dom";
+import {
+    getByLabelText,
+    getByRole,
+    queryAllByRole,
+    queryAllByTestId,
+    queryAllByText,
+    queryByRole,
+} from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
@@ -22,6 +29,10 @@ function retrySeconds(app: TestApp): number {
         throw new Error("Waiting for the visible retry countdown");
     }
     return Number(match[1]);
+}
+
+function classTokens(element: Element): readonly string[] {
+    return (element.getAttribute("class") ?? "").split(/\s+/u).filter((token) => token.length > 0);
 }
 
 const CLOCK_ORIGIN = "2026-10-13T08:00:00Z";
@@ -456,6 +467,16 @@ test("Given an unavailable Runtime and an editable draft, When automatic retries
         await act(async () => clock.advanceBy(seconds * 1000));
     }
     await app.waitForView(() => expect(getByRole(document.body, "alert").textContent).toContain("Couldn’t reconnect"));
+    // The headline must own the alert's title slot alone: a nested alert here would
+    // stack a second headline inside the first and reopen the gap this notice fixed.
+    const noticeAlert = getByRole(document.body, "alert");
+    expect(queryAllByTestId(noticeAlert, dataTestId.sessionReconnectNotice)).toHaveLength(0);
+    // The retry action stays a 20px line so it cannot inflate the description row;
+    // phones keep their 44px touch target through an overlay instead of height.
+    const retryLink = getByRole(noticeAlert, "button", { name: "Retry now" });
+    expect(classTokens(retryLink)).toContain("min-h-5");
+    expect(classTokens(retryLink)).not.toContain("min-h-11");
+    expect(classTokens(retryLink)).toContain("before:h-11");
     expect(composer.disabled).toBe(false);
     expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true);
     await app.user.type(composer, " even now");

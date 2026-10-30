@@ -196,6 +196,18 @@ export function BotChatComposer({
         error.length > 0 ? error : attachmentState.kind === "failed" ? attachmentState.message : "";
     const showComposerNotice =
         composerErrorMessage.length > 0 || errorStatus !== undefined || statusMessage !== undefined;
+    // A send failure owns the headline, but a standing status (such as unrestored
+    // attachments) still explains the draft: keep it as the error alert's detail
+    // instead of letting the failure branch hide it.
+    const errorDetail =
+        statusMessage === undefined ? (
+            errorStatus
+        ) : (
+            <>
+                {errorStatus}
+                <span className="block">{statusMessage}</span>
+            </>
+        );
     useComposerNoticeLayout(notice, showComposerNotice);
 
     return (
@@ -203,7 +215,7 @@ export function BotChatComposer({
             {showComposerNotice && (
                 <div className="absolute inset-x-0 bottom-[calc(100%+8px)] z-10" ref={notice}>
                     {composerErrorMessage.length > 0 ? (
-                        <MortyAlert description={errorStatus}>{composerErrorMessage}</MortyAlert>
+                        <MortyAlert description={errorDetail}>{composerErrorMessage}</MortyAlert>
                     ) : errorStatus !== undefined ? (
                         errorStatus
                     ) : statusMessage !== undefined ? (
