@@ -16,6 +16,8 @@ import { useConfigurationViewport } from "./chat-configuration-viewport.ts";
 import { mobileHeaderIconButtonClassName } from "./chat-header-control.ts";
 import { mortyThinScrollbarClassName } from "./chat-session-layout.ts";
 import { HarnessMark } from "./harness-mark.tsx";
+import { mobileSheetSurfaceClassName } from "./mobile-sheet.ts";
+import { MobileSheetTitle } from "./mobile-sheet-title.tsx";
 
 interface ChatConfigurationSelectControl {
     readonly disabled: boolean;
@@ -657,7 +659,18 @@ export function ChatConfigurationMenu({
               )
             : undefined;
     const header = (
-        <header className="flex min-h-14 shrink-0 items-center gap-2 pl-4 pr-2.5">
+        <header
+            className={cn(
+                "flex min-h-14 shrink-0 items-center gap-2 pl-4 pr-2.5",
+                // On phones this panel is a sheet next to the other chat sheets: a 64px header puts
+                // the 40px actions 12px from the top edge, so the side inset matches that 12px.
+                // The phone sheet keeps 16px from the title to either action, so its row gap is 16px;
+                // the desktop popover keeps the base 8px before its 36px close action.
+                picker === undefined
+                    ? "max-sm:h-16 max-sm:gap-4 max-sm:pl-5 max-sm:pr-3"
+                    : "max-sm:h-16 max-sm:gap-4 max-sm:pl-3 max-sm:pr-3",
+            )}
+        >
             {picker !== undefined && (
                 <button
                     aria-label="Back to Agent configuration"
@@ -672,7 +685,16 @@ export function ChatConfigurationMenu({
                     <ArrowLeft aria-hidden="true" className={desktop ? "size-4" : "size-5"} />
                 </button>
             )}
-            <span className="min-w-0 flex-1 px-1 text-16 font-semibold">{picker?.label ?? "Agent configuration"}</span>
+            {/* The phone sheet title comes from the shared component; the desktop popover keeps its inline label. */}
+            {desktop ? (
+                <span className="min-w-0 flex-1 px-1 text-16 font-semibold">
+                    {picker?.label ?? "Agent configuration"}
+                </span>
+            ) : (
+                <MobileSheetTitle className="min-w-0 flex-1 px-0">
+                    {picker?.label ?? "Agent configuration"}
+                </MobileSheetTitle>
+            )}
             <button
                 aria-label="Close Agent configuration"
                 className={cn(
@@ -886,6 +908,7 @@ export function ChatConfigurationMenu({
                         className={cn(
                             "fixed inset-x-0 bottom-0 z-[121] flex h-auto min-h-0 flex-col overflow-hidden rounded-t-overlay outline-none",
                             overlaySurfacePanelClassName,
+                            mobileSheetSurfaceClassName,
                         )}
                     >
                         <Dialog.Title className="sr-only">Agent configuration</Dialog.Title>

@@ -3,8 +3,11 @@ import { Dialog } from "radix-ui";
 import { cn } from "@/lib/utils";
 import { dataTestId } from "../../data-testid.ts";
 import { executionDetailsDialogDesktopWidthClassName, overlaySurfaceRadiusClassName } from "../ui/overlay-surface.ts";
+import { mobileHeaderIconButtonBelowSmClassName } from "./chat-header-control.ts";
 import type { ExecutionContext } from "./execution-context.ts";
 import { HarnessMark } from "./harness-mark.tsx";
+import { mobileSheetSurfaceClassName } from "./mobile-sheet.ts";
+import { MobileSheetTitle } from "./mobile-sheet-title.tsx";
 
 function computerStatusDotClassName(status: ExecutionContext["computerStatus"]): string {
     switch (status) {
@@ -85,7 +88,9 @@ export function ExecutionDetailsDialog({
                 <Dialog.Overlay className="fixed inset-0 z-[190] bg-black/25" />
                 <Dialog.Content
                     className={cn(
-                        "fixed inset-x-0 bottom-0 z-[191] max-h-[85dvh] overflow-y-auto rounded-t-[28px] border border-border bg-card px-6 pt-6 pb-[max(24px,env(safe-area-inset-bottom))] shadow-xl outline-none sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-w-[calc(100vw-24px)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:pb-6",
+                        "fixed inset-x-0 bottom-0 z-[191] flex max-h-[85dvh] flex-col overflow-hidden rounded-t-[28px] pt-0 pb-[max(24px,env(safe-area-inset-bottom))] shadow-xl outline-none sm:inset-auto sm:left-1/2 sm:top-1/2 sm:block sm:max-w-[calc(100vw-24px)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:overflow-y-auto sm:border sm:border-border sm:bg-card sm:px-6 sm:pt-6 sm:pb-6",
+                        // Same phone-sheet surface as the other chat sheets: opaque card with a 1px white edge.
+                        mobileSheetSurfaceClassName,
                         executionDetailsDialogDesktopWidthClassName,
                         overlaySurfaceRadiusClassName,
                         "sm:rounded-overlay",
@@ -95,21 +100,31 @@ export function ExecutionDetailsDialog({
                         returnFocus();
                     }}
                 >
-                    <div className="mb-5 flex items-center gap-3">
+                    {/* The phone sheet keeps the shared 64px title row, so its title sits on the same 20px
+                        gutter as the other sheets while the desktop dialog keeps its own header spacing. */}
+                    <header className="flex shrink-0 items-center gap-3 max-sm:h-16 max-sm:gap-2 max-sm:pl-5 max-sm:pr-3 sm:mb-5">
                         <div className="min-w-0 flex-1">
-                            <Dialog.Title className="text-16 font-semibold leading-6">Execution details</Dialog.Title>
+                            <Dialog.Title asChild>
+                                <MobileSheetTitle>Execution details</MobileSheetTitle>
+                            </Dialog.Title>
                             <Dialog.Description className="sr-only">
                                 Computer availability, session connection, Agent, and working directory.
                             </Dialog.Description>
                         </div>
                         <Dialog.Close
-                            className="mt-2.5 mr-2.5 flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-muted keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50"
+                            className={cn(
+                                "flex shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-muted keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 sm:mt-2.5 sm:mr-2.5 sm:size-9",
+                                mobileHeaderIconButtonBelowSmClassName,
+                            )}
                             aria-label="Close execution details"
                         >
-                            <X aria-hidden="true" className="size-4" />
+                            <X aria-hidden="true" className="size-4 max-sm:size-5" />
                         </Dialog.Close>
+                    </header>
+                    {/* 24px matches the text baseline of the other sheets' rows, which inset 16px inside their 8px list gutter. */}
+                    <div className="min-h-0 flex-1 overflow-y-auto px-6 sm:contents">
+                        <ExecutionDetails context={context} />
                     </div>
-                    <ExecutionDetails context={context} />
                 </Dialog.Content>
             </Dialog.Portal>
         </Dialog.Root>
