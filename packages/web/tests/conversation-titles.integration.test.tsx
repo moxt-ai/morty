@@ -262,6 +262,13 @@ test("Given an open session on a phone, When the user renames it from the header
         expect(app.optionalElementByTestId(dataTestId.mobileRenameMask)).not.toBeNull();
         const input = getByRole(editor, "textbox", { name: "Conversation title" });
         expect(document.activeElement).toBe(input);
+        // A software keyboard covers the home indicator, so the bar drops its safe-area padding while it is up.
+        const bar = input.parentElement;
+        expect(bar?.getAttribute("data-software-keyboard")).toBeNull();
+        window.happyDOM.setViewport({ height: 844 - 300, width: 390 });
+        expect(bar?.getAttribute("data-software-keyboard")).toBe("open");
+        window.happyDOM.setViewport({ height: 844, width: 390 });
+        expect(bar?.getAttribute("data-software-keyboard")).toBeNull();
         await app.user.clear(input);
         await app.user.type(input, "Phone rename edited");
         await app.user.click(getByRole(editor, "button", { name: "Cancel rename" }));
