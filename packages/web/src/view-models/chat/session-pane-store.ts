@@ -47,16 +47,17 @@ import {
     idleTurn,
     openedTurn,
     sessionActivity,
-    submittingCommandId,
     transitionCurrentTurn,
 } from "./session-current-turn.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import {
+    type DeliveryTarget,
     deliveryMessagePresentation,
     failedSubmission,
     journalMessage,
     prependToDraft,
     type SessionDeliveryStore,
+    type SubmitTurn,
     type SubmittedMessage,
     submissionFailure,
 } from "./session-delivery-store.ts";
@@ -145,9 +146,9 @@ export interface SessionPaneStore {
     readonly followRevision: number;
     readonly operation: Operation;
     /**
-     * The one record of the current turn: which command runs, how far the service confirmed it and when it started.
-     * The submission in flight, the activity the pane shows and reports, and the running turn the stop control acts
-     * on are all derived from it.
+     * The current turn as the service reported it: which command runs, its turn id and when it started, or how the
+     * last turn ended. The running turn the stop control acts on is derived from it; the activity the pane shows and
+     * reports is derived from it with the delivery of a turn this pane is still submitting.
      */
     readonly turn: CurrentTurn;
     /** The messages the Runtime holds queued, as last observed. The queue panel derives its list from them. */
@@ -238,7 +239,6 @@ export function sessionPanePresentation(
 ) {
     const facts = sessionOperationFacts(model, delivery, tasks, interactions, connectionAvailable);
     const activity = sessionActivity(model.turn, delivery.state);
-    const submitting = submittingCommandId(model.turn) !== null;
     // Which turn runs is the current turn's; the stop control only adds whether the user asked to stop it.
     const controlRunning = acceptedTurn(model.turn) !== null;
     const stopping = facts.stopping;
@@ -355,12 +355,14 @@ export function sessionPanePresentation(
                 ? "sending"
                 : stopping
                   ? "stopping"
-                  : submitting || delivery.state.kind === "submitting"
+                  : delivery.state.kind === "submitting"
                     ? "sending"
                     : controlRunning
                       ? "running"
                       : "idle",
-        workingIndicatorVisible: !facts.waitingForInput && controlRunning,
+        // The working timer counts from when the running turn's work started.
+        workingIndicator:
+            facts.waitingForInput || model.turn.kind !== "current" ? null : { startedAt: model.turn.startedAt },
         shouldQueueOnSubmit,
         retryFailedDisabled: pendingMessage === null || !canRetryFailedMessage(pendingMessage.target, facts),
         submitDisabled:
@@ -569,7 +571,7 @@ export function createSessionPaneModel(options: {
             attachments: [...request.attachments.filter((item) => item.uri !== instructionUri), attachment],
         };
     };
-    const submitTurn: Parameters<SessionDeliveryStore["submit"]>[1] = noticingClosure(async (request, signal) => {
+    const submitTurn: SubmitTurn = noticingClosure(async (request, signal) => {
         if (client === null) {
             throw new Error("The Session is not connected.");
         }
@@ -747,6 +749,25 @@ export function createSessionPaneModel(options: {
             set({ turn });
             turnMoved(previous, turn);
         };
+        /**
+         * Submits `commandId` through this pane. A new turn becomes current as the service's acceptance arrives, dated
+         * by when this browser sent it, or else `startedAt`; until then the turn is its delivery's.
+         */
+        const submitCommand =
+            (commandId: string, target: DeliveryTarget["disposition"], startedAt: number): SubmitTurn =>
+            async (request, signal) => {
+                const accepted = await submitTurn(request, signal);
+                signal.throwIfAborted();
+                if (target === "reject") {
+                    updateTurn({
+                        kind: "accepted",
+                        commandId,
+                        turnId: accepted.turnId,
+                        startedAt: turns.startedAt(commandId, startedAt),
+                    });
+                }
+                return accepted;
+            };
         let historyLoadController: AbortController | null = null;
         /** Adopts a new projection; its timeline is what the caller publishes. */
         const adoptProjection = (next: SessionProjection) => {
@@ -978,7 +999,7 @@ export function createSessionPaneModel(options: {
             }
             set({ pendingInitialMessage: null });
             if (target.disposition === "reject") {
-                updateTurn({ kind: "submitting", commandId, startedAt: sent.sentAt });
+                updateTurn({ kind: "new-turn-submitted" });
             }
             set({ followRevision: get().followRevision + 1 });
             try {
@@ -1008,7 +1029,7 @@ export function createSessionPaneModel(options: {
                         request: submission,
                         attachments: attachments.kind === "local" ? attachments.values : null,
                     },
-                    submitTurn,
+                    submitCommand(commandId, target.disposition, sent.sentAt),
                     signal,
                 );
                 const outcome = await sending;
@@ -1024,12 +1045,8 @@ export function createSessionPaneModel(options: {
                         ),
                     ]);
                 if (outcome.kind === "accepted") {
-                    if (target.disposition === "reject") {
-                        updateTurn({ kind: "accepted", commandId, turnId: outcome.turn.turnId });
-                    }
                     return;
                 }
-                updateTurn({ kind: "submission-ended", commandId });
                 set({ pendingInitialMessage: null });
             } catch (cause) {
                 signal.throwIfAborted();
@@ -1044,7 +1061,6 @@ export function createSessionPaneModel(options: {
                     // Delivery already owns the frozen request, so its outcome is unknown rather than unsent.
                     delivery.getState().submissionInterrupted();
                 }
-                updateTurn({ kind: "submission-ended", commandId });
                 // The retained submission owns its failure; the composer keeps the next draft.
                 set({ pendingInitialMessage: null });
             }
@@ -1500,11 +1516,7 @@ export function createSessionPaneModel(options: {
                 );
             },
             removeUnknownDelivery: () => {
-                const commandId = delivery.getState().discardUnknown();
-                if (commandId === null) {
-                    return;
-                }
-                updateTurn({ kind: "submission-ended", commandId });
+                delivery.getState().discardUnknown();
             },
             retryUnknownDelivery: async (signal) => {
                 const state = delivery.getState().state;
@@ -1513,33 +1525,15 @@ export function createSessionPaneModel(options: {
                 }
                 const pending = state.journal;
                 if (pending.request.disposition === "reject") {
-                    updateTurn({
-                        kind: "retrying",
-                        commandId: pending.commandId,
-                        startedAt: turns.startedAt(pending.commandId, Date.now()),
-                    });
+                    updateTurn({ kind: "new-turn-submitted" });
                 }
-                const outcome = await delivery.getState().retry(submitTurn, signal);
+                // Without a record of when this browser sent it, the retry dates the command's work.
+                const retrying = submitCommand(pending.commandId, pending.request.disposition, Date.now());
+                const outcome = await delivery.getState().retry(retrying, signal);
                 signal.throwIfAborted();
-                switch (outcome?.kind) {
-                    case "accepted":
-                        if (pending.request.disposition === "reject") {
-                            updateTurn({ kind: "accepted", commandId: pending.commandId, turnId: outcome.turn.turnId });
-                        }
-                        delivery.getState().messagesObserved(get().queued.map((message) => message.commandId));
-                        return;
-                    case "delivered":
-                        break;
-                    case "rejected":
-                        break;
-                    case "delivery-unknown":
-                        break;
-                    case undefined:
-                        return;
-                    default:
-                        return outcome satisfies never;
+                if (outcome?.kind === "accepted") {
+                    delivery.getState().messagesObserved(get().queued.map((message) => message.commandId));
                 }
-                updateTurn({ kind: "submission-ended", commandId: pending.commandId });
             },
             retryFailedMessage: async (signal) => {
                 const state = delivery.getState().state;

@@ -1,11 +1,5 @@
 import type { MobiusClient } from "@moxt-ai/mobius-sdk";
-import {
-    acceptedTurn,
-    awaitsService,
-    type CurrentTurn,
-    type TurnFailure,
-    transitionCurrentTurn,
-} from "./session-current-turn.ts";
+import { acceptedTurn, type CurrentTurn, type TurnFailure, transitionCurrentTurn } from "./session-current-turn.ts";
 import { type SessionInteractionRecovery, sessionInteractionRecovery } from "./session-lifecycle.ts";
 import {
     observeSessionProjectionExecution,
@@ -40,8 +34,8 @@ type TurnOutcome =
 
 export type SessionExecutionObservation =
     /**
-     * A snapshot the Runtime returned for a read that began while `turnAtRead` was current. Only a turn submitted
-     * before the read began can have ended by the time it was served. `deliveryCommandId` names the command whose
+     * A snapshot the Runtime returned for a read that began while `turnAtRead` was current. Only a turn the service
+     * reported before the read began can have ended by the time it was served. `deliveryCommandId` names the command whose
      * delivery the read asked for.
      */
     | {
@@ -92,7 +86,7 @@ function observeSnapshot(
             startedAt: startedAt(running.commandId),
         });
     } else {
-        if (awaitsService(turnAtRead)) {
+        if (turnAtRead.kind === "current") {
             turn = transitionCurrentTurn(turn, { kind: "nothing-running" });
         }
         // The Runtime's record of the last turn shows an outcome this pane missed. Older Runtimes and Relays omit it,
