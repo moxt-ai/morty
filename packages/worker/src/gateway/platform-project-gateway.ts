@@ -8,7 +8,6 @@ import {
 } from "@moxt-ai/mobius-sdk/platform";
 import {
     decodeRuntimeDiagnosticsResult,
-    RUNTIME_WORKSPACE_BINDING_ID,
     type SessionConfigOption,
     type SessionConfigurationSelection,
     type SessionReadyEvent,
@@ -374,11 +373,9 @@ export class PlatformProjectGateway {
                               {
                                   additionalDirectoryIds,
                                   agentId: input.agentRef,
-                                  bindingId: RUNTIME_WORKSPACE_BINDING_ID,
                                   directoryId: input.workspaceRef,
                                   runtimeId: input.runtimeId,
                                   sessionId,
-                                  title: input.title,
                               },
                               signal,
                           )

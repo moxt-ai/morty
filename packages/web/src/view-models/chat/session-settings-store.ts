@@ -5,23 +5,22 @@ import { recordBrowserError } from "../../services/diagnostics/browser-diagnosti
 
 // Runtime snapshots own current settings. Live updates and history reloads request a new
 // snapshot; historical configuration events never become current settings. The revision
-// travels with its snapshot and is sent only for explicit edits. Legacy Runtimes omit it.
+// travels with its snapshot and is sent only for explicit edits.
 
 type ConfigurationSnapshot = {
     readonly configOptions: readonly SessionConfigOption[];
-    readonly configurationRevision?: string | undefined;
+    readonly configurationRevision: string;
 };
 
 export interface SessionSettingsStore {
-    readonly configurationRevision: string | undefined;
+    readonly configurationRevision: string;
     readonly options: readonly SessionConfigOption[];
     /** Shows settings the Runtime reported and remembers them for the next draft. */
     readonly adopt: (snapshot: ConfigurationSnapshot) => void;
     /**
      * Refines the shown settings from an authoritative read, made whenever the
      * history is loaded again. The conversation stays usable while the
-     * read runs, a Runtime that cannot answer (such as a release from before
-     * settings reads) keeps the current settings, and settings adopted after the
+     * read runs, a Runtime that cannot answer keeps the current settings, and settings adopted after the
      * read started win. A newer read replaces an unfinished one.
      */
     readonly readInBackground: (
