@@ -806,6 +806,9 @@ export function ConversationSidebar({
                                                 sessions={sessions ?? []}
                                                 agents={nativeAgents}
                                                 onClose={dialogs.getState().closeNativeDialog}
+                                                onOpenDetail={dialogs.getState().openNativeSessionDetail}
+                                                onBack={dialogs.getState().backToNativeSessionList}
+                                                step={dialogState.nativeDialogStep}
                                                 bugReportDialog={workspace.bugReportDialog}
                                                 daemonSource={sessionDiagnostics}
                                             />
