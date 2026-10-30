@@ -22,7 +22,6 @@ interface SetupModule {
         args: readonly string[],
         host: {
             readonly state: string;
-            readonly documents: string;
             readonly agentEnvironment?: Readonly<Record<string, string | undefined>>;
             readonly signal: AbortSignal;
             readonly runtime?: ControlledSetupRuntime;
@@ -127,7 +126,6 @@ test.each(["fresh", "unknown", "revoked"] as const)(
                         PATH: bin,
                         MOBIUS_STATE_DIRECTORY: join(directory, "inherited-installation-data"),
                         MORTY_STATE_DIRECTORY: state,
-                        DOCUMENT_DIR: directory,
                     },
                     stdio: ["ignore", "pipe", "pipe"],
                     signal: AbortSignal.timeout(20000),
@@ -217,7 +215,6 @@ test.each(["missing", "unlaunchable", "npm-missing", "npm-unlaunchable"] as cons
                         PATH: bin,
                         MOBIUS_STATE_DIRECTORY: join(directory, "mobius-state"),
                         MORTY_STATE_DIRECTORY: state,
-                        DOCUMENT_DIR: directory,
                     },
                     stdio: ["ignore", "pipe", "pipe"],
                     signal: AbortSignal.timeout(20000),
@@ -246,10 +243,9 @@ test.each(["missing", "unlaunchable", "npm-missing", "npm-unlaunchable"] as cons
 
 test("Given a local workspace and a private state directory, When setup creates its identity and the user cancels, Then credentials remain private and can be reused", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-setup-filesystem-"));
-    const documents = join(directory, "Documents");
     const state = join(directory, "state ' & workspace");
     const workspace = join(directory, "workspace with spaces & quotes '");
-    await Promise.all([documents, workspace].map((path) => mkdir(path)));
+    await mkdir(workspace);
     const fixture = await createIdentityFixture();
     const cancellation = new AbortController();
     const events: Readonly<Record<string, unknown>>[] = [];
@@ -268,7 +264,6 @@ test("Given a local workspace and a private state directory, When setup creates 
             ],
             {
                 state,
-                documents,
                 agentEnvironment: {},
                 signal: cancellation.signal,
                 emit: (event) => {
@@ -317,10 +312,9 @@ test("Given a local workspace and a private state directory, When setup creates 
 
 test("Given a junction replaces the private Morty directory, When setup validates its local state, Then it refuses to write credentials through the link", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-setup-link-"));
-    const documents = join(directory, "Documents");
     const state = join(directory, "state");
     const target = join(directory, "target");
-    await Promise.all([documents, target].map((path) => mkdir(path)));
+    await mkdir(target);
     await symlink(target, state, process.platform === "win32" ? "junction" : "dir");
     const events: Readonly<Record<string, unknown>>[] = [];
     try {
@@ -339,7 +333,6 @@ test("Given a junction replaces the private Morty directory, When setup validate
                 ],
                 {
                     state,
-                    documents,
                     agentEnvironment: {},
                     signal: new AbortController().signal,
                     emit: (event) => events.push(event),
@@ -354,22 +347,19 @@ test("Given a junction replaces the private Morty directory, When setup validate
 });
 
 test.runIf(process.platform !== "win32")(
-    "Given HOME and no overrides, When a user runs the setup CLI, Then identity is saved in the platform's local state directory, not Documents, and cancellation releases setup",
+    "Given HOME and no overrides, When a user runs the setup CLI, Then identity is saved in the platform's local state directory and cancellation releases setup",
     { timeout: 30000 },
     async () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-home-"));
-        const documents = join(directory, "Documents");
         const state =
             process.platform === "darwin"
                 ? join(directory, "Library", "Application Support", "Morty")
                 : join(directory, ".local", "state", "morty");
         const workspace = join(directory, "workspace");
-        await Promise.all([documents, workspace].map((path) => mkdir(path)));
+        await mkdir(workspace);
         const fixture = await createIdentityFixture();
         const environment = Object.fromEntries(
-            Object.entries(process.env).filter(
-                ([name]) => !["DOCUMENT_DIR", "MORTY_STATE_DIRECTORY", "XDG_STATE_HOME"].includes(name),
-            ),
+            Object.entries(process.env).filter(([name]) => !["MORTY_STATE_DIRECTORY", "XDG_STATE_HOME"].includes(name)),
         );
         const child = spawn(
             process.execPath,
@@ -409,7 +399,6 @@ test.runIf(process.platform !== "win32")(
             const saved: unknown = JSON.parse(await readFile(join(state, "config.json"), "utf8"));
             expect(saved).toMatchObject({ base_url: fixture.origin });
             expect((await stat(state)).mode & 0o777).toBe(0o700);
-            await expect(stat(join(documents, "morty"))).rejects.toMatchObject({ code: "ENOENT" });
             expect(output).toContain('"code":"CANCELLED"');
         } finally {
             child.kill();
@@ -480,7 +469,6 @@ for (const [failure, scenario] of starterFailures) {
                         project_id: identity.projectId,
                         bot_id: botId,
                         agent_ref: "codex",
-                        agent_config_revision: 1,
                         workspace: directory,
                     }),
                     { mode: 0o600 },
@@ -528,7 +516,7 @@ const cancellation = new AbortController();
 process.on('SIGUSR2', () => cancellation.abort());
 let time = Date.parse('2026-09-15T12:00:00Z');
 process.exitCode = await runSetup(process.argv.slice(2), {
-    state: process.env.MORTY_STATE_DIRECTORY, documents: process.env.DOCUMENT_DIR, signal: cancellation.signal,
+    state: process.env.MORTY_STATE_DIRECTORY, signal: cancellation.signal,
     emit(event) { console.log(JSON.stringify(event)); ${failure === "cancel" ? "if (event.status === 'runtime_retrying') cancellation.abort();" : ""} },
     clock: { now: () => new Date(time), wait: async (milliseconds, signal) => { signal.throwIfAborted(); time += milliseconds; } },
 });
@@ -552,7 +540,6 @@ process.exitCode = await runSetup(process.argv.slice(2), {
                         env: {
                             ...process.env,
                             MORTY_STATE_DIRECTORY: state,
-                            DOCUMENT_DIR: join(directory, "Documents"),
                             PATH: `${bin}:${process.env["PATH"] ?? ""}`,
                         },
                         stdio: ["ignore", "pipe", "pipe"],
@@ -672,7 +659,6 @@ test.runIf(process.env["MORTY_VERIFY_SYSTEM_STATE"] === "true" && process.platfo
                 ],
                 {
                     state: "",
-                    documents: "",
                     agentEnvironment: {},
                     signal: cancellation.signal,
                     emit: (event) => {
@@ -703,7 +689,6 @@ for (const segments of [4, 8]) {
         { timeout: 30_000 },
         async () => {
             const root = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-long-")));
-            const documents = join(root, "Documents");
             const state = join(root, "state");
             const workspace = join(
                 root,
@@ -732,7 +717,6 @@ for (const segments of [4, 8]) {
                     ],
                     {
                         state,
-                        documents,
                         agentEnvironment: {},
                         signal: AbortSignal.timeout(25_000),
                         runtime,
@@ -780,7 +764,6 @@ async function setupMachine(
     runtime: ControlledSetupRuntime,
     paths: {
         readonly origin: string;
-        readonly documents: string;
         readonly state: string;
         readonly workspace: string;
     },
@@ -818,7 +801,6 @@ async function setupMachine(
         ],
         {
             state: paths.state,
-            documents: paths.documents,
             agentEnvironment: run.agentEnvironment ?? {},
             signal: AbortSignal.any([interrupt.signal, AbortSignal.timeout(55_000)]),
             runtime,
@@ -873,7 +855,6 @@ async function withUpgradeMachine(
         runtime: ControlledSetupRuntime,
         paths: {
             readonly origin: string;
-            readonly documents: string;
             readonly state: string;
             readonly workspace: string;
             readonly dispatch: (request: Request) => Promise<Response>;
@@ -895,7 +876,6 @@ async function withUpgradeMachine(
     try {
         await scenario(runtime, {
             origin: fixture.origin,
-            documents: join(root, "Documents"),
             state: join(root, "state"),
             workspace,
             dispatch: async (request) => await worker.fetch(request, fixture.environment(fixture.origin)),
@@ -1135,333 +1115,12 @@ test.each(["replacement_access_revoked", "project_replaced"])(
             const again = await setupMachine(runtime, paths);
             expect(again.events.at(-1)).toMatchObject({ status: "ready", project: "reused" });
             const completed = JSON.parse(await readFile(join(paths.state, "config.json"), "utf8"));
-            for (const key of [
-                "replacement_access",
-                "replacement_notice",
-                "replaced_project_id",
-                "replaced_user_token",
-                "agent_config_revision",
-            ]) {
+            for (const key of ["replacement_access", "replaced_project_id", "replaced_user_token"]) {
                 expect(completed).not.toHaveProperty(key);
             }
         });
     },
 );
-
-test.each(["notice-only", "access-only"] as const)(
-    "Given a saved %s replacement notice and an obsolete agent revision, When setup resumes, Then it reports the revoked access once and completes without the revision",
-    { timeout: 120_000 },
-    async (format) => {
-        await withUpgradeMachine("unavailable", async (runtime, paths) => {
-            expect((await setupMachine(runtime, paths)).code).toBe(0);
-            const configPath = join(paths.state, "config.json");
-            const config = v.parse(v.record(v.string(), v.unknown()), JSON.parse(await readFile(configPath, "utf8")));
-            await writeFile(
-                configPath,
-                JSON.stringify({
-                    ...config,
-                    // #861 wrote only this notice; #899 added the structured access result.
-                    ...(format === "notice-only"
-                        ? { replacement_notice: "pending" }
-                        : {
-                              replacement_access: {
-                                  kind: "revoked",
-                                  previousProjectId: "previous-project",
-                                  projectId: config["project_id"],
-                              },
-                          }),
-                    agent_config_revision: format === "notice-only" ? "obsolete" : 1,
-                }),
-                { mode: 0o600 },
-            );
-
-            const stopped = await setupMachine(runtime, paths, undefined, { interruptAt: "runtime_reused" });
-            expect(stopped.code).toBe(1);
-            expect(stopped.events.at(-1)).toMatchObject({
-                error: {
-                    replacementAccess: {
-                        kind: "revoked",
-                        previousProjectId: format === "notice-only" ? null : "previous-project",
-                    },
-                },
-            });
-            const resumable = JSON.parse(await readFile(configPath, "utf8"));
-            if (format === "notice-only") {
-                // A notice-only file has no previous Project for `replacement_access`, so it keeps its notice.
-                expect(resumable.replacement_notice).toBe("pending");
-                expect(resumable).not.toHaveProperty("replacement_access");
-            } else {
-                expect(resumable).not.toHaveProperty("replacement_notice");
-                expect(resumable.replacement_access).toMatchObject({
-                    kind: "revoked",
-                    previousProjectId: "previous-project",
-                });
-            }
-
-            const finished = await setupMachine(runtime, paths);
-            expect(finished.code, JSON.stringify(finished.events)).toBe(0);
-            expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
-            const saved = JSON.parse(await readFile(configPath, "utf8"));
-            expect(saved).not.toHaveProperty("agent_config_revision");
-            expect(saved).not.toHaveProperty("replacement_access");
-            expect(saved).not.toHaveProperty("replacement_notice");
-            expect((await setupMachine(runtime, paths)).events.at(-1)).toMatchObject({
-                status: "ready",
-                project: "reused",
-            });
-        });
-    },
-);
-
-test("Given the agent's shell exposes its current Pi session, When setup runs without --session-id, Then the link continues that session", {
-    timeout: 120_000,
-}, async () => {
-    await withUpgradeMachine("unavailable", async (runtime, paths) => {
-        await runtime.installAgents({
-            agentId: "pi",
-            agentName: "Pi",
-            additionalAgents: [{ id: "settings-test", name: "Settings Agent" }],
-        });
-        const finished = await setupMachine(runtime, paths, undefined, {
-            harness: "pi",
-            sessionArgument: null,
-            agentEnvironment: { PI_SESSION_ID: "pi-shell-session" },
-        });
-        expect(finished.code, JSON.stringify(finished.events)).toBe(0);
-        const ready = finished.events.at(-1);
-        expect(ready).toMatchObject({ status: "ready" });
-        expect(new URL(String(ready?.["url"])).searchParams.get("sessionId")).toBe("pi-shell-session");
-    });
-});
-
-test("Given an agent passes a session ID its shell does not expose, When setup runs, Then the link continues the shell's session and setup reports the mismatch", {
-    timeout: 120_000,
-}, async () => {
-    await withUpgradeMachine("unavailable", async (runtime, paths) => {
-        await runtime.installAgents({
-            agentId: "pi",
-            agentName: "Pi",
-            additionalAgents: [{ id: "settings-test", name: "Settings Agent" }],
-        });
-        const finished = await setupMachine(runtime, paths, undefined, {
-            harness: "pi",
-            sessionArgument: "agent-guessed-session",
-            agentEnvironment: { PI_SESSION_ID: "pi-shell-session" },
-        });
-        expect(finished.code, JSON.stringify(finished.events)).toBe(0);
-        expect(finished.events).toContainEqual(
-            expect.objectContaining({ status: "session_id_mismatch", harness: "pi", variable: "PI_SESSION_ID" }),
-        );
-        expect(new URL(String(finished.events.at(-1)?.["url"])).searchParams.get("sessionId")).toBe("pi-shell-session");
-    });
-});
-
-test("Given neither the agent's shell nor its arguments name a session, When setup runs, Then it fails before creating an identity and names the variable it looked for", {
-    timeout: 120_000,
-}, async () => {
-    await withUpgradeMachine("unavailable", async (runtime, paths) => {
-        const failed = await setupMachine(runtime, paths, undefined, {
-            harness: "pi",
-            sessionArgument: null,
-            agentEnvironment: { CLAUDE_CODE_SESSION_ID: "an-outer-claude-session" },
-        });
-        expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
-        expect(failed.events).toContainEqual(
-            expect.objectContaining({ status: "session_unavailable", harness: "pi", variable: "PI_SESSION_ID" }),
-        );
-        expect(failed.events.at(-1)).toMatchObject({ error: { code: "SESSION_ID_REQUIRED" } });
-        expect(failed.events).not.toContainEqual(expect.objectContaining({ status: "identity_ready" }));
-    });
-});
-
-test("Given the chosen harness is not installed, When the user reruns setup with it, Then each run reports it unavailable and setup finishes once an installed harness is chosen", {
-    timeout: 120_000,
-}, async () => {
-    await withUpgradeMachine("unavailable", async (runtime, paths) => {
-        for (let attempt = 1; attempt <= 8; attempt += 1) {
-            const failed = await setupMachine(runtime, paths, undefined, { harness: "pi" });
-            expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
-            expect(failed.events).toContainEqual(
-                expect.objectContaining({ status: "harness_unavailable", harness: "pi", available: ["settings-test"] }),
-            );
-            // This machine's Mobius cannot report why, so setup still names a next step without guessing a cause.
-            expect(failed.events.at(-1)?.["error"]).toMatchObject({
-                code: "HARNESS_UNAVAILABLE",
-                harness: {
-                    harness: "pi",
-                    status: "unknown",
-                    nextStep: expect.stringContaining("Confirm `pi` starts and answers a prompt in a new terminal"),
-                },
-            });
-        }
-        const finished = await setupMachine(runtime, paths);
-        expect(finished.code, JSON.stringify(finished.events)).toBe(0);
-        expect(finished.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-    });
-});
-
-function machineOf(events: readonly Readonly<Record<string, unknown>>[]) {
-    return events.find((event) => event["status"] === "identity_ready")?.["botId"];
-}
-
-test("Given the chosen agent is installed but signed out, When setup connects it, Then setup asks the user to sign in and finishes on the same Machine afterwards", {
-    timeout: 120_000,
-}, async () => {
-    await withUpgradeMachine("unavailable", async (runtime, paths) => {
-        await runtime.installAgents({ agentId: "signed-out-test", agentName: "Signed-out Agent" });
-        const failed = await setupMachine(runtime, paths, undefined, { harness: "signed-out-test" });
-        expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
-        expect(failed.events.at(-1)?.["error"]).toMatchObject({
-            code: "authentication_required",
-            binding: {
-                harness: "signed-out-test",
-                nextStep: expect.stringContaining(
-                    "Ask the user to sign in to signed-out-test on this computer; you cannot sign in for them.",
-                ),
-            },
-        });
-
-        // The user signs in, so the same harness now opens sessions.
-        await runtime.installAgents({ agentId: "settings-test", agentName: "Settings Agent" });
-        const finished = await setupMachine(runtime, paths, undefined, { harness: "settings-test" });
-        expect(finished.code, JSON.stringify(finished.events)).toBe(0);
-        expect(machineOf(finished.events)).toBe(machineOf(failed.events));
-        expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "reused" });
-    });
-});
-
-test("Given the network stalls while setup connects the agent, When the request times out, Then setup tells the agent to rerun unchanged and the rerun finishes on the same Machine", {
-    timeout: 120_000,
-}, async () => {
-    await withUpgradeMachine("unavailable", async (runtime, paths) => {
-        const failed = await setupMachine(runtime, paths, undefined, { stallFromStage: "binding" });
-        expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
-        const failure = failed.events.at(-1)?.["error"];
-        expect(failure).toMatchObject({
-            code: "TIMEOUT",
-            binding: {
-                harness: "settings-test",
-                nextStep: expect.stringContaining("Rerun setup without changing anything"),
-            },
-        });
-        expect(JSON.stringify(failure)).not.toContain("sign in");
-
-        const finished = await setupMachine(runtime, paths);
-        expect(finished.code, JSON.stringify(finished.events)).toBe(0);
-        expect(machineOf(finished.events)).toBe(machineOf(failed.events));
-        expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "reused" });
-    });
-});
-
-test("Given the chosen agent cannot open a session for another reason, When setup connects it, Then setup asks the agent to check the harness instead of guessing a fix", {
-    timeout: 120_000,
-}, async () => {
-    await withUpgradeMachine("unavailable", async (runtime, paths) => {
-        await runtime.installAgents({ agentId: "broken-test", agentName: "Broken Agent" });
-        const failed = await setupMachine(runtime, paths, undefined, { harness: "broken-test" });
-        expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
-        const failure = failed.events.at(-1)?.["error"];
-        expect(failure).toMatchObject({
-            binding: {
-                harness: "broken-test",
-                nextStep: expect.stringContaining("Confirm broken-test answers a prompt in the working directory"),
-            },
-        });
-        expect(failure).not.toMatchObject({ code: "SETUP_FAILED" });
-        expect(JSON.stringify(failure)).not.toMatch(/sign in|update/u);
-    });
-});
-
-test("Given Pi is installed but signed out, so the Runtime does not offer it, When setup runs with Pi, Then setup asks the user to sign in with Pi's own command and finishes on the same Machine afterwards", {
-    timeout: 120_000,
-}, async () => {
-    await withUpgradeMachine("unavailable", async (runtime, paths) => {
-        runtime.reportAgentInventory([
-            {
-                id: "pi",
-                label: "Pi",
-                status: "authentication_required",
-                code: "authentication_required",
-                message: "Agent authentication is required",
-                recoveryCommand: "pi",
-            },
-        ]);
-        const failed = await setupMachine(runtime, paths, undefined, { harness: "pi" });
-        expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
-        expect(failed.events.at(-1)?.["error"]).toMatchObject({
-            code: "HARNESS_UNAVAILABLE",
-            harness: {
-                harness: "pi",
-                status: "authentication_required",
-                nextStep: expect.stringContaining(
-                    "Ask the user to sign in to Pi on this computer by running `pi` in a terminal; you cannot sign in for them.",
-                ),
-            },
-        });
-
-        // The user signs in, so this computer's Mobius offers Pi again.
-        runtime.reportAgentInventory([]);
-        await runtime.installAgents({
-            agentId: "pi",
-            agentName: "Pi",
-            additionalAgents: [{ id: "settings-test", name: "Settings Agent" }],
-        });
-        const finished = await setupMachine(runtime, paths, undefined, { harness: "pi" });
-        expect(finished.code, JSON.stringify(finished.events)).toBe(0);
-        expect(machineOf(finished.events)).toBe(machineOf(failed.events));
-        expect(finished.events.at(-1)).toMatchObject({ status: "ready" });
-    });
-});
-
-test("Given Pi became ready after the running Runtime published its Agents, When setup runs with Pi and the Runtime still omits it, Then setup asks to rerun once and to get the user's consent before restarting Mobius", {
-    timeout: 120_000,
-}, async () => {
-    await withUpgradeMachine("unavailable", async (runtime, paths) => {
-        runtime.reportAgentInventory([], [{ id: "pi", label: "Pi" }]);
-        const failed = await setupMachine(runtime, paths, undefined, { harness: "pi" });
-        expect(failed.code, JSON.stringify(failed.events)).not.toBe(0);
-        const failure = failed.events.at(-1)?.["error"];
-        expect(failure).toMatchObject({
-            code: "HARNESS_UNAVAILABLE",
-            harness: {
-                harness: "pi",
-                status: "ready",
-                nextStep: expect.stringContaining(
-                    "ask the user before running `mobius quit`, because it stops every Morty session on this computer",
-                ),
-            },
-        });
-        expect(JSON.stringify(failure)).toContain("Rerun setup once.");
-    });
-});
-
-test("Given setup continues on a Runtime that does not offer the chosen harness yet, When the user installs it while setup waits, Then setup finishes once the Runtime publishes it", {
-    timeout: 120_000,
-}, async () => {
-    await withUpgradeMachine("unavailable", async (runtime, paths) => {
-        const missing = await setupMachine(runtime, paths, undefined, { harness: "pi" });
-        expect(missing.code, JSON.stringify(missing.events)).not.toBe(0);
-
-        // The Runtime is online with its earlier catalog until it republishes the newly installed harness.
-        let installing: Promise<void> | null = null;
-        const installed = await setupMachine(runtime, paths, undefined, {
-            harness: "pi",
-            whileWaiting: async (events) => {
-                if (events.some((event) => event["status"] === "runtime_reused") && installing === null) {
-                    installing = runtime.installAgents({
-                        agentId: "pi",
-                        agentName: "Pi",
-                        additionalAgents: [{ id: "settings-test", name: "Settings Agent" }],
-                    });
-                }
-                await installing;
-            },
-        });
-        expect(installed.code, JSON.stringify(installed.events)).toBe(0);
-        expect(installed.events).toContainEqual(expect.objectContaining({ status: "runtime_online", harness: "pi" }));
-        expect(installed.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-    });
-});
 
 test("Given setup bound the Machine but never received the reply, When the user runs setup again, Then setup finishes on the bound Runtime", {
     timeout: 90_000,
@@ -1476,7 +1135,6 @@ test("Given setup bound the Machine but never received the reply, When the user 
             ...v.parse(v.record(v.string(), v.unknown()), JSON.parse(await readFile(configPath, "utf8"))),
         };
         delete saved["agent_ref"];
-        delete saved["agent_config_revision"];
         await rm(configPath);
         await writeFile(configPath, JSON.stringify(saved), { mode: 0o600 });
 
@@ -1566,7 +1224,6 @@ test("Given a daemon upgrade is still switching releases when its budget expires
 
 test("Given two shared links and redeemed access, When the local owner revokes all access, Then previous links and credentials fail while local setup and another machine remain usable", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-revoke-access-"));
-    const documents = join(directory, "Documents");
     const configurationDirectory = join(directory, "state");
     await mkdir(configurationDirectory, { recursive: true, mode: 0o700 });
     const fixture = await createIdentityFixture();
@@ -1622,7 +1279,6 @@ test("Given two shared links and redeemed access, When the local owner revokes a
         expect(
             await runSetup(["revoke-all-access", "--base-url", "http://127.0.0.1:1"], {
                 state: configurationDirectory,
-                documents,
                 signal,
                 emit: (event) => mismatchEvents.push(event),
             }),
@@ -1632,7 +1288,6 @@ test("Given two shared links and redeemed access, When the local owner revokes a
         expect(
             await runSetup(["revoke-all-access"], {
                 state: configurationDirectory,
-                documents,
                 signal,
                 emit: (event) => events.push(event),
             }),
@@ -1652,7 +1307,6 @@ test("Given two shared links and redeemed access, When the local owner revokes a
         expect(
             await runSetup(["revoke-all-access", "--base-url", fixture.origin], {
                 state: configurationDirectory,
-                documents,
                 signal,
                 emit: () => undefined,
             }),
@@ -1666,7 +1320,6 @@ test("Given two shared links and redeemed access, When the local owner revokes a
 
 test("Given setup replaced the Project but stopped before ending the previous identity, When the user revokes all access, Then nothing opens the previous Project and the current identity stays usable", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-replaced-identity-"));
-    const documents = join(directory, "Documents");
     const configurationDirectory = join(directory, "state");
     await mkdir(configurationDirectory, { recursive: true, mode: 0o700 });
     const fixture = await createIdentityFixture();
@@ -1691,6 +1344,11 @@ test("Given setup replaced the Project but stopped before ending the previous id
                 project_id: current.projectId,
                 replaced_project_id: previous.projectId,
                 replaced_user_token: previous.token,
+                replacement_access: {
+                    kind: "revoked",
+                    previousProjectId: previous.projectId,
+                    projectId: current.projectId,
+                },
             }),
             { mode: 0o600 },
         );
@@ -1699,7 +1357,6 @@ test("Given setup replaced the Project but stopped before ending the previous id
         const events: Readonly<Record<string, unknown>>[] = [];
         const code = await runSetup(["revoke-all-access"], {
             state: configurationDirectory,
-            documents,
             signal,
             emit: (event) => events.push(event),
         });
@@ -1711,133 +1368,18 @@ test("Given setup replaced the Project but stopped before ending the previous id
         expect((await request(previous.projectId, "/identity/transfers", previous.token, "POST")).status).toBe(401);
         expect((await request(current.projectId, "/session", current.token)).status).toBe(200);
         const saved = JSON.parse(await readFile(join(configurationDirectory, "config.json"), "utf8"));
-        expect(saved).toEqual({ base_url: fixture.origin, user_token: current.token, project_id: current.projectId });
+        expect(saved).toEqual({
+            base_url: fixture.origin,
+            user_token: current.token,
+            project_id: current.projectId,
+            replacement_access: {
+                kind: "revoked",
+                previousProjectId: previous.projectId,
+                projectId: current.projectId,
+            },
+        });
     } finally {
         await fixture.close();
         await rm(directory, { recursive: true, force: true });
     }
 }, 30000);
-
-test("Given two computers share a synced Documents folder holding the first one's earlier setup, When each sets up Morty, Then each keeps its own Machine and neither ends the other's access", {
-    timeout: 120_000,
-}, async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-synced-")));
-    const workspace = join(root, "workspace");
-    await mkdir(workspace, { recursive: true });
-    const documents = join(root, "Documents");
-    const fixture = await createIdentityFixture();
-    const computer = (name: string) =>
-        new ControlledSetupRuntime({ agentId: "settings-test", agentName: "Settings Agent", reply: mortyReply }, name);
-    const first = computer("Computer A");
-    const second = computer("Computer B");
-    const opens = async (link: unknown) => {
-        const redeemed = await worker.fetch(
-            new Request(`${fixture.origin}/morty/api/identity/transfers/redeem`, {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ code: new URL(String(link)).hash.slice("#code=".length) }),
-            }),
-            fixture.environment(fixture.origin),
-        );
-        expect(redeemed.status).toBe(200);
-        const browser = v.parse(v.object({ projectId: v.string(), token: v.string() }), await redeemed.json());
-        return async () =>
-            (
-                await fetch(`${fixture.origin}/morty/api/projects/${browser.projectId}/session`, {
-                    headers: { authorization: `Bearer ${browser.token}` },
-                })
-            ).status;
-    };
-    try {
-        // An earlier release kept computer A's identity in Documents, which syncs to computer B.
-        const earlier = join(documents, "morty");
-        const setUpEarlier = await setupMachine(first, {
-            origin: fixture.origin,
-            documents,
-            state: earlier,
-            workspace,
-        });
-        expect(setUpEarlier.code, JSON.stringify(setUpEarlier.events)).toBe(0);
-        const firstBrowser = await opens(setUpEarlier.events.at(-1)?.["url"]);
-        const earlierConfiguration = await readFile(join(earlier, "config.json"), "utf8");
-
-        const onSecond = await setupMachine(second, {
-            origin: fixture.origin,
-            documents,
-            state: join(root, "computer-b"),
-            workspace,
-        });
-
-        expect(onSecond.code, JSON.stringify(onSecond.events)).toBe(0);
-        expect(onSecond.events).not.toContainEqual(expect.objectContaining({ status: "project_replaced" }));
-        expect(await firstBrowser()).toBe(200);
-        expect(await readFile(join(earlier, "config.json"), "utf8")).toBe(earlierConfiguration);
-        const secondBrowser = await opens(onSecond.events.at(-1)?.["url"]);
-
-        const onFirst = await setupMachine(first, {
-            origin: fixture.origin,
-            documents,
-            state: join(root, "computer-a"),
-            workspace,
-        });
-
-        expect(onFirst.code, JSON.stringify(onFirst.events)).toBe(0);
-        expect(onFirst.events).not.toContainEqual(expect.objectContaining({ status: "project_replaced" }));
-        expect(onFirst.events).toContainEqual(expect.objectContaining({ status: "runtime_already_online" }));
-        expect(JSON.parse(await readFile(join(root, "computer-a", "config.json"), "utf8"))).toMatchObject({
-            project_id: JSON.parse(earlierConfiguration)["project_id"],
-        });
-        await expect(stat(join(earlier, "config.json"))).rejects.toMatchObject({ code: "ENOENT" });
-        expect(await firstBrowser()).toBe(200);
-        expect(await secondBrowser()).toBe(200);
-    } finally {
-        await first.disconnect();
-        await second.disconnect();
-        await fixture.close();
-        await rm(root, { recursive: true, force: true });
-    }
-});
-
-test("Given an earlier release kept this computer's identity in Documents, When the user revokes all access, Then the identity moves to this computer's state and the revocation uses it", {
-    timeout: 90_000,
-}, async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), "morty-revoke-earlier-")));
-    const workspace = join(root, "workspace");
-    await mkdir(workspace, { recursive: true });
-    const documents = join(root, "Documents");
-    const state = join(root, "state");
-    const fixture = await createIdentityFixture();
-    const runtime = new ControlledSetupRuntime(
-        { agentId: "settings-test", agentName: "Settings Agent", reply: mortyReply },
-        "Setup test Runtime",
-    );
-    try {
-        const earlier = join(documents, "morty");
-        const setUp = await setupMachine(runtime, { origin: fixture.origin, documents, state: earlier, workspace });
-        expect(setUp.code, JSON.stringify(setUp.events)).toBe(0);
-        const saved = v.parse(
-            v.object({ project_id: v.string() }),
-            JSON.parse(await readFile(join(earlier, "config.json"), "utf8")),
-        );
-
-        const events: Readonly<Record<string, unknown>>[] = [];
-        const code = await runSetup(["revoke-all-access"], {
-            state,
-            documents,
-            runtime,
-            signal: AbortSignal.timeout(30_000),
-            emit: (event) => events.push(event),
-        });
-
-        expect(code, JSON.stringify(events)).toBe(0);
-        expect(events.at(-1)).toMatchObject({ status: "access_revoked", projectId: saved.project_id });
-        expect(JSON.parse(await readFile(join(state, "config.json"), "utf8"))).toMatchObject({
-            project_id: saved.project_id,
-        });
-        await expect(stat(join(earlier, "config.json"))).rejects.toMatchObject({ code: "ENOENT" });
-    } finally {
-        await runtime.disconnect();
-        await fixture.close();
-        await rm(root, { recursive: true, force: true });
-    }
-});

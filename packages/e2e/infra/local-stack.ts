@@ -142,7 +142,6 @@ export class LocalStack {
     async startChat(application: { readonly appId: string; readonly appSecret: string }) {
         const variables = {
             APP_ORIGIN: this.chatOrigin,
-            AUTHENTICATION_BASE_URL: this.chatOrigin,
             MOBIUS_APP_ID: application.appId,
             MOBIUS_APP_SECRET: application.appSecret,
             MOBIUS_BASE_URL: this.platformOrigin,

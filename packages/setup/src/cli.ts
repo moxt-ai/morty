@@ -12,7 +12,6 @@ if (process.argv[1] !== undefined && pathToFileURL(await realpath(process.argv[1
     try {
         process.exitCode = await runSetup(process.argv.slice(2), {
             state: process.env["MORTY_STATE_DIRECTORY"] ?? "",
-            documents: process.env["DOCUMENT_DIR"] ?? "",
             signal: controller.signal,
             emit: (value) => console.log(JSON.stringify(value)),
         });

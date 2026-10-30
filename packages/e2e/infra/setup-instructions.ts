@@ -12,7 +12,8 @@ function isSetupModule(value: unknown): value is { readonly runSetup: typeof set
 export async function followSetupInstructions(options: {
     readonly clock?: SetupHost["clock"];
     readonly cwd: string;
-    readonly documents: string;
+    /** Where the agent saves the downloaded setup bundle. */
+    readonly downloads: string;
     readonly state: string;
     readonly harness: string;
     readonly instructionUrl: string;
@@ -41,7 +42,7 @@ export async function followSetupInstructions(options: {
     assert.ok(download);
     const response = await fetch(download, { signal: options.signal, redirect: "error" });
     assert.equal(response.status, 200);
-    const script = join(options.documents, "setup.mjs");
+    const script = join(options.downloads, "setup.mjs");
     await writeFile(script, await response.text(), { mode: 0o600 });
     const bundle: unknown = await import(pathToFileURL(script).href);
     assert.ok(isSetupModule(bundle));
@@ -51,7 +52,6 @@ export async function followSetupInstructions(options: {
         {
             ...(options.clock === undefined ? {} : { clock: options.clock }),
             state: options.state,
-            documents: options.documents,
             agentEnvironment: options.agentEnvironment,
             emit: (event) => events.push(event),
             runtime: options.runtime,

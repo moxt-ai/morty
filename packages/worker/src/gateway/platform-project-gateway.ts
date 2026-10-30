@@ -640,61 +640,6 @@ export class PlatformProjectGateway {
         }
     };
 
-    readonly storagePlacement = async (requestedProjectId: string, parent: AbortSignal) => {
-        const projectId = v.parse(platformIdentifier, requestedProjectId);
-        const signal = AbortSignal.any([parent, AbortSignal.timeout(15000)]);
-        try {
-            const response = await fetch(
-                new URL(
-                    `/mobius/api/dashboard/v1/projects/${encodeURIComponent(projectId)}/storage-placement`,
-                    this.configuration().origin,
-                ),
-                {
-                    signal,
-                    redirect: "manual",
-                },
-            );
-            signal.throwIfAborted();
-            if (!response.ok) {
-                await response.body?.cancel();
-                throw new PlatformProjectError(
-                    "PROJECT_PLACEMENT_UNAVAILABLE",
-                    "Project placement is unavailable.",
-                    503,
-                    {
-                        cause: new PlatformProjectError(
-                            "PLACEMENT_HTTP_ERROR",
-                            "Placement endpoint rejected the request.",
-                            response.status,
-                        ),
-                    },
-                );
-            }
-            const value: unknown = await response.json();
-            signal.throwIfAborted();
-            const placement = v.parse(
-                v.strictObject({
-                    location: v.picklist(["apac", "wnam"]),
-                }),
-                value,
-            );
-            return placement;
-        } catch (cause) {
-            parent.throwIfAborted();
-            if (signal.aborted) {
-                throw new PlatformProjectError("PLATFORM_TIMEOUT", "Project placement lookup timed out.", 504, {
-                    cause,
-                });
-            }
-            if (cause instanceof PlatformProjectError) {
-                throw cause;
-            }
-            throw new PlatformProjectError("PROJECT_PLACEMENT_UNAVAILABLE", "Project placement is unavailable.", 503, {
-                cause,
-            });
-        }
-    };
-
     readonly create = async (
         userId: string,
         displayName: string,

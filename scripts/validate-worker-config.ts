@@ -1,4 +1,4 @@
-const variableNames = ["APP_ORIGIN", "AUTHENTICATION_BASE_URL", "MOBIUS_BASE_URL", "MOBIUS_APP_ID"];
+const variableNames = ["APP_ORIGIN", "MOBIUS_BASE_URL", "MOBIUS_APP_ID"];
 const secretNames = ["MOBIUS_APP_SECRET"];
 
 const mode = process.argv[2] ?? "validate";

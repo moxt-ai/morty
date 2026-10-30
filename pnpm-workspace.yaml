@@ -1,10 +1,5 @@
 engineStrict: true
 minimumReleaseAge: 1440
-minimumReleaseAgeExclude:
-  - '@moxt-ai/mobius-sdk@0.0.35'
-  - '@moxt-ai/mobius-sdk@0.0.36'
-  - '@moxt-ai/mobius-sdk@0.0.38'
-  - '@moxt-ai/mobius-sdk@0.0.39'
 
 overrides:
   'source-map-js@>=1.0.0 <1.2.2': 1.2.2

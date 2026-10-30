@@ -17,7 +17,6 @@ export class ManagementService {
     readonly #managedBots: ManagedBotStorage;
     readonly #platformProjects: PlatformProjectStorage;
     readonly #platform: PlatformProjectGateway;
-    readonly #scopeProject: (projectId: string, signal: AbortSignal) => Promise<ManagementService>;
     readonly #replacementKey: unknown;
 
     constructor(cx: {
@@ -28,22 +27,13 @@ export class ManagementService {
             readonly platformProjects: PlatformProjectStorage;
         };
         readonly gateways: { readonly platformProjects: PlatformProjectGateway };
-        readonly scopeProject: (projectId: string, signal: AbortSignal) => Promise<ManagementService>;
     }) {
         this.#authentication = cx.services.authentication;
         this.#managedBots = cx.storages.managedBots;
         this.#platformProjects = cx.storages.platformProjects;
         this.#platform = cx.gateways.platformProjects;
-        this.#scopeProject = cx.scopeProject;
         this.#replacementKey = cx.config.bindings.CHAT_REPLACEMENT_KEY;
     }
-
-    readonly createAnonymousUser = async (location: LocationHint, signal: AbortSignal) => {
-        const userId = `usr_${crypto.randomUUID()}`;
-        const project = await this.#platform.create(userId, "Morty", signal, location);
-        const scoped = await this.#scopeProject(project.projectId, signal);
-        return await scoped.initializeAnonymousUser(userId, project, signal);
-    };
 
     readonly initializeAnonymousUser = async (
         userId: string,
@@ -138,23 +128,6 @@ export class ManagementService {
     readonly readProject = async (userId: string, signal: AbortSignal) => {
         const { appId } = this.#platform.configuration();
         return await this.#platformProjects.read(userId, appId, signal);
-    };
-
-    readonly createProject = async (
-        userId: string,
-        displayName: string,
-        location: LocationHint,
-        signal: AbortSignal,
-    ) => {
-        const { appId } = this.#platform.configuration();
-        const existing = await this.#platformProjects.read(userId, appId, signal);
-        if (existing !== null) {
-            return existing;
-        }
-        const project = await this.#platform.create(userId, displayName, signal, location);
-        const scoped = await this.#scopeProject(project.projectId, signal);
-        await scoped.#platformProjects.save(userId, appId, project, signal);
-        return (await scoped.#platformProjects.read(userId, appId, signal)) ?? project;
     };
 
     /** Creates the successor Project for a user whose Project must be replaced, keeping the user. */

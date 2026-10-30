@@ -105,7 +105,6 @@ async function startIdentityFixture(
                 const listener = new URL(appOrigin);
                 const baseConfiguration = {
                     APP_ORIGIN: appOrigin,
-                    AUTHENTICATION_BASE_URL: "https://identity.test",
                     MOBIUS_APP_ID: platform.appId,
                     MOBIUS_APP_SECRET: platform.appCredential,
                     MOBIUS_BASE_URL: executionNetwork?.origin ?? network?.origin ?? platform.baseUrl,

@@ -15,7 +15,7 @@ case "${1:-}" in
         shift
         exec node "$ROOT/scripts/local-dev.cjs" prepare "$MODE" --app-id "$APP_ID" --app-secret "$APP_SECRET" "$@"
         ;;
-    web-server|web-server-mobius|web-server-mobius-cli)
+    web-server|web-server-mobius-cli)
         MODE=$1
         shift
         exec node "$ROOT/scripts/local-dev.cjs" prepare "$MODE" "$@"

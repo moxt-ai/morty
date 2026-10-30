@@ -33,10 +33,3 @@ function platformStateDirectory(): string | null {
         }
     }
 }
-
-/** The Documents directory earlier releases kept Morty's state in, or null when there is none to look in. */
-export function resolveDocumentsDirectory(configured: string, signal: AbortSignal): string | null {
-    signal.throwIfAborted();
-    const directory = configured !== "" ? configured : join(homedir(), "Documents");
-    return isAbsolute(directory) ? directory : null;
-}

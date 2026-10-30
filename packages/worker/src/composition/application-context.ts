@@ -8,7 +8,6 @@ import { ManagedBotStorage } from "../components/management/storage/managed-bot-
 import { PlatformProjectStorage } from "../components/management/storage/platform-project-storage.ts";
 import { PlatformProjectGateway } from "../gateway/platform-project-gateway.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
-import { projectBindings } from "./project-bindings.ts";
 
 export const logger = pino({
     base: { service: "morty" },
@@ -51,12 +50,7 @@ export function createApplicationDependencies(bindings: CloudBindings): Applicat
     const services = Object.freeze({
         authentication,
         chat: new ChatService(cx),
-        management: new ManagementService({
-            ...cx,
-            services: { authentication },
-            scopeProject: async (projectId, signal): Promise<ManagementService> =>
-                createApplicationDependencies(await projectBindings(bindings, projectId, signal)).services.management,
-        }),
+        management: new ManagementService({ ...cx, services: { authentication } }),
     });
     return Object.freeze({ ...cx, services });
 }
