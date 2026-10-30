@@ -58,7 +58,7 @@ export function ReadonlyWorkingDirectory({
                         data-testid={dataTestId.workingDirectory}
                         title={directoryLabel}
                     >
-                        <FolderOpen aria-hidden="true" className={cn("shrink-0", iconClassName)} />
+                        <FolderOpen aria-hidden="true" className={cn("shrink-0 text-morty-text-3/60", iconClassName)} />
                         <StartClippedLabel clip={clip} value={directoryLabel} />
                     </span>
                 </Tooltip.Trigger>
