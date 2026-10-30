@@ -1,7 +1,6 @@
 import { join } from "node:path";
-import { MobiusRuntimeEngine, pairMobiusRuntime } from "@moxt-ai/mobius/engine";
+import { MobiusRuntimeEngine } from "@moxt-ai/mobius/engine";
 import { expect, test } from "@playwright/test";
-import { openMobiusCliInstallation } from "../../third-party/mobius/packages/cli/src/daemon/pairing/pair-local-machine.ts";
 import { CodexAppServerClient } from "../../third-party/mobius/packages/cli/src/engine/acp/harness/codex/app-server-client.ts";
 import { stopProcessTree } from "../../third-party/mobius/packages/cli/src/engine/util/process/executable.ts";
 import { CodexFixture } from "../../third-party/mobius/packages/cli/tests/support/agents/codex.ts";
@@ -41,7 +40,7 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         const stack = await LocalStack.create(harness);
         const application = await stack.startPlatform();
         await stack.startChat(application);
-        const environment = { ...codex.environment, MOBIUS_STATE_DIRECTORY: join(harness.workDirectory, "runtime") };
+        const environment = codex.environment;
         const completed = Promise.withResolvers<void>();
         owner = new CodexAppServerClient({
             command: codex.executable,
@@ -85,9 +84,11 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         // biome-ignore lint/correctness/useHookAtTopLevel: ChatApi authentication is not a React hook.
         await chat.useBrowserIdentity({ projectId, token });
         const pairing = await chat.createPairing();
-        const installation = await openMobiusCliInstallation(signal, environment);
-        const paired = await pairMobiusRuntime(
-            installation,
+        const engine = new MobiusRuntimeEngine({
+            engineDataDir: join(harness.workDirectory, "runtime"),
+            agentLaunchEnvironment: environment,
+        });
+        const paired = await engine.pair(
             {
                 defaultWorkspace: stack.directories.workspace,
                 pairingCode: text(pairing["pairingCode"], "pairing code"),
@@ -95,16 +96,17 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
                 relayOrigin: text(pairing["relayUrl"], "relay URL"),
             },
             signal,
-            environment,
         );
         const ready = Promise.withResolvers<void>();
-        running = new MobiusRuntimeEngine(paired.config, {
+        running = engine.runLoop({
+            connection: { kind: "saved", connectionId: paired.connectionId },
+            signal,
             onConnectionStatus: (status) => {
                 if (status === "online") {
                     ready.resolve();
                 }
             },
-        }).run(signal);
+        });
         void running.catch(ready.reject);
         await Promise.race([ready.promise, running]);
         const pairedAgent = await chat.readPairedAgent(text(pairing["pairingId"], "pairing ID"), "codex");
