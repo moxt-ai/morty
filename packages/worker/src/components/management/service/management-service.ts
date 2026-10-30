@@ -46,19 +46,25 @@ export class ManagementService {
         const identity = await this.#authentication.createAnonymous(userId, project.projectId, signal, token);
         const { appId } = this.#platform.configuration();
         await this.#platformProjects.save(userId, appId, project, signal);
-        const { botId, displayName } = await this.userBot(identity.userId, signal);
+        const { botId, displayName } = await this.#provisionUserBot(identity.userId, signal);
         return { ...identity, bot: { botId, displayName } };
     };
 
-    /**
-     * The one Machine Morty serves a user; setup and every browser handoff resolve it here. Earlier releases could give
-     * a user several Machines, so the Machine bound to a Runtime is served before one that never got a Runtime, and
-     * the oldest such Machine wins. Setup binds only this Machine and a binding is permanent, so once it has a Runtime
-     * it remains the one served. A user without a Machine gets one, so resolving it again returns the same one.
-     */
+    /** The one Machine Morty serves a user; setup and every browser handoff resolve it here. Reading never creates. */
     readonly userBot = async (userId: string, signal: AbortSignal) => {
-        const bots = await this.#managedBots.listBots(userId, signal);
-        const served = bots.find((bot) => bot.runtimeId !== null) ?? bots[0];
+        const served = servedBot(await this.#managedBots.listBots(userId, signal));
+        if (served === undefined) {
+            throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
+        }
+        return served;
+    };
+
+    /**
+     * Gives the user its Machine unless it already has one. Only identity bootstrap and transfer redemption call this;
+     * both are retried writes, so repeating them returns the same Machine.
+     */
+    readonly #provisionUserBot = async (userId: string, signal: AbortSignal) => {
+        const served = servedBot(await this.#managedBots.listBots(userId, signal));
         if (served !== undefined) {
             return served;
         }
@@ -130,7 +136,7 @@ export class ManagementService {
         if (identity === null) {
             return null;
         }
-        const { botId } = await this.userBot(identity.userId, signal);
+        const { botId } = await this.#provisionUserBot(identity.userId, signal);
         return { ...identity, botId };
     };
 
@@ -174,4 +180,13 @@ async function derivedToken(serverKey: unknown, input: readonly string[]) {
         .replaceAll("+", "-")
         .replaceAll("/", "_")
         .replace(/=+$/u, "")}`;
+}
+
+/**
+ * Earlier releases could give a user several Machines, so the Machine bound to a Runtime is served before one that
+ * never got a Runtime, and the oldest such Machine wins. Setup binds only this Machine and a binding is permanent, so
+ * once it has a Runtime it remains the one served.
+ */
+function servedBot<Bot extends { readonly runtimeId: string | null }>(bots: readonly Bot[]): Bot | undefined {
+    return bots.find((bot) => bot.runtimeId !== null) ?? bots[0];
 }
