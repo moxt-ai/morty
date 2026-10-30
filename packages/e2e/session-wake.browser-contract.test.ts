@@ -11,7 +11,7 @@ test("Given a conversation recovering after suspension, when its history read ti
     const connections = new Set<WebSocketRoute>();
     // Forward to the real Platform. Delay one real history request while
     // keeping subscription acknowledgements and heartbeats flowing.
-    await page.routeWebSocket("**/mobius/api/v1/transport", (socket) => {
+    await page.routeWebSocket("**/mobius/api/v1/projects/*/runtimes/*/transport", (socket) => {
         const server = socket.connectToServer();
         connections.add(socket);
         socket.onClose(async (code, reason) => {
