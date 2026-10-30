@@ -837,7 +837,7 @@ process.exit(result.status ?? 1);
         { mode: 0o700 },
     );
     if (process.platform === "win32") {
-        fs.writeFileSync(path.join(shimDirectory, "npx.cmd"), '@ECHO off\r\nnode "%~dp0\\npx.cjs" %*\r\n');
+        fs.writeFileSync(path.join(shimDirectory, "npx.cmd"), '@ECHO off\r\n@SETLOCAL\r\nnode "%~dp0\\npx.cjs" %*\r\n');
     }
     log(`running setup for harness "${harness}" against workspace ${workspace}`);
     const runtimePid = await startProcess(
