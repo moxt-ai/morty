@@ -18,10 +18,8 @@ import { formatError } from "../format-error.ts";
 import { createComposerAttachmentStore } from "./composer-attachment-store.ts";
 import {
     type ConversationCreationState,
-    type FirstMessages,
     queuedDraftMessage,
     transitionConversationCreation,
-    transitionFirstMessages,
 } from "./conversation-creation-machine.ts";
 import {
     type ConversationSelectionEvent,
@@ -33,7 +31,7 @@ import { createConversationSessionStore } from "./conversation-session-store.ts"
 import type { OpenMobiusSession } from "./open-session.ts";
 import { startRecoveryNotice } from "./recovery-notice.ts";
 import type { RuntimeObservation } from "./runtime-recovery.ts";
-import { prependToDraft } from "./session-delivery-store.ts";
+import { prependToDraft, type SubmittedMessage } from "./session-delivery-store.ts";
 import type { SessionTitles, SessionTitlesStore } from "./session-titles-store.ts";
 
 export type BotChatHomeStoreApi = Omit<ReturnType<typeof createBotChatHomeStore>, "setState">;
@@ -114,7 +112,7 @@ export interface BotChatHomeStore {
     readonly composerAttachments: ReturnType<typeof createComposerAttachmentStore>;
     /** The draft written while creating the Session the page followed, until that Session's composer takes it. */
     readonly draftHandoff: {
-        readonly commandId: string;
+        readonly sessionId: string;
         readonly draft: string;
         readonly attachments: ReturnType<typeof createComposerAttachmentStore>;
     } | null;
@@ -133,8 +131,6 @@ export interface BotChatHomeStore {
     readonly setNetworkAvailable: (available: boolean) => void;
     readonly selection: ConversationSelectionState;
     readonly creation: ConversationCreationState;
-    /** First messages waiting to enter their Session's delivery workflow, whichever is on screen. */
-    readonly firstMessages: FirstMessages;
     readonly draft: string;
     /** The draft the composer text belongs to. Only starting a new draft changes it. */
     readonly draftKey: string;
@@ -152,11 +148,9 @@ export interface BotChatHomeStore {
     readonly setDraft: (draft: string) => void;
     readonly showPairingDialog: () => void;
     readonly closePairingDialog: () => void;
-    /** Releases the first message to delivery, or back to an editable composer if preparation failed. */
-    readonly initialMessageDequeued: (conversationId: string, commandId: string) => void;
     readonly createConversation: (signal: AbortSignal) => Promise<boolean>;
     /** Hands the draft written during creation to the Session the page followed; null for any other Session. */
-    readonly takeNextDraft: (commandId: string) => {
+    readonly takeNextDraft: (sessionId: string) => {
         readonly draft: string;
         readonly attachments: ReturnType<typeof createComposerAttachmentStore>;
     } | null;
@@ -235,6 +229,11 @@ export const createBotChatHomeStore = (
         readonly onRestart: () => void;
         /** Announced when a created conversation joins the directory: the owner reloads it without reloading the home view. */
         readonly onDirectoryRefreshed: () => void;
+        /**
+         * Hands a created Session its first message: the Session's delivery owns it, durably, from this call until
+         * the Runtime takes it, whichever conversation is on screen.
+         */
+        readonly onFirstMessage: (sessionId: string, message: SubmittedMessage) => void;
         /** Announced after a transition that selects a new draft: the owner reloads the draft controls. */
         readonly onDraftSelected: () => void;
         /** Announced after a transition that targets another conversation: the owner re-scopes the status watch. */
@@ -281,7 +280,7 @@ export const createBotChatHomeStore = (
             set({ selection });
             announceSelection();
         };
-        // A first message's reload recovery ends once its Session owns it or the user leaves its draft.
+        // The draft page's reload recovery of a first message ends once its Session owns it or the user leaves its draft.
         const releaseUnsentFirstMessage = (commandId: string): void => {
             const entry = newConversationUnsentMessageEntry(botId);
             if (centralSessionStorage.read(entry)?.commandId === commandId) {
@@ -307,7 +306,6 @@ export const createBotChatHomeStore = (
             },
             selection,
             creation: { kind: "draft" },
-            firstMessages: new Map(),
             draft: "",
             draftKey: selection.kind === "draft" ? selection.key : options.createId(),
             scrollFollowRevision: 0,
@@ -763,14 +761,6 @@ export const createBotChatHomeStore = (
             },
             showPairingDialog: () => set({ pairingDialogOpen: true }),
             closePairingDialog: () => set({ pairingDialogOpen: false }),
-            initialMessageDequeued: (conversationId, commandId) =>
-                set((state) => ({
-                    firstMessages: transitionFirstMessages(state.firstMessages, {
-                        kind: "dequeued",
-                        conversationId,
-                        commandId,
-                    }),
-                })),
             createConversation: async (signal) => {
                 const current = get();
                 const { attachments, state: attachmentState } = get().composerAttachments.getState();
@@ -882,44 +872,44 @@ export const createBotChatHomeStore = (
                     }
                     options.navigation.showManaged(conversationId);
                 }
-                set((state) => ({
-                    firstMessages: transitionFirstMessages(state.firstMessages, {
-                        kind: "queued",
-                        conversationId,
-                        message: queuedMessage,
-                    }),
-                    ...(session !== null
-                        ? {
-                              creation: transitionConversationCreation(state.creation, {
-                                  commandId,
-                                  kind: "conversation-created",
-                              }),
-                              scrollFollowRevision: state.scrollFollowRevision + 1,
-                              selection: transitionConversationSelection(state.selection, {
-                                  kind: "conversation-created",
-                                  conversationId,
-                                  session,
-                              }),
-                              // The attachment store moves with the draft, including any read still in progress.
-                              draftHandoff: { commandId, draft: state.draft, attachments: state.composerAttachments },
-                              draft: "",
-                              composerAttachments: createComposerAttachmentStore(),
-                          }
-                        : {}),
-                }));
-                if (session !== null) {
-                    centralSessionStorage.remove(newConversationDraftEntry(botId));
-                }
+                // The Session takes the message and its durable copy in one step, so a reload always finds one.
+                options.onFirstMessage(conversationId, {
+                    commandId,
+                    content: queuedMessage.content,
+                    attachments: { kind: "local", values: queuedMessage.attachments },
+                    target: { disposition: "reject", targetCommandId: "" },
+                });
                 releaseUnsentFirstMessage(commandId);
-                if (following) {
+                if (session !== null) {
+                    set((state) => ({
+                        creation: transitionConversationCreation(state.creation, {
+                            commandId,
+                            kind: "conversation-created",
+                        }),
+                        scrollFollowRevision: state.scrollFollowRevision + 1,
+                        selection: transitionConversationSelection(state.selection, {
+                            kind: "conversation-created",
+                            conversationId,
+                            session,
+                        }),
+                        // The attachment store moves with the draft, including any read still in progress.
+                        draftHandoff: {
+                            sessionId: conversationId,
+                            draft: state.draft,
+                            attachments: state.composerAttachments,
+                        },
+                        draft: "",
+                        composerAttachments: createComposerAttachmentStore(),
+                    }));
+                    centralSessionStorage.remove(newConversationDraftEntry(botId));
                     announceSelection();
                 }
                 onDirectoryRefreshed();
                 return true;
             },
-            takeNextDraft: (commandId) => {
+            takeNextDraft: (sessionId) => {
                 const handoff = get().draftHandoff;
-                if (handoff === null || handoff.commandId !== commandId) {
+                if (handoff === null || handoff.sessionId !== sessionId) {
                     return null;
                 }
                 set({ draftHandoff: null });

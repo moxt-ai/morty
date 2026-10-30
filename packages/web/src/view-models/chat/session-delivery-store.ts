@@ -80,6 +80,11 @@ export function submissionFailure(cause: unknown, fallback: string): SubmissionF
 
 export type DeliveryState =
     | { readonly kind: "idle" }
+    /**
+     * A message the Session holds until a connected pane prepares it: a new Session's first message, which its
+     * delivery owns from the Session's creation, so no moment leaves it without a record a reload can return.
+     */
+    | { readonly kind: "awaiting-connection"; readonly message: SubmittedMessage }
     | { readonly kind: "preparing"; readonly message: SubmittedMessage }
     | { readonly kind: "preparation-failed"; readonly message: SubmittedMessage; readonly failure: SubmissionFailure }
     | { readonly kind: "submitting"; readonly journal: Journal; readonly confirmation: "unknown" | "delivered" }
@@ -96,6 +101,7 @@ export function failedSubmission(
         case "failed":
             return { message: journalMessage(state.journal), failure: state.failure };
         case "idle":
+        case "awaiting-connection":
         case "preparing":
         case "submitting":
         case "delivery-unknown":
@@ -105,11 +111,18 @@ export function failedSubmission(
     }
 }
 
+/** The message the Session holds for its next connected pane to submit. */
+export function awaitingMessage(state: DeliveryState): SubmittedMessage | null {
+    return state.kind === "awaiting-connection" ? state.message : null;
+}
+
 export interface SessionDeliveryStore {
     readonly state: DeliveryState;
     /** Accepted prompts waiting for the Runtime's user-message history, independent of the next submission. */
     readonly confirmedMessages: readonly SubmittedMessage[];
     readonly discardUnknown: () => void;
+    /** Takes a new Session's first message, which a pane submits once it connects. */
+    readonly awaitConnection: (message: SubmittedMessage) => void;
     readonly prepare: (message: SubmittedMessage) => void;
     readonly preparationFailed: (message: SubmittedMessage, failure: SubmissionFailure) => void;
     readonly takeFailedMessage: () => SubmittedMessage | null;
@@ -127,6 +140,7 @@ export interface SessionDeliveryStore {
  */
 function unsentContent(state: DeliveryState): string | null {
     switch (state.kind) {
+        case "awaiting-connection":
         case "preparing":
         case "preparation-failed":
             return state.message.content.trim() === "" ? null : state.message.content;
@@ -236,6 +250,7 @@ export const createSessionDeliveryStore = (options: {
                     set({ state: { kind: "idle" } });
                 }
             },
+            awaitConnection: (message) => set({ state: { kind: "awaiting-connection", message } }),
             prepare: (message) => set({ state: { kind: "preparing", message } }),
             preparationFailed: (message, failure) => set({ state: { kind: "preparation-failed", message, failure } }),
             takeFailedMessage: () => {

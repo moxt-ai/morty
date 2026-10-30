@@ -180,6 +180,7 @@ export function createChatWorkspace(options: {
             startDirectoryLoad();
         },
         onDirectoryRefreshed: () => startDirectoryLoad(),
+        onFirstMessage: (sessionId, message) => sessionDelivery(sessionId).getState().awaitConnection(message),
         onSelectionReady: (selection) => {
             runtimeRecovery.working();
             replacePane(selection);
@@ -378,6 +379,34 @@ export function createChatWorkspace(options: {
     const sessionAttachments = new Map<string, ReturnType<typeof createComposerAttachmentStore>>();
     // Submitted intent belongs to the Session until confirmed or discarded, across pane replacements.
     const sessionDeliveries = new Map<string, ReturnType<typeof createSessionDeliveryStore>>();
+    /** The Session's delivery on this page, which persists what it holds for the next page to recover. */
+    const sessionDelivery = (sessionId: string): ReturnType<typeof createSessionDeliveryStore> => {
+        const existing = sessionDeliveries.get(sessionId);
+        if (existing !== undefined) {
+            return existing;
+        }
+        const unsentEntry = sessionUnsentMessageEntry(sessionId);
+        const pendingEntry = sessionPendingSubmissionEntry(botId, sessionId);
+        const delivery = createSessionDeliveryStore({
+            pendingSubmission: centralSessionStorage.read(pendingEntry),
+            pendingSubmissionChanged: (journal) => {
+                if (journal === null) {
+                    centralSessionStorage.remove(pendingEntry);
+                } else if (!centralSessionStorage.write(pendingEntry, journal)) {
+                    throw new SessionStorageWriteError();
+                }
+            },
+            unsentMessageChanged: (content) => {
+                if (content === null) {
+                    centralSessionStorage.remove(unsentEntry);
+                } else {
+                    centralSessionStorage.write(unsentEntry, content);
+                }
+            },
+        });
+        sessionDeliveries.set(sessionId, delivery);
+        return delivery;
+    };
     const replacePane = (selection: Extract<ConversationSelectionState, { readonly kind: "ready" }>): void => {
         if (paneEntry !== null && paneEntry.session === selection.session) {
             return;
@@ -398,43 +427,23 @@ export function createChatWorkspace(options: {
             );
             rememberedSessionId = sessionId;
         }
-        const firstMessage = home.getState().firstMessages.get(sessionId);
         let composerAttachments = sessionAttachments.get(sessionId);
         let nextDraft: string | null = null;
         if (composerAttachments === undefined) {
             // Only the draft page that followed its first message here hands over the draft written meanwhile.
-            const handoff = firstMessage === undefined ? null : home.getState().takeNextDraft(firstMessage.commandId);
+            const handoff = home.getState().takeNextDraft(sessionId);
             composerAttachments = handoff?.attachments ?? createComposerAttachmentStore();
             nextDraft = handoff?.draft ?? null;
             sessionAttachments.set(sessionId, composerAttachments);
         }
-        let delivery = sessionDeliveries.get(sessionId);
         let unsent: string | null = null;
-        if (delivery === undefined) {
+        if (!sessionDeliveries.has(sessionId)) {
             // A message an earlier page left unsent returns to the composer; it is never delivered implicitly.
             const unsentEntry = sessionUnsentMessageEntry(sessionId);
             unsent = centralSessionStorage.read(unsentEntry);
             centralSessionStorage.remove(unsentEntry);
-            const pendingEntry = sessionPendingSubmissionEntry(botId, sessionId);
-            delivery = createSessionDeliveryStore({
-                pendingSubmission: centralSessionStorage.read(pendingEntry),
-                pendingSubmissionChanged: (journal) => {
-                    if (journal === null) {
-                        centralSessionStorage.remove(pendingEntry);
-                    } else if (!centralSessionStorage.write(pendingEntry, journal)) {
-                        throw new SessionStorageWriteError();
-                    }
-                },
-                unsentMessageChanged: (content) => {
-                    if (content === null) {
-                        centralSessionStorage.remove(unsentEntry);
-                    } else {
-                        centralSessionStorage.write(unsentEntry, content);
-                    }
-                },
-            });
-            sessionDeliveries.set(sessionId, delivery);
         }
+        const delivery = sessionDelivery(sessionId);
         const model = createSessionPaneModel({
             clock: options.clock,
             session: selection.session,
@@ -443,8 +452,6 @@ export function createChatWorkspace(options: {
             attachmentSignal: operationsLifetime.signal,
             botId,
             requests,
-            initialMessage: firstMessage,
-            onInitialMessageDequeued: (commandId) => home.getState().initialMessageDequeued(sessionId, commandId),
             onReleased: (activity) => statuses.getState().paneReleased(sessionId, activity),
             titles,
             connectionAvailable: (connection) => connectionPresentation(home.getState(), connection).available,

@@ -786,8 +786,8 @@ function MobiusSessionPaneBody({
     const sessionMessagesLoading =
         model.connection.kind === "first-loading" &&
         model.messages.length === 0 &&
-        model.pendingInitialMessage === null;
-    const initialMessage = model.pendingInitialMessage;
+        presentation.awaitingMessage === null;
+    const initialMessage = presentation.awaitingMessage;
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
     const openLocalFile = (path: string) => {

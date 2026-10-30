@@ -26,7 +26,6 @@ import type { Clock } from "../../services/time/clock.ts";
 import { formatError, isRetryableRuntimeConnectionFailure, isSessionClosedFailure } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
 import type { ComposerAttachmentStore } from "./composer-attachment-store.ts";
-import type { QueuedDraftMessage } from "./conversation-creation-machine.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
 import type { SelectedMobiusSession } from "./open-session.ts";
 import { uploadPromptAttachment, uploadPromptAttachments } from "./prompt-attachment-upload.ts";
@@ -51,6 +50,7 @@ import {
 } from "./session-current-turn.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import {
+    awaitingMessage,
     type DeliveryTarget,
     deliveryMessagePresentation,
     failedSubmission,
@@ -132,7 +132,6 @@ export interface SessionPaneStore {
     readonly connection: SessionConnection;
     readonly titleEdit: TitleEdit;
     readonly messages: readonly SessionExecutionMessage[];
-    readonly pendingInitialMessage: QueuedDraftMessage | null;
     readonly olderHistory: OlderHistory;
     readonly historyRevision: number;
     readonly hasOlderHistory: boolean;
@@ -273,6 +272,7 @@ export function sessionPanePresentation(
             : {
                   ...deliveryMessagePresentation(journalMessage(unconfirmed)),
               };
+    const awaiting = awaitingMessage(delivery.state);
     const pendingMessage =
         delivery.state.kind === "preparing" || delivery.state.kind === "preparation-failed"
             ? delivery.state.message
@@ -369,6 +369,8 @@ export function sessionPanePresentation(
             !composerHasMessage(model.draft, attachments.attachments.length, attachments.state.kind === "reading") ||
             !(shouldQueueOnSubmit ? canQueue(facts) : canSendNow(facts)),
         unconfirmedDelivery,
+        /** The Session's first message while it waits for this pane to connect, shown as it was written. */
+        awaitingMessage: awaiting === null ? null : deliveryMessagePresentation(awaiting),
         confirmedMessages: delivery.confirmedMessages
             .filter(
                 (confirmed) =>
@@ -469,9 +471,6 @@ export function createSessionPaneModel(options: {
         | "waitForBridge"
         | "resetSessionConnections"
     >;
-    readonly initialMessage?: QueuedDraftMessage | undefined;
-    /** Transfers the queued first message to delivery. */
-    readonly onInitialMessageDequeued?: ((commandId: string) => void) | undefined;
     /**
      * Hands the owner this pane's last account of the Session's work when the pane stops. While it runs, the owner
      * derives the Session's status from the pane's turn instead.
@@ -537,11 +536,6 @@ export function createSessionPaneModel(options: {
         };
     let projection = createSessionProjection();
     let loadingOlderHistory = false;
-    // Creation owns the queued first message until the Session's delivery workflow takes its frozen request.
-    const queuedInitialCommandId = options.initialMessage?.commandId ?? null;
-    const isQueuedInitialMessage = (commandId: string): boolean => commandId === queuedInitialCommandId;
-    let queuedInitialSubmission: "waiting" | "submitted" =
-        options.initialMessage === undefined ? "submitted" : "waiting";
     const instructionUri = "morty://bot/instructions";
     const withInstructions = async <T extends { readonly attachments: readonly PromptAttachment[] }>(
         request: T,
@@ -859,12 +853,7 @@ export function createSessionPaneModel(options: {
         };
         const commitProjection = (input: SessionProjectionInput): readonly SessionProjectionEffect[] => {
             const result = transitionSessionProjection(projection, input);
-            set({
-                ...adoptProjection(result.state),
-                // Lifecycle bookkeeping does not replace the preview; wait for Agent output.
-                pendingInitialMessage:
-                    input.kind === "live-event" && input.event.type === "acp" ? null : get().pendingInitialMessage,
-            });
+            set(adoptProjection(result.state));
             for (const effect of result.effects) {
                 if (effect.kind !== "adopted") {
                     continue;
@@ -971,9 +960,9 @@ export function createSessionPaneModel(options: {
             });
         };
         /**
-         * Submits a message: the composer's draft, or the queued first message this pane was opened with, exactly
-         * as the home store holds it. Delivery owns that snapshot through preparation, sending, and recovery;
-         * completion never writes to the next draft.
+         * Submits a message: the composer's draft, a failed message again, or the first message the Session's
+         * delivery holds. Delivery owns that snapshot through preparation, sending, and recovery; completion never
+         * writes to the next draft.
          */
         const submit = async (message: SubmittedMessage, signal: AbortSignal): Promise<void> => {
             const currentDelivery = delivery.getState().state;
@@ -982,22 +971,16 @@ export function createSessionPaneModel(options: {
             }
             const { attachments, commandId, target } = message;
             welcome.getState().dismiss();
-            const queued = isQueuedInitialMessage(commandId);
-            if (queued) {
-                queuedInitialSubmission = "submitted";
-            }
             const sent = turns.recordSent(commandId, Date.now());
             void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
             const prompt = message.content.trim();
             delivery.getState().prepare(message);
-            if (queued) {
-                options.onInitialMessageDequeued?.(commandId);
-            } else if (currentDelivery.kind === "idle") {
+            // Only a message taken from the composer leaves it; a failed or first message never was in it.
+            if (currentDelivery.kind === "idle") {
                 centralSessionStorage.remove(draftEntry);
                 composerAttachments.getState().clear();
                 set({ draft: "", filesRestoreNotice: false });
             }
-            set({ pendingInitialMessage: null });
             if (target.disposition === "reject") {
                 updateTurn({ kind: "new-turn-submitted" });
             }
@@ -1023,7 +1006,7 @@ export function createSessionPaneModel(options: {
                     signal,
                 );
                 signal.throwIfAborted();
-                const sending = delivery.getState().submit(
+                await delivery.getState().submit(
                     {
                         commandId,
                         request: submission,
@@ -1032,7 +1015,6 @@ export function createSessionPaneModel(options: {
                     submitCommand(commandId, target.disposition, sent.sentAt),
                     signal,
                 );
-                const outcome = await sending;
                 signal.throwIfAborted();
                 delivery
                     .getState()
@@ -1044,10 +1026,6 @@ export function createSessionPaneModel(options: {
                                 : [],
                         ),
                     ]);
-                if (outcome.kind === "accepted") {
-                    return;
-                }
-                set({ pendingInitialMessage: null });
             } catch (cause) {
                 signal.throwIfAborted();
                 if (delivery.getState().state.kind === "preparing") {
@@ -1062,14 +1040,12 @@ export function createSessionPaneModel(options: {
                     delivery.getState().submissionInterrupted();
                 }
                 // The retained submission owns its failure; the composer keeps the next draft.
-                set({ pendingInitialMessage: null });
             }
         };
         return {
             connection: { kind: "first-loading" },
             titleEdit: { kind: "closed" },
             ...projectedTimeline(projection),
-            pendingInitialMessage: options.initialMessage ?? null,
             olderHistory: { kind: "idle" },
             draft: centralSessionStorage.read(draftEntry) ?? "",
             filesRestoreNotice: false,
@@ -1283,17 +1259,10 @@ export function createSessionPaneModel(options: {
                     })();
                     try {
                         welcome.getState().connected();
-                        if (options.initialMessage !== undefined && queuedInitialSubmission === "waiting") {
-                            // Preparation uses this pane; the frozen submission transfers to Session-owned delivery.
-                            await submit(
-                                {
-                                    commandId: options.initialMessage.commandId,
-                                    target: { disposition: "reject", targetCommandId: "" },
-                                    content: options.initialMessage.content,
-                                    attachments: { kind: "local", values: options.initialMessage.attachments },
-                                },
-                                paneSignal,
-                            );
+                        // The first message the Session holds is submitted by the first pane that connects.
+                        const awaiting = awaitingMessage(delivery.getState().state);
+                        if (awaiting !== null) {
+                            await submit(awaiting, paneSignal);
                             signal.throwIfAborted();
                         }
                         await subscription.completed;
