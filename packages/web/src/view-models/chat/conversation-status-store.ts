@@ -1,7 +1,8 @@
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { SessionActivityState } from "./session-activity-machine.ts";
-import { turnActivity } from "./session-current-turn.ts";
+import { sessionActivity } from "./session-current-turn.ts";
+import type { DeliveryState } from "./session-delivery-store.ts";
 import type { SessionPaneStore } from "./session-pane-store.ts";
 
 export type ConversationStatusStoreApi = ReturnType<typeof createConversationStatusStore>;
@@ -27,17 +28,21 @@ function settleIdle(current: ConversationListStatus | undefined, selected: boole
 }
 
 /**
- * What the sidebar shows for a Session. The open Session's pane owns its current turn, including submissions the
- * Runtime never saw, so once the pane has reached the Runtime that Session's status is derived from its turn. Every
- * other Session shows what this store retained, or the status its directory entry was listed with.
+ * What the sidebar shows for a Session. The open Session's pane owns its current turn and its delivery, including
+ * submissions the Runtime never saw, so once the pane has reached the Runtime that Session's status is the pane's
+ * activity. Every other Session shows what this store retained, or the status its directory entry was listed with.
  */
 export function conversationListStatus(
     session: Pick<ManagedChatSession, "id" | "status">,
     statuses: ReadonlyMap<string, ConversationListStatus>,
-    open: { readonly sessionId: string; readonly pane: Pick<SessionPaneStore, "connection" | "turn"> } | null,
+    open: {
+        readonly sessionId: string;
+        readonly pane: Pick<SessionPaneStore, "connection" | "turn">;
+        readonly delivery: DeliveryState;
+    } | null,
 ): ConversationListStatus {
     return open?.sessionId === session.id && open.pane.connection.kind !== "first-loading"
-        ? turnActivity(open.pane.turn)
+        ? sessionActivity(open.pane.turn, open.delivery)
         : (statuses.get(session.id) ?? session.status);
 }
 

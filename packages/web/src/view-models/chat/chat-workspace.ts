@@ -5,6 +5,8 @@ import { encodeIdentityScope, type IdentityScope } from "../../services/identity
 import { rememberComputerName, rememberComputerVisit } from "../../services/identity/remembered-computers.ts";
 import {
     centralSessionStorage,
+    SessionStorageWriteError,
+    sessionPendingSubmissionEntry,
     sessionUnsentMessageEntry,
 } from "../../services/session-storage/central-session-storage.ts";
 import type { Clock } from "../../services/time/clock.ts";
@@ -13,6 +15,7 @@ import { reportApplicationError } from "../report-error.ts";
 import { type BotChatHomeStoreApi, createBotChatHomeStore, homeWaitsForRuntime } from "./bot-chat-home-store.ts";
 import { createComposerAttachmentStore } from "./composer-attachment-store.ts";
 import type { ComputerSwitcherModel } from "./computer-switcher-store.ts";
+import { connectionPresentation } from "./connection-presentation.ts";
 import { type ConversationDirectoryStore, createConversationDirectoryStore } from "./conversation-directory-store.ts";
 import type { ConversationSelectionState } from "./conversation-selection-machine.ts";
 import { selectedConversationId } from "./conversation-selection-machine.ts";
@@ -451,7 +454,16 @@ export function createChatWorkspace(options: {
             const unsentEntry = sessionUnsentMessageEntry(sessionId);
             unsent = centralSessionStorage.read(unsentEntry);
             centralSessionStorage.remove(unsentEntry);
+            const pendingEntry = sessionPendingSubmissionEntry(botId, sessionId);
             delivery = createSessionDeliveryStore({
+                pendingSubmission: centralSessionStorage.read(pendingEntry),
+                pendingSubmissionChanged: (journal) => {
+                    if (journal === null) {
+                        centralSessionStorage.remove(pendingEntry);
+                    } else if (!centralSessionStorage.write(pendingEntry, journal)) {
+                        throw new SessionStorageWriteError();
+                    }
+                },
                 unsentMessageChanged: (content) => {
                     if (content === null) {
                         centralSessionStorage.remove(unsentEntry);
@@ -474,6 +486,7 @@ export function createChatWorkspace(options: {
             onInitialMessageDequeued: (commandId) => home.getState().initialMessageDequeued(sessionId, commandId),
             onReleased: (activity) => statuses.getState().paneReleased(sessionId, activity),
             titles,
+            connectionAvailable: (connection) => connectionPresentation(home.getState(), connection).available,
         });
         if (nextDraft !== null || unsent !== null) {
             const draft = nextDraft ?? model.store.getState().draft;

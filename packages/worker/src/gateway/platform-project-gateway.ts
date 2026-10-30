@@ -27,6 +27,20 @@ import {
     platformEndpointBindingsSchema,
 } from "../infra/cloud-bindings.ts";
 
+function runtimeSetupMessage(code: string): string {
+    // Keep actionable, locally owned explanations without forwarding untrusted upstream text.
+    switch (code) {
+        case "native_session_not_found":
+            return "Platform could not complete Runtime setup. Cause: The native session was not found.";
+        case "session_not_found":
+            return "Platform could not complete Runtime setup. Cause: The session was not found.";
+        case "local_authorization_failed":
+            return "Platform could not complete Runtime setup. Cause: This directory is missing or unavailable, or the Runtime denied access to the selected session.";
+        default:
+            return "Platform could not complete Runtime setup.";
+    }
+}
+
 export type ChatConversationInput =
     | {
           readonly kind: "existing";
@@ -624,7 +638,7 @@ export class PlatformProjectGateway {
             if (cause instanceof MobiusError) {
                 throw new PlatformProjectError(
                     cause.code,
-                    `Platform could not complete Runtime setup. Cause: ${cause.message}`,
+                    runtimeSetupMessage(cause.code),
                     cause instanceof MobiusApiError ? cause.status : 502,
                     { cause },
                 );

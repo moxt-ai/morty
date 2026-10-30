@@ -84,11 +84,7 @@ type RuntimeSelection =
           readonly appId: string;
           readonly connectionId: string;
           readonly runtimeId: string;
-          /**
-           * Whether the Worker binds the Machine to this Runtime. The Worker's binding is the record; the local
-           * `agent_ref` only remembers the harness a finished run bound, and a run that stopped after the Worker
-           * bound the Machine never wrote it.
-           */
+          /** Whether the Worker binds the Machine to this Runtime. The Worker's binding is the only record of it. */
           readonly bound: boolean;
       }
     | {
@@ -530,7 +526,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     "user_id",
                     "project_id",
                     "bot_id",
-                    "agent_ref",
                     "pairing_runtime_id",
                 ].includes(key),
             ),
@@ -1042,8 +1037,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 user_id: identifier(replacement["userId"]),
                 bot_id: identifier(object(replacement["bot"])["botId"]),
                 project_id: projectId,
-                // The replacement Machine starts unbound; drop the previous Machine's Agent binding.
-                agent_ref: undefined,
                 pairing_runtime_id: undefined,
             },
         );
@@ -1373,26 +1366,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             throw cause;
         }
         // The Machine now owns its Runtime, so the pairing record is no longer needed.
-        const saved = await saveConfiguration(context, {
-            agent_ref: agentRef,
-            pairing_runtime_id: undefined,
-        });
+        const saved = await saveConfiguration(context, { pairing_runtime_id: undefined });
         emit({ status: "binding_activated", botId: context.config["bot_id"], harness });
         return saved;
     }
 
-    function hasReadyBinding(context: Context, runtime: RuntimeSelection, configuration: Record<string, unknown>) {
-        const runtimeId = runtime.runtimeId;
-        if (
-            typeof context.config["agent_ref"] !== "string" ||
-            !hasOnlineRuntimeAgent(object(configuration["runtime"]), runtimeId, context.config["agent_ref"])
-        ) {
-            return false;
-        }
-        return true;
-    }
-
-    async function waitForReadiness(context: Context, runtime: RuntimeSelection) {
+    /** Waits until the bound Machine's Runtime is online and offers the harness this run bound. */
+    async function waitForReadiness(context: Context, runtime: RuntimeSelection, harness: string) {
+        const agentRef = identifier(harness);
         let attempts = 0;
         while (true) {
             signal.throwIfAborted();
@@ -1401,7 +1382,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 `/chat/projects/${context.config["project_id"]}/bots/${context.config["bot_id"]}/workspace`,
                 {},
             );
-            if (hasReadyBinding(context, runtime, configuration)) {
+            if (hasOnlineRuntimeAgent(object(configuration["runtime"]), runtime.runtimeId, agentRef)) {
                 return;
             }
             if (attempts++ % 10 === 0) {
@@ -1446,7 +1427,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         options: SetupOptions,
         identity: SetupIdentity["project"],
     ) {
-        await waitForReadiness(context, runtime);
+        await waitForReadiness(context, runtime, options.harness);
         const botId = context.config["bot_id"];
         const workingDirectory = text(context.config["workspace"]);
         const transfer = await request(context, "/identity/transfers", {});

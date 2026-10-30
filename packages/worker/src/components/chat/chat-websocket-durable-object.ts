@@ -37,7 +37,14 @@ export class ChatWebSocketDurableObject extends DurableObject<CloudBindings> {
                 request,
                 createCloudWebSocketHandlers({
                     dispatch: async (dispatched) => {
-                        const response = await application.fetch(dispatched, this.env);
+                        const headers = new Headers(dispatched.headers);
+                        const address = request.headers.get("CF-Connecting-IP");
+                        if (address === null) {
+                            headers.delete("CF-Connecting-IP");
+                        } else {
+                            headers.set("CF-Connecting-IP", address);
+                        }
+                        const response = await application.fetch(new Request(dispatched, { headers }), this.env);
                         // Only the browser application talks to Morty over this bridge.
                         recordSetupFunnelStep(logger, dispatched, response, "browser");
                         return response;

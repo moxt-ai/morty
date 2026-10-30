@@ -95,10 +95,18 @@ interface DialAttempt {
 }
 
 interface PendingRequest {
-    readonly workspaceKey: string | null;
+    readonly watchKey: string | null;
     readonly reject: (cause: unknown) => void;
     readonly resolve: (response: Response) => void;
     readonly release: () => void;
+}
+
+/** The resources the Chat bridge can watch: a Machine's workspace and its Runtime binding. */
+function isWatchable(method: string, pathname: string): boolean {
+    return (
+        (method === "POST" && pathname.endsWith("/workspace")) ||
+        (method === "GET" && pathname.endsWith("/runtime-binding"))
+    );
 }
 
 interface PendingWatch {
@@ -129,7 +137,7 @@ interface PendingEventStream extends PendingWatch {
 export class WebSocketApiTransport {
     // A watch starts from what this authenticated client actually received,
     // including when registration or a reconnect happens after a change.
-    readonly #workspaceBaselines = new Map<string, string>();
+    readonly #watchBaselines = new Map<string, string>();
     readonly #clock: Clock;
     readonly #origin: string;
     readonly #pending = new Map<string, PendingRequest>();
@@ -360,8 +368,7 @@ export class WebSocketApiTransport {
             };
             request.signal.addEventListener("abort", abort, { once: true });
             this.#pending.set(requestId, {
-                workspaceKey:
-                    request.method === "POST" && url.pathname.endsWith("/workspace") ? this.#watchKey(request) : null,
+                watchKey: isWatchable(request.method, url.pathname) ? this.#watchKey(request) : null,
                 reject,
                 resolve,
                 release: () => request.signal.removeEventListener("abort", abort),
@@ -458,11 +465,7 @@ export class WebSocketApiTransport {
     ): Promise<void> => {
         request.signal.throwIfAborted();
         const url = new URL(request.url);
-        if (
-            url.origin !== this.#origin ||
-            (!url.pathname.endsWith("/workspace") && !url.pathname.endsWith("/setup/runtimes")) ||
-            request.method !== "POST"
-        ) {
+        if (url.origin !== this.#origin || !isWatchable(request.method, url.pathname)) {
             throw new Error("The API request cannot be watched through the Chat WebSocket bridge.");
         }
         const headers: [string, string][] = [];
@@ -495,8 +498,7 @@ export class WebSocketApiTransport {
                         kind: "watch",
                         // Snapshot consumers adopt this watch's baseline. Notification-only
                         // consumers retain the preceding read as their comparison point.
-                        baseline:
-                            onReady === undefined ? this.#workspaceBaselines.get(this.#watchKey(request)) : undefined,
+                        baseline: onReady === undefined ? this.#watchBaselines.get(this.#watchKey(request)) : undefined,
                         subscriptionId,
                         method: request.method,
                         path: `${url.pathname}${url.search}`,
@@ -577,7 +579,7 @@ export class WebSocketApiTransport {
         }
         this.#disposed = true;
         this.#healthLifetime?.abort();
-        this.#workspaceBaselines.clear();
+        this.#watchBaselines.clear();
         this.#desired = false;
         this.#cancelReconnect();
         this.#lifetime.abort(bridgeClosed());
@@ -1000,8 +1002,8 @@ export class WebSocketApiTransport {
             this.#settle(frame.requestId)?.reject(new Error(`${frame.code}: ${frame.message}`));
             return;
         }
-        if (pending.workspaceKey !== null && frame.status >= 200 && frame.status < 300) {
-            this.#workspaceBaselines.set(pending.workspaceKey, `${frame.status}\u0000${frame.body ?? ""}`);
+        if (pending.watchKey !== null && frame.status >= 200 && frame.status < 300) {
+            this.#watchBaselines.set(pending.watchKey, `${frame.status}\u0000${frame.body ?? ""}`);
         }
         this.#settle(frame.requestId)?.resolve(
             new Response(frame.status === 204 || frame.status === 205 || frame.status === 304 ? null : frame.body, {

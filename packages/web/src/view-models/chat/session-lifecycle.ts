@@ -3,7 +3,7 @@ import type {
     SessionElicitationRequestedEvent,
     SessionPermissionRequestedEvent,
 } from "@moxt-ai/mobius-sdk";
-import type { SessionInteractionSnapshot, SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
+import { promptCompletion, type SessionInteractionSnapshot, type SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
 import type { SessionInteraction } from "./session-pane-types.ts";
 
 // The Session pane reads Mobius lifecycle metadata only through this module, so
@@ -61,7 +61,11 @@ export function sessionLifecycleFact(payload: LifecycleMetadata): SessionLifecyc
         case "prompt.started":
             return { kind: "turn-started", commandId: payload.commandId };
         case "prompt.completed":
-            return { kind: "turn-completed", commandId: payload.commandId, steered: payload.stopReason === "steered" };
+            return {
+                kind: "turn-completed",
+                commandId: payload.commandId,
+                steered: promptCompletion(payload).kind === "steered",
+            };
         case "prompt.failed":
         case "prompt.failed-before-start":
             return { kind: "turn-failed", commandId: payload.commandId, code: payload.code, message: payload.message };

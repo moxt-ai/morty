@@ -105,24 +105,27 @@ test("Given an earlier workspace read, When a snapshot watch starts after an Age
     }
 });
 
-test("Given pairing already completed, When a setup watch starts, Then it immediately reports that setup changed", {
+test("Given an unbound Machine was read, When pairing completes before the binding watch starts, Then the watch reports the change at once", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
-    const app = await createTestApp({ connectAgent: true, clock });
+    const app = await createTestApp({ clock });
+    await app.queryElementByTestId(dataTestId.pairingInstruction);
     const signal = AbortSignal.timeout(10_000);
     const token = await app.identity.getToken(signal);
-    await app.transport.waitForChange(
+    const binding = () =>
         new Request(
-            `${app.origin}/morty/api/chat/projects/${app.identity.projectId}/bots/${app.botId}/setup/runtimes`,
-            {
-                method: "POST",
-                headers: { authorization: `Bearer ${token}` },
-                signal,
-            },
-        ),
-    );
-    await app.queryElementByTestId(dataTestId.messageComposer);
+            `${app.origin}/morty/api/projects/${app.identity.projectId}/management/bots/${app.botId}/runtime-binding`,
+            { headers: { authorization: `Bearer ${token}` }, signal },
+        );
+    const unbound = await app.transport.fetch(binding());
+    expect(await unbound.json()).toMatchObject({ runtimeId: null });
+
+    await app.connectAgent();
+    await app.transport.waitForChange(binding());
+
+    const bound = await app.transport.fetch(binding());
+    expect(await bound.json()).not.toMatchObject({ runtimeId: null });
 });
 
 test("Given an unpaired Machine, When pairing finishes while the bridge is down, Then the recovered draft can send its first message", {

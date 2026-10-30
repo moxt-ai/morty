@@ -1,9 +1,12 @@
 import type { RuntimeDiagnosticsResult } from "@moxt-ai/mobius-sdk/protocol";
 import { captureFeedback, getClient } from "@sentry/react";
 import type { browserDiagnosticsSnapshot } from "./browser-diagnostics.ts";
+import type { ChatDiagnostics } from "./model-catalog.ts";
 import type { NetworkDiagnostics } from "./network-diagnostics.ts";
 
 export interface BugReport {
+    readonly schemaVersion: 2;
+    readonly chat: ChatDiagnostics;
     readonly id: string;
     readonly createdAt: string;
     readonly description: string;

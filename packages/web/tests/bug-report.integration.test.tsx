@@ -4,9 +4,11 @@ import { getAllByRole, getByLabelText, getByRole, queryByRole } from "@testing-l
 import { cleanup, render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { dataTestId } from "../src/data-testid.ts";
 import { WebSocketApiTransport } from "../src/services/api/websocket-api-transport.ts";
 import { createMortyApplication } from "../src/view-models/morty-application.ts";
 import { App } from "../src/views/application/app.tsx";
+import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
 /**
@@ -23,6 +25,85 @@ function noopTransport(): WebSocketApiTransport {
 }
 
 const observers = new Set<MutationObserver>();
+
+test("Given an Agent with a known CLI version and private model metadata, When reports are sent from the draft and a configured conversation, Then they contain version and model evidence without chat content or private metadata", {
+    timeout: 60_000,
+}, async () => {
+    const inbox = await createReportInbox();
+    try {
+        let app = await createTestApp({
+            connectAgent: true,
+            agent: { id: "diagnostics-test", label: "Settings Agent" },
+        });
+        await app.queryElementByTestId(
+            dataTestId.agentConfiguration,
+            (element) => element.textContent?.includes("GPT-6-Sol") === true,
+        );
+        await app.user.click(getByRole(document.body, "button", { name: "Configure agent" }));
+        await app.user.click(getByRole(document.body, "combobox", { name: "Model" }));
+        await app.user.click(getByRole(document.body, "option", { name: "GPT-6.1-Sol" }));
+        await app.user.click(getByRole(document.body, "button", { name: "Close Agent configuration" }));
+        const report = async () => {
+            const previousReports = inbox.envelopes.length;
+            await app.user.click(getByRole(document.body, "button", { name: "Report a bug" }));
+            const dialog = getByRole(document.body, "dialog", { name: "Report a bug" });
+            await app.user.type(getByRole(dialog, "textbox", { name: "What went wrong?" }), "Model menu differs");
+            await app.user.click(getByRole(dialog, "button", { name: "Send report" }));
+            await visibleMessage(dialog, "status", "Report sent");
+            expect(inbox.envelopes).toHaveLength(previousReports + 1);
+            const envelope = inbox.envelopes.at(-1) ?? "";
+            for (const secret of [
+                "PRIVATE_MODEL_DESCRIPTION",
+                "PRIVATE_MODEL_LABEL",
+                "PRIVATE_DEPLOYMENT_NAME",
+                "PRIVATE_CHAT_CONTENT",
+            ]) {
+                expect(envelope).not.toContain(secret);
+            }
+            return JSON.parse(envelope.trim().split("\n").at(-1) ?? "null");
+        };
+        const draft = await report();
+        expect(draft.chat).toMatchObject({
+            kind: "available",
+            view: "draft",
+            runtimeOnline: true,
+            agent: { version: "0.153.4" },
+            catalog: {
+                source: "agent-settings",
+                models: [{ selected: "gpt-6-sol", values: ["gpt-6-sol", "gpt-6.1-sol", "private-model-1"], count: 3 }],
+            },
+            visibleModels: [{ selected: "gpt-6.1-sol", count: 3 }],
+        });
+        expect(draft.chat.catalog.observedAt).toBe("2026-10-13T08:00:00.000Z");
+        await app.user.click(getByRole(document.body, "button", { name: "Close dialog" }));
+        await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "PRIVATE_CHAT_CONTENT");
+        await app.waitForView(() =>
+            expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
+                "Settings Agent: PRIVATE_CHAT_CONTENT",
+            ),
+        );
+        await app.waitForView(() => {
+            expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
+            expect(app.elementByTestId(dataTestId.messageComposer).hasAttribute("disabled")).toBe(false);
+        });
+        app = await app.reload();
+        await app.queryElementByTestId(
+            dataTestId.agentConfiguration,
+            (element) => element.textContent?.includes("GPT-6.1-Sol") === true,
+        );
+        const session = await report();
+        expect(session.sessionId).not.toBe("");
+        expect(session.chat).toMatchObject({
+            kind: "available",
+            view: "session",
+            agent: { version: "0.153.4" },
+            catalog: { source: "session-ready" },
+            visibleModels: [{ selected: "gpt-6.1-sol", count: 3 }],
+        });
+    } finally {
+        await inbox.close();
+    }
+});
 const pngBytes = Uint8Array.from(
     atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aOuoAAAAASUVORK5CYII="),
     (char) => char.charCodeAt(0),

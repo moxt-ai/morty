@@ -46,6 +46,7 @@ export interface CloudBindings {
     readonly CHAT_WEBSOCKETS?: unknown;
     readonly CHAT_PROJECTS?: unknown;
     readonly CHAT_ATTACHMENTS_APAC?: unknown;
+    readonly ANONYMOUS_CREATION_LIMITER?: unknown;
     readonly APP_ORIGIN?: unknown;
     readonly ASSETS?: unknown;
     readonly DATABASE?: unknown;

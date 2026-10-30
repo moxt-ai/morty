@@ -6,6 +6,10 @@
 @source "../node_modules/@streamdown/mermaid/dist/*.js";
 
 @custom-variant keyboard-focus (&:where(html[data-input-modality="keyboard"] *));
+/* Morty has only a light theme. Tailwind's default `dark:` follows the OS color scheme, which would apply dark
+   syntax-highlighting colors (light gray text) to code blocks rendered on the light surface. Only an explicit
+   `.dark` ancestor enables it. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 .agent-mermaid [data-streamdown="mermaid-block"] {
     border-color: color-mix(in srgb, var(--border) 60%, transparent);

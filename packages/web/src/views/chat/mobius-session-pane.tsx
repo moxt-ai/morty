@@ -637,6 +637,7 @@ function UnconfirmedDeliveryCard({
     readonly delivery: {
         readonly commandId: string;
         readonly displayPrompt: string;
+        readonly attachmentLabels: readonly { readonly name: string; readonly uri: string }[];
         readonly attachments: readonly ComposerAttachment[];
     };
     readonly retryDisabled: boolean;
@@ -645,7 +646,11 @@ function UnconfirmedDeliveryCard({
 }) {
     return (
         <div className={chatSessionMessageItemClassName} data-testid={dataTestId.unconfirmedDelivery}>
-            <UserPromptMessage attachments={delivery.attachments} text={delivery.displayPrompt} />
+            <UserPromptMessage
+                attachments={delivery.attachments}
+                attachmentLabels={delivery.attachmentLabels}
+                text={delivery.displayPrompt}
+            />
             <div
                 className="ml-auto flex max-w-[85%] items-center gap-3 rounded-lg border border-destructive/15 bg-destructive/5 py-2 pr-2 pl-3 text-xs leading-5 text-destructive"
                 role="alert"
@@ -867,6 +872,7 @@ function MobiusSessionPaneBody({
                                 )}
                             {!sessionMessagesLoading &&
                                 initialMessage === null &&
+                                presentation.confirmedMessages.length === 0 &&
                                 model.messages.length === 0 &&
                                 model.connection.kind === "ready" &&
                                 presentation.activity.kind === "idle" &&
@@ -1041,6 +1047,15 @@ function MobiusSessionPaneBody({
                                             );
                                         });
                                     })()}
+                                    {presentation.confirmedMessages.map((message) => (
+                                        <div key={message.commandId} className={chatSessionMessageItemClassName}>
+                                            <UserPromptMessage
+                                                attachments={message.attachments}
+                                                attachmentLabels={message.attachmentLabels}
+                                                text={message.content}
+                                            />
+                                        </div>
+                                    ))}
                                     {presentation.pendingDelivery !== null && (
                                         <div
                                             className={chatSessionMessageItemClassName}
@@ -1048,6 +1063,7 @@ function MobiusSessionPaneBody({
                                         >
                                             <UserPromptMessage
                                                 attachments={presentation.pendingDelivery.message.attachments}
+                                                attachmentLabels={presentation.pendingDelivery.message.attachmentLabels}
                                                 status={
                                                     presentation.pendingDelivery.error !== null ? (
                                                         <MessageDeliveryStatus
@@ -1070,10 +1086,7 @@ function MobiusSessionPaneBody({
                                                 >
                                                     <span>{presentation.pendingDelivery.error}</span>
                                                     <Button
-                                                        disabled={
-                                                            model.connection.kind !== "ready" ||
-                                                            model.turn.kind === "current"
-                                                        }
+                                                        disabled={presentation.retryFailedDisabled}
                                                         onClick={() => run(pane.store.getState().retryFailedMessage)}
                                                     >
                                                         Retry message
@@ -1196,8 +1209,8 @@ function MobiusSessionPaneBody({
                                         onRetryNow={pane.store.getState().retryNow}
                                         onReopen={() => run(pane.store.getState().reopen)}
                                     />
-                                ) : model.queuedFilesNotice ? (
-                                    "Files attached to the queued message could not be restored here. Add them again if it had any."
+                                ) : model.filesRestoreNotice ? (
+                                    "Files attached to this message could not be restored here. Add them again if it had any."
                                 ) : undefined
                             }
                             onDraftChange={pane.store.getState().setDraft}
@@ -1214,6 +1227,21 @@ function MobiusSessionPaneBody({
                             submitDisabled={presentation.submitDisabled}
                         >
                             <ChatConfigurationMenu
+                                notice={
+                                    presentation.settingsNotice === null ? undefined : (
+                                        <div className="px-5 pb-3 text-xs leading-5 text-copy-secondary" role="note">
+                                            <p>{presentation.settingsNotice}</p>
+                                            <button
+                                                className="mt-1 rounded-sm text-foreground underline underline-offset-4 outline-none keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 disabled:opacity-50"
+                                                disabled={presentation.settingsStopDisabled}
+                                                onClick={() => run(pane.store.getState().stop)}
+                                                type="button"
+                                            >
+                                                Stop current response
+                                            </button>
+                                        </div>
+                                    )
+                                }
                                 controls={[
                                     {
                                         disabled: true,
@@ -1230,7 +1258,7 @@ function MobiusSessionPaneBody({
                                         option.type === "boolean"
                                             ? {
                                                   checked: option.booleanValue,
-                                                  disabled: presentation.busy,
+                                                  disabled: presentation.settingsDisabled,
                                                   id: option.id,
                                                   kind: "boolean" as const,
                                                   label: option.name,
@@ -1238,7 +1266,7 @@ function MobiusSessionPaneBody({
                                                   testId: dataTestId.agentSetting(option.id),
                                               }
                                             : {
-                                                  disabled: presentation.busy,
+                                                  disabled: presentation.settingsDisabled,
                                                   id: option.id,
                                                   kind: "select" as const,
                                                   label: option.name,

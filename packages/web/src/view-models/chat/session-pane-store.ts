@@ -46,16 +46,33 @@ import {
     type CurrentTurnEvent,
     idleTurn,
     openedTurn,
+    sessionActivity,
     submittingCommandId,
     transitionCurrentTurn,
-    turnActivity,
 } from "./session-current-turn.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
-import { prependToDraft, type SessionDeliveryStore } from "./session-delivery-store.ts";
+import {
+    deliveryMessagePresentation,
+    failedSubmission,
+    journalMessage,
+    prependToDraft,
+    type SessionDeliveryStore,
+    type SubmittedMessage,
+    submissionFailure,
+} from "./session-delivery-store.ts";
 import { observeSessionExecution, type QueuedCommand, type SessionExecutionObservation } from "./session-execution.ts";
 import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
 import { type SessionLifecycleFact, sessionInteractionRecovery, sessionLifecycleFact } from "./session-lifecycle.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
+import {
+    canChangeSettings,
+    canQueue,
+    canRetryFailedMessage,
+    canSendNow,
+    canSubmit,
+    composerHasMessage,
+    type SessionOperationFacts,
+} from "./session-operation-rules.ts";
 import type { ElicitationInteractionResponse, PermissionInteractionResponse } from "./session-pane-types.ts";
 import {
     createSessionMessageReduction,
@@ -119,7 +136,7 @@ export interface SessionPaneStore {
     readonly hasOlderHistory: boolean;
     readonly draft: string;
     /** The composer holds an edited queued message whose attachment bytes were unavailable to this viewer. */
-    readonly queuedFilesNotice: boolean;
+    readonly filesRestoreNotice: boolean;
     /**
      * Bumped after a user-submitted action that appends content (send, queue,
      * steer) so the message surface re-arms following the latest message.
@@ -176,6 +193,35 @@ function messageExecutionCommandId(message: SessionExecutionMessage): string | n
     );
 }
 
+function waitingForInput(interactions: Pick<SessionInteractionStore, "interactions">): boolean {
+    return interactions.interactions.some(
+        (interaction) =>
+            (interaction.kind === "permission" && interaction.permission.state.kind !== "resolved") ||
+            (interaction.kind === "elicitation" &&
+                (interaction.elicitation.state.kind === "pending" ||
+                    interaction.elicitation.state.kind === "submitted")),
+    );
+}
+
+/** The pane's state as the operation rules read it, for the presentation and the actions alike. */
+function sessionOperationFacts(
+    model: Pick<SessionPaneStore, "connection" | "operation" | "turn">,
+    delivery: Pick<SessionDeliveryStore, "state">,
+    tasks: Pick<SessionTaskControlsStore, "stopRequest">,
+    interactions: Pick<SessionInteractionStore, "interactions">,
+    connectionAvailable: boolean,
+): SessionOperationFacts {
+    return {
+        connectionAvailable,
+        connection: model.connection.kind,
+        turn: model.turn,
+        stopping: stopRequested(tasks, acceptedTurn(model.turn)),
+        configuring: model.operation.kind === "configuring",
+        delivery: delivery.state.kind,
+        waitingForInput: waitingForInput(interactions),
+    };
+}
+
 export function sessionPanePresentation(
     model: SessionPaneStore,
     delivery: SessionDeliveryStore,
@@ -183,38 +229,22 @@ export function sessionPanePresentation(
     queue: SessionMessageQueueStore,
     attachments: ComposerAttachmentStore,
     interactions: SessionInteractionStore,
-    connectionAvailable = true,
+    connectionAvailable: boolean,
 ) {
-    const waitingForInput = interactions.interactions.some(
-        (interaction) =>
-            (interaction.kind === "permission" && interaction.permission.state.kind !== "resolved") ||
-            (interaction.kind === "elicitation" &&
-                (interaction.elicitation.state.kind === "pending" ||
-                    interaction.elicitation.state.kind === "submitted")),
-    );
-    const activity = turnActivity(model.turn);
+    const facts = sessionOperationFacts(model, delivery, tasks, interactions, connectionAvailable);
+    const activity = sessionActivity(model.turn, delivery.state);
     const submitting = submittingCommandId(model.turn) !== null;
     // Which turn runs is the current turn's; the stop control only adds whether the user asked to stop it.
-    const runningTurn = acceptedTurn(model.turn);
-    const controlRunning = runningTurn !== null;
-    const stopping = stopRequested(tasks, runningTurn);
-    const composerDisabled =
-        !connectionAvailable ||
-        model.connection.kind !== "ready" ||
-        (delivery.state.kind !== "idle" && delivery.state.kind !== "confirmed") ||
-        submitting ||
-        model.operation.kind === "configuring" ||
-        waitingForInput ||
-        queue.operation.kind === "submitting" ||
-        stopping;
+    const controlRunning = acceptedTurn(model.turn) !== null;
+    const stopping = facts.stopping;
+    // While a turn runs, the composer queues behind it until the user asks to stop it.
+    const shouldQueueOnSubmit = controlRunning && !stopping;
     const composerInputDisabled =
         model.connection.kind === "closed" ||
         model.operation.kind === "configuring" ||
-        waitingForInput ||
-        queue.operation.kind === "submitting" ||
+        facts.waitingForInput ||
         stopping;
     const activeCommandId = workingCommandId(activity);
-    const busy = activeCommandId !== null || composerDisabled;
     const activeMessageId =
         activeCommandId !== null
             ? (model.messages.findLast((message) => message.role === "assistant")?.firstEvent.eventId ?? null)
@@ -230,42 +260,34 @@ export function sessionPanePresentation(
     const unconfirmed = delivery.state.kind === "delivery-unknown" ? delivery.state.journal : null;
     const unconfirmedDelivery =
         unconfirmed === null ||
+        model.queued.some((message) => message.commandId === unconfirmed.commandId) ||
         model.messages.some(
             (message) => message.role === "user" && messageExecutionCommandId(message) === unconfirmed.commandId,
         )
             ? null
             : {
-                  commandId: unconfirmed.commandId,
-                  displayPrompt: unconfirmed.displayPrompt,
-                  attachments: unconfirmed.attachments,
+                  ...deliveryMessagePresentation(journalMessage(unconfirmed)),
               };
     const pendingMessage =
         delivery.state.kind === "preparing" || delivery.state.kind === "preparation-failed"
             ? delivery.state.message
-            : delivery.state.kind === "submitting" ||
-                delivery.state.kind === "failed" ||
-                delivery.state.kind === "confirmed"
-              ? {
-                    commandId: delivery.state.journal.commandId,
-                    content: delivery.state.journal.request.content,
-                    attachments: delivery.state.journal.attachments,
-                }
+            : delivery.state.kind === "submitting" || delivery.state.kind === "failed"
+              ? journalMessage(delivery.state.journal)
               : null;
     const pendingDelivery =
         pendingMessage === null ||
+        (pendingMessage.target.disposition === "queue" &&
+            delivery.state.kind !== "preparation-failed" &&
+            delivery.state.kind !== "failed") ||
+        model.queued.some((message) => message.commandId === pendingMessage.commandId) ||
         model.messages.some(
             (message) => message.role === "user" && messageExecutionCommandId(message) === pendingMessage.commandId,
         )
             ? null
             : {
-                  message: pendingMessage,
-                  sending: delivery.state.kind !== "confirmed",
-                  error:
-                      delivery.state.kind === "preparation-failed"
-                          ? delivery.state.error
-                          : delivery.state.kind === "failed"
-                            ? delivery.state.message
-                            : null,
+                  message: deliveryMessagePresentation(pendingMessage),
+                  sending: true,
+                  error: failedSubmission(delivery.state)?.failure.message ?? null,
               };
     const hasFailureCard =
         activity.kind === "failed" &&
@@ -287,13 +309,13 @@ export function sessionPanePresentation(
         authenticationFailure,
         activeMessageId,
         activeCommandId,
-        busy,
-        composerDisabled,
         composerInputDisabled,
+        settingsDisabled: !canChangeSettings(facts),
+        settingsNotice: controlRunning ? "New settings may not affect this response." : null,
+        settingsStopDisabled: !connectionAvailable || model.connection.kind !== "ready" || stopping,
         stopDisabled: !connectionAvailable || model.connection.kind !== "ready",
         canSuggestProgress:
-            !busy &&
-            !controlRunning &&
+            canSendNow(facts) &&
             model.draft.length === 0 &&
             attachments.attachments.length === 0 &&
             attachments.state.kind !== "reading",
@@ -301,7 +323,15 @@ export function sessionPanePresentation(
         composerError:
             model.connection.kind === "closed" || pendingDelivery?.error != null
                 ? ""
-                : ([activity, model.titleEdit, model.olderHistory, model.operation, delivery.state]
+                : ([
+                      activity,
+                      model.titleEdit,
+                      model.olderHistory,
+                      model.operation,
+                      delivery.state.kind === "failed"
+                          ? { kind: "failed" as const, message: delivery.state.failure.message }
+                          : delivery.state,
+                  ]
                       .filter((state) => state.kind === "failed")
                       .find(
                           (state) =>
@@ -316,7 +346,7 @@ export function sessionPanePresentation(
         hasOlderHistory: model.hasOlderHistory,
         historyLoading: model.olderHistory.kind === "loading",
         outputState:
-            queue.operation.kind === "submitting"
+            delivery.state.kind === "preparing"
                 ? "sending"
                 : stopping
                   ? "stopping"
@@ -325,15 +355,23 @@ export function sessionPanePresentation(
                     : controlRunning
                       ? "running"
                       : "idle",
-        workingIndicatorVisible: !waitingForInput && controlRunning,
-        shouldQueueOnSubmit: controlRunning && !stopping,
+        workingIndicatorVisible: !facts.waitingForInput && controlRunning,
+        shouldQueueOnSubmit,
+        retryFailedDisabled: pendingMessage === null || !canRetryFailedMessage(pendingMessage.target, facts),
         submitDisabled:
-            !connectionAvailable ||
-            model.connection.kind !== "ready" ||
-            (controlRunning && !stopping ? queue.operation.kind !== "idle" : busy) ||
-            attachments.state.kind === "reading" ||
-            (model.draft.trim() === "" && attachments.attachments.length === 0),
+            !composerHasMessage(model.draft, attachments.attachments.length, attachments.state.kind === "reading") ||
+            !(shouldQueueOnSubmit ? canQueue(facts) : canSendNow(facts)),
         unconfirmedDelivery,
+        confirmedMessages: delivery.confirmedMessages
+            .filter(
+                (confirmed) =>
+                    confirmed.target.disposition === "reject" &&
+                    !model.messages.some(
+                        (message) =>
+                            message.role === "user" && messageExecutionCommandId(message) === confirmed.commandId,
+                    ),
+            )
+            .map(deliveryMessagePresentation),
         pendingDelivery,
     } as const;
 }
@@ -433,6 +471,8 @@ export function createSessionPaneModel(options: {
      */
     readonly onReleased?: ((activity: SessionActivityState) => void) | undefined;
     readonly titles: SessionTitlesStore;
+    /** Whether the connection header reports this Session's connection available, network and Machine included. */
+    readonly connectionAvailable: (connection: SessionConnection) => boolean;
 }) {
     const { session, botId, requests, clock, composerAttachments, delivery, titles } = options;
     const sessionId = session.result.ready.sessionId;
@@ -561,23 +601,6 @@ export function createSessionPaneModel(options: {
                 }
                 await client.turns.steer(sessionId, turnId, signal);
             }),
-            submit: noticingClosure(async (request, signal) => {
-                if (client === null) {
-                    throw new Error("The Session is not connected.");
-                }
-                return await client.turns.submit(
-                    sessionId,
-                    await withInstructions(
-                        {
-                            ...request,
-                            agentId: session.agentRef,
-                            directoryId: session.result.ready.directoryId,
-                        },
-                        signal,
-                    ),
-                    signal,
-                );
-            }),
         },
     });
     const request = {
@@ -649,6 +672,14 @@ export function createSessionPaneModel(options: {
     // Connection waiters are woken where the connection settles. No wrapped set, no subscriptions.
     const connectionWaiters = new Set<() => void>();
     const store = createStore<SessionPaneStore>()((set, get) => {
+        const operationFacts = (): SessionOperationFacts =>
+            sessionOperationFacts(
+                get(),
+                delivery.getState(),
+                tasks.getState(),
+                interactions.getState(),
+                options.connectionAvailable(get().connection),
+            );
         let connectionChangedAt = clock.now();
         let recoveryNoticeDeadline: AbortController | null = null;
         const settleConnectionWaiters = (): void => {
@@ -735,6 +766,25 @@ export function createSessionPaneModel(options: {
                 (commandId) => turns.startedAt(commandId, Date.now()),
             );
             const { execution } = change;
+            const deliverySnapshot = delivery.getState();
+            for (const message of deliverySnapshot.confirmedMessages) {
+                if (
+                    message.attachments.kind === "local" &&
+                    execution.queued.some((queued) => queued.commandId === message.commandId)
+                ) {
+                    messageQueue.getState().rememberAttachments(message.commandId, message.attachments.values);
+                }
+            }
+            const submission = deliverySnapshot.state;
+            if (
+                "journal" in submission &&
+                submission.journal.attachments !== null &&
+                execution.queued.some((message) => message.commandId === submission.journal.commandId)
+            ) {
+                messageQueue
+                    .getState()
+                    .rememberAttachments(submission.journal.commandId, submission.journal.attachments);
+            }
             set({
                 ...(execution.projection === projection ? {} : adoptProjection(execution.projection)),
                 queued: execution.queued,
@@ -744,6 +794,7 @@ export function createSessionPaneModel(options: {
             if (change.delivered.length > 0) {
                 delivery.getState().reconcile(change.delivered);
             }
+            delivery.getState().messagesObserved(execution.queued.map((message) => message.commandId));
             if (change.leftQueue.length > 0) {
                 messageQueue.getState().left(change.leftQueue);
             }
@@ -894,27 +945,12 @@ export function createSessionPaneModel(options: {
          * as the home store holds it. Delivery owns that snapshot through preparation, sending, and recovery;
          * completion never writes to the next draft.
          */
-        const submit = async (
-            message: {
-                readonly commandId: string;
-                readonly content: string;
-                readonly attachments: readonly ComposerAttachment[];
-            },
-            signal: AbortSignal,
-        ): Promise<void> => {
-            const current = get();
+        const submit = async (message: SubmittedMessage, signal: AbortSignal): Promise<void> => {
             const currentDelivery = delivery.getState().state;
-            // One turn at a time, and none while the Session's settings change.
-            if (
-                current.connection.kind !== "ready" ||
-                current.operation.kind === "configuring" ||
-                delivery.getState().state.kind === "submitting" ||
-                delivery.getState().state.kind === "delivery-unknown" ||
-                current.turn.kind === "current"
-            ) {
+            if (!canSubmit(message.target, operationFacts())) {
                 return;
             }
-            const { attachments, commandId } = message;
+            const { attachments, commandId, target } = message;
             welcome.getState().dismiss();
             const queued = isQueuedInitialMessage(commandId);
             if (queued) {
@@ -923,32 +959,32 @@ export function createSessionPaneModel(options: {
             const sent = turns.recordSent(commandId, Date.now());
             void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
             const prompt = message.content.trim();
-            const displayPrompt = prompt || attachments.map((attachment) => attachment.name).join(", ");
             delivery.getState().prepare(message);
             if (queued) {
                 options.onInitialMessageDequeued?.(commandId);
-            } else if (currentDelivery.kind === "idle" || currentDelivery.kind === "confirmed") {
+            } else if (currentDelivery.kind === "idle") {
                 centralSessionStorage.remove(draftEntry);
                 composerAttachments.getState().clear();
-                set({ draft: "", queuedFilesNotice: false });
+                set({ draft: "", filesRestoreNotice: false });
             }
             set({ pendingInitialMessage: null });
-            updateTurn({ kind: "submitting", commandId, startedAt: sent.sentAt });
+            if (target.disposition === "reject") {
+                updateTurn({ kind: "submitting", commandId, startedAt: sent.sentAt });
+            }
             set({ followRevision: get().followRevision + 1 });
             try {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }
-                const uploadedAttachments = await uploadPromptAttachments(
-                    client.sessions,
-                    sessionId,
-                    attachments,
-                    signal,
-                );
+                const uploadedAttachments =
+                    attachments.kind === "uploaded"
+                        ? attachments.values
+                        : await uploadPromptAttachments(client.sessions, sessionId, attachments.values, signal);
                 // Freeze semantic intent before delivery owns retries, including instructions and identity.
                 const submission = await withInstructions(
                     {
                         ...request,
+                        ...target,
                         agentId: session.agentRef,
                         directoryId: session.result.ready.directoryId,
                         attachments: uploadedAttachments,
@@ -957,40 +993,49 @@ export function createSessionPaneModel(options: {
                     signal,
                 );
                 signal.throwIfAborted();
-                const sending = delivery
-                    .getState()
-                    .submit({ commandId, displayPrompt, request: submission, attachments }, submitTurn, signal);
+                const sending = delivery.getState().submit(
+                    {
+                        commandId,
+                        request: submission,
+                        attachments: attachments.kind === "local" ? attachments.values : null,
+                    },
+                    submitTurn,
+                    signal,
+                );
                 const outcome = await sending;
                 signal.throwIfAborted();
                 delivery
                     .getState()
-                    .messagesObserved(
-                        get().messages.flatMap((message) =>
+                    .messagesObserved([
+                        ...get().queued.map((message) => message.commandId),
+                        ...get().messages.flatMap((message) =>
                             message.role === "user"
                                 ? [messageExecutionCommandId(message)].filter((id): id is string => id !== null)
                                 : [],
                         ),
-                    );
+                    ]);
                 if (outcome.kind === "accepted") {
-                    updateTurn({ kind: "accepted", commandId, turnId: outcome.turn.turnId });
+                    if (target.disposition === "reject") {
+                        updateTurn({ kind: "accepted", commandId, turnId: outcome.turn.turnId });
+                    }
                     return;
                 }
-                updateTurn({ kind: "submission-ended", commandId, failure: null });
+                updateTurn({ kind: "submission-ended", commandId });
                 set({ pendingInitialMessage: null });
             } catch (cause) {
                 signal.throwIfAborted();
-                const failureMessage = formatError(cause, "The agent could not complete the message.");
                 if (delivery.getState().state.kind === "preparing") {
-                    delivery.getState().preparationFailed(message, failureMessage);
+                    delivery
+                        .getState()
+                        .preparationFailed(
+                            message,
+                            submissionFailure(cause, "The agent could not complete the message."),
+                        );
                 } else {
                     // Delivery already owns the frozen request, so its outcome is unknown rather than unsent.
                     delivery.getState().submissionInterrupted();
                 }
-                updateTurn({
-                    kind: "submission-ended",
-                    commandId,
-                    failure: { code: cause instanceof MobiusError ? cause.code : "", message: failureMessage },
-                });
+                updateTurn({ kind: "submission-ended", commandId });
                 // The retained submission owns its failure; the composer keeps the next draft.
                 set({ pendingInitialMessage: null });
             }
@@ -1002,7 +1047,7 @@ export function createSessionPaneModel(options: {
             pendingInitialMessage: options.initialMessage ?? null,
             olderHistory: { kind: "idle" },
             draft: centralSessionStorage.read(draftEntry) ?? "",
-            queuedFilesNotice: false,
+            filesRestoreNotice: false,
             followRevision: 0,
             operation: { kind: "idle" },
             turn: initialTurn,
@@ -1223,8 +1268,9 @@ export function createSessionPaneModel(options: {
                             await submit(
                                 {
                                     commandId: options.initialMessage.commandId,
+                                    target: { disposition: "reject", targetCommandId: "" },
                                     content: options.initialMessage.content,
-                                    attachments: options.initialMessage.attachments,
+                                    attachments: { kind: "local", values: options.initialMessage.attachments },
                                 },
                                 paneSignal,
                             );
@@ -1428,26 +1474,33 @@ export function createSessionPaneModel(options: {
                 } else {
                     centralSessionStorage.write(draftEntry, draft);
                 }
-                set(draft === "" ? { draft, queuedFilesNotice: false } : { draft });
+                set(draft === "" ? { draft, filesRestoreNotice: false } : { draft });
             },
             send: async (signal) => {
                 const { attachments, state: attachmentState } = composerAttachments.getState();
                 const draft = get().draft;
-                if (attachmentState.kind === "reading" || (draft.trim() === "" && attachments.length === 0)) {
+                if (
+                    !composerHasMessage(draft, attachments.length, attachmentState.kind === "reading") ||
+                    !canSendNow(operationFacts())
+                ) {
                     return;
                 }
-                const deliveryState = delivery.getState().state;
-                if (deliveryState.kind !== "idle" && deliveryState.kind !== "confirmed") {
-                    return;
-                }
-                await submit({ commandId: crypto.randomUUID(), content: draft, attachments }, signal);
+                await submit(
+                    {
+                        commandId: crypto.randomUUID(),
+                        content: draft,
+                        attachments: { kind: "local", values: attachments },
+                        target: { disposition: "reject", targetCommandId: "" },
+                    },
+                    signal,
+                );
             },
             removeUnknownDelivery: () => {
                 const commandId = delivery.getState().discardUnknown();
                 if (commandId === null) {
                     return;
                 }
-                updateTurn({ kind: "submission-ended", commandId, failure: null });
+                updateTurn({ kind: "submission-ended", commandId });
             },
             retryUnknownDelivery: async (signal) => {
                 const state = delivery.getState().state;
@@ -1455,16 +1508,21 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 const pending = state.journal;
-                updateTurn({
-                    kind: "retrying",
-                    commandId: pending.commandId,
-                    startedAt: turns.startedAt(pending.commandId, Date.now()),
-                });
+                if (pending.request.disposition === "reject") {
+                    updateTurn({
+                        kind: "retrying",
+                        commandId: pending.commandId,
+                        startedAt: turns.startedAt(pending.commandId, Date.now()),
+                    });
+                }
                 const outcome = await delivery.getState().retry(submitTurn, signal);
                 signal.throwIfAborted();
                 switch (outcome?.kind) {
                     case "accepted":
-                        updateTurn({ kind: "accepted", commandId: pending.commandId, turnId: outcome.turn.turnId });
+                        if (pending.request.disposition === "reject") {
+                            updateTurn({ kind: "accepted", commandId: pending.commandId, turnId: outcome.turn.turnId });
+                        }
+                        delivery.getState().messagesObserved(get().queued.map((message) => message.commandId));
                         return;
                     case "delivered":
                         break;
@@ -1477,24 +1535,22 @@ export function createSessionPaneModel(options: {
                     default:
                         return outcome satisfies never;
                 }
-                updateTurn({ kind: "submission-ended", commandId: pending.commandId, failure: null });
+                updateTurn({ kind: "submission-ended", commandId: pending.commandId });
             },
             retryFailedMessage: async (signal) => {
                 const state = delivery.getState().state;
-                if (state.kind === "preparation-failed") {
-                    // Nothing reached the Runtime, so the message keeps its identity.
-                    await submit(state.message, signal);
-                } else if (state.kind === "failed") {
-                    // The Runtime definitively rejected this identity and will not run it again.
-                    await submit(
-                        {
-                            commandId: crypto.randomUUID(),
-                            content: state.journal.request.content,
-                            attachments: state.journal.attachments,
-                        },
-                        signal,
-                    );
+                const message =
+                    state.kind === "preparation-failed"
+                        ? // Nothing reached the Runtime, so the message keeps its identity.
+                          state.message
+                        : state.kind === "failed"
+                          ? // The Runtime definitively rejected this identity and will not run it again.
+                            { ...journalMessage(state.journal), commandId: crypto.randomUUID() }
+                          : null;
+                if (message === null || !canRetryFailedMessage(message.target, operationFacts())) {
+                    return;
                 }
+                await submit(message, signal);
             },
             editFailedMessage: () => {
                 if (composerAttachments.getState().state.kind === "reading") {
@@ -1505,9 +1561,13 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 get().setDraft(prependToDraft(message.content, get().draft));
-                composerAttachments
-                    .getState()
-                    .restore([...message.attachments, ...composerAttachments.getState().attachments]);
+                if (message.attachments.kind === "local") {
+                    composerAttachments
+                        .getState()
+                        .restore([...message.attachments.values, ...composerAttachments.getState().attachments]);
+                } else if (message.attachments.values.length > 0) {
+                    set({ filesRestoreNotice: true });
+                }
             },
             discardFailedMessage: () => {
                 delivery.getState().takeFailedMessage();
@@ -1517,44 +1577,21 @@ export function createSessionPaneModel(options: {
                 const { attachments, state: attachmentState } = composerAttachments.getState();
                 const running = acceptedTurn(current.turn);
                 if (
-                    attachmentState.kind === "reading" ||
-                    current.connection.kind !== "ready" ||
                     running === null ||
-                    stopRequested(tasks.getState(), running)
+                    !composerHasMessage(current.draft, attachments.length, attachmentState.kind === "reading") ||
+                    !canQueue(operationFacts())
                 ) {
                     return;
                 }
-                const prompt = current.draft.trim();
-                const summary = prompt || attachments.map((attachment) => attachment.name).join(", ");
-                if (client === null) {
-                    throw new Error("The Session is not connected.");
-                }
-                const uploadedAttachments = await uploadPromptAttachments(
-                    client.sessions,
-                    sessionId,
-                    attachments,
-                    signal,
-                );
-                const queued = await messageQueue.getState().enqueue(
-                    running.commandId,
-                    summary,
+                await submit(
                     {
-                        ...request,
-                        attachments: uploadedAttachments,
-                        content: prompt,
+                        commandId: crypto.randomUUID(),
+                        content: current.draft,
+                        attachments: { kind: "local", values: attachments },
+                        target: { disposition: "queue", targetCommandId: running.commandId },
                     },
-                    attachments,
                     signal,
                 );
-                signal.throwIfAborted();
-                if (queued !== null) {
-                    welcome.getState().dismiss();
-                    const sent = turns.recordSent(queued.commandId, Date.now());
-                    void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
-                    centralSessionStorage.remove(draftEntry);
-                    composerAttachments.getState().clear();
-                    set({ draft: "", followRevision: get().followRevision + 1, queuedFilesNotice: false });
-                }
             },
             steerQueued: async (commandId, signal) => {
                 const steered = await messageQueue.getState().steerMessage(commandId, signal);
@@ -1585,18 +1622,11 @@ export function createSessionPaneModel(options: {
                     removed.attachments.kind === "restorable" ? removed.attachments.values : [];
                 composerAttachments.getState().restore([...restored, ...composerAttachments.getState().attachments]);
                 set({
-                    queuedFilesNotice: removed.attachments.kind === "unrestorable" && removed.attachments.count > 0,
+                    filesRestoreNotice: removed.attachments.kind === "unrestorable" && removed.attachments.count > 0,
                 });
             },
             configure: async (option, value, booleanValue, signal) => {
-                const current = get();
-                // Settings change between turns, one change at a time.
-                if (
-                    client === null ||
-                    current.connection.kind !== "ready" ||
-                    current.operation.kind === "configuring" ||
-                    current.turn.kind === "current"
-                ) {
+                if (client === null || !canChangeSettings(operationFacts())) {
                     return;
                 }
                 const connected = client;
@@ -1711,6 +1741,7 @@ export function createSessionPaneModel(options: {
                 messageQueue.getState(),
                 composerAttachments.getState(),
                 interactions.getState(),
+                options.connectionAvailable(store.getState().connection),
             );
             if (!presentation.canSuggestProgress) {
                 return false;
@@ -1791,7 +1822,7 @@ export function createSessionPaneModel(options: {
         filePreview.getState().close();
         connection.abort(new Error("The session pane stopped."));
         delivery.getState().submissionInterrupted();
-        options.onReleased?.(turnActivity(store.getState().turn));
+        options.onReleased?.(sessionActivity(store.getState().turn, delivery.getState().state));
     };
     /**
      * Announced with the pane's attached root element, following React's

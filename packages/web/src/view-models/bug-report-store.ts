@@ -5,6 +5,7 @@ import {
     type DaemonDiagnosticsSource,
 } from "../services/diagnostics/browser-diagnostics.ts";
 import { type BugReport, BugReportError, type BugReportSink } from "../services/diagnostics/bug-report.ts";
+import type { ChatDiagnostics } from "../services/diagnostics/model-catalog.ts";
 import type { BrowserNetworkOperations } from "../services/diagnostics/network-diagnostics.ts";
 import { collectNetworkDiagnostics } from "./bug-report-network.ts";
 
@@ -28,7 +29,9 @@ export function createBugReportStore(
     daemonSource: DaemonDiagnosticsSource | null,
 ) {
     let active: AbortController | null = null;
+    const chat: ChatDiagnostics = daemonSource?.context?.() ?? { kind: "unavailable", code: "NO_CHAT_CONTEXT" };
     return createStore<{
+        readonly technicalDetails: string;
         readonly state: ReportState;
         readonly description: string;
         readonly images: readonly BugReportImage[];
@@ -38,6 +41,7 @@ export function createBugReportStore(
         readonly send: (signal?: AbortSignal) => Promise<void>;
         readonly close: () => void;
     }>((set, get) => ({
+        technicalDetails: JSON.stringify(chat, null, 2),
         description: "",
         images: [],
         state: { kind: "editing" },
@@ -95,7 +99,7 @@ export function createBugReportStore(
             active = controller;
             set({ state: { kind: "sending" } });
             try {
-                const report = await collectBugReport(get().description, browserNetwork, daemonSource, signal);
+                const report = await collectBugReport(get().description, browserNetwork, daemonSource, chat, signal);
                 const id = await sink.submit(
                     report,
                     signal,
@@ -140,6 +144,7 @@ async function collectBugReport(
     description: string,
     browserNetwork: BrowserNetworkOperations | null,
     source: DaemonDiagnosticsSource | null,
+    chat: ChatDiagnostics,
     signal: AbortSignal,
 ): Promise<BugReport> {
     signal.throwIfAborted();
@@ -169,6 +174,8 @@ async function collectBugReport(
     ]);
     signal.throwIfAborted();
     return {
+        schemaVersion: 2,
+        chat,
         id: crypto.randomUUID().replaceAll("-", ""),
         createdAt: new Date().toISOString(),
         description: description.trim().slice(0, 2000),

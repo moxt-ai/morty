@@ -363,7 +363,7 @@ export function MobiusSessionMessage({
         );
     }
     if (presentation.kind === "completed") {
-        const notice = completedTurnNotice(presentation.stopReason);
+        const notice = completedTurnNotice(presentation.completion);
         if (notice === null) {
             return null;
         }

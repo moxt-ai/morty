@@ -16,6 +16,7 @@ const defineAgent = (
     id: string,
     label: string,
     createEndpoint: (onSessionUpdate: ControlledSessionUpdate) => InProcessAcpEndpoint,
+    version = "controlled-harness",
 ): AcpAgentDefinition =>
     new AcpAgentDefinition(
         id,
@@ -24,7 +25,7 @@ const defineAgent = (
         (options) =>
             new ControlledEndpointConnection(createEndpoint(controlledSessionUpdates(options.client)), options.client),
         {},
-        "controlled-harness",
+        version,
         undefined,
         fakeDaemonCapabilities,
     );
@@ -34,7 +35,7 @@ const defineAgent = (
  * its configuration through a real ACP update; it answers any other prompt.
  */
 export function createSettingsAgent(
-    profile: "model" | "full" | "dependent" = "model",
+    profile: "model" | "full" | "dependent" | "diagnostics" = "model",
     beforeConfigurationApplied?: (configId: string, value: string | boolean) => Promise<void>,
     beforeSessionCreated?: () => Promise<void>,
 ) {
@@ -53,7 +54,10 @@ export function createSettingsAgent(
             .agent({ name: "morty-settings-agent" })
             .onRequest(acp.methods.agent.initialize, () => ({
                 agentCapabilities: { loadSession: true, sessionCapabilities: { close: {}, list: {}, resume: {} } },
-                agentInfo: { name: "Settings Agent", version: "controlled-harness" },
+                agentInfo: {
+                    name: "Settings Agent",
+                    version: profile === "diagnostics" ? "0.153.4" : "controlled-harness",
+                },
                 authMethods: [],
                 protocolVersion: acp.PROTOCOL_VERSION,
             }))
@@ -104,6 +108,23 @@ export function createSettingsAgent(
                             ],
                         },
                         { id: "fast", name: "Fast mode", type: "boolean", currentValue: false },
+                    ]);
+                }
+                if (profile === "diagnostics") {
+                    sessions.set(sessionId, [
+                        {
+                            id: "model",
+                            name: "Model",
+                            category: "model",
+                            type: "select",
+                            currentValue: "gpt-6-sol",
+                            description: "PRIVATE_MODEL_DESCRIPTION",
+                            options: [
+                                { value: "gpt-6-sol", name: "GPT-6-Sol" },
+                                { value: "gpt-6.1-sol", name: "GPT-6.1-Sol" },
+                                { value: "PRIVATE_DEPLOYMENT_NAME", name: "PRIVATE_MODEL_LABEL" },
+                            ],
+                        },
                     ]);
                 }
                 return { sessionId, configOptions: configuration(sessionId) };
@@ -171,6 +192,43 @@ export function createSettingsAgent(
                     const notification: acp.SessionNotification = { sessionId, update };
                     await onSessionUpdate(notification);
                 }
+                if (prompt === "Wait for permission with current settings") {
+                    const update: acp.SessionUpdate = {
+                        sessionUpdate: "agent_message_chunk",
+                        messageId: replyId,
+                        content: { type: "text", text: "Waiting for permission with the original settings." },
+                    };
+                    history.push(update);
+                    await onSessionUpdate({ sessionId, update });
+                    const result = await context.client.request(
+                        acp.methods.client.session.requestPermission,
+                        {
+                            sessionId,
+                            options: [
+                                { optionId: "allow", kind: "allow_once", name: "Allow" },
+                                { optionId: "deny", kind: "reject_once", name: "Deny" },
+                            ],
+                            toolCall: {
+                                toolCallId: crypto.randomUUID(),
+                                title: "Write the proposed file",
+                                kind: "edit",
+                                status: "pending",
+                            },
+                        },
+                        { cancellationSignal: context.signal },
+                    );
+                    const decision: acp.SessionUpdate = {
+                        sessionUpdate: "agent_message_chunk",
+                        messageId: replyId,
+                        content: {
+                            type: "text",
+                            text: `Permission decision: ${result.outcome.outcome === "selected" ? result.outcome.optionId : "cancelled"}`,
+                        },
+                    };
+                    history.push(decision);
+                    await onSessionUpdate({ sessionId, update: decision });
+                    return { stopReason: "end_turn" };
+                }
                 if (prompt === "hold with consecutive user messages") {
                     const update: acp.SessionUpdate = {
                         sessionUpdate: "user_message_chunk",
@@ -191,7 +249,11 @@ export function createSettingsAgent(
                             text:
                                 prompt === "Report current model"
                                     ? `Current model: ${configuration(sessionId).find((option) => option.id === "model")?.currentValue}`
-                                    : `Settings Agent: ${prompt}`,
+                                    : prompt === "Report current settings"
+                                      ? `Current settings: ${configuration(sessionId)
+                                            .map((option) => `${option.id}=${option.currentValue}`)
+                                            .join(", ")}`
+                                      : `Settings Agent: ${prompt}`,
                         },
                     };
                     history.push(update);
@@ -222,8 +284,19 @@ export function createSettingsAgent(
         };
     };
     const id =
-        profile === "model" ? "settings-test" : profile === "full" ? "configuration-test" : "dependent-settings-test";
-    return defineAgent(id, "Settings Agent", createEndpoint);
+        profile === "diagnostics"
+            ? "diagnostics-test"
+            : profile === "model"
+              ? "settings-test"
+              : profile === "full"
+                ? "configuration-test"
+                : "dependent-settings-test";
+    return defineAgent(
+        id,
+        "Settings Agent",
+        createEndpoint,
+        profile === "diagnostics" ? "codex-cli 0.153.4" : "controlled-harness",
+    );
 }
 
 /** How an installed Agent fails to open a session: signed out like a real harness, or broken. */

@@ -106,6 +106,11 @@ export function notFoundPage(request: Request): Response | null {
             "Content-Type": "text/html; charset=utf-8",
             Vary: "Accept, Sec-Fetch-Dest",
             "X-Robots-Tag": "noindex",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "X-Frame-Options": "DENY",
+            // Preview srcdoc documents have their own resource policy. Keep it usable under the page policy.
+            "Content-Security-Policy": "frame-ancestors 'none'; object-src 'none'",
         },
     });
 }

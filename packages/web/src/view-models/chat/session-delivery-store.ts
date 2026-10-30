@@ -1,4 +1,10 @@
-import { MobiusApiError, MobiusCancellationError, type MobiusClient } from "@moxt-ai/mobius-sdk";
+import {
+    MobiusApiError,
+    MobiusCancellationError,
+    type MobiusClient,
+    MobiusError,
+    type PromptAttachment,
+} from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
@@ -13,31 +19,99 @@ type SubmissionOutcome =
     | { readonly kind: "delivered" }
     | { readonly kind: "rejected" }
     | { readonly kind: "delivery-unknown" };
-interface SubmittedMessage {
-    readonly attachments: readonly ComposerAttachment[];
+export type DeliveryTarget =
+    | { readonly disposition: "reject"; readonly targetCommandId: "" }
+    | { readonly disposition: "queue"; readonly targetCommandId: string };
+
+export interface SubmittedMessage {
+    readonly target: DeliveryTarget;
+    readonly attachments:
+        | { readonly kind: "local"; readonly values: readonly ComposerAttachment[] }
+        | { readonly kind: "uploaded"; readonly values: readonly PromptAttachment[] };
     readonly commandId: string;
     readonly content: string;
 }
 export type Journal = {
-    readonly attachments: readonly ComposerAttachment[];
+    /** Original local files are kept only in memory; the request already owns uploaded references. */
+    readonly attachments: readonly ComposerAttachment[] | null;
     readonly commandId: string;
-    readonly displayPrompt: string;
-    readonly request: Omit<SubmitRequest, "idempotencyKey">;
+    readonly request: Omit<SubmitRequest, "idempotencyKey" | "disposition" | "targetCommandId"> & DeliveryTarget;
 };
-type DeliveryState =
+export function journalMessage(journal: Journal): SubmittedMessage {
+    return {
+        commandId: journal.commandId,
+        content: journal.request.content,
+        attachments:
+            journal.attachments === null
+                ? { kind: "uploaded", values: journal.request.attachments }
+                : { kind: "local", values: journal.attachments },
+        target:
+            journal.request.disposition === "queue"
+                ? { disposition: "queue", targetCommandId: journal.request.targetCommandId }
+                : { disposition: "reject", targetCommandId: "" },
+    };
+}
+
+export function deliveryMessagePresentation(message: SubmittedMessage) {
+    return {
+        ...message,
+        displayPrompt:
+            message.content.trim() ||
+            message.attachments.values
+                .filter((attachment) => attachment.uri !== "morty://bot/instructions")
+                .map((attachment) => attachment.name)
+                .join(", "),
+        attachments: message.attachments.kind === "local" ? message.attachments.values : [],
+        attachmentLabels:
+            message.attachments.kind === "uploaded"
+                ? message.attachments.values
+                      .filter((attachment) => attachment.uri !== "morty://bot/instructions")
+                      .map((attachment) => ({ name: attachment.name, uri: attachment.uri }))
+                : [],
+    };
+}
+
+/** Why a submission failed before the service accepted it; delivery is the one record of it. */
+export type SubmissionFailure = { readonly code: string; readonly message: string };
+
+export function submissionFailure(cause: unknown, fallback: string): SubmissionFailure {
+    return { code: cause instanceof MobiusError ? cause.code : "", message: formatError(cause, fallback) };
+}
+
+export type DeliveryState =
     | { readonly kind: "idle" }
     | { readonly kind: "preparing"; readonly message: SubmittedMessage }
-    | { readonly kind: "preparation-failed"; readonly message: SubmittedMessage; readonly error: string }
+    | { readonly kind: "preparation-failed"; readonly message: SubmittedMessage; readonly failure: SubmissionFailure }
     | { readonly kind: "submitting"; readonly journal: Journal; readonly confirmation: "unknown" | "delivered" }
-    | { readonly kind: "confirmed"; readonly journal: Journal }
     | { readonly kind: "delivery-unknown"; readonly journal: Journal }
-    | { readonly kind: "failed"; readonly message: string; readonly journal: Journal };
+    | { readonly kind: "failed"; readonly journal: Journal; readonly failure: SubmissionFailure };
+
+/** The message of a submission that failed before the service accepted it, kept until it is retried or discarded. */
+export function failedSubmission(
+    state: DeliveryState,
+): { readonly message: SubmittedMessage; readonly failure: SubmissionFailure } | null {
+    switch (state.kind) {
+        case "preparation-failed":
+            return { message: state.message, failure: state.failure };
+        case "failed":
+            return { message: journalMessage(state.journal), failure: state.failure };
+        case "idle":
+        case "preparing":
+        case "submitting":
+        case "delivery-unknown":
+            return null;
+        default:
+            return state satisfies never;
+    }
+}
 
 export interface SessionDeliveryStore {
     readonly state: DeliveryState;
+    /** Accepted prompts waiting for the Runtime's user-message history, independent of the next submission. */
+    readonly confirmedMessages: readonly SubmittedMessage[];
     readonly discardUnknown: () => string | null;
     readonly prepare: (message: SubmittedMessage) => void;
-    readonly preparationFailed: (message: SubmittedMessage, error: string) => void;
+    readonly preparationFailed: (message: SubmittedMessage, failure: SubmissionFailure) => void;
     readonly takeFailedMessage: () => SubmittedMessage | null;
     /** Losing an attempt's connection does not discard its submitted intent. */
     readonly submissionInterrupted: () => void;
@@ -60,7 +134,6 @@ function unsentContent(state: DeliveryState): string | null {
             return state.journal.request.content === "" ? null : state.journal.request.content;
         case "idle":
         case "submitting":
-        case "confirmed":
         case "delivery-unknown":
             return null;
         default:
@@ -80,16 +153,34 @@ function isAuthoritativeFailure(cause: unknown): boolean {
     );
 }
 
+/** The delivery of no Session, for a view that follows the open Session's delivery when none is open. */
+export const noSessionDelivery = createStore<Pick<SessionDeliveryStore, "state">>()(() => ({
+    state: { kind: "idle" },
+}));
+
 /** The Session owns delivery; each attempt borrows the currently connected pane's submit port. */
 export const createSessionDeliveryStore = (options: {
+    readonly pendingSubmission: Omit<Journal, "attachments"> | null;
+    /** Writes the frozen request before it can leave the browser; failure prevents submission. */
+    readonly pendingSubmissionChanged: (journal: Omit<Journal, "attachments"> | null) => void;
     /** Persists the unsent message's text, or clears it with null. */
     readonly unsentMessageChanged: (content: string | null) => void;
 }) => {
+    type Update = { readonly state: DeliveryState; readonly confirmedMessages?: readonly SubmittedMessage[] };
+    const confirm = (journal: Journal, set: (update: Update) => void, get: () => SessionDeliveryStore): void => {
+        set({
+            state: { kind: "idle" },
+            confirmedMessages: [
+                ...get().confirmedMessages.filter((message) => message.commandId !== journal.commandId),
+                journalMessage(journal),
+            ],
+        });
+    };
     const send = async (
         journal: Journal,
         submit: SubmitTurn,
         signal: AbortSignal,
-        set: (state: Pick<SessionDeliveryStore, "state">) => void,
+        set: (state: Update) => void,
         get: () => SessionDeliveryStore,
     ): Promise<SubmissionOutcome> => {
         set({ state: { kind: "submitting", journal, confirmation: "unknown" } });
@@ -102,7 +193,7 @@ export const createSessionDeliveryStore = (options: {
                 signal,
             );
             signal.throwIfAborted();
-            set({ state: { kind: "confirmed", journal } });
+            confirm(journal, set, get);
             return { kind: "accepted", turn: accepted };
         } catch (cause) {
             if (signal.aborted || cause instanceof MobiusCancellationError) {
@@ -110,17 +201,13 @@ export const createSessionDeliveryStore = (options: {
             }
             if (isAuthoritativeFailure(cause)) {
                 set({
-                    state: {
-                        kind: "failed",
-                        journal,
-                        message: formatError(cause, "The message was rejected."),
-                    },
+                    state: { kind: "failed", journal, failure: submissionFailure(cause, "The message was rejected.") },
                 });
                 return { kind: "rejected" };
             }
             const state = get().state;
             if (state.kind === "submitting" && state.confirmation === "delivered") {
-                set({ state: { kind: "confirmed", journal } });
+                confirm(journal, set, get);
                 return { kind: "delivered" };
             }
             set({ state: { kind: "delivery-unknown", journal } });
@@ -128,12 +215,22 @@ export const createSessionDeliveryStore = (options: {
         }
     };
     return createStore<SessionDeliveryStore>()((setState, get) => {
-        const set = (update: Pick<SessionDeliveryStore, "state">): void => {
+        const set = (update: Update): void => {
+            const state = update.state;
+            options.pendingSubmissionChanged(
+                state.kind === "submitting" || state.kind === "delivery-unknown"
+                    ? { commandId: state.journal.commandId, request: state.journal.request }
+                    : null,
+            );
+            options.unsentMessageChanged(unsentContent(state));
             setState(update);
-            options.unsentMessageChanged(unsentContent(update.state));
         };
         return {
-            state: { kind: "idle" },
+            state:
+                options.pendingSubmission === null
+                    ? { kind: "idle" }
+                    : { kind: "delivery-unknown", journal: { ...options.pendingSubmission, attachments: null } },
+            confirmedMessages: [],
             discardUnknown: () => {
                 const state = get().state;
                 if (state.kind !== "delivery-unknown") {
@@ -143,23 +240,13 @@ export const createSessionDeliveryStore = (options: {
                 return state.journal.commandId;
             },
             prepare: (message) => set({ state: { kind: "preparing", message } }),
-            preparationFailed: (message, error) => set({ state: { kind: "preparation-failed", message, error } }),
+            preparationFailed: (message, failure) => set({ state: { kind: "preparation-failed", message, failure } }),
             takeFailedMessage: () => {
-                const state = get().state;
-                const message =
-                    state.kind === "preparation-failed"
-                        ? state.message
-                        : state.kind === "failed"
-                          ? {
-                                commandId: state.journal.commandId,
-                                content: state.journal.request.content,
-                                attachments: state.journal.attachments,
-                            }
-                          : null;
-                if (message !== null) {
+                const failed = failedSubmission(get().state);
+                if (failed !== null) {
                     set({ state: { kind: "idle" } });
                 }
-                return message;
+                return failed?.message ?? null;
             },
             submissionInterrupted: () => {
                 const state = get().state;
@@ -168,23 +255,26 @@ export const createSessionDeliveryStore = (options: {
                         state: {
                             kind: "preparation-failed",
                             message: state.message,
-                            error: "Message preparation was interrupted. Retry when connected.",
+                            failure: {
+                                code: "",
+                                message: "Message preparation was interrupted. Retry when connected.",
+                            },
                         },
                     });
                 } else if (state.kind === "submitting") {
-                    set({
-                        state:
-                            state.confirmation === "delivered"
-                                ? { kind: "idle" }
-                                : { kind: "delivery-unknown", journal: state.journal },
-                    });
+                    if (state.confirmation === "delivered") {
+                        set({ state: { kind: "idle" } });
+                    } else {
+                        set({ state: { kind: "delivery-unknown", journal: state.journal } });
+                    }
                 }
             },
             messagesObserved: (commandIds) => {
-                const state = get().state;
-                if (state.kind === "confirmed" && commandIds.includes(state.journal.commandId)) {
-                    set({ state: { kind: "idle" } });
-                }
+                setState({
+                    confirmedMessages: get().confirmedMessages.filter(
+                        (message) => !commandIds.includes(message.commandId),
+                    ),
+                });
             },
             reconcile: (commandIds) => {
                 const state = get().state;
