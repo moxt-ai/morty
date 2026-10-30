@@ -510,11 +510,10 @@ for (const [failure, scenario] of starterFailures) {
                     expect(response.ok).toBe(true);
                     return await response.json();
                 };
-                const bots = v.parse(
-                    v.object({ bots: v.array(v.object({ botId: v.string() })) }),
-                    await request(`projects/${identity.projectId}/management/bots`),
+                const { botId } = v.parse(
+                    v.object({ botId: v.string() }),
+                    await request(`projects/${identity.projectId}/management/bot`),
                 );
-                const botId = v.parse(v.string(), bots.bots[0]?.botId);
                 await request(`chat/projects/${identity.projectId}/bots/${botId}/setup`, {
                     runtimeId: runtime.runtimeId,
                     agentRef: "codex",

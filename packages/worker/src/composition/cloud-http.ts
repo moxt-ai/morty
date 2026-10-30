@@ -31,7 +31,7 @@ export const cloudRoutes = new Hono<CloudHttpEnvironment>()
 export const publicCloudRoutes = new Hono<{ readonly Bindings: CloudBindings }>()
     .post("/identity/anonymous-users", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .get("/projects/:projectId/session", (context) => cloudRoutes.fetch(context.req.raw, context.env))
-    .get("/projects/:projectId/management/bots", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .get("/projects/:projectId/management/bot", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .get("/projects/:projectId/management/bots/:botId/runtime-binding", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )

@@ -57,9 +57,9 @@ test("Given an existing Project and Machine, When the same Platform moves to ano
         );
         expect(originalProject.status).toBe(200);
         const project = await originalProject.json();
-        const originalBots = await worker.fetch(new Request(`${projectUrl}/bots`, { headers }), fixture.environment());
-        expect(originalBots.status).toBe(200);
-        const bots = await originalBots.json();
+        const originalBot = await worker.fetch(new Request(`${projectUrl}/bot`, { headers }), fixture.environment());
+        expect(originalBot.status).toBe(200);
+        const bot = await originalBot.json();
 
         // A second listener forwards to the same real Platform and its existing storage.
         const relocated = await createResponseLossProxy(fixture.baseConfiguration.MOBIUS_BASE_URL);
@@ -69,9 +69,9 @@ test("Given an existing Project and Machine, When the same Platform moves to ano
             const session = await worker.fetch(accountRequest(identity.token, identity.projectId), environment);
             expect(session.status).toBe(200);
             expect(await session.json()).toMatchObject({ userId: identity.userId });
-            const currentBots = await worker.fetch(new Request(`${projectUrl}/bots`, { headers }), environment);
-            expect(currentBots.status).toBe(200);
-            expect(await currentBots.json()).toEqual(bots);
+            const currentBot = await worker.fetch(new Request(`${projectUrl}/bot`, { headers }), environment);
+            expect(currentBot.status).toBe(200);
+            expect(await currentBot.json()).toEqual(bot);
             const currentProject = await worker.fetch(new Request(`${projectUrl}/project`, { headers }), environment);
             expect(currentProject.status).toBe(200);
             expect(await currentProject.json()).toEqual(project);
