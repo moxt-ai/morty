@@ -238,7 +238,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
         <main
             aria-label="Chat"
             data-chat-state={model.selection.kind === "ready" ? "connected" : "disconnected"}
-            className="fixed inset-0 flex min-h-0 overflow-hidden bg-card/90 text-foreground max-sm:flex-col sm:flex-row sm:bg-sidebar"
+            className="fixed inset-0 flex min-h-0 overflow-hidden bg-card/90 pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-foreground max-sm:flex-col sm:flex-row sm:bg-sidebar"
             onPointerDownCapture={workspace.recordUserActivity}
             onKeyDownCapture={workspace.recordUserActivity}
             onInputCapture={workspace.recordUserActivity}
