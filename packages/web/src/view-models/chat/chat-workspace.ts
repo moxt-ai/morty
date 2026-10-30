@@ -512,6 +512,8 @@ export function createChatWorkspace(options: {
         operationsSignal: () => operationsLifetime.signal,
         dispose: () => {
             options.computers?.dispose();
+            sidebar.dialogs.getState().discardNativeDialog();
+            sidebar.dialogs.getState().closeSharing();
             home.getState().composerAttachments.getState().clear();
             for (const attachments of sessionAttachments.values()) {
                 attachments.getState().clear();

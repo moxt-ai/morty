@@ -450,7 +450,6 @@ export function ConversationSidebar({
                                 <>
                                     {/* Desktop isolate keeps sticky group labels under the session pane shadow. */}
                                     <aside
-                                        ref={dialogs.getState().onAttach}
                                         id="conversation-sidebar-mobile-panel"
                                         aria-label="Morty navigation"
                                         className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-card/90 px-3 pt-0 max-sm:overflow-visible sm:isolate sm:w-[264px] sm:gap-0 sm:bg-sidebar sm:px-2.5 sm:pt-2 sm:pb-4"

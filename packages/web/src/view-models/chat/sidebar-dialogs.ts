@@ -28,7 +28,7 @@ interface SidebarDialogsState {
     readonly dismissMobileRecentSessions: () => void;
     readonly openNativeDialog: () => void;
     readonly closeNativeDialog: () => void;
-    /** Stops the dialog workflow for good: after a successful open, and when the sidebar detaches. */
+    /** Stops the dialog workflow for good: after a successful open, and when the workspace ends. */
     readonly discardNativeDialog: () => void;
     /** The phone sheet drills into the previewed session's detail. */
     readonly openNativeSessionDetail: () => void;
@@ -38,14 +38,6 @@ interface SidebarDialogsState {
     readonly runtimeChanged: () => void;
     readonly openSharing: () => void;
     readonly closeSharing: () => void;
-    /**
-     * Announced with the sidebar's attached root element, following React's
-     * ref-cleanup protocol: the view hands it straight to its root element's
-     * ref and the returned function stops any dialog whose workflow is still
-     * running. A WeakSet latches the node so a re-render of the same element
-     * cannot re-run the cleanup.
-     */
-    readonly onAttach: (node: HTMLElement) => () => void;
 }
 
 /**
@@ -53,8 +45,7 @@ interface SidebarDialogsState {
  * subscribes with `useStore` and wires only DOM callbacks. The native session
  * dialog's store is created when the dialog opens and kept when it closes, so
  * reopening the sheet returns to the session the user was reading; a successful
- * open and the sidebar detaching stop it for good, following the same
- * ref-cleanup protocol the chat root uses.
+ * open and the end of the workspace stop it for good.
  */
 
 const MOBILE_SHEET_DISMISS_LOCK_MILLISECONDS = 450;
@@ -70,7 +61,6 @@ export function createSidebarDialogs(options: {
     readonly onOpenedSession: () => void;
 }): SidebarDialogs {
     const { botId, clock, requests, runtime, createTransfer, onOpenSession, onOpenedSession } = options;
-    const attachedViews = new WeakSet<HTMLElement>();
     return createStore<SidebarDialogsState>()((set, get) => ({
         mobileNavOpen: false,
         mobileSessionsOpen: false,
@@ -145,17 +135,6 @@ export function createSidebarDialogs(options: {
             }
             store.getState().dispose();
             set({ sharing: null });
-        },
-        onAttach: (node: HTMLElement) => {
-            if (attachedViews.has(node)) {
-                return () => {};
-            }
-            attachedViews.add(node);
-            return () => {
-                attachedViews.delete(node);
-                get().discardNativeDialog();
-                get().closeSharing();
-            };
         },
     }));
 }
