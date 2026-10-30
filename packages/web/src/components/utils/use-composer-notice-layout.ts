@@ -43,6 +43,16 @@ export function useComposerNoticeLayout(noticeRef: RefObject<HTMLDivElement | nu
                 log instanceof HTMLElement
                     ? Math.max(0, log.getBoundingClientRect().bottom - element.getBoundingClientRect().top)
                     : 0;
+            // The jump-to-latest control rides this height so the gap above the notice
+            // equals the gap it keeps to the composer below. Measure from the scroll
+            // wrapper's bottom edge — the control's anchor — because the log's negative
+            // bottom margin extends its rect below that anchor and would inflate the gap.
+            const noticeTop = element.getBoundingClientRect().top;
+            const anchorBottom =
+                log instanceof HTMLElement && log.parentElement !== null
+                    ? log.parentElement.getBoundingClientRect().bottom
+                    : noticeTop;
+            pane.style.setProperty("--composer-overlay-block", `${Math.max(0, anchorBottom - noticeTop)}px`);
             const tucked = overlap > gapPx;
             if (tucked && log instanceof HTMLElement) {
                 const basePad = Number.parseFloat(getComputedStyle(log).paddingBottom) || 0;
@@ -64,6 +74,7 @@ export function useComposerNoticeLayout(noticeRef: RefObject<HTMLDivElement | nu
             mutations.disconnect();
             element.style.removeProperty("bottom");
             pane.style.removeProperty("--composer-notice-tuck");
+            pane.style.removeProperty("--composer-overlay-block");
         };
     }, [enabled]);
 }
