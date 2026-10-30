@@ -501,6 +501,7 @@ test("Given an active turn and an unsent follow-up, When connection freshness is
     );
     await app.user.type(composer, "Keep my follow-up");
     expect(composer).toHaveProperty("value", "Keep my follow-up");
+    await app.waitForView(() => expect(app.elementByTestId(dataTestId.sendMessage)).toHaveProperty("disabled", false));
     app.transport.disconnect();
     await app.waitForView(() => expect(app.elementByTestId(dataTestId.sendMessage)).toHaveProperty("disabled", true));
     expect(reconnectStatusText(app)).toBeNull();
