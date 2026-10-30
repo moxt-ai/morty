@@ -52,7 +52,6 @@ import {
 } from "./session-current-turn.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import {
-    type DeliveryTarget,
     deliveryMessagePresentation,
     journalMessage,
     prependToDraft,
@@ -63,6 +62,15 @@ import { observeSessionExecution, type QueuedCommand, type SessionExecutionObser
 import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
 import { type SessionLifecycleFact, sessionInteractionRecovery, sessionLifecycleFact } from "./session-lifecycle.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
+import {
+    canChangeSettings,
+    canQueue,
+    canRetryFailedMessage,
+    canSendNow,
+    canSubmit,
+    composerHasMessage,
+    type SessionOperationFacts,
+} from "./session-operation-rules.ts";
 import type { ElicitationInteractionResponse, PermissionInteractionResponse } from "./session-pane-types.ts";
 import {
     createSessionMessageReduction,
@@ -183,20 +191,33 @@ function messageExecutionCommandId(message: SessionExecutionMessage): string | n
     );
 }
 
-function sessionSettingsDisabled(
-    model: SessionPaneStore,
-    delivery: SessionDeliveryStore,
-    tasks: SessionTaskControlsStore,
-): boolean {
-    // Settings have their own acknowledged operation, independent of prompt output
-    // and permission requests. Keep submission and stop boundaries stable and serialize edits.
-    return (
-        model.connection.kind !== "ready" ||
-        model.operation.kind === "configuring" ||
-        submittingCommandId(model.turn) !== null ||
-        delivery.state.kind !== "idle" ||
-        stopRequested(tasks, acceptedTurn(model.turn))
+function waitingForInput(interactions: Pick<SessionInteractionStore, "interactions">): boolean {
+    return interactions.interactions.some(
+        (interaction) =>
+            (interaction.kind === "permission" && interaction.permission.state.kind !== "resolved") ||
+            (interaction.kind === "elicitation" &&
+                (interaction.elicitation.state.kind === "pending" ||
+                    interaction.elicitation.state.kind === "submitted")),
     );
+}
+
+/** The pane's state as the operation rules read it, for the presentation and the actions alike. */
+function sessionOperationFacts(
+    model: Pick<SessionPaneStore, "connection" | "operation" | "turn">,
+    delivery: Pick<SessionDeliveryStore, "state">,
+    tasks: Pick<SessionTaskControlsStore, "stopRequest">,
+    interactions: Pick<SessionInteractionStore, "interactions">,
+    connectionAvailable: boolean,
+): SessionOperationFacts {
+    return {
+        connectionAvailable,
+        connection: model.connection.kind,
+        turn: model.turn,
+        stopping: stopRequested(tasks, acceptedTurn(model.turn)),
+        configuring: model.operation.kind === "configuring",
+        delivery: delivery.state.kind,
+        waitingForInput: waitingForInput(interactions),
+    };
 }
 
 export function sessionPanePresentation(
@@ -206,33 +227,22 @@ export function sessionPanePresentation(
     queue: SessionMessageQueueStore,
     attachments: ComposerAttachmentStore,
     interactions: SessionInteractionStore,
-    connectionAvailable = true,
+    connectionAvailable: boolean,
 ) {
-    const waitingForInput = interactions.interactions.some(
-        (interaction) =>
-            (interaction.kind === "permission" && interaction.permission.state.kind !== "resolved") ||
-            (interaction.kind === "elicitation" &&
-                (interaction.elicitation.state.kind === "pending" ||
-                    interaction.elicitation.state.kind === "submitted")),
-    );
+    const facts = sessionOperationFacts(model, delivery, tasks, interactions, connectionAvailable);
     const activity = turnActivity(model.turn);
     const submitting = submittingCommandId(model.turn) !== null;
     // Which turn runs is the current turn's; the stop control only adds whether the user asked to stop it.
-    const runningTurn = acceptedTurn(model.turn);
-    const controlRunning = runningTurn !== null;
-    const stopping = stopRequested(tasks, runningTurn);
-    const composerDisabled =
-        !connectionAvailable ||
-        model.connection.kind !== "ready" ||
-        delivery.state.kind !== "idle" ||
-        submitting ||
-        model.operation.kind === "configuring" ||
-        waitingForInput ||
-        stopping;
+    const controlRunning = acceptedTurn(model.turn) !== null;
+    const stopping = facts.stopping;
+    // While a turn runs, the composer queues behind it until the user asks to stop it.
+    const shouldQueueOnSubmit = controlRunning && !stopping;
     const composerInputDisabled =
-        model.connection.kind === "closed" || model.operation.kind === "configuring" || waitingForInput || stopping;
+        model.connection.kind === "closed" ||
+        model.operation.kind === "configuring" ||
+        facts.waitingForInput ||
+        stopping;
     const activeCommandId = workingCommandId(activity);
-    const busy = activeCommandId !== null || composerDisabled;
     const activeMessageId =
         activeCommandId !== null
             ? (model.messages.findLast((message) => message.role === "assistant")?.firstEvent.eventId ?? null)
@@ -302,16 +312,13 @@ export function sessionPanePresentation(
         authenticationFailure,
         activeMessageId,
         activeCommandId,
-        busy,
-        composerDisabled,
         composerInputDisabled,
-        settingsDisabled: !connectionAvailable || sessionSettingsDisabled(model, delivery, tasks),
+        settingsDisabled: !canChangeSettings(facts),
         settingsNotice: controlRunning ? "New settings may not affect this response." : null,
         settingsStopDisabled: !connectionAvailable || model.connection.kind !== "ready" || stopping,
         stopDisabled: !connectionAvailable || model.connection.kind !== "ready",
         canSuggestProgress:
-            !busy &&
-            !controlRunning &&
+            canSendNow(facts) &&
             model.draft.length === 0 &&
             attachments.attachments.length === 0 &&
             attachments.state.kind !== "reading",
@@ -343,16 +350,12 @@ export function sessionPanePresentation(
                     : controlRunning
                       ? "running"
                       : "idle",
-        workingIndicatorVisible: !waitingForInput && controlRunning,
-        shouldQueueOnSubmit: controlRunning && !stopping,
-        retryFailedDisabled:
-            model.connection.kind !== "ready" ||
-            pendingMessage === null ||
-            !targetAvailable(pendingMessage.target, model.turn),
+        workingIndicatorVisible: !facts.waitingForInput && controlRunning,
+        shouldQueueOnSubmit,
+        retryFailedDisabled: pendingMessage === null || !canRetryFailedMessage(pendingMessage.target, facts),
         submitDisabled:
-            composerDisabled ||
-            attachments.state.kind === "reading" ||
-            (model.draft.trim() === "" && attachments.attachments.length === 0),
+            !composerHasMessage(model.draft, attachments.attachments.length, attachments.state.kind === "reading") ||
+            !(shouldQueueOnSubmit ? canQueue(facts) : canSendNow(facts)),
         unconfirmedDelivery,
         confirmedMessages: delivery.confirmedMessages
             .filter(
@@ -438,12 +441,6 @@ function mergeSessionEvents(
     return [...byId.values()];
 }
 
-function targetAvailable(target: DeliveryTarget, turn: CurrentTurn): boolean {
-    return target.disposition === "queue"
-        ? acceptedTurn(turn)?.commandId === target.targetCommandId
-        : turn.kind !== "current";
-}
-
 export function createSessionPaneModel(options: {
     readonly clock: Clock;
     readonly session: SelectedMobiusSession;
@@ -469,6 +466,8 @@ export function createSessionPaneModel(options: {
      */
     readonly onReleased?: ((activity: SessionActivityState) => void) | undefined;
     readonly titles: SessionTitlesStore;
+    /** Whether the connection header reports this Session's connection available, network and Machine included. */
+    readonly connectionAvailable: (connection: SessionConnection) => boolean;
 }) {
     const { session, botId, requests, clock, composerAttachments, delivery, titles } = options;
     const sessionId = session.result.ready.sessionId;
@@ -668,6 +667,14 @@ export function createSessionPaneModel(options: {
     // Connection waiters are woken where the connection settles. No wrapped set, no subscriptions.
     const connectionWaiters = new Set<() => void>();
     const store = createStore<SessionPaneStore>()((set, get) => {
+        const operationFacts = (): SessionOperationFacts =>
+            sessionOperationFacts(
+                get(),
+                delivery.getState(),
+                tasks.getState(),
+                interactions.getState(),
+                options.connectionAvailable(get().connection),
+            );
         let connectionChangedAt = clock.now();
         let recoveryNoticeDeadline: AbortController | null = null;
         const settleConnectionWaiters = (): void => {
@@ -934,16 +941,8 @@ export function createSessionPaneModel(options: {
          * completion never writes to the next draft.
          */
         const submit = async (message: SubmittedMessage, signal: AbortSignal): Promise<void> => {
-            const current = get();
             const currentDelivery = delivery.getState().state;
-            // One turn at a time, and none while the Session's settings change.
-            if (
-                current.connection.kind !== "ready" ||
-                current.operation.kind === "configuring" ||
-                delivery.getState().state.kind === "submitting" ||
-                delivery.getState().state.kind === "delivery-unknown" ||
-                !targetAvailable(message.target, current.turn)
-            ) {
+            if (!canSubmit(message.target, operationFacts())) {
                 return;
             }
             const { attachments, commandId, target } = message;
@@ -1475,11 +1474,10 @@ export function createSessionPaneModel(options: {
             send: async (signal) => {
                 const { attachments, state: attachmentState } = composerAttachments.getState();
                 const draft = get().draft;
-                if (attachmentState.kind === "reading" || (draft.trim() === "" && attachments.length === 0)) {
-                    return;
-                }
-                const deliveryState = delivery.getState().state;
-                if (deliveryState.kind !== "idle") {
+                if (
+                    !composerHasMessage(draft, attachments.length, attachmentState.kind === "reading") ||
+                    !canSendNow(operationFacts())
+                ) {
                     return;
                 }
                 await submit(
@@ -1536,19 +1534,18 @@ export function createSessionPaneModel(options: {
             },
             retryFailedMessage: async (signal) => {
                 const state = delivery.getState().state;
-                if (state.kind === "preparation-failed") {
-                    // Nothing reached the Runtime, so the message keeps its identity.
-                    await submit(state.message, signal);
-                } else if (state.kind === "failed") {
-                    // The Runtime definitively rejected this identity and will not run it again.
-                    await submit(
-                        {
-                            ...journalMessage(state.journal),
-                            commandId: crypto.randomUUID(),
-                        },
-                        signal,
-                    );
+                const message =
+                    state.kind === "preparation-failed"
+                        ? // Nothing reached the Runtime, so the message keeps its identity.
+                          state.message
+                        : state.kind === "failed"
+                          ? // The Runtime definitively rejected this identity and will not run it again.
+                            { ...journalMessage(state.journal), commandId: crypto.randomUUID() }
+                          : null;
+                if (message === null || !canRetryFailedMessage(message.target, operationFacts())) {
+                    return;
                 }
+                await submit(message, signal);
             },
             editFailedMessage: () => {
                 if (composerAttachments.getState().state.kind === "reading") {
@@ -1575,15 +1572,10 @@ export function createSessionPaneModel(options: {
                 const { attachments, state: attachmentState } = composerAttachments.getState();
                 const running = acceptedTurn(current.turn);
                 if (
-                    attachmentState.kind === "reading" ||
-                    current.connection.kind !== "ready" ||
                     running === null ||
-                    stopRequested(tasks.getState(), running)
+                    !composerHasMessage(current.draft, attachments.length, attachmentState.kind === "reading") ||
+                    !canQueue(operationFacts())
                 ) {
-                    return;
-                }
-                const state = delivery.getState().state;
-                if (state.kind !== "idle") {
                     return;
                 }
                 await submit(
@@ -1629,8 +1621,7 @@ export function createSessionPaneModel(options: {
                 });
             },
             configure: async (option, value, booleanValue, signal) => {
-                const current = get();
-                if (client === null || sessionSettingsDisabled(current, delivery.getState(), tasks.getState())) {
+                if (client === null || !canChangeSettings(operationFacts())) {
                     return;
                 }
                 const connected = client;
@@ -1745,6 +1736,7 @@ export function createSessionPaneModel(options: {
                 messageQueue.getState(),
                 composerAttachments.getState(),
                 interactions.getState(),
+                options.connectionAvailable(store.getState().connection),
             );
             if (!presentation.canSuggestProgress) {
                 return false;

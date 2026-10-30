@@ -49,3 +49,38 @@ test("Given an Agent takes longer than the Stop deadline, When its cancelled tur
     await app.waitForView(() => expect(document.body.textContent).toContain("Verification finished with one failure."));
     expect(queryByRole(document.body, "alert")).toBeNull();
 });
+
+test("Given a follow-up the Runtime rejected while a reply runs, When I ask to stop that reply, Then retrying the follow-up waits like the composer does", {
+    timeout: 30_000,
+}, async () => {
+    const cancellation = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    onTestFinished(() => {
+        release.resolve();
+    });
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: {
+            id: "tool-lifecycle-test",
+            label: "Controlled Agent",
+            beforeCancellationApplied: async () => {
+                cancellation.resolve();
+                await release.promise;
+            },
+        },
+    });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "answer then hold");
+    await app.waitForView(() => expect(document.body.textContent).toContain("Partial answer before stopping."));
+    // Production validation rejects the oversized follow-up before it enters the Runtime's queue.
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "x".repeat(100_001));
+    const retry = (): HTMLElement =>
+        getByRole(app.elementByTestId(dataTestId.queuedMessage), "button", { name: "Retry message" });
+    await app.waitForView(() => expect(retry()).toHaveProperty("disabled", false));
+
+    const stop = await app.waitForView(() => getByRole(document.body, "button", { name: "Stop agent output" }));
+    act(() => fireEvent.click(stop));
+    await cancellation.promise;
+
+    await app.waitForView(() => expect(retry()).toHaveProperty("disabled", true));
+    expect(getByRole(document.body, "button", { name: "Stopping agent output" })).toHaveProperty("disabled", true);
+});
