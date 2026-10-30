@@ -540,11 +540,13 @@ function SettingControl({
 export function ChatConfigurationMenu({
     controls,
     loadingControlId,
+    notice,
     settingsLoading = false,
 }: {
     readonly controls: readonly ChatConfigurationControl[];
     /** One setting's value is being written back. Other fields stay as they are. */
     readonly loadingControlId?: string;
+    readonly notice?: ReactNode;
     readonly settingsLoading?: boolean;
 }) {
     const [open, setOpen] = useState(false);
@@ -888,6 +890,7 @@ export function ChatConfigurationMenu({
                     >
                         <Dialog.Title className="sr-only">Agent configuration</Dialog.Title>
                         {header}
+                        {notice}
                         <Dialog.Description className="sr-only">
                             Configure the Agent used for this conversation.
                         </Dialog.Description>
@@ -916,6 +919,7 @@ export function ChatConfigurationMenu({
                     sideOffset={overlayTriggerOffsetPx}
                 >
                     {header}
+                    {notice}
                     {panelContents}
                 </Popover.Content>
             </Popover.Portal>
