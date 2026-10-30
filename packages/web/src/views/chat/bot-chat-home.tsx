@@ -397,7 +397,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                 connectionNotice={
                                     executionContext.feedback.kind === "hidden"
                                         ? undefined
-                                        : () => (
+                                        : (inline) => (
                                               <ConnectionNotice
                                                   feedback={executionContext.feedback}
                                                   footer={
@@ -405,6 +405,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                                           <OnlineComputerAlternative model={workspace.computers} />
                                                       )
                                                   }
+                                                  inline={inline}
                                                   onRetryNow={store.getState().retry}
                                                   onReopen={store.getState().retry}
                                               />
