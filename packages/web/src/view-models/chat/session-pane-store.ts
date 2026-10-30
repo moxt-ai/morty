@@ -207,7 +207,7 @@ export function sessionPanePresentation(
     const composerDisabled =
         !connectionAvailable ||
         model.connection.kind !== "ready" ||
-        (delivery.state.kind !== "idle" && delivery.state.kind !== "confirmed") ||
+        delivery.state.kind !== "idle" ||
         submitting ||
         model.operation.kind === "configuring" ||
         waitingForInput ||
@@ -244,9 +244,7 @@ export function sessionPanePresentation(
     const pendingMessage =
         delivery.state.kind === "preparing" || delivery.state.kind === "preparation-failed"
             ? delivery.state.message
-            : delivery.state.kind === "submitting" ||
-                delivery.state.kind === "failed" ||
-                delivery.state.kind === "confirmed"
+            : delivery.state.kind === "submitting" || delivery.state.kind === "failed"
               ? journalMessage(delivery.state.journal)
               : null;
     const pendingDelivery =
@@ -261,7 +259,7 @@ export function sessionPanePresentation(
             ? null
             : {
                   message: pendingMessage,
-                  sending: delivery.state.kind !== "confirmed",
+                  sending: true,
                   error:
                       delivery.state.kind === "preparation-failed"
                           ? delivery.state.error
@@ -338,6 +336,13 @@ export function sessionPanePresentation(
             attachments.state.kind === "reading" ||
             (model.draft.trim() === "" && attachments.attachments.length === 0),
         unconfirmedDelivery,
+        confirmedMessages: delivery.confirmedMessages.filter(
+            (confirmed) =>
+                confirmed.target.disposition === "reject" &&
+                !model.messages.some(
+                    (message) => message.role === "user" && messageExecutionCommandId(message) === confirmed.commandId,
+                ),
+        ),
         pendingDelivery,
     } as const;
 }
@@ -728,7 +733,13 @@ export function createSessionPaneModel(options: {
                 (commandId) => turns.startedAt(commandId, Date.now()),
             );
             const { execution } = change;
-            const submission = delivery.getState().state;
+            const deliverySnapshot = delivery.getState();
+            for (const message of deliverySnapshot.confirmedMessages) {
+                if (execution.queued.some((queued) => queued.commandId === message.commandId)) {
+                    messageQueue.getState().rememberAttachments(message.commandId, message.attachments);
+                }
+            }
+            const submission = deliverySnapshot.state;
             if (
                 "journal" in submission &&
                 execution.queued.some((message) => message.commandId === submission.journal.commandId)
@@ -923,7 +934,7 @@ export function createSessionPaneModel(options: {
             delivery.getState().prepare(message);
             if (queued) {
                 options.onInitialMessageDequeued?.(commandId);
-            } else if (currentDelivery.kind === "idle" || currentDelivery.kind === "confirmed") {
+            } else if (currentDelivery.kind === "idle") {
                 centralSessionStorage.remove(draftEntry);
                 composerAttachments.getState().clear();
                 set({ draft: "", queuedFilesNotice: false });
@@ -1440,7 +1451,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 const deliveryState = delivery.getState().state;
-                if (deliveryState.kind !== "idle" && deliveryState.kind !== "confirmed") {
+                if (deliveryState.kind !== "idle") {
                     return;
                 }
                 await submit(
@@ -1540,7 +1551,7 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 const state = delivery.getState().state;
-                if (state.kind !== "idle" && state.kind !== "confirmed") {
+                if (state.kind !== "idle") {
                     return;
                 }
                 await submit(
