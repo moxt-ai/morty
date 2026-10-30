@@ -119,6 +119,43 @@ for (const message of ["first", "subsequent"] as const) {
     });
 }
 
+test("Given a message on its way to the Runtime, When Chat remounts, Then it is delivered once and its reply arrives without asking to retry", {
+    timeout: 60_000,
+}, async () => {
+    const environment = await createChatWorkerEnvironment(true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true });
+    const network = app.network;
+    if (network === null) {
+        throw new Error("Expected the response-loss network");
+    }
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Established session");
+    await app.waitForView(() => {
+        expect(app.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain("Established session");
+        expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
+    });
+    network.holdNextTurn();
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Survive the remount");
+    await app.waitForView(() => expect(network.submissions.at(-1)).toContain("Survive the remount"));
+    const submissions = network.submissions.length;
+
+    app.remount();
+    const sent = () =>
+        app
+            .elementsByTestId(dataTestId.userMessage)
+            .filter((element) => element.textContent?.includes("Survive the remount"));
+    await app.waitForView(() => expect(sent()).toHaveLength(1));
+    expect(queryByRole(document.body, "button", { name: "Retry message with unknown delivery" })).toBeNull();
+    network.releaseHeldTurn();
+    await app.waitForView(() => {
+        expect(app.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain("Survive the remount");
+        expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
+    });
+    expect(network.submissions).toHaveLength(submissions);
+    expect(sent()).toHaveLength(1);
+    expect(queryByRole(document.body, "button", { name: "Retry message with unknown delivery" })).toBeNull();
+});
+
 function sessionEntry(app: TestApp, title: string): HTMLElement {
     const entry = app
         .elementsByTestId(dataTestId.managedConversation)

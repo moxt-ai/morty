@@ -146,7 +146,8 @@ export async function createTestApp(
     const mount = () => {
         container.setAttribute("data-test-app-root", "");
         document.body.appendChild(container);
-        rendered = render(assembled.element, { container });
+        // Development renders under StrictMode, which replays every mount; so does every scenario.
+        rendered = render(assembled.element, { container, reactStrictMode: true });
     };
     mount();
     let closed = false;

@@ -37,7 +37,6 @@ export type ConversationSelectionEvent =
           readonly target: ConversationTarget;
       }
     | { readonly kind: "retry-requested" }
-    | { readonly kind: "reload-requested" }
     | { readonly kind: "conversation-created"; readonly conversationId: string; readonly session: OpenMobiusSession };
 
 function sameTarget(left: ConversationTarget, right: ConversationTarget): boolean {
@@ -67,8 +66,6 @@ export function transitionConversationSelection(
                 : state;
         case "retry-requested":
             return state.kind === "failed" ? { kind: "pending", target: state.target } : state;
-        case "reload-requested":
-            return state.kind === "ready" ? { kind: "loading", target: state.target } : state;
         case "conversation-created":
             return state.kind === "draft"
                 ? {

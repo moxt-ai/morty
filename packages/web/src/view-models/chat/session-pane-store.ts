@@ -101,7 +101,8 @@ import { type SessionTitlesStore, sessionTitle } from "./session-titles-store.ts
 import { createSessionTurnLedger } from "./session-turn-ledger.ts";
 import { createSessionWelcomeStore } from "./session-welcome-store.ts";
 
-export type SessionPaneModel = ReturnType<typeof createSessionPaneModel>;
+/** What views see of a pane: its stores and the user's actions. Starting and stopping the pane is its owner's. */
+export type SessionPaneModel = Omit<ReturnType<typeof createSessionPaneModel>, "start" | "stop">;
 
 /** A change to the Session's settings. */
 type Operation =
@@ -151,7 +152,6 @@ export interface SessionPaneStore {
     readonly turn: CurrentTurn;
     /** The messages the Runtime holds queued, as last observed. The queue panel derives its list from them. */
     readonly queued: readonly QueuedCommand[];
-    readonly connect: (signal: AbortSignal) => Promise<void>;
     readonly recover: (signal: AbortSignal) => Promise<void>;
     readonly retryNow: () => void;
     /**
@@ -185,6 +185,11 @@ export interface SessionPaneStore {
     readonly confirmTitleEdit: (signal: AbortSignal) => Promise<void>;
     readonly cancelTitleEdit: () => void;
     readonly stop: (signal: AbortSignal) => Promise<void>;
+}
+
+/** The pane's state with its connection loop, which only the pane's own `start` runs. */
+interface SessionPaneState extends SessionPaneStore {
+    readonly connect: (signal: AbortSignal) => Promise<void>;
 }
 
 function messageExecutionCommandId(message: SessionExecutionMessage): string | null {
@@ -507,6 +512,10 @@ export function createSessionPaneModel(options: {
     // Counts the times the user reopened the Session. A `session_closed` failure from an operation that began
     // before a reopening describes the Session as it was, so it must not close the reopened Session again.
     let reopenings = 0;
+    // The pane's lifetime: its owner starts it once and stops it once, so at most one connection loop ever runs for
+    // the pane. React attaching or detaching its view is not part of it.
+    const lifetime = new AbortController();
+    let phase: "created" | "started" | "stopped" = "created";
     /** Whether a failure says the Session is closed now, not just as it was when the operation began. */
     const closedNow = (cause: unknown, reopeningsAtStart: number): boolean =>
         isSessionClosedFailure(cause) && reopeningsAtStart === reopenings;
@@ -671,7 +680,7 @@ export function createSessionPaneModel(options: {
 
     // Connection waiters are woken where the connection settles. No wrapped set, no subscriptions.
     const connectionWaiters = new Set<() => void>();
-    const store = createStore<SessionPaneStore>()((set, get) => {
+    const store = createStore<SessionPaneState>()((set, get) => {
         const operationFacts = (): SessionOperationFacts =>
             sessionOperationFacts(
                 get(),
@@ -692,9 +701,9 @@ export function createSessionPaneModel(options: {
         };
         const setAndSettle = (
             partial:
-                | SessionPaneStore
-                | Partial<SessionPaneStore>
-                | ((state: SessionPaneStore) => SessionPaneStore | Partial<SessionPaneStore>),
+                | SessionPaneState
+                | Partial<SessionPaneState>
+                | ((state: SessionPaneState) => SessionPaneState | Partial<SessionPaneState>),
         ): void => {
             const previous = get().connection.kind;
             set(partial);
@@ -1091,11 +1100,6 @@ export function createSessionPaneModel(options: {
                 }
             },
             connect: async (signal) => {
-                // Each connect starts from an empty projection: the history
-                // reload re-reads persisted events, so a re-attached view never renders stale
-                // in-memory content the service no longer returns.
-                projection = createSessionProjection();
-                set(projectedTimeline(projection));
                 const readStoredLastSentMessage = (): void => {
                     const revision = turns.lastSentRevision();
                     void centralIndexedDB.get(lastSentMessageEntry, signal).then((stored) => {
@@ -1417,7 +1421,7 @@ export function createSessionPaneModel(options: {
             },
             retryNow: () => {
                 recoveryRequested = true;
-                void requests.recoverBridge(connection.signal).catch(() => undefined);
+                void requests.recoverBridge(lifetime.signal).catch(() => undefined);
                 countdownInterrupt?.abort(new Error("Retried now"));
             },
             sessionClosed: (reason) => {
@@ -1750,15 +1754,6 @@ export function createSessionPaneModel(options: {
             return true;
         },
     });
-    // The pane's connection lifetime: attach starts connecting with its own
-    // signal, detach aborts it. The view drives this through a ref callback,
-    // so no component effect owns the session connection and nothing starts
-    // during render.
-    const attachedViews = new WeakSet<HTMLElement>();
-    // The pane's connection lifetime follows attach/detach: each attach gets a
-    // fresh controller (a detach aborts the previous one), so a re-attached
-    // pane reconnects instead of reusing an aborted signal.
-    let connection = new AbortController();
     const waitForConnectionReady = async (signal: AbortSignal): Promise<void> => {
         while (true) {
             signal.throwIfAborted();
@@ -1799,71 +1794,62 @@ export function createSessionPaneModel(options: {
         return await current.client.sessions.readFile(
             sessionId,
             path,
-            AbortSignal.any([signal, connection.signal, AbortSignal.timeout(20_000)]),
+            AbortSignal.any([signal, lifetime.signal, AbortSignal.timeout(20_000)]),
             32 * 1024 * 1024,
         );
     };
     const readResource = async (path: string, signal: AbortSignal) => {
         // The same bounded lifetime covers connection recovery and the file read.
-        const requestSignal = AbortSignal.any([signal, connection.signal, AbortSignal.timeout(20_000)]);
+        const requestSignal = AbortSignal.any([signal, lifetime.signal, AbortSignal.timeout(20_000)]);
         await waitForConnectionReady(requestSignal);
         return await readFile(path, requestSignal);
     };
     const filePreview = createBrowserFilePreviewStore(readFile);
     /**
-     * Stops the pane's connection-scoped resources. Idempotent: an owning
-     * workspace may stop a pane that is still attached, and the attached
-     * element's own cleanup then re-runs it as a no-op.
+     * Starts the pane's Session connection. The owner that created the pane starts it once; the connection then
+     * follows the Session, its interruptions and its closing until the owner stops the pane.
      */
-    const stop = (): void => {
-        if (connection.signal.aborted) {
+    const start = (): void => {
+        if (phase !== "created") {
             return;
         }
-        filePreview.getState().close();
-        connection.abort(new Error("The session pane stopped."));
-        delivery.getState().submissionInterrupted();
-        options.onReleased?.(sessionActivity(store.getState().turn, delivery.getState().state));
-    };
-    /**
-     * Announced with the pane's attached root element, following React's
-     * ref-cleanup protocol: the view hands it straight to its root element's
-     * ref. Attach starts the session connection; the returned function stops
-     * it. A WeakSet latches the node so a re-render of the same element cannot
-     * detach and reattach the connection.
-     */
-    const onAttach = (node: HTMLElement): (() => void) => {
-        if (attachedViews.has(node)) {
-            return () => {};
-        }
-        attachedViews.add(node);
+        phase = "started";
         const unregisterDebug = registerMortyDebugSession({
             sessionId,
             blocks: () => sessionDebugBlocks(store.getState()),
         });
-        // A previous cleanup aborted the old controllers; arm fresh ones so
-        // this attach reconnects with a live signal.
-        connection = new AbortController();
-        const signal = connection.signal;
+        lifetime.signal.addEventListener("abort", unregisterDebug, { once: true });
         void store
             .getState()
-            .connect(signal)
+            .connect(lifetime.signal)
             .catch((cause: unknown) => {
-                if (!signal.aborted) {
+                if (!lifetime.signal.aborted) {
                     reportApplicationError(cause, "session-pane-connect");
                 }
             });
-        return () => {
-            attachedViews.delete(node);
-            unregisterDebug();
-            stop();
-        };
     };
+    /**
+     * Ends the pane: its connection and everything bound to its lifetime. The owner stops a pane it replaces or
+     * removes; a stopped pane is never restarted. Idempotent.
+     */
+    const stop = (): void => {
+        if (phase === "stopped") {
+            return;
+        }
+        phase = "stopped";
+        filePreview.getState().close();
+        lifetime.abort(new Error("The session pane stopped."));
+        delivery.getState().submissionInterrupted();
+        options.onReleased?.(sessionActivity(store.getState().turn, delivery.getState().state));
+    };
+    // Views read the pane's state and invoke the user's actions; the connection loop stays with `start`.
+    const paneStore: StoreApi<SessionPaneStore> = store;
     return {
         composerAttachments,
         attachmentSignal: options.attachmentSignal,
         interactions,
         settings,
-        store,
+        store: paneStore,
         delivery,
         filePreview,
         messageQueue,
@@ -1875,10 +1861,10 @@ export function createSessionPaneModel(options: {
         agentRef: session.agentRef,
         /** The opened session record; scopes the execution context. */
         session,
-        onAttach,
+        start,
         stop,
-        /** The signal for view-triggered operations while the pane is attached. */
-        operationsSignal: () => connection.signal,
+        /** The signal for view-triggered operations: the pane's lifetime. */
+        operationsSignal: () => lifetime.signal,
         readResource,
     };
 }
