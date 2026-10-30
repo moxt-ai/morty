@@ -62,7 +62,11 @@ export function createPlatformProjectRoutes() {
                         body: JSON.stringify({
                             project,
                             userId: local.userId,
-                            replacement: { previousProjectId: audit.previousProjectId, token: local.token },
+                            origin: {
+                                kind: "replacement",
+                                previousProjectId: audit.previousProjectId,
+                                token: local.token,
+                            },
                         }),
                         headers: { "content-type": "application/json" },
                         method: "POST",

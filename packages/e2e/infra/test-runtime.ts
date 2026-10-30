@@ -3,7 +3,7 @@ import { type BrowserContextOptions, chromium, firefox, webkit } from "playwrigh
 import { mortyFiles, mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../web/src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../../web/src/services/identity/identity-scope-url.ts";
-import { ChatApi, jsonRequest, object, text } from "./chat-api.ts";
+import { anonymousCreationKey, ChatApi, jsonRequest, object, text } from "./chat-api.ts";
 import type { E2EHarness } from "./harness.ts";
 import { LocalStack } from "./local-stack.ts";
 import { ControlledSetupRuntime } from "./setup-daemon.ts";
@@ -49,7 +49,7 @@ export async function createTestRuntime(
         const openChat = async () => {
             const identity = object(
                 await jsonRequest(stack.chatOrigin, "/morty/api/identity/anonymous-users", {
-                    body: {},
+                    body: { creationKey: anonymousCreationKey() },
                     signal: harness.signal,
                 }),
                 "anonymous identity",
@@ -138,7 +138,7 @@ export async function createTestRuntime(
                 const unrelated = new ChatApi(stack.chatOrigin, harness.signal);
                 await unrelated.useBrowserIdentity(
                     await jsonRequest(stack.chatOrigin, "/morty/api/identity/anonymous-users", {
-                        body: {},
+                        body: { creationKey: anonymousCreationKey() },
                         signal: harness.signal,
                     }),
                 );

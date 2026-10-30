@@ -45,16 +45,15 @@ export class ProjectDurableObject extends DurableObject<CloudBindings> {
             }),
             {
                 ...this.#bindings(parsed.project.projectId),
-                ...(parsed.replacement === undefined
-                    ? {}
-                    : { CHAT_REPLACEMENT_KEY: await this.#replacementKey(request.signal) }),
+                CHAT_CREDENTIAL_KEY: await this.#credentialKey(request.signal),
             },
         );
     };
 
-    readonly #replacementKey = async (signal: AbortSignal): Promise<Uint8Array> => {
+    readonly #credentialKey = async (signal: AbortSignal): Promise<Uint8Array> => {
         signal.throwIfAborted();
         const result = await this.ctx.storage.transaction(async (storage) => {
+            // The stored name predates created identities; renaming it would change credentials a retry derives.
             const stored: unknown = await storage.get("replacement-key-v1");
             signal.throwIfAborted();
             if (stored !== undefined) {
@@ -66,7 +65,8 @@ export class ProjectDurableObject extends DurableObject<CloudBindings> {
                     stored,
                 );
             }
-            // Independent server entropy keeps a retired predecessor token from deriving its successor offline.
+            // Independent server entropy keeps a creation key or a retired predecessor token from deriving its
+            // credential offline.
             // This key survives restarts, deployment credential rotation, and retries; no bearer token is stored.
             const key = crypto.getRandomValues(new Uint8Array(32));
             await storage.put("replacement-key-v1", key);

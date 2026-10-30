@@ -5,6 +5,7 @@ import { json } from "../../../infra/http.ts";
 import { bodyParser, readJsonBody } from "../../../middleware/body-parser.ts";
 import { credentialRevocationPaths } from "../entity/authentication/credential.ts";
 import { ManagementError } from "../entity/management-error.ts";
+import { anonymousCreationKey } from "../entity/project-bootstrap.ts";
 import { projectLocationHint } from "../util/project-location.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 
@@ -17,10 +18,23 @@ const transferInput = v.pipe(
     v.readonly(),
 );
 const anonymousUserInput = v.strictObject({
+    creationKey: anonymousCreationKey,
     locationHint: v.optional(
         v.picklist(["wnam", "enam", "sam", "weur", "eeur", "apac", "apac-ne", "apac-se", "oc", "afr", "me"]),
     ),
 });
+
+/** The user a creation key names. A one-way digest, so the public user ID never reveals the key. */
+async function anonymousUserId(creationKey: string): Promise<string> {
+    const digest = new Uint8Array(
+        await crypto.subtle.digest(
+            "SHA-256",
+            new TextEncoder().encode(JSON.stringify(["morty-anonymous-user-v1", creationKey])),
+        ),
+    );
+    const hex = Array.from(digest.subarray(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `usr_${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 export function createAuthenticationRoutes() {
     return new Hono<ManagementHttpEnvironment>()
@@ -46,22 +60,24 @@ export function createAuthenticationRoutes() {
         .post("/identity/anonymous-users", async (context) => {
             const request = context.req.raw;
             const signal = AbortSignal.any([request.signal, AbortSignal.timeout(45000)]);
-            const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-            const requestedLocation =
-                contentType === "application/json"
-                    ? v.parse(anonymousUserInput, await readJsonBody(request))
-                    : undefined;
+            const input = v.parse(anonymousUserInput, await readJsonBody(request));
             signal.throwIfAborted();
-            const userId = `usr_${crypto.randomUUID()}`;
+            // Retrying the same creation key names the same user, whose Platform Project creation is idempotent and
+            // whose bootstrap returns the identity an earlier attempt issued.
+            const userId = await anonymousUserId(input.creationKey);
             const project = await context.env.gateways.platformProjects.create(
                 userId,
                 "Morty",
                 signal,
-                requestedLocation?.locationHint ?? projectLocationHint(request),
+                input.locationHint ?? projectLocationHint(request),
             );
             const response = await projectObject(context.env.config.bindings, project.projectId).fetch(
                 new Request("https://project.internal/__project/bootstrap", {
-                    body: JSON.stringify({ project, userId }),
+                    body: JSON.stringify({
+                        project,
+                        userId,
+                        origin: { kind: "created", creationKey: input.creationKey },
+                    }),
                     headers: { "content-type": "application/json" },
                     method: "POST",
                     signal,

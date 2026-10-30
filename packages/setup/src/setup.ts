@@ -529,7 +529,15 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     function savedIdentity(config: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
         return Object.fromEntries(
             Object.entries(config).filter(([key]) =>
-                ["user_token", "user_id", "project_id", "bot_id", "agent_ref", "pairing_runtime_id"].includes(key),
+                [
+                    "identity_creation_key",
+                    "user_token",
+                    "user_id",
+                    "project_id",
+                    "bot_id",
+                    "agent_ref",
+                    "pairing_runtime_id",
+                ].includes(key),
             ),
         );
     }
@@ -820,13 +828,32 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return { kind: "setup", context, project: "reused" };
         }
         progress("identity", "Creating the standalone identity and Machine.");
-        const identity = await request(context, "/identity/anonymous-users", {}, false);
-        const saved = await saveConfiguration(context, {
-            user_token: credential(identity["token"]),
-            user_id: identifier(identity["userId"]),
-            bot_id: identifier(object(identity["bot"])["botId"]),
-            project_id: identifier(identity["projectId"]),
-        });
+        // Save the creation key before creating, so a setup retried after a lost reply resumes the same identity
+        // instead of creating another.
+        const creating =
+            context.config["identity_creation_key"] === undefined
+                ? await saveConfiguration(context, {
+                      identity_creation_key: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString(
+                          "base64url",
+                      ),
+                  })
+                : context;
+        const identity = await request(
+            creating,
+            "/identity/anonymous-users",
+            { creationKey: text(creating.config["identity_creation_key"], /^[A-Za-z0-9_-]{43}$/u) },
+            false,
+        );
+        const { identity_creation_key: _created, ...config } = creating.config;
+        const saved = await saveConfiguration(
+            { ...creating, config },
+            {
+                user_token: credential(identity["token"]),
+                user_id: identifier(identity["userId"]),
+                bot_id: identifier(object(identity["bot"])["botId"]),
+                project_id: identifier(identity["projectId"]),
+            },
+        );
         return { kind: "setup", context: saved, project: "created" };
     }
 

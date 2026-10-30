@@ -8,6 +8,11 @@ import * as v from "valibot";
 import { expect } from "vitest";
 import { createSessionExecutionProxy } from "../../../../tests/support/session-execution-proxy.ts";
 import worker from "../../src/application.ts";
+
+/** A fresh client-held key naming one anonymous user creation. */
+export const anonymousCreationKey = (): string =>
+    Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
+
 import { startTestPlatform } from "./test-platform.ts";
 
 export const AUTH_TIME = new Date("2026-09-07T00:00:00.000Z");
@@ -180,7 +185,11 @@ async function startIdentityFixture(
             });
             const createAnonymousUser = async () => {
                 const response = await worker.fetch(
-                    new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, { method: "POST" }),
+                    new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
+                        method: "POST",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({ creationKey: anonymousCreationKey() }),
+                    }),
                     environment(),
                 );
                 expect(response.status).toBe(201);

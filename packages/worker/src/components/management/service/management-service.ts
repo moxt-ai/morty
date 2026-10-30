@@ -3,21 +3,18 @@ import type { PlatformProjectGateway } from "../../../gateway/platform-project-g
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { type PlatformProject, PlatformProjectError } from "../entity/platform-project.ts";
-import type { ReplacementIdentity } from "../entity/project-bootstrap.ts";
+import type { BootstrapOrigin } from "../entity/project-bootstrap.ts";
 import { projectRegion } from "../entity/project-region.ts";
 import type { ManagedBotStorage } from "../storage/managed-bot-storage.ts";
 import type { PlatformProjectStorage } from "../storage/platform-project-storage.ts";
-import type { ProjectLocationHint } from "../util/project-location.ts";
 import type { AuthenticationService } from "./authentication-service.ts";
-
-type LocationHint = ProjectLocationHint | undefined;
 
 export class ManagementService {
     readonly #authentication: AuthenticationService;
     readonly #managedBots: ManagedBotStorage;
     readonly #platformProjects: PlatformProjectStorage;
     readonly #platform: PlatformProjectGateway;
-    readonly #replacementKey: unknown;
+    readonly #credentialKey: unknown;
 
     constructor(cx: {
         readonly config: { readonly bindings: CloudBindings };
@@ -32,46 +29,39 @@ export class ManagementService {
         this.#managedBots = cx.storages.managedBots;
         this.#platformProjects = cx.storages.platformProjects;
         this.#platform = cx.gateways.platformProjects;
-        this.#replacementKey = cx.config.bindings.CHAT_REPLACEMENT_KEY;
+        this.#credentialKey = cx.config.bindings.CHAT_CREDENTIAL_KEY;
     }
 
+    /**
+     * Every step reuses what an earlier attempt committed, and the credential derives from the bootstrap's origin, so
+     * repeating the same bootstrap completes it and returns the same identity instead of creating another.
+     */
     readonly initializeAnonymousUser = async (
         userId: string,
         project: PlatformProject,
         signal: AbortSignal,
-        replacement?: ReplacementIdentity,
+        origin: BootstrapOrigin,
     ) => {
-        const token =
-            replacement === undefined
-                ? undefined
-                : await replacementToken(this.#replacementKey, userId, project.projectId, replacement);
+        const token = await bootstrapToken(this.#credentialKey, userId, project.projectId, origin);
         const identity = await this.#authentication.createAnonymous(userId, project.projectId, signal, token);
         const { appId } = this.#platform.configuration();
         await this.#platformProjects.save(userId, appId, project, signal);
-        const bot = await this.provisionUserBot(identity.userId, undefined, signal);
+        const bot = await this.provisionUserBot(identity.userId, signal);
         return { ...identity, bot };
     };
 
-    readonly provisionUserBot = async (userId: string, location: LocationHint, signal: AbortSignal) => {
+    /** Gives the user its first Machine unless it already has one. */
+    readonly provisionUserBot = async (userId: string, signal: AbortSignal) => {
         const existing = (await this.#managedBots.listBots(userId, signal))[0];
         if (existing !== undefined) {
             return existing;
         }
-        const { appId } = this.#platform.configuration();
-        const project =
-            (await this.#platformProjects.read(userId, appId, signal)) ??
-            (await this.#platform.create(userId, "Morty", signal, location));
-        await this.#platformProjects.save(userId, appId, project, signal);
-        signal.throwIfAborted();
         const bot = { botId: `bot_${crypto.randomUUID()}`, displayName: "My Machine" };
         await this.#managedBots.saveClaim(userId, bot, Date.now(), signal);
         return bot;
     };
 
-    readonly listBots = async (userId: string, location: LocationHint, signal: AbortSignal) => {
-        await this.provisionUserBot(userId, location, signal);
-        return await this.#managedBots.listBots(userId, signal);
-    };
+    readonly listBots = async (userId: string, signal: AbortSignal) => await this.#managedBots.listBots(userId, signal);
 
     readonly createBot = async (userId: string, displayName: string, signal: AbortSignal) => {
         const bot = { botId: `bot_${crypto.randomUUID()}`, displayName };
@@ -167,7 +157,7 @@ export class ManagementService {
         if (identity === null) {
             return null;
         }
-        const bot = await this.provisionUserBot(identity.userId, undefined, signal);
+        const bot = await this.provisionUserBot(identity.userId, signal);
         return { ...identity, botId: bot.botId };
     };
 
@@ -180,13 +170,24 @@ export class ManagementService {
     };
 }
 
-// The version and input encoding are part of the persisted retry contract; keep them stable.
-async function replacementToken(
-    serverKey: unknown,
-    userId: string,
-    projectId: string,
-    replacement: ReplacementIdentity,
-) {
+/** The credential a bootstrap issues, derived so that repeating the same bootstrap issues it again. */
+async function bootstrapToken(serverKey: unknown, userId: string, projectId: string, origin: BootstrapOrigin) {
+    // The versions and input encodings are part of the persisted retry contract; keep them stable.
+    switch (origin.kind) {
+        case "created":
+            return await derivedToken(serverKey, ["morty-anonymous-user-v1", userId, projectId, origin.creationKey]);
+        case "replacement":
+            return await derivedToken(serverKey, [
+                "morty-project-replacement-v1",
+                userId,
+                origin.previousProjectId,
+                projectId,
+                origin.token,
+            ]);
+    }
+}
+
+async function derivedToken(serverKey: unknown, input: readonly string[]) {
     const secret = v.parse(v.instance(Uint8Array), serverKey);
     const key = await crypto.subtle.importKey(
         "raw",
@@ -195,19 +196,7 @@ async function replacementToken(
         false,
         ["sign"],
     );
-    const signed = await crypto.subtle.sign(
-        "HMAC",
-        key,
-        new TextEncoder().encode(
-            JSON.stringify([
-                "morty-project-replacement-v1",
-                userId,
-                replacement.previousProjectId,
-                projectId,
-                replacement.token,
-            ]),
-        ),
-    );
+    const signed = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(JSON.stringify(input)));
     return `mobius_anon_v2_${btoa(String.fromCharCode(...new Uint8Array(signed)))
         .replaceAll("+", "-")
         .replaceAll("/", "_")

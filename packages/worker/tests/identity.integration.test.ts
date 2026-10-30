@@ -1,7 +1,7 @@
 import * as v from "valibot";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import worker, { fetchPublicApplication } from "../src/application.ts";
-import { APP_ORIGIN, accountRequest, createIdentityFixture } from "./support/identity-fixture.ts";
+import { APP_ORIGIN, accountRequest, anonymousCreationKey, createIdentityFixture } from "./support/identity-fixture.ts";
 
 let fixture: Awaited<ReturnType<typeof createIdentityFixture>>;
 
@@ -11,6 +11,49 @@ beforeAll(async () => {
 
 afterAll(async () => {
     await fixture.close();
+});
+
+/** Declares its length as HTTP clients do, so the request keeps Cloudflare's location metadata. */
+function creationRequest(headers: Readonly<Record<string, string>> = {}): Request {
+    const body = JSON.stringify({ creationKey: anonymousCreationKey() });
+    return new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json", "content-length": String(body.length) },
+        body,
+    });
+}
+
+test("Given an identity creation whose reply was lost, When the client retries it with the same creation key, Then it receives the same identity, Project and Machine", async () => {
+    const environment = fixture.environment();
+    const creationKey = anonymousCreationKey();
+    const create = async () => {
+        const response = await worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ creationKey }),
+            }),
+            environment,
+        );
+        expect(response.status).toBe(201);
+        return v.parse(
+            v.object({
+                token: v.string(),
+                userId: v.string(),
+                projectId: v.string(),
+                bot: v.object({ botId: v.string() }),
+            }),
+            await response.json(),
+        );
+    };
+
+    const lost = await create();
+    const retried = await create();
+
+    expect(retried).toEqual(lost);
+    const session = await worker.fetch(accountRequest(retried.token, retried.projectId), environment);
+    expect(session.status).toBe(200);
+    expect(await session.json()).toMatchObject({ userId: lost.userId });
 });
 
 test("Given visitors across Cloudflare regions, When Chat provisions and reopens Morty data, Then Platform preserves every placement", {
@@ -38,14 +81,7 @@ test("Given visitors across Cloudflare regions, When Chat provisions and reopens
         ["unknown", "US", "apac"],
     ] as const) {
         const created = await worker.fetch(
-            new GeolocatedRequest(
-                new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
-                    method: "POST",
-                    headers: { "cf-ipcountry": "US" },
-                }),
-                continent,
-                country,
-            ),
+            new GeolocatedRequest(creationRequest({ "cf-ipcountry": "US" }), continent, country),
             environment,
         );
         expect(created.status).toBe(201);
@@ -86,7 +122,7 @@ test("Given explicit location choices, When users create Morty identities, Then 
             new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
                 method: "POST",
                 headers: { "content-type": "application/json" },
-                body: JSON.stringify({ locationHint }),
+                body: JSON.stringify({ creationKey: anonymousCreationKey(), locationHint }),
             }),
             fixture.environment(),
         );
@@ -102,7 +138,7 @@ test("Given Projects in separate regions, When users reopen and transfer Morty a
     class RegionalRequest extends Request {
         override readonly cf: { readonly continent: string };
         constructor(continent: string) {
-            super(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, { method: "POST" });
+            super(creationRequest());
             this.cf = { continent };
         }
     }
