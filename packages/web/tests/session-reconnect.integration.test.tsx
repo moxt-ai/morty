@@ -64,7 +64,7 @@ test("Given a new session with an unsent draft, When the browser resumes after r
         } finally {
             observer.disconnect();
         }
-        await act(async () => clock.advanceBy(8_000));
+        await act(async () => clock.advanceBy(30_000));
         expect(reconnectStatusText(app)).toBeNull();
         expect(composer).toHaveProperty("value", "Keep this new session draft");
         expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain(
@@ -73,7 +73,7 @@ test("Given a new session with an unsent draft, When the browser resumes after r
     }
 });
 
-test("Given a new session with an interrupted bridge, When recovery takes eight seconds, Then one retry notice appears and clears without sending the draft", {
+test("Given a new session with an interrupted bridge, When recovery takes thirty seconds, Then one retry notice appears and clears without sending the draft", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
@@ -93,7 +93,7 @@ test("Given a new session with an interrupted bridge, When recovery takes eight 
         expect(reconnectStatusText(app)).toContain("Connection interrupted");
         expect(getByRole(document.body, "button", { name: "Retry now" })).toBeDefined();
     });
-    await act(async () => clock.advanceBy(8_000));
+    await act(async () => clock.advanceBy(30_000));
     await notice;
     await app.waitForView(() =>
         expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false),
@@ -193,14 +193,16 @@ test("Given an online computer and a saved session, When the session first loads
     expect(reconnectStatusText(app)).toBeNull();
 });
 
-test("Given an open conversation with a draft, When the Runtime disconnects across two background suspensions, Then foreground recovery stays quiet without sending the draft", {
+test("Given an open conversation with a draft, When recovery after two background suspensions takes twelve seconds, Then it stays quiet without sending the draft", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
-    const app = await createTestApp({ connectAgent: true, clock });
+    const environment = await createChatWorkerEnvironment(false, true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true, clock });
     const composer = await openSavedConversation(app, "Quiet recovery");
-    if (app.daemon === null) {
-        throw new Error("Expected the connected Runtime");
+    if (app.daemon === null || app.executionNetwork === null) {
+        throw new Error("Expected the connected Runtime and real execution-read proxy");
     }
     await app.user.type(composer, "Keep writing through recovery");
     for (const cycle of [1, 2]) {
@@ -215,20 +217,28 @@ test("Given an open conversation with a draft, When the Runtime disconnects acro
             window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
             clock.advanceBy(30_000);
         });
+        const held = app.executionNetwork.holdNextExecution();
         await app.daemon.reconnect();
         await act(async () => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
-        expect(reconnectStatusText(app)).toBeNull();
+        const release = await held;
+        try {
+            await act(async () => clock.advanceBy(12_000));
+            expect(reconnectStatusText(app), `slow foreground recovery ${cycle}`).toBeNull();
+            expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true);
+        } finally {
+            release();
+        }
         await app.waitForView(() =>
             expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false),
         );
-        await act(async () => clock.advanceBy(8_000));
+        await act(async () => clock.advanceBy(30_000));
         expect(reconnectStatusText(app)).toBeNull();
         expect(composer.value).toBe("Keep writing through recovery");
         expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain(composer.value);
     }
 });
 
-test("Given an interrupted conversation, When recovery lasts eight seconds across attempts, Then one actionable notice appears and clears on recovery", {
+test("Given an interrupted conversation, When recovery lasts thirty seconds across attempts, Then one actionable notice appears and clears on recovery", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
@@ -244,7 +254,7 @@ test("Given an interrupted conversation, When recovery lasts eight seconds acros
     );
     expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true);
     expect(reconnectStatusText(app)).toBeNull();
-    await act(async () => clock.advanceBy(7_999));
+    await act(async () => clock.advanceBy(29_999));
     expect(reconnectStatusText(app)).toBeNull();
     await act(async () => clock.advanceBy(1));
     await app.waitForView(() => expect(reconnectStatusText(app)).not.toBeNull());

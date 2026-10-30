@@ -1,6 +1,8 @@
 import type { Clock } from "../../services/time/clock.ts";
 
-const RECOVERY_NOTICE_DELAY_MS = 8_000;
+// Resuming a suspended browser can consume a full health check and socket handshake
+// before Session reconciliation completes. Give that automatic recovery time to finish.
+const RECOVERY_NOTICE_DELAY_MS = 30_000;
 
 /** One interruption's notice: only uninterrupted foreground recovery time can make it visible. */
 export function startRecoveryNotice(options: {

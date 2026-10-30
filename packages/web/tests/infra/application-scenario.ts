@@ -96,6 +96,6 @@ export async function showReconnectNotice(app: TestApp, clock: TestClock): Promi
     await app.waitForView(() =>
         getByRole(document.body, "button", { name: /Switch computer/, description: "Reconnecting" }),
     );
-    await act(async () => clock.advanceBy(8_000));
+    await act(async () => clock.advanceBy(30_000));
     await app.waitForView(() => getByRole(document.body, "button", { name: "Retry now" }));
 }
