@@ -207,7 +207,7 @@ test("Given a conversation is running in the background, When it completes after
     );
 });
 
-test("Given a running session, When the sidebar shows its status, Then the working icon is 12px", {
+test("Given a running session, When the sidebar shows its status, Then the working icon is 14px", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -229,7 +229,7 @@ test("Given a running session, When the sidebar shows its status, Then the worki
         if (!(icon instanceof SVGElement)) {
             throw new Error("Expected the session status icon");
         }
-        expect(icon.classList.contains("size-3")).toBe(true);
+        expect(icon.classList.contains("size-3.5")).toBe(true);
     });
 });
 
