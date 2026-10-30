@@ -24,6 +24,7 @@ export type AppState =
     | { readonly kind: "loading" }
     | { readonly kind: "failed"; readonly retry: () => void; readonly retrying: boolean }
     | { readonly kind: "invalid-link"; readonly continueHref: string | null }
+    | { readonly kind: "unpaired" }
     | {
           readonly kind: "setup";
           readonly notice: "access-ended" | "none";
@@ -93,6 +94,19 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
                             ) : (
                                 "Retry"
                             )}
+                        </Button>
+                    </SetupCardSection>
+                </SetupCardShell>
+            );
+        case "unpaired":
+            return (
+                <SetupCardShell cardLeading={<SetupCardFailureIcon />} showPageHeader titleId="unpaired-title">
+                    <SetupCardTitle id="unpaired-title">Browser not paired</SetupCardTitle>
+                    <SetupCardDescription>Copied browser URLs don’t grant access.</SetupCardDescription>
+                    <SetupCardDescription>Open your agent’s link or scan its QR code.</SetupCardDescription>
+                    <SetupCardSection className="mt-4">
+                        <Button asChild className={setupPrimaryButtonClassName} size={setupPrimaryButtonSize}>
+                            <a href="/">Go to morty</a>
                         </Button>
                     </SetupCardSection>
                 </SetupCardShell>

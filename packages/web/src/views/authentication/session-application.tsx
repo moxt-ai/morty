@@ -73,7 +73,7 @@ export function SessionApplication({
             />
         );
     }
-    if (state.kind === "invalid-link") {
+    if (state.kind === "invalid-link" || state.kind === "unpaired") {
         return <App bugReportDialog={application.bugReportDialog} state={state} />;
     }
     // Every branch renders the same App component, so the tree — and the bug

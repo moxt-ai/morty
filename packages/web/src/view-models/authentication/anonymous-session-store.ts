@@ -1,12 +1,13 @@
 import { createStore } from "zustand/vanilla";
 import { type AnonymousIdentity, AnonymousIdentityApi } from "../../services/identity/anonymous-identity-api.ts";
-import { hasIdentityScope } from "../../services/identity/identity-scope-url.ts";
+import { hasIdentityScope, readIdentityScope } from "../../services/identity/identity-scope-url.ts";
 import {
     computerAddress,
     rememberComputerVisit,
     rememberedComputers,
     resumesComputer,
     settleResumedComputer,
+    storedToken,
 } from "../../services/identity/remembered-computers.ts";
 import {
     accessEndedComputerEntry,
@@ -31,6 +32,7 @@ type AnonymousSessionState =
       }
     | ActiveAnonymousSession
     | { readonly kind: "invalid-link"; readonly continueHref: string | null }
+    | { readonly kind: "unpaired" }
     | { readonly kind: "failed"; readonly retrying: boolean };
 
 export interface AnonymousSessionStore {
@@ -89,6 +91,11 @@ export const createAnonymousSessionStore = (
                         return;
                     }
                     if (hasIdentityScope()) {
+                        const scope = readIdentityScope();
+                        if (scope !== null && storedToken(scope.userId) === null) {
+                            set({ state: { kind: "unpaired" } });
+                            return;
+                        }
                         // A place this browser remembered falls back to the computer's home when it is gone; a link
                         // someone gave the user reports that it no longer opens.
                         const entry = resumesComputer() ? "restore" : "address";
