@@ -63,6 +63,53 @@ async function createChatFixture(
     };
 }
 
+test("Given an owned Machine, When its owner requests access to an unmanaged session, Then Chat refuses to mint a credential while managed sessions remain usable", async ({
+    cloud,
+}) => {
+    await using fixture = await createChatFixture(cloud);
+    expect(
+        (
+            await fixture.request(`chat/bots/${fixture.botId}/setup`, {
+                runtimeId: fixture.runtime.runtimeId,
+                agentRef: "codex",
+            })
+        ).status,
+    ).toBe(202);
+    const unowned = await fixture.request(`chat/bots/${fixture.botId}/session-access`, {
+        sessionId: "chat_unowned_security_audit",
+    });
+    expect(unowned.status).toBe(404);
+    expect(await unowned.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
+
+    const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+        agentRef: "codex",
+        configurations: [],
+        conversationKey: "security-audit-owned",
+        title: "Owned session",
+        workspaceRef: "default",
+    });
+    expect(opened.status).toBe(200);
+    const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
+    const access = await fixture.request(`chat/bots/${fixture.botId}/session-access`, { sessionId });
+    expect(access.status).toBe(200);
+    expect(await access.json()).toMatchObject({ sessionId, credential: expect.stringMatching(/^msession_/u) });
+
+    const secondBot = await fixture.request("management/bots", { displayName: "Other Machine" });
+    expect(secondBot.status).toBe(201);
+    const { botId } = v.parse(v.object({ botId: v.string() }), await secondBot.json());
+    expect(
+        (
+            await fixture.request(`chat/bots/${botId}/setup`, {
+                runtimeId: fixture.runtime.runtimeId,
+                agentRef: "codex",
+            })
+        ).status,
+    ).toBe(202);
+    const otherMachine = await fixture.request(`chat/bots/${botId}/session-access`, { sessionId });
+    expect(otherMachine.status).toBe(404);
+    expect(await otherMachine.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
+});
+
 test("Given a draft Bot, When its owner configures and opens it, Then setup lists Runtime options and the Runtime endpoint exposes only the configured Runtime", async ({
     cloud,
 }) => {
