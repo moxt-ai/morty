@@ -19,6 +19,7 @@ import {
 import { readLastHarnessPreference, saveLastHarnessPreference } from "@/services/chat/last-harness-preference";
 import { pathDirectoryId } from "@/services/chat/workspace-directory-reference";
 import { isRuntimeConnectionFailure } from "@/services/management/management-api";
+import type { AgentModelCatalog } from "../../services/diagnostics/model-catalog.ts";
 import { formatError } from "../format-error.ts";
 import { harnessOptions, nativeSessionAgentTabs } from "./native-session-agents.ts";
 
@@ -41,6 +42,7 @@ type DraftSettingsState =
           readonly selectedAgent: ChatAgentSelection;
           readonly cwd: WorkspaceEntriesEvent;
           readonly options: readonly SessionConfigOption[];
+          readonly catalog: AgentModelCatalog;
           /** Explicit or restored choices must be sent even when their values equal the Agent defaults. */
           readonly changedOptionIds: ReadonlySet<string>;
       };
@@ -238,15 +240,16 @@ export const createDraftControlsStore = (
         const applyAgentSettings = (
             selectedAgent: ChatAgentSelection,
             cwd: WorkspaceEntriesEvent,
-            options: readonly SessionConfigOption[],
+            result: Awaited<ReturnType<BotChatApi["agentSettings"]>>,
             rememberHarness: boolean,
         ): void => {
-            const restoredSettings = restoreLastAgentSettings(botId, selectedAgent.agentRef, options);
+            const restoredSettings = restoreLastAgentSettings(botId, selectedAgent.agentRef, result.options);
             const ready = {
                 kind: "ready" as const,
                 selectedAgent,
                 cwd,
                 options: restoredSettings.options,
+                catalog: result.catalog,
                 changedOptionIds: restoredSettings.restoredIds,
             };
             // A harness becomes the remembered default only once its settings
@@ -403,7 +406,7 @@ export const createDraftControlsStore = (
                 }
                 // Applying the settings and remembering the choice settle together, without an asynchronous gap.
                 // A failed, cancelled, superseded or offline switch never changes the remembered preference.
-                applyAgentSettings(selected, cwd, result.options, requestedAgent !== undefined);
+                applyAgentSettings(selected, cwd, result, requestedAgent !== undefined);
             } catch (cause) {
                 if (!lifetimeSignal.aborted && operation.current()) {
                     settleFailure(cause, "Harness settings are unavailable.");
@@ -427,7 +430,7 @@ export const createDraftControlsStore = (
                 const result = await readAgentSettings(settings.selectedAgent.agentRef, true, operation);
                 operation.signal.throwIfAborted();
                 if (operation.current()) {
-                    applyAgentSettings(settings.selectedAgent, settings.cwd, result.options, false);
+                    applyAgentSettings(settings.selectedAgent, settings.cwd, result, false);
                 }
             } catch (cause) {
                 if (!parent.aborted && operation.current()) {

@@ -1,4 +1,5 @@
 import type { RuntimeDiagnosticsResult } from "@moxt-ai/mobius-sdk/protocol";
+import type { ChatDiagnostics } from "./model-catalog.ts";
 import type { ServerNetworkOperations } from "./network-diagnostics.ts";
 
 export interface BrowserDiagnostic {
@@ -35,6 +36,7 @@ export interface DaemonDiagnosticsSource extends ServerNetworkOperations {
     readonly botId: string;
     readonly sessionId: string | null;
     readonly nativeSessionId: string | null;
+    readonly context?: () => ChatDiagnostics;
     readonly read: (signal: AbortSignal) => Promise<RuntimeDiagnosticsResult>;
 }
 // Never store arbitrary error messages: they may contain prompts, paths or credentials.

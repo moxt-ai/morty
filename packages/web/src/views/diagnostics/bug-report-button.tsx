@@ -137,7 +137,8 @@ function BugReportDialog({
     readonly report: BugReportStoreApi;
 }) {
     const hideBugReport = dialog.getState().hide;
-    const { state, description, images, addImages, removeImage, describe, send, close } = useExternalStore(report);
+    const { state, description, images, technicalDetails, addImages, removeImage, describe, send, close } =
+        useExternalStore(report);
     return (
         <Dialog
             title="Report a bug"
@@ -215,7 +216,21 @@ function BugReportDialog({
                                 Paste an image here or choose a file. Up to 3 images, 2.5 MB each. PNG, JPEG, GIF or
                                 WebP.
                             </p>
+                            <p className="text-xs text-muted-foreground">
+                                Hide chat text, personal details and secrets before attaching images or writing your
+                                description.
+                            </p>
                         </div>
+                        <details className="text-xs text-muted-foreground">
+                            <summary className="cursor-pointer">Agent and model details included</summary>
+                            <p>
+                                Captured when this report was opened. Custom model names use anonymous labels within
+                                this report.
+                            </p>
+                            <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all">
+                                {technicalDetails}
+                            </pre>
+                        </details>
                         <p className="text-xs text-muted-foreground">
                             Network and daemon diagnostics are collected automatically and may take up to 10 seconds.
                             You can still send a report when your Runtime is offline.

@@ -28,6 +28,7 @@ import {
 import * as v from "valibot";
 import type { ApiResponseSnapshot, ApiTransport } from "../api/api-transport.ts";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
+import { type AgentModelCatalog, modelSelections } from "../diagnostics/model-catalog.ts";
 import { CloudApiError, ManagementApi, runtimeBindingUrl } from "../management/management-api.ts";
 
 const identifier = v.custom<Identifier>(isIdentifier);
@@ -119,6 +120,7 @@ export interface ChatDraftConfiguration {
 }
 interface AgentSettingsResult {
     readonly options: readonly SessionConfigOption[];
+    readonly catalog: AgentModelCatalog;
 }
 export type ConversationActiveTurn =
     | { readonly kind: "idle" }
@@ -454,6 +456,16 @@ export class BotChatApi {
         );
         const discovered = decodeAgentSettingsDiscoveredEvent(JSON.stringify(result.settings));
         const settings = {
+            catalog: {
+                agentId: discovered.agentId,
+                agentVersion: discovered.agentVersion,
+                observedAt: new Date().toISOString(),
+                revision: discovered.settingsRevision,
+                requestId: discovered.requestId,
+                models: modelSelections(
+                    discovered.settings.map((setting) => ({ ...setting, currentValue: setting.defaultValue })),
+                ),
+            },
             options: discovered.settings.map(({ defaultValue, ...setting }) => ({
                 ...setting,
                 currentValue:

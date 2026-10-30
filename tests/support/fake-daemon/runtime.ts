@@ -145,6 +145,9 @@ export function createMortyFakeDaemon(behavior: ControlledAgentBehavior, workspa
     const harness = createFakeDaemon(
         workspace === undefined ? behavior : { ...behavior, reply: workspaceReply(behavior, workspace) },
     );
+    if (behavior.agentId === "diagnostics-test") {
+        return { ...harness, agents: [createSettingsAgent("diagnostics")] };
+    }
     if (behavior.agentId === "tool-lifecycle-test") {
         return { ...harness, agents: [createToolLifecycleAgent(behavior.beforeCancellationApplied)] };
     }

@@ -26,6 +26,7 @@ import { cn } from "../../lib/utils.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { DaemonDiagnosticsSource } from "../../services/diagnostics/browser-diagnostics.ts";
 import { botConnectionStatus, homeCanStartConversation } from "../../view-models/chat/bot-chat-home-store.ts";
+import { chatDiagnostics } from "../../view-models/chat/chat-diagnostics.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { canAddAttachments } from "../../view-models/chat/composer-attachment-store.ts";
 import {
@@ -204,6 +205,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
         botId: workspace.botId,
         sessionId: activeConversationId,
         nativeSessionId: null,
+        context: () => chatDiagnostics(workspace),
         read: (signal) => requests.daemonDiagnostics(workspace.botId, signal),
         readNetwork: (signal) => requests.networkDiagnostic(workspace.botId, signal),
     };
