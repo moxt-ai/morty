@@ -96,14 +96,10 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
         case "unpaired":
             return (
                 <SetupCardShell cardLeading={<SetupCardFailureIcon />} showPageHeader titleId="unpaired-title">
-                    <SetupCardTitle id="unpaired-title">This browser is not paired with this computer</SetupCardTitle>
-                    <SetupCardDescription>
-                        Copying the address from another browser does not transfer access.
-                    </SetupCardDescription>
-                    <SetupCardAlert>Pair again to access this computer from this browser.</SetupCardAlert>
-                    <SetupCardDescription>
-                        Open the URL your agent gives you, or scan the QR code from your agent.
-                    </SetupCardDescription>
+                    <SetupCardTitle id="unpaired-title">Browser not paired</SetupCardTitle>
+                    <SetupCardDescription>Copied browser URLs don’t grant access.</SetupCardDescription>
+                    <SetupCardAlert>Pair again with this computer.</SetupCardAlert>
+                    <SetupCardDescription>Open your agent’s link or scan its QR code.</SetupCardDescription>
                     <SetupCardSection className="mt-4">
                         <PairingInstruction />
                     </SetupCardSection>

@@ -225,17 +225,13 @@ test("Given a browser without saved access, When I open a copied computer addres
     window.localStorage.clear();
     window.sessionStorage.clear();
     const unpaired = await app.reload();
-    await unpaired.waitForView(() =>
-        getByRole(document.body, "heading", { name: "This browser is not paired with this computer" }),
+    await unpaired.waitForView(() => getByRole(document.body, "heading", { name: "Browser not paired" }));
+    expect(document.body.textContent).toContain("Pair again with this computer.");
+    expect(document.body.textContent).toContain("Copied browser URLs don’t grant access.");
+    expect(document.body.textContent?.indexOf("Copied browser URLs")).toBeLessThan(
+        document.body.textContent?.indexOf("Pair again with this computer") ?? -1,
     );
-    expect(document.body.textContent).toContain("Pair again to access this computer from this browser.");
-    expect(document.body.textContent).toContain("Copying the address from another browser does not transfer access.");
-    expect(document.body.textContent?.indexOf("Copying the address from another browser")).toBeLessThan(
-        document.body.textContent?.indexOf("Pair again to access this computer") ?? -1,
-    );
-    expect(document.body.textContent).toContain(
-        "Open the URL your agent gives you, or scan the QR code from your agent.",
-    );
+    expect(document.body.textContent).toContain("Open your agent’s link or scan its QR code.");
     await unpaired.user.click(getByRole(document.body, "button", { name: "Copy setup prompt" }));
     expect(await navigator.clipboard.readText()).toContain(`${app.origin}/setup.md`);
     expect(window.location.href).toBe(address);
