@@ -15,7 +15,7 @@ import {
 } from "../../services/session-storage/central-session-storage.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError } from "../format-error.ts";
-import { createComposerAttachmentStore } from "./composer-attachment-store.ts";
+import { type ComposerAttachmentStore, createComposerAttachmentStore } from "./composer-attachment-store.ts";
 import {
     type ConversationCreationState,
     queuedDraftMessage,
@@ -28,6 +28,8 @@ import {
     transitionConversationSelection,
 } from "./conversation-selection-machine.ts";
 import { createConversationSessionStore } from "./conversation-session-store.ts";
+import { type DraftControlsStore, draftConfiguration } from "./draft-controls-store.ts";
+import { canRetryFirstMessage, canSendFirstMessage, type NewConversationFacts } from "./new-conversation-rules.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
 import { startRecoveryNotice } from "./recovery-notice.ts";
 import type { RuntimeObservation } from "./runtime-recovery.ts";
@@ -192,6 +194,45 @@ export function homeCanStartConversation(home: BotChatHomeStore): boolean {
     );
 }
 
+function newConversationFacts(
+    home: BotChatHomeStore,
+    settingsReady: boolean,
+    connectionAvailable: boolean,
+): NewConversationFacts {
+    return {
+        connectionAvailable,
+        startable: homeCanStartConversation(home),
+        draftSelected: home.selection.kind === "draft",
+        settingsReady,
+        creation: home.creation.kind,
+    };
+}
+
+function composerMessage(
+    home: Pick<BotChatHomeStore, "draft">,
+    attachments: Pick<ComposerAttachmentStore, "attachments" | "state">,
+) {
+    return {
+        draft: home.draft,
+        attachmentCount: attachments.attachments.length,
+        readingAttachments: attachments.state.kind === "reading",
+    };
+}
+
+/** What the New Session page offers now: the composer's send control and a failed first message's Retry. */
+export function newConversationPresentation(
+    home: BotChatHomeStore,
+    attachments: Pick<ComposerAttachmentStore, "attachments" | "state">,
+    settings: DraftControlsStore["settings"],
+    connectionAvailable: boolean,
+) {
+    const facts = newConversationFacts(home, draftConfiguration(settings) !== null, connectionAvailable);
+    return {
+        submitDisabled: !canSendFirstMessage(facts, composerMessage(home, attachments)),
+        retryDisabled: !canRetryFirstMessage(facts),
+    } as const;
+}
+
 export const createBotChatHomeStore = (
     requests: Pick<
         BotChatApi,
@@ -210,6 +251,8 @@ export const createBotChatHomeStore = (
         readonly botId: string;
         readonly titles: SessionTitlesStore;
         readonly draftConfiguration: () => ChatDraftConfiguration | null;
+        /** Whether the connection header reports the New Session page's connection available, network and Machine included. */
+        readonly connectionAvailable: () => boolean;
         readonly entry?: "address" | "restore";
         /**
          * Announced with every Runtime configuration the page observes, after the view follows it: the owner keeps the
@@ -763,24 +806,21 @@ export const createBotChatHomeStore = (
             closePairingDialog: () => set({ pairingDialogOpen: false }),
             createConversation: async (signal) => {
                 const current = get();
-                const { attachments, state: attachmentState } = get().composerAttachments.getState();
+                const composer = get().composerAttachments.getState();
+                const { attachments } = composer;
                 const draft = current.draft;
                 const settings = options.draftConfiguration();
-                if (
-                    (current.creation.kind === "draft" && attachmentState.kind === "reading") ||
-                    !homeCanStartConversation(current) ||
-                    current.selection.kind !== "draft" ||
-                    settings === null ||
-                    current.creation.kind === "session-creating" ||
-                    current.creation.kind === "draft-message-sending"
-                ) {
+                const facts = newConversationFacts(current, settings !== null, options.connectionAvailable());
+                const allowed =
+                    current.creation.kind === "draft"
+                        ? canSendFirstMessage(facts, composerMessage(current, composer))
+                        : canRetryFirstMessage(facts);
+                // The rule already requires both; checking them again narrows their types.
+                if (!allowed || settings === null || current.selection.kind !== "draft") {
                     return false;
                 }
                 const commandId = current.selection.key;
                 const content = draft.trim();
-                if (current.creation.kind === "draft" && content.length === 0 && attachments.length === 0) {
-                    return false;
-                }
                 const queuedMessage =
                     current.creation.kind === "draft"
                         ? {
