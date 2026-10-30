@@ -716,7 +716,7 @@ async function installLocalCli(stack) {
         await run("pnpm", ["pack", "--pack-destination", packageDirectory], { ...options, cwd: cliDirectory });
         controller.signal.throwIfAborted();
         const tarball = path.join(packageDirectory, `moxt-ai-mobius-${manifest.version}.tgz`);
-        const prefix = path.join(stack.stateDir, "mobius", "npm", manifest.version);
+        const prefix = path.join(stack.stateDir, "local-cli", manifest.version);
         log(`installing the local CLI into ${prefix}`);
         await run(
             "npm",
@@ -735,6 +735,7 @@ async function installLocalCli(stack) {
             options,
         );
         controller.signal.throwIfAborted();
+        return path.join(prefix, "node_modules", "@moxt-ai", "mobius", "dist", "cli.js");
     } finally {
         process.removeListener("SIGINT", cancel);
         process.removeListener("SIGTERM", cancel);
@@ -793,7 +794,7 @@ async function setup(options) {
     for (const directory of [mortyStateDirectory, mobiusStateDirectory, workspace]) {
         fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     }
-    await installLocalCli(stack);
+    const localCli = await installLocalCli(stack);
     const origin = new URL(stack.chatOrigin).origin;
 
     log(`downloading the setup bundle from ${origin}`);
@@ -822,6 +823,22 @@ process.exit(result.status ?? 1);
         { mode: 0o700 },
     );
     hostPlatform.writeCommandShim(shimDirectory);
+    fs.writeFileSync(
+        path.join(shimDirectory, process.platform === "win32" ? "npx.cjs" : "npx"),
+        `#!/usr/bin/env node
+const { spawnSync } = require("node:child_process");
+const args = process.argv.slice(2);
+if (args[0] !== "--yes" || args[1] !== "--prefer-online" || args[2] !== "@moxt-ai/mobius@latest") {
+    process.exit(2);
+}
+const result = spawnSync(process.execPath, [${JSON.stringify(localCli)}, ...args.slice(3)], { stdio: "inherit" });
+process.exit(result.status ?? 1);
+`,
+        { mode: 0o700 },
+    );
+    if (process.platform === "win32") {
+        fs.writeFileSync(path.join(shimDirectory, "npx.cmd"), '@ECHO off\r\nnode "%~dp0\\npx.cjs" %*\r\n');
+    }
     log(`running setup for harness "${harness}" against workspace ${workspace}`);
     const runtimePid = await startProcess(
         "setup runtime",
