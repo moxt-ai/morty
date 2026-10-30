@@ -33,6 +33,7 @@ import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
+import { chatDiagnostics } from "../../view-models/chat/chat-diagnostics.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import {
     type ConversationDirectoryStore,
@@ -389,6 +390,7 @@ export function ConversationSidebar({
         botId,
         sessionId: activeId,
         nativeSessionId: null,
+        context: () => chatDiagnostics(workspace),
         read: (signal: AbortSignal) => requests.daemonDiagnostics(botId, signal),
         readNetwork: (signal: AbortSignal) => requests.networkDiagnostic(botId, signal),
     };

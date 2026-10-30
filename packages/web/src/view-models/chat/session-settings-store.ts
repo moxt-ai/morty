@@ -13,6 +13,9 @@ type ConfigurationSnapshot = {
 };
 
 export interface SessionSettingsStore {
+    readonly openedAt: string;
+    readonly observedAt: string;
+    readonly source: "session-ready" | "session-configuration";
     readonly configurationRevision: string;
     readonly options: readonly SessionConfigOption[];
     /** Shows settings the Runtime reported and remembers them for the next draft. */
@@ -36,14 +39,23 @@ export function createSessionSettingsStore(options: {
 }) {
     return createStore<SessionSettingsStore>()((set, get) => {
         let pendingRead: AbortController | null = null;
+        const openedAt = new Date().toISOString();
         return {
+            openedAt,
+            observedAt: openedAt,
+            source: "session-ready",
             options: options.initial.configOptions,
             configurationRevision: options.initial.configurationRevision,
             adopt: ({ configOptions, configurationRevision }) => {
                 pendingRead?.abort(new DOMException("Newer settings were adopted", "AbortError"));
                 pendingRead = null;
                 saveLastAgentSettings(options.botId, options.agentRef, configOptions);
-                set({ options: configOptions, configurationRevision });
+                set({
+                    options: configOptions,
+                    configurationRevision,
+                    observedAt: new Date().toISOString(),
+                    source: "session-configuration",
+                });
             },
             readInBackground: (read, parentSignal) => {
                 pendingRead?.abort(new DOMException("A newer settings read replaced this one", "AbortError"));
