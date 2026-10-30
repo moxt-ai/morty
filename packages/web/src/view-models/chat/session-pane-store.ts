@@ -51,7 +51,13 @@ import {
     turnActivity,
 } from "./session-current-turn.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
-import { prependToDraft, type SessionDeliveryStore } from "./session-delivery-store.ts";
+import {
+    type DeliveryTarget,
+    journalMessage,
+    prependToDraft,
+    type SessionDeliveryStore,
+    type SubmittedMessage,
+} from "./session-delivery-store.ts";
 import { observeSessionExecution, type QueuedCommand, type SessionExecutionObservation } from "./session-execution.ts";
 import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
 import { type SessionLifecycleFact, sessionInteractionRecovery, sessionLifecycleFact } from "./session-lifecycle.ts";
@@ -180,7 +186,6 @@ function sessionSettingsDisabled(
     model: SessionPaneStore,
     delivery: SessionDeliveryStore,
     tasks: SessionTaskControlsStore,
-    queue: SessionMessageQueueStore,
 ): boolean {
     // Settings have their own acknowledged operation, independent of prompt output
     // and permission requests. Keep submission and stop boundaries stable and serialize edits.
@@ -188,8 +193,7 @@ function sessionSettingsDisabled(
         model.connection.kind !== "ready" ||
         model.operation.kind === "configuring" ||
         submittingCommandId(model.turn) !== null ||
-        (delivery.state.kind !== "idle" && delivery.state.kind !== "confirmed") ||
-        queue.operation.kind === "submitting" ||
+        delivery.state.kind !== "idle" ||
         stopRequested(tasks, acceptedTurn(model.turn))
     );
 }
@@ -219,18 +223,13 @@ export function sessionPanePresentation(
     const composerDisabled =
         !connectionAvailable ||
         model.connection.kind !== "ready" ||
-        (delivery.state.kind !== "idle" && delivery.state.kind !== "confirmed") ||
+        delivery.state.kind !== "idle" ||
         submitting ||
         model.operation.kind === "configuring" ||
         waitingForInput ||
-        queue.operation.kind === "submitting" ||
         stopping;
     const composerInputDisabled =
-        model.connection.kind === "closed" ||
-        model.operation.kind === "configuring" ||
-        waitingForInput ||
-        queue.operation.kind === "submitting" ||
-        stopping;
+        model.connection.kind === "closed" || model.operation.kind === "configuring" || waitingForInput || stopping;
     const activeCommandId = workingCommandId(activity);
     const busy = activeCommandId !== null || composerDisabled;
     const activeMessageId =
@@ -248,6 +247,7 @@ export function sessionPanePresentation(
     const unconfirmed = delivery.state.kind === "delivery-unknown" ? delivery.state.journal : null;
     const unconfirmedDelivery =
         unconfirmed === null ||
+        model.queued.some((message) => message.commandId === unconfirmed.commandId) ||
         model.messages.some(
             (message) => message.role === "user" && messageExecutionCommandId(message) === unconfirmed.commandId,
         )
@@ -260,24 +260,22 @@ export function sessionPanePresentation(
     const pendingMessage =
         delivery.state.kind === "preparing" || delivery.state.kind === "preparation-failed"
             ? delivery.state.message
-            : delivery.state.kind === "submitting" ||
-                delivery.state.kind === "failed" ||
-                delivery.state.kind === "confirmed"
-              ? {
-                    commandId: delivery.state.journal.commandId,
-                    content: delivery.state.journal.request.content,
-                    attachments: delivery.state.journal.attachments,
-                }
+            : delivery.state.kind === "submitting" || delivery.state.kind === "failed"
+              ? journalMessage(delivery.state.journal)
               : null;
     const pendingDelivery =
         pendingMessage === null ||
+        (pendingMessage.target.disposition === "queue" &&
+            delivery.state.kind !== "preparation-failed" &&
+            delivery.state.kind !== "failed") ||
+        model.queued.some((message) => message.commandId === pendingMessage.commandId) ||
         model.messages.some(
             (message) => message.role === "user" && messageExecutionCommandId(message) === pendingMessage.commandId,
         )
             ? null
             : {
                   message: pendingMessage,
-                  sending: delivery.state.kind !== "confirmed",
+                  sending: true,
                   error:
                       delivery.state.kind === "preparation-failed"
                           ? delivery.state.error
@@ -308,7 +306,7 @@ export function sessionPanePresentation(
         busy,
         composerDisabled,
         composerInputDisabled,
-        settingsDisabled: !connectionAvailable || sessionSettingsDisabled(model, delivery, tasks, queue),
+        settingsDisabled: !connectionAvailable || sessionSettingsDisabled(model, delivery, tasks),
         settingsNotice: controlRunning
             ? "Changes affect upcoming work. The current response may still use previous settings and permissions. Stop it before relying on reduced access."
             : null,
@@ -339,7 +337,7 @@ export function sessionPanePresentation(
         hasOlderHistory: model.hasOlderHistory,
         historyLoading: model.olderHistory.kind === "loading",
         outputState:
-            queue.operation.kind === "submitting"
+            delivery.state.kind === "preparing"
                 ? "sending"
                 : stopping
                   ? "stopping"
@@ -350,13 +348,22 @@ export function sessionPanePresentation(
                       : "idle",
         workingIndicatorVisible: !waitingForInput && controlRunning,
         shouldQueueOnSubmit: controlRunning && !stopping,
-        submitDisabled:
-            !connectionAvailable ||
+        retryFailedDisabled:
             model.connection.kind !== "ready" ||
-            (controlRunning && !stopping ? queue.operation.kind !== "idle" : busy) ||
+            pendingMessage === null ||
+            !targetAvailable(pendingMessage.target, model.turn),
+        submitDisabled:
+            composerDisabled ||
             attachments.state.kind === "reading" ||
             (model.draft.trim() === "" && attachments.attachments.length === 0),
         unconfirmedDelivery,
+        confirmedMessages: delivery.confirmedMessages.filter(
+            (confirmed) =>
+                confirmed.target.disposition === "reject" &&
+                !model.messages.some(
+                    (message) => message.role === "user" && messageExecutionCommandId(message) === confirmed.commandId,
+                ),
+        ),
         pendingDelivery,
     } as const;
 }
@@ -429,6 +436,12 @@ function mergeSessionEvents(
         byId.set(event.eventId, event);
     }
     return [...byId.values()];
+}
+
+function targetAvailable(target: DeliveryTarget, turn: CurrentTurn): boolean {
+    return target.disposition === "queue"
+        ? acceptedTurn(turn)?.commandId === target.targetCommandId
+        : turn.kind !== "current";
 }
 
 export function createSessionPaneModel(options: {
@@ -583,23 +596,6 @@ export function createSessionPaneModel(options: {
                     throw new Error("The Session is not connected.");
                 }
                 await client.turns.steer(sessionId, turnId, signal);
-            }),
-            submit: noticingClosure(async (request, signal) => {
-                if (client === null) {
-                    throw new Error("The Session is not connected.");
-                }
-                return await client.turns.submit(
-                    sessionId,
-                    await withInstructions(
-                        {
-                            ...request,
-                            agentId: session.agentRef,
-                            directoryId: session.result.ready.directoryId,
-                        },
-                        signal,
-                    ),
-                    signal,
-                );
             }),
         },
     });
@@ -758,6 +754,21 @@ export function createSessionPaneModel(options: {
                 (commandId) => turns.startedAt(commandId, Date.now()),
             );
             const { execution } = change;
+            const deliverySnapshot = delivery.getState();
+            for (const message of deliverySnapshot.confirmedMessages) {
+                if (execution.queued.some((queued) => queued.commandId === message.commandId)) {
+                    messageQueue.getState().rememberAttachments(message.commandId, message.attachments);
+                }
+            }
+            const submission = deliverySnapshot.state;
+            if (
+                "journal" in submission &&
+                execution.queued.some((message) => message.commandId === submission.journal.commandId)
+            ) {
+                messageQueue
+                    .getState()
+                    .rememberAttachments(submission.journal.commandId, submission.journal.attachments);
+            }
             set({
                 ...(execution.projection === projection ? {} : adoptProjection(execution.projection)),
                 queued: execution.queued,
@@ -767,6 +778,7 @@ export function createSessionPaneModel(options: {
             if (change.delivered.length > 0) {
                 delivery.getState().reconcile(change.delivered);
             }
+            delivery.getState().messagesObserved(execution.queued.map((message) => message.commandId));
             if (change.leftQueue.length > 0) {
                 messageQueue.getState().left(change.leftQueue);
             }
@@ -917,14 +929,7 @@ export function createSessionPaneModel(options: {
          * as the home store holds it. Delivery owns that snapshot through preparation, sending, and recovery;
          * completion never writes to the next draft.
          */
-        const submit = async (
-            message: {
-                readonly commandId: string;
-                readonly content: string;
-                readonly attachments: readonly ComposerAttachment[];
-            },
-            signal: AbortSignal,
-        ): Promise<void> => {
+        const submit = async (message: SubmittedMessage, signal: AbortSignal): Promise<void> => {
             const current = get();
             const currentDelivery = delivery.getState().state;
             // One turn at a time, and none while the Session's settings change.
@@ -933,11 +938,11 @@ export function createSessionPaneModel(options: {
                 current.operation.kind === "configuring" ||
                 delivery.getState().state.kind === "submitting" ||
                 delivery.getState().state.kind === "delivery-unknown" ||
-                current.turn.kind === "current"
+                !targetAvailable(message.target, current.turn)
             ) {
                 return;
             }
-            const { attachments, commandId } = message;
+            const { attachments, commandId, target } = message;
             welcome.getState().dismiss();
             const queued = isQueuedInitialMessage(commandId);
             if (queued) {
@@ -950,13 +955,15 @@ export function createSessionPaneModel(options: {
             delivery.getState().prepare(message);
             if (queued) {
                 options.onInitialMessageDequeued?.(commandId);
-            } else if (currentDelivery.kind === "idle" || currentDelivery.kind === "confirmed") {
+            } else if (currentDelivery.kind === "idle") {
                 centralSessionStorage.remove(draftEntry);
                 composerAttachments.getState().clear();
                 set({ draft: "", queuedFilesNotice: false });
             }
             set({ pendingInitialMessage: null });
-            updateTurn({ kind: "submitting", commandId, startedAt: sent.sentAt });
+            if (target.disposition === "reject") {
+                updateTurn({ kind: "submitting", commandId, startedAt: sent.sentAt });
+            }
             set({ followRevision: get().followRevision + 1 });
             try {
                 if (client === null) {
@@ -972,6 +979,7 @@ export function createSessionPaneModel(options: {
                 const submission = await withInstructions(
                     {
                         ...request,
+                        ...target,
                         agentId: session.agentRef,
                         directoryId: session.result.ready.directoryId,
                         attachments: uploadedAttachments,
@@ -987,15 +995,18 @@ export function createSessionPaneModel(options: {
                 signal.throwIfAborted();
                 delivery
                     .getState()
-                    .messagesObserved(
-                        get().messages.flatMap((message) =>
+                    .messagesObserved([
+                        ...get().queued.map((message) => message.commandId),
+                        ...get().messages.flatMap((message) =>
                             message.role === "user"
                                 ? [messageExecutionCommandId(message)].filter((id): id is string => id !== null)
                                 : [],
                         ),
-                    );
+                    ]);
                 if (outcome.kind === "accepted") {
-                    updateTurn({ kind: "accepted", commandId, turnId: outcome.turn.turnId });
+                    if (target.disposition === "reject") {
+                        updateTurn({ kind: "accepted", commandId, turnId: outcome.turn.turnId });
+                    }
                     return;
                 }
                 updateTurn({ kind: "submission-ended", commandId, failure: null });
@@ -1246,6 +1257,7 @@ export function createSessionPaneModel(options: {
                             await submit(
                                 {
                                     commandId: options.initialMessage.commandId,
+                                    target: { disposition: "reject", targetCommandId: "" },
                                     content: options.initialMessage.content,
                                     attachments: options.initialMessage.attachments,
                                 },
@@ -1460,10 +1472,18 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 const deliveryState = delivery.getState().state;
-                if (deliveryState.kind !== "idle" && deliveryState.kind !== "confirmed") {
+                if (deliveryState.kind !== "idle") {
                     return;
                 }
-                await submit({ commandId: crypto.randomUUID(), content: draft, attachments }, signal);
+                await submit(
+                    {
+                        commandId: crypto.randomUUID(),
+                        content: draft,
+                        attachments,
+                        target: { disposition: "reject", targetCommandId: "" },
+                    },
+                    signal,
+                );
             },
             removeUnknownDelivery: () => {
                 const commandId = delivery.getState().discardUnknown();
@@ -1478,16 +1498,21 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 const pending = state.journal;
-                updateTurn({
-                    kind: "retrying",
-                    commandId: pending.commandId,
-                    startedAt: turns.startedAt(pending.commandId, Date.now()),
-                });
+                if (pending.request.disposition === "reject") {
+                    updateTurn({
+                        kind: "retrying",
+                        commandId: pending.commandId,
+                        startedAt: turns.startedAt(pending.commandId, Date.now()),
+                    });
+                }
                 const outcome = await delivery.getState().retry(submitTurn, signal);
                 signal.throwIfAborted();
                 switch (outcome?.kind) {
                     case "accepted":
-                        updateTurn({ kind: "accepted", commandId: pending.commandId, turnId: outcome.turn.turnId });
+                        if (pending.request.disposition === "reject") {
+                            updateTurn({ kind: "accepted", commandId: pending.commandId, turnId: outcome.turn.turnId });
+                        }
+                        delivery.getState().messagesObserved(get().queued.map((message) => message.commandId));
                         return;
                     case "delivered":
                         break;
@@ -1511,9 +1536,8 @@ export function createSessionPaneModel(options: {
                     // The Runtime definitively rejected this identity and will not run it again.
                     await submit(
                         {
+                            ...journalMessage(state.journal),
                             commandId: crypto.randomUUID(),
-                            content: state.journal.request.content,
-                            attachments: state.journal.attachments,
                         },
                         signal,
                     );
@@ -1547,37 +1571,19 @@ export function createSessionPaneModel(options: {
                 ) {
                     return;
                 }
-                const prompt = current.draft.trim();
-                const summary = prompt || attachments.map((attachment) => attachment.name).join(", ");
-                if (client === null) {
-                    throw new Error("The Session is not connected.");
+                const state = delivery.getState().state;
+                if (state.kind !== "idle") {
+                    return;
                 }
-                const uploadedAttachments = await uploadPromptAttachments(
-                    client.sessions,
-                    sessionId,
-                    attachments,
-                    signal,
-                );
-                const queued = await messageQueue.getState().enqueue(
-                    running.commandId,
-                    summary,
+                await submit(
                     {
-                        ...request,
-                        attachments: uploadedAttachments,
-                        content: prompt,
+                        commandId: crypto.randomUUID(),
+                        content: current.draft,
+                        attachments,
+                        target: { disposition: "queue", targetCommandId: running.commandId },
                     },
-                    attachments,
                     signal,
                 );
-                signal.throwIfAborted();
-                if (queued !== null) {
-                    welcome.getState().dismiss();
-                    const sent = turns.recordSent(queued.commandId, Date.now());
-                    void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
-                    centralSessionStorage.remove(draftEntry);
-                    composerAttachments.getState().clear();
-                    set({ draft: "", followRevision: get().followRevision + 1, queuedFilesNotice: false });
-                }
             },
             steerQueued: async (commandId, signal) => {
                 const steered = await messageQueue.getState().steerMessage(commandId, signal);
@@ -1613,10 +1619,7 @@ export function createSessionPaneModel(options: {
             },
             configure: async (option, value, booleanValue, signal) => {
                 const current = get();
-                if (
-                    client === null ||
-                    sessionSettingsDisabled(current, delivery.getState(), tasks.getState(), messageQueue.getState())
-                ) {
+                if (client === null || sessionSettingsDisabled(current, delivery.getState(), tasks.getState())) {
                     return;
                 }
                 const connected = client;

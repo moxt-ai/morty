@@ -288,7 +288,7 @@ test("Given a reply is running with a queued follow-up, When I edit the follow-u
     await viewer.close();
 });
 
-test("Given this browser queued an attachment and the queue refreshed, When I edit and resend it, Then the original file is restored and delivered", {
+test("Given two queued submissions are accepted before their snapshot arrives, When I edit and resend it, Then the original file is restored and delivered", {
     timeout: 30_000,
 }, async () => {
     const queuedPrompt = "Describe the queued image";
@@ -296,7 +296,9 @@ test("Given this browser queued an attachment and the queue refreshed, When I ed
         atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4oKAAAAM0ATE4/UtcAAAAAElFTkSuQmCC"),
         (character) => character.charCodeAt(0),
     );
-    const app = await createTestApp({ connectAgent: true });
+    const environment = await createChatWorkerEnvironment(false, true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true });
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
     await app.queryElementByTestId(dataTestId.sessionStatus);
     await app.queryElementByTestId(
@@ -313,15 +315,33 @@ test("Given this browser queued an attachment and the queue refreshed, When I ed
     await app.waitForView(() =>
         expect(getByRole(document.body, "list", { name: "Attachments" }).textContent).toContain("queued.png"),
     );
+    if (app.executionNetwork === null) {
+        throw new Error("Expected the real execution-read proxy");
+    }
+    const held = app.executionNetwork.holdNextExecution();
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), queuedPrompt);
-    await app.queryElementByTestId(dataTestId.queuedMessage);
+    const release = await held;
     await app.waitForView(() => {
         expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "");
         expect(queryByRole(document.body, "list", { name: "Attachments" })).toBeNull();
     });
 
-    // A second accepted message refreshes the authoritative queue, including the first message.
-    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Refresh the queue");
+    try {
+        // Admission releases the composer while the first queue snapshot is still held.
+        await app.user.click(app.elementByTestId(dataTestId.messageComposer));
+        await app.user.paste("Refresh the queue");
+        const send = await app.waitForView(() => {
+            const button = getByRole(document.body, "button", { name: "Send message" });
+            expect(button.hasAttribute("disabled")).toBe(false);
+            return button;
+        });
+        await app.user.click(send);
+        await app.waitForView(() =>
+            expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", ""),
+        );
+    } finally {
+        release();
+    }
     await app.waitForView(() => expect(app.elementsByTestId(dataTestId.queuedMessage)).toHaveLength(2));
     await app.waitForView(() => expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", ""));
     await app.user.click(getByLabelText(document.body, `Edit queued message: ${queuedPrompt}`));

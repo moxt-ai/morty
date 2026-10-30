@@ -13,7 +13,12 @@ type SubmissionOutcome =
     | { readonly kind: "delivered" }
     | { readonly kind: "rejected" }
     | { readonly kind: "delivery-unknown" };
-interface SubmittedMessage {
+export type DeliveryTarget =
+    | { readonly disposition: "reject"; readonly targetCommandId: "" }
+    | { readonly disposition: "queue"; readonly targetCommandId: string };
+
+export interface SubmittedMessage {
+    readonly target: DeliveryTarget;
     readonly attachments: readonly ComposerAttachment[];
     readonly commandId: string;
     readonly content: string;
@@ -22,19 +27,32 @@ export type Journal = {
     readonly attachments: readonly ComposerAttachment[];
     readonly commandId: string;
     readonly displayPrompt: string;
-    readonly request: Omit<SubmitRequest, "idempotencyKey">;
+    readonly request: Omit<SubmitRequest, "idempotencyKey" | "disposition" | "targetCommandId"> & DeliveryTarget;
 };
+export function journalMessage(journal: Journal): SubmittedMessage {
+    return {
+        commandId: journal.commandId,
+        content: journal.request.content,
+        attachments: journal.attachments,
+        target:
+            journal.request.disposition === "queue"
+                ? { disposition: "queue", targetCommandId: journal.request.targetCommandId }
+                : { disposition: "reject", targetCommandId: "" },
+    };
+}
+
 type DeliveryState =
     | { readonly kind: "idle" }
     | { readonly kind: "preparing"; readonly message: SubmittedMessage }
     | { readonly kind: "preparation-failed"; readonly message: SubmittedMessage; readonly error: string }
     | { readonly kind: "submitting"; readonly journal: Journal; readonly confirmation: "unknown" | "delivered" }
-    | { readonly kind: "confirmed"; readonly journal: Journal }
     | { readonly kind: "delivery-unknown"; readonly journal: Journal }
     | { readonly kind: "failed"; readonly message: string; readonly journal: Journal };
 
 export interface SessionDeliveryStore {
     readonly state: DeliveryState;
+    /** Accepted prompts waiting for the Runtime's user-message history, independent of the next submission. */
+    readonly confirmedMessages: readonly SubmittedMessage[];
     readonly discardUnknown: () => string | null;
     readonly prepare: (message: SubmittedMessage) => void;
     readonly preparationFailed: (message: SubmittedMessage, error: string) => void;
@@ -60,7 +78,6 @@ function unsentContent(state: DeliveryState): string | null {
             return state.journal.request.content === "" ? null : state.journal.request.content;
         case "idle":
         case "submitting":
-        case "confirmed":
         case "delivery-unknown":
             return null;
         default:
@@ -85,11 +102,21 @@ export const createSessionDeliveryStore = (options: {
     /** Persists the unsent message's text, or clears it with null. */
     readonly unsentMessageChanged: (content: string | null) => void;
 }) => {
+    type Update = { readonly state: DeliveryState; readonly confirmedMessages?: readonly SubmittedMessage[] };
+    const confirm = (journal: Journal, set: (update: Update) => void, get: () => SessionDeliveryStore): void => {
+        set({
+            state: { kind: "idle" },
+            confirmedMessages: [
+                ...get().confirmedMessages.filter((message) => message.commandId !== journal.commandId),
+                journalMessage(journal),
+            ],
+        });
+    };
     const send = async (
         journal: Journal,
         submit: SubmitTurn,
         signal: AbortSignal,
-        set: (state: Pick<SessionDeliveryStore, "state">) => void,
+        set: (state: Update) => void,
         get: () => SessionDeliveryStore,
     ): Promise<SubmissionOutcome> => {
         set({ state: { kind: "submitting", journal, confirmation: "unknown" } });
@@ -102,7 +129,7 @@ export const createSessionDeliveryStore = (options: {
                 signal,
             );
             signal.throwIfAborted();
-            set({ state: { kind: "confirmed", journal } });
+            confirm(journal, set, get);
             return { kind: "accepted", turn: accepted };
         } catch (cause) {
             if (signal.aborted || cause instanceof MobiusCancellationError) {
@@ -120,7 +147,7 @@ export const createSessionDeliveryStore = (options: {
             }
             const state = get().state;
             if (state.kind === "submitting" && state.confirmation === "delivered") {
-                set({ state: { kind: "confirmed", journal } });
+                confirm(journal, set, get);
                 return { kind: "delivered" };
             }
             set({ state: { kind: "delivery-unknown", journal } });
@@ -128,12 +155,13 @@ export const createSessionDeliveryStore = (options: {
         }
     };
     return createStore<SessionDeliveryStore>()((setState, get) => {
-        const set = (update: Pick<SessionDeliveryStore, "state">): void => {
+        const set = (update: Update): void => {
             setState(update);
             options.unsentMessageChanged(unsentContent(update.state));
         };
         return {
             state: { kind: "idle" },
+            confirmedMessages: [],
             discardUnknown: () => {
                 const state = get().state;
                 if (state.kind !== "delivery-unknown") {
@@ -150,11 +178,7 @@ export const createSessionDeliveryStore = (options: {
                     state.kind === "preparation-failed"
                         ? state.message
                         : state.kind === "failed"
-                          ? {
-                                commandId: state.journal.commandId,
-                                content: state.journal.request.content,
-                                attachments: state.journal.attachments,
-                            }
+                          ? journalMessage(state.journal)
                           : null;
                 if (message !== null) {
                     set({ state: { kind: "idle" } });
@@ -172,19 +196,19 @@ export const createSessionDeliveryStore = (options: {
                         },
                     });
                 } else if (state.kind === "submitting") {
-                    set({
-                        state:
-                            state.confirmation === "delivered"
-                                ? { kind: "idle" }
-                                : { kind: "delivery-unknown", journal: state.journal },
-                    });
+                    if (state.confirmation === "delivered") {
+                        set({ state: { kind: "idle" } });
+                    } else {
+                        set({ state: { kind: "delivery-unknown", journal: state.journal } });
+                    }
                 }
             },
             messagesObserved: (commandIds) => {
-                const state = get().state;
-                if (state.kind === "confirmed" && commandIds.includes(state.journal.commandId)) {
-                    set({ state: { kind: "idle" } });
-                }
+                setState({
+                    confirmedMessages: get().confirmedMessages.filter(
+                        (message) => !commandIds.includes(message.commandId),
+                    ),
+                });
             },
             reconcile: (commandIds) => {
                 const state = get().state;

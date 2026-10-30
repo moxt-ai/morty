@@ -867,6 +867,7 @@ function MobiusSessionPaneBody({
                                 )}
                             {!sessionMessagesLoading &&
                                 initialMessage === null &&
+                                presentation.confirmedMessages.length === 0 &&
                                 model.messages.length === 0 &&
                                 model.connection.kind === "ready" &&
                                 presentation.activity.kind === "idle" &&
@@ -1041,6 +1042,14 @@ function MobiusSessionPaneBody({
                                             );
                                         });
                                     })()}
+                                    {presentation.confirmedMessages.map((message) => (
+                                        <div key={message.commandId} className={chatSessionMessageItemClassName}>
+                                            <UserPromptMessage
+                                                attachments={message.attachments}
+                                                text={message.content}
+                                            />
+                                        </div>
+                                    ))}
                                     {presentation.pendingDelivery !== null && (
                                         <div
                                             className={chatSessionMessageItemClassName}
@@ -1070,10 +1079,7 @@ function MobiusSessionPaneBody({
                                                 >
                                                     <span>{presentation.pendingDelivery.error}</span>
                                                     <Button
-                                                        disabled={
-                                                            model.connection.kind !== "ready" ||
-                                                            model.turn.kind === "current"
-                                                        }
+                                                        disabled={presentation.retryFailedDisabled}
                                                         onClick={() => run(pane.store.getState().retryFailedMessage)}
                                                     >
                                                         Retry message

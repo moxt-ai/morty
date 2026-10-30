@@ -110,6 +110,7 @@ function observeSnapshot(
     // Runtime or Relay that cannot report it omits the delivery, and the submission stays unconfirmed. The execution
     // receipt of a running command confirms its delivery even when admission and live events were lost.
     const delivered = [
+        ...snapshot.queued.map((item) => item.commandId),
         ...(deliveryCommandId !== null && snapshot.command !== undefined && snapshot.command.state !== "unknown"
             ? [deliveryCommandId]
             : []),
