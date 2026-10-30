@@ -23,7 +23,6 @@ The executable configuration and deployment steps are in
 Configure these **GitHub Environment variables** individually:
 
 - `APP_ORIGIN` — canonical Chat origin, without a trailing slash.
-- `AUTHENTICATION_BASE_URL` — application authentication base URL.
 - `MOBIUS_BASE_URL` — Platform origin.
 - `MOBIUS_APP_ID` — environment-specific Platform App ID.
 
