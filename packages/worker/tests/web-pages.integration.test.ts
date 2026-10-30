@@ -166,6 +166,9 @@ for (const navigation of [false, true]) {
             expect(response.headers.get("x-robots-tag"), path).toBe("noindex");
             const html = await response.text();
             expect(html, path).toContain('<div id="root">');
+            expect(html, path).toContain(
+                'name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"',
+            );
             expect(html, path).not.toMatch(/private-identity|private-session/);
         }
     });
@@ -181,13 +184,12 @@ test("Given application routes, When a client sends HEAD or POST, Then only the 
     expect(post.status).toBe(404);
 });
 
-test("Given the public home page, When a crawler fetches it without JavaScript, Then it receives product metadata, zoom permission and usable images", async () => {
+test("Given the public home page, When a crawler fetches it without JavaScript, Then it receives product metadata, a maximum scale of one and usable images", async () => {
     const response = await runtime.dispatchFetch("https://morty.example/");
     expect(response.status).toBe(200);
     expect(response.headers.get("x-robots-tag")).toBeNull();
     const html = await response.text();
-    expect(html).toContain('name="viewport" content="width=device-width, initial-scale=1.0"');
-    expect(html).not.toMatch(/maximum-scale|user-scalable/);
+    expect(html).toContain('name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"');
     expect(html).toContain("<title>Morty — Continue your coding agent from any browser</title>");
     expect(html).toContain('name="description"');
     for (const property of [
