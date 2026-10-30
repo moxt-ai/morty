@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import * as v from "valibot";
 import { json } from "../../../infra/http.ts";
 import { bodyParser } from "../../../middleware/body-parser.ts";
-import { projectLocationHint } from "../util/project-location.ts";
 import { authenticatedSession } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 
@@ -18,13 +17,7 @@ export function createBotManagementRoutes() {
         .get("/bots", authenticatedSession, async (context) => {
             const session = context.get("session");
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);
-            return json({
-                bots: await context.env.services.management.listBots(
-                    session.userId,
-                    projectLocationHint(context.req.raw),
-                    signal,
-                ),
-            });
+            return json({ bots: await context.env.services.management.listBots(session.userId, signal) });
         })
         .post(
             "/bots",

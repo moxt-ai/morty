@@ -8,7 +8,7 @@ import { FakeOpenAiProvider } from "../../third-party/mobius/packages/cli/tests/
 import { dataTestId } from "../web/src/data-testid.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../web/src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../web/src/services/identity/identity-scope-url.ts";
-import { ChatApi, jsonRequest, object, text } from "./infra/chat-api.ts";
+import { anonymousCreationKey, ChatApi, jsonRequest, object, text } from "./infra/chat-api.ts";
 import { E2EHarness } from "./infra/harness.ts";
 import { LocalStack } from "./infra/local-stack.ts";
 
@@ -73,7 +73,7 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         await completed.promise;
 
         const identity = await jsonRequest(stack.chatOrigin, "/morty/api/identity/anonymous-users", {
-            body: {},
+            body: { creationKey: anonymousCreationKey() },
             signal,
         });
         const token = text(identity["token"], "token");

@@ -26,6 +26,11 @@ export function text(value: unknown, name: string): string {
     return value;
 }
 
+/** A fresh client-held key naming one anonymous user creation. */
+export function anonymousCreationKey(): string {
+    return Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
+}
+
 export async function jsonRequest(
     origin: string,
     path: string,

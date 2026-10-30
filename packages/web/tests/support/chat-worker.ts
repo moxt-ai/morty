@@ -19,6 +19,10 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
     const createApplication = async (clock?: Clock) => {
         const identityResponse = await cloud.dispatchFetch(`${origin}/morty/api/identity/anonymous-users`, {
             method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+                creationKey: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url"),
+            }),
         });
         if (identityResponse.status !== 201) {
             throw new Error(`Could not create an anonymous Morty identity: ${identityResponse.status}`);

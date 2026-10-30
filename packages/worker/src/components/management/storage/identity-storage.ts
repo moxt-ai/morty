@@ -26,7 +26,7 @@ export class IdentityStorage {
         projectId: string,
         now: number,
         signal: AbortSignal,
-        token = `mobius_anon_v2_${randomSecret()}`,
+        token: string,
     ): Promise<AnonymousIdentity | null> => {
         signal.throwIfAborted();
         const credentialId = `cred_${crypto.randomUUID()}`;

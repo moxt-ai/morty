@@ -28,17 +28,6 @@ const botIdSchema = v.custom<Identifier>(isIdentifier);
 const userIdSchema = v.pipe(v.string(), v.minLength(8), v.maxLength(128));
 const identityFields = { token: tokenSchema, botId: botIdSchema, userId: userIdSchema, projectId: projectIdSchema };
 const identitySchema = v.pipe(v.object(identityFields), v.readonly());
-/** Response of creating an anonymous user, whose Bot is nested under `bot`. */
-const createdIdentitySchema = v.pipe(
-    v.object({
-        token: tokenSchema,
-        bot: v.pipe(v.object({ botId: botIdSchema }), v.readonly()),
-        userId: userIdSchema,
-        projectId: projectIdSchema,
-    }),
-    v.readonly(),
-);
-
 /**
  * The Project a well-formed transfer code names, or null when the code cannot
  * name one. A code that was already redeemed in this browser still names its
@@ -161,37 +150,6 @@ export class AnonymousIdentityApi {
         return identity;
     };
 
-    readonly loadOrCreate = async (requestSignal: AbortSignal): Promise<AnonymousIdentity> => {
-        const existing = await this.loadExisting(requestSignal);
-        if (existing !== null) {
-            return existing;
-        }
-        const created = this.#createdIdentity(
-            await this.#request("/identity/anonymous-users", { method: "POST" }, requestSignal),
-        );
-        this.#saveIdentity(created);
-        return created;
-    };
-
-    readonly replaceIdentity = async (
-        locationHint: DataRegion,
-        requestSignal: AbortSignal,
-    ): Promise<AnonymousIdentity> => {
-        const created = this.#createdIdentity(
-            await this.#request(
-                "/identity/anonymous-users",
-                {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ locationHint }),
-                },
-                requestSignal,
-            ),
-        );
-        this.#saveIdentity(created);
-        return created;
-    };
-
     readonly createTransfer = async (token: string, signal: AbortSignal): Promise<IdentityTransfer> =>
         v.parse(
             transferSchema,
@@ -272,17 +230,6 @@ export class AnonymousIdentityApi {
         writeIdentityScope(scope);
     };
 
-    /** Maps the nested `bot` of an anonymous-user creation response onto the identity. */
-    readonly #createdIdentity = (response: unknown): AnonymousIdentity => {
-        const created = v.parse(createdIdentitySchema, response);
-        return {
-            botId: created.bot.botId,
-            projectId: created.projectId,
-            token: created.token,
-            userId: created.userId,
-        };
-    };
-
     readonly #anonymousSession = async (
         identity: AnonymousIdentity,
         requestSignal: AbortSignal,
@@ -322,9 +269,7 @@ export class AnonymousIdentityApi {
         const headers = new Headers(init.headers);
         const scope = readIdentityScope();
         const scopedPath =
-            scope !== null &&
-            !path.startsWith("/projects/") &&
-            !["/identity/anonymous-users", "/identity/transfers/redeem"].includes(path)
+            scope !== null && !path.startsWith("/projects/") && path !== "/identity/transfers/redeem"
                 ? `/projects/${encodeURIComponent(scope.projectId)}${path}`
                 : path;
         const response = await this.#fetchRequest(

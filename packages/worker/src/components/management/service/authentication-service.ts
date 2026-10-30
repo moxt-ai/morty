@@ -80,15 +80,11 @@ export class AuthenticationService {
         userId: string,
         projectId: string,
         signal: AbortSignal,
-        token?: string,
+        token: string,
     ): Promise<AnonymousIdentity> => {
         const identity = await this.identities.createAnonymous(userId, projectId, Date.now(), signal, token);
         if (identity === null) {
-            throw new ManagementError(
-                "LOCAL_CREDENTIAL_UNAVAILABLE",
-                "The replacement credential is no longer available.",
-                409,
-            );
+            throw new ManagementError("LOCAL_CREDENTIAL_UNAVAILABLE", "The credential is no longer available.", 409);
         }
         return identity;
     };
