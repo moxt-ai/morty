@@ -1,4 +1,4 @@
-import { fireEvent, getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
+import { fireEvent, getByLabelText, getByRole, getByText, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, onTestFinished, test } from "vitest";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
@@ -261,6 +261,40 @@ test("Given my first message is waiting for Session creation, When the page relo
     await reloaded.waitForView(() =>
         expect(reloaded.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "Slow first message"),
     );
+});
+
+test("Given my first message's Session was just created, When the page reloads before the Runtime takes the message, Then the message returns to that Session's composer unsent", {
+    timeout: 60_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    // Reload the moment the page follows the created Session, before its pane can reach the Runtime.
+    const reloading = Promise.withResolvers<TestApp>();
+    let reloaded = false;
+    const observer = new MutationObserver(() => {
+        if (!reloaded && new URL(window.location.href).searchParams.has("sessionId")) {
+            reloaded = true;
+            reloading.resolve(app.reload());
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    onTestFinished(() => observer.disconnect());
+    // The reload ends the old page's interaction along with the page.
+    await sendFirstMessage(app, "Message caught by the reload").catch((cause: unknown) => {
+        if (!(cause instanceof DOMException && cause.name === "AbortError")) {
+            throw cause;
+        }
+    });
+    const page = await reloading.promise;
+    observer.disconnect();
+    await page.waitForView(() =>
+        expect(page.elementByTestId(dataTestId.messageComposer)).toHaveProperty(
+            "value",
+            "Message caught by the reload",
+        ),
+    );
+    // Unsent text is never delivered implicitly: the Session stays empty.
+    await page.waitForView(() => getByText(document.body, "No message history is available for this session."));
+    expect(answered(page, "Message caught by the reload")).toBe(false);
 });
 
 function conversationEntry(app: TestApp, title: string): HTMLElement | undefined {
