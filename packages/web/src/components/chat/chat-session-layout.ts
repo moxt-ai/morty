@@ -21,9 +21,13 @@ export const chatSessionMessageColumnClassName = `${chatSessionColumnClassName} 
  * Composer keeps 12px side gutters at every breakpoint (on `sm:` the width calc
  * provides them). The pane section uses `overflow-clip`, so a full-bleed card
  * would have its shadow clipped away at the section edge.
+ *
+ * The bottom margin clears the iOS home indicator. iOS keeps reporting the full
+ * safe-area inset while the software keyboard covers the indicator, so a focused
+ * textarea drops back to the plain 12px gutter instead of floating above the keyboard.
  */
 export const chatSessionComposerClassName =
-    "relative z-10 mx-auto w-full min-w-0 shrink-0 px-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] sm:mt-0 sm:px-0 sm:w-[min(920px,calc(100%-24px))]";
+    "relative z-10 mx-auto w-full min-w-0 shrink-0 px-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] has-[textarea:focus]:mb-3 sm:mt-0 sm:px-0 sm:w-[min(920px,calc(100%-24px))]";
 
 /**
  * Fills the conversation card. Background, radius, and the outer inset stay on
