@@ -1,5 +1,5 @@
 import { resolveObjectURL } from "node:buffer";
-import { getByLabelText, getByRole } from "@testing-library/dom";
+import { getByLabelText, getByRole, queryByLabelText, queryByRole } from "@testing-library/dom";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -101,4 +101,32 @@ test("Given an attachment upload is rejected before turn submission, When I send
     await app.user.click(getByRole(document.body, "button", { name: "Edit failed message" }));
     expect(next).toHaveProperty("value", "Keep this unsent message\n\nMy next draft");
     expect(getByRole(document.body, "button", { name: `Remove ${name}` })).toHaveProperty("disabled", false);
+});
+
+test("Given my message whose attachment upload was rejected, When I discard it, Then neither the composer nor the sidebar still reports the failure", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const composer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    const name = `${"notes".repeat(101)}.json`;
+    await app.user.upload(
+        getByLabelText(document.body, "Choose attachments"),
+        new File(["Attachment contents"], name, { type: "text/plain" }),
+    );
+    await sendPrompt(app, composer, "Discard this unsent message");
+    const discard = await app.waitForView(() => {
+        expect(queryByLabelText(document.body, "Session failed")).not.toBeNull();
+        return getByRole(document.body, "button", { name: "Discard failed message" });
+    });
+
+    await app.user.click(discard);
+
+    await app.waitForView(() => {
+        expect(queryByRole(document.body, "button", { name: "Discard failed message" })).toBeNull();
+        expect(queryByRole(document.body, "alert")).toBeNull();
+        expect(queryByLabelText(document.body, "Session failed")).toBeNull();
+    });
 });

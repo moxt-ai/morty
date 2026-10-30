@@ -1,4 +1,10 @@
-import { MobiusApiError, MobiusCancellationError, type MobiusClient, type PromptAttachment } from "@moxt-ai/mobius-sdk";
+import {
+    MobiusApiError,
+    MobiusCancellationError,
+    type MobiusClient,
+    MobiusError,
+    type PromptAttachment,
+} from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
@@ -65,13 +71,39 @@ export function deliveryMessagePresentation(message: SubmittedMessage) {
     };
 }
 
-type DeliveryState =
+/** Why a submission failed before the service accepted it; delivery is the one record of it. */
+export type SubmissionFailure = { readonly code: string; readonly message: string };
+
+export function submissionFailure(cause: unknown, fallback: string): SubmissionFailure {
+    return { code: cause instanceof MobiusError ? cause.code : "", message: formatError(cause, fallback) };
+}
+
+export type DeliveryState =
     | { readonly kind: "idle" }
     | { readonly kind: "preparing"; readonly message: SubmittedMessage }
-    | { readonly kind: "preparation-failed"; readonly message: SubmittedMessage; readonly error: string }
+    | { readonly kind: "preparation-failed"; readonly message: SubmittedMessage; readonly failure: SubmissionFailure }
     | { readonly kind: "submitting"; readonly journal: Journal; readonly confirmation: "unknown" | "delivered" }
     | { readonly kind: "delivery-unknown"; readonly journal: Journal }
-    | { readonly kind: "failed"; readonly message: string; readonly journal: Journal };
+    | { readonly kind: "failed"; readonly journal: Journal; readonly failure: SubmissionFailure };
+
+/** The message of a submission that failed before the service accepted it, kept until it is retried or discarded. */
+export function failedSubmission(
+    state: DeliveryState,
+): { readonly message: SubmittedMessage; readonly failure: SubmissionFailure } | null {
+    switch (state.kind) {
+        case "preparation-failed":
+            return { message: state.message, failure: state.failure };
+        case "failed":
+            return { message: journalMessage(state.journal), failure: state.failure };
+        case "idle":
+        case "preparing":
+        case "submitting":
+        case "delivery-unknown":
+            return null;
+        default:
+            return state satisfies never;
+    }
+}
 
 export interface SessionDeliveryStore {
     readonly state: DeliveryState;
@@ -79,7 +111,7 @@ export interface SessionDeliveryStore {
     readonly confirmedMessages: readonly SubmittedMessage[];
     readonly discardUnknown: () => string | null;
     readonly prepare: (message: SubmittedMessage) => void;
-    readonly preparationFailed: (message: SubmittedMessage, error: string) => void;
+    readonly preparationFailed: (message: SubmittedMessage, failure: SubmissionFailure) => void;
     readonly takeFailedMessage: () => SubmittedMessage | null;
     /** Losing an attempt's connection does not discard its submitted intent. */
     readonly submissionInterrupted: () => void;
@@ -120,6 +152,11 @@ function isAuthoritativeFailure(cause: unknown): boolean {
         (cause instanceof CloudApiError && cause.status !== null && cause.status >= 400 && cause.status < 500)
     );
 }
+
+/** The delivery of no Session, for a view that follows the open Session's delivery when none is open. */
+export const noSessionDelivery = createStore<Pick<SessionDeliveryStore, "state">>()(() => ({
+    state: { kind: "idle" },
+}));
 
 /** The Session owns delivery; each attempt borrows the currently connected pane's submit port. */
 export const createSessionDeliveryStore = (options: {
@@ -164,11 +201,7 @@ export const createSessionDeliveryStore = (options: {
             }
             if (isAuthoritativeFailure(cause)) {
                 set({
-                    state: {
-                        kind: "failed",
-                        journal,
-                        message: formatError(cause, "The message was rejected."),
-                    },
+                    state: { kind: "failed", journal, failure: submissionFailure(cause, "The message was rejected.") },
                 });
                 return { kind: "rejected" };
             }
@@ -207,19 +240,13 @@ export const createSessionDeliveryStore = (options: {
                 return state.journal.commandId;
             },
             prepare: (message) => set({ state: { kind: "preparing", message } }),
-            preparationFailed: (message, error) => set({ state: { kind: "preparation-failed", message, error } }),
+            preparationFailed: (message, failure) => set({ state: { kind: "preparation-failed", message, failure } }),
             takeFailedMessage: () => {
-                const state = get().state;
-                const message =
-                    state.kind === "preparation-failed"
-                        ? state.message
-                        : state.kind === "failed"
-                          ? journalMessage(state.journal)
-                          : null;
-                if (message !== null) {
+                const failed = failedSubmission(get().state);
+                if (failed !== null) {
                     set({ state: { kind: "idle" } });
                 }
-                return message;
+                return failed?.message ?? null;
             },
             submissionInterrupted: () => {
                 const state = get().state;
@@ -228,7 +255,10 @@ export const createSessionDeliveryStore = (options: {
                         state: {
                             kind: "preparation-failed",
                             message: state.message,
-                            error: "Message preparation was interrupted. Retry when connected.",
+                            failure: {
+                                code: "",
+                                message: "Message preparation was interrupted. Retry when connected.",
+                            },
                         },
                     });
                 } else if (state.kind === "submitting") {
