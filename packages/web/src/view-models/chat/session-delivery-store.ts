@@ -12,7 +12,7 @@ import { formatError } from "../format-error.ts";
 
 type SubmitRequest = Parameters<MobiusClient["turns"]["submit"]>[1];
 type AcceptedTurn = { readonly turnId: string };
-type SubmitTurn = (request: SubmitRequest, signal: AbortSignal) => Promise<AcceptedTurn>;
+export type SubmitTurn = (request: SubmitRequest, signal: AbortSignal) => Promise<AcceptedTurn>;
 type SubmissionOutcome =
     | { readonly kind: "accepted"; readonly turn: AcceptedTurn }
     /** The request failed, but the service had already shown it has the command. */
@@ -109,7 +109,7 @@ export interface SessionDeliveryStore {
     readonly state: DeliveryState;
     /** Accepted prompts waiting for the Runtime's user-message history, independent of the next submission. */
     readonly confirmedMessages: readonly SubmittedMessage[];
-    readonly discardUnknown: () => string | null;
+    readonly discardUnknown: () => void;
     readonly prepare: (message: SubmittedMessage) => void;
     readonly preparationFailed: (message: SubmittedMessage, failure: SubmissionFailure) => void;
     readonly takeFailedMessage: () => SubmittedMessage | null;
@@ -232,12 +232,9 @@ export const createSessionDeliveryStore = (options: {
                     : { kind: "delivery-unknown", journal: { ...options.pendingSubmission, attachments: null } },
             confirmedMessages: [],
             discardUnknown: () => {
-                const state = get().state;
-                if (state.kind !== "delivery-unknown") {
-                    return null;
+                if (get().state.kind === "delivery-unknown") {
+                    set({ state: { kind: "idle" } });
                 }
-                set({ state: { kind: "idle" } });
-                return state.journal.commandId;
             },
             prepare: (message) => set({ state: { kind: "preparing", message } }),
             preparationFailed: (message, failure) => set({ state: { kind: "preparation-failed", message, failure } }),

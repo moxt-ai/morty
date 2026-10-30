@@ -782,7 +782,7 @@ function MobiusSessionPaneBody({
         agentReplyMessageGroups(model.messages).map((group) => [group.id, group.messages] as const),
     );
     const lastRenderItemIndex = renderItems.length - 1;
-    const generationActive = presentation.workingIndicatorVisible && presentation.activity.kind === "working";
+    const generationActive = presentation.workingIndicator !== null && presentation.activity.kind === "working";
     const sessionMessagesLoading =
         model.connection.kind === "first-loading" &&
         model.messages.length === 0 &&
@@ -838,7 +838,7 @@ function MobiusSessionPaneBody({
                             followRevision={model.followRevision}
                             jumpToLatest={{
                                 label: "Jump to latest message",
-                                working: presentation.workingIndicatorVisible,
+                                working: presentation.workingIndicator !== null,
                             }}
                             showTopFade
                             aria-label="Messages"
@@ -1107,13 +1107,13 @@ function MobiusSessionPaneBody({
                                             onRetry={() => run(pane.store.getState().retryUnknownDelivery)}
                                         />
                                     )}
-                                    {presentation.workingIndicatorVisible &&
+                                    {presentation.workingIndicator !== null &&
                                         presentation.outputState !== "idle" &&
                                         presentation.activity.kind === "working" && (
                                             // mt-1 keeps 4px of air under the previous bubble's reserved
                                             // copy-button strip, matching the consecutive-message rhythm.
                                             <div className="mt-1">
-                                                <WorkingIndicator startedAt={presentation.activity.startedAt} />
+                                                <WorkingIndicator startedAt={presentation.workingIndicator.startedAt} />
                                             </div>
                                         )}
                                     {authenticationRecovery !== null && presentation.authenticationFailure !== null && (

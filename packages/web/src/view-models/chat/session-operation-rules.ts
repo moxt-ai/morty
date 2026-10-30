@@ -1,5 +1,5 @@
 import type { SessionConnection } from "./session-connection.ts";
-import { acceptedTurn, type CurrentTurn, submittingCommandId } from "./session-current-turn.ts";
+import { acceptedTurn, type CurrentTurn } from "./session-current-turn.ts";
 import type { DeliveryTarget, SessionDeliveryStore } from "./session-delivery-store.ts";
 
 /**
@@ -24,8 +24,8 @@ const NEW_TURN: DeliveryTarget = { disposition: "reject", targetCommandId: "" };
 
 /**
  * Whether delivery can take a message for `target` now: on a connected Session whose settings are not changing, with
- * no earlier submission unresolved. A new turn needs none current; a queued message needs the turn it waits behind
- * running and not being stopped.
+ * no earlier submission being prepared, submitted or unresolved. A new turn needs none current; a queued message needs
+ * the turn it waits behind running and not being stopped.
  */
 export function canSubmit(
     target: DeliveryTarget,
@@ -34,6 +34,7 @@ export function canSubmit(
     return (
         facts.connection === "ready" &&
         !facts.configuring &&
+        facts.delivery !== "preparing" &&
         facts.delivery !== "submitting" &&
         facts.delivery !== "delivery-unknown" &&
         (target.disposition === "queue"
@@ -72,16 +73,12 @@ export function canRetryFailedMessage(target: DeliveryTarget, facts: SessionOper
  * permission requests: keep submission and stop boundaries stable and serialize edits.
  */
 export function canChangeSettings(
-    facts: Pick<
-        SessionOperationFacts,
-        "connectionAvailable" | "connection" | "configuring" | "turn" | "delivery" | "stopping"
-    >,
+    facts: Pick<SessionOperationFacts, "connectionAvailable" | "connection" | "configuring" | "delivery" | "stopping">,
 ): boolean {
     return (
         facts.connectionAvailable &&
         facts.connection === "ready" &&
         !facts.configuring &&
-        submittingCommandId(facts.turn) === null &&
         facts.delivery === "idle" &&
         !facts.stopping
     );
