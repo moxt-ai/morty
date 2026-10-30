@@ -12,7 +12,7 @@ import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 
 const workSummary = "2 steps · 1 file edit";
-const failureSummary = "1 step · 1 failed";
+const failureSummary = "1 step";
 
 async function start(prompt: string) {
     const app = await createTestApp({
@@ -27,7 +27,10 @@ async function start(prompt: string) {
 async function assertWorkCollapsed(app: TestApp) {
     return await app.waitForView(() => {
         const work = getByRole(document.body, "button", { name: workSummary, expanded: false });
-        const failure = getByRole(document.body, "button", { name: failureSummary, expanded: false });
+        const [failure] = getAllByRole(document.body, "button", { name: failureSummary, expanded: false });
+        if (failure === undefined) {
+            throw new Error("Expected the failed tool's process summary");
+        }
         expect(getByText(document.body, "Checking the failed verification.")).toBeDefined();
         expect(getByText(document.body, "Verification finished with one failure.")).toBeDefined();
         expect(queryByLabelText(document.body, "Tool: Failed verification")).toBeNull();
@@ -98,7 +101,10 @@ test("Given a reloaded completed reply with tools, When the user starts another 
         expect(app.elementByTestId(dataTestId.agentReplyStatus).textContent).toBe("Turn stopped."),
     );
     await assertWorkCollapsed(app);
-    const stoppedSummary = getByRole(document.body, "button", { name: "1 step", expanded: false });
+    const stoppedSummary = getAllByRole(document.body, "button", { name: "1 step", expanded: false }).at(-1);
+    if (stoppedSummary === undefined) {
+        throw new Error("Expected the stopped turn's process summary");
+    }
     await app.user.click(stoppedSummary);
     await app.waitForView(() => expect(queryByLabelText(document.body, "Tool: Completed verification")).not.toBeNull());
 });
