@@ -23,7 +23,7 @@ export const chatSessionMessageColumnClassName = `${chatSessionColumnClassName} 
  * would have its shadow clipped away at the section edge.
  */
 export const chatSessionComposerClassName =
-    "relative z-10 mx-auto w-full min-w-0 shrink-0 px-3 mb-3 sm:mt-0 sm:px-0 sm:w-[min(920px,calc(100%-24px))]";
+    "relative z-10 mx-auto w-full min-w-0 shrink-0 px-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] sm:mt-0 sm:px-0 sm:w-[min(920px,calc(100%-24px))]";
 
 /**
  * Fills the conversation card. Background, radius, and the outer inset stay on

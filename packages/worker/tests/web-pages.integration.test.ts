@@ -195,7 +195,7 @@ for (const navigation of [false, true]) {
             const html = await response.text();
             expect(html, path).toContain('<div id="root">');
             expect(html, path).toContain(
-                'name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"',
+                'name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover"',
             );
             expect(html, path).not.toMatch(/private-identity|private-session/);
         }
@@ -217,7 +217,9 @@ test("Given the public home page, When a crawler fetches it without JavaScript, 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-robots-tag")).toBeNull();
     const html = await response.text();
-    expect(html).toContain('name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"');
+    expect(html).toContain(
+        'name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover"',
+    );
     expect(html).toContain("<title>Morty — Continue your coding agent from any browser</title>");
     expect(html).toContain('name="description"');
     for (const property of [
