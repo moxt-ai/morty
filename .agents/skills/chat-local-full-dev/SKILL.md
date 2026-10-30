@@ -32,7 +32,6 @@ Modes:
 | --- | --- | --- |
 | `web` | local Chat web/Worker | staging Platform |
 | `web-server` | local Chat web/Worker + local Mobius Platform | local |
-| `web-server-mobius` | compatibility alias for `web-server` | local |
 | `web-server-mobius-cli` | mode above + checkout Mobius CLI check | local |
 
 Examples:
@@ -40,7 +39,6 @@ Examples:
 ```sh
 scripts/local-dev web
 scripts/local-dev web-server
-scripts/local-dev web-server-mobius
 scripts/local-dev web-server-mobius-cli
 ```
 
@@ -164,8 +162,7 @@ Platform):
 
 - `MORTY_STATE_DIRECTORY` is set to `<stateDir>/morty`, so the setup script
   keeps its private state there instead of this computer's application data
-  directory. `DOCUMENT_DIR` is set to `<stateDir>/documents`, so setup never
-  moves state an earlier release left in the user's Documents folder.
+  directory.
 - Mobius receives `MOBIUS_STATE_DIRECTORY=<stateDir>/mobius`, so every generated
   stack uses an isolated CLI manager and connection state. This prevents another
   checkout with a different CLI version from restarting or replacing its manager.
@@ -241,7 +238,7 @@ Details, inspection commands, and a failure-mode table are in
     The local Platform App is provisioned automatically.
 - `setup --state-dir DIR --harness ID --session-id ID [--workspace DIR]`
   - connect a local agent Runtime through the served setup bundle with
-    Morty's setup state, `DOCUMENT_DIR`, the Mobius state directory, and the CLI shim isolated under
+    Morty's setup state, the Mobius state directory, and the CLI shim isolated under
     the state directory; prints the handoff URL to continue as this user in the
     browser.
 - `status --state-dir DIR` - report process and HTTP health for a stack.
