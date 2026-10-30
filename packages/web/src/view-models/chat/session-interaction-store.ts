@@ -1,6 +1,11 @@
+import type { SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
 import { formatError } from "../format-error.ts";
-import type { SessionLifecycleFact } from "./session-lifecycle.ts";
+import {
+    requestedInteraction,
+    type SessionInteractionRecovery,
+    type SessionLifecycleFact,
+} from "./session-lifecycle.ts";
 import type {
     ElicitationInteractionResponse,
     PermissionInteraction,
@@ -88,7 +93,9 @@ export interface SessionInteractionStore {
     /** The Agent's requests in arrival order, each with its latest resolution. */
     readonly interactions: readonly SessionInteraction[];
     readonly submissions: ReadonlyMap<string, InteractionOperation>;
-    readonly apply: (fact: SessionInteractionFact) => void;
+    readonly coverage: { readonly sessionGenerationId: string; readonly throughPosition: string } | null;
+    readonly apply: (fact: SessionInteractionFact, event: SessionLiveEvent, signal: AbortSignal) => Promise<void>;
+    readonly recover: (recovery: SessionInteractionRecovery) => void;
     /** Replaces the interactions with those the Runtime reports for the Session now. */
     readonly restore: (interactions: readonly SessionInteraction[]) => void;
     readonly respondToPermission: (response: PermissionInteractionResponse, signal: AbortSignal) => void;
@@ -96,6 +103,7 @@ export interface SessionInteractionStore {
 }
 
 export function createSessionInteractionStore(ports: {
+    readonly read: (signal: AbortSignal) => Promise<SessionInteractionRecovery>;
     readonly permission: (response: PermissionInteractionResponse, signal: AbortSignal) => Promise<void>;
     readonly elicitation: (response: ElicitationInteractionResponse, signal: AbortSignal) => Promise<void>;
 }) {
@@ -129,10 +137,49 @@ export function createSessionInteractionStore(ports: {
         };
         return {
             interactions: [],
+            coverage: null,
             submissions: new Map(),
-            apply: (fact) =>
-                set((current) => ({ interactions: transitionSessionInteractions(current.interactions, fact) })),
-            restore: (interactions) => set({ interactions }),
+            apply: async (fact, event, signal) => {
+                signal.throwIfAborted();
+                const previous = get().coverage;
+                if (previous !== null && previous.sessionGenerationId !== event.sessionGenerationId) {
+                    const recovery = await ports.read(signal);
+                    signal.throwIfAborted();
+                    get().recover(recovery);
+                }
+                const coverage = get().coverage;
+                if (
+                    coverage !== null &&
+                    (coverage.sessionGenerationId !== event.sessionGenerationId ||
+                        BigInt(event.position) <= BigInt(coverage.throughPosition))
+                ) {
+                    return;
+                }
+                set((current) => ({
+                    interactions: transitionSessionInteractions(current.interactions, fact),
+                    coverage: { sessionGenerationId: event.sessionGenerationId, throughPosition: event.position },
+                }));
+            },
+            recover: (recovery) => {
+                switch (recovery.kind) {
+                    case "session":
+                        set({
+                            interactions: recovery.snapshot.interactions.map(requestedInteraction),
+                            coverage: {
+                                sessionGenerationId: recovery.snapshot.sessionGenerationId,
+                                throughPosition: recovery.snapshot.throughPosition,
+                            },
+                        });
+                        return;
+                    case "legacy-turn":
+                        // Preserve the old foreground recovery contract without claiming full session coverage.
+                        set({ interactions: recovery.interactions, coverage: null });
+                        return;
+                    default:
+                        return recovery satisfies never;
+                }
+            },
+            restore: (interactions) => set({ interactions, coverage: null }),
             respondToPermission: (response, signal) =>
                 submit(response.interactionId, signal, () => ports.permission(response, signal)),
             respondToElicitation: (response, signal) =>

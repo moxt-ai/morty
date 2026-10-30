@@ -1,5 +1,9 @@
-import type { SessionElicitationRequestedEvent, SessionPermissionRequestedEvent } from "@moxt-ai/mobius-sdk";
-import type { SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
+import type {
+    MobiusClient,
+    SessionElicitationRequestedEvent,
+    SessionPermissionRequestedEvent,
+} from "@moxt-ai/mobius-sdk";
+import type { SessionInteractionSnapshot, SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
 import type { SessionInteraction } from "./session-pane-types.ts";
 
 // The Session pane reads Mobius lifecycle metadata only through this module, so
@@ -86,4 +90,19 @@ export function requestedInteraction(
         default:
             return event satisfies never;
     }
+}
+
+export type SessionInteractionRecovery =
+    | { readonly kind: "session"; readonly snapshot: SessionInteractionSnapshot }
+    | { readonly kind: "legacy-turn"; readonly interactions: readonly SessionInteraction[] };
+
+/** Older relays strip additive fields, so fallback belongs at the protocol adapter. */
+export function sessionInteractionRecovery(
+    execution: Awaited<ReturnType<MobiusClient["sessions"]["readSessionExecution"]>>,
+): SessionInteractionRecovery {
+    if (execution.interactionState !== undefined) {
+        return { kind: "session", snapshot: execution.interactionState };
+    }
+    const interaction = execution.turn?.interaction;
+    return { kind: "legacy-turn", interactions: interaction == null ? [] : [requestedInteraction(interaction)] };
 }

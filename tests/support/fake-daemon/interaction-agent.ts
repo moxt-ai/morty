@@ -12,7 +12,7 @@ import type {
 } from "../../../third-party/mobius/packages/cli/src/engine/acp/agent/in-process-endpoint.ts";
 
 /** A stateful ACP peer injected through the production daemon's Agent port. */
-export function createInteractionAgent() {
+export function createInteractionAgent(onBackgroundPermissionReady?: (request: () => Promise<void>) => void) {
     const sessions = new Set<string>();
     const createEndpoint = (onSessionUpdate: ControlledSessionUpdate): InProcessAcpEndpoint => {
         const termination = Promise.withResolvers<AcpEndpointTermination>();
@@ -38,6 +38,49 @@ export function createInteractionAgent() {
                 const sessionId = context.params.sessionId;
                 if (!sessions.has(sessionId)) {
                     throw new Error("Unknown controlled session");
+                }
+                if (
+                    context.params.prompt.some(
+                        (content) => content.type === "text" && content.text === "request background permission",
+                    )
+                ) {
+                    onBackgroundPermissionReady?.(async () => {
+                        const result = await context.client.request(
+                            acp.methods.client.session.requestPermission,
+                            {
+                                sessionId,
+                                options: [{ optionId: "allow-once", kind: "allow_once", name: "Verify" }],
+                                toolCall: {
+                                    toolCallId: crypto.randomUUID(),
+                                    kind: "execute",
+                                    title: "Background verification",
+                                    status: "pending",
+                                    rawInput: { command: "echo verified" },
+                                },
+                            },
+                            { cancellationSignal: lifetime.signal },
+                        );
+                        await onSessionUpdate({
+                            sessionId,
+                            update: {
+                                sessionUpdate: "agent_message_chunk",
+                                messageId: crypto.randomUUID(),
+                                content: {
+                                    type: "text",
+                                    text: `Background decision: ${result.outcome.outcome === "selected" ? result.outcome.optionId : "cancelled"}`,
+                                },
+                            },
+                        });
+                    });
+                    await onSessionUpdate({
+                        sessionId,
+                        update: {
+                            sessionUpdate: "agent_message_chunk",
+                            messageId: crypto.randomUUID(),
+                            content: { type: "text", text: "Foreground work completed" },
+                        },
+                    });
+                    return { stopReason: "end_turn" };
                 }
                 const cancellation = new AbortController();
                 turns.set(sessionId, cancellation);
