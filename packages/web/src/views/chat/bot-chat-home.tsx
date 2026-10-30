@@ -397,16 +397,16 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                 error=""
                                 errorStatus={
                                     executionContext.feedback.kind === "hidden" ? undefined : (
-                                        <div className="w-full">
-                                            <ConnectionNotice
-                                                feedback={executionContext.feedback}
-                                                onRetryNow={store.getState().retry}
-                                                onReopen={store.getState().retry}
-                                            />
-                                            {workspace.computers !== null && (
-                                                <OnlineComputerAlternative model={workspace.computers} />
-                                            )}
-                                        </div>
+                                        <ConnectionNotice
+                                            feedback={executionContext.feedback}
+                                            footer={
+                                                workspace.computers === null ? undefined : (
+                                                    <OnlineComputerAlternative model={workspace.computers} />
+                                                )
+                                            }
+                                            onRetryNow={store.getState().retry}
+                                            onReopen={store.getState().retry}
+                                        />
                                     )
                                 }
                                 onDraftChange={store.getState().setDraft}

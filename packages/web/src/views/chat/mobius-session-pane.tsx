@@ -1,5 +1,5 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
-import { Archive, Check, CircleAlert, WifiOff, X } from "lucide-react";
+import { Check, CircleAlert, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
@@ -1184,23 +1184,6 @@ function MobiusSessionPaneBody({
                             disabled={presentation.composerInputDisabled}
                             draft={model.draft}
                             error={presentation.composerError}
-                            statusTone={
-                                executionContext.feedback.kind === "failed" ||
-                                (executionContext.feedback.kind === "closed" &&
-                                    executionContext.feedback.reopen === "failed")
-                                    ? "error"
-                                    : "neutral"
-                            }
-                            statusIcon={
-                                executionContext.feedback.kind === "closed" &&
-                                executionContext.feedback.reopen !== "failed"
-                                    ? Archive
-                                    : executionContext.feedback.kind === "retrying" ||
-                                        executionContext.feedback.kind === "waiting"
-                                      ? WifiOff
-                                      : undefined
-                            }
-                            statusCompact={executionContext.feedback.kind === "waiting"}
                             errorStatus={
                                 executionContext.feedback.kind !== "hidden" ? (
                                     <ConnectionNotice
@@ -1209,9 +1192,12 @@ function MobiusSessionPaneBody({
                                         onRetryNow={pane.store.getState().retryNow}
                                         onReopen={() => run(pane.store.getState().reopen)}
                                     />
-                                ) : model.filesRestoreNotice ? (
-                                    "Files attached to this message could not be restored here. Add them again if it had any."
                                 ) : undefined
+                            }
+                            statusMessage={
+                                executionContext.feedback.kind === "hidden" && model.filesRestoreNotice
+                                    ? "Files attached to this message could not be restored here. Add them again if it had any."
+                                    : undefined
                             }
                             onDraftChange={pane.store.getState().setDraft}
                             onStop={() => run(pane.store.getState().stop)}

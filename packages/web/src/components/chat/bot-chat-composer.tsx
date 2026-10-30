@@ -1,4 +1,4 @@
-import { ArrowUp, FileText, LoaderCircle, type LucideIcon, Plus, Square, X } from "lucide-react";
+import { ArrowUp, FileText, LoaderCircle, Plus, Square, X } from "lucide-react";
 import {
     type ClipboardEvent,
     type FormEvent,
@@ -98,9 +98,7 @@ export function BotChatComposer({
     draft,
     error,
     errorStatus,
-    statusTone = "neutral",
-    statusIcon,
-    statusCompact = false,
+    statusMessage,
     onDraftChange,
     onStop,
     onSubmit,
@@ -120,13 +118,14 @@ export function BotChatComposer({
     readonly disabled: boolean;
     readonly draft: string;
     readonly error: string;
+    /**
+     * A notice that already owns its surface (an alert or a compact chip). Rendered
+     * as-is when there is no send failure: wrapping it here would nest a second
+     * card and duplicate the headline hierarchy inside the first.
+     */
     readonly errorStatus?: ReactNode;
-    /** Surface for a connection-status notice shown on its own: failures read as error tone. */
-    readonly statusTone?: "error" | "neutral";
-    /** Leading icon for an informational connection-status notice, matching the error tone's icon slot. */
-    readonly statusIcon?: LucideIcon | undefined;
-    /** The status notice renders its own compact chip (waiting state): skip the alert card wrapper. */
-    readonly statusCompact?: boolean;
+    /** Plain status text with no notice of its own; the composer gives it a neutral alert surface. */
+    readonly statusMessage?: string | undefined;
     readonly onDraftChange: (draft: string) => void;
     readonly onStop: () => void;
     readonly onSubmit: () => void;
@@ -195,7 +194,8 @@ export function BotChatComposer({
     const submitAction = outputState === "idle" || (outputState === "running" && !submitDisabled);
     const composerErrorMessage =
         error.length > 0 ? error : attachmentState.kind === "failed" ? attachmentState.message : "";
-    const showComposerNotice = composerErrorMessage.length > 0 || errorStatus !== undefined;
+    const showComposerNotice =
+        composerErrorMessage.length > 0 || errorStatus !== undefined || statusMessage !== undefined;
     useComposerNoticeLayout(notice, showComposerNotice);
 
     return (
@@ -204,13 +204,11 @@ export function BotChatComposer({
                 <div className="absolute inset-x-0 bottom-[calc(100%+8px)] z-10" ref={notice}>
                     {composerErrorMessage.length > 0 ? (
                         <MortyAlert description={errorStatus}>{composerErrorMessage}</MortyAlert>
-                    ) : statusCompact ? (
+                    ) : errorStatus !== undefined ? (
                         errorStatus
-                    ) : (
-                        <MortyAlert tone={statusTone} icon={statusIcon}>
-                            {errorStatus}
-                        </MortyAlert>
-                    )}
+                    ) : statusMessage !== undefined ? (
+                        <MortyAlert tone="neutral">{statusMessage}</MortyAlert>
+                    ) : null}
                 </div>
             )}
             <div className="flex max-h-64 flex-col rounded-[24px] border-[0.5px] border-border bg-surface-elevated px-3 pt-3 pb-2.5 shadow-[0_8px_28px_rgba(23,30,36,0.06)] has-[:focus]:border-[var(--color-border)] sm:min-h-[128px] sm:pb-3">

@@ -1,9 +1,79 @@
+import { Archive, type LucideIcon, WifiOff } from "lucide-react";
+import type { ReactNode } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import { LinkButton } from "../ui/link-button.tsx";
+import { MortyAlert, type MortyAlertTone } from "../ui/morty-alert.tsx";
 import type { ConnectionFeedback } from "./execution-context.ts";
+
+type VisibleFeedback = Exclude<ConnectionFeedback, { readonly kind: "hidden" }>;
+type ClosedFeedback = Extract<ConnectionFeedback, { readonly kind: "closed" }>;
+function noticeTestId(feedback: ConnectionFeedback): string {
+    return feedback.kind === "closed" ? dataTestId.sessionClosedNotice : dataTestId.sessionReconnectNotice;
+}
+
+/**
+ * Surface for a connection state, matching the tone rules shared by every other
+ * notice in the product: failures read as errors, everything else is neutral.
+ */
+function noticeTone(feedback: VisibleFeedback): MortyAlertTone {
+    const failed = feedback.kind === "failed" || (feedback.kind === "closed" && feedback.reopen === "failed");
+    return failed ? "error" : "neutral";
+}
+
+/** The leading icon names the connection state, so it can stand in for the tone's default icon. */
+function noticeIcon(feedback: VisibleFeedback): LucideIcon | undefined {
+    if (feedback.kind === "closed") {
+        // A failed reopen is a failure, so it keeps the error tone's own icon.
+        return feedback.reopen === "failed" ? undefined : Archive;
+    }
+    return feedback.kind === "retrying" || feedback.kind === "waiting" ? WifiOff : undefined;
+}
+
+function RetryAction({ className, onClick }: { readonly className: string; readonly onClick: () => void }) {
+    return (
+        <LinkButton className={className} onClick={onClick}>
+            Retry now
+        </LinkButton>
+    );
+}
+
+function ReopenAction({
+    className,
+    feedback,
+    onReopen,
+}: {
+    readonly className: string;
+    readonly feedback: ClosedFeedback;
+    readonly onReopen: () => void;
+}) {
+    return (
+        <LinkButton
+            className={className}
+            disabled={feedback.reopen === "reopening" || feedback.reopen === "offline"}
+            onClick={onReopen}
+        >
+            {feedback.reopen === "reopening" ? "Reopening…" : "Reopen it"}
+        </LinkButton>
+    );
+}
+
+function retryButton(feedback: VisibleFeedback, onRetryNow: () => void, className: string): ReactNode {
+    if (feedback.kind !== "retrying" && feedback.kind !== "failed") {
+        return null;
+    }
+    return <RetryAction className={className} onClick={onRetryNow} />;
+}
+
+function countdown(feedback: VisibleFeedback): ReactNode {
+    if (feedback.kind !== "retrying" || feedback.remainingSeconds === null) {
+        return null;
+    }
+    return <span className="tabular-nums">Retrying in {feedback.remainingSeconds} s</span>;
+}
 
 export function ConnectionNotice({
     feedback,
+    footer,
     inline = false,
     onRetryNow,
     onReopen,
@@ -15,33 +85,23 @@ export function ConnectionNotice({
      * would only repeat it and stack a second hierarchy inside the first.
      */
     readonly inline?: boolean;
+    /** Extra action line, such as switching to another online computer. */
+    readonly footer?: ReactNode;
     readonly onRetryNow: () => void;
     readonly onReopen: () => void;
 }) {
     if (feedback.kind === "hidden") {
         return null;
     }
-    const failed = feedback.kind === "failed" || (feedback.kind === "closed" && feedback.reopen === "failed");
     // No text size here: the row already sets text-12, and passing a custom text-*
     // token through LinkButton's tailwind-merge would evict its text-primary color.
     const actionClassName = inline ? "min-h-5" : "min-h-11 sm:min-h-5";
-    const retry =
-        feedback.kind === "retrying" || feedback.kind === "failed" ? (
-            <LinkButton className={actionClassName} onClick={onRetryNow}>
-                Retry now
-            </LinkButton>
-        ) : null;
+    const retry = retryButton(feedback, onRetryNow, actionClassName);
     const reopen =
         feedback.kind === "closed" ? (
-            <LinkButton
-                className={actionClassName}
-                disabled={feedback.reopen === "reopening" || feedback.reopen === "offline"}
-                onClick={onReopen}
-            >
-                {feedback.reopen === "reopening" ? "Reopening…" : "Reopen it"}
-            </LinkButton>
+            <ReopenAction className={actionClassName} feedback={feedback} onReopen={onReopen} />
         ) : null;
-    const testId = feedback.kind === "closed" ? dataTestId.sessionClosedNotice : dataTestId.sessionReconnectNotice;
+    const testId = noticeTestId(feedback);
 
     // The waiting state reads as a quiet chip, not a card: title only, in a
     // button-like shape on the chat surface so it sits left-aligned with the
@@ -76,31 +136,42 @@ export function ConnectionNotice({
                 <span className="min-w-0">
                     {feedback.kind === "closed" ? "The session is closed." : feedback.description}
                 </span>
-                {feedback.kind === "retrying" && feedback.remainingSeconds !== null && (
-                    <span className="tabular-nums">Retrying in {feedback.remainingSeconds} s</span>
-                )}
+                {countdown(feedback)}
                 {retry}
                 {reopen}
             </div>
         );
     }
 
-    return (
-        // The host notice owns the surface and the live region: a failure reads
-        // through the host's error tone instead of a nested red block here.
-        // Plain string, not cn(): tailwind-merge reads the custom text-13 token as a
-        // text color and would evict it in favor of text-muted-foreground.
-        <div className={`min-w-0 w-full text-13${failed ? "" : " text-muted-foreground"}`} data-testid={testId}>
-            {/* Headline stands alone; countdown and action sit with the detail line. */}
-            <p className="font-medium">{feedback.kind === "closed" ? "The session is closed." : feedback.title}</p>
-            <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-12 font-normal text-muted-foreground">
-                <span className="min-w-0">{feedback.description}</span>
-                {feedback.kind === "retrying" && feedback.remainingSeconds !== null && (
-                    <span className="tabular-nums">Retrying in {feedback.remainingSeconds} s</span>
-                )}
-                {retry}
-                {reopen}
-            </div>
+    // The host alert owns the surface, the live region and the headline: this
+    // component fills its two slots instead of stacking its own heading block
+    // inside the alert's, so connection states read exactly like every other
+    // notice (tone ink for the headline, muted text for the detail line).
+    const detail = (
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 font-normal">
+            <span className="min-w-0">{feedback.description}</span>
+            {countdown(feedback)}
+            {retry}
+            {reopen}
         </div>
+    );
+    return (
+        <MortyAlert
+            description={
+                footer === undefined ? (
+                    detail
+                ) : (
+                    <>
+                        {detail}
+                        {footer}
+                    </>
+                )
+            }
+            icon={noticeIcon(feedback)}
+            testId={testId}
+            tone={noticeTone(feedback)}
+        >
+            {feedback.kind === "closed" ? "The session is closed." : feedback.title}
+        </MortyAlert>
     );
 }
