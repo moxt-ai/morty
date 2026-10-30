@@ -251,33 +251,67 @@ test("Given a local workspace and a private state directory, When setup creates 
     const workspace = join(directory, "workspace with spaces & quotes '");
     await mkdir(workspace);
     const fixture = await createIdentityFixture();
-    const cancellation = new AbortController();
-    const events: Readonly<Record<string, unknown>>[] = [];
-    try {
-        const code = await runSetup(
-            [
-                "setup",
-                "--base-url",
-                fixture.origin,
-                "--cwd",
-                workspace,
-                "--harness",
-                "codex",
-                "--session-id",
-                "native-setup",
-            ],
-            {
-                state,
-                agentEnvironment: {},
-                signal: cancellation.signal,
-                emit: (event) => {
-                    events.push(event);
-                    if (event["status"] === "identity_ready") {
-                        cancellation.abort(new Error("User cancelled setup"));
-                    }
-                },
+    const bin = join(directory, "bin");
+    await mkdir(bin);
+    await writeNpxFixture(
+        bin,
+        `await import(${JSON.stringify(new URL("../../../third-party/mobius/packages/cli/src/cli/entrypoint.ts", import.meta.url).href)});`,
+    );
+    const runner = join(directory, "setup.mjs");
+    await writeFile(
+        runner,
+        `
+import { runSetup } from ${JSON.stringify(new URL("../../setup/src/setup.ts", import.meta.url).href)};
+const cancellation = new AbortController();
+process.exitCode = await runSetup(process.argv.slice(2), {
+    state: process.env.MORTY_STATE_DIRECTORY,
+    agentEnvironment: {},
+    signal: cancellation.signal,
+    emit(event) {
+        console.log(JSON.stringify(event));
+        if (event.status === 'identity_ready') cancellation.abort(new Error('User cancelled setup'));
+    },
+});
+`,
+    );
+    const child = spawn(
+        process.execPath,
+        [
+            runner,
+            "setup",
+            "--base-url",
+            fixture.origin,
+            "--cwd",
+            workspace,
+            "--harness",
+            "codex",
+            "--session-id",
+            "native-setup",
+        ],
+        {
+            env: {
+                ...process.env,
+                MORTY_STATE_DIRECTORY: state,
+                MOBIUS_STATE_DIRECTORY: join(directory, "mobius-state"),
+                PATH: `${bin}${process.platform === "win32" ? ";" : ":"}${process.env["PATH"] ?? ""}`,
             },
-        );
+            stdio: ["ignore", "pipe", "pipe"],
+            windowsHide: true,
+            signal: AbortSignal.timeout(30000),
+        },
+    );
+    const exited = once(child, "exit");
+    let output = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+        output += chunk.toString();
+    });
+    child.stderr.resume();
+    try {
+        const [code] = await exited;
+        const events = output
+            .trim()
+            .split("\n")
+            .map((line) => v.parse(v.record(v.string(), v.unknown()), JSON.parse(line)));
         expect(code).toBe(1);
         expect(events).toContainEqual(expect.objectContaining({ status: "identity_ready" }));
         expect(events.at(-1)).toMatchObject({ error: { code: "CANCELLED" } });
@@ -309,6 +343,7 @@ test("Given a local workspace and a private state directory, When setup creates 
             expect((await stat(configPath)).mode & 0o777).toBe(0o600);
         }
     } finally {
+        child.kill();
         await fixture.close();
         await rm(directory, { recursive: true, force: true });
     }
