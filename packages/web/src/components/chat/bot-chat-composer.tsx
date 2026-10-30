@@ -135,6 +135,7 @@ export function BotChatComposer({
     readonly messageLabel?: string;
     readonly placeholder?: string;
     readonly submitLabel?: string;
+    /** The owner's rule refuses a submission now, including while attachments are still being read. */
     readonly submitDisabled: boolean;
     readonly stopDisabled?: boolean;
 }) {
@@ -149,7 +150,7 @@ export function BotChatComposer({
 
     const submit = (event: FormEvent<HTMLFormElement>): void => {
         event.preventDefault();
-        if (!submitDisabled && attachmentState.kind !== "reading") {
+        if (!submitDisabled) {
             onSubmit();
             // Touch devices drop the software keyboard so the reply is visible; keyboard users keep typing.
             if (window.matchMedia("(pointer: coarse)").matches) {
@@ -322,7 +323,6 @@ export function BotChatComposer({
                             className={`size-8! rounded-full text-background ${submitAction || outputState === "sending" ? "bg-foreground hover:bg-foreground/85" : "bg-destructive hover:bg-destructive/90"}`}
                             data-testid={dataTestId.sendMessage}
                             disabled={
-                                (submitAction && attachmentState.kind === "reading") ||
                                 outputState === "sending" ||
                                 outputState === "stopping" ||
                                 (outputState === "idle" && submitDisabled) ||

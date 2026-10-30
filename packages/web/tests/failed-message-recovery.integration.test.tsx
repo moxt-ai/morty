@@ -206,6 +206,34 @@ test("Given my first message is waiting for Session creation, When the creation 
     getByRole(document.body, "button", { name: "Retry message" });
 });
 
+test("Given Session creation failed for my first message, When the computer goes offline and returns, Then Retry message waits for it and then sends the message", {
+    timeout: 90_000,
+}, async () => {
+    const creation = heldSessionCreation();
+    const app = await createTestApp({ connectAgent: true, agent: creation.agent });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected a connected computer");
+    }
+    await sendFirstMessage(app, "Retry once the computer returns", creation.hold);
+    creation.reject();
+    await app.waitForView(() => getByRole(document.body, "button", { name: "Retry message" }));
+    await daemon.disconnect();
+    // The Worker checks the Runtime every 5 s and retries a failed check 5 s later, so one change can take two checks.
+    await app.waitForView(
+        () => expect(getByRole(document.body, "button", { name: "Retry message" })).toHaveProperty("disabled", true),
+        20_000,
+    );
+    await daemon.reconnect();
+    const retry = await app.waitForView(() => {
+        const button = getByRole(document.body, "button", { name: "Retry message" });
+        expect(button).toHaveProperty("disabled", false);
+        return button;
+    }, 20_000);
+    await app.user.click(retry);
+    await app.waitForView(() => expect(answered(app, "Retry once the computer returns")).toBe(true), 20_000);
+});
+
 test("Given Session creation failed for my first message and I wrote a next draft, When the page reloads, Then the first message returns to the composer ahead of the draft", {
     timeout: 60_000,
 }, async () => {
