@@ -425,6 +425,7 @@ export class PlatformProjectGateway {
                                 agentId: input.agentRef,
                                 directoryId: input.workspaceRef,
                                 additionalDirectoryIds,
+                                expectedConfigurationRevision: configuration.configurationRevision,
                             },
                             signal,
                         );
