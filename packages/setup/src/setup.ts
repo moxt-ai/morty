@@ -389,11 +389,6 @@ function serializeErrorCause(cause: unknown, seen = new WeakSet<object>()): Erro
     };
 }
 
-// A real upgrade (npm install plus the release switch) took about 100 seconds on
-// a typical machine; the rest of setup takes well under the remaining 120 seconds
-// of its 300 second budget.
-const RUNTIME_UPGRADE_BUDGET_MILLISECONDS = 180_000;
-
 // A Runtime comes online while it still republishes its harness catalog, so the catalog an existing Runtime shows
 // right after it starts may predate an install. A new pairing carries the catalog it was redeemed with instead.
 const HARNESS_CATALOG_GRACE_MILLISECONDS = 30_000;
@@ -881,11 +876,16 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         let child: ChildProcess | undefined;
         try {
             await safeLocalPath(logPath, false, true);
-            const executable = await findExecutableOnPath("mobius", process.env);
+            const executable = await findExecutableOnPath("npx", process.env);
             if (executable === null) {
                 fail("RUNTIME_NOT_INSTALLED");
             }
-            const launch = executableLaunch(executable.path, args);
+            const launch = executableLaunch(executable.path, [
+                "--yes",
+                "--prefer-online",
+                "@moxt-ai/mobius@latest",
+                ...args,
+            ]);
             child = spawn(launch.command, [...launch.arguments], {
                 cwd,
                 stdio: ["ignore", log.fd, log.fd],
@@ -1134,35 +1134,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             "--workspace",
             cwd,
         ];
-    }
-
-    /**
-     * A daemon keeps running the release that started it after the CLI updates,
-     * and a release whose own upgrade check fails stays on that release. The
-     * installed CLI owns the upgrade path, so once the Runtime is online, bring
-     * its daemon to the newest release before setup binds it. The upgrade only refines
-     * the Runtime: when it is unavailable, setup continues with the running
-     * daemon and reports why.
-     */
-    async function upgradeRuntime(context: Context, cwd: string): Promise<void> {
-        // The upgrade has its own budget so a slow download leaves setup time to reuse the running daemon.
-        const budget = deadline(RUNTIME_UPGRADE_BUDGET_MILLISECONDS);
-        try {
-            // The daemon is already running here, so the upgrade command never launches it and
-            // stopping the command's process tree cannot stop the daemon.
-            await runMobius(context, ["upgrade"], cwd, AbortSignal.any([signal, budget]), "process-tree");
-            emit({ status: "runtime_upgrade_checked" });
-        } catch (cause) {
-            signal.throwIfAborted();
-            emit({
-                status: "runtime_upgrade_skipped",
-                error: {
-                    code: budget.aborted ? "RUNTIME_UPGRADE_TIMEOUT" : "RUNTIME_UPGRADE_FAILED",
-                    cause: serializeErrorCause(cause),
-                },
-                message: "Continuing with the running Mobius daemon. Run mobius upgrade to update it.",
-            });
-        }
     }
 
     async function startRuntime(
@@ -1565,7 +1536,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function preflightRuntime(context: Context, cwd: string) {
-        progress("preflight", "Checking Node.js, npm and the installed Runtime before creating an identity.");
+        progress("preflight", "Checking Node.js, npx and the latest Runtime before creating an identity.");
         const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
         if (major < 22 || (major === 22 && minor < 19)) {
             throw new RuntimePreflightError(
@@ -1575,7 +1546,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         try {
             // This uses the same executable resolution as start/pair, including the Node
             // selected by its launcher. A package's engines field is not proof it starts.
-            await runMobius(context, ["--version"], cwd, AbortSignal.any([signal, deadline(30_000)]), "process-tree");
+            await runMobius(context, ["--version"], cwd, AbortSignal.any([signal, deadline(120_000)]), "process-tree");
             if (host.runtime === undefined) {
                 const npm = await findExecutableOnPath("npm", process.env);
                 if (npm === null) {
@@ -1623,7 +1594,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         context = prepared.context;
         context = await startRuntime(context, prepared.runtime, cwd, options.harness);
         await waitForRuntime(context, prepared.runtime, options.harness, cwd);
-        await upgradeRuntime(context, cwd);
         // A release switch reconnects the Runtime, and the manager finishes a switch even
         // when setup stopped waiting for the upgrade, so wait for it before binding.
         await waitForRuntime(context, prepared.runtime, options.harness, cwd);

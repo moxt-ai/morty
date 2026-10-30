@@ -836,19 +836,6 @@ async function setupMachine(
     return { code, events };
 }
 
-/** Setup's daemon upgrade budget. */
-const upgradeBudgetMilliseconds = 180_000;
-
-/** Lets a scenario end setup's upgrade budget early; every other deadline keeps its own time. */
-function upgradeBudget() {
-    const budget = new AbortController();
-    return {
-        deadline: (milliseconds: number) =>
-            milliseconds === upgradeBudgetMilliseconds ? budget.signal : AbortSignal.timeout(milliseconds),
-        elapse: () => budget.abort(new DOMException("The upgrade budget elapsed", "TimeoutError")),
-    };
-}
-
 async function withUpgradeMachine(
     upgrade: ConstructorParameters<typeof ControlledSetupRuntime>[2],
     scenario: (
@@ -887,7 +874,7 @@ async function withUpgradeMachine(
     }
 }
 
-test("Given a paired machine whose online daemon runs an outdated release, When the user reruns setup and an upgrade is available, Then setup reuses the Runtime on the newest release", {
+test("Given a paired machine whose online daemon runs an outdated release, When the user reruns setup, Then setup reuses the running Runtime without restarting it", {
     timeout: 90_000,
 }, async () => {
     await withUpgradeMachine(
@@ -902,7 +889,7 @@ test("Given a paired machine whose online daemon runs an outdated release, When 
             expect(rerun.code, JSON.stringify(rerun.events)).toBe(0);
             expect(rerun.events).toContainEqual(expect.objectContaining({ status: "runtime_already_online" }));
             expect(rerun.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-            expect(runtime.daemonRelease()).toBe("latest");
+            expect(runtime.daemonRelease()).toBe("outdated");
         },
         "outdated",
     );
@@ -1144,82 +1131,6 @@ test("Given setup bound the Machine but never received the reply, When the user 
         expect(rerun.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
         expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({ agent_ref: "settings-test" });
     });
-});
-
-test("Given a machine runs an outdated daemon release and no upgrade is reachable, When setup prepares the Runtime, Then setup completes on the running release and reports why", {
-    timeout: 60_000,
-}, async () => {
-    await withUpgradeMachine(
-        "unavailable",
-        async (runtime, paths) => {
-            const { code, events } = await setupMachine(runtime, paths);
-            expect(code, JSON.stringify(events)).toBe(0);
-            expect(events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-            expect(runtime.daemonRelease()).toBe("outdated");
-            expect(events).toContainEqual(
-                expect.objectContaining({
-                    status: "runtime_upgrade_skipped",
-                    error: expect.objectContaining({ code: "RUNTIME_UPGRADE_FAILED" }),
-                }),
-            );
-        },
-        "outdated",
-    );
-});
-
-test("Given a daemon upgrade stops responding, When its budget expires, Then setup completes on the running daemon and reports the timeout", {
-    timeout: 60_000,
-}, async () => {
-    await withUpgradeMachine(
-        "unresponsive",
-        async (runtime, paths) => {
-            const budget = upgradeBudget();
-            const setup = setupMachine(runtime, paths, budget.deadline);
-            await runtime.upgradeRequested;
-            budget.elapse();
-            const { code, events } = await setup;
-            expect(code, JSON.stringify(events)).toBe(0);
-            expect(events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-            expect(runtime.daemonRelease()).toBe("outdated");
-            expect(events).toContainEqual(
-                expect.objectContaining({
-                    status: "runtime_upgrade_skipped",
-                    error: expect.objectContaining({ code: "RUNTIME_UPGRADE_TIMEOUT" }),
-                }),
-            );
-        },
-        "outdated",
-    );
-});
-
-test("Given a daemon upgrade is still switching releases when its budget expires, When the manager finishes the switch, Then setup waits for the Runtime and completes on the newest release", {
-    timeout: 60_000,
-}, async () => {
-    await withUpgradeMachine(
-        "interrupted-switch",
-        async (runtime, paths) => {
-            const budget = upgradeBudget();
-            const setup = setupMachine(runtime, paths, budget.deadline);
-            await runtime.upgradeRequested;
-            budget.elapse();
-            const { code, events } = await setup;
-            expect(code, JSON.stringify(events)).toBe(0);
-            expect(events).toContainEqual(
-                expect.objectContaining({
-                    status: "runtime_upgrade_skipped",
-                    error: expect.objectContaining({ code: "RUNTIME_UPGRADE_TIMEOUT" }),
-                }),
-            );
-            const skipped = events.findIndex((event) => event["status"] === "runtime_upgrade_skipped");
-            const online = events.findIndex((event, index) => index > skipped && event["status"] === "runtime_online");
-            const bound = events.findIndex((event) => event["status"] === "binding_activated");
-            expect(online, JSON.stringify(events)).toBeGreaterThan(skipped);
-            expect(bound, JSON.stringify(events)).toBeGreaterThan(online);
-            expect(events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-            expect(runtime.daemonRelease()).toBe("latest");
-        },
-        "outdated",
-    );
 });
 
 test("Given two shared links and redeemed access, When the local owner revokes all access, Then previous links and credentials fail while local setup and another machine remain usable", async () => {
