@@ -175,31 +175,21 @@ async function localLaunch(command, args) {
 }
 
 async function run(command, args, options = {}) {
+    options.signal?.throwIfAborted();
     const launch = await localLaunch(command, args);
-    return new Promise((resolve, reject) => {
-        const child = spawn(launch.command, launch.arguments, {
-            cwd: options.cwd ?? REPO_ROOT,
-            env: { ...process.env, ...options.env },
-            stdio: ["ignore", "pipe", "pipe"],
-            windowsHide: true,
-            signal: options.signal,
-            timeout: options.timeout,
-            killSignal: "SIGKILL",
-        });
-        let stdout = "";
-        let stderr = "";
-        child.stdout.on("data", (chunk) => {
-            stdout += chunk;
-        });
-        child.stderr.on("data", (chunk) => {
-            stderr += chunk;
-        });
-        child.on("error", reject);
-        child.on("close", (code) =>
-            code === 0
-                ? resolve({ stdout, stderr })
-                : reject(new Error(`${command} ${args.join(" ")} exited ${code}\n${(stderr || stdout).slice(-2_000)}`)),
-        );
+    const { runBoundedProcess } = await import(
+        pathToFileURL(path.join(MOBIUS_ROOT, "packages/cli/src/engine/util/process/executable.ts")).href
+    );
+    // The production runner owns a platform-specific process tree, not just pnpm.
+    // It awaits graceful/forced tree cleanup before returning on every exit path.
+    return runBoundedProcess({
+        command: launch.command,
+        arguments: launch.arguments,
+        cwd: options.cwd ?? REPO_ROOT,
+        environment: { ...process.env, ...options.env },
+        signal: options.signal ?? new AbortController().signal,
+        timeoutMilliseconds: options.timeout ?? 300_000,
+        outputLimitBytes: 16 * 1024 * 1024,
     });
 }
 
