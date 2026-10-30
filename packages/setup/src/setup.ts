@@ -1594,9 +1594,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         context = prepared.context;
         context = await startRuntime(context, prepared.runtime, cwd, options.harness);
         await waitForRuntime(context, prepared.runtime, options.harness, cwd);
-        // A release switch reconnects the Runtime, and the manager finishes a switch even
-        // when setup stopped waiting for the upgrade, so wait for it before binding.
-        await waitForRuntime(context, prepared.runtime, options.harness, cwd);
         context = await bindAgent(context, prepared.runtime, options.harness);
         await finishSetup(context, prepared.runtime, options, identity.project);
     }
