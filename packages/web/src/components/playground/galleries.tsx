@@ -1,5 +1,5 @@
 import type { SessionElicitationField } from "@moxt-ai/mobius-sdk";
-import { Archive, CircleAlert, FileText, Inbox, MessageSquare, PackageOpen, Plus, Unplug, WifiOff } from "lucide-react";
+import { CircleAlert, FileText, Inbox, MessageSquare, PackageOpen, Plus, Unplug } from "lucide-react";
 import { Tooltip } from "radix-ui";
 import { type ComponentType, type ReactNode, useState } from "react";
 import { AttemptFailure } from "../chat/attempt-failure.tsx";
@@ -587,24 +587,32 @@ function ComposerNoticeGallery() {
                 </MortyAlert>
             </Specimen>
             <Specimen layout="stack" title="Failure: reconnect failed">
-                <MortyAlert tone="error">
-                    <ConnectionNotice feedback={failed} onRetryNow={noop} onReopen={noop} />
-                </MortyAlert>
+                <ConnectionNotice feedback={failed} onRetryNow={noop} onReopen={noop} />
             </Specimen>
             <Specimen layout="stack" title="Informational: connecting (compact chip on the chat surface)">
                 <div className="rounded-xl bg-card p-4">
                     <ConnectionNotice feedback={waiting} onRetryNow={noop} onReopen={noop} />
                 </div>
             </Specimen>
+            <Specimen layout="stack" title="Informational: computer offline with another online computer to switch to">
+                <div className="rounded-xl bg-card p-4">
+                    <ConnectionNotice
+                        feedback={waiting}
+                        footer={
+                            <a className={`inline-flex text-xs font-medium ${textLinkClassName}`} href="#computer">
+                                Switch to Online computer
+                            </a>
+                        }
+                        onRetryNow={noop}
+                        onReopen={noop}
+                    />
+                </div>
+            </Specimen>
             <Specimen layout="stack" title="Informational: reconnecting">
-                <MortyAlert icon={WifiOff} tone="neutral">
-                    <ConnectionNotice feedback={retrying} onRetryNow={noop} onReopen={noop} />
-                </MortyAlert>
+                <ConnectionNotice feedback={retrying} onRetryNow={noop} onReopen={noop} />
             </Specimen>
             <Specimen layout="stack" title="Informational: session closed">
-                <MortyAlert icon={Archive} tone="neutral">
-                    <ConnectionNotice feedback={closed} onRetryNow={noop} onReopen={noop} />
-                </MortyAlert>
+                <ConnectionNotice feedback={closed} onRetryNow={noop} onReopen={noop} />
             </Specimen>
         </div>
     );

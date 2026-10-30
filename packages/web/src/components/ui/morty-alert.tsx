@@ -55,18 +55,21 @@ export function MortyAlert({
     className,
     description,
     icon,
+    testId,
     tone = "error",
 }: {
     readonly children: ReactNode;
-    readonly className?: string;
+    readonly className?: string | undefined;
     readonly description?: ReactNode;
     readonly icon?: LucideIcon | undefined;
+    /** Identifies the notice as a whole for interaction tests, headline included. */
+    readonly testId?: string | undefined;
     readonly tone?: MortyAlertTone;
 }) {
     const selected = alertTones[tone];
     const Icon = icon ?? selected.icon;
     return (
-        <div className={cn(alertChrome, selected.surface, className)} role={selected.role}>
+        <div className={cn(alertChrome, selected.surface, className)} data-testid={testId} role={selected.role}>
             {Icon !== null && (
                 <Icon aria-hidden="true" className={cn("mt-1 size-3.5 shrink-0", selected.iconClassName)} />
             )}
