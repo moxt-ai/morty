@@ -143,7 +143,6 @@ export function BotChatComposer({
     const fileInput = useRef<HTMLInputElement>(null);
     const notice = useRef<HTMLDivElement>(null);
     const textarea = useRef<HTMLTextAreaElement>(null);
-    const form = useRef<HTMLFormElement>(null);
     const scrollViewport = useRef<HTMLDivElement>(null);
     const attachTextarea = useComposerFocus(textarea, focusScope);
     useAutoGrowingTextarea(textarea, draft, scrollViewport);
@@ -217,10 +216,10 @@ export function BotChatComposer({
             </>
         );
     useComposerNoticeLayout(notice, showComposerNotice);
-    useSoftwareKeyboardMarker(form);
+    const attachKeyboardMarker = useSoftwareKeyboardMarker();
 
     return (
-        <form className={chatSessionComposerClassName} onSubmit={submit} ref={form}>
+        <form className={chatSessionComposerClassName} onSubmit={submit} ref={attachKeyboardMarker}>
             {showComposerNotice && (
                 <div className="absolute inset-x-0 bottom-[calc(100%+8px)] z-10" ref={notice}>
                     {composerErrorMessage.length > 0 ? (

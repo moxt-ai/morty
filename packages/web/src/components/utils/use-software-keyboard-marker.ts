@@ -1,54 +1,63 @@
-import { type RefObject, useEffect } from "react";
+import { type RefCallback, useCallback } from "react";
 
 const markerAttribute = "data-software-keyboard";
-/** A visible height this much shorter than before the textarea took focus means a software keyboard is up. */
+/** A visible height this much shorter than the tallest one seen at this width means a software keyboard is up. */
 const keyboardHeightThresholdPx = 120;
 
+type ClosedViewport = { readonly width: number; readonly height: number };
+
 /**
- * Marks the composer form with `data-software-keyboard="open"` while a software keyboard covers the bottom edge.
+ * The tallest visible height seen per window and width. It is shared across composer mounts and only grows, so
+ * another field's keyboard, a remount, or a blur during the closing animation cannot lower it. A width change
+ * (rotation) starts over.
+ */
+const closedViewports = new WeakMap<Window, ClosedViewport>();
+
+/**
+ * Attaches to the composer form and marks it `data-software-keyboard="open"` while a software keyboard covers
+ * the bottom edge.
  *
  * iOS keeps reporting the full safe-area inset while the keyboard covers the home indicator, so the composer's
  * safe-area margin would float it above the keyboard. Neither a coarse pointer nor focus proves the keyboard is
- * visible, because a Bluetooth keyboard has both, so this compares the visible height with the height seen while
- * no textarea in the form had focus. A host that never shrinks its viewport leaves the marker off and the
- * safe-area margin in place. The marker is a DOM attribute, so the layout flips without re-rendering the composer.
+ * visible, because a Bluetooth keyboard has both, so this compares the visible height with the tallest height seen
+ * before. A host that never shrinks its viewport leaves the marker off and the safe-area margin in place. The marker
+ * is a DOM attribute, so the layout flips without re-rendering the composer. Listeners are bound and released with
+ * the form element.
  */
-export function useSoftwareKeyboardMarker(form: RefObject<HTMLFormElement | null>): void {
-    useEffect(() => {
-        const element = form.current;
-        if (element === null) {
+export function useSoftwareKeyboardMarker(): RefCallback<HTMLFormElement> {
+    return useCallback((form) => {
+        const view = form?.ownerDocument.defaultView;
+        if (form === null || view === null || view === undefined) {
             return;
         }
-        const visible = window.visualViewport;
-        const height = () => visible?.height ?? window.innerHeight;
-        let unfocusedHeight = height();
-        const sync = (focused: boolean) => {
-            if (!focused) {
-                unfocusedHeight = height();
-                element.removeAttribute(markerAttribute);
-            } else if (height() < unfocusedHeight - keyboardHeightThresholdPx) {
-                element.setAttribute(markerAttribute, "open");
+        const visible = view.visualViewport;
+        const sync = () => {
+            const width = view.innerWidth;
+            const height = visible?.height ?? view.innerHeight;
+            const known = closedViewports.get(view);
+            const closed =
+                known?.width === width ? { width, height: Math.max(known.height, height) } : { width, height };
+            closedViewports.set(view, closed);
+            const active = form.ownerDocument.activeElement;
+            const typing = active instanceof HTMLTextAreaElement && form.contains(active);
+            if (typing && height < closed.height - keyboardHeightThresholdPx) {
+                form.setAttribute(markerAttribute, "open");
             } else {
-                element.removeAttribute(markerAttribute);
+                form.removeAttribute(markerAttribute);
             }
         };
-        const textareaFocused = () => {
-            const active = element.ownerDocument.activeElement;
-            return active instanceof HTMLTextAreaElement && element.contains(active);
-        };
-        const onFocusIn = (event: FocusEvent) => sync(event.target instanceof HTMLTextAreaElement);
-        const onFocusOut = () => sync(false);
-        const onResize = () => sync(textareaFocused());
-        element.addEventListener("focusin", onFocusIn);
-        element.addEventListener("focusout", onFocusOut);
-        window.addEventListener("resize", onResize);
-        visible?.addEventListener("resize", onResize);
+        const onFocusOut = () => form.removeAttribute(markerAttribute);
+        form.addEventListener("focusin", sync);
+        form.addEventListener("focusout", onFocusOut);
+        view.addEventListener("resize", sync);
+        visible?.addEventListener("resize", sync);
+        sync();
         return () => {
-            element.removeEventListener("focusin", onFocusIn);
-            element.removeEventListener("focusout", onFocusOut);
-            window.removeEventListener("resize", onResize);
-            visible?.removeEventListener("resize", onResize);
-            element.removeAttribute(markerAttribute);
+            form.removeEventListener("focusin", sync);
+            form.removeEventListener("focusout", onFocusOut);
+            view.removeEventListener("resize", sync);
+            visible?.removeEventListener("resize", sync);
+            form.removeAttribute(markerAttribute);
         };
-    }, [form]);
+    }, []);
 }
