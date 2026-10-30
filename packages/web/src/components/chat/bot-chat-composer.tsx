@@ -150,7 +150,12 @@ export function BotChatComposer({
         event.preventDefault();
         if (!submitDisabled && attachmentState.kind !== "reading") {
             onSubmit();
-            textarea.current?.focus({ preventScroll: true });
+            // Touch devices drop the software keyboard so the reply is visible; keyboard users keep typing.
+            if (window.matchMedia("(pointer: coarse)").matches) {
+                textarea.current?.blur();
+            } else {
+                textarea.current?.focus({ preventScroll: true });
+            }
         }
     };
 
