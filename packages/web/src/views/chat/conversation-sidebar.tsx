@@ -50,6 +50,7 @@ import { type ConversationGroup, groupConversationsByUpdatedAt } from "../../vie
 import {
     type ConversationListStatus,
     conversationListStatus,
+    hasUnreadConversation,
 } from "../../view-models/chat/conversation-status-store.ts";
 import { pendingExecutionContext, sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { nativeSessionAgentTabs } from "../../view-models/chat/native-session-agents.ts";
@@ -440,6 +441,7 @@ export function ConversationSidebar({
         archiveSession: workspace.directory.getState().archiveSession,
         operationsSignal: workspace.operationsSignal,
     };
+    const unreadReplies = hasUnreadConversation(sessions, sessionStatuses, sessionListProps.openPane);
     return (
         <DesktopChatLayout>
             {(desktop) => (
@@ -513,8 +515,15 @@ export function ConversationSidebar({
                                                 )}
                                                 <Button
                                                     variant="ghost"
-                                                    className={cn(mobileHeaderIconButtonClassName, "sm:hidden")}
-                                                    aria-label="Recent sessions"
+                                                    className={cn(
+                                                        mobileHeaderIconButtonClassName,
+                                                        "relative sm:hidden",
+                                                    )}
+                                                    aria-label={
+                                                        unreadReplies
+                                                            ? "Recent sessions, unread replies"
+                                                            : "Recent sessions"
+                                                    }
                                                     aria-expanded={mobileSessionsOpen}
                                                     aria-controls="chat-conversations-mobile-sheet"
                                                     onClick={(event) => {
@@ -528,6 +537,13 @@ export function ConversationSidebar({
                                                     }}
                                                 >
                                                     <List aria-hidden="true" className="size-5" />
+                                                    {unreadReplies ? (
+                                                        <span
+                                                            aria-hidden="true"
+                                                            className="absolute top-1.5 right-1.5 size-2.5 rounded-full bg-primary ring-2 ring-white"
+                                                            data-testid={dataTestId.mobileRecentSessionsUnread}
+                                                        />
+                                                    ) : null}
                                                 </Button>
                                             </div>
                                             <div
