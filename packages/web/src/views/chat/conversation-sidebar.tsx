@@ -1,4 +1,5 @@
 import {
+    Check,
     Laptop,
     List,
     LoaderCircle,
@@ -19,6 +20,12 @@ import { MortyLogoMark } from "../../components/brand/morty-logo.tsx";
 import { mobileHeaderIconButtonClassName } from "../../components/chat/chat-header-control.ts";
 import { mortyThinScrollbarClassName } from "../../components/chat/chat-session-layout.ts";
 import { ComputerOfflineIcon } from "../../components/chat/computer-offline-icon.tsx";
+import {
+    mobileSheetHeaderClassName,
+    mobileSheetSessionRowClassName,
+    mobileSheetSurfaceClassName,
+} from "../../components/chat/mobile-sheet.ts";
+import { MobileSheetTitle } from "../../components/chat/mobile-sheet-title.tsx";
 import { PanelPresence } from "../../components/chat/panel-presence.tsx";
 import { panelMotionClassName } from "../../components/chat/sidebar-panel-presence.ts";
 import { SidebarUserMenu } from "../../components/chat/sidebar-user-menu.tsx";
@@ -129,6 +136,7 @@ function ManagedSessionDirectoryList({
     sessions,
     conversationGroups,
     activeId,
+    showSelectedIndicator = false,
     connectionStatus,
     sessionStatuses,
     openPane,
@@ -142,6 +150,8 @@ function ManagedSessionDirectoryList({
     readonly sessions: readonly ManagedChatSession[] | null;
     readonly conversationGroups: readonly ConversationGroup[] | null;
     readonly activeId: string;
+    /** The phone sheet has no persistent selection elsewhere, so it marks the open Session with a check. */
+    readonly showSelectedIndicator?: boolean;
     readonly connectionStatus: BotConnectionStatus;
     readonly sessionStatuses: ReadonlyMap<string, ConversationListStatus>;
     /** The open Session's pane, whose turn and delivery decide that Session's status. */
@@ -195,8 +205,8 @@ function ManagedSessionDirectoryList({
                 <p className="py-3 text-xs text-muted-foreground sm:py-2">Your Chat sessions will appear here.</p>
             )}
             {conversationGroups?.map((group) => (
-                <section className="mb-3 min-w-0 w-full space-y-0 last:mb-0" key={group.label}>
-                    <h3 className="sticky top-0 z-[1] -mx-2 mb-0 bg-card px-[22px] pb-1 pt-1 text-13 font-normal text-morty-text-3 sm:-mx-2.5 sm:bg-sidebar sm:px-6 sm:text-11">
+                <section className="min-w-0 w-full pb-3 last:pb-0" key={group.label}>
+                    <h3 className="sticky top-0 z-[11] -mx-2 mb-0 bg-card px-6 pb-1 pt-1 text-13 font-normal text-morty-text-3 max-sm:[font-size:14px] sm:-mx-2.5 sm:bg-sidebar sm:px-6 sm:text-11">
                         {group.label}
                     </h3>
                     {group.sessions.map((session) => {
@@ -209,19 +219,22 @@ function ManagedSessionDirectoryList({
                                 aria-current={activeId === session.id ? "page" : undefined}
                                 disabled={connectionStatus.kind !== "connected"}
                                 onClick={() => onOpen(session)}
-                                className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-4 py-2 text-left text-15 font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 aria-[current=page]:hover:text-foreground aria-[current=page]:disabled:hover:text-foreground motion-reduce:transition-none sm:h-9 sm:px-3.5 sm:py-0 sm:text-13"
+                                className={cn(
+                                    "mb-0 grid grid-cols-[minmax(0,1fr)_auto] disabled:opacity-50 aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 aria-[current=page]:hover:text-foreground aria-[current=page]:disabled:hover:text-foreground",
+                                    mobileSheetSessionRowClassName,
+                                )}
                             >
                                 <span className="min-w-0 truncate">{session.title}</span>
                                 {status.kind === "working" ? (
                                     <span
                                         aria-label="Session working"
-                                        className="inline-flex -mr-0.5 text-copy-secondary"
+                                        className="inline-flex -mr-[3px] size-4 items-center justify-center text-copy-secondary"
                                         data-testid={dataTestId.sessionStatus}
                                         role="status"
                                     >
                                         <LoaderCircle
                                             aria-hidden="true"
-                                            className="size-3 animate-spin motion-reduce:animate-none"
+                                            className="size-3.5 animate-spin motion-reduce:animate-none"
                                         />
                                     </span>
                                 ) : status.kind === "failed" ? (
@@ -241,6 +254,13 @@ function ManagedSessionDirectoryList({
                                         role="status"
                                     >
                                         <span className="size-2 rounded-full bg-primary" />
+                                    </span>
+                                ) : showSelectedIndicator && activeId === session.id ? (
+                                    <span
+                                        aria-hidden="true"
+                                        className="inline-flex -mr-[3px] size-4 items-center justify-center"
+                                    >
+                                        <Check className="size-4" />
                                     </span>
                                 ) : null}
                             </button>
@@ -1003,19 +1023,18 @@ export function ConversationSidebar({
                                                       aria-modal="true"
                                                       aria-labelledby="mobile-recent-sessions-title"
                                                       className={cn(
-                                                          "pointer-events-auto fixed inset-x-0 bottom-0 z-[121] flex h-[80dvh] max-h-[80dvh] flex-col rounded-t-[24px] bg-card shadow-[0_-8px_32px_rgba(17,24,20,0.12)] sm:hidden",
+                                                          "pointer-events-auto fixed inset-x-0 bottom-0 z-[121] flex h-[80dvh] max-h-[80dvh] flex-col rounded-t-[24px] shadow-[0_-8px_32px_rgba(17,24,20,0.12)] sm:hidden",
+                                                          mobileSheetSurfaceClassName,
                                                           sessionsMotion.animate && panelMotionClassName,
                                                           sessionsMotion.shown ? "translate-y-0" : "translate-y-full",
                                                       )}
                                                       onTransitionEnd={sessionsMotion.onTransitionEnd}
                                                   >
-                                                      <header className="flex shrink-0 items-center justify-between gap-2 pt-4 pr-3 pb-2 pl-5">
-                                                          <h2
-                                                              id="mobile-recent-sessions-title"
-                                                              className="font-inter text-16 font-semibold tracking-normal text-morty-text-2"
-                                                          >
+                                                      {/* Above the sticky group labels (z-11) and scroll edge fades (z-10) so the header buttons' shadows are not clipped by them. */}
+                                                      <header className={mobileSheetHeaderClassName}>
+                                                          <MobileSheetTitle id="mobile-recent-sessions-title">
                                                               Recent sessions
-                                                          </h2>
+                                                          </MobileSheetTitle>
                                                           <div className="flex shrink-0 items-center gap-2">
                                                               <Button
                                                                   variant="ghost"
@@ -1059,14 +1078,17 @@ export function ConversationSidebar({
                                                           fadeClassName="right-2"
                                                           fadeFromClassName="from-card"
                                                           fadeToClassName="to-card/0"
-                                                          topFadeClassName="top-0 h-8"
+                                                          topFadeClassName="top-[30px] h-6"
                                                           frameClassName="flex min-h-0 flex-1 flex-col"
                                                           className={cn(
                                                               "min-h-0 flex-1 space-y-0 overflow-y-auto overscroll-contain px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]",
                                                               mortyThinScrollbarClassName,
                                                           )}
                                                       >
-                                                          <ManagedSessionDirectoryList {...sessionListProps} />
+                                                          <ManagedSessionDirectoryList
+                                                              {...sessionListProps}
+                                                              showSelectedIndicator
+                                                          />
                                                       </ScrollEdgeFade>
                                                   </div>
                                               </>,

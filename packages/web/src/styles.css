@@ -273,6 +273,10 @@
     body {
         font-family: var(--font-sans);
         -webkit-font-smoothing: antialiased;
+        /* The canvas color paints the iOS safe-area strip behind the home
+           indicator; keep it equal to the app surfaces so the strip never
+           reads as a brighter white bar. */
+        background-color: var(--background);
     }
 
     button,
