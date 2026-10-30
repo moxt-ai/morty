@@ -116,8 +116,8 @@ test("Given a rejected submission after an earlier failure, When another viewer'
         expect(other.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
         expect(entryStatus(other, "Established session")).toBe("Session failed");
     });
+    // Only the Chat bridge dropped: the pane's own Session stream may already show the failure.
     expect(getByRole(form, "button", { name: "Send message" })).toHaveProperty("disabled", true);
-    expect(entryStatus(app, "Established session")).toBeNull();
     await act(async () => clock.advanceBy(1_000));
     await app.waitForView(() => {
         expect(getByRole(document.body, "button", { name: "Retry message" })).toHaveProperty("disabled", false);

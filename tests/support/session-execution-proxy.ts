@@ -5,6 +5,7 @@ import { WebSocket, WebSocketServer } from "ws";
 export async function createSessionExecutionProxy(upstream: string) {
     let hold: ((release: () => void) => void) | null = null;
     let holdSteer: ((release: () => Promise<unknown>) => void) | null = null;
+    let holdSubmission: ((release: () => void) => void) | null = null;
     let heldEvents: (() => void)[] | null = null;
     const server = createServer((incoming, outgoing) => {
         const forwarded = request(
@@ -63,6 +64,23 @@ export async function createSessionExecutionProxy(upstream: string) {
                     send();
                     return await response;
                 });
+                return;
+            }
+            if (
+                holdSubmission !== null &&
+                typeof frame === "object" &&
+                frame !== null &&
+                "kind" in frame &&
+                frame.kind === "http.request" &&
+                "method" in frame &&
+                frame.method === "POST" &&
+                "path" in frame &&
+                typeof frame.path === "string" &&
+                new URL(frame.path, upstream).pathname.endsWith("/turns")
+            ) {
+                const held = holdSubmission;
+                holdSubmission = null;
+                held(send);
                 return;
             }
             if (
@@ -136,6 +154,11 @@ export async function createSessionExecutionProxy(upstream: string) {
         holdNextExecution: () =>
             new Promise<() => void>((resolve) => {
                 hold = resolve;
+            }),
+        /** Holds the next turn submission before the Runtime receives it, until the returned release. */
+        holdNextSubmission: () =>
+            new Promise<() => void>((resolve) => {
+                holdSubmission = resolve;
             }),
         holdNextSteer: () =>
             new Promise<() => Promise<unknown>>((resolve) => {

@@ -39,10 +39,14 @@ import {
     conversationDirectorySessions,
 } from "../../view-models/chat/conversation-directory-store.ts";
 import { type ConversationGroup, groupConversationsByUpdatedAt } from "../../view-models/chat/conversation-groups.ts";
-import type { ConversationListStatus } from "../../view-models/chat/conversation-status-store.ts";
+import {
+    type ConversationListStatus,
+    conversationListStatus,
+} from "../../view-models/chat/conversation-status-store.ts";
 import { pendingExecutionContext, sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { nativeSessionAgentTabs } from "../../view-models/chat/native-session-agents.ts";
 import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
+import type { SessionPaneStore } from "../../view-models/chat/session-pane-store.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import {
     ComputerSwitcher,
@@ -126,6 +130,7 @@ function ManagedSessionDirectoryList({
     activeId,
     connectionStatus,
     sessionStatuses,
+    openPane,
     onConnectAgent,
     onOpen,
     archiveSession,
@@ -138,6 +143,11 @@ function ManagedSessionDirectoryList({
     readonly activeId: string;
     readonly connectionStatus: BotConnectionStatus;
     readonly sessionStatuses: ReadonlyMap<string, ConversationListStatus>;
+    /** The open Session's pane, whose own turn decides that Session's status. */
+    readonly openPane: {
+        readonly sessionId: string;
+        readonly pane: Pick<SessionPaneStore, "connection" | "turn">;
+    } | null;
     readonly onConnectAgent: (() => void) | null;
     readonly onOpen: (session: ManagedChatSession) => void;
     readonly archiveSession: ConversationDirectoryStore["archiveSession"];
@@ -192,6 +202,7 @@ function ManagedSessionDirectoryList({
                         {group.label}
                     </h3>
                     {group.sessions.map((session) => {
+                        const status = conversationListStatus(session, sessionStatuses, openPane);
                         const sessionButton = (
                             <button
                                 data-testid={dataTestId.managedConversation}
@@ -203,7 +214,7 @@ function ManagedSessionDirectoryList({
                                 className="box-border mb-0 grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-[20px] px-4 py-2 text-left text-15 font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 hover:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-copy-secondary aria-[current=page]:bg-morty-fill-opacity-3 aria-[current=page]:text-foreground aria-[current=page]:hover:bg-morty-fill-opacity-4 aria-[current=page]:hover:text-foreground aria-[current=page]:disabled:hover:text-foreground motion-reduce:transition-none sm:h-9 sm:px-3.5 sm:py-0 sm:text-13"
                             >
                                 <span className="min-w-0 truncate">{session.title}</span>
-                                {(sessionStatuses.get(session.id) ?? session.status).kind === "working" ? (
+                                {status.kind === "working" ? (
                                     <span
                                         aria-label="Session working"
                                         className="inline-flex -mr-0.5 text-copy-secondary"
@@ -215,7 +226,7 @@ function ManagedSessionDirectoryList({
                                             className="size-3 animate-spin motion-reduce:animate-none"
                                         />
                                     </span>
-                                ) : sessionStatuses.get(session.id)?.kind === "failed" ? (
+                                ) : status.kind === "failed" ? (
                                     <span
                                         aria-label="Session failed"
                                         className="text-xs text-destructive"
@@ -224,7 +235,7 @@ function ManagedSessionDirectoryList({
                                     >
                                         Failed
                                     </span>
-                                ) : sessionStatuses.get(session.id)?.kind === "unread" ? (
+                                ) : status.kind === "unread" ? (
                                     <span
                                         aria-label="Unread response"
                                         className="inline-flex -mr-[3px] size-4 items-center justify-center"
@@ -400,6 +411,10 @@ export function ConversationSidebar({
         activeId,
         connectionStatus,
         sessionStatuses,
+        openPane:
+            home.selection.kind === "ready" && pane !== null && "turn" in paneSource
+                ? { sessionId: pane.session.result.ready.sessionId, pane: paneSource }
+                : null,
         onConnectAgent,
         onOpen: openSession,
         archiveSession: workspace.directory.getState().archiveSession,

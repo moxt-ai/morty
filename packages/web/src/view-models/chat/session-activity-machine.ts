@@ -13,19 +13,3 @@ export function workingCommandId(state: SessionActivityState): string | null {
             return state.commandId;
     }
 }
-
-export function sameSessionActivity(left: SessionActivityState, right: SessionActivityState): boolean {
-    switch (left.kind) {
-        case "idle":
-            return right.kind === "idle";
-        case "working":
-            return right.kind === "working" && right.commandId === left.commandId && right.startedAt === left.startedAt;
-        case "failed":
-            return (
-                right.kind === "failed" &&
-                right.commandId === left.commandId &&
-                right.code === left.code &&
-                right.message === left.message
-            );
-    }
-}

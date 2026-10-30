@@ -1,7 +1,8 @@
-import { expect, test } from "vitest";
+import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
+import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
 
 async function readyComposer(app: TestApp): Promise<HTMLTextAreaElement> {
     const composer = await app.queryElementByTestId(
@@ -44,4 +45,36 @@ test("Given a conversation whose turn failed, When the directory reloads with th
         expect(directoryEntry(app, "Start another conversation")).toBeDefined();
         expect(entryStatus(app, failedPrompt)).toBe("Session failed");
     });
+});
+
+test("Given an open conversation, When I send a message the Runtime has not received yet, Then the sidebar marks it working with the pane and clears the mark when the reply completes", {
+    timeout: 30_000,
+}, async () => {
+    const firstPrompt = "Start a conversation to follow up";
+    const environment = await createChatWorkerEnvironment(false, true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true });
+    const { executionNetwork } = app;
+    if (executionNetwork === null) {
+        throw new Error("Expected the execution transport proxy");
+    }
+    await sendPrompt(app, await readyComposer(app), firstPrompt);
+    await app.waitForView(() => {
+        expect(document.body.textContent).toContain(`Codex turn 1: ${firstPrompt}`);
+        expect(directoryEntry(app, firstPrompt)).toBeDefined();
+        expect(entryStatus(app, firstPrompt)).toBeNull();
+    });
+
+    const submission = executionNetwork.holdNextSubmission();
+    await sendPrompt(app, await readyComposer(app), "Follow up while the Runtime waits");
+    const release = await submission;
+    // The Runtime has not received the message, so only the open pane knows the conversation works.
+    await app.waitForView(() => expect(entryStatus(app, firstPrompt)).toBe("Session working"));
+
+    release();
+    await app.waitForView(() => {
+        expect(document.body.textContent).toContain("Codex turn 2: Follow up while the Runtime waits");
+        expect(entryStatus(app, firstPrompt)).toBeNull();
+    });
+    await app.close();
 });

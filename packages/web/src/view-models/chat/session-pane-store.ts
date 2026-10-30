@@ -31,7 +31,7 @@ import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
 import type { SelectedMobiusSession } from "./open-session.ts";
 import { uploadPromptAttachment, uploadPromptAttachments } from "./prompt-attachment-upload.ts";
 import { startRecoveryNotice } from "./recovery-notice.ts";
-import { type SessionActivityState, sameSessionActivity, workingCommandId } from "./session-activity-machine.ts";
+import { type SessionActivityState, workingCommandId } from "./session-activity-machine.ts";
 import {
     connectionFailure,
     disconnectedConnection,
@@ -42,7 +42,6 @@ import {
 } from "./session-connection.ts";
 import {
     acceptedTurn,
-    awaitsService,
     type CurrentTurn,
     type CurrentTurnEvent,
     idleTurn,
@@ -53,6 +52,7 @@ import {
 } from "./session-current-turn.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import { prependToDraft, type SessionDeliveryStore } from "./session-delivery-store.ts";
+import { observeSessionExecution, type QueuedCommand, type SessionExecutionObservation } from "./session-execution.ts";
 import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
 import { type SessionLifecycleFact, sessionInteractionRecovery, sessionLifecycleFact } from "./session-lifecycle.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
@@ -69,7 +69,6 @@ import {
     type SessionProjection,
     type SessionProjectionEffect,
     type SessionProjectionInput,
-    sessionProjectionExecutionOwner,
     sessionProjectionMessages,
     sessionProjectionPagination,
     transitionSessionProjection,
@@ -133,6 +132,8 @@ export interface SessionPaneStore {
      * on are all derived from it.
      */
     readonly turn: CurrentTurn;
+    /** The messages the Runtime holds queued, as last observed. The queue panel derives its list from them. */
+    readonly queued: readonly QueuedCommand[];
     readonly connect: (signal: AbortSignal) => Promise<void>;
     readonly recover: (signal: AbortSignal) => Promise<void>;
     readonly retryNow: () => void;
@@ -426,8 +427,11 @@ export function createSessionPaneModel(options: {
     readonly initialMessage?: QueuedDraftMessage | undefined;
     /** Transfers the queued first message to delivery. */
     readonly onInitialMessageDequeued?: ((commandId: string) => void) | undefined;
-    /** Reports session activity transitions, such as a running turn, to the owner. */
-    readonly onStatusChange?: ((status: SessionActivityState) => void) | undefined;
+    /**
+     * Hands the owner this pane's last account of the Session's work when the pane stops. While it runs, the owner
+     * derives the Session's status from the pane's turn instead.
+     */
+    readonly onReleased?: ((activity: SessionActivityState) => void) | undefined;
     readonly titles: SessionTitlesStore;
 }) {
     const { session, botId, requests, clock, composerAttachments, delivery, titles } = options;
@@ -543,6 +547,7 @@ export function createSessionPaneModel(options: {
         runningTurn: () => acceptedTurn(store.getState().turn),
     });
     const messageQueue = createSessionMessageQueueStore({
+        queued: () => store.getState().queued,
         port: {
             cancel: noticingClosure(async (turnId, signal) => {
                 if (client === null) {
@@ -641,10 +646,7 @@ export function createSessionPaneModel(options: {
         elicitation: respondToElicitation,
     });
 
-    // Activity transitions are reported to the owner through this latch at
-    // the explicit sites that change activity; connection waiters are woken
-    // where the connection settles. No wrapped set, no subscriptions.
-    let reportedStatus: SessionActivityState | null = null;
+    // Connection waiters are woken where the connection settles. No wrapped set, no subscriptions.
     const connectionWaiters = new Set<() => void>();
     const store = createStore<SessionPaneStore>()((set, get) => {
         let connectionChangedAt = clock.now();
@@ -688,16 +690,14 @@ export function createSessionPaneModel(options: {
             }
             settleConnectionWaiters();
         };
-        // Reports an activity transition to the owner through the latch; the
-        // explicit sites that change activity call this right after their set.
-        const announceActivity = (): void => {
-            const activity = turnActivity(get().turn);
-            if (reportedStatus === null || !sameSessionActivity(activity, reportedStatus)) {
-                reportedStatus = activity;
-                options.onStatusChange?.(activity);
+        /** The stop control follows the running turn: a different one retires what the user asked of the previous. */
+        const turnMoved = (previous: CurrentTurn, turn: CurrentTurn): void => {
+            const running = acceptedTurn(turn);
+            if (running?.commandId !== acceptedTurn(previous)?.commandId) {
+                tasks.getState().turnChanged(running?.commandId ?? null);
             }
         };
-        /** Moves the current turn. Callers announce the activity derived from it once their other updates are in. */
+        /** Moves the current turn by something this pane did. What the Runtime reports goes through `observeExecution`. */
         const updateTurn = (event: CurrentTurnEvent): void => {
             const previous = get().turn;
             const turn = transitionCurrentTurn(previous, event);
@@ -705,15 +705,12 @@ export function createSessionPaneModel(options: {
                 return;
             }
             set({ turn });
-            const running = acceptedTurn(turn);
-            if (running?.commandId !== acceptedTurn(previous)?.commandId) {
-                tasks.getState().turnChanged(running?.commandId ?? null);
-            }
+            turnMoved(previous, turn);
         };
         let historyLoadController: AbortController | null = null;
-        const commitProjection = (input: SessionProjectionInput): readonly SessionProjectionEffect[] => {
-            const result = transitionSessionProjection(projection, input);
-            projection = result.state;
+        /** Adopts a new projection; its timeline is what the caller publishes. */
+        const adoptProjection = (next: SessionProjection) => {
+            projection = next;
             const timeline = projectedTimeline(projection);
             delivery
                 .getState()
@@ -724,8 +721,65 @@ export function createSessionPaneModel(options: {
                             : [],
                     ),
                 );
+            return timeline;
+        };
+        /**
+         * Applies an execution fact the Runtime reported to everything it moves at once: the timeline, the current turn,
+         * the queue, the deliveries it confirms and the pending interactions.
+         */
+        const observeExecution = (observation: SessionExecutionObservation): void => {
+            const previous = get();
+            const change = observeSessionExecution(
+                { projection, turn: previous.turn, queued: previous.queued },
+                observation,
+                (commandId) => turns.startedAt(commandId, Date.now()),
+            );
+            const { execution } = change;
             set({
-                ...timeline,
+                ...(execution.projection === projection ? {} : adoptProjection(execution.projection)),
+                queued: execution.queued,
+                turn: execution.turn,
+            });
+            turnMoved(previous.turn, execution.turn);
+            if (change.delivered.length > 0) {
+                delivery.getState().reconcile(change.delivered);
+            }
+            if (change.leftQueue.length > 0) {
+                messageQueue.getState().left(change.leftQueue);
+            }
+            switch (change.interactions.kind) {
+                case "kept":
+                    return;
+                case "recovered":
+                    interactions.getState().recover(change.interactions.recovery);
+                    return;
+                case "cleared":
+                    interactions.getState().restore([]);
+                    return;
+                default:
+                    change.interactions satisfies never;
+            }
+        };
+        /** Reads the Runtime's execution snapshot and observes it. */
+        const readExecution = async (
+            connected: MobiusClient,
+            turnAtRead: CurrentTurn,
+            signal: AbortSignal,
+            deliveryCommandId: string | null = null,
+        ): Promise<void> => {
+            const snapshot = await connected.sessions.readSessionExecution(
+                sessionId,
+                sessionIdentity,
+                signal,
+                deliveryCommandId ?? undefined,
+            );
+            signal.throwIfAborted();
+            observeExecution({ kind: "snapshot", snapshot, turnAtRead, deliveryCommandId });
+        };
+        const commitProjection = (input: SessionProjectionInput): readonly SessionProjectionEffect[] => {
+            const result = transitionSessionProjection(projection, input);
+            set({
+                ...adoptProjection(result.state),
                 // Lifecycle bookkeeping does not replace the preview; wait for Agent output.
                 pendingInitialMessage:
                     input.kind === "live-event" && input.event.type === "acp" ? null : get().pendingInitialMessage,
@@ -816,15 +870,6 @@ export function createSessionPaneModel(options: {
                 }
             }
         };
-        // A closed Session runs nothing. Settles the turn, queue and interactions it was holding, the way a
-        // reconnect finds them when the Session reports no running turn.
-        const settleClosedExecution = (): void => {
-            commitProjection({ kind: "execution-idle" });
-            messageQueue.getState().replace([]);
-            updateTurn({ kind: "nothing-running" });
-            interactions.getState().restore([]);
-            announceActivity();
-        };
         // Holds the connect loop on a closed Session until the user reopens it, then lets the loop connect again.
         const untilReopened = async (reason: string | null, signal: AbortSignal): Promise<void> => {
             await new Promise<void>((resolve) => {
@@ -839,7 +884,8 @@ export function createSessionPaneModel(options: {
                 };
                 resumeAfterReopen = finish;
                 signal.addEventListener("abort", finish, { once: true });
-                settleClosedExecution();
+                // A closed Session runs nothing: the turn, queue and interactions it was holding settle.
+                observeExecution({ kind: "closed" });
                 setAndSettle({ connection: { kind: "closed", reason, reopen: { kind: "available" } } });
             });
         };
@@ -931,7 +977,6 @@ export function createSessionPaneModel(options: {
                 }
                 updateTurn({ kind: "submission-ended", commandId, failure: null });
                 set({ pendingInitialMessage: null });
-                announceActivity();
             } catch (cause) {
                 signal.throwIfAborted();
                 const failureMessage = formatError(cause, "The agent could not complete the message.");
@@ -948,7 +993,6 @@ export function createSessionPaneModel(options: {
                 });
                 // The retained submission owns its failure; the composer keeps the next draft.
                 set({ pendingInitialMessage: null });
-                announceActivity();
             }
         };
         return {
@@ -962,6 +1006,7 @@ export function createSessionPaneModel(options: {
             followRevision: 0,
             operation: { kind: "idle" },
             turn: initialTurn,
+            queued: [],
             loadOlderMessages: async (signal) => {
                 const pagination = sessionProjectionPagination(projection);
                 if (loadingOlderHistory || pagination === null || client === null) {
@@ -1013,7 +1058,6 @@ export function createSessionPaneModel(options: {
                             return;
                         }
                         updateTurn({ kind: "sent-at-known", commandId: stored.commandId, sentAt: stored.sentAt });
-                        announceActivity();
                     });
                 };
                 let consecutiveFailures = 0;
@@ -1058,71 +1102,30 @@ export function createSessionPaneModel(options: {
                             case "elicitation-resolved":
                                 await interactions.getState().apply(fact, event, signal);
                                 return;
-                            case "queue-changed": {
-                                const execution = await connected.sessions.readSessionExecution(
-                                    sessionId,
-                                    sessionIdentity,
-                                    signal,
-                                );
-                                signal.throwIfAborted();
-                                commitProjection({
-                                    kind: "queue-observed",
-                                    commandIds: execution.queued.map((item) => item.commandId),
-                                });
-                                messageQueue.getState().replace(execution.queued);
+                            case "queue-changed":
+                                await readExecution(connected, get().turn, signal);
                                 return;
-                            }
-                            case "turn-started": {
-                                delivery.getState().reconcile([fact.commandId]);
-                                const queued = messageQueue.getState().takeStarted(fact.commandId);
-                                const owner = sessionProjectionExecutionOwner(projection, fact.commandId);
-                                if (owner !== null && owner !== fact.commandId) {
-                                    // Steering starts a command, not a new execution to stop.
-                                    return;
-                                }
-                                const accepted = acceptedTurn(get().turn);
-                                updateTurn({
-                                    kind: "running",
-                                    commandId: fact.commandId,
-                                    turnId:
-                                        queued?.turnId ??
-                                        (accepted?.commandId === fact.commandId ? accepted.turnId : fact.commandId),
-                                    startedAt: turns.startedAt(fact.commandId, Date.now()),
-                                });
-                                announceActivity();
+                            case "turn-started":
+                                observeExecution({ kind: "turn-started", commandId: fact.commandId });
                                 return;
-                            }
                             case "turn-completed":
-                            case "turn-failed": {
-                                delivery.getState().reconcile([fact.commandId]);
-                                if (fact.kind === "turn-completed" && fact.steered) {
-                                    const execution = await connected.sessions.readSessionExecution(
-                                        sessionId,
-                                        sessionIdentity,
-                                        signal,
-                                    );
-                                    signal.throwIfAborted();
-                                    const running = execution.turn;
-                                    if (running !== null) {
-                                        updateTurn({
-                                            kind: "running",
-                                            commandId: running.commandId,
-                                            turnId: running.commandId,
-                                            startedAt: turns.startedAt(running.commandId, Date.now()),
-                                        });
-                                        announceActivity();
-                                        return;
-                                    }
-                                }
-                                updateTurn({
-                                    kind: "ended",
+                                observeExecution({
+                                    kind: "turn-ended",
                                     commandId: fact.commandId,
-                                    failure:
-                                        fact.kind === "turn-failed" ? { code: fact.code, message: fact.message } : null,
+                                    outcome: fact.steered ? { kind: "steered" } : { kind: "completed" },
                                 });
-                                announceActivity();
+                                if (fact.steered) {
+                                    // Steering ended the turn but not its execution; only a snapshot tells what runs now.
+                                    await readExecution(connected, get().turn, signal);
+                                }
                                 return;
-                            }
+                            case "turn-failed":
+                                observeExecution({
+                                    kind: "turn-ended",
+                                    commandId: fact.commandId,
+                                    outcome: { kind: "failed", failure: { code: fact.code, message: fact.message } },
+                                });
+                                return;
                             case "none":
                                 return;
                             default:
@@ -1154,68 +1157,12 @@ export function createSessionPaneModel(options: {
                             // Confirm execution after history is adopted. An earlier idle snapshot
                             // cannot settle work that started while those pages were loading.
                             const submission = delivery.getState().state;
-                            const unconfirmedCommandId =
-                                submission.kind === "delivery-unknown" ? submission.journal.commandId : undefined;
-                            const execution = await connected.sessions.readSessionExecution(
-                                sessionId,
-                                sessionIdentity,
+                            await readExecution(
+                                connected,
+                                reconciliation.turn,
                                 signal,
-                                unconfirmedCommandId,
+                                submission.kind === "delivery-unknown" ? submission.journal.commandId : null,
                             );
-                            signal.throwIfAborted();
-                            // Only the Runtime knows whether a submission arrived, including one that
-                            // finished while this pane was detached. A Runtime or Relay that cannot
-                            // report it omits the delivery, and the submission stays unconfirmed.
-                            if (
-                                unconfirmedCommandId !== undefined &&
-                                execution.command !== undefined &&
-                                execution.command.state !== "unknown"
-                            ) {
-                                delivery.getState().reconcile([unconfirmedCommandId]);
-                            }
-                            const running = execution.turn;
-                            if (running === null) {
-                                commitProjection({ kind: "execution-idle" });
-                            } else {
-                                commitProjection({ kind: "execution-running", commandId: running.commandId });
-                            }
-                            commitProjection({
-                                kind: "queue-observed",
-                                commandIds: execution.queued.map((item) => item.commandId),
-                            });
-                            messageQueue.getState().replace(execution.queued);
-                            if (running !== null) {
-                                // The execution receipt confirms delivery even when admission and live events were lost.
-                                delivery.getState().reconcile([running.commandId]);
-                                const accepted = acceptedTurn(reconciliation.turn);
-                                updateTurn({
-                                    kind: "running",
-                                    commandId: running.commandId,
-                                    turnId:
-                                        accepted?.commandId === running.commandId ? accepted.turnId : running.commandId,
-                                    startedAt: turns.startedAt(running.commandId, Date.now()),
-                                });
-                            } else {
-                                if (awaitsService(reconciliation.turn)) {
-                                    updateTurn({ kind: "nothing-running" });
-                                }
-                                // The Runtime's record of the last turn shows an outcome this pane missed. Older
-                                // Runtimes and Relays omit it, which leaves the turn as before.
-                                const lastTurn = execution.lastTurn;
-                                if (lastTurn !== undefined) {
-                                    updateTurn({
-                                        kind: "last-turn-reported",
-                                        commandId: lastTurn.commandId,
-                                        failure:
-                                            lastTurn.state === "failed"
-                                                ? { code: lastTurn.code, message: lastTurn.message }
-                                                : null,
-                                    });
-                                }
-                            }
-                            signal.throwIfAborted();
-                            interactions.getState().recover(sessionInteractionRecovery(execution));
-                            announceActivity();
                             switch (reconciliation.kind) {
                                 case "initial-subscription":
                                     break;
@@ -1501,7 +1448,6 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 updateTurn({ kind: "submission-ended", commandId, failure: null });
-                announceActivity();
             },
             retryUnknownDelivery: async (signal) => {
                 const state = delivery.getState().state;
@@ -1514,7 +1460,6 @@ export function createSessionPaneModel(options: {
                     commandId: pending.commandId,
                     startedAt: turns.startedAt(pending.commandId, Date.now()),
                 });
-                announceActivity();
                 const outcome = await delivery.getState().retry(submitTurn, signal);
                 signal.throwIfAborted();
                 switch (outcome?.kind) {
@@ -1533,7 +1478,6 @@ export function createSessionPaneModel(options: {
                         return outcome satisfies never;
                 }
                 updateTurn({ kind: "submission-ended", commandId: pending.commandId, failure: null });
-                announceActivity();
             },
             retryFailedMessage: async (signal) => {
                 const state = delivery.getState().state;
@@ -1847,6 +1791,7 @@ export function createSessionPaneModel(options: {
         filePreview.getState().close();
         connection.abort(new Error("The session pane stopped."));
         delivery.getState().submissionInterrupted();
+        options.onReleased?.(turnActivity(store.getState().turn));
     };
     /**
      * Announced with the pane's attached root element, following React's

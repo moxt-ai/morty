@@ -1,6 +1,8 @@
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { SessionActivityState } from "./session-activity-machine.ts";
+import { turnActivity } from "./session-current-turn.ts";
+import type { SessionPaneStore } from "./session-pane-store.ts";
 
 export type ConversationStatusStoreApi = ReturnType<typeof createConversationStatusStore>;
 
@@ -24,6 +26,21 @@ function settleIdle(current: ConversationListStatus | undefined, selected: boole
     return { kind: "idle" };
 }
 
+/**
+ * What the sidebar shows for a Session. The open Session's pane owns its current turn, including submissions the
+ * Runtime never saw, so once the pane has reached the Runtime that Session's status is derived from its turn. Every
+ * other Session shows what this store retained, or the status its directory entry was listed with.
+ */
+export function conversationListStatus(
+    session: Pick<ManagedChatSession, "id" | "status">,
+    statuses: ReadonlyMap<string, ConversationListStatus>,
+    open: { readonly sessionId: string; readonly pane: Pick<SessionPaneStore, "connection" | "turn"> } | null,
+): ConversationListStatus {
+    return open?.sessionId === session.id && open.pane.connection.kind !== "first-loading"
+        ? turnActivity(open.pane.turn)
+        : (statuses.get(session.id) ?? session.status);
+}
+
 interface ConversationStatusState {
     readonly statuses: ReadonlyMap<string, ConversationListStatus>;
     /** A directory load starts; its snapshot will not replace statuses that change after this. */
@@ -31,12 +48,11 @@ interface ConversationStatusState {
     readonly directoryLoaded: (botId: string, sessions: readonly ManagedChatSession[], signal: AbortSignal) => void;
     /** The user opened this Session, so nothing it finished is unread. */
     readonly opened: (sessionId: string) => void;
-    readonly statusChanged: (
-        botId: string,
-        sessionId: string,
-        status: SessionActivityState,
-        signal: AbortSignal,
-    ) => void;
+    /**
+     * The open pane of this Session stopped with `activity` as its last account. A failed turn, which only the pane
+     * knows, stays marked until the next turn starts; whether the Session works is the Runtime's to report.
+     */
+    readonly paneReleased: (sessionId: string, activity: SessionActivityState) => void;
     /**
      * Whether Sessions have statuses but no stream follows them: the last one gave up, as when the Runtime went away.
      */
@@ -203,15 +219,22 @@ export function createConversationStatusStore(
                     replaceStatus(sessionId, { kind: "idle" });
                 }
             },
-            statusChanged: (botId, sessionId, status, signal) => {
-                if (activeBotId !== botId) {
-                    closeWatcher();
-                    activeBotId = botId;
-                    set({ statuses: new Map() });
+            paneReleased: (sessionId, activity) => {
+                switch (activity.kind) {
+                    case "failed":
+                        replaceStatus(sessionId, activity);
+                        return;
+                    case "idle":
+                        // The pane saw the failure it had marked resolved.
+                        if (get().statuses.get(sessionId)?.kind === "failed") {
+                            replaceStatus(sessionId, { kind: "idle" });
+                        }
+                        return;
+                    case "working":
+                        return;
+                    default:
+                        return activity satisfies never;
                 }
-                // The open pane already settled its own turn, including local submissions the Runtime never saw.
-                replaceStatus(sessionId, status);
-                watch(botId, [...get().statuses.keys()], signal);
             },
             unfollowed: () => watcher === null && get().statuses.size > 0,
             follow: (signal) => {
