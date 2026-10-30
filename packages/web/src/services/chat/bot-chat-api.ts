@@ -28,7 +28,7 @@ import {
 import * as v from "valibot";
 import type { ApiResponseSnapshot, ApiTransport } from "../api/api-transport.ts";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
-import { CloudApiError, ManagementApi } from "../management/management-api.ts";
+import { CloudApiError, ManagementApi, runtimeBindingUrl } from "../management/management-api.ts";
 
 const identifier = v.custom<Identifier>(isIdentifier);
 const accessSchema = v.pipe(
@@ -269,6 +269,7 @@ export class BotChatApi {
     readonly recoverBridge: ApiTransport["recover"];
     readonly #waitForBridge: ApiTransport["waitForBridge"];
     readonly readBot: ManagementApi["readBot"];
+    readonly readRuntimeBinding: ManagementApi["readRuntimeBinding"];
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
         readonly origin: string;
@@ -295,6 +296,7 @@ export class BotChatApi {
         this.recoverBridge = options.recoverBridge;
         const management = new ManagementApi(options);
         this.readBot = management.readBot;
+        this.readRuntimeBinding = management.readRuntimeBinding;
     }
     readonly waitForBridge = async (signal: AbortSignal): Promise<void> => await this.#waitForBridge(signal);
     readonly resetSessionConnections = (): void => {
@@ -468,9 +470,10 @@ export class BotChatApi {
         decodeWorkspaceEntriesEvent(
             JSON.stringify(await this.#request(botId, "workspace/directory", { directoryId }, signal)),
         );
-    readonly #waitForBotChange = async (
-        botId: string,
-        resource: "setup/runtimes" | "workspace",
+    /** Resolves once the watched resource differs from the snapshot this client last read, or from its first sample. */
+    readonly #waitForResourceChange = async (
+        url: URL,
+        method: "GET" | "POST",
         parent: AbortSignal,
         onReady?: (snapshot: ApiResponseSnapshot) => void,
     ) => {
@@ -480,26 +483,24 @@ export class BotChatApi {
             throw new CloudApiError("UNAUTHENTICATED", "Your session is unavailable.");
         }
         await this.#waitForChange(
-            new Request(
-                new URL(
-                    `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/${resource}`,
-                    this.#origin,
-                ),
-                { method: "POST", headers: { authorization: `Bearer ${token}` }, signal },
-            ),
+            new Request(url, { method, headers: { authorization: `Bearer ${token}` }, signal }),
             onReady,
         );
     };
-    readonly waitForSetupChange = async (botId: string, parent: AbortSignal): Promise<void> =>
-        await this.#waitForBotChange(botId, "setup/runtimes", parent);
+    /** Resolves once the Machine's Runtime binding differs from the binding this client last read. */
+    readonly waitForRuntimeBindingChange = async (botId: string, parent: AbortSignal): Promise<void> =>
+        await this.#waitForResourceChange(runtimeBindingUrl(this.#origin, this.#projectId, botId), "GET", parent);
     readonly waitForRuntimeConfigurationChange = async (
         botId: string,
         parent: AbortSignal,
         onReady?: (configuration: BotRuntimeConfiguration) => void,
     ): Promise<void> =>
-        await this.#waitForBotChange(
-            botId,
-            "workspace",
+        await this.#waitForResourceChange(
+            new URL(
+                `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/workspace`,
+                this.#origin,
+            ),
+            "POST",
             parent,
             onReady === undefined
                 ? undefined

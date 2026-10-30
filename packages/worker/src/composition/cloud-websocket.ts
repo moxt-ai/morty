@@ -15,11 +15,18 @@ const permittedHeaders = new Set([
 const STATUS_SUBSCRIPTION_PATH =
     /^\/morty\/api\/chat\/projects\/([^/]+)\/bots\/([^/]+)\/managed-session\/status-events$/u;
 const statusSubscriptionPath = v.pipe(v.string(), v.regex(STATUS_SUBSCRIPTION_PATH));
-const configuredSetupResponse = v.object({ error: v.object({ code: v.literal("BOT_RUNTIME_FIXED") }) });
 
 interface CloudWebSocketDependencies {
     readonly dispatch: (request: Request) => Promise<Response>;
     readonly logger: { readonly error: (value: unknown, message: string) => void };
+}
+
+/** The resources a watch may follow: a Machine's workspace and its Runtime binding. */
+function isWatchable(method: string, pathname: string): boolean {
+    return (
+        (method === "POST" && pathname.endsWith("/workspace")) ||
+        (method === "GET" && pathname.endsWith("/runtime-binding"))
+    );
 }
 
 function invalidBridgeRequest(): never {
@@ -55,12 +62,7 @@ function resolveRequest(
     const headers = bridgedHeaders(input.headers);
     const body = input.body === "" ? null : input.body;
     const requestBody = body instanceof Uint8Array ? body.slice().buffer : body;
-    if (
-        operation === "watch" &&
-        (input.method !== "POST" ||
-            (!url.pathname.endsWith("/workspace") && !url.pathname.endsWith("/setup/runtimes")) ||
-            body !== null)
-    ) {
+    if (operation === "watch" && (!isWatchable(input.method, url.pathname) || body !== null)) {
         return invalidBridgeRequest();
     }
     if (
@@ -158,18 +160,6 @@ export function createCloudWebSocketHandlers(dependencies: CloudWebSocketDepende
                     }
                     const body = await response.text();
                     requestSignal.throwIfAborted();
-                    // Pairing may finish between the client's read and this
-                    // watch's first response. A configured Machine has already
-                    // left setup; its fixed 409 must not become a baseline that
-                    // waits forever for another pairing change.
-                    if (
-                        new URL(request.url).pathname.endsWith("/setup/runtimes") &&
-                        response.status === 409 &&
-                        v.safeParse(configuredSetupResponse, JSON.parse(body)).success
-                    ) {
-                        observer.notify();
-                        return;
-                    }
                     const next = `${response.status}\u0000${body}`;
                     if (fingerprint !== null && fingerprint !== next) {
                         observer.notify();

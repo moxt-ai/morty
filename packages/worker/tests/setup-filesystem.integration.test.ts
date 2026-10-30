@@ -1157,27 +1157,21 @@ test.each(["replacement_access_revoked", "project_replaced"])(
     },
 );
 
-test("Given setup bound the Machine but never received the reply, When the user runs setup again, Then setup finishes on the bound Runtime", {
+test("Given a Machine bound by setup, When the user runs setup again, Then setup finishes on the Worker's bound Runtime without a local binding copy", {
     timeout: 90_000,
 }, async () => {
     await withUpgradeMachine("unavailable", async (runtime, paths) => {
         const first = await setupMachine(runtime, paths);
         expect(first.code, JSON.stringify(first.events)).toBe(0);
-        // The Worker committed the binding, but the run stopped before it saved the binding locally, as when the
-        // reply is lost to an interruption, a dropped connection or the request deadline.
+        // The Worker's binding is the only record, so a reply lost after the Worker bound the Machine leaves the
+        // local configuration exactly as a completed run does.
         const configPath = join(paths.state, "config.json");
-        const saved: Record<string, unknown> = {
-            ...v.parse(v.record(v.string(), v.unknown()), JSON.parse(await readFile(configPath, "utf8"))),
-        };
-        delete saved["agent_ref"];
-        await rm(configPath);
-        await writeFile(configPath, JSON.stringify(saved), { mode: 0o600 });
+        expect(JSON.parse(await readFile(configPath, "utf8"))).not.toHaveProperty("agent_ref");
 
         const rerun = await setupMachine(runtime, paths);
         expect(rerun.code, JSON.stringify(rerun.events)).toBe(0);
         expect(rerun.events).toContainEqual(expect.objectContaining({ status: "runtime_reused" }));
         expect(rerun.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-        expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({ agent_ref: "settings-test" });
     });
 });
 
