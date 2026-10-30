@@ -176,6 +176,24 @@ function messageExecutionCommandId(message: SessionExecutionMessage): string | n
     );
 }
 
+function sessionSettingsDisabled(
+    model: SessionPaneStore,
+    delivery: SessionDeliveryStore,
+    tasks: SessionTaskControlsStore,
+    queue: SessionMessageQueueStore,
+): boolean {
+    // Settings have their own acknowledged operation, independent of prompt output
+    // and permission requests. Keep submission and stop boundaries stable and serialize edits.
+    return (
+        model.connection.kind !== "ready" ||
+        model.operation.kind === "configuring" ||
+        submittingCommandId(model.turn) !== null ||
+        (delivery.state.kind !== "idle" && delivery.state.kind !== "confirmed") ||
+        queue.operation.kind === "submitting" ||
+        stopRequested(tasks, acceptedTurn(model.turn))
+    );
+}
+
 export function sessionPanePresentation(
     model: SessionPaneStore,
     delivery: SessionDeliveryStore,
@@ -290,6 +308,11 @@ export function sessionPanePresentation(
         busy,
         composerDisabled,
         composerInputDisabled,
+        settingsDisabled: !connectionAvailable || sessionSettingsDisabled(model, delivery, tasks, queue),
+        settingsNotice: controlRunning
+            ? "Changes affect upcoming work. The current response may still use previous settings and permissions. Stop it before relying on reduced access."
+            : null,
+        settingsStopDisabled: !connectionAvailable || model.connection.kind !== "ready" || stopping,
         stopDisabled: !connectionAvailable || model.connection.kind !== "ready",
         canSuggestProgress:
             !busy &&
@@ -1590,12 +1613,9 @@ export function createSessionPaneModel(options: {
             },
             configure: async (option, value, booleanValue, signal) => {
                 const current = get();
-                // Settings change between turns, one change at a time.
                 if (
                     client === null ||
-                    current.connection.kind !== "ready" ||
-                    current.operation.kind === "configuring" ||
-                    current.turn.kind === "current"
+                    sessionSettingsDisabled(current, delivery.getState(), tasks.getState(), messageQueue.getState())
                 ) {
                     return;
                 }
