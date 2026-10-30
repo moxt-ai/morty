@@ -35,4 +35,4 @@ async function stopProcess(pid) {
     }
 }
 
-module.exports = { cliShimName: "mobius", writeCommandShim: () => {}, stopProcess };
+module.exports = { stopProcess };

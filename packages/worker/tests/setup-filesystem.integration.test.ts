@@ -62,12 +62,17 @@ if (!isSetupModule(setupModule)) {
 }
 const { runSetup } = setupModule;
 
-test.each(["fresh", "unknown", "revoked"] as const)(
-    "Given an invalid Mobius state root and %s replacement state, When setup stops at preflight, Then it preserves the identity and accurately reports earlier shared access",
+test.each([
+    { replacementState: "fresh", launcher: "npx" },
+    { replacementState: "unknown", launcher: "npx" },
+    { replacementState: "revoked", launcher: "npx" },
+    { replacementState: "fresh", launcher: "local" },
+] as const)(
+    "Given an invalid Mobius state root and $replacementState replacement state using $launcher, When setup stops at preflight, Then it preserves the identity and accurately reports earlier shared access",
     {
         timeout: 30_000,
     },
-    async (replacementState) => {
+    async ({ replacementState, launcher }) => {
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-state-root-"));
         const state = join(directory, "state");
         const bin = join(directory, "bin");
@@ -114,7 +119,16 @@ test.each(["fresh", "unknown", "revoked"] as const)(
             // Mobius 0.0.315 and later refuse another root's installation data with EX_CONFIG.
             const refusal =
                 "MOBIUS_STATE_DIRECTORY is Mobius installation data, not a state root. Use the state root that owns it: MOBIUS_STATE_DIRECTORY=/owning-root";
-            await writeNpxFixture(bin, `process.stderr.write(${JSON.stringify(`${refusal}\n`)}); process.exit(78);`);
+            if (launcher === "npx") {
+                await writeNpxFixture(
+                    bin,
+                    `process.stderr.write(${JSON.stringify(`${refusal}\n`)}); process.exit(78);`,
+                );
+            }
+            const localCli = join(bin, "local-mobius.cjs");
+            if (launcher === "local") {
+                await writeFile(localCli, `process.stderr.write(${JSON.stringify(refusal)}); process.exit(78);`);
+            }
             let output = "";
             const child = spawn(
                 process.execPath,
@@ -136,6 +150,7 @@ test.each(["fresh", "unknown", "revoked"] as const)(
                         PATH: bin,
                         MOBIUS_STATE_DIRECTORY: join(directory, "inherited-installation-data"),
                         MORTY_STATE_DIRECTORY: state,
+                        MORTY_LOCAL_MOBIUS_CLI: launcher === "local" ? localCli : undefined,
                     },
                     stdio: ["ignore", "pipe", "pipe"],
                     signal: AbortSignal.timeout(20000),

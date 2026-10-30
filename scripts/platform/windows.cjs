@@ -1,5 +1,4 @@
 const { execFile } = require("node:child_process");
-const fs = require("node:fs");
 const path = require("node:path");
 const { promisify } = require("node:util");
 const execute = promisify(execFile);
@@ -37,11 +36,4 @@ async function stopProcess(pid) {
     }
 }
 
-function writeCommandShim(directory) {
-    fs.writeFileSync(
-        path.join(directory, "mobius.cmd"),
-        '@ECHO off\r\nSET dp0=%~dp0\r\nSET "_prog=node"\r\n"%_prog%" "%dp0%\\mobius.cjs" %*\r\n',
-    );
-}
-
-module.exports = { cliShimName: "mobius.cjs", writeCommandShim, stopProcess };
+module.exports = { stopProcess };
