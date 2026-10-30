@@ -63,5 +63,6 @@ export const dataTestId = Object.freeze({
     closeFilePreview: "chat-close-file-preview",
     mobileSessionTitleSlot: "mobile-session-title-slot",
     mobileRecentSessionsSheet: "chat-recent-sessions-mobile-sheet",
+    mobileRecentSessionsUnread: "chat-recent-sessions-unread",
     mobileRenameMask: "chat-mobile-rename-mask",
 });
