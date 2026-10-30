@@ -22,7 +22,6 @@ import { createNetworkDiagnosticStore, type NetworkDiagnosticStore } from "./net
 import type { SelectedMobiusSession } from "./open-session.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
 import { createRuntimeRecovery } from "./runtime-recovery.ts";
-import type { SessionActivityState } from "./session-activity-machine.ts";
 import { createSessionDeliveryStore, prependToDraft } from "./session-delivery-store.ts";
 import { createSessionPaneModel, type SessionPaneModel } from "./session-pane-store.ts";
 import { createSessionTitlesStore, type SessionTitlesStore } from "./session-titles-store.ts";
@@ -80,7 +79,6 @@ export interface ChatWorkspace {
     /** Restarts the directory load, for example from the sidebar refresh button. */
     readonly refreshDirectory: () => void;
     /** Reports a session activity change from an open session pane. */
-    readonly sessionStatusChanged: (sessionId: string, status: SessionActivityState) => void;
     /** The signal of the current home loading attempt; aborted when loading restarts. */
     readonly chatSignal: () => AbortSignal;
     /** A stable signal for user-triggered operations such as archiving and diagnostics. */
@@ -192,7 +190,11 @@ export function createChatWorkspace(options: {
             runtimeRecovery.working();
             replacePane(selection);
         },
-        onSelectionTargeted: (conversationId) => statuses.getState().selectionChanged(conversationId),
+        onSelectionTargeted: (conversationId) => {
+            if (conversationId !== null) {
+                statuses.getState().opened(conversationId);
+            }
+        },
         url: options.url ?? window.location.href,
     });
     const directory = createConversationDirectoryStore(
@@ -214,6 +216,10 @@ export function createChatWorkspace(options: {
     );
     const statuses = createConversationStatusStore(
         requests,
+        () => {
+            const selected = selectedConversationId(home.getState().selection);
+            return selected.length > 0 ? selected : null;
+        },
         (sessionId, reason) => {
             // Only the open pane has something to tell its user; the other Sessions reopen when selected.
             if (paneEntry?.session.result.ready.sessionId === sessionId) {
@@ -407,10 +413,6 @@ export function createChatWorkspace(options: {
         };
     };
 
-    const initialSelection = home.getState().selection;
-    const initialSelectionId = selectedConversationId(initialSelection);
-    statuses.getState().selectionChanged(initialSelectionId.length > 0 ? initialSelectionId : null);
-
     const replacePane = (selection: Extract<ConversationSelectionState, { readonly kind: "ready" }>): void => {
         if (paneEntry !== null && paneEntry.session === selection.session) {
             return;
@@ -533,8 +535,6 @@ export function createChatWorkspace(options: {
         },
         onAttach: announceChatViewAttached,
         refreshDirectory: startDirectoryLoad,
-        sessionStatusChanged: (sessionId, status) =>
-            statuses.getState().statusChanged(botId, sessionId, status, statusLifetime.signal),
         chatSignal: () => chatLifetime.signal,
         operationsSignal: () => operationsLifetime.signal,
         dispose: () => {

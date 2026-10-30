@@ -29,7 +29,8 @@ interface ConversationStatusState {
     /** A directory load starts; its snapshot will not replace statuses that change after this. */
     readonly directoryLoadStarted: () => void;
     readonly directoryLoaded: (botId: string, sessions: readonly ManagedChatSession[], signal: AbortSignal) => void;
-    readonly selectionChanged: (sessionId: string | null) => void;
+    /** The user opened this Session, so nothing it finished is unread. */
+    readonly opened: (sessionId: string) => void;
     readonly statusChanged: (
         botId: string,
         sessionId: string,
@@ -49,6 +50,8 @@ type ConversationStatusRequests = Pick<BotChatApi, "managedSessions" | "subscrib
 
 export function createConversationStatusStore(
     requests: ConversationStatusRequests,
+    /** The Session the user has open, read from the selection itself. */
+    selectedSessionId: () => string | null,
     /** Announced when the Runtime closes a Session, with the reason it gives. */
     onSessionClosed: (sessionId: string, reason: string) => void,
     /** Announced when the stream following the Sessions gives up, as when the Runtime went away. */
@@ -62,7 +65,6 @@ export function createConversationStatusStore(
         readonly controller: AbortController;
     } | null = null;
     let activeBotId = "";
-    let selectedSessionId: string | null = null;
     // The stream and the open pane report changes as they happen, while a directory snapshot describes the moment its
     // request was served. Each change is numbered so that a snapshot keeps the statuses that changed after it started.
     let changes = 0;
@@ -76,7 +78,7 @@ export function createConversationStatusStore(
             set((state) => ({ statuses: new Map(state.statuses).set(sessionId, status) }));
         };
         const markCompleted = (sessionId: string): void => {
-            replaceStatus(sessionId, settleIdle(get().statuses.get(sessionId), sessionId === selectedSessionId));
+            replaceStatus(sessionId, settleIdle(get().statuses.get(sessionId), sessionId === selectedSessionId()));
         };
 
         const replaceDirectory = (sessions: readonly ManagedChatSession[], snapshotStartedAt: number): void => {
@@ -89,7 +91,7 @@ export function createConversationStatusStore(
                     return [
                         session.id,
                         session.status.kind === "idle"
-                            ? settleIdle(current, session.id === selectedSessionId)
+                            ? settleIdle(current, session.id === selectedSessionId())
                             : session.status,
                     ];
                 });
@@ -196,9 +198,8 @@ export function createConversationStatusStore(
                     );
                 }
             },
-            selectionChanged: (sessionId) => {
-                selectedSessionId = sessionId;
-                if (sessionId !== null && get().statuses.get(sessionId)?.kind === "unread") {
+            opened: (sessionId) => {
+                if (get().statuses.get(sessionId)?.kind === "unread") {
                     replaceStatus(sessionId, { kind: "idle" });
                 }
             },
@@ -208,6 +209,7 @@ export function createConversationStatusStore(
                     activeBotId = botId;
                     set({ statuses: new Map() });
                 }
+                // The open pane already settled its own turn, including local submissions the Runtime never saw.
                 replaceStatus(sessionId, status);
                 watch(botId, [...get().statuses.keys()], signal);
             },
