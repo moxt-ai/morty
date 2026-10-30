@@ -215,6 +215,30 @@ test("Given a remembered computer, When I deliberately start a new conversation 
     expect(returned.elementsByTestId(dataTestId.agentResponse)).toHaveLength(0);
 });
 
+test("Given a browser without saved access, When I open a copied computer address, Then Morty explains that this browser is not paired and helps me pair again", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(dataTestId.messageComposer);
+    const address = window.location.href;
+    // The other browser has the address, but none of this browser's saved access.
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    const unpaired = await app.reload();
+    await unpaired.waitForView(() =>
+        getByRole(document.body, "heading", { name: "This browser is not paired with this computer" }),
+    );
+    expect(document.body.textContent).toContain("Pair again to access this computer from this browser.");
+    expect(document.body.textContent).toContain("Copying the address from another browser does not transfer access.");
+    expect(document.body.textContent).toContain(
+        "Open the URL your agent gives you, or scan the QR code from your agent.",
+    );
+    await unpaired.user.click(getByRole(document.body, "button", { name: "Copy setup prompt" }));
+    expect(await navigator.clipboard.readText()).toContain(`${app.origin}/setup.md`);
+    expect(window.location.href).toBe(address);
+    expect(queryByRole(document.body, "textbox", { name: "Message" })).toBeNull();
+});
+
 test("Given a remembered computer, When I open an invalid explicit computer link, Then it never switches me to the remembered computer automatically", {
     timeout: 30_000,
 }, async () => {

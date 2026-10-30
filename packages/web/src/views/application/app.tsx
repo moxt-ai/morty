@@ -22,6 +22,7 @@ export type AppState =
     | { readonly kind: "loading" }
     | { readonly kind: "failed"; readonly retry: () => void; readonly retrying: boolean }
     | { readonly kind: "invalid-link"; readonly continueHref: string | null }
+    | { readonly kind: "unpaired" }
     | {
           readonly kind: "setup";
           readonly notice: "access-ended" | "legacy" | "none";
@@ -89,6 +90,22 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
                                 "Retry"
                             )}
                         </Button>
+                    </SetupCardSection>
+                </SetupCardShell>
+            );
+        case "unpaired":
+            return (
+                <SetupCardShell cardLeading={<SetupCardFailureIcon />} showPageHeader titleId="unpaired-title">
+                    <SetupCardTitle id="unpaired-title">This browser is not paired with this computer</SetupCardTitle>
+                    <SetupCardAlert>Pair again to access this computer from this browser.</SetupCardAlert>
+                    <SetupCardDescription>
+                        Copying the address from another browser does not transfer access.
+                    </SetupCardDescription>
+                    <SetupCardDescription>
+                        Open the URL your agent gives you, or scan the QR code from your agent.
+                    </SetupCardDescription>
+                    <SetupCardSection className="mt-4">
+                        <PairingInstruction />
                     </SetupCardSection>
                 </SetupCardShell>
             );
