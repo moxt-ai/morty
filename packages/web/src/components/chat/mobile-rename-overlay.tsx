@@ -4,6 +4,7 @@ import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
 import { Button } from "../ui/cloud-button.tsx";
 import { inputClassName } from "../ui/input.tsx";
+import { useSoftwareKeyboardMarker } from "../utils/use-software-keyboard-marker.ts";
 import { AutoFocusInput } from "./auto-focus-input.tsx";
 import { useConfigurationViewport } from "./chat-configuration-viewport.ts";
 
@@ -25,6 +26,7 @@ export function MobileRenameOverlay({
     readonly onConfirmTitleEdit: () => void;
 }) {
     const viewport = useConfigurationViewport();
+    const attachKeyboardMarker = useSoftwareKeyboardMarker();
     return createPortal(
         <div
             role="dialog"
@@ -41,7 +43,8 @@ export function MobileRenameOverlay({
                 onClick={onCancelTitleEdit}
             />
             <div
-                className="absolute inset-x-0 flex items-center gap-2 border-t border-border/60 bg-card px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+                className="absolute inset-x-0 flex items-center gap-2 border-t border-border/60 bg-card px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] data-[software-keyboard=open]:pb-2"
+                ref={attachKeyboardMarker}
                 style={{ bottom: viewport.bottom }}
             >
                 <AutoFocusInput
