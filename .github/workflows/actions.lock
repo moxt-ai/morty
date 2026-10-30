@@ -29,6 +29,7 @@ workflows:
     '.github/workflows/pr-title.yml':
         - 'amannn/action-semantic-pull-request@v6.1.1'
     '.github/workflows/production.yml': []
+    '.github/workflows/retire-legacy-checkout-token.yml': []
     '.github/workflows/setup-compatibility.yml':
         - 'actions/cache@v6.1.0'
         - 'actions/checkout@v7.0.1'
