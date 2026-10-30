@@ -428,6 +428,9 @@ export class ChatService {
     };
 
     readonly nativeSessionAccess = async (scope: ChatScope, sessionId: string) => {
+        if (!(await this.#ownsManagedSession(scope, sessionId))) {
+            throw new PlatformProjectError("NOT_FOUND", "The session was not found.", 404);
+        }
         const runtime = await this.localRuntime(scope);
         const access = await this.#platform.nativeSessionAccess(
             scope.projectId,

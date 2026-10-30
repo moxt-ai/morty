@@ -36,6 +36,7 @@ const runtime = new Miniflare(
         script: output.text,
         compatibilityDate: configuration.compatibility_date,
         compatibilityFlags: ["nodejs_compat"],
+        r2Buckets: ["CHAT_ATTACHMENTS_APAC"],
         assets: {
             directory,
             binding: assets.binding,
@@ -73,6 +74,33 @@ const browserNavigation = {
     "Sec-Fetch-Dest": "document",
     "Sec-Fetch-Mode": "navigate",
 };
+
+test("Given an old Slack attachment in storage, When an unauthenticated client requests the retired file proxy, Then no file content is exposed", async () => {
+    const key = "slack-attachments/tenant-victim/team/file/private.txt";
+    const bucket = await runtime.getR2Bucket("CHAT_ATTACHMENTS_APAC");
+    await bucket.put(key, "security-audit-private-attachment");
+    for (const requested of [key, encodeURIComponent(key)]) {
+        const response = await runtime.dispatchFetch(
+            `https://morty.example/mobius-slack/api/files/${requested}?projectId=prj_wn_01_audit`,
+        );
+        expect(response.status).toBe(404);
+        expect(await response.text()).not.toContain("security-audit-private-attachment");
+    }
+    const pair = await runtime.dispatchFetch("https://morty.example/pair.md?token=security-audit");
+    expect(pair.status).toBe(404);
+});
+
+test("Given a browser opening Morty, When HTML is served by assets or the Worker, Then it prevents framing and MIME sniffing and limits referrers", async () => {
+    for (const path of ["/", "/chat", "/setup", "/page-that-does-not-exist"]) {
+        const response = await runtime.dispatchFetch(`https://morty.example${path}`, { headers: browserNavigation });
+        expect(response.headers.get("x-content-type-options"), path).toBe("nosniff");
+        expect(response.headers.get("referrer-policy"), path).toBe("strict-origin-when-cross-origin");
+        expect(response.headers.get("x-frame-options"), path).toBe("DENY");
+        expect(response.headers.get("content-security-policy"), path).toContain("frame-ancestors 'none'");
+        expect(response.headers.get("content-security-policy"), path).toContain("object-src 'none'");
+        await response.text();
+    }
+});
 
 test("Given the setup URL, When a browser opens it directly, Then it receives the application HTML without redirecting", async () => {
     for (const path of ["/setup", "/setup/", "/setup?identity=private-identity"]) {
