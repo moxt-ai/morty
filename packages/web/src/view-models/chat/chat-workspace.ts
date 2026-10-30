@@ -38,7 +38,7 @@ interface ChatWorkspaceSidebar {
 
 interface ChatWorkspacePaneEntry {
     readonly session: SelectedMobiusSession;
-    readonly model: SessionPaneModel;
+    readonly model: ReturnType<typeof createSessionPaneModel>;
 }
 
 export interface ChatWorkspace {
@@ -62,23 +62,14 @@ export interface ChatWorkspace {
     readonly sidebar: ChatWorkspaceSidebar;
     /**
      * The session pane model for the currently selected conversation, created
-     * by the workspace when the selection becomes ready for a fresh session
-     * record and released when it moves on. Render-time access is a pure
-     * read: `null` means the pane for the ready selection is not built (yet),
-     * which no current view renders through.
+     * and started by the workspace when the selection becomes ready for a
+     * fresh session record and stopped when it moves on. Render-time access is
+     * a pure read: `null` means the pane for the ready selection is not built
+     * (yet), which no current view renders through.
      */
     readonly sessionPane: () => SessionPaneModel | null;
     /** Restarts the draft settings load, for example from its retry control. */
     readonly retryDraftControls: () => void;
-    /**
-     * Announced with the chat view's attached root element, following React's
-     * ref-cleanup protocol: the view hands it straight to its root element's
-     * ref and the returned function re-arms the announcement. A ready
-     * selection is re-read from the service — the same path as a fresh page
-     * load — so a re-attached pane does not render a stale session snapshot
-     * captured when the conversation was created or first opened.
-     */
-    readonly onAttach: (node: HTMLElement) => () => void;
     /** Restarts the directory load, for example from the sidebar refresh button. */
     readonly refreshDirectory: () => void;
     /** Reports a session activity change from an open session pane. */
@@ -197,6 +188,12 @@ export function createChatWorkspace(options: {
             if (conversationId !== null) {
                 statuses.getState().opened(conversationId);
             }
+            // A pane lives while its session record is the ready selection; any other target ends it.
+            const selection = home.getState().selection;
+            if (paneEntry !== null && (selection.kind !== "ready" || selection.session !== paneEntry.session)) {
+                paneEntry.model.stop();
+                paneEntry = null;
+            }
         },
         url: options.url ?? window.location.href,
     });
@@ -212,8 +209,6 @@ export function createChatWorkspace(options: {
             if (selectedConversationId(home.getState().selection) !== sessionId) {
                 return;
             }
-            paneEntry?.model.stop();
-            paneEntry = null;
             home.getState().newConversation();
         },
     );
@@ -375,47 +370,14 @@ export function createChatWorkspace(options: {
             }
         },
     });
-    const announcedViews = new WeakSet<HTMLElement>();
-    // A loading selection at attach time means a previous view released it on
-    // detach — the initial entry load is owned by home.load, so only a
-    // re-attach re-reads the session itself. This gates the second read so a
-    // fresh entry performs exactly one managedSession request.
-    let releasedByDetach = false;
-    // The single live pane model; replaced when a different session is
-    // requested, torn down with the workspace.
+    // The single live pane model. It lives while its session record is the
+    // ready selection: another target stops it, a re-read replaces it, and
+    // the workspace tears it down.
     let paneEntry: ChatWorkspacePaneEntry | null = null;
     // Drafts belong to their sessions, independently of pane and connection replacements.
     const sessionAttachments = new Map<string, ReturnType<typeof createComposerAttachmentStore>>();
     // Submitted intent belongs to the Session until confirmed or discarded, across pane replacements.
     const sessionDeliveries = new Map<string, ReturnType<typeof createSessionDeliveryStore>>();
-    const announceChatViewAttached = (node: HTMLElement): (() => void) => {
-        if (announcedViews.has(node)) {
-            return () => {};
-        }
-        announcedViews.add(node);
-        const selection = home.getState().selection;
-        if (releasedByDetach && selection.kind === "loading") {
-            // The previous view released this selection when it detached; the
-            // re-attached view re-reads the saved session so it does not render
-            // the snapshot captured by the view instance that just went away.
-            // Session targets take the same path as a fresh page load; a
-            // conversation target re-reads the saved session record, which
-            // omits the creation-time access envelope — the pane's live
-            // reconciliation restores running-turn state from the service.
-            releasedByDetach = false;
-            void home.getState().reloadSelection(chatLifetime.signal);
-        }
-        return () => {
-            announcedViews.delete(node);
-            // A chat view detaching releases its ready selection so the next
-            // attached view re-reads the session instead of rendering the
-            // snapshot captured by the view instance that just went away.
-            if (home.getState().releaseSelection()) {
-                releasedByDetach = true;
-            }
-        };
-    };
-
     const replacePane = (selection: Extract<ConversationSelectionState, { readonly kind: "ready" }>): void => {
         if (paneEntry !== null && paneEntry.session === selection.session) {
             return;
@@ -424,8 +386,7 @@ export function createChatWorkspace(options: {
         // arrives as a fresh record (a re-read for a reopened conversation, a
         // creation result for a new one), so the pane starts from a pristine
         // projection with its older-history pagination instead of whatever
-        // the previous mount accumulated. The replaced pane's attached
-        // element stops it through the ref-cleanup protocol.
+        // the previous pane accumulated.
         paneEntry?.model.stop();
         const sessionId = selection.session.result.ready.sessionId;
         if (options.rememberedIdentity !== undefined && rememberedSessionId !== sessionId) {
@@ -493,6 +454,7 @@ export function createChatWorkspace(options: {
             model.store.getState().setDraft(unsent === null ? draft : prependToDraft(unsent, draft));
         }
         paneEntry = { model, session: selection.session };
+        model.start();
     };
 
     return {
@@ -545,7 +507,6 @@ export function createChatWorkspace(options: {
                 .load(chatLifetime.signal)
                 .catch(() => undefined);
         },
-        onAttach: announceChatViewAttached,
         refreshDirectory: startDirectoryLoad,
         chatSignal: () => chatLifetime.signal,
         operationsSignal: () => operationsLifetime.signal,

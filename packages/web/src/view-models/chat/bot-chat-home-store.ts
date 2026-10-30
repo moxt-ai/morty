@@ -152,9 +152,6 @@ export interface BotChatHomeStore {
     readonly setDraft: (draft: string) => void;
     readonly showPairingDialog: () => void;
     readonly closePairingDialog: () => void;
-    /** Releases a mounted view's selection so its next attachment reads a fresh Session. */
-    readonly releaseSelection: () => boolean;
-    readonly reloadSelection: (signal: AbortSignal) => Promise<void>;
     /** Releases the first message to delivery, or back to an editable composer if preparation failed. */
     readonly initialMessageDequeued: (conversationId: string, commandId: string) => void;
     readonly createConversation: (signal: AbortSignal) => Promise<boolean>;
@@ -766,45 +763,6 @@ export const createBotChatHomeStore = (
             },
             showPairingDialog: () => set({ pairingDialogOpen: true }),
             closePairingDialog: () => set({ pairingDialogOpen: false }),
-            releaseSelection: () => {
-                const current = get().selection;
-                if (current.kind !== "ready") {
-                    return false;
-                }
-                set({ selection: transitionConversationSelection(current, { kind: "reload-requested" }) });
-                return true;
-            },
-            reloadSelection: async (signal) => {
-                const current = get().selection;
-                if (current.kind !== "loading") {
-                    return;
-                }
-                const target = current.target;
-                const startedWith = titles.getState().titles;
-                try {
-                    signal.throwIfAborted();
-                    const session = await requests.managedSession(botId, selectedConversationId(current), signal);
-                    signal.throwIfAborted();
-                    if (get().selection === current) {
-                        acceptLoadedSelection({ kind: "session-loaded", session, target }, startedWith);
-                    }
-                } catch (cause) {
-                    if (signal.aborted || get().selection !== current) {
-                        return;
-                    }
-                    set({
-                        selection: transitionConversationSelection(current, {
-                            kind: "session-load-failed",
-                            failure:
-                                isRuntimeConnectionFailure(cause) || isChatBridgeError(cause)
-                                    ? "connection"
-                                    : "unavailable",
-                            message: formatError(cause, "The Session could not be loaded."),
-                            target,
-                        }),
-                    });
-                }
-            },
             initialMessageDequeued: (conversationId, commandId) =>
                 set((state) => ({
                     firstMessages: transitionFirstMessages(state.firstMessages, {

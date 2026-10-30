@@ -50,14 +50,14 @@ test("Given an open session renamed by another client, When its directory refres
     expect(getByRole(document.body, "textbox", { name: "Conversation title" })).toHaveProperty("value", renamed);
 });
 
-test("Given a selected session renamed elsewhere, When the view reattaches and later reloads offline, Then the title learned by the re-read survives", {
+test("Given a selected session renamed elsewhere, When the user selects it again and later reloads offline, Then the title learned by the re-read survives", {
     timeout: 60_000,
 }, async () => {
     const environment = await createChatWorkerEnvironment(false, true);
     onTestFinished(() => environment.close());
     const app = await createTestApp({ environment, connectAgent: true, clock: new TestClock("2026-10-29T00:00:00Z") });
     const original = "Remember the selected session";
-    const renamed = "Title learned on reattach";
+    const renamed = "Title learned on reselection";
     await sendPrompt(app, await readyComposer(app), original);
     await app.waitForView(() =>
         expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
@@ -71,7 +71,7 @@ test("Given a selected session renamed elsewhere, When the view reattaches and l
     const releaseEvents = app.executionNetwork.holdSessionEvents();
     onTestFinished(releaseEvents);
     await app.daemon.renameSession(sessionId, renamed);
-    app.remount();
+    await app.user.click(app.elementByTestId(dataTestId.managedConversation));
     await app.waitForView(() => getByRole(document.body, "heading", { name: renamed }));
     await app.daemon.disconnect();
     const reopened = await app.reload();

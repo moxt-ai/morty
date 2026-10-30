@@ -738,10 +738,6 @@ function MobiusSessionPaneBody({
     const welcome = useStore(pane.welcome, (state) => state.state);
     const harness = sessionHarnessSelection(runtimeConfiguration?.runtime ?? null, pane.agentRef);
 
-    // The model owns the session connection through the same ref-cleanup
-    // protocol the chat root uses: attach starts it, the cleanup detaches,
-    // and the model's WeakSet latch ignores re-renders of the same element.
-
     const run = (action: (signal: AbortSignal) => Promise<void>) => {
         const signal = pane.operationsSignal();
         void action(signal).catch((cause: unknown) => {
@@ -818,7 +814,7 @@ function MobiusSessionPaneBody({
         <DesktopChatLayout>
             {(desktop) => (
                 <>
-                    <section className={chatSessionPaneFillClassName} ref={pane.onAttach}>
+                    <section className={chatSessionPaneFillClassName}>
                         {desktop ? (
                             <header className={chatSessionExecutionHeaderClassName}>
                                 <div className="min-w-0 flex-1">
@@ -863,12 +859,7 @@ function MobiusSessionPaneBody({
                                     >
                                         <div className="grid w-full max-w-lg justify-items-center gap-4 text-center">
                                             <SessionLoadFailure message={model.connection.message} />
-                                            <Button
-                                                onClick={() =>
-                                                    run(async (signal) => await pane.store.getState().connect(signal))
-                                                }
-                                                variant="outline"
-                                            >
+                                            <Button onClick={() => pane.store.getState().retryNow()} variant="outline">
                                                 Reconnect
                                             </Button>
                                         </div>

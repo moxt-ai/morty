@@ -131,7 +131,7 @@ test("Given lifecycle events arrive before ACP output, When I queue a follow-up,
     );
 });
 
-test("Given a configuration request is in flight, When the chat view detaches and re-attaches, Then the reconnected composer accepts and sends a new prompt", {
+test("Given a configuration request is in flight, When the chat view detaches and re-attaches, Then the composer accepts and sends a new prompt", {
     timeout: 30_000,
 }, async () => {
     const prompt = "Configuration cancelled by detach";
@@ -153,7 +153,7 @@ test("Given a configuration request is in flight, When the chat view detaches an
         ).toBe(true),
     );
     // Start a configuration request and detach while it is in flight: the
-    // detach aborts the request, and the pane it belonged to must not lock
+    // request belongs to the conversation, not to the view, and must not lock
     // the re-attached view out of the composer.
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
     await openAgentModelPicker(app);
@@ -181,7 +181,7 @@ test("Given a configuration request is in flight, When the chat view detaches an
     );
 });
 
-test("Given an open conversation, When the chat view detaches and re-attaches, Then the pane re-reads the session and restores its history", {
+test("Given an open conversation, When the chat view detaches and re-attaches, Then it shows the conversation's history", {
     timeout: 30_000,
 }, async () => {
     const prompt = "Restore this conversation after re-attach";
@@ -203,8 +203,7 @@ test("Given an open conversation, When the chat view detaches and re-attaches, T
         ).toBe(true),
     );
     app.remount();
-    // The re-attached view must show the persisted conversation again from
-    // the re-read session, not an empty or stale pane.
+    // The re-attached view must show the conversation, not an empty or stale pane.
     await app.waitForView(() =>
         expect(app.elementsByTestId(dataTestId.userMessage).some((element) => element.textContent === prompt)).toBe(
             true,
@@ -219,7 +218,7 @@ test("Given an open conversation, When the chat view detaches and re-attaches, T
     );
 });
 
-test("Given a remounted conversation whose re-read is in flight, When the user re-selects it from the directory, Then the superseded read cannot fail the new attempt", {
+test("Given a remounted conversation, When the user re-selects it from the directory, Then it reopens with its history and no failure", {
     timeout: 30_000,
 }, async () => {
     const prompt = "Re-select during re-read";
@@ -240,10 +239,9 @@ test("Given a remounted conversation whose re-read is in flight, When the user r
                 .some((element) => element.textContent?.includes(`Codex turn 1: ${prompt}`)),
         ).toBe(true),
     );
-    // The remount starts a re-read of the released selection; selecting the
-    // same conversation from the directory again immediately supersedes that
-    // read with a fresh home load. The superseded read's cancellation must
-    // not surface as a failure for the newer attempt.
+    // Selecting the same conversation from the directory again replaces its
+    // pane with a fresh home load. The replaced pane's cancellation must not
+    // surface as a failure for the newer one.
     app.remount();
     const conversation = await app.queryElementByTestId(dataTestId.managedConversation);
     await app.user.click(conversation);
