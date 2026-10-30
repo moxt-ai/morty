@@ -230,6 +230,9 @@ test("Given a browser without saved access, When I open a copied computer addres
     );
     expect(document.body.textContent).toContain("Pair again to access this computer from this browser.");
     expect(document.body.textContent).toContain("Copying the address from another browser does not transfer access.");
+    expect(document.body.textContent?.indexOf("Copying the address from another browser")).toBeLessThan(
+        document.body.textContent?.indexOf("Pair again to access this computer") ?? -1,
+    );
     expect(document.body.textContent).toContain(
         "Open the URL your agent gives you, or scan the QR code from your agent.",
     );
