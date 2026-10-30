@@ -163,3 +163,38 @@ for (const [label, optionId] of [
         await app.waitForView(() => expect(document.body.textContent).toContain(`Selected decision: ${optionId}`));
     });
 }
+
+test("Given a background permission after the foreground turn ends, When the user reloads and approves it, Then the request is recovered and stays resolved after another reload", {
+    timeout: 30_000,
+}, async () => {
+    const ready = Promise.withResolvers<() => Promise<void>>();
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: { id: "interaction-test", label: "Interaction Agent", onBackgroundPermissionReady: ready.resolve },
+    });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "request background permission");
+    await app.waitForView(() => expect(document.body.textContent).toContain("Foreground work completed"));
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    await app.user.type(composer, "Unsent draft");
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false),
+    );
+    const response = (await ready.promise)();
+    void response.catch(() => undefined);
+    await app.waitForView(() => getByRole(document.body, "alertdialog", { name: "Agent permission request" }));
+    const reloaded = await app.reload();
+    const permission = await reloaded.waitForView(() =>
+        getByRole(document.body, "alertdialog", { name: "Agent permission request" }),
+    );
+    expect(permission.textContent).toContain("echo verified");
+    await reloaded.user.click(getByRole(permission, "button", { name: "Allow: Verify" }));
+    await response;
+    await reloaded.waitForView(() => expect(document.body.textContent).toContain("Background decision: allow-once"));
+    expect(queryByRole(document.body, "alertdialog", { name: "Agent permission request" })).toBeNull();
+    const settled = await reloaded.reload();
+    await settled.user.type(await settled.queryElementByTestId(dataTestId.messageComposer), "Another unsent draft");
+    await settled.waitForView(() =>
+        expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false),
+    );
+    expect(queryByRole(document.body, "alertdialog", { name: "Agent permission request" })).toBeNull();
+});

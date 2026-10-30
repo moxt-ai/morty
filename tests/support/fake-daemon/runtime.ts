@@ -54,12 +54,14 @@ export interface ControlledAgent {
     readonly beforeConfigurationApplied?: ((configId: string, value: string | boolean) => Promise<void>) | undefined;
     /** Holds the controlled Agent's cancellation while its current reply remains active. */
     readonly beforeCancellationApplied?: (() => Promise<void>) | undefined;
+    readonly onBackgroundPermissionReady?: ((request: () => Promise<void>) => void) | undefined;
 }
 
 export interface ControlledAgentBehavior extends FakeAgentHarnessOptions {
     readonly beforeSessionCreated?: (() => Promise<void>) | undefined;
     readonly beforeConfigurationApplied?: ((configId: string, value: string | boolean) => Promise<void>) | undefined;
     readonly beforeCancellationApplied?: (() => Promise<void>) | undefined;
+    readonly onBackgroundPermissionReady?: ((request: () => Promise<void>) => void) | undefined;
     readonly files?: ReadonlyMap<string, { readonly content: string | Uint8Array; readonly mediaType: string }>;
 }
 
@@ -147,7 +149,7 @@ export function createMortyFakeDaemon(behavior: ControlledAgentBehavior, workspa
         return { ...harness, agents: [createToolLifecycleAgent(behavior.beforeCancellationApplied)] };
     }
     if (behavior.agentId === "interaction-test") {
-        return { ...harness, agents: [createInteractionAgent()] };
+        return { ...harness, agents: [createInteractionAgent(behavior.onBackgroundPermissionReady)] };
     }
     if (behavior.agentId === "configuration-test") {
         return {

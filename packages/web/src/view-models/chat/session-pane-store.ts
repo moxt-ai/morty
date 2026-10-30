@@ -11,7 +11,7 @@ import {
     SESSION_CLOSED_ERROR_CODE,
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
-import type { SessionEvent } from "@moxt-ai/mobius-sdk/protocol";
+import type { SessionEvent, SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
@@ -54,7 +54,7 @@ import {
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import { prependToDraft, type SessionDeliveryStore } from "./session-delivery-store.ts";
 import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
-import { requestedInteraction, type SessionLifecycleFact, sessionLifecycleFact } from "./session-lifecycle.ts";
+import { type SessionLifecycleFact, sessionInteractionRecovery, sessionLifecycleFact } from "./session-lifecycle.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
 import type { ElicitationInteractionResponse, PermissionInteractionResponse } from "./session-pane-types.ts";
 import {
@@ -629,6 +629,14 @@ export function createSessionPaneModel(options: {
         }
     };
     const interactions = createSessionInteractionStore({
+        read: async (signal) => {
+            if (client === null) {
+                throw new Error("The Session is not connected");
+            }
+            return sessionInteractionRecovery(
+                await client.sessions.readSessionExecution(sessionId, sessionIdentity, signal),
+            );
+        },
         permission: respondToPermission,
         elicitation: respondToElicitation,
     });
@@ -1040,12 +1048,15 @@ export function createSessionPaneModel(options: {
                         session.result.action === "conversation" ? session.result.access : undefined,
                     );
                     const connected = client;
-                    const receiveLifecycle = async (fact: SessionLifecycleFact): Promise<void> => {
+                    const receiveLifecycle = async (
+                        fact: SessionLifecycleFact,
+                        event: SessionLiveEvent,
+                    ): Promise<void> => {
                         switch (fact.kind) {
                             case "interaction-requested":
                             case "permission-resolved":
                             case "elicitation-resolved":
-                                interactions.getState().apply(fact);
+                                await interactions.getState().apply(fact, event, signal);
                                 return;
                             case "queue-changed": {
                                 const execution = await connected.sessions.readSessionExecution(
@@ -1203,14 +1214,7 @@ export function createSessionPaneModel(options: {
                                 }
                             }
                             signal.throwIfAborted();
-                            const interaction = execution.turn?.interaction;
-                            interactions
-                                .getState()
-                                .restore(
-                                    interaction === undefined || interaction === null
-                                        ? []
-                                        : [requestedInteraction(interaction)],
-                                );
+                            interactions.getState().recover(sessionInteractionRecovery(execution));
                             announceActivity();
                             switch (reconciliation.kind) {
                                 case "initial-subscription":
@@ -1238,7 +1242,7 @@ export function createSessionPaneModel(options: {
                                     }
                                 }
                                 if (event.type !== "acp") {
-                                    await receiveLifecycle(sessionLifecycleFact(event.payload));
+                                    await receiveLifecycle(sessionLifecycleFact(event.payload), event);
                                 }
                                 await new Promise<void>((resolve) => queueMicrotask(resolve));
                                 signal.throwIfAborted();
