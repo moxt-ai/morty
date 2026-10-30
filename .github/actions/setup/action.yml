@@ -10,14 +10,14 @@ runs:
 
     - name: Checkout Mobius
       # Mobius is public; checkout uses the caller's read-only GITHUB_TOKEN.
-      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      uses: actions/checkout@v7.0.1
       with:
         repository: moxt-ai/mobius
         ref: ${{ steps.mobius.outputs.revision }}
         path: third-party/mobius
         persist-credentials: false
 
-    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+    - uses: actions/setup-node@v7.0.0
       with:
         node-version-file: .nvmrc
 
@@ -29,7 +29,7 @@ runs:
         pnpm --version
         echo "store-path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
 
-    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+    - uses: actions/cache@v6.1.0
       with:
         path: ${{ steps.pnpm.outputs.store-path }}
         key: pnpm-v11-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'third-party/mobius/pnpm-lock.yaml') }}
