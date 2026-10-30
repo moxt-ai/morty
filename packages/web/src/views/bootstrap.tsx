@@ -9,18 +9,19 @@ import type { WebSocketApiTransport } from "../services/api/websocket-api-transp
 import type { SetupHandoff } from "../services/device/setup-handoff.ts";
 import type { Clock } from "../services/time/clock.ts";
 import { createImageDownloadStore } from "../view-models/chat/image-download-store.ts";
-import { createMortyApplication, type MortyApplication } from "../view-models/morty-application.ts";
+import { prepareHomeScreenGuide } from "../view-models/home-screen-guide.ts";
+import { createMortyApplication } from "../view-models/morty-application.ts";
 import { MortyApplicationProvider } from "./application/application-context.tsx";
 import { MortyCrashFallback } from "./application/crash-fallback.tsx";
 import { createContinuationRouter } from "./authentication/router.tsx";
 import { createSignedInRouter, SessionApplication } from "./authentication/session-application.tsx";
+import { HomeScreenGuide } from "./home-screen-guide.tsx";
 
 /**
- * The one application assembly shared by production and tests: creates the
- * application, builds the continuation router once, and renders the session
- * application tree with its toast host and error boundary. `assembleMorty`
- * owns creation; `mountMorty` additionally attaches a real React root, which
- * is what the page does.
+ * The page assembly shared by production and tests. A shortcut preparation
+ * visit renders its guide without starting identity recovery; other visits
+ * create the application and its routers. The assembly owns their disposal,
+ * and `mountMorty` additionally attaches a real React root.
  */
 export function assembleMorty(options: {
     readonly analytics?: PageAnalytics | null;
@@ -29,11 +30,17 @@ export function assembleMorty(options: {
     readonly clock?: Clock;
     readonly setupHandoff?: SetupHandoff;
 }): {
-    readonly application: MortyApplication;
-    readonly disposeAnalytics: () => void;
+    readonly dispose: () => void;
     readonly element: React.ReactElement;
 } {
     installInputModalityTracking();
+    const homeScreenPlatform = prepareHomeScreenGuide();
+    if (homeScreenPlatform !== null) {
+        return {
+            dispose: () => options.transport.dispose(),
+            element: <HomeScreenGuide platform={homeScreenPlatform} />,
+        };
+    }
     // Application-scoped workflows — the Chat API transport and the anonymous
     // identity session — are owned outside React's mount and unmount cycle.
     // They start with the page and end with it, so no component effect
@@ -75,11 +82,11 @@ export function assembleMorty(options: {
         </MortyApplicationProvider>
     );
     return {
-        application,
-        disposeAnalytics: () => {
+        dispose: () => {
             for (const unsubscribe of analyticsSubscriptions) {
                 unsubscribe();
             }
+            application.dispose();
         },
         element,
     };
@@ -96,13 +103,12 @@ export function mountMorty(options: {
     readonly transport: WebSocketApiTransport;
     readonly origin: string;
 }): {
-    readonly application: MortyApplication;
     /** Unmounts the React tree; the application keeps running. */
     readonly unmount: () => void;
     /** Releases the application's resources after its last unmount. */
     readonly dispose: () => void;
 } {
-    const { application, disposeAnalytics, element } = assembleMorty({
+    const { dispose, element } = assembleMorty({
         ...(options.analytics === undefined ? {} : { analytics: options.analytics }),
         origin: options.origin,
         transport: options.transport,
@@ -114,13 +120,9 @@ export function mountMorty(options: {
     });
     root.render(element);
     return {
-        application,
         unmount: () => {
             void root.unmount();
         },
-        dispose: () => {
-            disposeAnalytics();
-            application.dispose();
-        },
+        dispose,
     };
 }
