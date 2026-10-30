@@ -192,7 +192,8 @@ const pendingRequestEntries = {
     additionalDirectoryIds: v.pipe(v.array(v.custom<string>(isDirectoryIdentifier)), v.maxLength(16), v.readonly()),
     agentId: v.exactOptional(submissionIdentifier),
     directoryId: v.exactOptional(v.custom<string>(isDirectoryIdentifier)),
-    content: messageDraftSchema,
+    // Preserve the attempted request exactly; the receiving API owns prompt-size rejection.
+    content: v.string(),
     attachments: v.pipe(v.array(uploadedAttachmentSchema), v.maxLength(16), v.readonly()),
     historyPolicy: v.exactOptional(v.picklist(["eager", "execution-only"])),
     sessionConfigurations: v.exactOptional(
