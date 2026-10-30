@@ -72,6 +72,14 @@ jobs:
 
       - uses: ./.github/actions/setup
 
+      - name: Validate Worker config with public fixtures
+        run: node scripts/validate-worker-config.ts
+        env:
+          APP_ORIGIN: https://chat.example.invalid
+          MOBIUS_BASE_URL: https://platform.example.invalid
+          MOBIUS_APP_ID: ci-app
+          MOBIUS_APP_SECRET: ci-placeholder
+
       - run: pnpm check:static
 
   tests:

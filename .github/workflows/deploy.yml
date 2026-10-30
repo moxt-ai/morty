@@ -16,6 +16,21 @@ permissions:
 jobs:
   deploy:
     name: Deploy ${{ inputs.environment }}
+    # Authorize the source revision at the reusable workflow boundary.
+    if: >-
+      github.repository == 'moxt-ai/morty' &&
+      github.ref == 'refs/heads/main' &&
+      (inputs.environment == 'staging' || inputs.environment == 'production') &&
+      (
+        ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+          inputs.revision == github.sha) ||
+        (github.event_name == 'workflow_run' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_branch == 'main' &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          inputs.revision == github.event.workflow_run.head_sha)
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
