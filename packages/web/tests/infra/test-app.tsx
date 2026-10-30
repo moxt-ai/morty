@@ -241,7 +241,7 @@ export async function createTestApp(
             lifetime.abort(new DOMException("The test document reloaded", "AbortError"));
             rendered.unmount();
             container.remove();
-            assembled.application.dispose();
+            assembled.dispose();
             activeApps.delete(app);
             // A real reload gets a fresh page with its own Chat API
             // transport; the reloaded document keeps the live server and
@@ -274,7 +274,7 @@ export async function createTestApp(
             // transport; disposing it also closes the shared transport, which
             // is fine here because current.close() closes it anyway and
             // viewers own their own transports.
-            assembled.application.dispose();
+            assembled.dispose();
             await current.close();
             container.remove();
             activeApps.delete(app);

@@ -8,6 +8,7 @@ import {
     MessageSquarePlus,
     RefreshCw,
     Share2,
+    Smartphone,
     Wifi,
     X,
 } from "lucide-react";
@@ -683,6 +684,20 @@ export function ConversationSidebar({
                                                                 variant="card"
                                                                 onClick={dialogs.getState().openSharing}
                                                             />
+                                                            <a
+                                                                className={mobileDrawerCardRowClassName}
+                                                                href="/?view=home-screen"
+                                                                target="_blank"
+                                                                rel="noopener"
+                                                                onClick={dialogs.getState().closeMobileNav}
+                                                            >
+                                                                <Smartphone
+                                                                    aria-hidden="true"
+                                                                    className="size-5 shrink-0 text-copy-secondary"
+                                                                />
+                                                                Add to Home Screen
+                                                                <span className="sr-only"> (opens a new tab)</span>
+                                                            </a>
                                                             <BugReportButton
                                                                 appearance="card"
                                                                 daemonSource={sessionDiagnostics}
