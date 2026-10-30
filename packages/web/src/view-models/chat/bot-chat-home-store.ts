@@ -13,6 +13,7 @@ import {
     newConversationDraftEntry,
     newConversationUnsentMessageEntry,
 } from "../../services/session-storage/central-session-storage.ts";
+import type { Clock } from "../../services/time/clock.ts";
 import { formatError } from "../format-error.ts";
 import { createComposerAttachmentStore } from "./composer-attachment-store.ts";
 import {
@@ -30,6 +31,7 @@ import {
 } from "./conversation-selection-machine.ts";
 import { createConversationSessionStore } from "./conversation-session-store.ts";
 import type { OpenMobiusSession } from "./open-session.ts";
+import { startRecoveryNotice } from "./recovery-notice.ts";
 import type { RuntimeObservation } from "./runtime-recovery.ts";
 import { prependToDraft } from "./session-delivery-store.ts";
 import type { SessionTitles, SessionTitlesStore } from "./session-titles-store.ts";
@@ -122,7 +124,11 @@ export interface BotChatHomeStore {
     readonly configurationWatch:
         | { readonly kind: "checking" }
         | { readonly kind: "current"; readonly checkedAt: number }
-        | { readonly kind: "unavailable"; readonly lastCheckedAt: number | null };
+        | {
+              readonly kind: "unavailable";
+              readonly lastCheckedAt: number | null;
+              readonly notice: "quiet" | "visible";
+          };
     readonly networkAvailable: boolean;
     readonly setNetworkAvailable: (available: boolean) => void;
     readonly selection: ConversationSelectionState;
@@ -224,7 +230,7 @@ export const createBotChatHomeStore = (
         ) => void;
         /** Announced when the view failed only because the Runtime was unreachable and waits for it to be retried. */
         readonly onWaitingForRuntime: () => void;
-        readonly now: () => number;
+        readonly clock: Clock;
         readonly url: string;
         readonly createId: () => string;
         readonly navigation: BotChatNavigation;
@@ -291,20 +297,6 @@ export const createBotChatHomeStore = (
                 releaseUnsentFirstMessage(abandoned.commandId);
             }
         };
-        const configurationUnavailable = (): void => {
-            const watch = get().configurationWatch;
-            set({
-                configurationWatch: {
-                    kind: "unavailable",
-                    lastCheckedAt:
-                        watch.kind === "current"
-                            ? watch.checkedAt
-                            : watch.kind === "unavailable"
-                              ? watch.lastCheckedAt
-                              : null,
-                },
-            });
-        };
         return {
             composerAttachments: createComposerAttachmentStore(),
             draftHandoff: null,
@@ -327,6 +319,45 @@ export const createBotChatHomeStore = (
             dismissNotice: () => set((current) => ({ notices: { ...current.notices, pairing: { kind: "hidden" } } })),
             load: async (signal) => {
                 signal.throwIfAborted();
+                let recoveryNotice: AbortController | null = null;
+                const clearRecoveryNotice = (): void => {
+                    recoveryNotice?.abort();
+                    recoveryNotice = null;
+                };
+                const configurationUnavailable = (): void => {
+                    const watch = get().configurationWatch;
+                    // Repeated failures belong to one interruption, so they cannot postpone its notice.
+                    if (recoveryNotice !== null) {
+                        return;
+                    }
+                    const notice =
+                        watch.kind === "current" ? "quiet" : watch.kind === "unavailable" ? watch.notice : "visible";
+                    set({
+                        configurationWatch: {
+                            kind: "unavailable",
+                            lastCheckedAt:
+                                watch.kind === "current"
+                                    ? watch.checkedAt
+                                    : watch.kind === "unavailable"
+                                      ? watch.lastCheckedAt
+                                      : null,
+                            notice,
+                        },
+                    });
+                    if (notice === "visible") {
+                        return;
+                    }
+                    recoveryNotice = startRecoveryNotice({
+                        clock: options.clock,
+                        signal,
+                        onNotice: (notice) => {
+                            const current = get().configurationWatch;
+                            if (current.kind === "unavailable") {
+                                set({ configurationWatch: { ...current, notice } });
+                            }
+                        },
+                    });
+                };
                 titles.getState().restore();
                 const startedWith = titles.getState().titles;
                 const starting = get();
@@ -422,9 +453,10 @@ export const createBotChatHomeStore = (
                     configuration: BotRuntimeConfiguration,
                     observation: RuntimeObservation,
                 ): void => {
+                    clearRecoveryNotice();
                     set({
                         runtimeConfiguration: configuration,
-                        configurationWatch: { kind: "current", checkedAt: options.now() },
+                        configurationWatch: { kind: "current", checkedAt: options.clock.now() },
                     });
                     options.onRuntimeConfiguration(configuration, observation);
                 };
@@ -663,6 +695,8 @@ export const createBotChatHomeStore = (
                         return;
                     }
                     failLoad("unavailable", message);
+                } finally {
+                    clearRecoveryNotice();
                 }
             },
             newConversation: () => {

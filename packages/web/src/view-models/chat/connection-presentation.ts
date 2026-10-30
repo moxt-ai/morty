@@ -141,6 +141,9 @@ export function connectionPresentation(
         );
     }
     if (computer.kind === "unavailable") {
+        if (watch.kind === "unavailable" && watch.notice === "quiet") {
+            return present({ kind: "recovering", label: "Reconnecting" }, { kind: "hidden" });
+        }
         return present(
             { kind: "unknown", label: "Connection status unavailable" },
             {
