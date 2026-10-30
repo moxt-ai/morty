@@ -16,7 +16,6 @@ export function pendingConversationPresentation(
     if (
         selection.kind === "draft" ||
         selection.kind === "ready" ||
-        selection.target.kind === "continue" ||
         (selection.kind === "failed" && (selection.failure === "unavailable" || selection.failure === "agent-required"))
     ) {
         return { title, recovery: null };

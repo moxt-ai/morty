@@ -1,22 +1,8 @@
 import { type OpenMobiusSession, type SelectedMobiusSession, selectedSession } from "./open-session.ts";
 
-type SelectedConversationTarget =
+type ConversationTarget =
     | { readonly kind: "conversation"; readonly conversationId: string }
     | { readonly kind: "session"; readonly sessionId: string };
-
-export type ConversationTarget =
-    | SelectedConversationTarget
-    | ({
-          readonly kind: "continue";
-          readonly harness: string;
-          readonly sessionId: string;
-      } & (
-          | { readonly action: "import" }
-          | {
-                readonly action: "fork";
-                readonly operation: { readonly id: string; readonly contract: "undecided" | "legacy" | "recoverable" };
-            }
-      ));
 
 export type ConversationSelectionState =
     | { readonly kind: "draft"; readonly key: string }
@@ -26,7 +12,7 @@ export type ConversationSelectionState =
     | {
           readonly kind: "ready";
           readonly session: SelectedMobiusSession;
-          readonly target: SelectedConversationTarget;
+          readonly target: ConversationTarget;
       }
     | {
           readonly kind: "failed";
@@ -42,7 +28,7 @@ export type ConversationSelectionEvent =
     | {
           readonly kind: "session-loaded";
           readonly session: OpenMobiusSession;
-          readonly target: SelectedConversationTarget;
+          readonly target: ConversationTarget;
       }
     | {
           readonly kind: "session-load-failed";
@@ -52,30 +38,12 @@ export type ConversationSelectionEvent =
       }
     | { readonly kind: "retry-requested" }
     | { readonly kind: "reload-requested" }
-    | {
-          readonly kind: "continued-session-loaded";
-          readonly session: OpenMobiusSession;
-          readonly target: ConversationTarget;
-      }
     | { readonly kind: "conversation-created"; readonly conversationId: string; readonly session: OpenMobiusSession };
 
 function sameTarget(left: ConversationTarget, right: ConversationTarget): boolean {
-    if (left.kind !== right.kind) {
-        return false;
-    }
-    switch (left.kind) {
-        case "conversation":
-            return right.kind === "conversation" && left.conversationId === right.conversationId;
-        case "session":
-            return right.kind === "session" && left.sessionId === right.sessionId;
-        case "continue":
-            return (
-                right.kind === "continue" &&
-                left.action === right.action &&
-                left.harness === right.harness &&
-                left.sessionId === right.sessionId
-            );
-    }
+    return left.kind === "conversation"
+        ? right.kind === "conversation" && left.conversationId === right.conversationId
+        : right.kind === "session" && left.sessionId === right.sessionId;
 }
 
 export function transitionConversationSelection(
@@ -101,16 +69,6 @@ export function transitionConversationSelection(
             return state.kind === "failed" ? { kind: "pending", target: state.target } : state;
         case "reload-requested":
             return state.kind === "ready" ? { kind: "loading", target: state.target } : state;
-        case "continued-session-loaded":
-            return state.kind === "loading" &&
-                state.target.kind === "continue" &&
-                sameTarget(state.target, event.target)
-                ? {
-                      kind: "ready",
-                      session: selectedSession(event.session),
-                      target: { kind: "session", sessionId: event.session.result.ready.sessionId },
-                  }
-                : state;
         case "conversation-created":
             return state.kind === "draft"
                 ? {
@@ -123,7 +81,7 @@ export function transitionConversationSelection(
 }
 
 export function selectedConversationId(state: ConversationSelectionState): string {
-    if (state.kind === "draft" || state.target.kind === "continue") {
+    if (state.kind === "draft") {
         return "";
     }
     return state.target.kind === "conversation" ? state.target.conversationId : state.target.sessionId;

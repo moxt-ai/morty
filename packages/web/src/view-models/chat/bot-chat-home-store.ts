@@ -25,7 +25,6 @@ import {
 import {
     type ConversationSelectionEvent,
     type ConversationSelectionState,
-    type ConversationTarget,
     selectedConversationId,
     transitionConversationSelection,
 } from "./conversation-selection-machine.ts";
@@ -81,13 +80,11 @@ export function botConnectionStatus(
 
 /**
  * Whether the home view failed only because the Runtime was unreachable, so the workspace retries it once the Runtime
- * is back. A selection that is loading again is a retry in flight, not a failure. Only loads that read are retried:
- * continuing a native session forks or imports it, and a connection that dropped mid-request cannot show it did not
- * happen, so the user decides whether to retry.
+ * is back. A selection that is loading again is a retry in flight, not a failure.
  */
 export function homeWaitsForRuntime(home: Pick<BotChatHomeStore, "initialization" | "selection">): boolean {
     const selection = home.selection;
-    if (selection.kind === "draft" || selection.target.kind === "continue") {
+    if (selection.kind === "draft") {
         return false;
     }
     return (
@@ -98,9 +95,7 @@ export function homeWaitsForRuntime(home: Pick<BotChatHomeStore, "initialization
 
 export interface BotChatNavigation {
     readonly showDraft: () => void;
-    readonly showManaged: (isExternal: boolean, id: string) => void;
-    readonly showContinuedSession: (sessionId: string) => void;
-    readonly showForkInstead: () => void;
+    readonly showManaged: (id: string) => void;
 }
 
 /**
@@ -146,9 +141,8 @@ export interface BotChatHomeStore {
     readonly dismissNotice: () => void;
     readonly load: (signal: AbortSignal) => Promise<void>;
     readonly newConversation: () => void;
-    readonly openManaged: (isExternal: boolean, id: string) => void;
+    readonly openManaged: (id: string) => void;
     readonly retry: () => void;
-    readonly forkInstead: () => void;
     readonly setDraft: (draft: string) => void;
     readonly showPairingDialog: () => void;
     readonly closePairingDialog: () => void;
@@ -166,31 +160,10 @@ export interface BotChatHomeStore {
 }
 
 function initialSelection(urlValue: string, createId: () => string): ConversationSelectionState {
-    const url = new URL(urlValue);
-    const sessionId = url.searchParams.get("sessionId");
-    const harness = url.searchParams.get("harness");
-    const requestedAction = url.searchParams.get("nativeSessionAction");
-    if (sessionId !== null && isIdentifier(sessionId)) {
-        if (harness !== null && isIdentifier(harness)) {
-            return requestedAction === null || requestedAction === "fork" || requestedAction === "import"
-                ? {
-                      kind: "pending",
-                      target:
-                          requestedAction === "import"
-                              ? { kind: "continue", action: "import", harness, sessionId }
-                              : {
-                                    kind: "continue",
-                                    action: "fork",
-                                    harness,
-                                    sessionId,
-                                    operation: { id: createId(), contract: "undecided" },
-                                },
-                  }
-                : { kind: "draft", key: createId() };
-        }
-        return { kind: "pending", target: { kind: "session", sessionId } };
-    }
-    return { kind: "draft", key: createId() };
+    const sessionId = new URL(urlValue).searchParams.get("sessionId");
+    return sessionId !== null && isIdentifier(sessionId)
+        ? { kind: "pending", target: { kind: "session", sessionId } }
+        : { kind: "draft", key: createId() };
 }
 
 /** Setup is a projection of its owning workflows, not a second stored configuration snapshot. */
@@ -227,8 +200,6 @@ export const createBotChatHomeStore = (
         BotChatApi,
         | "access"
         | "conversationSession"
-        | "continueNativeSession"
-        | "continueRecoverableNativeFork"
         | "createConversation"
         | "managedSession"
         | "readBot"
@@ -293,10 +264,7 @@ export const createBotChatHomeStore = (
             }
         };
         const acceptLoadedSelection = (
-            event: Extract<
-                ConversationSelectionEvent,
-                { readonly kind: "session-loaded" | "continued-session-loaded" }
-            >,
+            event: Extract<ConversationSelectionEvent, { readonly kind: "session-loaded" }>,
             startedWith: SessionTitles,
         ): void => {
             const previous = get().selection;
@@ -588,44 +556,7 @@ export const createBotChatHomeStore = (
                         await watchRuntimeConfigurationChanges();
                         return;
                     }
-                    let currentTarget = currentSelection.kind === "draft" ? null : currentSelection.target;
-                    if (currentTarget?.kind === "continue") {
-                        if (currentTarget.action === "fork" && currentTarget.operation.contract === "undecided") {
-                            currentTarget = {
-                                ...currentTarget,
-                                operation: {
-                                    id: currentTarget.operation.id,
-                                    contract: configuration.runtime.nativeForkRecovery ? "recoverable" : "legacy",
-                                },
-                            };
-                            set({ selection: { kind: "loading", target: currentTarget } });
-                        }
-                        const session =
-                            currentTarget.action === "fork" && currentTarget.operation.contract === "recoverable"
-                                ? await requests.continueRecoverableNativeFork(
-                                      botId,
-                                      currentTarget.harness,
-                                      currentTarget.sessionId,
-                                      currentTarget.operation.id,
-                                      signal,
-                                  )
-                                : await requests.continueNativeSession(
-                                      botId,
-                                      currentTarget.harness,
-                                      currentTarget.sessionId,
-                                      currentTarget.action,
-                                      signal,
-                                  );
-                        signal.throwIfAborted();
-                        options.navigation.showContinuedSession(session.result.ready.sessionId);
-                        acceptLoadedSelection(
-                            { kind: "continued-session-loaded", session, target: currentTarget },
-                            startedWith,
-                        );
-                        phase = "watch";
-                        await followConfigurationChanges(signal);
-                        return;
-                    }
+                    const currentTarget = currentSelection.kind === "draft" ? null : currentSelection.target;
                     if (currentTarget?.kind === "session") {
                         const session = await requests.managedSession(botId, currentTarget.sessionId, signal);
                         signal.throwIfAborted();
@@ -764,11 +695,11 @@ export const createBotChatHomeStore = (
                     onRestart();
                 }
             },
-            openManaged: (isExternal, id) => {
+            openManaged: (id) => {
                 restoredSessionId = null;
                 abandonFirstMessage();
                 get().composerAttachments.getState().clear();
-                options.navigation.showManaged(isExternal, id);
+                options.navigation.showManaged(id);
                 set((current) => ({
                     selection: transitionConversationSelection(current.selection, {
                         kind: "target-selected",
@@ -785,25 +716,6 @@ export const createBotChatHomeStore = (
                     selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
                 }));
                 onRestart();
-            },
-            forkInstead: () => {
-                const current = get().selection;
-                if (current.kind === "failed" && current.target.kind === "continue") {
-                    const target: ConversationTarget = {
-                        ...current.target,
-                        action: "fork",
-                        operation: { id: options.createId(), contract: "undecided" },
-                    };
-                    options.navigation.showForkInstead();
-                    set((state) => ({
-                        selection: transitionConversationSelection(state.selection, {
-                            kind: "target-selected",
-                            target,
-                        }),
-                    }));
-                    onSelectionTargeted(selectedConversationId(get().selection));
-                    onRestart();
-                }
             },
             setDraft: (draft) => {
                 const entry = newConversationDraftEntry(botId);
@@ -826,7 +738,7 @@ export const createBotChatHomeStore = (
             },
             reloadSelection: async (signal) => {
                 const current = get().selection;
-                if (current.kind !== "loading" || current.target.kind === "continue") {
+                if (current.kind !== "loading") {
                     return;
                 }
                 const target = current.target;
@@ -947,7 +859,7 @@ export const createBotChatHomeStore = (
                     }
                 }
                 signal.throwIfAborted();
-                const conversationId = access.conversationId;
+                const conversationId = access.sessionId;
                 titles.getState().created(conversationId, queuedMessage.summary);
                 // The conversation exists, so its first message belongs to it from now on, whatever is on screen.
                 // The page follows it only if the user is still on this draft.
@@ -972,7 +884,7 @@ export const createBotChatHomeStore = (
                         }));
                         return false;
                     }
-                    options.navigation.showManaged(false, conversationId);
+                    options.navigation.showManaged(conversationId);
                 }
                 set((state) => ({
                     firstMessages: transitionFirstMessages(state.firstMessages, {

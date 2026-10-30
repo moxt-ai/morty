@@ -26,7 +26,7 @@ export type AppState =
     | { readonly kind: "invalid-link"; readonly continueHref: string | null }
     | {
           readonly kind: "setup";
-          readonly notice: "access-ended" | "legacy" | "none";
+          readonly notice: "access-ended" | "none";
           readonly returnHref: string | null;
           readonly setupHandoff: SetupHandoffModel;
           readonly onPromptCopied: () => void;
@@ -147,7 +147,7 @@ function SetupApplication({
     returnHref,
     setupHandoff,
 }: {
-    readonly notice: "access-ended" | "legacy" | "none";
+    readonly notice: "access-ended" | "none";
     readonly onLinkSent: () => void;
     readonly onPromptCopied: () => void;
     readonly returnHref: string | null;
@@ -163,18 +163,6 @@ function SetupApplication({
                 <p>
                     <span className="font-medium">Current access ended</span>{" "}
                     <span className="text-muted-foreground">Your local agent and tasks keep running.</span>
-                </p>
-            </MortyAlert>
-        ) : notice === "legacy" ? (
-            <MortyAlert
-                className="w-full items-start justify-center rounded-[12px] border-[oklch(0.62_0.19_255/0.20)] bg-[oklch(0.62_0.19_255/0.08)] px-6 py-3 text-center text-foreground shadow-none [&>div]:flex-initial [&>svg]:mt-[3px] [&>svg]:text-[oklch(0.62_0.19_255)]"
-                tone="info"
-            >
-                <p>
-                    <span className="font-medium">Already using Morty?</span>{" "}
-                    <span className="text-muted-foreground">
-                        Open the link your agent gave you once, and this browser will remember your computer.
-                    </span>
                 </p>
             </MortyAlert>
         ) : undefined;

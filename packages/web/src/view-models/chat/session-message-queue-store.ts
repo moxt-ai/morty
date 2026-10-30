@@ -187,8 +187,7 @@ export const createSessionMessageQueueStore = (options: { readonly port: Session
                     throw cause;
                 }
                 set((state) => {
-                    // Execution events and queue snapshots may arrive before the HTTP refusal,
-                    // including the generic refusal returned by older Runtimes.
+                    // Execution events and queue snapshots may arrive before the HTTP refusal.
                     if (!state.messages.some((candidate) => candidate.commandId === commandId)) {
                         return state;
                     }

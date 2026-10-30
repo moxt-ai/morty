@@ -16,8 +16,7 @@ export const computerKey = (scope: IdentityScope): string => encodeIdentityScope
 
 /**
  * The computers this browser can open, most recently used first. This list owns which computers are kept; a user's
- * token is kept while a remembered computer needs it. Tokens no computer has claimed yet, such as those saved before
- * computers were remembered, only fill the room the list leaves.
+ * token is kept while a remembered computer needs it.
  */
 export function rememberedComputers(): readonly RememberedComputer[] {
     return openable(readStoredAccess());
@@ -32,11 +31,6 @@ export function storedToken(userId: string): string | null {
 export function storedTokenForProject(projectId: string): string | null {
     const computer = rememberedComputers().find((entry) => entry.scope.projectId === projectId);
     return computer === undefined ? null : storedToken(computer.scope.userId);
-}
-
-/** Whether this browser holds any access at all, including access saved before computers were remembered. */
-export function hasStoredAccess(): boolean {
-    return readStoredAccess().credentials.size > 0;
 }
 
 /** Keeps a newly issued access: its token, and its computer behind those already visited. */
@@ -86,10 +80,7 @@ export function forgetComputerAccess(scope: IdentityScope, token: string): boole
 }
 
 export function forgetComputer(scope: IdentityScope): void {
-    updateComputers(
-        rememberedComputers().filter((computer) => computerKey(computer.scope) !== computerKey(scope)),
-        { released: scope.userId },
-    );
+    updateComputers(rememberedComputers().filter((computer) => computerKey(computer.scope) !== computerKey(scope)));
 }
 
 export function rememberComputerVisit(
@@ -237,33 +228,16 @@ function withComputer(saved: readonly RememberedComputer[], scope: IdentityScope
  */
 function updateComputers(
     computers: readonly RememberedComputer[],
-    change: {
-        readonly added?: { readonly userId: string; readonly token: string };
-        /** A user whose access ended, even if no listed computer held its token. */
-        readonly released?: string;
-    } = {},
+    change: { readonly added?: { readonly userId: string; readonly token: string } } = {},
 ): void {
-    const { added, released } = change;
+    const { added } = change;
     const stored = readStoredAccess();
-    const previous = new Set(openable(stored).map((computer) => computer.scope.userId));
     // Computer records this version cannot read are kept, so the tokens they name are needed as much as any other.
     const needed = new Set([...computers.map((computer) => computer.scope.userId), ...stored.unreadableComputerUsers]);
-    const credentials = [...stored.credentials].filter(
-        ([userId]) =>
-            userId !== added?.userId && (needed.has(userId) || (!previous.has(userId) && userId !== released)),
-    );
+    const kept = [...stored.credentials].filter(([userId]) => userId !== added?.userId && needed.has(userId));
     if (added !== undefined) {
-        credentials.push([added.userId, added.token]);
+        kept.push([added.userId, added.token]);
     }
-    // Unclaimed tokens give way first, oldest first. The list's own limit leaves room for every token it needs.
-    let excess = credentials.length - MAX_REMEMBERED_COMPUTERS;
-    const kept = credentials.filter(([userId]) => {
-        if (excess <= 0 || needed.has(userId)) {
-            return true;
-        }
-        excess -= 1;
-        return false;
-    });
     // What only another version can read stays as it was: its tokens, and the computers that need them.
     const unreadable = Object.fromEntries(
         Object.entries(stored.unreadableCredentials).filter(

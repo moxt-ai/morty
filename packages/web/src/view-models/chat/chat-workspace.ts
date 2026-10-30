@@ -99,23 +99,13 @@ function historyNavigation(onDraft: () => void) {
         window.history.replaceState(window.history.state, "", url);
     };
     return {
-        showContinuedSession: (sessionId: string) =>
-            replace((url) => {
-                url.searchParams.delete("harness");
-                url.searchParams.delete("nativeSessionAction");
-                url.searchParams.set("sessionId", sessionId);
-            }),
         showDraft: () => {
             onDraft();
             replace((url) => {
                 url.searchParams.delete("sessionId");
             });
         },
-        showForkInstead: () =>
-            replace((url) => {
-                url.searchParams.set("nativeSessionAction", "fork");
-            }),
-        showManaged: (_isExternal: boolean, id: string) =>
+        showManaged: (id: string) =>
             replace((url) => {
                 url.searchParams.set("sessionId", id);
             }),
@@ -255,7 +245,7 @@ export function createChatWorkspace(options: {
                 return options.createTransfer(signal);
             },
             onOpenSession: (session) => {
-                home.getState().openManaged(session.result.action === "import", session.result.ready.sessionId);
+                home.getState().openManaged(session.result.ready.sessionId);
             },
             onOpenedSession: () => startDirectoryLoad(),
         }),
@@ -395,7 +385,7 @@ export function createChatWorkspace(options: {
         }
         announcedViews.add(node);
         const selection = home.getState().selection;
-        if (releasedByDetach && selection.kind === "loading" && selection.target.kind !== "continue") {
+        if (releasedByDetach && selection.kind === "loading") {
             // The previous view released this selection when it detached; the
             // re-attached view re-reads the saved session so it does not render
             // the snapshot captured by the view instance that just went away.

@@ -38,13 +38,8 @@ const nativeListInput = v.strictObject({
 });
 const nativeEntryInput = v.strictObject({ ...nativeIdentity, discoveryId: platformIdentifier });
 const nativePreviewInput = v.strictObject({ ...nativeIdentity, nativeSessionId: platformIdentifier });
-const nativeForkContinuationInput = v.strictObject({ harness: platformIdentifier, sessionId: platformIdentifier });
 const directoryInput = v.strictObject({ directoryId: nativeDirectoryId });
-const nativeContinuationInput = v.strictObject({
-    action: v.picklist(["fork", "import"]),
-    harness: platformIdentifier,
-    sessionId: platformIdentifier,
-});
+const nativeContinuationInput = v.strictObject({ harness: platformIdentifier, sessionId: platformIdentifier });
 const nativeSessionInput = v.strictObject({ sessionId: platformIdentifier });
 const sessionConfiguration = v.strictObject({
     booleanValue: v.boolean(),
@@ -267,7 +262,6 @@ export function createBotChatRoutes() {
                         context.get("chatScope"),
                         input.harness,
                         input.sessionId,
-                        input.action,
                     ),
                 );
             },
@@ -305,24 +299,6 @@ export function createBotChatRoutes() {
             },
         )
         .post(
-            "/bots/:botId/native-session/:id/fork",
-            authenticatedSession,
-            authorizedChat(120000),
-            bodyParser<AuthorizedChatEnvironment, typeof nativeEntryInput>(nativeEntryInput),
-            async (context) => {
-                const entryId = v.parse(platformIdentifier, context.req.param("id"));
-                const { runtimeId, ...input } = context.req.valid("json");
-                return privateJson(
-                    await context.env.services.chat.forkNativeSession(
-                        context.get("chatScope"),
-                        runtimeId,
-                        entryId,
-                        input,
-                    ),
-                );
-            },
-        )
-        .post(
             "/bots/:botId/native-session-forks/:operationId",
             authenticatedSession,
             authorizedChat(120000),
@@ -337,24 +313,6 @@ export function createBotChatRoutes() {
                     input,
                 );
                 return privateJson(receipt.result);
-            },
-        )
-        .post(
-            "/bots/:botId/continue-native-session/forks/:operationId",
-            authenticatedSession,
-            authorizedChat(120000),
-            bodyParser<AuthorizedChatEnvironment, typeof nativeForkContinuationInput>(nativeForkContinuationInput),
-            async (context) => {
-                const operationId = v.parse(platformIdentifier, context.req.param("operationId"));
-                const input = context.req.valid("json");
-                return privateJson(
-                    await context.env.services.chat.continueRecoverableNativeFork(
-                        context.get("chatScope"),
-                        operationId,
-                        input.harness,
-                        input.sessionId,
-                    ),
-                );
             },
         )
         .post(
