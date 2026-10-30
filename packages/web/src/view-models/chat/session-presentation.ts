@@ -1,5 +1,12 @@
 import { externalContentPath } from "@moxt-ai/mobius-sdk";
-import type { AcpSessionUpdate, ContentBlock, SessionEvent, SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
+import {
+    type AcpSessionUpdate,
+    type ContentBlock,
+    type PromptCompletion,
+    promptCompletion,
+    type SessionEvent,
+    type SessionLiveEvent,
+} from "@moxt-ai/mobius-sdk/protocol";
 import type { AgentDisplayContent } from "../../components/agents/display-content.ts";
 import {
     REASONING_CHARACTER_LIMIT,
@@ -62,7 +69,7 @@ export type SessionMessage =
                     readonly status: "in_progress" | "completed" | "failed" | "cancelled";
                     readonly summary: SessionText | null;
                 }
-              | { readonly kind: "completed"; readonly stopReason: string }
+              | { readonly kind: "completed"; readonly completion: PromptCompletion }
               | { readonly kind: "failure"; readonly code: string; readonly message: string };
       };
 
@@ -505,7 +512,7 @@ function consumeSessionEvent(
                     firstEvent: event,
                     presentation:
                         lifecycle.kind === "prompt.completed"
-                            ? { kind: "completed", stopReason: lifecycle.stopReason }
+                            ? { kind: "completed", completion: promptCompletion(lifecycle) }
                             : { kind: "failure", code: lifecycle.code, message: lifecycle.message },
                 },
             };
@@ -819,11 +826,9 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
         if (
             message.role === "assistant" &&
             message.presentation.kind === "completed" &&
-            message.presentation.stopReason === "cancelled" &&
+            message.presentation.completion.kind === "cancelled" &&
             message.commandId !== null &&
-            ((message.firstEvent.type === "lifecycle-metadata" &&
-                message.firstEvent.payload.kind === "prompt.completed" &&
-                message.firstEvent.payload.execution === "not-started") ||
+            (!message.presentation.completion.started ||
                 (queuedCommands.has(message.commandId) && !startedCommands.has(message.commandId)))
         ) {
             continue;
@@ -864,7 +869,7 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
         const terminal = event.payload;
         if (
             terminal.kind !== "prompt.failed" &&
-            (terminal.kind !== "prompt.completed" || terminal.stopReason === "steered")
+            (terminal.kind !== "prompt.completed" || promptCompletion(terminal).kind === "steered")
         ) {
             continue;
         }
@@ -923,10 +928,10 @@ function terminalExecutionState(message: SessionMessage): SessionExecutionState 
     if (presentation.kind === "failure") {
         return { kind: "ended-early" };
     }
-    if (presentation.kind !== "completed" || presentation.stopReason === "steered") {
+    if (presentation.kind !== "completed" || presentation.completion.kind === "steered") {
         return null;
     }
-    return completedTurnNotice(presentation.stopReason) === null ? { kind: "finished" } : { kind: "ended-early" };
+    return completedTurnNotice(presentation.completion) === null ? { kind: "finished" } : { kind: "ended-early" };
 }
 
 /** Returns, for each message, the state of the execution that owns it. */
@@ -991,13 +996,24 @@ export function sessionExecutionStates(
     return states;
 }
 
-export function completedTurnNotice(stopReason: string): string | null {
-    switch (stopReason) {
-        case "end_turn":
+export function completedTurnNotice(completion: PromptCompletion): string | null {
+    switch (completion.kind) {
         case "steered":
             return null;
         case "cancelled":
             return "Turn stopped.";
+        case "ended":
+            return endedTurnNotice(completion.stopReason);
+        default:
+            return completion satisfies never;
+    }
+}
+
+/** The notice for a turn the Agent ended with its own stop reason. */
+function endedTurnNotice(stopReason: string): string | null {
+    switch (stopReason) {
+        case "end_turn":
+            return null;
         case "max_tokens":
             return "The response reached its length limit.";
         case "max_turn_requests":
