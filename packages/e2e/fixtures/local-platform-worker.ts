@@ -52,5 +52,4 @@ export default {
 export {
     ProjectDO,
     RuntimeRelay,
-    WebSocketTransport,
 } from "../../../third-party/mobius/packages/relay-cloudflare-platform/src/worker.ts";

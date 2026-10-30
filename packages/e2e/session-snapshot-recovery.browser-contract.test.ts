@@ -71,7 +71,7 @@ const test = base.extend<{ readonly network: Network }>({
                     ),
                 );
                 const upstream = new WebSocket(endpoint, { headers, perMessageDeflate: false });
-                const pair = { client, upstream, session: endpoint.pathname === "/mobius/api/v1/transport" };
+                const pair = { client, upstream, session: endpoint.pathname.endsWith("/transport") };
                 pairs.add(pair);
                 const opened = new Promise<void>((resolve, reject) => {
                     upstream.once("open", resolve);
@@ -227,7 +227,7 @@ for (const schedule of ["before-snapshot", "after-snapshot", "after-recovery"] a
             }
         };
         page.on("websocket", (socket) => {
-            if (new URL(socket.url()).pathname !== "/mobius/api/v1/transport") {
+            if (!new URL(socket.url()).pathname.endsWith("/transport")) {
                 return;
             }
             socket.on("framereceived", ({ payload }) => {

@@ -265,7 +265,7 @@ export class BotChatApi {
     readonly #projectId: string;
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly #replacedToken: ((rejected: string, signal: AbortSignal) => Promise<string | null>) | undefined;
-    readonly #sessionTransports = new Map<string, BrowserSessionTransport>();
+    readonly #sessionTransport = new BrowserSessionTransport();
     readonly #subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
     readonly #waitForChange: ApiTransport["waitForChange"];
     readonly recoverBridge: ApiTransport["recover"];
@@ -302,15 +302,10 @@ export class BotChatApi {
     }
     readonly waitForBridge = async (signal: AbortSignal): Promise<void> => await this.#waitForBridge(signal);
     readonly resetSessionConnections = (): void => {
-        for (const transport of this.#sessionTransports.values()) {
-            transport.reset();
-        }
+        this.#sessionTransport.reset();
     };
     readonly close = (): void => {
-        for (const transport of this.#sessionTransports.values()) {
-            transport.close();
-        }
-        this.#sessionTransports.clear();
+        this.#sessionTransport.close();
     };
     readonly access = async (botId: string, parent: AbortSignal, conversationId: string): Promise<ChatAccess> =>
         v.parse(
@@ -624,17 +619,12 @@ export class BotChatApi {
         if (access.sessionId !== sessionId) {
             throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session could not be verified.");
         }
-        let sharedTransport = this.#sessionTransports.get(endpoint);
-        if (sharedTransport === undefined) {
-            sharedTransport = new BrowserSessionTransport();
-            this.#sessionTransports.set(endpoint, sharedTransport);
-        }
         return new MobiusClient({
             endpoint,
             projectId,
             operationTimeoutMilliseconds: 120000,
             maxStreamReconnectAttempts: 0,
-            transport: sharedTransport,
+            transport: this.#sessionTransport,
             credentialProvider: {
                 credential: async (parent) => {
                     if (Date.parse(access.expiresAt) - Date.now() < 30000) {

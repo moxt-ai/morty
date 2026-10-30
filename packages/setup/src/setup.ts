@@ -886,16 +886,25 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         let child: ChildProcess | undefined;
         try {
             await safeLocalPath(logPath, false, true);
-            const executable = await findExecutableOnPath("npx", process.env);
-            if (executable === null) {
-                fail("RUNTIME_NOT_INSTALLED");
+            const localCli = process.env["MORTY_LOCAL_MOBIUS_CLI"];
+            let launch: ReturnType<typeof executableLaunch>;
+            if (localCli !== undefined) {
+                if (!isAbsolute(localCli)) {
+                    fail("RUNTIME_NOT_INSTALLED");
+                }
+                launch = { command: process.execPath, arguments: [await realpath(localCli), ...args] };
+            } else {
+                const executable = await findExecutableOnPath("npx", process.env);
+                if (executable === null) {
+                    fail("RUNTIME_NOT_INSTALLED");
+                }
+                launch = executableLaunch(executable.path, [
+                    "--yes",
+                    "--prefer-online",
+                    "@moxt-ai/mobius@latest",
+                    ...args,
+                ]);
             }
-            const launch = executableLaunch(executable.path, [
-                "--yes",
-                "--prefer-online",
-                "@moxt-ai/mobius@latest",
-                ...args,
-            ]);
             child = spawn(launch.command, [...launch.arguments], {
                 cwd,
                 stdio: ["ignore", log.fd, log.fd],

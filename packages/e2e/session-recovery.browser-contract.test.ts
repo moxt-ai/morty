@@ -155,7 +155,7 @@ test("Given a healthy conversation, when the stability timer and foreground sign
     const { page } = runtime;
     let connections = 0;
     page.on("websocket", (socket) => {
-        if (new URL(socket.url()).pathname === "/mobius/api/v1/transport") {
+        if (new URL(socket.url()).pathname.endsWith("/transport")) {
             connections += 1;
         }
     });
@@ -198,7 +198,7 @@ test("Given an interrupted browser connection, when a task completes before fore
     const { page } = runtime;
     const sockets = new Set<WebSocket>();
     page.on("websocket", (socket) => {
-        if (new URL(socket.url()).pathname === "/mobius/api/v1/transport") {
+        if (new URL(socket.url()).pathname.endsWith("/transport")) {
             sockets.add(socket);
             socket.on("close", () => sockets.delete(socket));
         }
@@ -398,7 +398,7 @@ test("Given a live Session stream with stalled execution reads, when foreground 
     const { page } = runtime;
     let connections = 0;
     page.on("websocket", (socket) => {
-        if (new URL(socket.url()).pathname === "/mobius/api/v1/transport") {
+        if (new URL(socket.url()).pathname.endsWith("/transport")) {
             connections += 1;
         }
     });
