@@ -1184,15 +1184,17 @@ function MobiusSessionPaneBody({
                             disabled={presentation.composerInputDisabled}
                             draft={model.draft}
                             error={presentation.composerError}
-                            errorStatus={
-                                executionContext.feedback.kind !== "hidden" ? (
-                                    <ConnectionNotice
-                                        feedback={executionContext.feedback}
-                                        inline={presentation.composerError.length > 0}
-                                        onRetryNow={pane.store.getState().retryNow}
-                                        onReopen={() => run(pane.store.getState().reopen)}
-                                    />
-                                ) : undefined
+                            connectionNotice={
+                                executionContext.feedback.kind === "hidden"
+                                    ? undefined
+                                    : (inline) => (
+                                          <ConnectionNotice
+                                              feedback={executionContext.feedback}
+                                              inline={inline}
+                                              onRetryNow={pane.store.getState().retryNow}
+                                              onReopen={() => run(pane.store.getState().reopen)}
+                                          />
+                                      )
                             }
                             statusMessage={
                                 executionContext.feedback.kind === "hidden" && model.filesRestoreNotice

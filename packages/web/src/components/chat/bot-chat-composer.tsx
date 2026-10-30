@@ -97,7 +97,7 @@ export function BotChatComposer({
     disabled,
     draft,
     error,
-    errorStatus,
+    connectionNotice,
     statusMessage,
     onDraftChange,
     onStop,
@@ -119,11 +119,13 @@ export function BotChatComposer({
     readonly draft: string;
     readonly error: string;
     /**
-     * A notice that already owns its surface (an alert or a compact chip). Rendered
-     * as-is when there is no send failure: wrapping it here would nest a second
-     * card and duplicate the headline hierarchy inside the first.
+     * The connection notice for this composer, as a render function because only the
+     * composer knows whether a send or attachment failure owns the headline. The
+     * notice renders its own surface when it stands alone, and folds itself into the
+     * failure's detail line when one is present, so a failure never nests a second
+     * card and a second assertive region inside itself.
      */
-    readonly errorStatus?: ReactNode;
+    readonly connectionNotice?: ((inline: boolean) => ReactNode) | undefined;
     /** Plain status text with no notice of its own; the composer gives it a neutral alert surface. */
     readonly statusMessage?: string | undefined;
     readonly onDraftChange: (draft: string) => void;
@@ -194,17 +196,20 @@ export function BotChatComposer({
     const submitAction = outputState === "idle" || (outputState === "running" && !submitDisabled);
     const composerErrorMessage =
         error.length > 0 ? error : attachmentState.kind === "failed" ? attachmentState.message : "";
+    // Any headline this composer shows means the connection state has to become the
+    // description's inline detail, not a second alert inside the first.
+    const connection = connectionNotice?.(composerErrorMessage.length > 0);
     const showComposerNotice =
-        composerErrorMessage.length > 0 || errorStatus !== undefined || statusMessage !== undefined;
+        composerErrorMessage.length > 0 || connection !== undefined || statusMessage !== undefined;
     // A send failure owns the headline, but a standing status (such as unrestored
     // attachments) still explains the draft: keep it as the error alert's detail
     // instead of letting the failure branch hide it.
     const errorDetail =
         statusMessage === undefined ? (
-            errorStatus
+            connection
         ) : (
             <>
-                {errorStatus}
+                {connection}
                 <span className="block">{statusMessage}</span>
             </>
         );
@@ -216,8 +221,8 @@ export function BotChatComposer({
                 <div className="absolute inset-x-0 bottom-[calc(100%+8px)] z-10" ref={notice}>
                     {composerErrorMessage.length > 0 ? (
                         <MortyAlert description={errorDetail}>{composerErrorMessage}</MortyAlert>
-                    ) : errorStatus !== undefined ? (
-                        errorStatus
+                    ) : connection !== undefined ? (
+                        connection
                     ) : statusMessage !== undefined ? (
                         <MortyAlert tone="neutral">{statusMessage}</MortyAlert>
                     ) : null}
