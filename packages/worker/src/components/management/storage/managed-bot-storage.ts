@@ -1,9 +1,9 @@
 import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
-import { and, count, eq, exists, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, or } from "drizzle-orm";
 import * as v from "valibot";
 import type { HttpError } from "../../../infra/http-error.ts";
 import { createDatabase, type Database } from "../../../schema/project-do/database.ts";
-import { agentPairingTicket, managedBot } from "../../../schema/project-do/index.ts";
+import { managedBot } from "../../../schema/project-do/index.ts";
 import { type BotConfiguration, botConfigurationSchema } from "../entity/bot-configuration.ts";
 
 const identifier = v.custom<string>(isIdentifier);
@@ -49,27 +49,7 @@ export class ManagedBotStorage {
             .where(and(eq(managedBot.userId, userId), eq(managedBot.botId, v.parse(identifier, botId))))
             .get();
         signal.throwIfAborted();
-        return result !== undefined || (await this.#readPendingBot(userId, botId, signal)) !== null;
-    };
-
-    readonly #readPendingBot = async (userId: string, botId: string, signal: AbortSignal) => {
-        signal.throwIfAborted();
-        const row = await this.#requireDatabase()
-            .select({ botId: agentPairingTicket.botId })
-            .from(agentPairingTicket)
-            .where(
-                and(
-                    eq(agentPairingTicket.userId, userId),
-                    eq(agentPairingTicket.botId, v.parse(identifier, botId)),
-                    eq(agentPairingTicket.createsBot, true),
-                    isNotNull(agentPairingTicket.consumedAt),
-                ),
-            )
-            .get();
-        signal.throwIfAborted();
-        return row === undefined
-            ? null
-            : { botId: row.botId, displayName: "My Machine", configuration: null, instructions: "" };
+        return result !== undefined;
     };
 
     readonly readBot = async (
@@ -96,7 +76,7 @@ export class ManagedBotStorage {
             .get();
         signal.throwIfAborted();
         if (row === undefined) {
-            return await this.#readPendingBot(userId, botId, signal);
+            return null;
         }
         const bot = v.parse(managedBotSchema, row);
         const configuration = v.safeParse(botConfigurationSchema, row);
@@ -117,66 +97,19 @@ export class ManagedBotStorage {
         const value = v.parse(botConfigurationSchema, configuration);
         signal.throwIfAborted();
         const database = this.#requireDatabase();
-        const pending = and(
-            eq(agentPairingTicket.userId, userId),
-            eq(agentPairingTicket.botId, v.parse(identifier, botId)),
-            eq(agentPairingTicket.createsBot, true),
-            isNotNull(agentPairingTicket.consumedAt),
-        );
-        const results = await database.batch([
-            database
-                .insert(managedBot)
-                .select(
-                    database
-                        .select({
-                            userId: agentPairingTicket.userId,
-                            botId: agentPairingTicket.botId,
-                            displayName:
-                                sql<string>`'My Machine ' || (${database.select({ count: count() }).from(managedBot).where(eq(managedBot.userId, agentPairingTicket.userId))} + 1)`.as(
-                                    "display_name",
-                                ),
-                            runtimeId: sql<string>`${value.runtimeId}`.as("runtime_id"),
-                            instructions: sql<string>`''`.as("instructions"),
-                            createdAt: sql<number>`${now}`.as("created_at"),
-                            updatedAt: sql<number>`${now}`.as("updated_at"),
-                        })
-                        .from(agentPairingTicket)
-                        .where(pending),
-                )
-                .onConflictDoNothing(),
-            database
-                .update(managedBot)
-                .set({ runtimeId: value.runtimeId, updatedAt: now })
-                .where(
-                    and(
-                        eq(managedBot.userId, userId),
-                        eq(managedBot.botId, v.parse(identifier, botId)),
-                        or(isNull(managedBot.runtimeId), eq(managedBot.runtimeId, value.runtimeId)),
-                    ),
+        const result = await database
+            .update(managedBot)
+            .set({ runtimeId: value.runtimeId, updatedAt: now })
+            .where(
+                and(
+                    eq(managedBot.userId, userId),
+                    eq(managedBot.botId, v.parse(identifier, botId)),
+                    or(isNull(managedBot.runtimeId), eq(managedBot.runtimeId, value.runtimeId)),
                 ),
-            database
-                .update(agentPairingTicket)
-                .set({ createsBot: false })
-                .where(
-                    and(
-                        pending,
-                        exists(
-                            database
-                                .select({ botId: managedBot.botId })
-                                .from(managedBot)
-                                .where(
-                                    and(
-                                        eq(managedBot.botId, agentPairingTicket.botId),
-                                        eq(managedBot.userId, userId),
-                                        eq(managedBot.runtimeId, value.runtimeId),
-                                    ),
-                                ),
-                        ),
-                    ),
-                ),
-        ]);
+            )
+            .run();
         signal.throwIfAborted();
-        if (results[1]?.meta.changes === 1) {
+        if (result.meta.changes === 1) {
             return "configured";
         }
         const current = await database

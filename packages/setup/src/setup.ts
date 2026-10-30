@@ -17,7 +17,7 @@ import {
     runBoundedProcess,
     stopProcessTree,
 } from "../../../third-party/mobius/packages/cli/src/engine/util/process/executable.ts";
-import { resolveDocumentsDirectory, resolveStateDirectory } from "./platform/index.ts";
+import { resolveStateDirectory } from "./platform/index.ts";
 
 export interface SetupRuntime {
     readonly run: (
@@ -37,8 +37,6 @@ export interface SetupHost {
      * which is not synced to the user's other computers.
      */
     readonly state: string;
-    /** The Documents directory earlier releases kept that state in, read once to move it. Empty selects the user's. */
-    readonly documents: string;
     readonly signal: AbortSignal;
     readonly emit: (value: Readonly<Record<string, unknown>>) => void;
     /** The calling Agent's environment, where its harness exposes the current session. Defaults to this process's. */
@@ -77,10 +75,8 @@ type ReplacementState =
     | { readonly kind: "unknown" }
     | {
           readonly kind: "revoked";
-          readonly previous: RetiringIdentity | { readonly kind: "retired"; readonly projectId: string | null };
-      }
-    // Earlier releases could owe identity cleanup without owing a completion notice.
-    | { readonly kind: "retiring"; readonly previous: RetiringIdentity };
+          readonly previous: RetiringIdentity | { readonly kind: "retired"; readonly projectId: string };
+      };
 
 type RuntimeSelection =
     | {
@@ -142,7 +138,7 @@ interface SetupOptions {
 type ReplacementAccess =
     | { readonly kind: "unchanged" }
     | { readonly kind: "unknown"; readonly previousProjectId: string }
-    | { readonly kind: "revoked"; readonly previousProjectId: string | null; readonly projectId: string };
+    | { readonly kind: "revoked"; readonly previousProjectId: string; readonly projectId: string };
 
 type ReplacementReason = "managed_runtime_missing" | "replacement_result_unknown";
 
@@ -326,8 +322,7 @@ function harnessNextStep(harness: string, diagnosis: HarnessDiagnosis | null): s
         case "unsupported_version":
             return `Update ${diagnosis.label} to ${diagnosis.minimumSupportedVersion || "its latest release"} or newer, then ${rerun}`;
         case "ready":
-            // Mobius 0.0.314 and later refresh a running Runtime's Agents when setup starts it; earlier releases keep
-            // the Agents they found at startup until the daemon restarts.
+            // Mobius refreshes a running Runtime's Agents when setup starts it.
             return `${diagnosis.label} is ready, but this computer's running Morty Runtime has not picked it up yet. Rerun setup once. If it fails the same way again, ask the user before running \`mobius quit\`, because it stops every Morty session on this computer; when they agree, run it and ${rerun}`;
         default:
             return `Confirm \`${harness}\` starts and answers a prompt in a new terminal and fix what stops it, then ${rerun} If it answers and setup fails the same way again, report error.code to the user.`;
@@ -488,35 +483,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return directory;
     }
 
-    /** The directory earlier releases kept this state in, under Documents, or null when it does not exist. */
-    async function earlierStateDirectory() {
-        const documents = resolveDocumentsDirectory(host.documents, signal);
-        if (documents === null) {
-            return null;
-        }
-        const directory = join(resolve(documents), "morty");
-        try {
-            await safeLocalPath(directory, true, false);
-        } catch (cause) {
-            if (errorCode(cause) === "ENOENT") {
-                return null;
-            }
-            throw cause;
-        }
-        return directory;
-    }
-
-    async function readOptionalPrivateJson(path: string) {
-        try {
-            return await readPrivateJson(path);
-        } catch (cause) {
-            if (errorCode(cause) === "ENOENT") {
-                return null;
-            }
-            throw cause;
-        }
-    }
-
     async function resolveWorkingDirectory(requested: string) {
         if (!isAbsolute(requested)) {
             fail("WORKING_DIRECTORY_REQUIRED");
@@ -568,68 +534,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         );
     }
 
-    /**
-     * Moves the state an earlier release kept under Documents into this computer's state directory, but only when its
-     * Machine runs on this computer. Documents may sync to the user's other computers: a copy whose Machine runs
-     * elsewhere is left to that computer, and this one sets up a Machine of its own instead of replacing that one.
-     */
-    async function adoptEarlierState(directory: string, base: string | undefined, cwd: string): Promise<void> {
-        if ((await readOptionalPrivateJson(join(directory, "config.json"))) !== null) {
-            return;
-        }
-        const earlierDirectory = await earlierStateDirectory();
-        const earlierPath = earlierDirectory === null ? null : join(earlierDirectory, "config.json");
-        const earlier = earlierPath === null ? null : await readOptionalPrivateJson(earlierPath);
-        if (earlierPath === null || earlier === null || typeof earlier["base_url"] !== "string") {
-            return;
-        }
-        const context: Context = {
-            directory,
-            base: origin(earlier["base_url"]),
-            config: savedIdentity(earlier),
-            replacement: { kind: "unchanged" },
-        };
-        if ((base !== undefined && context.base !== base) || !(await runsOnThisComputer(context, cwd))) {
-            return;
-        }
-        await saveConfiguration({ ...context, replacement: readReplacementState(earlier) }, {});
-        await rm(earlierPath, { force: true });
-        progress("identity", "Moved the saved identity out of Documents into this computer's private state.");
-    }
-
-    /** Whether the saved Machine runs here: its bound Runtime, or the one a stopped run paired for it, is managed here. */
-    async function runsOnThisComputer(context: Context, cwd: string): Promise<boolean> {
-        if (context.config["user_token"] === undefined || context.config["project_id"] === undefined) {
-            return false;
-        }
-        let appId: string;
-        let runtimeIds: readonly unknown[];
-        try {
-            appId = identifier((await request(context, "/management/project"))["appId"]);
-            const listed = await request(context, "/management/bots");
-            const bot = (Array.isArray(listed["bots"]) ? listed["bots"] : [])
-                .map(object)
-                .find((item) => context.config["bot_id"] === undefined || item["botId"] === context.config["bot_id"]);
-            const binding =
-                bot === undefined
-                    ? null
-                    : await request(
-                          context,
-                          `/management/bots/${encodeURIComponent(identifier(bot["botId"]))}/runtime-binding`,
-                      );
-            runtimeIds = [binding?.["runtimeId"], context.config["pairing_runtime_id"]];
-        } catch (cause) {
-            // An identity this origin no longer accepts names no Machine on any computer.
-            if (errorCode(cause) === "UNAUTHENTICATED") {
-                return false;
-            }
-            throw cause;
-        }
-        return (await listManagedConnections(context, cwd)).some(
-            (connection) => connection.appId === appId && runtimeIds.includes(connection.runtimeId),
-        );
-    }
-
     async function loadConfiguration(directory: string, base: string): Promise<Context> {
         let config: Readonly<Record<string, unknown>> = {};
         try {
@@ -645,7 +549,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return { directory, base, config: savedIdentity(saved), replacement: readReplacementState(saved) };
     }
 
-    /** Decode old file layouts once. Business operations never read or synchronize their overlapping keys. */
+    /** Decode the saved replacement once. Business operations never read or synchronize its overlapping keys. */
     function readReplacementState(config: Readonly<Record<string, unknown>>): ReplacementState {
         const retiring: RetiringIdentity | null =
             config["replaced_project_id"] === undefined && config["replaced_user_token"] === undefined
@@ -682,12 +586,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     fail("INVALID_REPLACEMENT_STATE");
             }
         }
-        // Earlier setup versions saved only the notification, without the previous Project's ID.
-        if (config["replacement_notice"] === "pending") {
-            identifier(config["project_id"]);
-            return { kind: "revoked", previous: retiring ?? { kind: "retired", projectId: null } };
+        if (retiring !== null) {
+            fail("INVALID_REPLACEMENT_STATE");
         }
-        return retiring === null ? { kind: "unchanged" } : { kind: "retiring", previous: retiring };
+        return { kind: "unchanged" };
     }
 
     /** Encode the replacement state so `readReplacementState` decodes it again on the next run. */
@@ -697,23 +599,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 return {};
             case "unknown":
                 return { replacement_access: { kind: "unknown", previousProjectId: identifier(projectId) } };
-            case "retiring":
-                return {
-                    replaced_project_id: replacement.previous.projectId,
-                    replaced_user_token: replacement.previous.token,
-                };
             case "revoked":
                 return {
-                    // Notice-only files never recorded the previous Project, which `replacement_access` requires.
-                    ...(replacement.previous.projectId === null
-                        ? { replacement_notice: "pending" }
-                        : {
-                              replacement_access: {
-                                  kind: "revoked",
-                                  previousProjectId: replacement.previous.projectId,
-                                  projectId: identifier(projectId),
-                              },
-                          }),
+                    replacement_access: {
+                        kind: "revoked",
+                        previousProjectId: replacement.previous.projectId,
+                        projectId: identifier(projectId),
+                    },
                     ...(replacement.previous.kind === "retired"
                         ? {}
                         : {
@@ -731,7 +623,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     function restoreReplacementAccess(context: Context): void {
         switch (context.replacement.kind) {
             case "unchanged":
-            case "retiring":
                 replacementAccess = { kind: "unchanged" };
                 return;
             case "unknown":
@@ -827,10 +718,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
      */
     async function retireReplacedIdentity(context: Context): Promise<Context> {
         const replacement = context.replacement;
-        if (
-            (replacement.kind !== "revoked" && replacement.kind !== "retiring") ||
-            replacement.previous.kind !== "pending"
-        ) {
+        if (replacement.kind !== "revoked" || replacement.previous.kind !== "pending") {
             return context;
         }
         const { projectId, token } = replacement.previous;
@@ -848,13 +736,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             remoteFailure(object(await response.json()), response.status);
         }
         return await saveConfiguration(
-            {
-                ...context,
-                replacement:
-                    replacement.kind === "retiring"
-                        ? { kind: "unchanged" }
-                        : { kind: "revoked", previous: { kind: "retired", projectId } },
-            },
+            { ...context, replacement: { kind: "revoked", previous: { kind: "retired", projectId } } },
             {},
         );
     }
@@ -1409,8 +1291,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 minimumSupportedVersion: field("minimumSupportedVersion"),
             };
         } catch (cause) {
-            // Cancellation and the setup budget keep their own codes; any other failure, such as a Mobius release
-            // without `agents --output-json`, leaves the harness unavailable without a diagnosis.
+            // Cancellation and the setup budget keep their own codes; any other failure leaves the harness unavailable
+            // without a diagnosis.
             if (signal.aborted) {
                 throw cause;
             }
@@ -1643,7 +1525,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     async function revokeAllAccess(options: RevokeAllAccessOptions) {
         const directory = await prepareStateDirectory(resolveStateDirectory(host.state, signal));
-        await adoptEarlierState(directory, options.base, directory);
         let config: Readonly<Record<string, unknown>>;
         try {
             config = await readPrivateJson(join(directory, "config.json"));
@@ -1666,14 +1547,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             base,
             config: Object.fromEntries(
                 Object.entries(config).filter(
-                    ([key]) =>
-                        ![
-                            "replacement_access",
-                            "replacement_notice",
-                            "replaced_project_id",
-                            "replaced_user_token",
-                            "agent_config_revision",
-                        ].includes(key),
+                    ([key]) => !["replacement_access", "replaced_project_id", "replaced_user_token"].includes(key),
                 ),
             ),
             replacement: readReplacementState(config),
@@ -1737,7 +1611,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         // A previous replacement must still be explained when this run fails its local startup checks.
         restoreReplacementAccess(await loadConfiguration(directory, options.base));
         await preflightRuntime({ directory, base: options.base, config: {}, replacement: { kind: "unchanged" } }, cwd);
-        await adoptEarlierState(directory, options.base, cwd);
         let context = await loadConfiguration(directory, options.base);
         restoreReplacementAccess(context);
         context = await retireReplacedIdentity(context);

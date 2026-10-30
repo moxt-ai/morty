@@ -180,35 +180,3 @@ export const rememberedSessionEntry = (identity: string): SessionStorageEntry<Re
             }
         },
     });
-
-// ---------------------------------------------------------------------------
-// Conversation sidebar layout
-// ---------------------------------------------------------------------------
-
-const sidebarLayoutValueSchema = v.pipe(
-    v.variant("kind", [
-        v.object({ kind: v.literal("expanded"), width: v.pipe(v.number(), v.minValue(220), v.maxValue(380)) }),
-        v.object({
-            kind: v.literal("collapsed"),
-            rememberedWidth: v.pipe(v.number(), v.minValue(220), v.maxValue(380)),
-        }),
-    ]),
-    v.readonly(),
-);
-
-type StoredSidebarLayout = v.InferOutput<typeof sidebarLayoutValueSchema>;
-
-/** Falls back to null for values the layout state cannot represent. */
-const _sidebarLayoutEntry = customSessionStorageEntry<StoredSidebarLayout>({
-    key: "mobius:conversation-sidebar-layout",
-    schema: sidebarLayoutValueSchema,
-    encode: (value) => JSON.stringify(value),
-    decode: (raw): StoredSidebarLayout | null => {
-        try {
-            const parsed = v.safeParse(sidebarLayoutValueSchema, JSON.parse(raw));
-            return parsed.success ? parsed.output : null;
-        } catch {
-            return null;
-        }
-    },
-});

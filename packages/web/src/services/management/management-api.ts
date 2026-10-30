@@ -43,10 +43,6 @@ export class ManagementApi {
             await this.#request("/project", "GET", undefined, signal),
         ).project;
 
-    readonly createProject = async (displayName: string, signal: AbortSignal): Promise<ManagedProject> =>
-        v.parse(v.object({ project: projectSchema }), await this.#request("/project", "POST", { displayName }, signal))
-            .project;
-
     readonly readBot = async (botId: string, signal: AbortSignal): Promise<ManagedBotDetail> =>
         v.parse(
             managedBotDetailSchema,

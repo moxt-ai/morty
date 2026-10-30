@@ -6,7 +6,7 @@ export const continueLink = sqliteTable(
         id: text("id").primaryKey().notNull(),
         codeHash: text("code_hash").notNull().unique(),
         userId: text("user_id").notNull(),
-        expiresAt: integer("expires_at").notNull().default(0),
+        expiresAt: integer("expires_at").notNull(),
         claimNonce: text("claim_nonce"),
         createdAt: integer("created_at").notNull(),
         revokedAt: integer("revoked_at"),

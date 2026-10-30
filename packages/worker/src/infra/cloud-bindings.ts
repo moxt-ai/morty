@@ -48,7 +48,6 @@ export interface CloudBindings {
     readonly CHAT_ATTACHMENTS_APAC?: unknown;
     readonly APP_ORIGIN?: unknown;
     readonly ASSETS?: unknown;
-    readonly AUTHENTICATION_BASE_URL?: unknown;
     readonly DATABASE?: unknown;
     readonly CHAT_PROJECT_ID?: string;
     readonly CHAT_SESSION_OPERATIONS?: ManagedSessionOperations;
@@ -56,7 +55,4 @@ export interface CloudBindings {
     readonly MOBIUS_BASE_URL?: unknown;
     readonly MOBIUS_APP_ID?: unknown;
     readonly MOBIUS_APP_SECRET?: unknown;
-    readonly RUNTIME_RELAY?: unknown;
-    readonly SESSION_ACTIVE_SESSIONS_PER_PROJECT?: unknown;
-    readonly SESSION_ACTIVE_SESSIONS_PER_TENANT?: unknown;
 }

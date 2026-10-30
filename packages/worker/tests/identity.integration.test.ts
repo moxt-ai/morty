@@ -60,18 +60,7 @@ test("Given visitors across Cloudflare regions, When Chat provisions and reopens
         const projectCode = { apac: "ap", "apac-ne": "an", "apac-se": "as", wnam: "wn" }[region];
         expect(initial.project.projectId).toMatch(new RegExp(`^prj_${projectCode}_01_`));
         const revisited = await worker.fetch(
-            new GeolocatedRequest(
-                new Request(projectRequest(), {
-                    method: "POST",
-                    headers: {
-                        authorization: `Bearer ${identity.token}`,
-                        "content-type": "application/json",
-                    },
-                    body: JSON.stringify({ displayName: "Morty" }),
-                }),
-                region === "wnam" ? "AS" : "NA",
-                region === "wnam" ? "CN" : "US",
-            ),
+            new GeolocatedRequest(projectRequest(), region === "wnam" ? "AS" : "NA", region === "wnam" ? "CN" : "US"),
             environment,
         );
         expect(revisited.status).toBe(200);

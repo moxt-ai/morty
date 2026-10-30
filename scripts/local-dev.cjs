@@ -350,11 +350,9 @@ async function keepAlive(stack, options) {
 }
 
 async function prepare(options) {
-    const validModes = new Set(["web", "web-server", "web-server-mobius", "web-server-mobius-cli"]);
+    const validModes = new Set(["web", "web-server", "web-server-mobius-cli"]);
     if (!validModes.has(options.mode)) {
-        throw new Error(
-            `Unknown mode ${options.mode}; use web, web-server, web-server-mobius, or web-server-mobius-cli`,
-        );
+        throw new Error(`Unknown mode ${options.mode}; use web, web-server, or web-server-mobius-cli`);
     }
     if (options.mode === "web") {
         return prepareWeb(options);
@@ -496,7 +494,6 @@ async function prepare(options) {
 
         const variables = {
             APP_ORIGIN: chatOrigin,
-            AUTHENTICATION_BASE_URL: chatOrigin,
             MOBIUS_APP_ID: appId,
             MOBIUS_APP_SECRET: appSecret,
             MOBIUS_BASE_URL: platformOrigin,
@@ -640,8 +637,7 @@ function readSetupRecord(line) {
 /**
  * Runs the Chat-served setup bundle's `setup` flow with Morty's writable
  * location isolated under the stack's state directory. `morty/` isolates
- * Morty's saved setup state, `documents/` stands in for the Documents folder
- * earlier releases kept it in, `mobius/` isolates its CLI manager and connection
+ * Morty's saved setup state, `mobius/` isolates its CLI manager and connection
  * state, and `workspace/` is the default working directory. On success prints
  * one JSON record whose `handoffUrl` continues the setup identity in the
  * browser.
@@ -668,11 +664,10 @@ async function setup(options) {
     if (!isAlive(stack.chatPid)) {
         fail("the stack's Chat Worker is not running; run prepare first");
     }
-    const documents = path.join(stack.stateDir, "documents");
     const mortyStateDirectory = path.join(stack.stateDir, "morty");
     const mobiusStateDirectory = path.join(stack.stateDir, "mobius");
     const workspace = path.resolve(options.workspace ?? path.join(stack.stateDir, "workspace"));
-    for (const directory of [documents, mortyStateDirectory, mobiusStateDirectory, workspace]) {
+    for (const directory of [mortyStateDirectory, mobiusStateDirectory, workspace]) {
         fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     }
     await installLocalCli(stack);
@@ -722,7 +717,6 @@ process.exit(result.status ?? 1);
         setupLog,
         process.execPath,
         {
-            DOCUMENT_DIR: documents,
             MORTY_STATE_DIRECTORY: mortyStateDirectory,
             MOBIUS_STATE_DIRECTORY: mobiusStateDirectory,
             PATH: `${shimDirectory}${path.delimiter}${process.env.PATH ?? ""}`,
@@ -822,7 +816,6 @@ process.exit(result.status ?? 1);
     const record = {
         chatOrigin: stack.chatOrigin,
         connectionId,
-        documents,
         handoffUrl,
         mortyStateDirectory,
         harness,
@@ -1016,7 +1009,7 @@ function usage(stream = process.stdout) {
     stream.write(
         [
             "Usage:",
-            "  node scripts/local-dev.cjs prepare <web|web-server|web-server-mobius|web-server-mobius-cli> [--state-dir DIR] [--platform-port N] [--chat-port N] [--app-id ID --app-secret SECRET] [--force] [--no-build] [--background]",
+            "  node scripts/local-dev.cjs prepare <web|web-server|web-server-mobius-cli> [--state-dir DIR] [--platform-port N] [--chat-port N] [--app-id ID --app-secret SECRET] [--force] [--no-build] [--background]",
             "  node scripts/local-dev.cjs setup  --state-dir DIR --harness ID --session-id ID [--workspace DIR]",
             "  node scripts/local-dev.cjs status --state-dir DIR",
             "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|platform|runtime|all] [--lines N] [--filter REGEX] [--follow]",

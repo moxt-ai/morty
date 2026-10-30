@@ -35,6 +35,8 @@ import platformProjectIdentity from "../../migrations/project-do/0033_platform_p
 import anonymousCredentialRevocation from "../../migrations/project-do/0034_anonymous_credential_revocation.sql?raw";
 import anonymousCredentialKind from "../../migrations/project-do/0035_anonymous_credential_kind.sql?raw";
 import dropAppUser from "../../migrations/project-do/0036_drop_app_user.sql?raw";
+import materializePairedBots from "../../migrations/project-do/0037_materialize_paired_bots.sql?raw";
+import dropAgentPairingTicket from "../../migrations/project-do/0038_drop_agent_pairing_ticket.sql?raw";
 
 /** Generated Project Durable Object migrations, in order. The ledger records each by its tag. */
 const migrations = [
@@ -74,6 +76,8 @@ const migrations = [
     { tag: "0034_anonymous_credential_revocation", sql: anonymousCredentialRevocation },
     { tag: "0035_anonymous_credential_kind", sql: anonymousCredentialKind },
     { tag: "0036_drop_app_user", sql: dropAppUser },
+    { tag: "0037_materialize_paired_bots", sql: materializePairedBots },
+    { tag: "0038_drop_agent_pairing_ticket", sql: dropAgentPairingTicket },
 ];
 
 /**

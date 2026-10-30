@@ -155,16 +155,7 @@ test("Given an unknown URL, When a browser sends HEAD, Then it receives the not-
 for (const navigation of [false, true]) {
     const headers = navigation ? { "Sec-Fetch-Mode": "navigate" } : {};
     test(`Given an existing application route, When ${navigation ? "a browser opens" : "a client fetches"} it, Then its HTML loads without redirecting or exposing session data`, async () => {
-        for (const path of [
-            "/chat",
-            "/chat/",
-            "/continue",
-            "/continue/",
-            "/continue/preview",
-            "/continue/preview/ready",
-            "/playground",
-            "/playground/buttons",
-        ]) {
+        for (const path of ["/chat", "/chat/", "/continue", "/continue/", "/playground", "/playground/buttons"]) {
             const response = await runtime.dispatchFetch(
                 `https://morty.example${path}?identity=private-identity&sessionId=private-session`,
                 { headers, redirect: "manual" },
