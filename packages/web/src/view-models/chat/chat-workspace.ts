@@ -5,6 +5,8 @@ import { encodeIdentityScope, type IdentityScope } from "../../services/identity
 import { rememberComputerName, rememberComputerVisit } from "../../services/identity/remembered-computers.ts";
 import {
     centralSessionStorage,
+    SessionStorageWriteError,
+    sessionPendingSubmissionEntry,
     sessionUnsentMessageEntry,
 } from "../../services/session-storage/central-session-storage.ts";
 import type { Clock } from "../../services/time/clock.ts";
@@ -451,7 +453,16 @@ export function createChatWorkspace(options: {
             const unsentEntry = sessionUnsentMessageEntry(sessionId);
             unsent = centralSessionStorage.read(unsentEntry);
             centralSessionStorage.remove(unsentEntry);
+            const pendingEntry = sessionPendingSubmissionEntry(botId, sessionId);
             delivery = createSessionDeliveryStore({
+                pendingSubmission: centralSessionStorage.read(pendingEntry),
+                pendingSubmissionChanged: (journal) => {
+                    if (journal === null) {
+                        centralSessionStorage.remove(pendingEntry);
+                    } else if (!centralSessionStorage.write(pendingEntry, journal)) {
+                        throw new SessionStorageWriteError();
+                    }
+                },
                 unsentMessageChanged: (content) => {
                     if (content === null) {
                         centralSessionStorage.remove(unsentEntry);

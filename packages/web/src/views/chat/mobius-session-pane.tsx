@@ -637,6 +637,7 @@ function UnconfirmedDeliveryCard({
     readonly delivery: {
         readonly commandId: string;
         readonly displayPrompt: string;
+        readonly attachmentLabels: readonly { readonly name: string; readonly uri: string }[];
         readonly attachments: readonly ComposerAttachment[];
     };
     readonly retryDisabled: boolean;
@@ -645,7 +646,11 @@ function UnconfirmedDeliveryCard({
 }) {
     return (
         <div className={chatSessionMessageItemClassName} data-testid={dataTestId.unconfirmedDelivery}>
-            <UserPromptMessage attachments={delivery.attachments} text={delivery.displayPrompt} />
+            <UserPromptMessage
+                attachments={delivery.attachments}
+                attachmentLabels={delivery.attachmentLabels}
+                text={delivery.displayPrompt}
+            />
             <div
                 className="ml-auto flex max-w-[85%] items-center gap-3 rounded-lg border border-destructive/15 bg-destructive/5 py-2 pr-2 pl-3 text-xs leading-5 text-destructive"
                 role="alert"
@@ -1046,6 +1051,7 @@ function MobiusSessionPaneBody({
                                         <div key={message.commandId} className={chatSessionMessageItemClassName}>
                                             <UserPromptMessage
                                                 attachments={message.attachments}
+                                                attachmentLabels={message.attachmentLabels}
                                                 text={message.content}
                                             />
                                         </div>
@@ -1057,6 +1063,7 @@ function MobiusSessionPaneBody({
                                         >
                                             <UserPromptMessage
                                                 attachments={presentation.pendingDelivery.message.attachments}
+                                                attachmentLabels={presentation.pendingDelivery.message.attachmentLabels}
                                                 status={
                                                     presentation.pendingDelivery.error !== null ? (
                                                         <MessageDeliveryStatus
@@ -1202,8 +1209,8 @@ function MobiusSessionPaneBody({
                                         onRetryNow={pane.store.getState().retryNow}
                                         onReopen={() => run(pane.store.getState().reopen)}
                                     />
-                                ) : model.queuedFilesNotice ? (
-                                    "Files attached to the queued message could not be restored here. Add them again if it had any."
+                                ) : model.filesRestoreNotice ? (
+                                    "Files attached to this message could not be restored here. Add them again if it had any."
                                 ) : undefined
                             }
                             onDraftChange={pane.store.getState().setDraft}

@@ -53,6 +53,7 @@ import {
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import {
     type DeliveryTarget,
+    deliveryMessagePresentation,
     journalMessage,
     prependToDraft,
     type SessionDeliveryStore,
@@ -125,7 +126,7 @@ export interface SessionPaneStore {
     readonly hasOlderHistory: boolean;
     readonly draft: string;
     /** The composer holds an edited queued message whose attachment bytes were unavailable to this viewer. */
-    readonly queuedFilesNotice: boolean;
+    readonly filesRestoreNotice: boolean;
     /**
      * Bumped after a user-submitted action that appends content (send, queue,
      * steer) so the message surface re-arms following the latest message.
@@ -253,9 +254,7 @@ export function sessionPanePresentation(
         )
             ? null
             : {
-                  commandId: unconfirmed.commandId,
-                  displayPrompt: unconfirmed.displayPrompt,
-                  attachments: unconfirmed.attachments,
+                  ...deliveryMessagePresentation(journalMessage(unconfirmed)),
               };
     const pendingMessage =
         delivery.state.kind === "preparing" || delivery.state.kind === "preparation-failed"
@@ -274,7 +273,7 @@ export function sessionPanePresentation(
         )
             ? null
             : {
-                  message: pendingMessage,
+                  message: deliveryMessagePresentation(pendingMessage),
                   sending: true,
                   error:
                       delivery.state.kind === "preparation-failed"
@@ -355,13 +354,16 @@ export function sessionPanePresentation(
             attachments.state.kind === "reading" ||
             (model.draft.trim() === "" && attachments.attachments.length === 0),
         unconfirmedDelivery,
-        confirmedMessages: delivery.confirmedMessages.filter(
-            (confirmed) =>
-                confirmed.target.disposition === "reject" &&
-                !model.messages.some(
-                    (message) => message.role === "user" && messageExecutionCommandId(message) === confirmed.commandId,
-                ),
-        ),
+        confirmedMessages: delivery.confirmedMessages
+            .filter(
+                (confirmed) =>
+                    confirmed.target.disposition === "reject" &&
+                    !model.messages.some(
+                        (message) =>
+                            message.role === "user" && messageExecutionCommandId(message) === confirmed.commandId,
+                    ),
+            )
+            .map(deliveryMessagePresentation),
         pendingDelivery,
     } as const;
 }
@@ -754,13 +756,17 @@ export function createSessionPaneModel(options: {
             const { execution } = change;
             const deliverySnapshot = delivery.getState();
             for (const message of deliverySnapshot.confirmedMessages) {
-                if (execution.queued.some((queued) => queued.commandId === message.commandId)) {
-                    messageQueue.getState().rememberAttachments(message.commandId, message.attachments);
+                if (
+                    message.attachments.kind === "local" &&
+                    execution.queued.some((queued) => queued.commandId === message.commandId)
+                ) {
+                    messageQueue.getState().rememberAttachments(message.commandId, message.attachments.values);
                 }
             }
             const submission = deliverySnapshot.state;
             if (
                 "journal" in submission &&
+                submission.journal.attachments !== null &&
                 execution.queued.some((message) => message.commandId === submission.journal.commandId)
             ) {
                 messageQueue
@@ -949,14 +955,13 @@ export function createSessionPaneModel(options: {
             const sent = turns.recordSent(commandId, Date.now());
             void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
             const prompt = message.content.trim();
-            const displayPrompt = prompt || attachments.map((attachment) => attachment.name).join(", ");
             delivery.getState().prepare(message);
             if (queued) {
                 options.onInitialMessageDequeued?.(commandId);
             } else if (currentDelivery.kind === "idle") {
                 centralSessionStorage.remove(draftEntry);
                 composerAttachments.getState().clear();
-                set({ draft: "", queuedFilesNotice: false });
+                set({ draft: "", filesRestoreNotice: false });
             }
             set({ pendingInitialMessage: null });
             if (target.disposition === "reject") {
@@ -967,12 +972,10 @@ export function createSessionPaneModel(options: {
                 if (client === null) {
                     throw new Error("The Session is not connected.");
                 }
-                const uploadedAttachments = await uploadPromptAttachments(
-                    client.sessions,
-                    sessionId,
-                    attachments,
-                    signal,
-                );
+                const uploadedAttachments =
+                    attachments.kind === "uploaded"
+                        ? attachments.values
+                        : await uploadPromptAttachments(client.sessions, sessionId, attachments.values, signal);
                 // Freeze semantic intent before delivery owns retries, including instructions and identity.
                 const submission = await withInstructions(
                     {
@@ -986,9 +989,15 @@ export function createSessionPaneModel(options: {
                     signal,
                 );
                 signal.throwIfAborted();
-                const sending = delivery
-                    .getState()
-                    .submit({ commandId, displayPrompt, request: submission, attachments }, submitTurn, signal);
+                const sending = delivery.getState().submit(
+                    {
+                        commandId,
+                        request: submission,
+                        attachments: attachments.kind === "local" ? attachments.values : null,
+                    },
+                    submitTurn,
+                    signal,
+                );
                 const outcome = await sending;
                 signal.throwIfAborted();
                 delivery
@@ -1034,7 +1043,7 @@ export function createSessionPaneModel(options: {
             pendingInitialMessage: options.initialMessage ?? null,
             olderHistory: { kind: "idle" },
             draft: centralSessionStorage.read(draftEntry) ?? "",
-            queuedFilesNotice: false,
+            filesRestoreNotice: false,
             followRevision: 0,
             operation: { kind: "idle" },
             turn: initialTurn,
@@ -1257,7 +1266,7 @@ export function createSessionPaneModel(options: {
                                     commandId: options.initialMessage.commandId,
                                     target: { disposition: "reject", targetCommandId: "" },
                                     content: options.initialMessage.content,
-                                    attachments: options.initialMessage.attachments,
+                                    attachments: { kind: "local", values: options.initialMessage.attachments },
                                 },
                                 paneSignal,
                             );
@@ -1461,7 +1470,7 @@ export function createSessionPaneModel(options: {
                 } else {
                     centralSessionStorage.write(draftEntry, draft);
                 }
-                set(draft === "" ? { draft, queuedFilesNotice: false } : { draft });
+                set(draft === "" ? { draft, filesRestoreNotice: false } : { draft });
             },
             send: async (signal) => {
                 const { attachments, state: attachmentState } = composerAttachments.getState();
@@ -1477,7 +1486,7 @@ export function createSessionPaneModel(options: {
                     {
                         commandId: crypto.randomUUID(),
                         content: draft,
-                        attachments,
+                        attachments: { kind: "local", values: attachments },
                         target: { disposition: "reject", targetCommandId: "" },
                     },
                     signal,
@@ -1550,9 +1559,13 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 get().setDraft(prependToDraft(message.content, get().draft));
-                composerAttachments
-                    .getState()
-                    .restore([...message.attachments, ...composerAttachments.getState().attachments]);
+                if (message.attachments.kind === "local") {
+                    composerAttachments
+                        .getState()
+                        .restore([...message.attachments.values, ...composerAttachments.getState().attachments]);
+                } else if (message.attachments.values.length > 0) {
+                    set({ filesRestoreNotice: true });
+                }
             },
             discardFailedMessage: () => {
                 delivery.getState().takeFailedMessage();
@@ -1577,7 +1590,7 @@ export function createSessionPaneModel(options: {
                     {
                         commandId: crypto.randomUUID(),
                         content: current.draft,
-                        attachments,
+                        attachments: { kind: "local", values: attachments },
                         target: { disposition: "queue", targetCommandId: running.commandId },
                     },
                     signal,
@@ -1612,7 +1625,7 @@ export function createSessionPaneModel(options: {
                     removed.attachments.kind === "restorable" ? removed.attachments.values : [];
                 composerAttachments.getState().restore([...restored, ...composerAttachments.getState().attachments]);
                 set({
-                    queuedFilesNotice: removed.attachments.kind === "unrestorable" && removed.attachments.count > 0,
+                    filesRestoreNotice: removed.attachments.kind === "unrestorable" && removed.attachments.count > 0,
                 });
             },
             configure: async (option, value, booleanValue, signal) => {
