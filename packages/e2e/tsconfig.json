@@ -8,6 +8,5 @@
         "paths": {},
         "lib": ["es2024", "dom", "dom.iterable"]
     },
-    "include": ["**/*.ts", "../../worker-configuration.d.ts"],
-    "exclude": ["codex-borrowed-steering.e2e.test.ts"]
+    "include": ["**/*.ts", "../../worker-configuration.d.ts"]
 }
