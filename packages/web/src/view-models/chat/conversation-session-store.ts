@@ -35,7 +35,7 @@ export function createConversationSessionStore(
                 set({
                     state: {
                         kind: "ready",
-                        conversationId: access.conversationId,
+                        conversationId: access.sessionId,
                         session: requests.conversationSession(access, { kind: "idle" }, directory.directoryLabel),
                     },
                 });

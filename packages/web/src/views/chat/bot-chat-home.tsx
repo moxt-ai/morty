@@ -60,7 +60,6 @@ type BotChatHomeProps = {
         | "managedSessions"
         | "managedSession"
         | "subscribeManagedSessionStatuses"
-        | "continueNativeSession"
         | "connectSession"
         | "createConversation"
         | "conversationSession"
@@ -192,8 +191,8 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
     const newConversation = () => {
         store.getState().newConversation();
     };
-    const openManaged = (isExternal: boolean, id: string) => {
-        store.getState().openManaged(isExternal, id);
+    const openManaged = (id: string) => {
+        store.getState().openManaged(id);
     };
     const pendingTitle = showNewSessionTitle ? (
         <NewSessionTitle
@@ -223,7 +222,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                 connectionStatus={connectionStatus}
                 onConnectAgent={model.pairing.kind === "unpaired" ? store.getState().showPairingDialog : null}
                 requests={requests}
-                onOpen={(session) => openManaged(session.isExternal, session.id)}
+                onOpen={(session) => openManaged(session.id)}
                 onNewConversation={newConversation}
             />
             {workspace.accessNotice !== null && (
@@ -309,15 +308,9 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                             />
                                             {reportButton}
                                         </div>
-                                        {model.selection.kind === "failed" &&
-                                        model.selection.target.kind === "continue" &&
-                                        model.selection.target.action === "import" ? (
-                                            <Button onClick={store.getState().forkInstead}>Fork session instead</Button>
-                                        ) : (
-                                            <div className="flex flex-wrap justify-center gap-2">
-                                                <Button onClick={store.getState().retry}>Reconnect</Button>
-                                            </div>
-                                        )}
+                                        <div className="flex flex-wrap justify-center gap-2">
+                                            <Button onClick={store.getState().retry}>Reconnect</Button>
+                                        </div>
                                     </div>
                                 ) : queuedInitialMessage !== null && creationStatus !== null ? (
                                     <div className={`${chatSessionColumnClassName} flex flex-col gap-2`}>

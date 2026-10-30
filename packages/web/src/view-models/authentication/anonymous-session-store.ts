@@ -3,7 +3,6 @@ import { type AnonymousIdentity, AnonymousIdentityApi } from "../../services/ide
 import { hasIdentityScope } from "../../services/identity/identity-scope-url.ts";
 import {
     computerAddress,
-    hasStoredAccess,
     rememberComputerVisit,
     rememberedComputers,
     resumesComputer,
@@ -27,7 +26,7 @@ type AnonymousSessionState =
     | { readonly kind: "loading" }
     | {
           readonly kind: "setup";
-          readonly notice: "access-ended" | "legacy" | "none";
+          readonly notice: "access-ended" | "none";
           readonly returnHref: string | null;
       }
     | ActiveAnonymousSession
@@ -140,7 +139,7 @@ export const createAnonymousSessionStore = (
                     set({
                         state: {
                             kind: "setup",
-                            notice: ended ? "access-ended" : hasStoredAccess() ? "legacy" : "none",
+                            notice: ended ? "access-ended" : "none",
                             returnHref: null,
                         },
                     });

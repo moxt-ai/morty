@@ -372,48 +372,6 @@ test("Given the last computer is offline and another is online, When I return, T
     );
 });
 
-test("Given only a legacy credential, When I open the plain address, Then Morty asks for the original link once and remembers it afterwards", {
-    timeout: 30_000,
-}, async () => {
-    const app = await createTestApp({ connectAgent: true });
-    await startConversation(app, "Existing user");
-    const originalLink = window.location.href;
-    // Simulate an existing browser from before computer metadata was introduced.
-    window.localStorage.removeItem("morty:remembered-computers:v1");
-    window.location.href = `${app.origin}/`;
-    const legacy = await app.reload();
-    await legacy.waitForView(() =>
-        expect(document.body.textContent).toContain("Open the link your agent gave you once"),
-    );
-    window.location.href = originalLink;
-    const linked = await legacy.reload();
-    await linked.waitForView(() => getByRole(document.body, "textbox", { name: "Message" }));
-    window.location.href = `${app.origin}/`;
-    const returned = await linked.reload();
-    await returned.waitForView(() => getByRole(document.body, "textbox", { name: "Message" }));
-    expect(document.body.textContent).not.toContain("Open the link your agent gave you once");
-});
-
-test("Given only a legacy credential whose access was revoked, When I open its link and then the plain address, Then Morty stops asking for that link", {
-    timeout: 30_000,
-}, async () => {
-    const app = await createTestApp({ connectAgent: true });
-    await startConversation(app, "Revoked legacy user");
-    const originalLink = window.location.href;
-    // Simulate an existing browser from before computer metadata was introduced.
-    window.localStorage.removeItem("morty:remembered-computers:v1");
-    await revokeAccess(app);
-    const linked = await app.reload();
-    await linked.waitForView(() => getByRole(document.body, "heading", { name: "This link is no longer valid" }));
-    expect(window.location.href).toBe(originalLink);
-    window.location.href = `${app.origin}/`;
-    const returned = await linked.reload();
-    await returned.waitForView(() =>
-        getByRole(document.body, "heading", { name: "Step away. Keep your agent working." }),
-    );
-    expect(document.body.textContent).not.toContain("Open the link your agent gave you once");
-});
-
 test("Given a saved computer and a failed connection, When I retry after reconnecting, Then my original conversation is retained", {
     timeout: 30_000,
 }, async () => {
@@ -701,7 +659,7 @@ test("Given a remembered computer and a computer record this version cannot read
     expect(JSON.parse(window.localStorage.getItem("morty:remembered-computers:v1") ?? "[]")).toContainEqual(future);
 });
 
-test("Given a computer record this version cannot read whose token it can read, When saving a visit has to make room for tokens, Then that computer keeps its token", {
+test("Given a computer record this version cannot read whose token it can read, When saving a visit, Then that computer keeps its token and a token no computer needs is dropped", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -709,16 +667,10 @@ test("Given a computer record this version cannot read whose token it can read, 
     const theirToken = `mobius_anon_v2_${"t".repeat(43)}`;
     const future = { scope: { userId: FUTURE_USER_ID }, destination: { kind: "workspace" }, lastUsedAt: 0 };
     addStoredValue("morty:remembered-computers:v1", (stored) => [...(Array.isArray(stored) ? stored : []), future]);
-    // Its token comes first, and older tokens no computer claims fill the remaining room.
     addStoredValue("mobius.anonymous-credentials.v1", (stored) => ({
-        [FUTURE_USER_ID]: theirToken,
         ...(typeof stored === "object" && stored !== null ? stored : {}),
-        ...Object.fromEntries(
-            Array.from({ length: 9 }, (_, index) => [
-                `usr_unclaimed-${index}`,
-                `mobius_anon_v2_${String(index).repeat(43)}`,
-            ]),
-        ),
+        [FUTURE_USER_ID]: theirToken,
+        "usr_unclaimed-0": `mobius_anon_v2_${"0".repeat(43)}`,
     }));
 
     window.location.href = `${app.origin}/`;
@@ -727,7 +679,7 @@ test("Given a computer record this version cannot read whose token it can read, 
     expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
     const credentials = JSON.parse(window.localStorage.getItem("mobius.anonymous-credentials.v1") ?? "{}");
     expect(credentials).toMatchObject({ [FUTURE_USER_ID]: theirToken });
-    expect(Object.keys(credentials)).toHaveLength(10);
+    expect(credentials).not.toHaveProperty("usr_unclaimed-0");
 });
 
 test("Given a computer whose remembered conversation was closed elsewhere, When I switch to it from another computer, Then it opens at its chat home", {

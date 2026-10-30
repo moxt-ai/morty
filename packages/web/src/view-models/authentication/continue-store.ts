@@ -187,7 +187,6 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     identity.botId,
                     handoff.harness,
                     handoff.sessionId,
-                    "import",
                     signal,
                 );
                 signal.throwIfAborted();

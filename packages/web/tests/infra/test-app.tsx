@@ -4,17 +4,14 @@ import { getByTestId, getConfig, queryAllByTestId } from "@testing-library/dom";
 import { act, render } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { flushSync } from "react-dom";
+import * as v from "valibot";
 import { afterAll, afterEach } from "vitest";
 import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
 import type { PageAnalytics } from "../../src/services/analytics/google-analytics.ts";
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 import type { SetupHandoff } from "../../src/services/device/setup-handoff.ts";
-import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../../src/services/identity/anonymous-identity-api.ts";
-import { encodeIdentityScope } from "../../src/services/identity/identity-scope-url.ts";
-import {
-    anonymousCredentialsEntry,
-    centralLocalStorage,
-} from "../../src/services/local-storage/central-local-storage.ts";
+import { encodeIdentityScope, identityScopeSchema } from "../../src/services/identity/identity-scope-url.ts";
+import { saveAccess } from "../../src/services/identity/remembered-computers.ts";
 import type { Clock } from "../../src/services/time/clock.ts";
 import { assembleMorty } from "../../src/views/bootstrap.tsx";
 import { createChatWorkerEnvironment } from "../support/chat-worker.ts";
@@ -107,21 +104,13 @@ export async function createTestApp(
     } else if (page.kind === "bootstrap") {
         const destination = new URL("/", current.origin);
         if (page.identity === true) {
-            destination.searchParams.set(
-                "identity",
-                encodeIdentityScope({
-                    botId: current.botId,
-                    projectId: current.identity.projectId,
-                    userId: current.userId,
-                }),
-            );
-            window.localStorage.setItem(
-                ANONYMOUS_CREDENTIAL_KEY_NAME,
-                JSON.stringify({
-                    ...(centralLocalStorage.read(anonymousCredentialsEntry) ?? {}),
-                    [current.userId]: await current.identity.getToken(new AbortController().signal),
-                }),
-            );
+            const scope = v.parse(identityScopeSchema, {
+                botId: current.botId,
+                projectId: current.identity.projectId,
+                userId: current.userId,
+            });
+            destination.searchParams.set("identity", encodeIdentityScope(scope));
+            saveAccess(scope, await current.identity.getToken(new AbortController().signal));
         }
         window.location.href = destination.href;
     } else if (options.application === undefined) {
@@ -130,23 +119,15 @@ export async function createTestApp(
             destination.searchParams.set("sessionId", page.sessionId);
         }
         // Sign in through the production flow: the URL carries the identity
-        // scope and storage carries its token, exactly what a shared-access
-        // link persists, so the anonymous session restores it on load.
-        destination.searchParams.set(
-            "identity",
-            encodeIdentityScope({
-                botId: current.botId,
-                projectId: current.identity.projectId,
-                userId: current.userId,
-            }),
-        );
-        window.localStorage.setItem(
-            ANONYMOUS_CREDENTIAL_KEY_NAME,
-            JSON.stringify({
-                ...(centralLocalStorage.read(anonymousCredentialsEntry) ?? {}),
-                [current.userId]: await current.identity.getToken(new AbortController().signal),
-            }),
-        );
+        // scope and storage carries the access a shared-access link saves, so
+        // the anonymous session restores it on load.
+        const scope = v.parse(identityScopeSchema, {
+            botId: current.botId,
+            projectId: current.identity.projectId,
+            userId: current.userId,
+        });
+        destination.searchParams.set("identity", encodeIdentityScope(scope));
+        saveAccess(scope, await current.identity.getToken(new AbortController().signal));
         window.location.href = destination.href;
     }
     let container = document.createElement("div");

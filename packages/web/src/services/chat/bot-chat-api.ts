@@ -35,7 +35,6 @@ const accessSchema = v.pipe(
     v.strictObject({
         endpoint: v.pipe(v.string(), v.url()),
         projectId: identifier,
-        conversationId: identifier,
         sessionId: identifier,
         credential: v.pipe(v.string(), v.regex(/^msession_[A-Za-z0-9_-]{22}_[A-Za-z0-9_-]+_[A-Za-z0-9_-]{43}$/u)),
         expiresAt: v.pipe(v.string(), v.isoTimestamp()),
@@ -50,7 +49,6 @@ export type ChatAccess = v.InferOutput<typeof accessSchema>;
 const managedSessionSchema = v.pipe(
     v.object({
         createdAt: v.pipe(v.string(), v.isoTimestamp()),
-        isExternal: v.boolean(),
         id: identifier,
         title: v.string(),
         updatedAt: v.pipe(v.string(), v.isoTimestamp()),
@@ -80,7 +78,6 @@ export type ManagedSessionEvent =
     | SessionStatusChangedEvent
     | SessionCloseNoticeEvent;
 const chatRuntimeSchema = v.object({
-    nativeForkRecovery: v.optional(v.boolean(), false),
     runtimeId: identifier,
     machineName: v.string(),
     online: v.boolean(),
@@ -156,10 +153,10 @@ const localSessionSchema = v.object({
     entry: localSessionEntrySchema,
 });
 
-function continuedSession(value: unknown, action: "fork" | "import") {
+function continuedSession(value: unknown) {
     const stored = v.parse(localSessionSchema, value);
     const result = decodeNativeSessionResult(JSON.stringify(stored.result));
-    if (result.action !== action || (action === "fork" && result.ready.sessionId !== result.targetSessionId)) {
+    if (result.action !== "import") {
         throw new CloudApiError("INVALID_SESSION", "The continued Chat session is invalid.");
     }
     return { ...stored, result };
@@ -438,33 +435,9 @@ export class BotChatApi {
             },
         };
     };
-    readonly continueNativeSession = async (
-        botId: string,
-        harness: string,
-        sessionId: string,
-        action: "fork" | "import",
-        signal: AbortSignal,
-    ) =>
-        continuedSession(
-            await this.#request(botId, "continue-native-session", { action, harness, sessionId }, signal),
-            action,
-        );
-    readonly continueRecoverableNativeFork = async (
-        botId: string,
-        harness: string,
-        sessionId: string,
-        operationId: string,
-        signal: AbortSignal,
-    ) =>
-        continuedSession(
-            await this.#request(
-                botId,
-                `continue-native-session/forks/${encodeURIComponent(operationId)}`,
-                { harness, sessionId },
-                signal,
-            ),
-            "fork",
-        );
+    /** Imports the native session a setup handoff names into the caller's Machine. */
+    readonly continueNativeSession = async (botId: string, harness: string, sessionId: string, signal: AbortSignal) =>
+        continuedSession(await this.#request(botId, "continue-native-session", { harness, sessionId }, signal));
     readonly agentSettings = async (
         botId: string,
         agentRef: string,
@@ -564,8 +537,11 @@ export class BotChatApi {
                 JSON.stringify(await this.#request(botId, "native-sessions", { ...input, runtimeId }, signal)),
             );
         }
-        if (input.action !== "fork" && input.action !== "import") {
-            throw new CloudApiError("INVALID_REQUEST", "Use the session preview endpoint to read local history.");
+        if (input.action !== "import") {
+            throw new CloudApiError(
+                "INVALID_REQUEST",
+                "Fork through forkNativeSession and read local history through the session preview endpoint.",
+            );
         }
         const { entryId, action, ...identity } = input;
         return decodeNativeSessionResult(

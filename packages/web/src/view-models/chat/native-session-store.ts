@@ -44,7 +44,6 @@ type Operation = "idle" | "more" | "import" | "fork";
 type ForkIntent = {
     readonly target: string;
     readonly operationId: string;
-    readonly contract: "legacy" | "recoverable";
 };
 
 export interface NativeSessionStore {
@@ -299,20 +298,17 @@ export const createNativeSessionStore = (
                     additionalDirectoryIds: preview.entry.additionalDirectories.map((item) => item.directoryId),
                     nativeSessionId: preview.entry.nativeSessionId,
                 };
-                let forkIntent = get().forkIntent;
+                const retained = get().forkIntent;
+                const target = JSON.stringify([directory.runtimeId, input]);
+                const forkIntent =
+                    retained !== null && retained.target === target
+                        ? retained
+                        : { target, operationId: crypto.randomUUID() };
                 if (action === "fork") {
-                    const target = JSON.stringify([directory.runtimeId, input]);
-                    if (forkIntent === null || forkIntent.target !== target) {
-                        forkIntent = {
-                            target,
-                            operationId: crypto.randomUUID(),
-                            contract: runtime()?.nativeForkRecovery === true ? "recoverable" : "legacy",
-                        };
-                        set({ forkIntent });
-                    }
+                    set({ forkIntent });
                 }
                 const result =
-                    action === "fork" && forkIntent?.contract === "recoverable"
+                    action === "fork"
                         ? await requests.forkNativeSession(
                               botId,
                               directory.runtimeId,

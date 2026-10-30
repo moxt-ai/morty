@@ -291,10 +291,8 @@ for (const configured of [false, true]) {
         const paths = [
             { path: "native-sessions", input: { ...entry, action: "list", cursor: null, discoveryId: null } },
             { path: `native-session/${found.entry.entryId}`, input: { ...entry, nativeSessionId } },
-            ...["import", "fork"].map((action) => ({
-                path: `native-session/${found.entry.entryId}/${action}`,
-                input: { ...entry, discoveryId: found.sessionId },
-            })),
+            { path: `native-session/${found.entry.entryId}/import`, input: { ...entry, discoveryId: found.sessionId } },
+            { path: "native-session-forks/fork-operation", input: { ...entry, nativeSessionId } },
         ];
         const responses = [];
         for (const { path, input } of paths) {
@@ -395,7 +393,6 @@ test("Given an imported native session, When its owner imports it again, Then Ch
     expect(second.status).toBe(200);
     expect(await second.json()).toMatchObject({ ready: { sessionId: opened.ready.sessionId } });
     const handoff = await fixture.request(`chat/bots/${fixture.botId}/continue-native-session`, {
-        action: "import",
         harness: "codex",
         sessionId: nativeId,
     });
@@ -462,7 +459,7 @@ test("Given an idle managed Chat session, When its owner archives it, Then Chat 
 
     const reopened = await fixture.request(`chat/bots/${fixture.botId}/access`, { conversationId: sessionId });
     expect(reopened.status).toBe(200);
-    expect(await reopened.json()).toMatchObject({ conversationId: sessionId, sessionId });
+    expect(await reopened.json()).toMatchObject({ sessionId });
 
     const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
 
@@ -510,7 +507,7 @@ test("Given two Bots on the same Runtime, When a conversation ID is opened throu
     expect(await rejected.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
     const reopened = await fixture.request(`chat/bots/${fixture.botId}/access`, { conversationId: sessionId });
     expect(reopened.status).toBe(200);
-    expect(await reopened.json()).toMatchObject({ conversationId: sessionId, sessionId });
+    expect(await reopened.json()).toMatchObject({ sessionId });
     const managed = await fixture.request(`chat/bots/${other.botId}/managed-sessions`, {});
     expect(await managed.json()).toEqual({ sessions: [] });
 });
@@ -554,7 +551,7 @@ for (const operation of ["access", "managed-session"]) {
     });
 }
 
-test("Given a Runtime cannot complete Session close, When its owner archives a managed Chat session, Then Chat reports the unconfirmed close while preserving legacy archival", async ({
+test("Given a Runtime cannot complete Session close, When its owner archives a managed Chat session, Then Chat reports the unconfirmed close and still archives it", async ({
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
@@ -575,10 +572,7 @@ test("Given a Runtime cannot complete Session close, When its owner archives a m
     const archived = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
 
     expect(archived.status).toBe(200);
-    const result: unknown = await archived.json();
-    expect(result).toEqual({ close: "unconfirmed" });
-    // The released browser at 830721ff accepts an object and ignores additional response fields.
-    expect(v.parse(v.object({}), result)).toEqual({});
+    expect(await archived.json()).toEqual({ close: "unconfirmed" });
     const managed = await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {});
     expect(await managed.json()).toEqual({ sessions: [] });
     const repeated = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });

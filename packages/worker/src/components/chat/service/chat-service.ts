@@ -196,8 +196,8 @@ export class ChatService {
 
     readonly #nativeSessionRuntime = async (scope: ChatScope, requestedRuntimeId: string) => {
         const runtime = await this.localRuntime(scope);
-        // Existing clients send the Runtime with their native-session identity. Keep it as a consistency check:
-        // discovery and entry identifiers belong to that Runtime and must not be silently redirected elsewhere.
+        // The client names the Runtime its native-session identity came from. Discovery and entry identifiers belong to
+        // that Runtime and must not be silently redirected to another one.
         if (requestedRuntimeId !== runtime.runtimeId) {
             throw new PlatformProjectError("BOT_RUNTIME_FIXED", "This Machine is bound to a different Runtime.", 409);
         }
@@ -239,7 +239,6 @@ export class ChatService {
                         details?.additionalDirectories.map((directory) => directory.directoryId) ?? [],
                     directoryId: details?.directoryId ?? "default",
                     directoryLabel: details?.directoryLabel ?? "",
-                    isExternal: false,
                     // The Runtime titles a Session from its first prompt; until then it lists a placeholder.
                     prompted: details?.prompted ?? false,
                     status: details?.status ?? { kind: "idle" },
@@ -421,7 +420,7 @@ export class ChatService {
                 scope.projectId,
                 scope.userId,
                 scope.botId,
-                { id: access.conversationId },
+                { id: access.sessionId },
                 scope.signal,
             );
         }
@@ -472,7 +471,7 @@ export class ChatService {
             } catch {
                 scope.signal.throwIfAborted();
             }
-            // Archival stays available to offline and older Runtimes, but does not prove their process stopped.
+            // Archival stays available to an offline Runtime, but does not prove its process stopped.
             await this.#chatSessions.archive(scope.projectId, scope.userId, scope.botId, sessionId, scope.signal);
             return { close };
         });
@@ -490,12 +489,8 @@ export class ChatService {
         return result;
     };
 
-    readonly continueNativeSession = async (
-        scope: ChatScope,
-        harness: string,
-        sessionId: string,
-        action: "fork" | "import",
-    ) => {
+    /** Imports the native session a setup handoff names, found by its native identifier in the default workspace. */
+    readonly continueNativeSession = async (scope: ChatScope, harness: string, sessionId: string) => {
         const bot = await this.#bot(scope);
         const runtime =
             bot.configuration === null
@@ -521,7 +516,7 @@ export class ChatService {
             scope.projectId,
             runtime.runtimeId,
             {
-                action,
+                action: "import",
                 discoveryId: found.sessionId,
                 agentId: agent.agentRef,
                 directoryId: entry.directoryId,
@@ -530,14 +525,8 @@ export class ChatService {
             },
             scope.signal,
         );
-        if (result.action !== action || (action === "fork" && result.ready.sessionId !== result.targetSessionId)) {
-            throw new PlatformProjectError(
-                action === "import" ? "IMPORT_UNAVAILABLE" : "CONTINUATION_UNAVAILABLE",
-                action === "import"
-                    ? "The original session could not be opened."
-                    : "The handoff session could not be forked.",
-                409,
-            );
+        if (result.action !== "import") {
+            throw new PlatformProjectError("IMPORT_UNAVAILABLE", "The original session could not be opened.", 409);
         }
         const stored = { agentRef: agent.agentRef, result, entry, instructions: bot.instructions };
         await this.#chatSessions.save(
@@ -569,17 +558,33 @@ export class ChatService {
 
     readonly importNativeSession = async (
         scope: ChatScope,
-        runtimeId: string,
+        requestedRuntimeId: string,
         entryId: string,
         input: NativeEntryInput,
-    ) => await this.#openNativeSession(scope, runtimeId, entryId, input, "import");
-
-    readonly forkNativeSession = async (
-        scope: ChatScope,
-        runtimeId: string,
-        entryId: string,
-        input: NativeEntryInput,
-    ) => await this.#openNativeSession(scope, runtimeId, entryId, input, "fork");
+    ) => {
+        const runtime = await this.#nativeSessionRuntime(scope, requestedRuntimeId);
+        const result = await this.#platform.nativeSessions(
+            scope.projectId,
+            runtime.runtimeId,
+            { ...input, entryId, action: "import" },
+            scope.signal,
+        );
+        if (result.action !== "import") {
+            throw new PlatformProjectError(
+                "IMPORT_UNAVAILABLE",
+                "This agent cannot import the selected local session.",
+                409,
+            );
+        }
+        await this.#chatSessions.save(
+            scope.projectId,
+            scope.userId,
+            scope.botId,
+            { id: result.ready.sessionId },
+            scope.signal,
+        );
+        return result;
+    };
 
     readonly recoverableNativeFork = async (
         scope: ChatScope,
@@ -588,20 +593,11 @@ export class ChatService {
         input: NativePreviewInput,
     ) => {
         const runtime = await this.#nativeSessionRuntime(scope, requestedRuntimeId);
-        return await this.#recoverFork(scope, runtime.runtimeId, operationId, input);
-    };
-
-    readonly #recoverFork = async (
-        scope: ChatScope,
-        runtimeId: string,
-        operationId: string,
-        input: NativePreviewInput,
-    ) => {
         // Operation identity belongs to this user and Machine, even when they share a Platform Project.
         const scopedOperationId = await chatSessionId(scope.botId, `${scope.userId}\u0000fork\u0000${operationId}`);
         const receipt = await this.#platform.forkNativeSession(
             scope.projectId,
-            runtimeId,
+            runtime.runtimeId,
             scopedOperationId,
             input,
             scope.signal,
@@ -614,50 +610,6 @@ export class ChatService {
             scope.signal,
         );
         return receipt;
-    };
-
-    readonly continueRecoverableNativeFork = async (
-        scope: ChatScope,
-        operationId: string,
-        harness: string,
-        nativeSessionId: string,
-    ) => {
-        const bot = await this.#bot(scope);
-        const runtime = await this.localRuntime(scope);
-        const input = { agentId: harness, nativeSessionId, directoryId: "default", additionalDirectoryIds: [] };
-        const receipt = await this.#recoverFork(scope, runtime.runtimeId, operationId, input);
-        return { agentRef: harness, ...receipt, instructions: bot.instructions };
-    };
-
-    readonly #openNativeSession = async (
-        scope: ChatScope,
-        requestedRuntimeId: string,
-        entryId: string,
-        input: NativeEntryInput,
-        action: "fork" | "import",
-    ) => {
-        const runtime = await this.#nativeSessionRuntime(scope, requestedRuntimeId);
-        const result = await this.#platform.nativeSessions(
-            scope.projectId,
-            runtime.runtimeId,
-            { ...input, entryId, action },
-            scope.signal,
-        );
-        if (result.action !== action || (action === "fork" && result.ready.sessionId !== result.targetSessionId)) {
-            throw new PlatformProjectError(
-                action === "fork" ? "FORK_UNAVAILABLE" : "IMPORT_UNAVAILABLE",
-                `This agent cannot ${action} the selected local session.`,
-                409,
-            );
-        }
-        await this.#chatSessions.save(
-            scope.projectId,
-            scope.userId,
-            scope.botId,
-            { id: result.ready.sessionId },
-            scope.signal,
-        );
-        return result;
     };
 
     readonly configureBot = async (scope: ChatScope, input: ConfigureBotInput) => {

@@ -53,7 +53,6 @@ export type ChatConversationInput =
       };
 
 const discoveredRuntimeSchema = v.object({
-    nativeForkRecovery: v.optional(v.boolean(), false),
     agents: v.array(
         v.object({
             id: platformIdentifier,
@@ -172,7 +171,6 @@ export class PlatformProjectGateway {
             }
             return {
                 runtimeId: runtime.runtimeId,
-                nativeForkRecovery: runtime.nativeForkRecovery,
                 machineName: runtime.machineName,
                 online: runtime.online,
                 agents: runtime.agents.map((agent) => ({ agentRef: agent.id, label: agent.label })),
@@ -452,7 +450,6 @@ export class PlatformProjectGateway {
                 return {
                     endpoint: this.configuration().origin,
                     projectId,
-                    conversationId: sessionId,
                     sessionId,
                     credential: access.credential,
                     expiresAt: access.expiresAt,
