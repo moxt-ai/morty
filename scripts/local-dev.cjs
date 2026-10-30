@@ -24,6 +24,7 @@ const path = require("node:path");
 const net = require("node:net");
 const { pathToFileURL } = require("node:url");
 const { setTimeout: delay } = require("node:timers/promises");
+const { stripVTControlCharacters } = require("node:util");
 const hostPlatform = require("./platform/index.cjs");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
@@ -177,20 +178,128 @@ async function localLaunch(command, args) {
 async function run(command, args, options = {}) {
     options.signal?.throwIfAborted();
     const launch = await localLaunch(command, args);
-    const { runBoundedProcess } = await import(
+    const { stopProcessTree, platformSpawnOptions, ProcessExecutionError } = await import(
         pathToFileURL(path.join(MOBIUS_ROOT, "packages/cli/src/engine/util/process/executable.ts")).href
     );
-    // The production runner owns a platform-specific process tree, not just pnpm.
-    // It awaits graceful/forced tree cleanup before returning on every exit path.
-    return runBoundedProcess({
-        command: launch.command,
-        arguments: launch.arguments,
+    options.signal?.throwIfAborted();
+    const environment = { ...process.env, ...options.env };
+    const child = spawn(launch.command, launch.arguments, {
+        ...platformSpawnOptions,
         cwd: options.cwd ?? REPO_ROOT,
-        environment: { ...process.env, ...options.env },
-        signal: options.signal ?? new AbortController().signal,
-        timeoutMilliseconds: options.timeout ?? 300_000,
-        outputLimitBytes: 16 * 1024 * 1024,
+        env: environment,
+        stdio: ["ignore", "pipe", "pipe"],
     });
+    const completion = new Promise((resolve, reject) => {
+        child.once("error", reject);
+        // Drain both pipes before formatting a failed command's diagnostic tail.
+        child.once("close", (code, signal) =>
+            code === 0
+                ? resolve()
+                : reject(new ProcessExecutionError("process_exit_failed", `exited ${code ?? signal}`)),
+        );
+    });
+    const interrupted = Promise.withResolvers();
+    let cleanup;
+    const interrupt = (failure) => {
+        if (cleanup !== undefined) {
+            return;
+        }
+        // Use the production platform adapters to own and reap the entire tree.
+        // Resolve the interruption only after graceful/forced termination completes.
+        cleanup = stopProcessTree(child).then(
+            () => failure,
+            (cause) =>
+                new ProcessExecutionError("process_termination_failed", "command tree cleanup failed", { cause }),
+        );
+        void cleanup.then(interrupted.reject);
+    };
+    const output = { stdout: [], stderr: [] };
+    const bytes = { stdout: 0, stderr: 0 };
+    const limit = 16 * 1024 * 1024;
+    const collect = (stream, chunk) => {
+        if (cleanup !== undefined) {
+            return;
+        }
+        output[stream].push(chunk.subarray(0, Math.max(0, limit - bytes[stream])));
+        bytes[stream] += chunk.length;
+        if (bytes[stream] > limit) {
+            interrupt(new ProcessExecutionError("process_output_limit", "command output exceeded 16 MiB"));
+        }
+    };
+    child.stdout.on("data", (chunk) => collect("stdout", chunk));
+    child.stderr.on("data", (chunk) => collect("stderr", chunk));
+    const timeout = setTimeout(
+        () => interrupt(new ProcessExecutionError("process_timeout", "command timed out")),
+        options.timeout ?? 300_000,
+    );
+    const abort = () =>
+        interrupt(
+            new ProcessExecutionError("process_cancelled", "command was cancelled", { cause: options.signal.reason }),
+        );
+    options.signal?.addEventListener("abort", abort, { once: true });
+    if (options.signal?.aborted) {
+        abort();
+    }
+    const stdout = () => Buffer.concat(output.stdout).toString("utf8");
+    const stderr = () => Buffer.concat(output.stderr).toString("utf8");
+    try {
+        await Promise.race([completion, interrupted.promise]);
+        if (cleanup !== undefined) {
+            await interrupted.promise;
+        }
+        return { stdout: stdout(), stderr: stderr() };
+    } catch (cause) {
+        const original = cleanup === undefined ? cause : await cleanup;
+        const failure =
+            original instanceof ProcessExecutionError
+                ? original
+                : new ProcessExecutionError("process_spawn_failed", "command could not be started", {
+                      cause: original,
+                  });
+        // Never print raw arguments: --var and setup arguments can contain credentials.
+        const label = `${path.basename(command)}${/^[a-z][a-z:-]*$/u.test(args[0] ?? "") ? ` ${args[0]}` : ""}`;
+        const tail = sanitizeCommandOutput(stderr() || stdout(), environment, args).slice(-8_000);
+        throw new ProcessExecutionError(
+            failure.code,
+            `${label}: ${failure.message}${tail.length === 0 ? "" : `\n${tail}`}`,
+            { cause: failure },
+        );
+    } finally {
+        clearTimeout(timeout);
+        options.signal?.removeEventListener("abort", abort);
+        if (cleanup !== undefined) {
+            await cleanup;
+        } else {
+            await stopProcessTree(child);
+        }
+    }
+}
+
+function sanitizeCommandOutput(output, environment, args) {
+    const sensitive = /secret|token|password|credential|authorization|private.?key|encryption.?key/iu;
+    const values = Object.entries(environment)
+        .filter(([key, value]) => sensitive.test(key) && typeof value === "string" && value.length > 0)
+        .map(([, value]) => value);
+    // Also cover credentials supplied as CLI flags or Wrangler KEY:value bindings.
+    for (const tokens of [args, process.argv.slice(2)]) {
+        for (let index = 0; index < tokens.length; index += 1) {
+            const match = /^([^:=]+)[:=](.*)$/u.exec(tokens[index]);
+            if (match !== null && sensitive.test(match[1]) && match[2].length > 0) {
+                values.push(match[2]);
+            } else if (tokens[index].startsWith("--") && sensitive.test(tokens[index]) && tokens[index + 1]) {
+                values.push(tokens[index + 1]);
+            }
+        }
+    }
+    // Color sequences can split a credential between individual characters.
+    let sanitized = stripVTControlCharacters(output);
+    const secrets = [...new Set(values.map(stripVTControlCharacters).filter((value) => value.length > 0))]
+        .sort((left, right) => right.length - left.length)
+        .map((value) => RegExp.escape(value));
+    if (secrets.length > 0) {
+        sanitized = sanitized.replace(new RegExp(secrets.join("|"), "gu"), "[REDACTED]");
+    }
+    return sanitized.replace(/Bearer\s+[^\s"']+/giu, "Bearer [REDACTED]");
 }
 
 function wrangler(args) {
