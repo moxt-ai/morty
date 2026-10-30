@@ -208,8 +208,8 @@ export const createBotChatHomeStore = (
         | "conversationSession"
         | "createConversation"
         | "managedSession"
-        | "readBot"
-        | "waitForSetupChange"
+        | "readRuntimeBinding"
+        | "waitForRuntimeBindingChange"
         | "waitForRuntimeConfigurationChange"
         | "runtimeConfiguration"
         | "directory"
@@ -477,14 +477,14 @@ export const createBotChatHomeStore = (
                             if (dropped) {
                                 await requests.waitForBridge(watchSignal);
                                 watchSignal.throwIfAborted();
-                                const detail = await requests.readBot(botId, watchSignal);
+                                const binding = await requests.readRuntimeBinding(botId, watchSignal);
                                 watchSignal.throwIfAborted();
-                                set({ pairing: { kind: detail.configured ? "paired" : "unpaired" } });
-                                if (!detail.configured) {
-                                    // The setup watch only exists for an
-                                    // unconfigured Machine; the pairing flow
+                                set({ pairing: { kind: binding.kind === "bound" ? "paired" : "unpaired" } });
+                                if (binding.kind === "unbound") {
+                                    // An unbound Machine waits for the binding
+                                    // it just read to change; the pairing flow
                                     // completes by restarting the load.
-                                    await requests.waitForSetupChange(botId, watchSignal);
+                                    await requests.waitForRuntimeBindingChange(botId, watchSignal);
                                     watchSignal.throwIfAborted();
                                     completeSetup();
                                     return;
@@ -500,10 +500,8 @@ export const createBotChatHomeStore = (
                                 }
                                 dropped = false;
                             }
-                            // A configured Machine keeps following workspace
-                            // changes even while its Runtime is offline: the
-                            // setup endpoint answers it a fixed
-                            // BOT_RUNTIME_FIXED fingerprint that never fires.
+                            // A bound Machine keeps following workspace
+                            // changes even while its Runtime is offline.
                             // A watch re-armed after a dropped bridge may find a Runtime that changed meanwhile.
                             const rearmed = armed;
                             armed = true;
@@ -541,10 +539,10 @@ export const createBotChatHomeStore = (
                         await followConfigurationChanges(signal);
                         return;
                     }
-                    const detail = await requests.readBot(botId, signal);
+                    const binding = await requests.readRuntimeBinding(botId, signal);
                     signal.throwIfAborted();
-                    set({ pairing: { kind: detail.configured ? "paired" : "unpaired" } });
-                    if (!detail.configured) {
+                    set({ pairing: { kind: binding.kind === "bound" ? "paired" : "unpaired" } });
+                    if (binding.kind === "unbound") {
                         set((current) => ({
                             selection:
                                 current.selection.kind === "pending" || current.selection.kind === "loading"
