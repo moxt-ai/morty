@@ -197,7 +197,7 @@ export const createSessionDeliveryStore = (options: {
                     });
                 } else if (state.kind === "submitting") {
                     if (state.confirmation === "delivered") {
-                        confirm(state.journal, set, get);
+                        set({ state: { kind: "idle" } });
                     } else {
                         set({ state: { kind: "delivery-unknown", journal: state.journal } });
                     }
@@ -217,7 +217,7 @@ export const createSessionDeliveryStore = (options: {
                     set({ state: { ...state, confirmation: "delivered" } });
                 }
                 if (state.kind === "delivery-unknown" && commandIds.includes(state.journal.commandId)) {
-                    confirm(state.journal, set, get);
+                    set({ state: { kind: "idle" } });
                 }
             },
             submit: async (journal, submit, signal) => await send(journal, submit, signal, set, get),
