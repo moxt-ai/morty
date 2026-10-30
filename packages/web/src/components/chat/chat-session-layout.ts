@@ -23,13 +23,12 @@ export const chatSessionMessageColumnClassName = `${chatSessionColumnClassName} 
  * would have its shadow clipped away at the section edge.
  *
  * The bottom margin clears the iOS home indicator. iOS keeps reporting the full
- * safe-area inset while the software keyboard covers the indicator, so on touch
- * devices a focused textarea drops back to the plain 12px gutter instead of
- * floating above the keyboard. Fine-pointer devices keep the inset because focus
- * there does not imply a software keyboard.
+ * safe-area inset while the software keyboard covers the indicator, so the
+ * composer drops back to the plain 12px gutter while `useSoftwareKeyboardMarker`
+ * reports the keyboard open, instead of floating above it.
  */
 export const chatSessionComposerClassName =
-    "relative z-10 mx-auto w-full min-w-0 shrink-0 px-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] pointer-coarse:has-[textarea:focus]:mb-3 sm:mt-0 sm:px-0 sm:w-[min(920px,calc(100%-24px))]";
+    "relative z-10 mx-auto w-full min-w-0 shrink-0 px-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] data-[software-keyboard=open]:mb-3 sm:mt-0 sm:px-0 sm:w-[min(920px,calc(100%-24px))]";
 
 /**
  * Fills the conversation card. Background, radius, and the outer inset stay on
