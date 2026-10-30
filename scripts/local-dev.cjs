@@ -8,6 +8,7 @@
 //   node scripts/local-dev.cjs prepare [options]
 //   node scripts/local-dev.cjs setup  --state-dir <dir> --harness <id> --session-id <id> [options]
 //   node scripts/local-dev.cjs status  --state-dir <dir>
+//   node scripts/local-dev.cjs reload web --state-dir <dir>
 //   node scripts/local-dev.cjs logs    --state-dir <dir> [options]
 //   node scripts/local-dev.cjs remove  --state-dir <dir> [options]
 //
@@ -22,6 +23,7 @@ const os = require("node:os");
 const path = require("node:path");
 const net = require("node:net");
 const { pathToFileURL } = require("node:url");
+const { setTimeout: delay } = require("node:timers/promises");
 const hostPlatform = require("./platform/index.cjs");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
@@ -241,23 +243,28 @@ async function stopProcess(pid) {
     await hostPlatform.stopProcess(pid);
 }
 
-async function waitForHttp(url, accept, timeoutMilliseconds, description, process) {
+async function waitForHttp(url, accept, timeoutMilliseconds, description, process, signal) {
     const deadline = Date.now() + timeoutMilliseconds;
     let last = "no attempt";
     while (Date.now() < deadline) {
+        signal?.throwIfAborted();
         if (process !== undefined && !isAlive(process.pid)) {
             throw new Error(`${description} process exited before becoming healthy; see ${process.logPath}`);
         }
         try {
-            const response = await fetch(url, { signal: AbortSignal.timeout(3_000) });
+            const timeout = AbortSignal.timeout(3_000);
+            const response = await fetch(url, {
+                signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]),
+            });
             if (await accept(response)) {
                 return;
             }
             last = `status ${response.status}`;
         } catch (error) {
+            signal?.throwIfAborted();
             last = error instanceof Error ? error.message : String(error);
         }
-        await new Promise((resolve) => setTimeout(resolve, 400));
+        await delay(400, undefined, { signal });
     }
     throw new Error(`Timed out waiting for ${description}: ${last}`);
 }
@@ -831,6 +838,80 @@ process.exit(result.status ?? 1);
     log("setup is ready; open handoffUrl in the browser to continue as this user");
 }
 
+async function reload(options) {
+    const target = options.mode;
+    if (target !== "web" && target !== "chat") {
+        throw new Error("reload requires a target: web (or chat)");
+    }
+    const stack = options.stateDir === undefined ? null : readStack(options.stateDir);
+    if (stack === null) {
+        throw new Error("pass --state-dir for a stack created by prepare");
+    }
+    if (!["web", "web-server", "web-server-mobius-cli"].includes(stack.mode)) {
+        throw new Error("unsupported stack mode; run prepare first");
+    }
+    const origin = new URL(stack.chatOrigin);
+    if (origin.protocol !== "http:" || origin.hostname !== "localhost" || origin.origin !== stack.chatOrigin) {
+        throw new Error("the stack must use a local Chat origin created by prepare");
+    }
+    const stateDir = fs.realpathSync(options.stateDir);
+    const chatPersist = path.join(stateDir, "chat");
+    if (stack.mode !== "web" && fs.realpathSync(chatPersist) !== chatPersist) {
+        throw new Error("Chat persistence must resolve inside the selected state directory");
+    }
+    if (!isAlive(stack.chatPid)) {
+        throw new Error("the stack's web/Chat process is not running; run prepare first");
+    }
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    process.once("SIGINT", cancel);
+    process.once("SIGTERM", cancel);
+    const operation = { signal: controller.signal, timeout: SETUP_READY_TIMEOUT_MILLISECONDS };
+    try {
+        if (stack.mode === "web") {
+            log("Vite already hot-reloads web source changes; checking health");
+        } else {
+            log("rebuilding web/Chat; Platform and paired runtimes will stay running");
+            // Do not delete the entrypoint/assets while the live Wrangler watcher reads them.
+            await run("pnpm", ["build", "--emptyOutDir", "false"], operation);
+            controller.signal.throwIfAborted();
+            log("refreshing the local setup bundle");
+            await run(
+                WRANGLER,
+                [
+                    "r2",
+                    "object",
+                    "put",
+                    `${CHAT_ATTACHMENTS_BUCKET}/artifacts/setup.mjs`,
+                    "--file",
+                    SETUP_BUNDLE,
+                    "--local",
+                    "--persist-to",
+                    chatPersist,
+                    "--config",
+                    CHAT_CONFIG,
+                ],
+                operation,
+            );
+            // Wrangler watches the built Worker entrypoint and serves assets from disk.
+            // Keep its process (and in-memory credentials) rather than reprovisioning the stack.
+        }
+        await waitForHttp(
+            stack.chatOrigin,
+            (response) => response.ok,
+            90_000,
+            "reloaded web/Chat",
+            { pid: stack.chatPid, logPath: stack.chatLog },
+            controller.signal,
+        );
+        log(`web/Chat ready at ${stack.chatOrigin}; refresh the browser to load rebuilt assets`);
+        process.stdout.write(`${JSON.stringify(stack)}\n`);
+    } finally {
+        process.removeListener("SIGINT", cancel);
+        process.removeListener("SIGTERM", cancel);
+    }
+}
+
 async function status(options) {
     const stack = options.stateDir === undefined ? null : readStack(options.stateDir);
     if (stack === null) {
@@ -1012,14 +1093,18 @@ function usage(stream = process.stdout) {
             "  node scripts/local-dev.cjs prepare <web|web-server|web-server-mobius-cli> [--state-dir DIR] [--platform-port N] [--chat-port N] [--app-id ID --app-secret SECRET] [--force] [--no-build] [--background]",
             "  node scripts/local-dev.cjs setup  --state-dir DIR --harness ID --session-id ID [--workspace DIR]",
             "  node scripts/local-dev.cjs status --state-dir DIR",
+            "  node scripts/local-dev.cjs reload <web|chat> --state-dir DIR",
             "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|platform|runtime|all] [--lines N] [--filter REGEX] [--follow]",
             "  node scripts/local-dev.cjs remove --state-dir DIR [--keep-state]",
+            "",
+            "reload rebuilds web/Chat and refreshes setup.mjs without restarting Platform or runtimes.",
+            "In web mode, Vite already hot-reloads source changes; reload checks health only.",
             "",
         ].join("\n"),
     );
 }
 
-const COMMANDS = new Set(["prepare", "setup", "status", "logs", "remove"]);
+const COMMANDS = new Set(["prepare", "setup", "status", "reload", "logs", "remove"]);
 const HELP_COMMANDS = new Set(["help", "--help", "-h"]);
 
 async function main() {
@@ -1041,6 +1126,9 @@ async function main() {
             break;
         case "status":
             await status(options);
+            break;
+        case "reload":
+            await reload(options);
             break;
         case "logs":
             await logs(options);
