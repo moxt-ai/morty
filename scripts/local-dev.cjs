@@ -8,6 +8,7 @@
 //   node scripts/local-dev.cjs prepare [options]
 //   node scripts/local-dev.cjs setup  --state-dir <dir> --harness <id> --session-id <id> [options]
 //   node scripts/local-dev.cjs status  --state-dir <dir>
+//   node scripts/local-dev.cjs reload web --state-dir <dir>
 //   node scripts/local-dev.cjs logs    --state-dir <dir> [options]
 //   node scripts/local-dev.cjs remove  --state-dir <dir> [options]
 //
@@ -22,6 +23,8 @@ const os = require("node:os");
 const path = require("node:path");
 const net = require("node:net");
 const { pathToFileURL } = require("node:url");
+const { setTimeout: delay } = require("node:timers/promises");
+const { stripVTControlCharacters } = require("node:util");
 const hostPlatform = require("./platform/index.cjs");
 
 const REPO_ROOT = path.resolve(__dirname, "..");
@@ -173,32 +176,147 @@ async function localLaunch(command, args) {
 }
 
 async function run(command, args, options = {}) {
+    // Every caller owns CLI cancellation before resolving or spawning a detached
+    // command, including prepare's migrations, dependency installation and build.
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    const signal =
+        options.signal === undefined ? controller.signal : AbortSignal.any([controller.signal, options.signal]);
+    process.on("SIGINT", cancel);
+    process.on("SIGTERM", cancel);
+    try {
+        return await runOwnedCommand(command, args, { ...options, signal });
+    } finally {
+        process.removeListener("SIGINT", cancel);
+        process.removeListener("SIGTERM", cancel);
+    }
+}
+
+async function runOwnedCommand(command, args, options) {
+    options.signal?.throwIfAborted();
     const launch = await localLaunch(command, args);
-    return new Promise((resolve, reject) => {
-        const child = spawn(launch.command, launch.arguments, {
-            cwd: options.cwd ?? REPO_ROOT,
-            env: { ...process.env, ...options.env },
-            stdio: ["ignore", "pipe", "pipe"],
-            windowsHide: true,
-            signal: options.signal,
-            timeout: options.timeout,
-            killSignal: "SIGKILL",
-        });
-        let stdout = "";
-        let stderr = "";
-        child.stdout.on("data", (chunk) => {
-            stdout += chunk;
-        });
-        child.stderr.on("data", (chunk) => {
-            stderr += chunk;
-        });
-        child.on("error", reject);
-        child.on("close", (code) =>
+    const { stopProcessTree, platformSpawnOptions, ProcessExecutionError } = await import(
+        pathToFileURL(path.join(MOBIUS_ROOT, "packages/cli/src/engine/util/process/executable.ts")).href
+    );
+    options.signal?.throwIfAborted();
+    const environment = { ...process.env, ...options.env };
+    const child = spawn(launch.command, launch.arguments, {
+        ...platformSpawnOptions,
+        cwd: options.cwd ?? REPO_ROOT,
+        env: environment,
+        stdio: ["ignore", "pipe", "pipe"],
+    });
+    const completion = new Promise((resolve, reject) => {
+        child.once("error", reject);
+        // Drain both pipes before formatting a failed command's diagnostic tail.
+        child.once("close", (code, signal) =>
             code === 0
-                ? resolve({ stdout, stderr })
-                : reject(new Error(`${command} ${args.join(" ")} exited ${code}\n${(stderr || stdout).slice(-2_000)}`)),
+                ? resolve()
+                : reject(new ProcessExecutionError("process_exit_failed", `exited ${code ?? signal}`)),
         );
     });
+    const interrupted = Promise.withResolvers();
+    let cleanup;
+    const interrupt = (failure) => {
+        if (cleanup !== undefined) {
+            return;
+        }
+        // Use the production platform adapters to own and reap the entire tree.
+        // Resolve the interruption only after graceful/forced termination completes.
+        cleanup = stopProcessTree(child).then(
+            () => failure,
+            (cause) =>
+                new ProcessExecutionError("process_termination_failed", "command tree cleanup failed", { cause }),
+        );
+        void cleanup.then(interrupted.reject);
+    };
+    const output = { stdout: [], stderr: [] };
+    const bytes = { stdout: 0, stderr: 0 };
+    const limit = 16 * 1024 * 1024;
+    const collect = (stream, chunk) => {
+        if (cleanup !== undefined) {
+            return;
+        }
+        output[stream].push(chunk.subarray(0, Math.max(0, limit - bytes[stream])));
+        bytes[stream] += chunk.length;
+        if (bytes[stream] > limit) {
+            interrupt(new ProcessExecutionError("process_output_limit", "command output exceeded 16 MiB"));
+        }
+    };
+    child.stdout.on("data", (chunk) => collect("stdout", chunk));
+    child.stderr.on("data", (chunk) => collect("stderr", chunk));
+    const timeout = setTimeout(
+        () => interrupt(new ProcessExecutionError("process_timeout", "command timed out")),
+        options.timeout ?? 300_000,
+    );
+    const abort = () =>
+        interrupt(
+            new ProcessExecutionError("process_cancelled", "command was cancelled", { cause: options.signal.reason }),
+        );
+    options.signal?.addEventListener("abort", abort, { once: true });
+    if (options.signal?.aborted) {
+        abort();
+    }
+    const stdout = () => Buffer.concat(output.stdout).toString("utf8");
+    const stderr = () => Buffer.concat(output.stderr).toString("utf8");
+    try {
+        await Promise.race([completion, interrupted.promise]);
+        if (cleanup !== undefined) {
+            await interrupted.promise;
+        }
+        return { stdout: stdout(), stderr: stderr() };
+    } catch (cause) {
+        const original = cleanup === undefined ? cause : await cleanup;
+        const failure =
+            original instanceof ProcessExecutionError
+                ? original
+                : new ProcessExecutionError("process_spawn_failed", "command could not be started", {
+                      cause: original,
+                  });
+        // Never print raw arguments: --var and setup arguments can contain credentials.
+        const label = `${path.basename(command)}${/^[a-z][a-z:-]*$/u.test(args[0] ?? "") ? ` ${args[0]}` : ""}`;
+        const tail = sanitizeCommandOutput(stderr() || stdout(), environment, args).slice(-8_000);
+        throw new ProcessExecutionError(
+            failure.code,
+            `${label}: ${failure.message}${tail.length === 0 ? "" : `\n${tail}`}`,
+            { cause: failure },
+        );
+    } finally {
+        clearTimeout(timeout);
+        options.signal?.removeEventListener("abort", abort);
+        if (cleanup !== undefined) {
+            await cleanup;
+        } else {
+            await stopProcessTree(child);
+        }
+    }
+}
+
+function sanitizeCommandOutput(output, environment, args) {
+    const sensitive = /secret|token|password|credential|authorization|private.?key|encryption.?key/iu;
+    const values = Object.entries(environment)
+        .filter(([key, value]) => sensitive.test(key) && typeof value === "string" && value.length > 0)
+        .map(([, value]) => value);
+    // Also cover credentials supplied as CLI flags or Wrangler KEY:value bindings.
+    for (const tokens of [args, process.argv.slice(2)]) {
+        for (let index = 0; index < tokens.length; index += 1) {
+            const match = /^([^:=]+)[:=](.*)$/u.exec(tokens[index]);
+            if (match !== null && sensitive.test(match[1]) && match[2].length > 0) {
+                values.push(match[2]);
+            } else if (tokens[index].startsWith("--") && sensitive.test(tokens[index]) && tokens[index + 1]) {
+                values.push(tokens[index + 1]);
+            }
+        }
+    }
+    // Color sequences can split a credential between individual characters.
+    let sanitized = stripVTControlCharacters(output);
+    const secrets = [...new Set(values.map(stripVTControlCharacters).filter((value) => value.length > 0))]
+        .sort((left, right) => right.length - left.length)
+        .map((value) => RegExp.escape(value));
+    if (secrets.length > 0) {
+        sanitized = sanitized.replace(new RegExp(secrets.join("|"), "gu"), "[REDACTED]");
+    }
+    return sanitized.replace(/Bearer\s+[^\s"']+/giu, "Bearer [REDACTED]");
 }
 
 function wrangler(args) {
@@ -241,23 +359,28 @@ async function stopProcess(pid) {
     await hostPlatform.stopProcess(pid);
 }
 
-async function waitForHttp(url, accept, timeoutMilliseconds, description, process) {
+async function waitForHttp(url, accept, timeoutMilliseconds, description, process, signal) {
     const deadline = Date.now() + timeoutMilliseconds;
     let last = "no attempt";
     while (Date.now() < deadline) {
+        signal?.throwIfAborted();
         if (process !== undefined && !isAlive(process.pid)) {
             throw new Error(`${description} process exited before becoming healthy; see ${process.logPath}`);
         }
         try {
-            const response = await fetch(url, { signal: AbortSignal.timeout(3_000) });
+            const timeout = AbortSignal.timeout(3_000);
+            const response = await fetch(url, {
+                signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout]),
+            });
             if (await accept(response)) {
                 return;
             }
             last = `status ${response.status}`;
         } catch (error) {
+            signal?.throwIfAborted();
             last = error instanceof Error ? error.message : String(error);
         }
-        await new Promise((resolve) => setTimeout(resolve, 400));
+        await delay(400, undefined, { signal });
     }
     throw new Error(`Timed out waiting for ${description}: ${last}`);
 }
@@ -831,6 +954,80 @@ process.exit(result.status ?? 1);
     log("setup is ready; open handoffUrl in the browser to continue as this user");
 }
 
+async function reload(options) {
+    const target = options.mode;
+    if (target !== "web" && target !== "chat") {
+        throw new Error("reload requires a target: web (or chat)");
+    }
+    const stack = options.stateDir === undefined ? null : readStack(options.stateDir);
+    if (stack === null) {
+        throw new Error("pass --state-dir for a stack created by prepare");
+    }
+    if (!["web", "web-server", "web-server-mobius-cli"].includes(stack.mode)) {
+        throw new Error("unsupported stack mode; run prepare first");
+    }
+    const origin = new URL(stack.chatOrigin);
+    if (origin.protocol !== "http:" || origin.hostname !== "localhost" || origin.origin !== stack.chatOrigin) {
+        throw new Error("the stack must use a local Chat origin created by prepare");
+    }
+    const stateDir = fs.realpathSync(options.stateDir);
+    const chatPersist = path.join(stateDir, "chat");
+    if (stack.mode !== "web" && fs.realpathSync(chatPersist) !== chatPersist) {
+        throw new Error("Chat persistence must resolve inside the selected state directory");
+    }
+    if (!isAlive(stack.chatPid)) {
+        throw new Error("the stack's web/Chat process is not running; run prepare first");
+    }
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    process.once("SIGINT", cancel);
+    process.once("SIGTERM", cancel);
+    const operation = { signal: controller.signal, timeout: SETUP_READY_TIMEOUT_MILLISECONDS };
+    try {
+        if (stack.mode === "web") {
+            log("Vite already hot-reloads web source changes; checking health");
+        } else {
+            log("rebuilding web/Chat; Platform and paired runtimes will stay running");
+            // Do not delete the entrypoint/assets while the live Wrangler watcher reads them.
+            await run("pnpm", ["build", "--emptyOutDir", "false"], operation);
+            controller.signal.throwIfAborted();
+            log("refreshing the local setup bundle");
+            await run(
+                WRANGLER,
+                [
+                    "r2",
+                    "object",
+                    "put",
+                    `${CHAT_ATTACHMENTS_BUCKET}/artifacts/setup.mjs`,
+                    "--file",
+                    SETUP_BUNDLE,
+                    "--local",
+                    "--persist-to",
+                    chatPersist,
+                    "--config",
+                    CHAT_CONFIG,
+                ],
+                operation,
+            );
+            // Wrangler watches the built Worker entrypoint and serves assets from disk.
+            // Keep its process (and in-memory credentials) rather than reprovisioning the stack.
+        }
+        await waitForHttp(
+            stack.chatOrigin,
+            (response) => response.ok,
+            90_000,
+            "reloaded web/Chat",
+            { pid: stack.chatPid, logPath: stack.chatLog },
+            controller.signal,
+        );
+        log(`web/Chat ready at ${stack.chatOrigin}; refresh the browser to load rebuilt assets`);
+        process.stdout.write(`${JSON.stringify(stack)}\n`);
+    } finally {
+        process.removeListener("SIGINT", cancel);
+        process.removeListener("SIGTERM", cancel);
+    }
+}
+
 async function status(options) {
     const stack = options.stateDir === undefined ? null : readStack(options.stateDir);
     if (stack === null) {
@@ -1012,14 +1209,18 @@ function usage(stream = process.stdout) {
             "  node scripts/local-dev.cjs prepare <web|web-server|web-server-mobius-cli> [--state-dir DIR] [--platform-port N] [--chat-port N] [--app-id ID --app-secret SECRET] [--force] [--no-build] [--background]",
             "  node scripts/local-dev.cjs setup  --state-dir DIR --harness ID --session-id ID [--workspace DIR]",
             "  node scripts/local-dev.cjs status --state-dir DIR",
+            "  node scripts/local-dev.cjs reload <web|chat> --state-dir DIR",
             "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|platform|runtime|all] [--lines N] [--filter REGEX] [--follow]",
             "  node scripts/local-dev.cjs remove --state-dir DIR [--keep-state]",
+            "",
+            "reload rebuilds web/Chat and refreshes setup.mjs without restarting Platform or runtimes.",
+            "In web mode, Vite already hot-reloads source changes; reload checks health only.",
             "",
         ].join("\n"),
     );
 }
 
-const COMMANDS = new Set(["prepare", "setup", "status", "logs", "remove"]);
+const COMMANDS = new Set(["prepare", "setup", "status", "reload", "logs", "remove"]);
 const HELP_COMMANDS = new Set(["help", "--help", "-h"]);
 
 async function main() {
@@ -1041,6 +1242,9 @@ async function main() {
             break;
         case "status":
             await status(options);
+            break;
+        case "reload":
+            await reload(options);
             break;
         case "logs":
             await logs(options);
