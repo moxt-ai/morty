@@ -232,7 +232,10 @@ test("Given Morty has no paired agent, When the setup page opens, Then it offers
 
     expect(pairing).toBeInstanceOf(HTMLTextAreaElement);
     expect(pairing).toHaveProperty("readOnly", true);
-    expect(pairing).toHaveProperty("value", expect.stringContaining(`${window.location.origin}/setup.md`));
+    expect(pairing).toHaveProperty(
+        "value",
+        `Fetch ${window.location.origin}/setup.md and complete the Morty setup for me. You may install missing prerequisites and pair this machine.`,
+    );
     expect(queryByRole(document.body, "combobox", { name: "Data region" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Refresh pairing instruction" })).toBeNull();
     const dialog = getByRole(document.body, "dialog", { name: "Connect agent" });
