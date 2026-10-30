@@ -47,7 +47,7 @@ import {
 import { pendingExecutionContext, sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { nativeSessionAgentTabs } from "../../view-models/chat/native-session-agents.ts";
 import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
-import type { SessionPaneStore } from "../../view-models/chat/session-pane-store.ts";
+import { noSessionDelivery } from "../../view-models/chat/session-delivery-store.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import {
     ComputerSwitcher,
@@ -144,11 +144,8 @@ function ManagedSessionDirectoryList({
     readonly activeId: string;
     readonly connectionStatus: BotConnectionStatus;
     readonly sessionStatuses: ReadonlyMap<string, ConversationListStatus>;
-    /** The open Session's pane, whose own turn decides that Session's status. */
-    readonly openPane: {
-        readonly sessionId: string;
-        readonly pane: Pick<SessionPaneStore, "connection" | "turn">;
-    } | null;
+    /** The open Session's pane, whose turn and delivery decide that Session's status. */
+    readonly openPane: Parameters<typeof conversationListStatus>[2];
     readonly onConnectAgent: (() => void) | null;
     readonly onOpen: (session: ManagedChatSession) => void;
     readonly archiveSession: ConversationDirectoryStore["archiveSession"];
@@ -364,6 +361,7 @@ export function ConversationSidebar({
     const draftSettings = useStore(workspace.draftControls, (state) => state.settings);
     const pane = workspace.sessionPane();
     const paneSource = useStore(pane?.store ?? workspace.home);
+    const paneDelivery = useStore(pane?.delivery ?? noSessionDelivery, (state) => state.state);
     const executionContext =
         home.selection.kind === "ready" && pane !== null && "connection" in paneSource
             ? sessionExecutionContext(pane.session, home, paneSource.connection)
@@ -415,7 +413,7 @@ export function ConversationSidebar({
         sessionStatuses,
         openPane:
             home.selection.kind === "ready" && pane !== null && "turn" in paneSource
-                ? { sessionId: pane.session.result.ready.sessionId, pane: paneSource }
+                ? { sessionId: pane.session.result.ready.sessionId, pane: paneSource, delivery: paneDelivery }
                 : null,
         onConnectAgent,
         onOpen: openSession,

@@ -46,17 +46,19 @@ import {
     type CurrentTurnEvent,
     idleTurn,
     openedTurn,
+    sessionActivity,
     submittingCommandId,
     transitionCurrentTurn,
-    turnActivity,
 } from "./session-current-turn.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import {
     deliveryMessagePresentation,
+    failedSubmission,
     journalMessage,
     prependToDraft,
     type SessionDeliveryStore,
     type SubmittedMessage,
+    submissionFailure,
 } from "./session-delivery-store.ts";
 import { observeSessionExecution, type QueuedCommand, type SessionExecutionObservation } from "./session-execution.ts";
 import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
@@ -230,7 +232,7 @@ export function sessionPanePresentation(
     connectionAvailable: boolean,
 ) {
     const facts = sessionOperationFacts(model, delivery, tasks, interactions, connectionAvailable);
-    const activity = turnActivity(model.turn);
+    const activity = sessionActivity(model.turn, delivery.state);
     const submitting = submittingCommandId(model.turn) !== null;
     // Which turn runs is the current turn's; the stop control only adds whether the user asked to stop it.
     const controlRunning = acceptedTurn(model.turn) !== null;
@@ -285,12 +287,7 @@ export function sessionPanePresentation(
             : {
                   message: deliveryMessagePresentation(pendingMessage),
                   sending: true,
-                  error:
-                      delivery.state.kind === "preparation-failed"
-                          ? delivery.state.error
-                          : delivery.state.kind === "failed"
-                            ? delivery.state.message
-                            : null,
+                  error: failedSubmission(delivery.state)?.failure.message ?? null,
               };
     const hasFailureCard =
         activity.kind === "failed" &&
@@ -326,7 +323,15 @@ export function sessionPanePresentation(
         composerError:
             model.connection.kind === "closed" || pendingDelivery?.error != null
                 ? ""
-                : ([activity, model.titleEdit, model.olderHistory, model.operation, delivery.state]
+                : ([
+                      activity,
+                      model.titleEdit,
+                      model.olderHistory,
+                      model.operation,
+                      delivery.state.kind === "failed"
+                          ? { kind: "failed" as const, message: delivery.state.failure.message }
+                          : delivery.state,
+                  ]
                       .filter((state) => state.kind === "failed")
                       .find(
                           (state) =>
@@ -1015,22 +1020,22 @@ export function createSessionPaneModel(options: {
                     }
                     return;
                 }
-                updateTurn({ kind: "submission-ended", commandId, failure: null });
+                updateTurn({ kind: "submission-ended", commandId });
                 set({ pendingInitialMessage: null });
             } catch (cause) {
                 signal.throwIfAborted();
-                const failureMessage = formatError(cause, "The agent could not complete the message.");
                 if (delivery.getState().state.kind === "preparing") {
-                    delivery.getState().preparationFailed(message, failureMessage);
+                    delivery
+                        .getState()
+                        .preparationFailed(
+                            message,
+                            submissionFailure(cause, "The agent could not complete the message."),
+                        );
                 } else {
                     // Delivery already owns the frozen request, so its outcome is unknown rather than unsent.
                     delivery.getState().submissionInterrupted();
                 }
-                updateTurn({
-                    kind: "submission-ended",
-                    commandId,
-                    failure: { code: cause instanceof MobiusError ? cause.code : "", message: failureMessage },
-                });
+                updateTurn({ kind: "submission-ended", commandId });
                 // The retained submission owns its failure; the composer keeps the next draft.
                 set({ pendingInitialMessage: null });
             }
@@ -1495,7 +1500,7 @@ export function createSessionPaneModel(options: {
                 if (commandId === null) {
                     return;
                 }
-                updateTurn({ kind: "submission-ended", commandId, failure: null });
+                updateTurn({ kind: "submission-ended", commandId });
             },
             retryUnknownDelivery: async (signal) => {
                 const state = delivery.getState().state;
@@ -1530,7 +1535,7 @@ export function createSessionPaneModel(options: {
                     default:
                         return outcome satisfies never;
                 }
-                updateTurn({ kind: "submission-ended", commandId: pending.commandId, failure: null });
+                updateTurn({ kind: "submission-ended", commandId: pending.commandId });
             },
             retryFailedMessage: async (signal) => {
                 const state = delivery.getState().state;
@@ -1817,7 +1822,7 @@ export function createSessionPaneModel(options: {
         filePreview.getState().close();
         connection.abort(new Error("The session pane stopped."));
         delivery.getState().submissionInterrupted();
-        options.onReleased?.(turnActivity(store.getState().turn));
+        options.onReleased?.(sessionActivity(store.getState().turn, delivery.getState().state));
     };
     /**
      * Announced with the pane's attached root element, following React's
