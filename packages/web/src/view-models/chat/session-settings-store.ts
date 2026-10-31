@@ -1,6 +1,5 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
 import { createStore } from "zustand/vanilla";
-import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
 import { recordBrowserError } from "../../services/diagnostics/browser-diagnostics.ts";
 
 // Runtime snapshots own current settings. Live updates and history reloads request a new
@@ -18,7 +17,7 @@ export interface SessionSettingsStore {
     readonly source: "session-ready" | "session-configuration";
     readonly configurationRevision: string;
     readonly options: readonly SessionConfigOption[];
-    /** Shows settings the Runtime reported and remembers them for the next draft. */
+    /** Shows settings the Runtime reported. */
     readonly adopt: (snapshot: ConfigurationSnapshot) => void;
     /**
      * Refines the shown settings from an authoritative read, made whenever the
@@ -32,11 +31,7 @@ export interface SessionSettingsStore {
     ) => void;
 }
 
-export function createSessionSettingsStore(options: {
-    readonly botId: string;
-    readonly agentRef: string;
-    readonly initial: ConfigurationSnapshot;
-}) {
+export function createSessionSettingsStore(options: { readonly initial: ConfigurationSnapshot }) {
     return createStore<SessionSettingsStore>()((set, get) => {
         let pendingRead: AbortController | null = null;
         const openedAt = new Date().toISOString();
@@ -49,7 +44,6 @@ export function createSessionSettingsStore(options: {
             adopt: ({ configOptions, configurationRevision }) => {
                 pendingRead?.abort(new DOMException("Newer settings were adopted", "AbortError"));
                 pendingRead = null;
-                saveLastAgentSettings(options.botId, options.agentRef, configOptions);
                 set({
                     options: configOptions,
                     configurationRevision,

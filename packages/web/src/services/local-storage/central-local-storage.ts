@@ -97,7 +97,7 @@ function scopedKey(prefix: string, ...parts: readonly string[]): string {
 const settingIdentifierSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(128));
 
 // ---------------------------------------------------------------------------
-// Last agent settings per Bot and agent
+// Chosen agent settings per Bot and agent
 // ---------------------------------------------------------------------------
 
 const agentSettingPreferenceSchema = v.pipe(
@@ -117,12 +117,18 @@ const agentSettingPreferenceSchema = v.pipe(
 );
 export type AgentSettingPreference = v.InferOutput<typeof agentSettingPreferenceSchema>;
 
+export const MAX_AGENT_SETTING_PREFERENCES = 100;
+
+/**
+ * The settings the user chose for an Agent, one per setting. Version 1 stored every setting a Session ran with,
+ * chosen or not; those entries cannot tell a choice from a default, so they are no longer read.
+ */
 export const lastAgentSettingsEntry = (botId: string, agentRef: string) =>
     jsonLocalStorageEntry({
-        key: scopedKey("mobius:last-agent-settings:v1:", botId, agentRef),
+        key: scopedKey("mobius:last-agent-settings:v2:", botId, agentRef),
         schema: v.pipe(
             v.array(agentSettingPreferenceSchema),
-            v.maxLength(100),
+            v.maxLength(MAX_AGENT_SETTING_PREFERENCES),
             v.check(
                 (preferences) =>
                     new Set(preferences.map((preference) => preference.configId)).size === preferences.length,

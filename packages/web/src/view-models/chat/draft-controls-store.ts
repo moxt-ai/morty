@@ -7,7 +7,7 @@ import {
     type ChatDraftConfiguration,
     connectedChatRuntimeAgents,
 } from "@/services/chat/bot-chat-api";
-import { restoreLastAgentSettings, saveLastAgentSettings } from "@/services/chat/last-agent-settings";
+import { rememberAgentSettingChoice, restoreLastAgentSettings } from "@/services/chat/last-agent-settings";
 import {
     forgetRecentCwdPreference,
     type RecentCwdPreference,
@@ -224,9 +224,6 @@ export const createDraftControlsStore = (
                 return;
             }
             set({ settings: { kind: "failed", message: formatError(cause, message) } });
-        };
-        const rememberAgentSettings = (settings: ReadyDraftSettings): void => {
-            saveLastAgentSettings(botId, settings.selectedAgent.agentRef, settings.options);
         };
         const rememberDirectory = (
             settings: ReadyDraftSettings,
@@ -650,7 +647,13 @@ export const createDraftControlsStore = (
                         option.id === configId ? { ...option, currentValue: value } : option,
                     ),
                 };
-                rememberAgentSettings(ready);
+                if (settings.options.some((option) => option.id === configId && option.type === "select")) {
+                    rememberAgentSettingChoice(botId, settings.selectedAgent.agentRef, {
+                        configId,
+                        kind: "select",
+                        value,
+                    });
+                }
                 set({ settings: ready });
             },
             toggleOption: (configId) => {
@@ -667,7 +670,14 @@ export const createDraftControlsStore = (
                             : option,
                     ),
                 };
-                rememberAgentSettings(ready);
+                const toggled = ready.options.find((option) => option.id === configId);
+                if (toggled?.type === "boolean") {
+                    rememberAgentSettingChoice(botId, settings.selectedAgent.agentRef, {
+                        configId,
+                        kind: "boolean",
+                        value: toggled.booleanValue,
+                    });
+                }
                 set({ settings: ready });
             },
             setCwdPath: (path, signal) => {

@@ -17,7 +17,7 @@ import type { ComposerAttachment } from "../../components/chat/composer-attachme
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import { saveLastAgentSettings } from "../../services/chat/last-agent-settings.ts";
+import { rememberAgentSettingChoice } from "../../services/chat/last-agent-settings.ts";
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import { recordBrowserDiagnostic } from "../../services/diagnostics/browser-diagnostics.ts";
 import { centralIndexedDB, sessionLastSentMessageEntry } from "../../services/indexed-db/central-indexed-db.ts";
@@ -441,15 +441,11 @@ export function createSessionPaneModel(options: {
 }) {
     const { session, botId, requests, clock, composerAttachments, delivery, messageQueue, titles } = options;
     const sessionId = session.result.ready.sessionId;
-    // Working in a conversation makes it the reference for the next draft: its
-    // harness and the settings it runs with carry into New Session.
+    // Working in a conversation makes its harness the reference for the next draft. Its settings carry into New
+    // Session only where the user changes them: the others are the Agent's and its directory's, which the draft reads
+    // for itself.
     saveLastHarnessPreference(botId, session.agentRef);
-    saveLastAgentSettings(botId, session.agentRef, session.result.ready.configOptions);
-    const settings = createSessionSettingsStore({
-        botId,
-        agentRef: session.agentRef,
-        initial: session.result.ready,
-    });
+    const settings = createSessionSettingsStore({ initial: session.result.ready });
     const fallbackStartedAt = Date.now();
     const initialTurn: CurrentTurn =
         session.result.action === "conversation" && session.result.activeTurn.kind === "running"
@@ -1574,6 +1570,13 @@ export function createSessionPaneModel(options: {
                         AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
                     );
                     signal.throwIfAborted();
+                    rememberAgentSettingChoice(
+                        botId,
+                        session.agentRef,
+                        option.type === "boolean"
+                            ? { configId: option.id, kind: "boolean", value: booleanValue }
+                            : { configId: option.id, kind: "select", value },
+                    );
                     settings.getState().adopt(result);
                     set({ operation: { kind: "idle" } });
                 } catch (cause) {
