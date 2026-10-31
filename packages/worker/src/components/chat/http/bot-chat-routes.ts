@@ -55,7 +55,11 @@ const sessionConfigurations = v.pipe(
         "Session configuration identifiers must be unique.",
     ),
 );
-const agentSettingsInput = v.strictObject({ agentRef: platformIdentifier });
+// A page loaded before drafts named their directory omits `workspaceRef`; its settings are the default directory's.
+const agentSettingsInput = v.strictObject({
+    agentRef: platformIdentifier,
+    workspaceRef: v.optional(nativeDirectoryId),
+});
 const accessInput = v.union([
     v.strictObject({ conversationId: platformIdentifier }),
     v.strictObject({
@@ -185,10 +189,10 @@ export function createBotChatRoutes() {
             bodyParser<AuthorizedChatEnvironment, typeof agentSettingsInput>(agentSettingsInput),
             async (context) =>
                 privateJson(
-                    await context.env.services.chat.agentSettings(
-                        context.get("chatScope"),
-                        context.req.valid("json").agentRef,
-                    ),
+                    await context.env.services.chat.agentSettings(context.get("chatScope"), {
+                        agentRef: context.req.valid("json").agentRef,
+                        workspaceRef: context.req.valid("json").workspaceRef ?? "default",
+                    }),
                 ),
         )
         .post(

@@ -151,7 +151,8 @@ export const createDraftControlsStore = (
     createStore<DraftControlsStore>()((set, get) => {
         let cwdOperation: AbortController | null = null;
         // Agent settings belong to the Runtime configuration they were read under: a different configuration, as
-        // after the Runtime reconnects or its Agents change, drops them.
+        // after the Runtime reconnects or its Agents change, drops them. They also belong to the directory a Session
+        // would start in, whose project settings the Agent reads.
         const agentSettings = new Map<string, Awaited<ReturnType<BotChatApi["agentSettings"]>>>();
         let settingsRuntime: string | null = null;
         // Every operation that writes the draft's settings (a load, a refresh, a harness switch, a directory choice)
@@ -168,14 +169,20 @@ export const createDraftControlsStore = (
             };
         };
         type SettingsOperation = ReturnType<typeof beginSettingsOperation>;
-        const readAgentSettings = async (agentRef: string, refresh: boolean, operation: SettingsOperation) => {
-            const cached = refresh ? undefined : agentSettings.get(agentRef);
+        const readAgentSettings = async (
+            agentRef: string,
+            cwd: WorkspaceEntriesEvent,
+            refresh: boolean,
+            operation: SettingsOperation,
+        ) => {
+            const key = JSON.stringify([agentRef, cwd.directoryId]);
+            const cached = refresh ? undefined : agentSettings.get(key);
             if (cached !== undefined) {
                 return cached;
             }
-            const result = await requests.agentSettings(botId, agentRef, operation.signal);
+            const result = await requests.agentSettings(botId, agentRef, cwd.directoryId, operation.signal);
             if (operation.current()) {
-                agentSettings.set(agentRef, result);
+                agentSettings.set(key, result);
             }
             return result;
         };
@@ -232,10 +239,15 @@ export const createDraftControlsStore = (
                 directoryLabel: directory.directoryLabel,
             });
         };
-        const applyDirectory = (settings: ReadyDraftSettings, directory: WorkspaceEntriesEvent): void => {
-            const ready = { ...settings, cwd: directory };
-            const recentCwds = rememberDirectory(ready, directory);
-            set({ settings: ready, cwdBrowser: { kind: "closed" }, recentCwds });
+        /** A new directory brings its own Agent settings, read while the draft keeps its selection. */
+        const applyDirectory = async (
+            settings: ReadyDraftSettings,
+            directory: WorkspaceEntriesEvent,
+            signal: AbortSignal,
+        ): Promise<void> => {
+            const recentCwds = rememberDirectory(settings, directory);
+            set({ cwdBrowser: { kind: "closed" }, recentCwds });
+            await refreshSettings({ selectedAgent: settings.selectedAgent, cwd: directory }, false, signal);
         };
         const applyAgentSettings = (
             selectedAgent: ChatAgentSelection,
@@ -377,12 +389,7 @@ export const createDraftControlsStore = (
                     awaitAgent();
                     return;
                 }
-                const [result, defaultCwd] = await Promise.all([
-                    // A deliberate Agent switch must be acknowledged by the live Runtime, not satisfied by settings
-                    // cached before the user made the choice.
-                    readAgentSettings(selected.agentRef, switching, operation),
-                    requests.directory(botId, "default", operation.signal),
-                ]);
+                const defaultCwd = await requests.directory(botId, "default", operation.signal);
                 operation.signal.throwIfAborted();
                 const savedDirectoryId = readLastCwdPreference(botId, selected.runtimeId, selected.agentRef);
                 let cwd = defaultCwd;
@@ -394,6 +401,10 @@ export const createDraftControlsStore = (
                         operation.signal.throwIfAborted();
                     }
                 }
+                // The settings are read in the directory the Session would start in. A deliberate Agent switch must
+                // be acknowledged by the live Runtime, not satisfied by settings cached before the user made the choice.
+                const result = await readAgentSettings(selected.agentRef, cwd, switching, operation);
+                operation.signal.throwIfAborted();
                 if (!operation.current()) {
                     return;
                 }
@@ -413,9 +424,10 @@ export const createDraftControlsStore = (
                 }
             }
         };
-        /** Re-reads the selected Agent's settings, keeping the selection and directory while they load. */
+        /** Reads the selected Agent's settings in the directory, keeping the selection and directory while they load. */
         const refreshSettings = async (
             settings: Pick<ReadyDraftSettings, "cwd" | "selectedAgent">,
+            refresh: boolean,
             parent: AbortSignal,
         ): Promise<void> => {
             const operation = beginSettingsOperation(parent);
@@ -427,7 +439,12 @@ export const createDraftControlsStore = (
                 },
             });
             try {
-                const result = await readAgentSettings(settings.selectedAgent.agentRef, true, operation);
+                const result = await readAgentSettings(
+                    settings.selectedAgent.agentRef,
+                    settings.cwd,
+                    refresh,
+                    operation,
+                );
                 operation.signal.throwIfAborted();
                 if (operation.current()) {
                     applyAgentSettings(settings.selectedAgent, settings.cwd, result, false);
@@ -491,7 +508,7 @@ export const createDraftControlsStore = (
                             agent.runtimeId === selectedAgent.runtimeId && agent.agentRef === selectedAgent.agentRef,
                     );
                 if (offered && (settings.kind === "ready" || settings.kind === "refreshing")) {
-                    await refreshSettings(settings, signal);
+                    await refreshSettings(settings, true, signal);
                     return;
                 }
                 await load(signal);
@@ -512,7 +529,7 @@ export const createDraftControlsStore = (
             refreshAgentSettings: async (signal) => {
                 const settings = get().settings;
                 if (settings.kind === "ready") {
-                    await refreshSettings(settings, signal);
+                    await refreshSettings(settings, true, signal);
                 }
             },
             saveCwd: async (signal) => {
@@ -573,7 +590,7 @@ export const createDraftControlsStore = (
                 }
                 if (operation.current()) {
                     operation.release();
-                    applyDirectory(settings, directory);
+                    await applyDirectory(settings, directory, signal);
                 }
             },
             selectRecentCwd: async (directoryId, signal) => {
@@ -588,7 +605,7 @@ export const createDraftControlsStore = (
                     operation.signal.throwIfAborted();
                     if (operation.current()) {
                         operation.release();
-                        applyDirectory(settings, directory);
+                        await applyDirectory(settings, directory, signal);
                     }
                 } catch (cause) {
                     if (signal.aborted || !operation.current()) {

@@ -43,7 +43,10 @@ export type Journal = {
     /** Original local files are kept only in memory; the request already owns uploaded references. */
     readonly attachments: readonly ComposerAttachment[] | null;
     readonly commandId: string;
-    readonly request: Omit<SubmitRequest, "idempotencyKey" | "disposition" | "targetCommandId"> & DeliveryTarget;
+    /** Chat states the Session's whole binding, so a saved request stays complete for any Relay it is resent to. */
+    readonly request: Omit<SubmitRequest, "idempotencyKey" | "disposition" | "targetCommandId"> &
+        Required<Pick<SubmitRequest, "additionalDirectoryIds">> &
+        DeliveryTarget;
 };
 export function journalMessage(journal: Journal): SubmittedMessage {
     return {
