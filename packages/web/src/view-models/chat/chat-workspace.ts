@@ -398,6 +398,7 @@ export function createChatWorkspace(options: {
         const unsentEntry = sessionUnsentMessageEntry(sessionId);
         const pendingEntry = sessionPendingSubmissionEntry(botId, sessionId);
         const delivery = createSessionDeliveryStore({
+            lifetime: operationsLifetime.signal,
             pendingSubmission: centralSessionStorage.read(pendingEntry),
             pendingSubmissionChanged: (journal) => {
                 if (journal === null) {

@@ -1,4 +1,4 @@
-import { getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
+import { getByLabelText, getByRole, queryAllByLabelText, queryByRole } from "@testing-library/dom";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
@@ -224,4 +224,51 @@ test("Given a message the network has not delivered yet, When I switch to anothe
         expect(app.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain("Keep chatting");
         expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
     });
+});
+
+test("Given a message whose file is still uploading, When I switch to New Session and back, Then the message is delivered and its reply arrives", {
+    timeout: 60_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Session that sends a file");
+    await app.waitForView(() => {
+        expect(document.body.textContent).toContain("Codex turn 1: Session that sends a file");
+        expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
+        sessionEntry(app, "Session that sends a file");
+    });
+    await app.user.upload(
+        getByLabelText(document.body, "Choose attachments"),
+        new File(["attachment body ".repeat(4096)], "photo.txt", { type: "text/plain" }),
+    );
+    // Leave the moment the message shows as sending, while its file is still on its way.
+    let left = false;
+    const observer = new MutationObserver(() => {
+        if (!left && queryAllByLabelText(document.body, "Sending message").length > 0) {
+            left = true;
+            app.elementByTestId(dataTestId.newConversation).click();
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    onTestFinished(() => observer.disconnect());
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Look at this file");
+    await app.waitForView(() => expect(left).toBe(true));
+    observer.disconnect();
+    await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+
+    await app.user.click(sessionEntry(app, "Session that sends a file"));
+    await app.waitForView(() => {
+        expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
+            "Codex turn 2: Look at this file",
+        );
+        expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
+    });
+    expect(document.body.textContent).not.toContain("Message preparation was interrupted");
+    expect(
+        app
+            .elementsByTestId(dataTestId.userMessage)
+            .filter((element) => element.textContent?.includes("Look at this file")),
+    ).toHaveLength(1);
 });
