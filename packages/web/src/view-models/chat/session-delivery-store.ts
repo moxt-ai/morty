@@ -92,7 +92,7 @@ export type DeliveryState =
     | { readonly kind: "failed"; readonly journal: Journal; readonly failure: SubmissionFailure };
 
 /** The message of a submission that failed before the service accepted it, kept until it is retried or discarded. */
-export function failedSubmission(
+function failedSubmission(
     state: DeliveryState,
 ): { readonly message: SubmittedMessage; readonly failure: SubmissionFailure } | null {
     switch (state.kind) {
