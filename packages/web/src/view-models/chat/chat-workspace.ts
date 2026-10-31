@@ -25,6 +25,7 @@ import { createNetworkDiagnosticStore, type NetworkDiagnosticStore } from "./net
 import type { SelectedMobiusSession } from "./open-session.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
 import { createRuntimeRecovery } from "./runtime-recovery.ts";
+import { connectionWaitsForRuntime } from "./session-connection.ts";
 import { createSessionDeliveryStore, prependToDraft } from "./session-delivery-store.ts";
 import { createSessionMessageQueueStore } from "./session-message-queue-store.ts";
 import { createSessionPaneModel, type SessionPaneModel } from "./session-pane-store.ts";
@@ -342,10 +343,14 @@ export function createChatWorkspace(options: {
     };
     const draftWaitsForRuntime = (): boolean =>
         home.getState().selection.kind === "draft" && draftControls.getState().settings.kind === "waiting-runtime";
+    /** The live pane, when its connection used up its automatic retries and waits for the Runtime. */
+    const paneWaitingForRuntime = (): ChatWorkspacePaneEntry | null =>
+        paneEntry !== null && connectionWaitsForRuntime(paneEntry.model.store.getState().connection) ? paneEntry : null;
     /**
      * Retries everything the page reads through the Runtime that it could not read while the Runtime was unreachable:
-     * the home view, the session list, and the stream that follows their statuses. Each retries only what it lost.
-     * Restarting the home view reloads the list with it, and a list load follows the statuses again.
+     * the home view, the session list, the stream that follows their statuses, and the open Session's connection.
+     * Each retries only what it lost. Restarting the home view reloads the list with it, and a list load follows the
+     * statuses again.
      */
     const runtimeRecovery = createRuntimeRecovery({
         clock: options.clock,
@@ -354,7 +359,8 @@ export function createChatWorkspace(options: {
             homeWaitsForRuntime(home.getState()) ||
             listWaitsForRuntime() ||
             statuses.getState().unfollowed() ||
-            draftWaitsForRuntime(),
+            draftWaitsForRuntime() ||
+            paneWaitingForRuntime() !== null,
         retry: () => {
             if (homeWaitsForRuntime(home.getState())) {
                 home.getState().retry();
@@ -371,6 +377,7 @@ export function createChatWorkspace(options: {
                     .load(chatLifetime.signal)
                     .catch(() => undefined);
             }
+            paneWaitingForRuntime()?.model.reconnect();
         },
     });
     // The single live pane model. It lives while its session record is the
@@ -464,6 +471,8 @@ export function createChatWorkspace(options: {
             onReleased: (activity) => statuses.getState().paneReleased(sessionId, activity),
             titles,
             connectionAvailable: (connection) => connectionPresentation(home.getState(), connection).available,
+            onConnected: () => runtimeRecovery.working(),
+            onWaitingForRuntime: () => runtimeRecovery.failed(),
         });
         if (nextDraft !== null || unsent !== null) {
             const draft = nextDraft ?? model.store.getState().draft;

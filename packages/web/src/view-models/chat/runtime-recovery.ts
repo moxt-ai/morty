@@ -85,11 +85,17 @@ export function createRuntimeRecovery(options: {
                 schedule();
             }
         },
-        /** Something read through the Runtime works again: a session opened, a list loaded, or statuses are followed. */
+        /**
+         * Something read through the Runtime works again: a session opened or connected, a list loaded, or statuses
+         * are followed.
+         */
         working: (): void => {
             workingSince ??= options.clock.now();
         },
-        /** Something read through the Runtime failed for it: the home view, a list load, or the status stream. */
+        /**
+         * Something read through the Runtime failed for it: the home view, a list load, the status stream, or the open
+         * Session's connection once its own retries are used up.
+         */
         failed: (): void => {
             if (workingSince !== null && options.clock.now() - workingSince >= RECOVERY_STABLE_MS) {
                 startOver();
