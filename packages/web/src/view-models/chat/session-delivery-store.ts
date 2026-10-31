@@ -92,7 +92,7 @@ export type DeliveryState =
     | { readonly kind: "failed"; readonly journal: Journal; readonly failure: SubmissionFailure };
 
 /** The message of a submission that failed before the service accepted it, kept until it is retried or discarded. */
-export function failedSubmission(
+function failedSubmission(
     state: DeliveryState,
 ): { readonly message: SubmittedMessage; readonly failure: SubmissionFailure } | null {
     switch (state.kind) {
@@ -116,10 +116,31 @@ export function awaitingMessage(state: DeliveryState): SubmittedMessage | null {
     return state.kind === "awaiting-connection" ? state.message : null;
 }
 
+/** The submitted intent and files have one owner through preparation, admission and queueing. */
+export function deliveryMessages(
+    delivery: Pick<SessionDeliveryStore, "state" | "acceptedMessages">,
+): readonly SubmittedMessage[] {
+    const state = delivery.state;
+    switch (state.kind) {
+        case "idle":
+            return delivery.acceptedMessages;
+        case "awaiting-connection":
+        case "preparing":
+        case "preparation-failed":
+            return [...delivery.acceptedMessages, state.message];
+        case "submitting":
+        case "delivery-unknown":
+        case "failed":
+            return [...delivery.acceptedMessages, journalMessage(state.journal)];
+        default:
+            return state satisfies never;
+    }
+}
+
 export interface SessionDeliveryStore {
     readonly state: DeliveryState;
-    /** Accepted prompts waiting for the Runtime's user-message history, independent of the next submission. */
-    readonly confirmedMessages: readonly SubmittedMessage[];
+    /** Accepted input retained until history owns its display and the queue no longer needs its local files. */
+    readonly acceptedMessages: readonly SubmittedMessage[];
     readonly discardUnknown: () => void;
     /** Takes a new Session's first message, which a pane submits once it connects. */
     readonly awaitConnection: (message: SubmittedMessage) => void;
@@ -129,7 +150,8 @@ export interface SessionDeliveryStore {
     /** Losing an attempt's connection does not discard its submitted intent. */
     readonly submissionInterrupted: () => void;
     readonly reconcile: (commandIds: readonly string[]) => void;
-    readonly messagesObserved: (commandIds: readonly string[]) => void;
+    /** Releases original input once history owns it or the Runtime confirms its withdrawal. */
+    readonly releaseMessages: (commandIds: readonly string[]) => void;
     readonly submit: (journal: Journal, submit: SubmitTurn, signal: AbortSignal) => Promise<SubmissionOutcome>;
     readonly retry: (submit: SubmitTurn, signal: AbortSignal) => Promise<SubmissionOutcome | null>;
 }
@@ -180,12 +202,12 @@ export const createSessionDeliveryStore = (options: {
     /** Persists the unsent message's text, or clears it with null. */
     readonly unsentMessageChanged: (content: string | null) => void;
 }) => {
-    type Update = { readonly state: DeliveryState; readonly confirmedMessages?: readonly SubmittedMessage[] };
+    type Update = { readonly state: DeliveryState; readonly acceptedMessages?: readonly SubmittedMessage[] };
     const confirm = (journal: Journal, set: (update: Update) => void, get: () => SessionDeliveryStore): void => {
         set({
             state: { kind: "idle" },
-            confirmedMessages: [
-                ...get().confirmedMessages.filter((message) => message.commandId !== journal.commandId),
+            acceptedMessages: [
+                ...get().acceptedMessages.filter((message) => message.commandId !== journal.commandId),
                 journalMessage(journal),
             ],
         });
@@ -244,7 +266,7 @@ export const createSessionDeliveryStore = (options: {
                 options.pendingSubmission === null
                     ? { kind: "idle" }
                     : { kind: "delivery-unknown", journal: { ...options.pendingSubmission, attachments: null } },
-            confirmedMessages: [],
+            acceptedMessages: [],
             discardUnknown: () => {
                 if (get().state.kind === "delivery-unknown") {
                     set({ state: { kind: "idle" } });
@@ -275,15 +297,19 @@ export const createSessionDeliveryStore = (options: {
                     });
                 } else if (state.kind === "submitting") {
                     if (state.confirmation === "delivered") {
-                        set({ state: { kind: "idle" } });
+                        if (state.journal.request.disposition === "queue") {
+                            confirm(state.journal, set, get);
+                        } else {
+                            set({ state: { kind: "idle" } });
+                        }
                     } else {
                         set({ state: { kind: "delivery-unknown", journal: state.journal } });
                     }
                 }
             },
-            messagesObserved: (commandIds) => {
+            releaseMessages: (commandIds) => {
                 setState({
-                    confirmedMessages: get().confirmedMessages.filter(
+                    acceptedMessages: get().acceptedMessages.filter(
                         (message) => !commandIds.includes(message.commandId),
                     ),
                 });
@@ -295,7 +321,13 @@ export const createSessionDeliveryStore = (options: {
                     set({ state: { ...state, confirmation: "delivered" } });
                 }
                 if (state.kind === "delivery-unknown" && commandIds.includes(state.journal.commandId)) {
-                    set({ state: { kind: "idle" } });
+                    // Recovered history from released Runtimes may omit command identities. As before, their
+                    // execution receipt owns a recovered immediate message; queue inputs still retain local files.
+                    if (state.journal.request.disposition === "queue") {
+                        confirm(state.journal, set, get);
+                    } else {
+                        set({ state: { kind: "idle" } });
+                    }
                 }
             },
             submit: async (journal, submit, signal) => await send(journal, submit, signal, set, get),

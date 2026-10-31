@@ -26,6 +26,7 @@ import type { SelectedMobiusSession } from "./open-session.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
 import { createRuntimeRecovery } from "./runtime-recovery.ts";
 import { createSessionDeliveryStore, prependToDraft } from "./session-delivery-store.ts";
+import { createSessionMessageQueueStore } from "./session-message-queue-store.ts";
 import { createSessionPaneModel, type SessionPaneModel } from "./session-pane-store.ts";
 import { createSessionTitlesStore, type SessionTitlesStore } from "./session-titles-store.ts";
 import { createSidebarDialogs, type SidebarDialogs } from "./sidebar-dialogs.ts";
@@ -380,6 +381,7 @@ export function createChatWorkspace(options: {
     const sessionAttachments = new Map<string, ReturnType<typeof createComposerAttachmentStore>>();
     // Submitted intent belongs to the Session until confirmed or discarded, across pane replacements.
     const sessionDeliveries = new Map<string, ReturnType<typeof createSessionDeliveryStore>>();
+    const sessionQueues = new Map<string, ReturnType<typeof createSessionMessageQueueStore>>();
     /** The Session's delivery on this page, which persists what it holds for the next page to recover. */
     const sessionDelivery = (sessionId: string): ReturnType<typeof createSessionDeliveryStore> => {
         const existing = sessionDeliveries.get(sessionId);
@@ -445,11 +447,17 @@ export function createChatWorkspace(options: {
             centralSessionStorage.remove(unsentEntry);
         }
         const delivery = sessionDelivery(sessionId);
+        let messageQueue = sessionQueues.get(sessionId);
+        if (messageQueue === undefined) {
+            messageQueue = createSessionMessageQueueStore();
+            sessionQueues.set(sessionId, messageQueue);
+        }
         const model = createSessionPaneModel({
             clock: options.clock,
             session: selection.session,
             composerAttachments,
             delivery,
+            messageQueue,
             attachmentSignal: operationsLifetime.signal,
             botId,
             requests,
@@ -533,6 +541,7 @@ export function createChatWorkspace(options: {
             statusLifetime.abort(new Error("Conversation status lifetime ended."));
             operationsLifetime.abort(new Error("The chat workspace was disposed."));
             sessionDeliveries.clear();
+            sessionQueues.clear();
             statuses.getState().close();
         },
     };
