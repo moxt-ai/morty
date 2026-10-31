@@ -279,6 +279,7 @@ export class BotChatApi {
     readonly #projectId: string;
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly #replacedToken: ((rejected: string, signal: AbortSignal) => Promise<string | null>) | undefined;
+    readonly #credentialRejected: (() => void) | undefined;
     readonly #sessionTransport = new BrowserSessionTransport();
     readonly #subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
     readonly #waitForChange: ApiTransport["waitForChange"];
@@ -296,6 +297,8 @@ export class BotChatApi {
          * request refused while another tab replaced its access is sent again with the replacement.
          */
         readonly replacedToken?: (rejected: string, signal: AbortSignal) => Promise<string | null>;
+        /** Told when the Worker refuses the access as unauthenticated; whoever owns that access decides what it means. */
+        readonly credentialRejected?: () => void;
         readonly subscribe: (request: Request, receive: (data: string) => void) => Promise<void>;
         readonly waitForChange: ApiTransport["waitForChange"];
         readonly recoverBridge: ApiTransport["recover"];
@@ -306,6 +309,7 @@ export class BotChatApi {
         this.#fetchRequest = options.fetchRequest;
         this.#getToken = options.getToken;
         this.#replacedToken = options.replacedToken;
+        this.#credentialRejected = options.credentialRejected;
         this.#subscribe = options.subscribe;
         this.#waitForChange = options.waitForChange;
         this.#waitForBridge = options.waitForBridge;
@@ -752,6 +756,9 @@ export class BotChatApi {
                 await response.body?.cancel();
                 response = await send(replacement);
             }
+        }
+        if (response.status === 401) {
+            this.#credentialRejected?.();
         }
         let responseBody: string;
         try {

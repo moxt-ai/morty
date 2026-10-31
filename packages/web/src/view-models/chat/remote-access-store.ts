@@ -36,10 +36,16 @@ export function createRemoteAccessOperations(options: {
         readonly getToken: (signal: AbortSignal) => Promise<string>;
     };
     readonly onEnded: () => void;
+    /** The page's access as its owner confirms it, or null when it no longer opens the computer. */
+    readonly currentAccess: (
+        signal: AbortSignal,
+    ) => Promise<{ readonly projectId: string; readonly token: string } | null>;
+    /** Tells the owner of the page's access that the Worker refused it; settles once the owner checked it. */
+    readonly credentialRejected: () => Promise<void>;
 }): RemoteAccessOperations {
     const api = new AnonymousIdentityApi(options);
     const currentAccessToken = async (signal: AbortSignal): Promise<string> => {
-        const localIdentity = await api.loadExisting(signal);
+        const localIdentity = await options.currentAccess(signal);
         signal.throwIfAborted();
         return localIdentity?.projectId === options.identity.projectId
             ? localIdentity.token
@@ -55,12 +61,20 @@ export function createRemoteAccessOperations(options: {
                     : rememberedComputers().find((entry) => computerKey(entry.scope) === computerKey(scope));
             // Another tab may have replaced the access while the user confirmed; end the one held now. The Worker
             // checks it, so it is read without validating it again, which would wait for this same lock.
-            await withStoredAccessLock(signal, async () =>
-                api.endRemoteAccess(
-                    storedTokenForProject(options.identity.projectId) ?? (await options.identity.getToken(signal)),
-                    signal,
-                ),
-            );
+            try {
+                await withStoredAccessLock(signal, async () =>
+                    api.endRemoteAccess(
+                        storedTokenForProject(options.identity.projectId) ?? (await options.identity.getToken(signal)),
+                        signal,
+                    ),
+                );
+            } catch (cause) {
+                signal.throwIfAborted();
+                if (cause instanceof IdentityApiError && cause.status === 401) {
+                    await options.credentialRejected();
+                }
+                throw cause;
+            }
             signal.throwIfAborted();
             centralSessionStorage.write(accessEndedNoticeEntry, "ended");
             centralSessionStorage.write(accessEndedComputerEntry, computer?.name || "the previous computer");
@@ -88,7 +102,10 @@ export const createRemoteAccessStore = (operations: RemoteAccessOperations) =>
                 signal.throwIfAborted();
                 set({ state: { kind: "confirming-end" } });
             } catch {
-                signal.throwIfAborted();
+                // Access that no longer opens the computer may have ended this page's workspace, and this store with it.
+                if (signal.aborted) {
+                    return;
+                }
                 set({
                     state: {
                         kind: "unavailable",
@@ -108,15 +125,15 @@ export const createRemoteAccessStore = (operations: RemoteAccessOperations) =>
                 await operations.endRemoteAccess(operationSignal(signal));
                 signal.throwIfAborted();
                 set({ state: { kind: "ended" } });
-            } catch (cause) {
-                signal.throwIfAborted();
+            } catch {
+                // Access that no longer opens the computer may have ended this page's workspace, and this store with it.
+                if (signal.aborted) {
+                    return;
+                }
                 set({
                     state: {
                         kind: "failed",
-                        message:
-                            cause instanceof IdentityApiError && cause.code === "UNAUTHENTICATED"
-                                ? "This request was not authorized. Reload Morty to check your current access."
-                                : "We couldn't confirm whether this access ended. Check your connection and try again.",
+                        message: "We couldn't confirm whether this access ended. Check your connection and try again.",
                     },
                 });
             }

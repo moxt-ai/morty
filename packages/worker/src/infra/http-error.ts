@@ -1,5 +1,7 @@
 export interface HttpErrorJson {
-    readonly body: { readonly error: { readonly code: string; readonly message: string } };
+    readonly body: {
+        readonly error: { readonly code: string; readonly message: string; readonly reason?: string };
+    };
     readonly status: number;
     readonly headers?: Readonly<Record<string, string>>;
 }

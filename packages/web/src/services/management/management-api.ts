@@ -40,6 +40,8 @@ export interface ManagementApiOptions {
     readonly fetchRequest: (request: Request) => Promise<Response>;
     readonly getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly origin: string;
+    /** Told when the Worker refuses the access as unauthenticated; whoever owns that access decides what it means. */
+    readonly credentialRejected?: () => void;
 }
 
 export class ManagementApi {
@@ -47,11 +49,13 @@ export class ManagementApi {
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
     readonly #origin: string;
     readonly #projectId: Identifier;
+    readonly #credentialRejected: (() => void) | undefined;
     constructor(options: ManagementApiOptions) {
         this.#fetchRequest = options.fetchRequest;
         this.#getToken = options.getToken;
         this.#origin = options.origin;
         this.#projectId = decodeIdentifier(options.projectId);
+        this.#credentialRejected = options.credentialRejected;
     }
 
     readonly readProject = async (signal: AbortSignal): Promise<ManagedProject | null> =>
@@ -107,6 +111,9 @@ export class ManagementApi {
         );
         const value: unknown = response.status === 204 ? null : await response.json();
         signal.throwIfAborted();
+        if (response.status === 401) {
+            this.#credentialRejected?.();
+        }
         if (!response.ok) {
             const parsed = v.safeParse(v.object({ error: v.object({ code: v.string(), message: v.string() }) }), value);
             throw new CloudApiError(

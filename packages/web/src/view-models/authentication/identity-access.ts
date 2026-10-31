@@ -22,12 +22,16 @@ export function createIdentityAccess(options: {
     readonly origin: string;
     readonly identity: { readonly projectId: string; readonly getToken: (signal: AbortSignal) => Promise<string> };
     readonly onAccessEnded: () => void;
+    readonly currentAccess: (
+        signal: AbortSignal,
+    ) => Promise<{ readonly projectId: string; readonly token: string } | null>;
+    readonly credentialRejected: () => Promise<void>;
 }): IdentityAccess {
     const api = new AnonymousIdentityApi({ fetchRequest: options.fetchRequest, origin: options.origin });
     return {
         ...createRemoteAccessOperations({ ...options, onEnded: options.onAccessEnded }),
         createTransfer: async (signal) => {
-            const localIdentity = await api.loadExisting(signal);
+            const localIdentity = await options.currentAccess(signal);
             signal.throwIfAborted();
             if (localIdentity === null || localIdentity.projectId !== options.identity.projectId) {
                 throw new IdentitySharingUnavailable();

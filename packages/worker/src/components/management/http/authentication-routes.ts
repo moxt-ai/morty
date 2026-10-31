@@ -8,6 +8,7 @@ import { credentialRevocationPaths } from "../entity/authentication/credential.t
 import { ManagementError } from "../entity/management-error.ts";
 import { anonymousCreationKey } from "../entity/project-bootstrap.ts";
 import { projectLocationHint } from "../util/project-location.ts";
+import { credentialRejected } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 
 const transferInput = v.pipe(
@@ -55,7 +56,8 @@ export function createAuthenticationRoutes() {
                         "Morty-Credential-Revocation": credentialRevocationPaths[result.credentialKind],
                     });
                 case "unauthenticated":
-                    throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
+                case "revoked":
+                    throw credentialRejected(result.kind);
             }
         })
         .post("/identity/anonymous-users", async (context) => {

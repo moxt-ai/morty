@@ -325,6 +325,7 @@ test("Given the last computer's access ended, When I return through the plain ad
                 .some((item) => item.textContent?.includes("The remaining computer")),
         ).toBe(true),
     );
+    expect(document.body.textContent).toContain("Access to Controlled Agent Runtime ended");
 });
 
 test("Given a revoked explicit computer link and another saved computer, When I open the link, Then only a deliberate fallback is offered", {
@@ -337,9 +338,29 @@ test("Given a revoked explicit computer link and another saved computer, When I 
     await startConversation(second, "Explicit revoked computer");
     await revokeAccess(second);
     const returned = await second.reload();
-    await returned.waitForView(() => getByRole(document.body, "heading", { name: "This link is no longer valid" }));
+    await returned.waitForView(() =>
+        expect(getByRole(document.body, "status").textContent).toContain("Current access ended"),
+    );
     expect(getByRole(document.body, "link", { name: "Back to your last computer" })).toBeInstanceOf(HTMLAnchorElement);
     expect(queryByRole(document.body, "textbox", { name: "Message" })).toBeNull();
+});
+
+test("Given an open conversation, When its access is revoked elsewhere and I start a new conversation, Then Morty explains that the current access ended", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await startConversation(app, "Before revocation");
+    await revokeAccess(app);
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "status").textContent).toContain("Current access ended"),
+    );
+    expect(document.body.textContent).toContain("Your local agent and tasks keep running");
+    expect(document.body.textContent).not.toMatch(/sign in|something went wrong/iu);
+    expect(queryByRole(document.body, "textbox", { name: "Message" })).toBeNull();
+    expect(new URL(window.location.href).searchParams.has("identity")).toBe(false);
 });
 
 test("Given the last computer is offline and another is online, When I return, Then I stay on the offline computer and can explicitly switch", {

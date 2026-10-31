@@ -423,6 +423,63 @@ test("Given anonymous Morty sessions, When the account endpoint authenticates th
     });
 });
 
+test("Given browser access the owner revoked, When the browser presents its credential, Then the Worker reports that its access ended instead of an unknown credential", async () => {
+    const environment = fixture.environment();
+    const owner = await fixture.createAnonymousUser();
+    const transfer = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/transfers`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${owner.token}` },
+        }),
+        environment,
+    );
+    const code = new URL(v.parse(v.object({ url: v.string() }), await transfer.json()).url).hash.slice("#code=".length);
+    const redeemed = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code }),
+        }),
+        environment,
+    );
+    const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+    const revoked = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/revoke-all-access`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${owner.token}` },
+        }),
+        environment,
+    );
+    expect(revoked.status).toBe(200);
+    const management = (token: string) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/management/bot`, {
+                headers: { authorization: `Bearer ${token}` },
+            }),
+            environment,
+        );
+    const unknownToken = `mobius_anon_v2_${"A".repeat(43)}`;
+
+    // Released pages read the status and code, which stay as they were.
+    for (const response of [
+        await worker.fetch(accountRequest(browser, owner.projectId), environment),
+        await management(browser),
+    ]) {
+        expect(response.status).toBe(401);
+        expect(await response.json()).toEqual({
+            error: { code: "UNAUTHENTICATED", message: "Access to this computer has ended.", reason: "ACCESS_REVOKED" },
+        });
+    }
+    for (const response of [
+        await worker.fetch(accountRequest(unknownToken, owner.projectId), environment),
+        await management(unknownToken),
+    ]) {
+        expect(response.status).toBe(401);
+        expect(await response.json()).toEqual({ error: { code: "UNAUTHENTICATED", message: "Sign in to continue." } });
+    }
+    expect((await worker.fetch(accountRequest(owner.token, owner.projectId), environment)).status).toBe(200);
+});
+
 test("Given a browser that opened one link, When it opens another link for the same user and later ends its access, Then its earlier credential stops at once and both links stop opening Morty", async () => {
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();

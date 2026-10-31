@@ -369,7 +369,7 @@ test("Given the end confirmation, When the real API transport closes, Then an un
     await app.waitForView(() => expect(window.location.search).not.toContain("identity="));
 });
 
-test("Given an end confirmation for revoked access, When the API rejects the request, Then Morty explains the rejection instead of reporting success", {
+test("Given an end confirmation for access revoked elsewhere, When the API rejects the request, Then Morty explains that the current access ended", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ page: { kind: "bootstrap", identity: true }, connectAgent: true });
@@ -391,10 +391,9 @@ test("Given an end confirmation for revoked access, When the API rejects the req
     expect(revoked.status).toBe(204);
     await app.user.click(confirm);
     await app.waitForView(() =>
-        expect(getByRole(dialog, "alert").textContent).toContain("This request was not authorized"),
+        expect(getByRole(document.body, "status").textContent).toContain("Current access ended"),
     );
-    expect(dialog.textContent).toContain("Reload Morty to check your current access");
-    expect(document.body.textContent).not.toContain("Current access ended");
+    expect(queryByRole(document.body, "dialog", { name: "End current access?" })).toBeNull();
 });
 
 test("Given an unavailable connection, When current access cannot be prepared, Then the user sees a retryable error and can return to confirmation", {
