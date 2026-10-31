@@ -33,6 +33,7 @@ import { startRecoveryNotice } from "./recovery-notice.ts";
 import { type SessionActivityState, workingCommandId } from "./session-activity-machine.ts";
 import {
     connectionFailure,
+    connectionWaitsForRuntime,
     disconnectedConnection,
     isConnectionSettled,
     type SessionConnection,
@@ -103,8 +104,11 @@ import { type SessionTitlesStore, sessionTitle } from "./session-titles-store.ts
 import { createSessionTurnLedger } from "./session-turn-ledger.ts";
 import { createSessionWelcomeStore } from "./session-welcome-store.ts";
 
-/** What views see of a pane: its stores and the user's actions. Starting and stopping the pane is its owner's. */
-export type SessionPaneModel = Omit<ReturnType<typeof createSessionPaneModel>, "start" | "stop">;
+/**
+ * What views see of a pane: its stores and the user's actions. Starting, stopping and reconnecting the pane is its
+ * owner's.
+ */
+export type SessionPaneModel = Omit<ReturnType<typeof createSessionPaneModel>, "start" | "stop" | "reconnect">;
 
 /** A change to the Session's settings. */
 type Operation =
@@ -427,6 +431,10 @@ export function createSessionPaneModel(options: {
     readonly titles: SessionTitlesStore;
     /** Whether the connection header reports this Session's connection available, network and Machine included. */
     readonly connectionAvailable: (connection: SessionConnection) => boolean;
+    /** The connection reached the Session through the Runtime. */
+    readonly onConnected: () => void;
+    /** The connection used up its automatic retries and waits for the owner's `reconnect`. */
+    readonly onWaitingForRuntime: () => void;
 }) {
     const { session, botId, requests, clock, composerAttachments, delivery, messageQueue, titles } = options;
     const sessionId = session.result.ready.sessionId;
@@ -1172,6 +1180,7 @@ export function createSessionPaneModel(options: {
                     const subscription = await connected.events.subscribeLive(sessionId, observer, signal);
                     signal.throwIfAborted();
                     setAndSettle({ connection: { kind: "ready", client: connected } });
+                    options.onConnected();
                     const monitoring = new AbortController();
                     const monitorSignal = AbortSignal.any([signal, monitoring.signal]);
                     void (async () => {
@@ -1300,6 +1309,11 @@ export function createSessionPaneModel(options: {
                                     });
                                 }
                             } else {
+                                if (retryable) {
+                                    // The automatic retries are used up: the owner retries once it sees the Runtime
+                                    // reachable again, and the user can retry at any time.
+                                    options.onWaitingForRuntime();
+                                }
                                 await new Promise<void>((resolve) => {
                                     if (retrySignal.aborted) {
                                         resolve();
@@ -1731,6 +1745,15 @@ export function createSessionPaneModel(options: {
             });
     };
     /**
+     * Starts the next attempt of a connection that used up its automatic retries, without restoring them: the owner
+     * calls it when it sees the Runtime reachable again, and a failed attempt waits for the owner's next call.
+     */
+    const reconnect = (): void => {
+        if (connectionWaitsForRuntime(store.getState().connection)) {
+            countdownInterrupt?.abort(new Error("The Runtime is reachable again."));
+        }
+    };
+    /**
      * Ends the pane: its connection and everything bound to its lifetime. The owner stops a pane it replaces or
      * removes; a stopped pane is never restarted. Idempotent.
      */
@@ -1766,6 +1789,7 @@ export function createSessionPaneModel(options: {
         session,
         start,
         stop,
+        reconnect,
         /** The signal for view-triggered operations: the pane's lifetime. */
         operationsSignal: () => lifetime.signal,
         readResource,

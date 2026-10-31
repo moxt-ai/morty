@@ -75,6 +75,14 @@ export function isConnectionSettled(connection: SessionConnection): boolean {
 }
 
 /**
+ * Whether the connection used up its automatic retries for a failure the Runtime's return can resolve. Such a
+ * connection waits for its owner to retry it once the owner sees the Runtime reachable again.
+ */
+export function connectionWaitsForRuntime(connection: SessionConnection): boolean {
+    return connection.kind === "disconnected" && connection.retry.kind === "exhausted";
+}
+
+/**
  * The next retry after `consecutiveFailures` failed attempts: a scheduled
  * automatic retry with its delay, or none once the attempts are used up.
  */

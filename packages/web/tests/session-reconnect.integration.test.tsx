@@ -387,7 +387,7 @@ test("Given a recovered Runtime and an unsent draft, When the retry deadline arr
     expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain("Still unsent");
 });
 
-test("Given an unavailable Runtime and an editable draft, When automatic retries are exhausted and the user reconnects, Then one actionable failure clears and the draft is never sent automatically", {
+test("Given an unavailable Runtime and an editable draft, When automatic retries are exhausted and the user retries, Then one actionable failure clears and the draft is never sent automatically", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
@@ -453,8 +453,18 @@ test("Given an unavailable Runtime and an editable draft, When automatic retries
     expect(
         queryByRole(document.body, "button", { name: /Switch computer/, description: "Connection available" }),
     ).toBeNull();
-    await app.daemon.reconnect();
+    // Retrying by hand restores the automatic retries, which reconnect once the computer is back.
     await app.user.click(getByRole(document.body, "button", { name: "Retry now" }));
+    await showReconnectNotice(app, clock);
+    const seconds = await app.waitForView(() => {
+        const match = /Retrying in (\d+) s/u.exec(document.body.textContent ?? "");
+        if (match === null) {
+            throw new Error("Waiting for the restored retry countdown");
+        }
+        return Number(match[1]);
+    });
+    await app.daemon.reconnect();
+    await act(async () => clock.advanceBy(seconds * 1000));
     await app.waitForView(() =>
         getByRole(document.body, "button", { name: /Switch computer/, description: "Connection available" }),
     );
@@ -466,6 +476,40 @@ test("Given an unavailable Runtime and an editable draft, When automatic retries
     expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain(
         "Keep editing through failure",
     );
+});
+
+test("Given an open conversation whose automatic retries are exhausted, When the page sees its computer online again, Then the conversation reconnects without the user retrying", {
+    timeout: 60_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    await openSavedConversation(app, "Reconnect when the computer returns");
+    if (app.daemon === null) {
+        throw new Error("Expected a connected Runtime");
+    }
+    await app.daemon.disconnect();
+    await showReconnectNotice(app, clock);
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+        const seconds = await app.waitForView(() => retrySeconds(app));
+        await act(async () => clock.advanceBy(seconds * 1000));
+    }
+    await app.waitForView(() => expect(getByRole(document.body, "alert").textContent).toContain("Couldn’t reconnect"));
+    await app.waitForView(
+        () =>
+            expect(app.elementByTestId(dataTestId.botConnectionStatus).getAttribute("data-connection-status")).toBe(
+                "disconnected",
+            ),
+        20_000,
+    );
+    await app.daemon.reconnect();
+    await app.waitForView(() =>
+        getByRole(document.body, "button", {
+            name: /^Switch computer, .*, Online$/u,
+            description: "Connection available",
+        }),
+    );
+    expect(reconnectStatusText(app)).toBeNull();
+    expect(queryByRole(document.body, "alert")).toBeNull();
 });
 
 test("Given an active turn and an unsent follow-up, When connection freshness is lost and Enter is pressed, Then the follow-up stays in the composer until recovery", {
