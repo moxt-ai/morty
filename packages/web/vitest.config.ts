@@ -22,7 +22,9 @@ export default defineConfig({
         // Each file owns real Chat and Platform isolates. Bound their concurrent startup.
         maxWorkers: 2,
         include: ["tests/**/*.integration.test.tsx"],
-        testTimeout: 5_000,
+        // Scenarios start real isolates, and the harness waits up to 12 s for a view (`waitForView`) and 10 s for the
+        // WebSocket bridge. The test budget must outlast those waits so a stuck wait fails with what it waited for.
+        testTimeout: 30_000,
         coverage: {
             provider: "istanbul",
             reporter: ["text-summary", "json"],

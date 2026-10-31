@@ -28,6 +28,13 @@ async function writeNpxFixture(bin: string, body: string): Promise<void> {
     }
 }
 
+// Budgets for the scenarios that run Setup as a child process. CI also runs some of them on Windows, the slowest
+// platform: there each run checks path permissions through PowerShell, which Mobius bounds at 30 s per check, and a
+// fixture's first workerd start has taken over 10 s. The child's deadline leaves room for one check to reach that
+// bound and for the run to finish and report. The test's timeout adds room to start the fixture and to clean up.
+const SETUP_PROCESS_TIMEOUT_MS = 60_000;
+const SETUP_PROCESS_TEST_TIMEOUT_MS = 90_000;
+
 let createIdentityFixture: Awaited<ReturnType<typeof prepareIdentityFixture>>;
 beforeAll(async () => {
     createIdentityFixture = await prepareIdentityFixture({ listenOnLoopback: true });
@@ -70,7 +77,7 @@ test.each([
 ] as const)(
     "Given an invalid Mobius state root and $replacementState replacement state using $launcher, When setup stops at preflight, Then it preserves the identity and accurately reports earlier shared access",
     {
-        timeout: 30_000,
+        timeout: SETUP_PROCESS_TEST_TIMEOUT_MS,
     },
     async ({ replacementState, launcher }) => {
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-state-root-"));
@@ -153,7 +160,7 @@ test.each([
                         MORTY_LOCAL_MOBIUS_CLI: launcher === "local" ? localCli : undefined,
                     },
                     stdio: ["ignore", "pipe", "pipe"],
-                    signal: AbortSignal.timeout(20000),
+                    signal: AbortSignal.timeout(SETUP_PROCESS_TIMEOUT_MS),
                     windowsHide: true,
                 },
             );
@@ -236,7 +243,7 @@ test.each(["missing", "unlaunchable", "npm-missing", "npm-unlaunchable"] as cons
                         MORTY_STATE_DIRECTORY: state,
                     },
                     stdio: ["ignore", "pipe", "pipe"],
-                    signal: AbortSignal.timeout(20000),
+                    signal: AbortSignal.timeout(SETUP_PROCESS_TIMEOUT_MS),
                     windowsHide: true,
                 },
             );
@@ -257,10 +264,12 @@ test.each(["missing", "unlaunchable", "npm-missing", "npm-unlaunchable"] as cons
             await rm(directory, { recursive: true, force: true });
         }
     },
-    30000,
+    SETUP_PROCESS_TEST_TIMEOUT_MS,
 );
 
-test("Given a local workspace and a private state directory, When setup creates its identity and the user cancels, Then credentials remain private and can be reused", async () => {
+test("Given a local workspace and a private state directory, When setup creates its identity and the user cancels, Then credentials remain private and can be reused", {
+    timeout: SETUP_PROCESS_TEST_TIMEOUT_MS,
+}, async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-setup-filesystem-"));
     const state = join(directory, "state ' & workspace");
     const workspace = join(directory, "workspace with spaces & quotes '");
@@ -312,7 +321,7 @@ process.exitCode = await runSetup(process.argv.slice(2), {
             },
             stdio: ["ignore", "pipe", "pipe"],
             windowsHide: true,
-            signal: AbortSignal.timeout(30000),
+            signal: AbortSignal.timeout(SETUP_PROCESS_TIMEOUT_MS),
         },
     );
     const exited = once(child, "exit");
@@ -362,7 +371,7 @@ process.exitCode = await runSetup(process.argv.slice(2), {
         await fixture.close();
         await rm(directory, { recursive: true, force: true });
     }
-}, 30000);
+});
 
 test("Given a junction replaces the private Morty directory, When setup validates its local state, Then it refuses to write credentials through the link", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-setup-link-"));
@@ -402,7 +411,7 @@ test("Given a junction replaces the private Morty directory, When setup validate
 
 test.runIf(process.platform !== "win32")(
     "Given HOME and no overrides, When a user runs the setup CLI, Then identity is saved in the platform's local state directory and cancellation releases setup",
-    { timeout: 30000 },
+    { timeout: SETUP_PROCESS_TEST_TIMEOUT_MS },
     async () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-home-"));
         const state =
@@ -443,7 +452,7 @@ test.runIf(process.platform !== "win32")(
                     PATH: `${bin}:${environment["PATH"] ?? ""}`,
                 },
                 stdio: ["ignore", "pipe", "pipe"],
-                signal: AbortSignal.timeout(30000),
+                signal: AbortSignal.timeout(SETUP_PROCESS_TIMEOUT_MS),
             },
         );
         const exited = once(child, "exit");
@@ -605,7 +614,7 @@ process.exitCode = await runSetup(process.argv.slice(2), {
                             PATH: `${bin}:${process.env["PATH"] ?? ""}`,
                         },
                         stdio: ["ignore", "pipe", "pipe"],
-                        signal: AbortSignal.timeout(30000),
+                        signal: AbortSignal.timeout(SETUP_PROCESS_TIMEOUT_MS),
                     },
                 );
                 const exited = once(child, "exit");
@@ -683,7 +692,7 @@ process.exitCode = await runSetup(process.argv.slice(2), {
                 await rm(directory, { recursive: true, force: true });
             }
         },
-        30000,
+        SETUP_PROCESS_TEST_TIMEOUT_MS,
     );
 }
 
