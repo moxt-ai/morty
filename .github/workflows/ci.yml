@@ -90,8 +90,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # GitHub-hosted runners for this repository have 2 vCPUs. Each web test file starts its own Chat and Platform
-        # workerd isolates and a Runtime daemon, so a shard runs one file at a time and the suite spreads across shards.
+        # Nearly every web and Worker test file starts its own workerd isolates, and many also start a Runtime daemon or
+        # Setup processes. Each job runs one file at a time, so files never compete for the runner's CPUs and test
+        # durations do not depend on the runner size (Vitest would otherwise run one file per CPU but one). The web
+        # suite spreads across shards instead.
         include:
           - suite: web
             shard: 1/8
@@ -129,11 +131,10 @@ jobs:
 
       - name: Run integration tests with coverage
         working-directory: packages/${{ matrix.suite }}
-        run: pnpm exec vitest run --coverage --shard="$TEST_SHARD" --coverage.reportsDirectory="../../coverage/$COVERAGE_REPORT" $TEST_WORKERS
+        run: pnpm exec vitest run --coverage --shard="$TEST_SHARD" --coverage.reportsDirectory="../../coverage/$COVERAGE_REPORT" --maxWorkers=1
         env:
           TEST_SHARD: ${{ matrix.shard }}
           COVERAGE_REPORT: ${{ matrix.report }}
-          TEST_WORKERS: ${{ matrix.suite == 'web' && '--maxWorkers=1' || '' }}
 
       - name: Verify web asset publishing
         if: matrix.suite == 'worker'
