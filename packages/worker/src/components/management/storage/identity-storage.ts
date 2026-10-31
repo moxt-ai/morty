@@ -74,6 +74,9 @@ export class IdentityStorage {
                 kind: anonymousCredential.kind,
                 transferId: anonymousCredential.remoteTransferId,
                 browserId: anonymousCredential.browserId,
+                revokedAt: anonymousCredential.revokedAt,
+                // Durable Object rows are keyed by column name, so this column needs a name of its own.
+                linkRevokedAt: sql<number | null>`${continueLink.revokedAt}`.as("link_revoked_at"),
             })
             .from(anonymousCredential)
             .innerJoin(platformProjectMapping, eq(platformProjectMapping.userId, anonymousCredential.userId))
@@ -81,9 +84,7 @@ export class IdentityStorage {
             .where(
                 and(
                     eq(anonymousCredential.tokenHash, await digest(token)),
-                    isNull(anonymousCredential.revokedAt),
                     eq(platformProjectMapping.projectId, this.#projectId),
-                    or(isNull(anonymousCredential.remoteTransferId), isNull(continueLink.revokedAt)),
                 ),
             )
             .get();

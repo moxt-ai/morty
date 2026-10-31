@@ -7,7 +7,14 @@ import type { AnonymousIdentity } from "../storage/identity-storage-common.ts";
 
 type SessionResult =
     | { readonly kind: "authenticated"; readonly session: Session; readonly credentialKind: Credential["kind"] }
-    | { readonly kind: "unauthenticated" };
+    | { readonly kind: "unauthenticated" }
+    /** The credential was issued for this Project and its access was ended since. */
+    | { readonly kind: "revoked" };
+
+type CredentialLookup =
+    | { readonly kind: "active"; readonly credential: Credential }
+    | { readonly kind: "revoked" }
+    | { readonly kind: "unknown" };
 
 type EndAccessResult = { readonly kind: "ended" | "unauthenticated" | "forbidden" };
 
@@ -19,13 +26,22 @@ export class AuthenticationService {
     }
 
     readonly #credential = async (token: string | undefined, signal: AbortSignal): Promise<Credential | null> => {
+        const found = await this.#lookup(token, signal);
+        return found.kind === "active" ? found.credential : null;
+    };
+
+    readonly #lookup = async (token: string | undefined, signal: AbortSignal): Promise<CredentialLookup> => {
         const parsed = v.safeParse(anonymousToken, token);
         if (!parsed.success) {
-            return null;
+            return { kind: "unknown" };
         }
         const stored = await this.identities.findCredential(parsed.output, signal);
         if (stored === null) {
-            return null;
+            return { kind: "unknown" };
+        }
+        // Revoking a link also ends the browser access it issued.
+        if (stored.revokedAt !== null || stored.linkRevokedAt !== null) {
+            return { kind: "revoked" };
         }
         // Only a successfully authenticated token can supply the missing historical fact. Hashes alone cannot.
         const kind =
@@ -39,7 +55,7 @@ export class AuthenticationService {
         switch (kind) {
             case "browser":
                 if (stored.transferId === null) {
-                    return null;
+                    return { kind: "unknown" };
                 }
                 credential = {
                     kind,
@@ -52,28 +68,33 @@ export class AuthenticationService {
             case "local":
             case "recovery":
                 if (stored.transferId !== null || stored.browserId !== null) {
-                    return null;
+                    return { kind: "unknown" };
                 }
                 credential = { kind, credentialId: stored.credentialId, userId: stored.userId };
                 break;
             default:
-                return null;
+                return { kind: "unknown" };
         }
         if (stored.kind === null) {
             await this.identities.identifyLegacyCredential(stored.credentialId, kind, signal);
         }
-        return credential;
+        return { kind: "active", credential };
     };
 
     readonly session = async (token: string | undefined, signal: AbortSignal): Promise<SessionResult> => {
-        const credential = await this.#credential(token, signal);
-        return credential === null
-            ? { kind: "unauthenticated" }
-            : {
-                  kind: "authenticated",
-                  session: { authentication: { kind: "anonymous" }, userId: credential.userId },
-                  credentialKind: credential.kind,
-              };
+        const found = await this.#lookup(token, signal);
+        switch (found.kind) {
+            case "active":
+                return {
+                    kind: "authenticated",
+                    session: { authentication: { kind: "anonymous" }, userId: found.credential.userId },
+                    credentialKind: found.credential.kind,
+                };
+            case "revoked":
+                return { kind: "revoked" };
+            case "unknown":
+                return { kind: "unauthenticated" };
+        }
     };
 
     readonly createAnonymous = async (

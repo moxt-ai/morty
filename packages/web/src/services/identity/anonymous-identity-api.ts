@@ -2,7 +2,12 @@ import { type Identifier, isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
 import { anonymousCredentialsEntry } from "../local-storage/central-local-storage.ts";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
-import { clearIdentityScope, type IdentityScope, readIdentityScope, writeIdentityScope } from "./identity-scope-url.ts";
+import {
+    type IdentityScope,
+    leaveComputerAddress,
+    readIdentityScope,
+    writeIdentityScope,
+} from "./identity-scope-url.ts";
 import {
     forgetComputer,
     forgetComputerAccess,
@@ -57,6 +62,18 @@ const credentialRevocationPathSchema = v.picklist([
 export type AnonymousIdentity = v.InferOutput<typeof identitySchema>;
 export type IdentityTransfer = v.InferOutput<typeof transferSchema>;
 
+/**
+ * What checking access this browser stores found. Access that no longer opens its computer is forgotten either way;
+ * `revoked` is the Worker reporting that the access was ended, `gone` is any other access that stopped opening it.
+ */
+export type AccessCheck =
+    | { readonly kind: "open"; readonly identity: AnonymousIdentity }
+    | { readonly kind: "revoked" }
+    | { readonly kind: "gone" };
+
+/** The reason the Worker gives, beside UNAUTHENTICATED, for a credential whose access was ended. */
+const ACCESS_REVOKED = "ACCESS_REVOKED";
+
 export type DataRegion =
     | "wnam"
     | "enam"
@@ -84,9 +101,9 @@ export class AnonymousIdentityApi {
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
     }
 
-    readonly loadExisting = async (signal: AbortSignal): Promise<AnonymousIdentity | null> => {
-        const scope = readIdentityScope();
-        return scope === null ? null : await this.loadScope(scope, signal);
+    readonly loadScope = async (scope: IdentityScope, signal: AbortSignal): Promise<AnonymousIdentity | null> => {
+        const checked = await this.checkScope(scope, signal);
+        return checked.kind === "open" ? checked.identity : null;
     };
 
     /**
@@ -94,36 +111,36 @@ export class AnonymousIdentityApi {
      * including a replacement still being saved, is checked in turn instead of being forgotten with the access it
      * replaced.
      */
-    readonly loadScope = async (scope: IdentityScope, signal: AbortSignal): Promise<AnonymousIdentity | null> => {
+    readonly checkScope = async (scope: IdentityScope, signal: AbortSignal): Promise<AccessCheck> => {
         for (;;) {
             signal.throwIfAborted();
             const token = storedToken(scope.userId);
             if (token === null) {
                 forgetComputer(scope);
-                return null;
+                return { kind: "gone" };
             }
             const checked = await this.#checkAccess({ ...scope, token }, signal);
-            if (checked !== null) {
+            if (checked.kind === "open") {
                 rememberComputer(scope);
                 return checked;
             }
             // A tab replacing this access holds the lock until it saves the replacement, so forgetting waits for it
             // and checks the replacement instead.
             if (await withStoredAccessLock(signal, async () => forgetComputerAccess(scope, token))) {
-                return null;
+                return checked;
             }
         }
     };
 
-    /** The access when it still opens its computer, or null when it is gone. */
-    readonly #checkAccess = async (
-        identity: AnonymousIdentity,
-        signal: AbortSignal,
-    ): Promise<AnonymousIdentity | null> => {
+    /** Whether the access still opens its computer. */
+    readonly #checkAccess = async (identity: AnonymousIdentity, signal: AbortSignal): Promise<AccessCheck> => {
         const session = await this.#anonymousSession(identity, signal);
         signal.throwIfAborted();
+        if (session === "revoked") {
+            return { kind: "revoked" };
+        }
         if (session?.userId !== identity.userId) {
-            return null;
+            return { kind: "gone" };
         }
         const management = new ManagementApi({
             fetchRequest: this.#fetchRequest,
@@ -143,11 +160,11 @@ export class AnonymousIdentityApi {
                 cause instanceof CloudApiError &&
                 (cause.code === "BOT_NOT_FOUND" || cause.status === 401 || cause.status === 403)
             ) {
-                return null;
+                return { kind: "gone" };
             }
             throw cause;
         }
-        return identity;
+        return { kind: "open", identity };
     };
 
     readonly createTransfer = async (token: string, signal: AbortSignal): Promise<IdentityTransfer> =>
@@ -197,12 +214,7 @@ export class AnonymousIdentityApi {
         if (scope !== null) {
             forgetComputer(scope);
         }
-        clearIdentityScope();
-        const destination = new URL(window.location.href);
-        destination.pathname = "/chat";
-        destination.searchParams.delete("sessionId");
-        destination.hash = "";
-        window.history.replaceState(window.history.state, "", destination);
+        leaveComputerAddress();
     };
 
     readonly createRecoveryToken = async (
@@ -233,7 +245,7 @@ export class AnonymousIdentityApi {
     readonly #anonymousSession = async (
         identity: AnonymousIdentity,
         requestSignal: AbortSignal,
-    ): Promise<v.InferOutput<typeof anonymousSessionSchema> | null> => {
+    ): Promise<v.InferOutput<typeof anonymousSessionSchema> | "revoked" | null> => {
         try {
             return v.parse(
                 anonymousSessionSchema,
@@ -250,6 +262,9 @@ export class AnonymousIdentityApi {
             );
         } catch (error) {
             requestSignal.throwIfAborted();
+            if (error instanceof IdentityApiError && error.status === 401 && error.reason === ACCESS_REVOKED) {
+                return "revoked";
+            }
             if (error instanceof IdentityApiError && (error.status === 401 || error.status === 403)) {
                 return null;
             }
@@ -279,11 +294,17 @@ export class AnonymousIdentityApi {
         if (!response.ok) {
             const value: unknown = await response.json();
             signal.throwIfAborted();
-            const error = v.safeParse(v.object({ error: v.object({ code: v.string(), message: v.string() }) }), value);
+            const error = v.safeParse(
+                v.object({
+                    error: v.object({ code: v.string(), message: v.string(), reason: v.optional(v.string()) }),
+                }),
+                value,
+            );
             throw new IdentityApiError(
                 error.success ? error.output.error.code : "IDENTITY_UNAVAILABLE",
                 error.success ? error.output.error.message : "Identity service is unavailable.",
                 response.status,
+                error.success ? (error.output.error.reason ?? null) : null,
             );
         }
         return response;
@@ -293,10 +314,13 @@ export class AnonymousIdentityApi {
 export class IdentityApiError extends Error {
     readonly code: string;
     readonly status: number | null;
-    constructor(code: string, message: string, status: number | null = null) {
+    /** The finer cause the Worker names beside `code`, when it names one. */
+    readonly reason: string | null;
+    constructor(code: string, message: string, status: number | null = null, reason: string | null = null) {
         super(message);
         this.code = code;
         this.status = status;
+        this.reason = reason;
         this.name = "IdentityApiError";
     }
 }

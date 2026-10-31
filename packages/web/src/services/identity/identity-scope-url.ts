@@ -74,9 +74,12 @@ export function writeIdentityScope(scope: IdentityScope): void {
     });
 }
 
-/** Removes the scope from the current URL without adding a history entry. */
-export function clearIdentityScope(): void {
-    withIdentitySearch((parameters) => {
-        parameters.delete("identity");
-    });
+/** Leaves the address of a computer whose access ended for the plain chat address, without adding a history entry. */
+export function leaveComputerAddress(): void {
+    const destination = new URL(window.location.href);
+    destination.pathname = "/chat";
+    destination.searchParams.delete("identity");
+    destination.searchParams.delete("sessionId");
+    destination.hash = "";
+    window.history.replaceState(window.history.state, "", destination);
 }

@@ -119,6 +119,9 @@ export function createMortyApplication(options: {
         workspace = null;
         workspaceRequests = null;
     };
+    // The anonymous session owns the page's access: every check of it, and every request refused with it, goes there.
+    const currentAccess = (signal: AbortSignal) => anonymousSession.getState().currentAccess(signal);
+    const credentialRejected = () => anonymousSession.getState().credentialRejected(lifetime.signal);
     const activateWorkspace = (session: ActiveAnonymousSession): void => {
         const identity = session.identity;
         activeUserId = identity.userId;
@@ -135,11 +138,14 @@ export function createMortyApplication(options: {
             origin: options.origin,
             identity: scope,
             onAccessEnded: () => window.location.reload(),
+            currentAccess,
+            credentialRejected,
         });
         const requests = new BotChatApi({
             fetchRequest: transport.fetch,
             getToken: scope.getToken,
             replacedToken: (rejected, signal) => replacedToken(identity.userId, rejected, signal),
+            credentialRejected: () => void credentialRejected(),
             origin: options.origin,
             projectId: identity.projectId,
             subscribe: transport.subscribe,
@@ -278,6 +284,8 @@ export function createMortyApplication(options: {
                 origin: options.origin,
                 identity,
                 onAccessEnded,
+                currentAccess,
+                credentialRejected,
             }),
         transport,
         reloadIdentity,
