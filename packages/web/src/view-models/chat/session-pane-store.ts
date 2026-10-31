@@ -49,11 +49,11 @@ import {
     transitionCurrentTurn,
 } from "./session-current-turn.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
+import { sessionDeliveryPresentation } from "./session-delivery-presentation.ts";
 import {
     awaitingMessage,
     type DeliveryTarget,
-    deliveryMessagePresentation,
-    failedSubmission,
+    deliveryMessages,
     journalMessage,
     prependToDraft,
     type SessionDeliveryStore,
@@ -64,7 +64,7 @@ import {
 import { observeSessionExecution, type QueuedCommand, type SessionExecutionObservation } from "./session-execution.ts";
 import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
 import { type SessionLifecycleFact, sessionInteractionRecovery, sessionLifecycleFact } from "./session-lifecycle.ts";
-import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
+import { queuedMessages, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
 import {
     canChangeSettings,
     canQueue,
@@ -80,6 +80,7 @@ import {
     type SessionExecutionMessage,
     sessionEventCommandIds,
     sessionReductionMessages,
+    sessionUserCommandIds,
 } from "./session-presentation.ts";
 import {
     createSessionProjection,
@@ -192,12 +193,6 @@ interface SessionPaneState extends SessionPaneStore {
     readonly connect: (signal: AbortSignal) => Promise<void>;
 }
 
-function messageExecutionCommandId(message: SessionExecutionMessage): string | null {
-    return (
-        message.commandId ?? (message.executionContext.kind === "managed" ? message.executionContext.commandId : null)
-    );
-}
-
 function waitingForInput(interactions: Pick<SessionInteractionStore, "interactions">): boolean {
     return interactions.interactions.some(
         (interaction) =>
@@ -256,44 +251,9 @@ export function sessionPanePresentation(
     const deliveryUnknownCommandId =
         delivery.state.kind === "delivery-unknown" ? delivery.state.journal.commandId : null;
     const deliveryUnknownUserMessageId = deliveryUnknownCommandId === null ? null : deliveryUnknownCommandId;
-    // A recovered journal was never accepted by the service, so the projection
-    // has no user message for it. Expose the submission itself so the view can
-    // render an independent recovery card with retry and remove controls. Once
-    // the service confirms the turn, history supplies the message and the card
-    // disappears.
-    const unconfirmed = delivery.state.kind === "delivery-unknown" ? delivery.state.journal : null;
-    const unconfirmedDelivery =
-        unconfirmed === null ||
-        model.queued.some((message) => message.commandId === unconfirmed.commandId) ||
-        model.messages.some(
-            (message) => message.role === "user" && messageExecutionCommandId(message) === unconfirmed.commandId,
-        )
-            ? null
-            : {
-                  ...deliveryMessagePresentation(journalMessage(unconfirmed)),
-              };
-    const awaiting = awaitingMessage(delivery.state);
-    const pendingMessage =
-        delivery.state.kind === "preparing" || delivery.state.kind === "preparation-failed"
-            ? delivery.state.message
-            : delivery.state.kind === "submitting" || delivery.state.kind === "failed"
-              ? journalMessage(delivery.state.journal)
-              : null;
-    const pendingDelivery =
-        pendingMessage === null ||
-        (pendingMessage.target.disposition === "queue" &&
-            delivery.state.kind !== "preparation-failed" &&
-            delivery.state.kind !== "failed") ||
-        model.queued.some((message) => message.commandId === pendingMessage.commandId) ||
-        model.messages.some(
-            (message) => message.role === "user" && messageExecutionCommandId(message) === pendingMessage.commandId,
-        )
-            ? null
-            : {
-                  message: deliveryMessagePresentation(pendingMessage),
-                  sending: true,
-                  error: failedSubmission(delivery.state)?.failure.message ?? null,
-              };
+    const deliveries = sessionDeliveryPresentation(model.messages, model.queued, delivery, queue);
+    const pendingMessage = deliveries.pendingDelivery?.message ?? null;
+    const pendingDelivery = deliveries.pendingDelivery;
     const hasFailureCard =
         activity.kind === "failed" &&
         model.messages.some(
@@ -368,20 +328,7 @@ export function sessionPanePresentation(
         submitDisabled:
             !composerHasMessage(model.draft, attachments.attachments.length, attachments.state.kind === "reading") ||
             !(shouldQueueOnSubmit ? canQueue(facts) : canSendNow(facts)),
-        unconfirmedDelivery,
-        /** The Session's first message while it waits for this pane to connect, shown as it was written. */
-        awaitingMessage: awaiting === null ? null : deliveryMessagePresentation(awaiting),
-        confirmedMessages: delivery.confirmedMessages
-            .filter(
-                (confirmed) =>
-                    confirmed.target.disposition === "reject" &&
-                    !model.messages.some(
-                        (message) =>
-                            message.role === "user" && messageExecutionCommandId(message) === confirmed.commandId,
-                    ),
-            )
-            .map(deliveryMessagePresentation),
-        pendingDelivery,
+        ...deliveries,
     } as const;
 }
 
@@ -461,6 +408,7 @@ export function createSessionPaneModel(options: {
     readonly composerAttachments: StoreApi<ComposerAttachmentStore>;
     readonly attachmentSignal: AbortSignal;
     readonly delivery: StoreApi<SessionDeliveryStore>;
+    readonly messageQueue: StoreApi<SessionMessageQueueStore>;
     readonly botId: string;
     readonly requests: Pick<
         BotChatApi,
@@ -480,7 +428,7 @@ export function createSessionPaneModel(options: {
     /** Whether the connection header reports this Session's connection available, network and Machine included. */
     readonly connectionAvailable: (connection: SessionConnection) => boolean;
 }) {
-    const { session, botId, requests, clock, composerAttachments, delivery, titles } = options;
+    const { session, botId, requests, clock, composerAttachments, delivery, messageQueue, titles } = options;
     const sessionId = session.result.ready.sessionId;
     // Working in a conversation makes it the reference for the next draft: its
     // harness and the settings it runs with carry into New Session.
@@ -591,23 +539,24 @@ export function createSessionPaneModel(options: {
         },
         runningTurn: () => acceptedTurn(store.getState().turn),
     });
-    const messageQueue = createSessionMessageQueueStore({
-        queued: () => store.getState().queued,
-        port: {
-            cancel: noticingClosure(async (turnId, signal) => {
-                if (client === null) {
-                    throw new Error("The Session is not connected.");
-                }
-                await client.turns.cancelQueued(sessionId, turnId, signal);
-            }),
-            steer: noticingClosure(async (turnId, signal) => {
-                if (client === null) {
-                    throw new Error("The Session is not connected.");
-                }
-                await client.turns.steer(sessionId, turnId, signal);
-            }),
-        },
-    });
+    const queuePort = {
+        cancel: noticingClosure(async (turnId: string, signal: AbortSignal) => {
+            if (client === null) {
+                throw new Error("The Session is not connected.");
+            }
+            await client.turns.cancelQueued(sessionId, turnId, signal);
+        }),
+        steer: noticingClosure(async (turnId: string, signal: AbortSignal) => {
+            if (client === null) {
+                throw new Error("The Session is not connected.");
+            }
+            await client.turns.steer(sessionId, turnId, signal);
+        }),
+    };
+    const queuedMessage = (commandId: string) =>
+        queuedMessages(store.getState().queued, messageQueue.getState(), deliveryMessages(delivery.getState())).find(
+            (message) => message.commandId === commandId,
+        ) ?? null;
     const request = {
         additionalDirectoryIds: session.result.ready.additionalDirectories.map((directory) => directory.directoryId),
     };
@@ -767,15 +716,7 @@ export function createSessionPaneModel(options: {
         const adoptProjection = (next: SessionProjection) => {
             projection = next;
             const timeline = projectedTimeline(projection);
-            delivery
-                .getState()
-                .messagesObserved(
-                    timeline.messages.flatMap((message) =>
-                        message.role === "user"
-                            ? [messageExecutionCommandId(message)].filter((id): id is string => id !== null)
-                            : [],
-                    ),
-                );
+            delivery.getState().releaseMessages(sessionUserCommandIds(timeline.messages));
             return timeline;
         };
         /**
@@ -790,25 +731,6 @@ export function createSessionPaneModel(options: {
                 (commandId) => turns.startedAt(commandId, Date.now()),
             );
             const { execution } = change;
-            const deliverySnapshot = delivery.getState();
-            for (const message of deliverySnapshot.confirmedMessages) {
-                if (
-                    message.attachments.kind === "local" &&
-                    execution.queued.some((queued) => queued.commandId === message.commandId)
-                ) {
-                    messageQueue.getState().rememberAttachments(message.commandId, message.attachments.values);
-                }
-            }
-            const submission = deliverySnapshot.state;
-            if (
-                "journal" in submission &&
-                submission.journal.attachments !== null &&
-                execution.queued.some((message) => message.commandId === submission.journal.commandId)
-            ) {
-                messageQueue
-                    .getState()
-                    .rememberAttachments(submission.journal.commandId, submission.journal.attachments);
-            }
             set({
                 ...(execution.projection === projection ? {} : adoptProjection(execution.projection)),
                 queued: execution.queued,
@@ -817,10 +739,10 @@ export function createSessionPaneModel(options: {
             turnMoved(previous.turn, execution.turn);
             if (change.delivered.length > 0) {
                 delivery.getState().reconcile(change.delivered);
+                delivery.getState().releaseMessages(sessionUserCommandIds(get().messages));
             }
-            delivery.getState().messagesObserved(execution.queued.map((message) => message.commandId));
-            if (change.leftQueue.length > 0) {
-                messageQueue.getState().left(change.leftQueue);
+            if (observation.kind === "snapshot" || observation.kind === "closed" || change.leftQueue.length > 0) {
+                messageQueue.getState().reconcile(execution.queued.map((message) => message.commandId));
             }
             switch (change.interactions.kind) {
                 case "kept":
@@ -842,6 +764,11 @@ export function createSessionPaneModel(options: {
             signal: AbortSignal,
             deliveryCommandId: string | null = null,
         ): Promise<void> => {
+            // Only retire accepted queue inputs known before the read began. A submission accepted while this
+            // snapshot was in flight may legitimately be absent from it.
+            const acceptedQueue = delivery
+                .getState()
+                .acceptedMessages.filter((message) => message.target.disposition === "queue");
             const snapshot = await connected.sessions.readSessionExecution(
                 sessionId,
                 sessionIdentity,
@@ -850,6 +777,17 @@ export function createSessionPaneModel(options: {
             );
             signal.throwIfAborted();
             observeExecution({ kind: "snapshot", snapshot, turnAtRead, deliveryCommandId });
+            delivery
+                .getState()
+                .releaseMessages(
+                    acceptedQueue
+                        .filter(
+                            (message) =>
+                                snapshot.turn?.commandId !== message.commandId &&
+                                !snapshot.queued.some((queued) => queued.commandId === message.commandId),
+                        )
+                        .map((message) => message.commandId),
+                );
         };
         const commitProjection = (input: SessionProjectionInput): readonly SessionProjectionEffect[] => {
             const result = transitionSessionProjection(projection, input);
@@ -895,6 +833,7 @@ export function createSessionPaneModel(options: {
                 }
                 const effects = commitProjection({ history, kind: "history-loaded", revision });
                 delivery.getState().reconcile(sessionEventCommandIds(history.events));
+                delivery.getState().releaseMessages(sessionUserCommandIds(get().messages));
                 if (effects.some((loaded) => loaded.kind === "read-settings")) {
                     settings
                         .getState()
@@ -1016,16 +955,7 @@ export function createSessionPaneModel(options: {
                     signal,
                 );
                 signal.throwIfAborted();
-                delivery
-                    .getState()
-                    .messagesObserved([
-                        ...get().queued.map((message) => message.commandId),
-                        ...get().messages.flatMap((message) =>
-                            message.role === "user"
-                                ? [messageExecutionCommandId(message)].filter((id): id is string => id !== null)
-                                : [],
-                        ),
-                    ]);
+                delivery.getState().releaseMessages(sessionUserCommandIds(get().messages));
             } catch (cause) {
                 signal.throwIfAborted();
                 if (delivery.getState().state.kind === "preparing") {
@@ -1498,11 +1428,9 @@ export function createSessionPaneModel(options: {
                 }
                 // Without a record of when this browser sent it, the retry dates the command's work.
                 const retrying = submitCommand(pending.commandId, pending.request.disposition, Date.now());
-                const outcome = await delivery.getState().retry(retrying, signal);
+                await delivery.getState().retry(retrying, signal);
                 signal.throwIfAborted();
-                if (outcome?.kind === "accepted") {
-                    delivery.getState().messagesObserved(get().queued.map((message) => message.commandId));
-                }
+                delivery.getState().releaseMessages(sessionUserCommandIds(get().messages));
             },
             retryFailedMessage: async (signal) => {
                 const state = delivery.getState().state;
@@ -1561,21 +1489,32 @@ export function createSessionPaneModel(options: {
                 );
             },
             steerQueued: async (commandId, signal) => {
-                const steered = await messageQueue.getState().steerMessage(commandId, signal);
+                const steered = await messageQueue
+                    .getState()
+                    .steerMessage(queuedMessage(commandId), queuePort.steer, signal);
                 signal.throwIfAborted();
                 if (steered !== null) {
                     set({ followRevision: get().followRevision + 1 });
                 }
             },
             deleteQueued: async (commandId, signal) => {
-                await messageQueue.getState().deleteMessage(commandId, signal);
+                const removed = await messageQueue
+                    .getState()
+                    .deleteMessage(queuedMessage(commandId), queuePort.cancel, signal);
+                signal.throwIfAborted();
+                if (removed !== null) {
+                    delivery.getState().releaseMessages([removed.commandId]);
+                }
             },
             editQueued: async (commandId, signal) => {
-                const removed = await messageQueue.getState().deleteMessage(commandId, signal);
+                const removed = await messageQueue
+                    .getState()
+                    .deleteMessage(queuedMessage(commandId), queuePort.cancel, signal);
                 signal.throwIfAborted();
                 if (removed === null) {
                     return;
                 }
+                delivery.getState().releaseMessages([removed.commandId]);
                 // The queued message was written first, so it goes ahead of a draft the user started since.
                 const current = get().draft;
                 get().setDraft(
@@ -1803,6 +1742,7 @@ export function createSessionPaneModel(options: {
         filePreview.getState().close();
         lifetime.abort(new Error("The session pane stopped."));
         delivery.getState().submissionInterrupted();
+        messageQueue.getState().interrupted();
         options.onReleased?.(sessionActivity(store.getState().turn, delivery.getState().state));
     };
     // Views read the pane's state and invoke the user's actions; the connection loop stays with `start`.

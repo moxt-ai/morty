@@ -83,6 +83,19 @@ export type SessionExecutionMessage = SessionMessage & {
         | { readonly kind: "managed"; readonly commandId: string };
 };
 
+/** Released events can omit command identity; resolve it once at the history adapter. */
+export function sessionUserCommandIds(messages: readonly SessionExecutionMessage[]): readonly string[] {
+    return messages.flatMap((message) => {
+        if (message.role !== "user") {
+            return [];
+        }
+        const commandId =
+            message.commandId ??
+            (message.executionContext.kind === "managed" ? message.executionContext.commandId : null);
+        return commandId === null ? [] : [commandId];
+    });
+}
+
 function exhaustive(value: never): never {
     throw new Error(`Unsupported Session Event Log payload: ${JSON.stringify(value)}`);
 }

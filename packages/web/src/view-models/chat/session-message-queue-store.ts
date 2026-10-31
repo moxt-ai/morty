@@ -1,6 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { formatError } from "../format-error.ts";
+import type { SubmittedMessage } from "./session-delivery-store.ts";
 import type { QueuedCommand } from "./session-execution.ts";
 
 type QueuedMessageAttachments =
@@ -29,45 +30,44 @@ type QueueFeedback =
           readonly message: string;
       };
 
-interface SessionMessageQueuePort {
-    readonly cancel: (turnId: string, signal: AbortSignal) => Promise<void>;
-    readonly steer: (turnId: string, signal: AbortSignal) => Promise<void>;
-}
+type QueueOperation = (turnId: string, signal: AbortSignal) => Promise<void>;
 
-/**
- * This browser's request on a message the Runtime lists as queued. A withdrawn message, steered or deleted, stays
- * hidden until the Runtime's queue no longer lists it.
- */
+/** A withdrawn message stays hidden until an authoritative queue snapshot no longer lists it. */
 type QueuedMessageRequest = "steering" | "deleting" | "withdrawn";
 
-/**
- * This browser's part of the message queue. Which messages are queued is the Runtime's, kept by the Session pane's
- * execution; this store keeps only what this browser adds to them: its requests on them and the files it queued.
- */
+/** Session-owned requests on the Runtime's queue. Original files remain owned by delivery. */
 export interface SessionMessageQueueStore {
     readonly feedback: QueueFeedback;
     readonly requests: ReadonlyMap<string, QueuedMessageRequest>;
-    /** The original files this browser queued, by command; the Runtime keeps only their uploaded references. */
-    readonly attachments: ReadonlyMap<string, readonly ComposerAttachment[]>;
-    readonly deleteMessage: (commandId: string, signal: AbortSignal) => Promise<ChatQueuedMessage | null>;
+    readonly deleteMessage: (
+        message: ChatQueuedMessage | null,
+        cancel: QueueOperation,
+        signal: AbortSignal,
+    ) => Promise<ChatQueuedMessage | null>;
     readonly dismissFailure: () => void;
-    readonly rememberAttachments: (commandId: string, attachments: readonly ComposerAttachment[]) => void;
-    readonly steerMessage: (commandId: string, signal: AbortSignal) => Promise<ChatQueuedMessage | null>;
-    /** The messages left the Runtime's queue: what this browser kept for them ends. */
-    readonly left: (commandIds: readonly string[]) => void;
+    readonly steerMessage: (
+        message: ChatQueuedMessage | null,
+        steer: QueueOperation,
+        signal: AbortSignal,
+    ) => Promise<ChatQueuedMessage | null>;
+    readonly reconcile: (queuedCommandIds: readonly string[]) => void;
+    /** Ends operations borrowing a pane's connection, retaining completed withdrawals. */
+    readonly interrupted: () => void;
 }
 
-/** The queue as the user sees it: the Runtime's queued messages, with this browser's requests and files on them. */
+/** The Runtime's queue, enriched from the Session's sole copy of local submitted messages. */
 export function queuedMessages(
     queued: readonly QueuedCommand[],
-    queue: Pick<SessionMessageQueueStore, "attachments" | "requests">,
+    queue: Pick<SessionMessageQueueStore, "requests">,
+    submitted: readonly SubmittedMessage[],
 ): readonly ChatQueuedMessage[] {
     return queued.flatMap((message): readonly ChatQueuedMessage[] => {
         const request = queue.requests.get(message.commandId);
         if (request === "withdrawn") {
             return [];
         }
-        const attachments = queue.attachments.get(message.commandId);
+        const local = submitted.find((candidate) => candidate.commandId === message.commandId)?.attachments;
+        const attachments = local?.kind === "local" ? local.values : undefined;
         return [
             {
                 commandId: message.commandId,
@@ -98,58 +98,35 @@ function withRequest(
     return next;
 }
 
-function withoutAttachments(
-    attachments: ReadonlyMap<string, readonly ComposerAttachment[]>,
-    commandId: string,
-): ReadonlyMap<string, readonly ComposerAttachment[]> {
-    const next = new Map(attachments);
-    next.delete(commandId);
-    return next;
-}
-
-export const createSessionMessageQueueStore = (options: {
-    readonly port: SessionMessageQueuePort;
-    /** The messages the Runtime lists as queued, as the Session pane last observed them. */
-    readonly queued: () => readonly QueuedCommand[];
-}) => {
-    const listed = (commandId: string): boolean => options.queued().some((message) => message.commandId === commandId);
-    return createStore<SessionMessageQueueStore>()((set, get) => {
-        /** Ends a request the Runtime accepted: the message stays hidden while the Runtime still lists it. */
+/** Each operation borrows the selected pane's port; no connection outlives its pane. */
+export const createSessionMessageQueueStore = () =>
+    createStore<SessionMessageQueueStore>()((set, get) => {
         const withdrawn = (commandId: string): void => {
             set((state) => ({
-                attachments: withoutAttachments(state.attachments, commandId),
-                requests: withRequest(state.requests, commandId, listed(commandId) ? "withdrawn" : null),
+                // A snapshot may already have removed the request while its HTTP response was in flight.
+                requests: withRequest(state.requests, commandId, state.requests.has(commandId) ? "withdrawn" : null),
             }));
-        };
-        const queuedMessage = (commandId: string): ChatQueuedMessage | null => {
-            const message = queuedMessages(options.queued(), get()).find(
-                (candidate) => candidate.commandId === commandId,
-            );
-            return message === undefined || message.kind !== "queued" ? null : message;
         };
         return {
             feedback: { kind: "none" },
             requests: new Map(),
-            attachments: new Map(),
-            deleteMessage: async (commandId, parent) => {
-                const message = queuedMessage(commandId);
-                if (message === null) {
+            deleteMessage: async (message, cancel, parent) => {
+                if (message === null || message.kind !== "queued" || get().requests.has(message.commandId)) {
                     return null;
                 }
+                const { commandId } = message;
                 set((state) => ({
                     feedback: { kind: "none" },
                     requests: withRequest(state.requests, commandId, "deleting"),
                 }));
                 const signal = AbortSignal.any([parent, AbortSignal.timeout(15_000)]);
                 try {
-                    await options.port.cancel(message.turnId, signal);
+                    await cancel(message.turnId, signal);
                     signal.throwIfAborted();
                     withdrawn(commandId);
                     return message;
                 } catch (cause) {
-                    if (parent.aborted) {
-                        throw cause;
-                    }
+                    parent.throwIfAborted();
                     set((state) => ({
                         feedback: {
                             kind: "failed",
@@ -163,31 +140,26 @@ export const createSessionMessageQueueStore = (options: {
                 }
             },
             dismissFailure: () => set({ feedback: { kind: "none" } }),
-            rememberAttachments: (commandId, attachments) => {
-                set((state) => ({ attachments: new Map(state.attachments).set(commandId, attachments) }));
-            },
-            steerMessage: async (commandId, parent) => {
-                const message = queuedMessage(commandId);
-                if (message === null) {
+            steerMessage: async (message, steer, parent) => {
+                if (message === null || message.kind !== "queued" || get().requests.has(message.commandId)) {
                     return null;
                 }
+                const { commandId } = message;
                 set((state) => ({
                     feedback: { kind: "none" },
                     requests: withRequest(state.requests, commandId, "steering"),
                 }));
                 const signal = AbortSignal.any([parent, AbortSignal.timeout(15_000)]);
                 try {
-                    await options.port.steer(message.turnId, signal);
+                    await steer(message.turnId, signal);
                     signal.throwIfAborted();
                     withdrawn(commandId);
                     return message;
                 } catch (cause) {
-                    if (parent.aborted) {
-                        throw cause;
-                    }
+                    parent.throwIfAborted();
                     set((state) => ({
                         // Execution events and queue snapshots may arrive before the HTTP refusal.
-                        ...(listed(commandId)
+                        ...(state.requests.has(commandId)
                             ? {
                                   feedback: {
                                       kind: "failed",
@@ -202,20 +174,22 @@ export const createSessionMessageQueueStore = (options: {
                     return null;
                 }
             },
-            left: (commandIds) => {
-                const left = new Set(commandIds);
+            reconcile: (commandIds) => {
+                const queued = new Set(commandIds);
                 set((state) => ({
-                    attachments: new Map([...state.attachments].filter(([commandId]) => !left.has(commandId))),
-                    requests: new Map([...state.requests].filter(([commandId]) => !left.has(commandId))),
-                    // A refused steer has nothing left to report once its message leaves the queue.
+                    requests: new Map([...state.requests].filter(([commandId]) => queued.has(commandId))),
                     feedback:
                         state.feedback.kind === "failed" &&
                         state.feedback.operation === "steer" &&
-                        left.has(state.feedback.commandId)
+                        !queued.has(state.feedback.commandId)
                             ? { kind: "none" }
                             : state.feedback,
                 }));
             },
+            interrupted: () => {
+                set((state) => ({
+                    requests: new Map([...state.requests].filter(([, request]) => request === "withdrawn")),
+                }));
+            },
         };
     });
-};

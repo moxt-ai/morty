@@ -1,11 +1,49 @@
 import { resolveObjectURL } from "node:buffer";
-import { fireEvent, getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
+import { fireEvent, getAllByText, getByLabelText, getByRole, queryAllByText, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
+
+test("Given a running turn, When I queue a message before the Runtime receives it, Then it stays visible exactly once through admission and execution", {
+    timeout: 30_000,
+}, async () => {
+    const environment = await createChatWorkerEnvironment(false, true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true });
+    const { daemon, executionNetwork } = app;
+    if (daemon === null || executionNetwork === null) {
+        throw new Error("Expected a real Runtime and the execution transport proxy");
+    }
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
+    await app.queryElementByTestId(dataTestId.sessionStatus);
+    const instruction = "Keep this queued instruction visible";
+    await app.waitForView(() => expect(document.body.textContent).toContain("Waiting for steering"));
+    const held = executionNetwork.holdNextSubmission();
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), instruction);
+    const release = await held;
+    try {
+        await app.waitForView(() => expect(getAllByText(document.body, instruction)).toHaveLength(1));
+    } finally {
+        release();
+    }
+    await app.waitForView(() => {
+        getByLabelText(document.body, `Edit queued message: ${instruction}`);
+        expect(getAllByText(document.body, instruction)).toHaveLength(1);
+    });
+    await daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
+    await app.waitForView(() => {
+        expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull();
+        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+            "wait for steering",
+            instruction,
+        ]);
+        expect(getAllByText(document.body, instruction)).toHaveLength(1);
+    });
+    await app.close();
+});
 
 for (const eventOrder of ["before refusal", "after refusal"] as const) {
     test(`Given a released Runtime starts queued work before a delayed steer arrives, When its lifecycle arrives ${eventOrder}, Then the completed reply has no stale queue error`, {
@@ -140,6 +178,7 @@ test("Given the daemon has queued work, When the user steers it into the active 
         await current.waitForView(() => expect(current.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
         await current.queryElementByTestId(dataTestId.sessionStatus);
         await current.waitForView(() => {
+            expect(queryAllByText(document.body, deletedInstruction)).toHaveLength(0);
             expect(
                 current
                     .elementsByTestId(dataTestId.userMessage)
@@ -288,7 +327,7 @@ test("Given a reply is running with a queued follow-up, When I edit the follow-u
     await viewer.close();
 });
 
-test("Given two queued submissions are accepted before their snapshot arrives, When I edit and resend it, Then the original file is restored and delivered", {
+test("Given two queued submissions are accepted before their snapshot arrives, When I switch Sessions then edit and resend, Then the original file is restored and delivered", {
     timeout: 30_000,
 }, async () => {
     const queuedPrompt = "Describe the queued image";
@@ -344,6 +383,18 @@ test("Given two queued submissions are accepted before their snapshot arrives, W
     }
     await app.waitForView(() => expect(app.elementsByTestId(dataTestId.queuedMessage)).toHaveLength(2));
     await app.waitForView(() => expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", ""));
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    const previous = await app.waitForView(() => {
+        const entry = app
+            .elementsByTestId(dataTestId.managedConversation)
+            .find((element) => element.textContent?.includes("wait for steering"));
+        if (entry === undefined) {
+            throw new Error("Expected the running Session in the directory");
+        }
+        return entry;
+    });
+    await app.user.click(previous);
+    await app.waitForView(() => expect(app.elementsByTestId(dataTestId.queuedMessage)).toHaveLength(2));
     await app.user.click(getByLabelText(document.body, `Edit queued message: ${queuedPrompt}`));
     await app.waitForView(() => {
         expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", queuedPrompt);

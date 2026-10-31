@@ -1,0 +1,97 @@
+import {
+    type DeliveryState,
+    deliveryMessagePresentation,
+    deliveryMessages,
+    journalMessage,
+    type SessionDeliveryStore,
+    type SubmittedMessage,
+} from "./session-delivery-store.ts";
+import type { QueuedCommand } from "./session-execution.ts";
+import { queuedMessages, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
+import { type SessionExecutionMessage, sessionUserCommandIds } from "./session-presentation.ts";
+
+type LocalMessage =
+    | { readonly kind: "awaiting" | "accepted" | "unknown"; readonly message: SubmittedMessage }
+    | { readonly kind: "pending"; readonly message: SubmittedMessage; readonly error: string | null };
+
+function currentMessage(state: DeliveryState): LocalMessage | null {
+    switch (state.kind) {
+        case "idle":
+            return null;
+        case "awaiting-connection":
+            return { kind: "awaiting", message: state.message };
+        case "preparing":
+            return { kind: "pending", message: state.message, error: null };
+        case "preparation-failed":
+            return { kind: "pending", message: state.message, error: state.failure.message };
+        case "submitting":
+            return { kind: "pending", message: journalMessage(state.journal), error: null };
+        case "failed":
+            return { kind: "pending", message: journalMessage(state.journal), error: state.failure.message };
+        case "delivery-unknown":
+            return { kind: "unknown", message: journalMessage(state.journal) };
+        default:
+            return state satisfies never;
+    }
+}
+
+/** History, then the Runtime queue, then local delivery own each command's sole display location. */
+export function sessionDeliveryPresentation(
+    messages: readonly SessionExecutionMessage[],
+    queued: readonly QueuedCommand[],
+    delivery: Pick<SessionDeliveryStore, "state" | "acceptedMessages">,
+    queue: Pick<SessionMessageQueueStore, "requests">,
+) {
+    const historyIds = new Set(sessionUserCommandIds(messages));
+    const claimed = new Set([
+        ...historyIds,
+        ...queued.map((message) => message.commandId),
+        ...[...queue.requests].flatMap(([commandId, request]) => (request === "withdrawn" ? [commandId] : [])),
+    ]);
+    const current = currentMessage(delivery.state);
+    const candidates: readonly LocalMessage[] = [
+        ...(current === null ? [] : [current]),
+        ...delivery.acceptedMessages.map((message): LocalMessage => ({ kind: "accepted", message })),
+    ];
+    const local = candidates.filter(({ message }) => {
+        if (claimed.has(message.commandId)) {
+            return false;
+        }
+        claimed.add(message.commandId);
+        return true;
+    });
+    const pendingQueue = local.filter(
+        (entry) =>
+            entry.message.target.disposition === "queue" &&
+            (entry.kind === "accepted" || (entry.kind === "pending" && entry.error === null)),
+    );
+    const timeline = local.filter((entry) => !pendingQueue.includes(entry));
+    const awaiting = timeline.find((message) => message.kind === "awaiting");
+    const unknown = timeline.find((message) => message.kind === "unknown");
+    const pending = timeline.find((message) => message.kind === "pending");
+    return {
+        awaitingMessage: awaiting === undefined ? null : deliveryMessagePresentation(awaiting.message),
+        unconfirmedDelivery: unknown === undefined ? null : deliveryMessagePresentation(unknown.message),
+        pendingDelivery:
+            pending === undefined
+                ? null
+                : {
+                      message: deliveryMessagePresentation(pending.message),
+                      sending: pending.error === null,
+                      error: pending.error,
+                  },
+        confirmedMessages: timeline
+            .filter((message) => message.kind === "accepted")
+            .map(({ message }) => deliveryMessagePresentation(message)),
+        pendingQueueMessages: pendingQueue.map((entry) => ({
+            commandId: entry.message.commandId,
+            summary: deliveryMessagePresentation(entry.message).displayPrompt,
+            status: entry.kind === "accepted" ? "Message queued" : "Sending message",
+        })),
+        queuedMessages: queuedMessages(
+            queued.filter((message) => !historyIds.has(message.commandId)),
+            queue,
+            deliveryMessages(delivery),
+        ),
+    };
+}

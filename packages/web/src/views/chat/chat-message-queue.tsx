@@ -1,6 +1,7 @@
 import { Clock4, CornerUpLeft, LoaderCircle, MessageSquare, Pencil, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { dataTestId } from "../../data-testid.ts";
+import type { sessionDeliveryPresentation } from "../../view-models/chat/session-delivery-presentation.ts";
 import type { ChatQueuedMessage } from "../../view-models/chat/session-message-queue-store.ts";
 
 function QueueAction({
@@ -30,18 +31,20 @@ function QueueAction({
 
 export function ChatMessageQueue({
     messages,
+    pendingMessages,
     steeringSupported,
     onDelete,
     onEdit,
     onSteer,
 }: {
     readonly messages: readonly ChatQueuedMessage[];
+    readonly pendingMessages: ReturnType<typeof sessionDeliveryPresentation>["pendingQueueMessages"];
     readonly steeringSupported: boolean;
     readonly onDelete: (commandId: string) => void;
     readonly onEdit: (commandId: string) => void;
     readonly onSteer: (commandId: string) => void;
 }) {
-    if (messages.length === 0) {
+    if (messages.length + pendingMessages.length === 0) {
         return null;
     }
     return (
@@ -55,7 +58,9 @@ export function ChatMessageQueue({
                     <MessageSquare aria-hidden="true" className="size-3.5 shrink-0 text-morty-text-3" />
                     <div className="flex min-w-0 items-center gap-1">
                         <span className="text-13 font-medium text-morty-text-2">Queued messages</span>
-                        <span className="text-12 font-normal text-morty-text-3">{messages.length.toString()}</span>
+                        <span className="text-12 font-normal text-morty-text-3">
+                            {(messages.length + pendingMessages.length).toString()}
+                        </span>
                     </div>
                 </div>
                 <div className="overflow-hidden rounded-t-md bg-morty-fill-white">
@@ -134,6 +139,23 @@ export function ChatMessageQueue({
                                 </li>
                             );
                         })}
+                        {pendingMessages.map((message) => (
+                            <li
+                                key={message.commandId}
+                                className="-mx-2 flex items-start gap-2 rounded-sm py-1.5 pr-2.5 pl-2 text-morty-text-2"
+                            >
+                                <LoaderCircle
+                                    aria-label={message.status}
+                                    className="mt-1 size-3.5 shrink-0 animate-spin text-morty-text-3 motion-reduce:animate-none"
+                                />
+                                <span
+                                    className="min-w-0 flex-1 truncate text-13 leading-[22px] text-foreground"
+                                    title={message.summary}
+                                >
+                                    {message.summary}
+                                </span>
+                            </li>
+                        ))}
                     </ol>
                 </div>
             </div>
