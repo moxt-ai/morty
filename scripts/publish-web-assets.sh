@@ -95,6 +95,23 @@ if ! pnpm exec wrangler r2 bucket info "$bucket" --json >/dev/null; then
   exit 1
 fi
 
+# Every asset key is content-addressed, so repeating an upload or the CDN probe
+# is idempotent. Bounded retries absorb transient R2 and CDN failures, and a
+# persistent failure still stops the deployment before the new Worker activates.
+max_attempts=3
+with_retries() {
+  local attempt=1
+  until "$@"; do
+    if [[ "$attempt" -ge "$max_attempts" ]]; then
+      echo "Giving up after $max_attempts attempts" >&2
+      return 1
+    fi
+    echo "Attempt $attempt of $max_attempts failed; retrying in $((attempt * 10)) seconds" >&2
+    sleep "$((attempt * 10))"
+    attempt=$((attempt + 1))
+  done
+}
+
 publish_assets() {
   local manifest="$1"
   local content_type="$2"
@@ -103,8 +120,10 @@ publish_assets() {
     return
   fi
   # The pinned bulk command reuses one authenticated Wrangler process while
-  # separate manifests preserve each asset type's content type.
-  pnpm exec wrangler r2 bulk put "$bucket" \
+  # separate manifests preserve each asset type's content type. It stops at the
+  # first failed object without reporting which objects completed, so a retry
+  # uploads the whole manifest again.
+  with_retries pnpm exec wrangler r2 bulk put "$bucket" \
     --filename "$manifest" \
     --content-type "$content_type" \
     --cache-control "public, max-age=31536000, immutable" \
@@ -119,7 +138,7 @@ publish_assets "$woff_manifest" "font/woff" "${#woff_entries[@]}"
 publish_assets "$woff2_manifest" "font/woff2" "${#woff2_entries[@]}"
 
 probe_key="${assets[0]#dist/client/}"
-curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \
+with_retries curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \
   --header "Origin: $app_origin" \
   --dump-header "$headers" \
   --output /dev/null \
