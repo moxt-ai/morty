@@ -303,7 +303,7 @@ test("Given an anonymous user, When machine access is shared, Then its expiring 
     const recoveryResponse = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/recovery-token`, {
             method: "POST",
-            headers: { authorization: `Bearer ${remoteTokens[0]}` },
+            headers: { authorization: `Bearer ${owner.token}` },
         }),
         environment,
     );

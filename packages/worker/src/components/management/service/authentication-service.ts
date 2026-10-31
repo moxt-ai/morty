@@ -1,5 +1,11 @@
 import * as v from "valibot";
-import { anonymousToken, type Credential } from "../entity/authentication/credential.ts";
+import {
+    anonymousToken,
+    type Credential,
+    type CredentialOperation,
+    mayPerform,
+    type PermittedCredential,
+} from "../entity/authentication/credential.ts";
 import type { Session } from "../entity/authentication/session.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import type { IdentityStorage, IdentityTransfer } from "../storage/identity-storage.ts";
@@ -16,7 +22,23 @@ type CredentialLookup =
     | { readonly kind: "revoked" }
     | { readonly kind: "unknown" };
 
+type Authorization<Operation extends CredentialOperation> =
+    | {
+          readonly kind: "authorized";
+          readonly credential: PermittedCredential<Operation>;
+          readonly token: string;
+      }
+    | { readonly kind: "unauthenticated" }
+    /** The credential was issued for this Project and its access was ended since. */
+    | { readonly kind: "revoked" }
+    | { readonly kind: "forbidden" };
+
 type EndAccessResult = { readonly kind: "ended" | "unauthenticated" | "forbidden" };
+
+/** Outside the session check, revoked access answers like unknown access, so a retry after a lost reply stays safe. */
+function refused(access: { readonly kind: "unauthenticated" | "revoked" | "forbidden" }) {
+    return { kind: access.kind === "forbidden" ? "forbidden" : "unauthenticated" } as const;
+}
 
 export class AuthenticationService {
     private readonly identities: IdentityStorage;
@@ -24,11 +46,6 @@ export class AuthenticationService {
     constructor(cx: { readonly storages: { readonly identities: IdentityStorage } }) {
         this.identities = cx.storages.identities;
     }
-
-    readonly #credential = async (token: string | undefined, signal: AbortSignal): Promise<Credential | null> => {
-        const found = await this.#lookup(token, signal);
-        return found.kind === "active" ? found.credential : null;
-    };
 
     readonly #lookup = async (token: string | undefined, signal: AbortSignal): Promise<CredentialLookup> => {
         const parsed = v.safeParse(anonymousToken, token);
@@ -110,27 +127,57 @@ export class AuthenticationService {
         return identity;
     };
 
+    /** The one check of which credential kinds may perform an operation; the rule itself is `mayPerform`. */
+    readonly authorize = async <Operation extends CredentialOperation>(
+        token: string | undefined,
+        operation: Operation,
+        signal: AbortSignal,
+    ): Promise<Authorization<Operation>> => {
+        if (token === undefined) {
+            return { kind: "unauthenticated" };
+        }
+        const found = await this.#lookup(token, signal);
+        switch (found.kind) {
+            case "active":
+                return mayPerform(found.credential, operation)
+                    ? { kind: "authorized", credential: found.credential, token }
+                    : { kind: "forbidden" };
+            case "revoked":
+                return { kind: "revoked" };
+            case "unknown":
+                return { kind: "unauthenticated" };
+        }
+    };
+
     readonly createTransfer = async (
         token: string | undefined,
         signal: AbortSignal,
     ): Promise<IdentityTransfer | null> => {
-        if (token === undefined) {
-            return null;
-        }
-        const credential = await this.#credential(token, signal);
-        return credential === null
-            ? null
-            : await this.identities.createTransfer(credential.userId, token, Date.now(), signal);
+        const access = await this.authorize(token, "shareAccess", signal);
+        return access.kind === "authorized"
+            ? await this.identities.createTransfer(access.credential.userId, access.token, Date.now(), signal)
+            : null;
     };
 
-    readonly createRecoveryToken = async (token: string | undefined, signal: AbortSignal): Promise<string | null> => {
-        if (token === undefined) {
-            return null;
+    readonly createRecoveryToken = async (
+        token: string | undefined,
+        signal: AbortSignal,
+    ): Promise<
+        | { readonly kind: "issued"; readonly token: string }
+        | { readonly kind: "unauthenticated" }
+        | { readonly kind: "forbidden" }
+    > => {
+        const access = await this.authorize(token, "issueRecoveryCredential", signal);
+        if (access.kind !== "authorized") {
+            return refused(access);
         }
-        const credential = await this.#credential(token, signal);
-        return credential === null
-            ? null
-            : await this.identities.createRecoveryToken(credential.userId, token, Date.now(), signal);
+        const issued = await this.identities.createRecoveryToken(
+            access.credential.userId,
+            access.token,
+            Date.now(),
+            signal,
+        );
+        return issued === null ? { kind: "unauthenticated" } : { kind: "issued", token: issued };
     };
 
     readonly redeemTransfer = async (
@@ -139,77 +186,49 @@ export class AuthenticationService {
         signal: AbortSignal,
     ): Promise<AnonymousIdentity | null> => await this.identities.redeemTransfer(code, replaces, Date.now(), signal);
 
-    /** Only a machine's local credential can administer the user's access or Project. */
-    readonly localIdentity = async (
-        token: string | undefined,
-        signal: AbortSignal,
-    ): Promise<
-        | { readonly kind: "local"; readonly userId: string; readonly token: string }
-        | { readonly kind: "unauthenticated" }
-        | { readonly kind: "forbidden" }
-    > => {
-        if (token === undefined) {
-            return { kind: "unauthenticated" };
-        }
-        const credential = await this.#credential(token, signal);
-        if (credential === null) {
-            return { kind: "unauthenticated" };
-        }
-        if (credential.kind !== "local") {
-            return { kind: "forbidden" };
-        }
-        return { kind: "local", userId: credential.userId, token };
-    };
-
     readonly revokeAllAccess = async (
         token: string | undefined,
         signal: AbortSignal,
     ): Promise<{ readonly kind: "revoked" | "unauthenticated" | "forbidden" }> => {
-        const local = await this.localIdentity(token, signal);
-        if (local.kind !== "local") {
-            return local;
+        const access = await this.authorize(token, "revokeAllAccess", signal);
+        if (access.kind !== "authorized") {
+            return refused(access);
         }
-        await this.identities.revokeOtherAccess(local.userId, local.token, Date.now(), signal);
+        await this.identities.revokeOtherAccess(access.credential.userId, access.token, Date.now(), signal);
         return { kind: "revoked" };
     };
 
     readonly endBrowserAccess = async (token: string | undefined, signal: AbortSignal): Promise<EndAccessResult> => {
-        const credential = await this.#credential(token, signal);
-        if (credential === null) {
-            return { kind: "unauthenticated" };
-        }
-        if (credential.kind !== "browser") {
-            return { kind: "forbidden" };
+        const access = await this.authorize(token, "endBrowserAccess", signal);
+        if (access.kind !== "authorized") {
+            return refused(access);
         }
         return {
-            kind: (await this.identities.revokeBrowserAccess(credential, Date.now(), signal))
+            kind: (await this.identities.revokeBrowserAccess(access.credential, Date.now(), signal))
                 ? "ended"
                 : "unauthenticated",
         };
     };
 
     readonly retireLocalCredential = async (token: string | undefined, signal: AbortSignal): Promise<EndAccessResult> =>
-        await this.#revokeCredential(token, "local", signal);
+        await this.#revokeCredential(token, "retireLocalCredential", signal);
 
     readonly revokeRecoveryCredential = async (
         token: string | undefined,
         signal: AbortSignal,
-    ): Promise<EndAccessResult> => await this.#revokeCredential(token, "recovery", signal);
+    ): Promise<EndAccessResult> => await this.#revokeCredential(token, "revokeRecoveryCredential", signal);
 
     readonly #revokeCredential = async (
         token: string | undefined,
-        kind: "local" | "recovery",
+        operation: "retireLocalCredential" | "revokeRecoveryCredential",
         signal: AbortSignal,
     ): Promise<EndAccessResult> => {
-        const credential = await this.#credential(token, signal);
-        if (credential === null) {
-            return { kind: "unauthenticated" };
-        }
-        if (credential.kind !== kind) {
-            return { kind: "forbidden" };
+        const access = await this.authorize(token, operation, signal);
+        if (access.kind !== "authorized") {
+            return refused(access);
         }
         return {
-            kind: (await this.identities.revokeCredential(credential, Date.now(), signal))
+            kind: (await this.identities.revokeCredential(access.credential, Date.now(), signal))
                 ? "ended"
                 : "unauthenticated",
         };

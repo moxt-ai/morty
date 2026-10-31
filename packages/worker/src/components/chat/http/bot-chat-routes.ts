@@ -11,7 +11,7 @@ import { json } from "../../../infra/http.ts";
 import { bodyParser } from "../../../middleware/body-parser.ts";
 import type { Session } from "../../management/entity/authentication/session.ts";
 import { PlatformProjectError, platformIdentifier } from "../../management/entity/platform-project.ts";
-import { authenticatedSession } from "../../management/http/authenticated-session.ts";
+import { authenticatedSession, localSession } from "../../management/http/authenticated-session.ts";
 import {
     type ChatScope,
     MANAGED_SESSION_STATUSES_FOLLOWING_KIND,
@@ -317,7 +317,7 @@ export function createBotChatRoutes() {
         )
         .post(
             "/bots/:botId/setup",
-            authenticatedSession,
+            localSession("configureBot"),
             authorizedChat(),
             bodyParser<AuthorizedChatEnvironment, typeof setupInput>(setupInput),
             async (context) => {

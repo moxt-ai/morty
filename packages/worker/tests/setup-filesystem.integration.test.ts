@@ -1244,7 +1244,7 @@ test("Given two shared links and redeemed access, When the local owner revokes a
             }
         }
         const remote = v.parse(v.string(), tokens[0]);
-        const recovery = await request(owner.projectId, "/identity/recovery-token", remote, "POST");
+        const recovery = await request(owner.projectId, "/identity/recovery-token", owner.token, "POST");
         expect(recovery.status).toBe(201);
         const recoveryToken = v.parse(v.object({ token: v.string() }), await recovery.json()).token;
         for (const token of [remote, recoveryToken]) {

@@ -8,7 +8,7 @@ import { credentialRevocationPaths } from "../entity/authentication/credential.t
 import { ManagementError } from "../entity/management-error.ts";
 import { anonymousCreationKey } from "../entity/project-bootstrap.ts";
 import { projectLocationHint } from "../util/project-location.ts";
-import { credentialRejected } from "./authenticated-session.ts";
+import { credentialRejected, localIdentityRequired } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 
 const transferInput = v.pipe(
@@ -108,14 +108,18 @@ export function createAuthenticationRoutes() {
         })
         .post("/identity/recovery-token", async (context) => {
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]);
-            const token = await context.env.services.authentication.createRecoveryToken(
+            const result = await context.env.services.authentication.createRecoveryToken(
                 context.get("bearerToken"),
                 signal,
             );
-            if (token === null) {
-                throw new ManagementError("UNAUTHENTICATED", "Anonymous identity is required.", 401);
+            switch (result.kind) {
+                case "issued":
+                    return json({ token: result.token }, 201, { "Cache-Control": "no-store" });
+                case "unauthenticated":
+                    throw new ManagementError("UNAUTHENTICATED", "Anonymous identity is required.", 401);
+                case "forbidden":
+                    throw localIdentityRequired();
             }
-            return json({ token }, 201, { "Cache-Control": "no-store" });
         })
         .post(
             "/identity/transfers/redeem",

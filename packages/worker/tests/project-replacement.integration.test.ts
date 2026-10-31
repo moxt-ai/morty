@@ -187,7 +187,7 @@ test("Given access shared from a saved Machine, When its Project is replaced, Th
     expect(redeemed.status).toBe(200);
     const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
     const recoveryResponse = await worker.fetch(
-        projectRequest(original.projectId, "/identity/recovery-token", browser, "POST"),
+        projectRequest(original.projectId, "/identity/recovery-token", original.token, "POST"),
         fixture.environment(),
     );
     expect(recoveryResponse.status).toBe(201);
