@@ -35,7 +35,11 @@ export type Journal = {
     /** Original local files are kept only in memory; the request already owns uploaded references. */
     readonly attachments: readonly ComposerAttachment[] | null;
     readonly commandId: string;
-    readonly request: Omit<SubmitRequest, "idempotencyKey" | "disposition" | "targetCommandId"> & DeliveryTarget;
+    readonly request: Omit<
+        SubmitRequest,
+        "idempotencyKey" | "disposition" | "targetCommandId" | "additionalDirectoryIds"
+    > &
+        DeliveryTarget & { readonly additionalDirectoryIds: readonly string[] };
 };
 export function journalMessage(journal: Journal): SubmittedMessage {
     return {
