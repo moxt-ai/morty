@@ -48,7 +48,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version-file: .nvmrc
 
@@ -142,7 +142,7 @@ jobs:
 
       - name: Save suite coverage
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: coverage-input-${{ matrix.report }}
           path: coverage/
@@ -160,7 +160,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version-file: .nvmrc
           package-manager-cache: false
@@ -170,7 +170,7 @@ jobs:
           corepack enable
           pnpm --dir scripts/coverage-report install --frozen-lockfile --ignore-scripts
 
-      - uses: actions/download-artifact@v4.3.0
+      - uses: actions/download-artifact@v8.0.2
         with:
           pattern: coverage-input-*
           path: coverage/
@@ -180,7 +180,7 @@ jobs:
       - run: node scripts/coverage.mjs --merge-only --web-shards=8
 
       - name: Save combined coverage report
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: coverage-report
           path: coverage/

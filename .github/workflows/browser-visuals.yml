@@ -26,7 +26,7 @@ jobs:
 
       - name: Save browser screenshots
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: browser-visuals
           path: packages/e2e/test-results/
