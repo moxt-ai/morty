@@ -70,7 +70,7 @@ export async function followSetupInstructions(options: {
         events,
         ready,
         identity: {
-            botId: text(configuration["bot_id"], "saved Bot"),
+            botId: text(ready["botId"], "ready Bot"),
             projectId: text(configuration["project_id"], "saved project"),
             userId: text(configuration["user_id"], "saved user"),
         },

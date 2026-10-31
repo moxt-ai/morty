@@ -84,7 +84,7 @@ test("Given Pi is not installed on the Runtime, When the user opens Open Session
     await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
     const dialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
     const tablist = await app.waitForView(() => getByRole(dialog, "tablist", { name: "Session agent" }));
-    const pi = getByRole(tablist, "tab", { name: "Pi" });
+    const pi = getByRole(tablist, "tab", { name: "Pi not installed" });
     await app.user.click(pi);
     await app.waitForView(() => {
         expect(dialog.textContent).toContain("Pi is not installed");
@@ -106,7 +106,7 @@ test("Given Pi is installed on the Runtime, When the user opens Open Session, Th
     expect(getAllByRole(tablist, "tab", { name: "Pi" })).toHaveLength(1);
 });
 
-test("Given native sessions are available, When the user selects a session from the Native session menu, Then its history is previewed", {
+test("Given native sessions are available, When the user opens Open Session, Then the sheet lists them inline with their directory and previews a tap", {
     timeout: 30_000,
 }, async () => {
     const longSessionId = "session-two-with-a-title-that-is-long-enough-to-overflow-a-mobile-menu";
@@ -120,23 +120,82 @@ test("Given native sessions are available, When the user selects a session from 
         (element) => element.getAttribute("data-connection-status") === "connected",
     );
     await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
-    const menu = await app.waitForView(() =>
-        getByRole(document.body, "combobox", {
-            name: "Native session",
-        }),
-    );
-
-    await app.user.click(menu);
-    const longSession = getByRole(document.body, "option", {
-        name: /Native session-two-with-a-title-that-is-long-enough-to-overflow-a-mobile-menu/,
-    });
-    expect(longSession.getAttribute("title")).toBe(`${longSessionTitle} · /`);
-    act(() => fireEvent.click(longSession));
+    const dialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
+    // The phone sheet lists the sessions itself: there is no menu to open first, and each row's
+    // name carries its directory so same-titled sessions stay tellable apart.
+    expect(queryByRole(dialog, "combobox", { name: "Native session" })).toBeNull();
+    const row = await app.waitForView(() => getByRole(dialog, "button", { name: `${longSessionTitle} /` }));
+    expect(row.textContent).toContain(longSessionTitle);
+    act(() => fireEvent.click(row));
 
     const preview = getByRole(document.body, "region", {
         name: "Selected session preview",
     });
     await app.waitForView(() => getByRole(preview, "heading", { name: longSessionTitle }));
+});
+
+test("Given the phone sheet lists sessions, When the user taps one, Then the sheet shows its detail with a way back to the list", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        connectAgent: true,
+        nativeSessionIds: new Set(["first-session", "second-session"]),
+    });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.getAttribute("data-connection-status") === "connected",
+    );
+    await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
+    const dialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
+    const row = await app.waitForView(() => getByRole(dialog, "button", { name: "Native second-session /" }));
+    // The sheet opens on the list step, with no detail chrome yet.
+    expect(queryByRole(dialog, "button", { name: "Back to session list" })).toBeNull();
+    await app.user.click(row);
+
+    const back = await app.waitForView(() => getByRole(dialog, "button", { name: "Back to session list" }));
+    const preview = getByRole(dialog, "region", { name: "Selected session preview" });
+    await app.waitForView(() => getByRole(preview, "heading", { name: "Native second-session" }));
+    expect(getByRole(dialog, "button", { name: "Open" })).toBeDefined();
+
+    await app.user.click(back);
+    await app.waitForView(() => {
+        expect(queryByRole(dialog, "button", { name: "Back to session list" })).toBeNull();
+        expect(getByRole(dialog, "button", { name: "Native second-session /" }).getAttribute("aria-pressed")).toBe(
+            "true",
+        );
+    });
+});
+
+test("Given the user previewed a session, When they close Open Session and open it again, Then the same session is still selected", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        connectAgent: true,
+        nativeSessionIds: new Set(["first-session", "second-session"]),
+    });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.getAttribute("data-connection-status") === "connected",
+    );
+    await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
+    const dialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
+    const second = await app.waitForView(() => getByRole(dialog, "button", { name: "Native second-session" }));
+    await app.user.click(second);
+    await app.waitForView(() => expect(second.getAttribute("aria-pressed")).toBe("true"));
+
+    await app.user.click(getByRole(dialog, "button", { name: "Close dialog" }));
+    await app.waitForView(() => {
+        if (queryByRole(document.body, "dialog", { name: "Open Session" }) !== null) {
+            throw new Error("The Open Session dialog is still open.");
+        }
+    });
+    await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
+    const reopened = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
+    await app.waitForView(() =>
+        expect(getByRole(reopened, "button", { name: "Native second-session" }).getAttribute("aria-pressed")).toBe(
+            "true",
+        ),
+    );
 });
 
 test("Given native sessions were discovered before the Runtime disconnected, When a preview fails, Then Open Session shows one error with one bug report action", {
@@ -148,13 +207,14 @@ test("Given native sessions were discovered before the Runtime disconnected, Whe
         (element) => element.getAttribute("data-connection-status") === "connected",
     );
     await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
-    const menu = await app.waitForView(() => getByRole(document.body, "combobox", { name: "Native session" }));
+    const entry = await app.waitForView(() =>
+        getByRole(document.body, "button", { name: "Native preview-error-session" }),
+    );
     if (app.daemon === null) {
         throw new Error("The scenario requires a connected Runtime.");
     }
     await app.daemon.disconnect();
-    await app.user.click(menu);
-    act(() => fireEvent.click(getByRole(document.body, "option", { name: /Native preview-error-session/ })));
+    act(() => fireEvent.click(entry));
     const dialog = getByRole(document.body, "dialog", { name: "Open Session" });
     await app.waitForView(() => {
         expect(getAllByRole(dialog, "alert")).toHaveLength(1);
@@ -200,8 +260,7 @@ test("Given Open Session was opened while the Runtime was offline, When the Runt
     await daemon.reconnect();
     await followRuntime();
     await app.waitForView(() => expect(connection()).toBe("connected"));
-    const menu = await app.waitForView(() => getByRole(dialog, "combobox", { name: "Native session" }));
-    await app.user.click(menu);
-    expect(getByRole(document.body, "option", { name: /Native session-after-reconnect/ })).toBeDefined();
+    await app.waitForView(() => getByRole(dialog, "button", { name: "Native session-after-reconnect" }));
+    await app.waitForView(() => getByRole(dialog, "button", { name: "Native session-after-reconnect /" }));
     expect(dialog.textContent).not.toContain("No local agent");
 });

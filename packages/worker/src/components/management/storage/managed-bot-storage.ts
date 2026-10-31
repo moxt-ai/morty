@@ -1,5 +1,5 @@
 import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
-import { and, eq, gt, isNull, or } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import * as v from "valibot";
 import type { HttpError } from "../../../infra/http-error.ts";
 import { createDatabase, type Database } from "../../../schema/project-do/database.ts";
@@ -12,8 +12,17 @@ const managedBotSchema = v.pipe(
     v.readonly(),
 );
 
+const listedBotSchema = v.pipe(
+    v.object({
+        botId: identifier,
+        displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(80)),
+        runtimeId: v.nullable(identifier),
+    }),
+    v.readonly(),
+);
+
 export type ManagedBot = v.InferOutput<typeof managedBotSchema>;
-export type DeleteManagedBotResult = "deleted" | "last-bot" | "not-found";
+type ListedManagedBot = v.InferOutput<typeof listedBotSchema>;
 export type ConfigureManagedBotResult = "configured" | "not-found" | "runtime-mismatch";
 
 export class ManagedBotStorage {
@@ -30,15 +39,16 @@ export class ManagedBotStorage {
         return database;
     };
 
-    readonly listBots = async (userId: string, signal: AbortSignal): Promise<readonly ManagedBot[]> => {
+    /** The user's Machines, oldest first. */
+    readonly listBots = async (userId: string, signal: AbortSignal): Promise<readonly ListedManagedBot[]> => {
         signal.throwIfAborted();
         const result = await this.#requireDatabase()
-            .select({ botId: managedBot.botId, displayName: managedBot.displayName })
+            .select({ botId: managedBot.botId, displayName: managedBot.displayName, runtimeId: managedBot.runtimeId })
             .from(managedBot)
             .where(eq(managedBot.userId, userId))
-            .orderBy(managedBot.createdAt);
+            .orderBy(managedBot.createdAt, managedBot.botId);
         signal.throwIfAborted();
-        return v.parse(v.array(managedBotSchema), result);
+        return v.parse(v.array(listedBotSchema), result);
     };
 
     readonly ownsBot = async (userId: string, botId: string, signal: AbortSignal): Promise<boolean> => {
@@ -122,52 +132,6 @@ export class ManagedBotStorage {
             return "not-found";
         }
         return current.runtimeId !== null && current.runtimeId !== value.runtimeId ? "runtime-mismatch" : "not-found";
-    };
-
-    readonly updateBot = async (
-        userId: string,
-        botId: string,
-        input: { readonly displayName: string; readonly instructions: string },
-        now: number,
-        signal: AbortSignal,
-    ): Promise<boolean> => {
-        signal.throwIfAborted();
-        const result = await this.#requireDatabase()
-            .update(managedBot)
-            .set({
-                displayName: v.parse(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80)), input.displayName),
-                instructions: v.parse(v.pipe(v.string(), v.maxLength(100000)), input.instructions),
-                updatedAt: now,
-            })
-            .where(and(eq(managedBot.userId, userId), eq(managedBot.botId, v.parse(identifier, botId))))
-            .run();
-        signal.throwIfAborted();
-        return result.meta.changes === 1;
-    };
-
-    readonly deleteBot = async (
-        userId: string,
-        botId: string,
-        signal: AbortSignal,
-    ): Promise<DeleteManagedBotResult> => {
-        const parsedBotId = v.parse(identifier, botId);
-        signal.throwIfAborted();
-        const database = this.#requireDatabase();
-        const result = await database
-            .delete(managedBot)
-            .where(
-                and(
-                    eq(managedBot.userId, userId),
-                    eq(managedBot.botId, parsedBotId),
-                    gt(database.$count(managedBot, eq(managedBot.userId, userId)), 1),
-                ),
-            )
-            .run();
-        signal.throwIfAborted();
-        if (result.meta.changes === 1) {
-            return "deleted";
-        }
-        return (await this.ownsBot(userId, parsedBotId, signal)) ? "last-bot" : "not-found";
     };
 
     readonly saveClaim = async (userId: string, bot: ManagedBot, now: number, signal: AbortSignal): Promise<void> => {

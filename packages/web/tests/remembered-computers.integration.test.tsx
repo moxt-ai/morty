@@ -526,57 +526,6 @@ test("Given the remembered conversation was closed elsewhere, When I return, The
     expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
 });
 
-test("Given the last computer was deleted, When I return, Then the next valid computer opens and the deleted one is not offered", {
-    timeout: 30_000,
-}, async () => {
-    const first = await createTestApp({ connectAgent: true });
-    const firstSession = await startConversation(first, "Keep the existing computer");
-    await first.close();
-    const second = await createTestApp({ connectAgent: true });
-    await startConversation(second, "Deleted computer");
-    const deletedScope = new URL(window.location.href).searchParams.get("identity");
-    const signal = AbortSignal.timeout(10_000);
-    const replacement = await second.transport.fetch(
-        new Request(`${second.origin}/morty/api/projects/${second.identity.projectId}/management/bots`, {
-            method: "POST",
-            headers: {
-                authorization: `Bearer ${await second.identity.getToken(signal)}`,
-                "content-type": "application/json",
-            },
-            body: JSON.stringify({ displayName: "A replacement outside this browser" }),
-            signal,
-        }),
-    );
-    expect(replacement.status).toBe(201);
-    const deleted = await second.transport.fetch(
-        new Request(
-            `${second.origin}/morty/api/projects/${second.identity.projectId}/management/bots/${second.botId}`,
-            {
-                method: "DELETE",
-                headers: { authorization: `Bearer ${await second.identity.getToken(signal)}` },
-                signal,
-            },
-        ),
-    );
-    expect(deleted.status).toBe(204);
-    window.location.href = `${second.origin}/`;
-    const returned = await second.reload();
-    await returned.waitForView(() =>
-        expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(firstSession),
-    );
-    await returned.user.click(
-        await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ })),
-    );
-    await returned.waitForView(() => expect(document.body.textContent).not.toContain("Checking connections"));
-    expect(
-        getAllByRole(document.body, "menuitemradio").some(
-            (item) =>
-                new URL(item.getAttribute("href") ?? "/", returned.origin).searchParams.get("identity") ===
-                deletedScope,
-        ),
-    ).toBe(false);
-});
-
 test("Given a computer I keep using, When ten more computers are saved in this browser, Then its link still opens and older unused computers make room", {
     timeout: 120_000,
 }, async () => {

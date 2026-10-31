@@ -60,7 +60,8 @@ type RevealedSurfaceFade = ScrollEdgeFadeBase & {
      * rows and will not match the background.
      */
     readonly revealSurface: true;
-    readonly edgeStroke: EdgeStrokeAppearance;
+    /** Optional seam stroke; omit when the scrollport sits inside a card without a border seam. */
+    readonly edgeStroke?: EdgeStrokeAppearance;
 };
 
 type ScrollEdgeFadeProps = PaintedEdgeFade | RevealedSurfaceFade;

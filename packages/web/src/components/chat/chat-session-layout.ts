@@ -1,5 +1,5 @@
-/** Shared horizontal rhythm for the Mobius session pane (messages, composer, cards). */
-const chatSessionContentInsetClassName = "px-3 sm:px-6";
+/** Message column horizontal rhythm: 20px on mobile, 24px from `sm:` up. */
+const chatSessionContentInsetClassName = "px-5 sm:px-6";
 
 /** Morty thin scrollbar styling used on overflow scroll regions. */
 export const mortyThinScrollbarClassName = "[scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]";
@@ -17,9 +17,18 @@ export const chatSessionMessageScrollClassName = `min-h-0 flex-1 overflow-y-auto
 
 export const chatSessionMessageColumnClassName = `${chatSessionColumnClassName} font-inter text-foreground`;
 
-/** Desktop composer keeps 12px side gutters. Mobile is full width. */
+/**
+ * Composer keeps 12px side gutters at every breakpoint (on `sm:` the width calc
+ * provides them). The pane section uses `overflow-clip`, so a full-bleed card
+ * would have its shadow clipped away at the section edge.
+ *
+ * The bottom margin clears the iOS home indicator. iOS keeps reporting the full
+ * safe-area inset while the software keyboard covers the indicator, so the
+ * composer drops back to the plain 12px gutter while `useSoftwareKeyboardMarker`
+ * reports the keyboard open, instead of floating above it.
+ */
 export const chatSessionComposerClassName =
-    "relative z-10 mx-auto w-full min-w-0 shrink-0 px-0 mb-3 sm:mt-0 sm:w-[min(920px,calc(100%-24px))]";
+    "relative z-10 mx-auto w-full min-w-0 shrink-0 px-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] data-[software-keyboard=open]:mb-3 sm:mt-0 sm:px-0 sm:w-[min(920px,calc(100%-24px))]";
 
 /**
  * Fills the conversation card. Background, radius, and the outer inset stay on
@@ -34,8 +43,10 @@ export const chatSessionPaneFillClassName = "flex min-h-0 min-w-0 flex-1 flex-co
 /**
  * No backdrop-filter here. It would make this pane the backdrop root, and the
  * composer notice could no longer blur the messages scrolling behind it.
+ *
+ * Mobile sits flush to the viewport edges; only the desktop card keeps insets.
  */
-export const chatSessionPaneSectionClassName = `relative z-20 ${chatSessionPaneFillClassName} mb-2 ml-2 mr-2 mt-0 sm:rounded-t-[20px] sm:rounded-b-[32px] sm:border-[1px] sm:border-white sm:bg-card/90 sm:shadow-module sm:my-2 sm:ml-0 sm:mr-2`;
+export const chatSessionPaneSectionClassName = `relative z-20 ${chatSessionPaneFillClassName} sm:rounded-t-[20px] sm:rounded-b-[32px] sm:border-[1px] sm:border-white sm:bg-card/90 sm:shadow-module sm:my-2 sm:ml-0 sm:mr-2`;
 
 /** One-time cloud module entrance on the session column; stays mounted across sends within a session. */
 export const chatSessionPaneEnterClassName =

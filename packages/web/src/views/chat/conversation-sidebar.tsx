@@ -50,6 +50,7 @@ import { type ConversationGroup, groupConversationsByUpdatedAt } from "../../vie
 import {
     type ConversationListStatus,
     conversationListStatus,
+    hasUnreadConversation,
 } from "../../view-models/chat/conversation-status-store.ts";
 import { pendingExecutionContext, sessionExecutionContext } from "../../view-models/chat/execution-context.ts";
 import { nativeSessionAgentTabs } from "../../view-models/chat/native-session-agents.ts";
@@ -440,6 +441,7 @@ export function ConversationSidebar({
         archiveSession: workspace.directory.getState().archiveSession,
         operationsSignal: workspace.operationsSignal,
     };
+    const unreadReplies = hasUnreadConversation(sessions, sessionStatuses, sessionListProps.openPane);
     return (
         <DesktopChatLayout>
             {(desktop) => (
@@ -450,7 +452,6 @@ export function ConversationSidebar({
                                 <>
                                     {/* Desktop isolate keeps sticky group labels under the session pane shadow. */}
                                     <aside
-                                        ref={dialogs.getState().onAttach}
                                         id="conversation-sidebar-mobile-panel"
                                         aria-label="Morty navigation"
                                         className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-card/90 px-3 pt-0 max-sm:overflow-visible sm:isolate sm:w-[264px] sm:gap-0 sm:bg-sidebar sm:px-2.5 sm:pt-2 sm:pb-4"
@@ -514,8 +515,15 @@ export function ConversationSidebar({
                                                 )}
                                                 <Button
                                                     variant="ghost"
-                                                    className={cn(mobileHeaderIconButtonClassName, "sm:hidden")}
-                                                    aria-label="Recent sessions"
+                                                    className={cn(
+                                                        mobileHeaderIconButtonClassName,
+                                                        "relative sm:hidden",
+                                                    )}
+                                                    aria-label={
+                                                        unreadReplies
+                                                            ? "Recent sessions, unread replies"
+                                                            : "Recent sessions"
+                                                    }
                                                     aria-expanded={mobileSessionsOpen}
                                                     aria-controls="chat-conversations-mobile-sheet"
                                                     onClick={(event) => {
@@ -529,6 +537,13 @@ export function ConversationSidebar({
                                                     }}
                                                 >
                                                     <List aria-hidden="true" className="size-5" />
+                                                    {unreadReplies ? (
+                                                        <span
+                                                            aria-hidden="true"
+                                                            className="absolute top-1.5 right-1.5 size-2 rounded-full bg-primary ring-2 ring-white"
+                                                            data-testid={dataTestId.mobileRecentSessionsUnread}
+                                                        />
+                                                    ) : null}
                                                 </Button>
                                             </div>
                                             <div
@@ -806,6 +821,9 @@ export function ConversationSidebar({
                                                 sessions={sessions ?? []}
                                                 agents={nativeAgents}
                                                 onClose={dialogs.getState().closeNativeDialog}
+                                                onOpenDetail={dialogs.getState().openNativeSessionDetail}
+                                                onBack={dialogs.getState().backToNativeSessionList}
+                                                step={dialogState.nativeDialogStep}
                                                 bugReportDialog={workspace.bugReportDialog}
                                                 daemonSource={sessionDiagnostics}
                                             />

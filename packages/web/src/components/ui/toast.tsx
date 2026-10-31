@@ -60,7 +60,7 @@ export function ToastProvider({ children }: { readonly children: ReactNode }) {
                         </Primitive.Close>
                     </Primitive.Root>
                 )}
-                <Primitive.Viewport className="fixed bottom-6 left-1/2 z-[100] m-0 flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 list-none flex-col gap-2 outline-none" />
+                <Primitive.Viewport className="fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 z-[100] m-0 flex w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 list-none flex-col gap-2 outline-none" />
             </Primitive.Provider>
         </ToastContext.Provider>
     );

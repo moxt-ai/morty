@@ -1,4 +1,4 @@
-import { fireEvent, getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
+import { fireEvent, getByLabelText, getByRole, getByText, queryByRole } from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, onTestFinished, test } from "vitest";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
@@ -206,6 +206,34 @@ test("Given my first message is waiting for Session creation, When the creation 
     getByRole(document.body, "button", { name: "Retry message" });
 });
 
+test("Given Session creation failed for my first message, When the computer goes offline and returns, Then Retry message waits for it and then sends the message", {
+    timeout: 90_000,
+}, async () => {
+    const creation = heldSessionCreation();
+    const app = await createTestApp({ connectAgent: true, agent: creation.agent });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected a connected computer");
+    }
+    await sendFirstMessage(app, "Retry once the computer returns", creation.hold);
+    creation.reject();
+    await app.waitForView(() => getByRole(document.body, "button", { name: "Retry message" }));
+    await daemon.disconnect();
+    // The Worker checks the Runtime every 5 s and retries a failed check 5 s later, so one change can take two checks.
+    await app.waitForView(
+        () => expect(getByRole(document.body, "button", { name: "Retry message" })).toHaveProperty("disabled", true),
+        20_000,
+    );
+    await daemon.reconnect();
+    const retry = await app.waitForView(() => {
+        const button = getByRole(document.body, "button", { name: "Retry message" });
+        expect(button).toHaveProperty("disabled", false);
+        return button;
+    }, 20_000);
+    await app.user.click(retry);
+    await app.waitForView(() => expect(answered(app, "Retry once the computer returns")).toBe(true), 20_000);
+});
+
 test("Given Session creation failed for my first message and I wrote a next draft, When the page reloads, Then the first message returns to the composer ahead of the draft", {
     timeout: 60_000,
 }, async () => {
@@ -261,6 +289,40 @@ test("Given my first message is waiting for Session creation, When the page relo
     await reloaded.waitForView(() =>
         expect(reloaded.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "Slow first message"),
     );
+});
+
+test("Given my first message's Session was just created, When the page reloads before the Runtime takes the message, Then the message returns to that Session's composer unsent", {
+    timeout: 60_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    // Reload the moment the page follows the created Session, before its pane can reach the Runtime.
+    const reloading = Promise.withResolvers<TestApp>();
+    let reloaded = false;
+    const observer = new MutationObserver(() => {
+        if (!reloaded && new URL(window.location.href).searchParams.has("sessionId")) {
+            reloaded = true;
+            reloading.resolve(app.reload());
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    onTestFinished(() => observer.disconnect());
+    // The reload ends the old page's interaction along with the page.
+    await sendFirstMessage(app, "Message caught by the reload").catch((cause: unknown) => {
+        if (!(cause instanceof DOMException && cause.name === "AbortError")) {
+            throw cause;
+        }
+    });
+    const page = await reloading.promise;
+    observer.disconnect();
+    await page.waitForView(() =>
+        expect(page.elementByTestId(dataTestId.messageComposer)).toHaveProperty(
+            "value",
+            "Message caught by the reload",
+        ),
+    );
+    // Unsent text is never delivered implicitly: the Session stays empty.
+    await page.waitForView(() => getByText(document.body, "No message history is available for this session."));
+    expect(answered(page, "Message caught by the reload")).toBe(false);
 });
 
 function conversationEntry(app: TestApp, title: string): HTMLElement | undefined {

@@ -1,7 +1,9 @@
+import { fileURLToPath } from "node:url";
 import * as v from "valibot";
 import { afterEach, test as baseTest, beforeEach, expect, vi } from "vitest";
 import type { ControlledAgent } from "../../../tests/support/fake-daemon/runtime.ts";
 import worker from "../src/application.ts";
+import { projectObject } from "../src/gateway/project-object-routing.ts";
 import { APP_ORIGIN, AUTH_TIME, createIdentityFixture } from "./support/identity-fixture.ts";
 
 beforeEach(() => {
@@ -14,7 +16,9 @@ const test = baseTest.extend<{ readonly cloud: Awaited<ReturnType<typeof createI
     cloud: [
         // biome-ignore lint/correctness/noEmptyPattern: Vitest fixtures declare their dependencies by destructuring.
         async ({}, use) => {
-            const cloud = await createIdentityFixture();
+            const cloud = await createIdentityFixture({
+                workerEntryPoint: fileURLToPath(new URL("./support/credential-storage-worker.ts", import.meta.url)),
+            });
             try {
                 await use(cloud);
             } finally {
@@ -52,12 +56,24 @@ async function createChatFixture(
             ),
             environment,
         );
-    const listed = await request("management/bots");
-    const { bots } = v.parse(v.object({ bots: v.array(v.object({ botId: v.string() })) }), await listed.json());
+    const served = await request("management/bot");
+    const { botId } = v.parse(v.object({ botId: v.string() }), await served.json());
     return {
-        botId: v.parse(v.string(), bots[0]?.botId),
+        botId,
         projectId: identity.projectId,
         request,
+        /** A second Machine of the same user, as earlier releases could create. */
+        addLegacyMachine: async () => {
+            const legacy = `bot_legacy_${crypto.randomUUID()}`;
+            const seeded = await projectObject(environment, identity.projectId).fetch(
+                new Request("https://project.internal/legacy-machine", {
+                    method: "POST",
+                    body: JSON.stringify({ userId: identity.userId, botId: legacy, createdAt: Date.now() }),
+                }),
+            );
+            expect(seeded.status).toBe(204);
+            return legacy;
+        },
         runtime,
         [Symbol.asyncDispose]: () => runtime[Symbol.asyncDispose](),
     };
@@ -94,9 +110,7 @@ test("Given an owned Machine, When its owner requests access to an unmanaged ses
     expect(access.status).toBe(200);
     expect(await access.json()).toMatchObject({ sessionId, credential: expect.stringMatching(/^msession_/u) });
 
-    const secondBot = await fixture.request("management/bots", { displayName: "Other Machine" });
-    expect(secondBot.status).toBe(201);
-    const { botId } = v.parse(v.object({ botId: v.string() }), await secondBot.json());
+    const botId = await fixture.addLegacyMachine();
     expect(
         (
             await fixture.request(`chat/bots/${botId}/setup`, {
@@ -115,15 +129,6 @@ test("Given a draft Bot, When its owner configures and opens it, Then setup list
 }) => {
     await using fixture = await createChatFixture(cloud);
     const setup = { runtimeId: fixture.runtime.runtimeId, agentRef: "codex" };
-    expect(
-        (
-            await fixture.request(
-                `management/bots/${fixture.botId}`,
-                { displayName: "Test Bot", instructions: "Answer as the configured Chat Bot." },
-                "PATCH",
-            )
-        ).status,
-    ).toBe(200);
     const setupRuntimesResponse = await fixture.request(`chat/bots/${fixture.botId}/setup/runtimes`, {});
     expect(setupRuntimesResponse.status).toBe(200);
     const setupRuntimes = v.parse(
@@ -534,10 +539,8 @@ test("Given two Bots on the same Runtime, When a conversation ID is opened throu
     await using fixture = await createChatFixture(cloud);
     const setup = { runtimeId: fixture.runtime.runtimeId, agentRef: "codex" };
     expect((await fixture.request(`chat/bots/${fixture.botId}/setup`, setup)).status).toBe(202);
-    const created = await fixture.request("management/bots", { displayName: "Other Bot" });
-    expect(created.status).toBe(201);
-    const other = v.parse(v.object({ botId: v.string() }), await created.json());
-    expect((await fixture.request(`chat/bots/${other.botId}/setup`, setup)).status).toBe(202);
+    const otherBotId = await fixture.addLegacyMachine();
+    expect((await fixture.request(`chat/bots/${otherBotId}/setup`, setup)).status).toBe(202);
     const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, {
         agentRef: "codex",
         configurations: [],
@@ -548,14 +551,14 @@ test("Given two Bots on the same Runtime, When a conversation ID is opened throu
     expect(opened.status).toBe(200);
     const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
 
-    const rejected = await fixture.request(`chat/bots/${other.botId}/access`, { conversationId: sessionId });
+    const rejected = await fixture.request(`chat/bots/${otherBotId}/access`, { conversationId: sessionId });
 
     expect(rejected.status).toBe(404);
     expect(await rejected.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
     const reopened = await fixture.request(`chat/bots/${fixture.botId}/access`, { conversationId: sessionId });
     expect(reopened.status).toBe(200);
     expect(await reopened.json()).toMatchObject({ sessionId });
-    const managed = await fixture.request(`chat/bots/${other.botId}/managed-sessions`, {});
+    const managed = await fixture.request(`chat/bots/${otherBotId}/managed-sessions`, {});
     expect(await managed.json()).toEqual({ sessions: [] });
 });
 

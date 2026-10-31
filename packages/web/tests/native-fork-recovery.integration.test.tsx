@@ -1,5 +1,4 @@
 import { getByRole, queryByRole } from "@testing-library/dom";
-import { act, fireEvent } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
@@ -23,9 +22,8 @@ test("Given a Fork completes before Morty loses its response, When the user retr
         );
         await app.user.click(getByRole(document.body, "button", { name: "Open Session" }));
         await app.user.click(
-            await app.waitForView(() => getByRole(document.body, "combobox", { name: "Native session" })),
+            await app.waitForView(() => getByRole(document.body, "button", { name: "Native fork-recovery-source" })),
         );
-        act(() => fireEvent.click(getByRole(document.body, "option", { name: /Native fork-recovery-source/ })));
         const dialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
         const fork = await app.waitForView(() => {
             const button = getByRole(dialog, "button", { name: "Fork" });

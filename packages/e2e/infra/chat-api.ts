@@ -80,15 +80,11 @@ export class ChatApi {
         const identity = object(value, "anonymous identity");
         const projectId = text(identity["projectId"], "projectId");
         const token = text(identity["token"], "anonymous token");
-        const directory = await jsonRequest(this.origin, "/morty/api/management/bots", {
+        const bot = await jsonRequest(this.origin, "/morty/api/management/bot", {
             project: projectId,
             token,
             signal: this.signal,
         });
-        if (!Array.isArray(directory["bots"]) || directory["bots"].length !== 1) {
-            throw new Error(`Expected exactly one browser bot, received ${String(directory["bots"])}`);
-        }
-        const bot = object(directory["bots"][0], "browser bot");
         this.identity = {
             botId: text(bot["botId"], "botId"),
             projectId,

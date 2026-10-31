@@ -28,32 +28,6 @@ export type ConversationCreationState =
           readonly message: QueuedDraftMessage;
       };
 
-/** First messages waiting to enter their Session's delivery workflow, by conversation id. */
-export type FirstMessages = ReadonlyMap<string, QueuedDraftMessage>;
-
-type FirstMessageEvent =
-    | { readonly kind: "queued"; readonly conversationId: string; readonly message: QueuedDraftMessage }
-    | { readonly kind: "dequeued"; readonly conversationId: string; readonly commandId: string };
-
-export function transitionFirstMessages(messages: FirstMessages, event: FirstMessageEvent): FirstMessages {
-    const current = messages.get(event.conversationId);
-    const next = new Map(messages);
-    switch (event.kind) {
-        case "queued":
-            next.set(event.conversationId, event.message);
-            return next;
-        case "dequeued":
-            // Delivery or the editable composer now owns this message; the creation queue must release it.
-            if (current?.commandId !== event.commandId) {
-                return messages;
-            }
-            next.delete(event.conversationId);
-            return next;
-        default:
-            return event satisfies never;
-    }
-}
-
 export type ConversationCreationEvent =
     | { readonly kind: "reset" }
     | { readonly kind: "draft-message-queued"; readonly message: QueuedDraftMessage }

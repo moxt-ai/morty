@@ -2,18 +2,13 @@ import { decodeIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import type { SessionActivityState } from "./session-activity-machine.ts";
 import type { DeliveryState } from "./session-delivery-store.ts";
 
-// The turn the Session pane treats as current. It is the one record of which command runs, how far the service
-// confirmed it and when it started. The working indicator, the stop control and the status the pane reports are all
-// derived from it, so they cannot disagree. A submission that fails before the service accepts it ran no turn: its
+// The turn the Session pane treats as current: the command the service reported running or accepted from this pane,
+// its turn id and when its work started, or how the last reported turn ended. It records only what the service
+// reported. A message this pane is still submitting is its delivery's: the activity the pane shows and reports is
+// derived from both, so the two cannot disagree. A submission that fails before the service accepts it ran no turn: its
 // failure belongs to the Session's delivery.
 
 export type TurnFailure = { readonly code: string; readonly message: string };
-
-type TurnSubmission =
-    /** The command is current, but this pane has not submitted it, as when it retries an unconfirmed delivery. */
-    | { readonly kind: "unconfirmed" }
-    | { readonly kind: "submitting" }
-    | { readonly kind: "accepted"; readonly turnId: string };
 
 export type CurrentTurn = {
     /** The last Runtime terminal outcome observed, retained when a local submission clears its failure. */
@@ -21,34 +16,26 @@ export type CurrentTurn = {
 } & (
     | {
           readonly kind: "idle";
-          /** The last failure the service reported for a turn, reported until another turn starts. */
+          /** The last failure the service reported for a turn, reported until another turn starts or is submitted. */
           readonly failure: (TurnFailure & { readonly commandId: string }) | null;
       }
     | {
           readonly kind: "current";
           readonly commandId: string;
+          readonly turnId: string;
           readonly startedAt: number;
-          readonly submission: TurnSubmission;
       }
 );
 
 export type CurrentTurnEvent =
-    /** This pane submits a new command. */
-    | { readonly kind: "submitting"; readonly commandId: string; readonly startedAt: number }
-    /** This pane submits an unconfirmed command again. */
-    | { readonly kind: "retrying"; readonly commandId: string; readonly startedAt: number }
-    /** The service accepted this pane's submission of the command. */
-    | { readonly kind: "accepted"; readonly commandId: string; readonly turnId: string }
+    /** This pane submits a new turn, so the failure reported for an earlier one no longer describes the Session. */
+    | { readonly kind: "new-turn-submitted" }
+    /** The service accepted this pane's submission of a new turn, whose work started at `startedAt`. */
+    | { readonly kind: "accepted"; readonly commandId: string; readonly turnId: string; readonly startedAt: number }
     /** The service reports the command running; it replaces any other current command. */
     | { readonly kind: "running"; readonly commandId: string; readonly turnId: string; readonly startedAt: number }
     /** The service reports the command's turn ended; `failure` explains a failed one. */
     | { readonly kind: "ended"; readonly commandId: string; readonly failure: TurnFailure | null }
-    /**
-     * This pane's submission of the command ended without the service accepting it in reply: it was refused, its
-     * delivery is uncertain, failed or was discarded, or only an event showed the service has it. Whether the
-     * command's turn runs is the service's to report, so this ends only a turn the service has not reported running.
-     */
-    | { readonly kind: "submission-ended"; readonly commandId: string }
     /** Nothing runs any more, as when the Session closed or a reconnect found no running turn. */
     | { readonly kind: "nothing-running" }
     /**
@@ -70,8 +57,8 @@ export function openedTurn(running: {
     return {
         kind: "current",
         commandId: decodeIdentifier(running.commandId),
+        turnId: decodeIdentifier(running.turnId),
         startedAt: running.startedAt,
-        submission: { kind: "accepted", turnId: decodeIdentifier(running.turnId) },
         lastEndedCommandId: null,
     };
 }
@@ -86,46 +73,33 @@ function endedTurn(commandId: string, failure: TurnFailure | null, lastEndedComm
 
 export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent): CurrentTurn {
     switch (event.kind) {
-        case "submitting":
-            return {
-                kind: "current",
-                commandId: event.commandId,
-                startedAt: event.startedAt,
-                submission: { kind: "submitting" },
-                lastEndedCommandId: turn.lastEndedCommandId,
-            };
-        case "retrying":
-            // Retrying a submission cannot displace a turn the service reports running.
-            if (turn.kind === "current" && turn.submission.kind === "accepted" && turn.commandId !== event.commandId) {
-                return turn;
-            }
-            return {
-                kind: "current",
-                commandId: event.commandId,
-                startedAt: event.startedAt,
-                submission: isCurrent(turn, event.commandId) ? turn.submission : { kind: "unconfirmed" },
-                lastEndedCommandId: turn.lastEndedCommandId,
-            };
+        case "new-turn-submitted":
+            return turn.kind === "idle" && turn.failure !== null ? { ...turn, failure: null } : turn;
         case "accepted":
+            // Another command the service reports running stays current.
+            if (turn.kind === "current") {
+                return turn.commandId === event.commandId ? { ...turn, turnId: decodeIdentifier(event.turnId) } : turn;
+            }
             // A terminal live event can precede the acceptance response; the turn it ended stays ended.
-            return isCurrent(turn, event.commandId)
-                ? { ...turn, submission: { kind: "accepted", turnId: decodeIdentifier(event.turnId) } }
-                : turn;
+            return turn.lastEndedCommandId === event.commandId
+                ? turn
+                : {
+                      kind: "current",
+                      commandId: event.commandId,
+                      turnId: decodeIdentifier(event.turnId),
+                      startedAt: event.startedAt,
+                      lastEndedCommandId: turn.lastEndedCommandId,
+                  };
         case "running":
             return {
                 kind: "current",
                 commandId: decodeIdentifier(event.commandId),
+                turnId: decodeIdentifier(event.turnId),
                 startedAt: isCurrent(turn, event.commandId) ? turn.startedAt : event.startedAt,
-                submission: { kind: "accepted", turnId: decodeIdentifier(event.turnId) },
                 lastEndedCommandId: turn.lastEndedCommandId,
             };
         case "ended":
             return isCurrent(turn, event.commandId) ? endedTurn(event.commandId, event.failure, event.commandId) : turn;
-        case "submission-ended":
-            // The service's report that the command runs outranks this pane's account of its submission.
-            return isCurrent(turn, event.commandId) && turn.submission.kind !== "accepted"
-                ? endedTurn(event.commandId, null, turn.lastEndedCommandId)
-                : turn;
         case "nothing-running":
             // Learning that nothing runs cannot resolve an earlier turn failure.
             return turn.kind === "idle" ? turn : { ...idleTurn, lastEndedCommandId: turn.lastEndedCommandId };
@@ -145,29 +119,40 @@ export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent
 
 /** The command the service accepted as the running turn, with that turn's id. */
 export function acceptedTurn(turn: CurrentTurn): { readonly commandId: string; readonly turnId: string } | null {
-    return turn.kind === "current" && turn.submission.kind === "accepted"
-        ? { commandId: turn.commandId, turnId: turn.submission.turnId }
-        : null;
-}
-
-/** The command this pane is submitting and the service has not yet accepted. */
-export function submittingCommandId(turn: CurrentTurn): string | null {
-    return turn.kind === "current" && turn.submission.kind === "submitting" ? turn.commandId : null;
-}
-
-/** Whether a reconnect that finds no running turn must end this one: only a submitted command can have ended. */
-export function awaitsService(turn: CurrentTurn): boolean {
-    return turn.kind === "current" && turn.submission.kind !== "unconfirmed";
+    return turn.kind === "current" ? { commandId: turn.commandId, turnId: turn.turnId } : null;
 }
 
 /**
- * What the pane reports for the Session: working while a command is current; otherwise failed while a message that
- * would have started a turn keeps the failure of its preparation, or after the service reported a failed turn;
- * otherwise idle. A message the service rejected reports its failure on the message alone.
+ * The command of the new turn this pane is submitting and the service has not reported yet: a message sent as a new
+ * turn while its delivery is being prepared or submitted. A message queued behind a running turn starts none, and
+ * once the service reports the command running or ended, the turn is the service's account.
+ */
+function submittingCommandId(turn: CurrentTurn, delivery: DeliveryState): string | null {
+    if (turn.kind === "current") {
+        return null;
+    }
+    const commandId =
+        delivery.kind === "preparing" && delivery.message.target.disposition === "reject"
+            ? delivery.message.commandId
+            : delivery.kind === "submitting" && delivery.journal.request.disposition === "reject"
+              ? delivery.journal.commandId
+              : null;
+    return commandId === turn.lastEndedCommandId ? null : commandId;
+}
+
+/**
+ * What the pane reports for the Session: working while a command is current or this pane submits a new turn;
+ * otherwise failed while a message that would have started a turn keeps the failure of its preparation, or after the
+ * service reported a failed turn; otherwise idle. A message the service rejected reports its failure on the message
+ * alone.
  */
 export function sessionActivity(turn: CurrentTurn, delivery: DeliveryState): SessionActivityState {
     if (turn.kind === "current") {
-        return { kind: "working", commandId: turn.commandId, startedAt: turn.startedAt };
+        return { kind: "working", commandId: turn.commandId };
+    }
+    const submitting = submittingCommandId(turn, delivery);
+    if (submitting !== null) {
+        return { kind: "working", commandId: submitting };
     }
     if (delivery.kind === "preparation-failed" && delivery.message.target.disposition === "reject") {
         return { kind: "failed", commandId: delivery.message.commandId, ...delivery.failure };

@@ -1,4 +1,4 @@
-import { ArrowUp, FileText, LoaderCircle, type LucideIcon, Plus, Square, X } from "lucide-react";
+import { ArrowUp, FileText, LoaderCircle, Plus, Square, X } from "lucide-react";
 import {
     type ClipboardEvent,
     type FormEvent,
@@ -19,6 +19,7 @@ import { useAutoGrowingTextarea } from "../utils/use-auto-growing-textarea.ts";
 import { useComposerFocus } from "../utils/use-composer-focus.ts";
 import { useComposerNoticeLayout } from "../utils/use-composer-notice-layout.ts";
 import { useScrollClippedEdges } from "../utils/use-scroll-clipped-edges.ts";
+import { useSoftwareKeyboardMarker } from "../utils/use-software-keyboard-marker.ts";
 import { chatSessionComposerClassName } from "./chat-session-layout.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 
@@ -97,10 +98,8 @@ export function BotChatComposer({
     disabled,
     draft,
     error,
-    errorStatus,
-    statusTone = "neutral",
-    statusIcon,
-    statusCompact = false,
+    connectionNotice,
+    statusMessage,
     onDraftChange,
     onStop,
     onSubmit,
@@ -120,13 +119,16 @@ export function BotChatComposer({
     readonly disabled: boolean;
     readonly draft: string;
     readonly error: string;
-    readonly errorStatus?: ReactNode;
-    /** Surface for a connection-status notice shown on its own: failures read as error tone. */
-    readonly statusTone?: "error" | "neutral";
-    /** Leading icon for an informational connection-status notice, matching the error tone's icon slot. */
-    readonly statusIcon?: LucideIcon | undefined;
-    /** The status notice renders its own compact chip (waiting state): skip the alert card wrapper. */
-    readonly statusCompact?: boolean;
+    /**
+     * The connection notice for this composer, as a render function because only the
+     * composer knows whether a send or attachment failure owns the headline. The
+     * notice renders its own surface when it stands alone, and folds itself into the
+     * failure's detail line when one is present, so a failure never nests a second
+     * card and a second assertive region inside itself.
+     */
+    readonly connectionNotice?: ((inline: boolean) => ReactNode) | undefined;
+    /** Plain status text with no notice of its own; the composer gives it a neutral alert surface. */
+    readonly statusMessage?: string | undefined;
     readonly onDraftChange: (draft: string) => void;
     readonly onStop: () => void;
     readonly onSubmit: () => void;
@@ -134,6 +136,7 @@ export function BotChatComposer({
     readonly messageLabel?: string;
     readonly placeholder?: string;
     readonly submitLabel?: string;
+    /** The owner's rule refuses a submission now, including while attachments are still being read. */
     readonly submitDisabled: boolean;
     readonly stopDisabled?: boolean;
 }) {
@@ -148,7 +151,7 @@ export function BotChatComposer({
 
     const submit = (event: FormEvent<HTMLFormElement>): void => {
         event.preventDefault();
-        if (!submitDisabled && attachmentState.kind !== "reading") {
+        if (!submitDisabled) {
             onSubmit();
             // Touch devices drop the software keyboard so the reply is visible; keyboard users keep typing.
             if (window.matchMedia("(pointer: coarse)").matches) {
@@ -195,22 +198,37 @@ export function BotChatComposer({
     const submitAction = outputState === "idle" || (outputState === "running" && !submitDisabled);
     const composerErrorMessage =
         error.length > 0 ? error : attachmentState.kind === "failed" ? attachmentState.message : "";
-    const showComposerNotice = composerErrorMessage.length > 0 || errorStatus !== undefined;
+    // Any headline this composer shows means the connection state has to become the
+    // description's inline detail, not a second alert inside the first.
+    const connection = connectionNotice?.(composerErrorMessage.length > 0);
+    const showComposerNotice =
+        composerErrorMessage.length > 0 || connection !== undefined || statusMessage !== undefined;
+    // A send failure owns the headline, but a standing status (such as unrestored
+    // attachments) still explains the draft: keep it as the error alert's detail
+    // instead of letting the failure branch hide it.
+    const errorDetail =
+        statusMessage === undefined ? (
+            connection
+        ) : (
+            <>
+                {connection}
+                <span className="block">{statusMessage}</span>
+            </>
+        );
     useComposerNoticeLayout(notice, showComposerNotice);
+    const attachKeyboardMarker = useSoftwareKeyboardMarker();
 
     return (
-        <form className={chatSessionComposerClassName} onSubmit={submit}>
+        <form className={chatSessionComposerClassName} onSubmit={submit} ref={attachKeyboardMarker}>
             {showComposerNotice && (
                 <div className="absolute inset-x-0 bottom-[calc(100%+8px)] z-10" ref={notice}>
                     {composerErrorMessage.length > 0 ? (
-                        <MortyAlert description={errorStatus}>{composerErrorMessage}</MortyAlert>
-                    ) : statusCompact ? (
-                        errorStatus
-                    ) : (
-                        <MortyAlert tone={statusTone} icon={statusIcon}>
-                            {errorStatus}
-                        </MortyAlert>
-                    )}
+                        <MortyAlert description={errorDetail}>{composerErrorMessage}</MortyAlert>
+                    ) : connection !== undefined ? (
+                        connection
+                    ) : statusMessage !== undefined ? (
+                        <MortyAlert tone="neutral">{statusMessage}</MortyAlert>
+                    ) : null}
                 </div>
             )}
             <div className="flex max-h-64 flex-col rounded-[24px] border-[0.5px] border-border bg-surface-elevated px-3 pt-3 pb-2.5 shadow-[0_8px_28px_rgba(23,30,36,0.06)] has-[:focus]:border-[var(--color-border)] sm:min-h-[128px] sm:pb-3">
@@ -307,7 +325,6 @@ export function BotChatComposer({
                             className={`size-8! rounded-full text-background ${submitAction || outputState === "sending" ? "bg-foreground hover:bg-foreground/85" : "bg-destructive hover:bg-destructive/90"}`}
                             data-testid={dataTestId.sendMessage}
                             disabled={
-                                (submitAction && attachmentState.kind === "reading") ||
                                 outputState === "sending" ||
                                 outputState === "stopping" ||
                                 (outputState === "idle" && submitDisabled) ||

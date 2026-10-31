@@ -25,7 +25,11 @@ import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import type { DaemonDiagnosticsSource } from "../../services/diagnostics/browser-diagnostics.ts";
-import { botConnectionStatus, homeCanStartConversation } from "../../view-models/chat/bot-chat-home-store.ts";
+import {
+    botConnectionStatus,
+    homeCanStartConversation,
+    newConversationPresentation,
+} from "../../view-models/chat/bot-chat-home-store.ts";
 import { chatDiagnostics } from "../../view-models/chat/chat-diagnostics.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
 import { canAddAttachments } from "../../view-models/chat/composer-attachment-store.ts";
@@ -192,6 +196,12 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
     const titles = useStore(workspace.titles, (state) => state.titles);
     const pendingConversation = pendingConversationPresentation(model, titles);
     const canStartConversation = homeCanStartConversation(model);
+    const presentation = newConversationPresentation(
+        model,
+        attachmentModel,
+        draftControls.settings,
+        executionContext.available,
+    );
     const pairingNotice = model.notices.pairing.kind === "visible" || model.pairingDialogOpen;
 
     const newSessionHarness = activeHarnessMark(model, draftControls.settings);
@@ -238,8 +248,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
         <main
             aria-label="Chat"
             data-chat-state={model.selection.kind === "ready" ? "connected" : "disconnected"}
-            className="fixed inset-0 flex min-h-0 overflow-hidden bg-card/90 text-foreground max-sm:flex-col sm:flex-row sm:bg-sidebar"
-            ref={workspace.onAttach}
+            className="fixed inset-0 flex min-h-0 overflow-hidden bg-card/90 pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-foreground max-sm:flex-col sm:flex-row sm:bg-sidebar"
             onPointerDownCapture={workspace.recordUserActivity}
             onKeyDownCapture={workspace.recordUserActivity}
             onInputCapture={workspace.recordUserActivity}
@@ -357,7 +366,12 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                                 role="alert"
                                             >
                                                 <span className="min-w-0 flex-1 break-words">{creationError}</span>
-                                                <Button onClick={createConversation}>Retry message</Button>
+                                                <Button
+                                                    disabled={presentation.retryDisabled}
+                                                    onClick={createConversation}
+                                                >
+                                                    Retry message
+                                                </Button>
                                                 {reportButton}
                                             </div>
                                         )}
@@ -395,31 +409,28 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                 disabled={false}
                                 draft={draft}
                                 error=""
-                                errorStatus={
-                                    executionContext.feedback.kind === "hidden" ? undefined : (
-                                        <div className="w-full">
-                                            <ConnectionNotice
-                                                feedback={executionContext.feedback}
-                                                onRetryNow={store.getState().retry}
-                                                onReopen={store.getState().retry}
-                                            />
-                                            {workspace.computers !== null && (
-                                                <OnlineComputerAlternative model={workspace.computers} />
-                                            )}
-                                        </div>
-                                    )
+                                connectionNotice={
+                                    executionContext.feedback.kind === "hidden"
+                                        ? undefined
+                                        : (inline) => (
+                                              <ConnectionNotice
+                                                  feedback={executionContext.feedback}
+                                                  footer={
+                                                      workspace.computers === null ? undefined : (
+                                                          <OnlineComputerAlternative model={workspace.computers} />
+                                                      )
+                                                  }
+                                                  inline={inline}
+                                                  onRetryNow={store.getState().retry}
+                                                  onReopen={store.getState().retry}
+                                              />
+                                          )
                                 }
                                 onDraftChange={store.getState().setDraft}
                                 onStop={() => {}}
                                 onSubmit={createConversation}
                                 outputState={creationBusy ? "sending" : "idle"}
-                                submitDisabled={
-                                    !executionContext.available ||
-                                    !canStartConversation ||
-                                    composerLocked ||
-                                    (draft.trim().length === 0 && attachmentModel.attachments.length === 0) ||
-                                    draftControls.settings.kind !== "ready"
-                                }
+                                submitDisabled={presentation.submitDisabled}
                             >
                                 <DraftChatControls
                                     key={model.selection.key}

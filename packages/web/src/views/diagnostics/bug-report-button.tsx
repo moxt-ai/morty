@@ -15,7 +15,7 @@ import { useExternalStore } from "../../view-models/external-store.ts";
 import { mobileDrawerCardRowClassName } from "../chat/computer-switcher.tsx";
 
 const appearances = {
-    floating: "fixed bottom-2 right-2 z-40 bg-background/90 text-xs",
+    floating: "fixed bottom-[max(0.5rem,env(safe-area-inset-bottom))] right-2 z-40 bg-background/90 text-xs",
     icon: "size-8! min-h-8! shrink-0 justify-center rounded-full px-0 text-copy-secondary hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3",
     labelled: "min-h-10 shrink-0 text-xs",
 };

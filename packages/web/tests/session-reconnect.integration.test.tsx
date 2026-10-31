@@ -1,8 +1,15 @@
-import { getByLabelText, getByRole, queryAllByRole, queryAllByText, queryByRole } from "@testing-library/dom";
+import {
+    fireEvent,
+    getByLabelText,
+    getByRole,
+    queryAllByRole,
+    queryAllByTestId,
+    queryAllByText,
+    queryByRole,
+} from "@testing-library/dom";
 import { act } from "@testing-library/react";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { WebSocketApiTransport } from "../src/services/api/websocket-api-transport.ts";
 import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
@@ -103,65 +110,6 @@ test("Given a new session with an interrupted bridge, When recovery takes thirty
     expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain(
         "Keep editing through the interruption",
     );
-});
-
-test("Given a draft whose computer is removed during a bridge interruption, When the recovery read fails, Then Chat offers retry immediately instead of staying silently stuck", {
-    timeout: 30_000,
-}, async () => {
-    const clock = new TestClock(CLOCK_ORIGIN);
-    const app = await createTestApp({ connectAgent: true, clock });
-    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
-    await app.user.type(composer, "Keep my draft after recovery fails");
-    await app.waitForView(() =>
-        expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false),
-    );
-    const otherClient = new WebSocketApiTransport(app.origin, clock);
-    otherClient.open();
-    try {
-        const signal = AbortSignal.timeout(15_000);
-        const headers = {
-            authorization: `Bearer ${await app.identity.getToken(signal)}`,
-            "content-type": "application/json",
-        };
-        const bots = `${app.origin}/morty/api/projects/${app.identity.projectId}/management/bots`;
-        // The management contract preserves at least one computer, so another real client creates its replacement.
-        expect(
-            (
-                await otherClient.fetch(
-                    new Request(bots, {
-                        method: "POST",
-                        headers,
-                        body: JSON.stringify({ displayName: "Other computer" }),
-                        signal,
-                    }),
-                )
-            ).status,
-        ).toBe(201);
-        app.transport.disconnect();
-        await app.waitForView(() =>
-            expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true),
-        );
-        expect(reconnectStatusText(app)).toBeNull();
-        expect(
-            (
-                await otherClient.fetch(
-                    new Request(`${bots}/${app.botId}`, {
-                        method: "DELETE",
-                        headers,
-                        signal,
-                    }),
-                )
-            ).status,
-        ).toBe(204);
-        document.dispatchEvent(new Event("visibilitychange"));
-        await app.waitForView(() =>
-            expect(getByRole(document.body, "button", { name: "Retry now" })).toHaveProperty("disabled", false),
-        );
-        expect(reconnectStatusText(app)).toContain("Connection interrupted");
-        expect(composer).toHaveProperty("value", "Keep my draft after recovery fails");
-    } finally {
-        otherClient.dispose();
-    }
 });
 
 test("Given an online computer and a saved session, When the session first loads, Then the composer stays writable without a connection notice until sending becomes available", {
@@ -456,13 +404,49 @@ test("Given an unavailable Runtime and an editable draft, When automatic retries
         await act(async () => clock.advanceBy(seconds * 1000));
     }
     await app.waitForView(() => expect(getByRole(document.body, "alert").textContent).toContain("Couldn’t reconnect"));
+    // The headline must own the alert's title slot alone: a nested alert here would
+    // stack a second headline inside the first and reopen the gap this notice fixed.
+    const noticeAlert = getByRole(document.body, "alert");
+    expect(queryAllByTestId(noticeAlert, dataTestId.sessionReconnectNotice)).toHaveLength(0);
+    const retryLink = getByRole(noticeAlert, "button", { name: "Retry now" });
+    expect(retryLink).not.toBeNull();
+    // An attachment failure takes over the headline too, so the connection state has
+    // to fold into that single alert instead of nesting a second assertive region.
+    const liveComposer = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+    );
+    if (!(liveComposer instanceof HTMLTextAreaElement) || liveComposer.form === null) {
+        throw new Error("Expected the live composer form");
+    }
+    const composerForm = liveComposer.form;
+    fireEvent.change(getByLabelText(composerForm, "Choose attachments"), {
+        target: { files: [new File([new Uint8Array(0)], "empty.txt", { type: "text/plain" })] },
+    });
+    await act(async () => {});
+    const attachmentAlert = await app.waitForView(() => {
+        const alerts = queryAllByRole(composerForm, "alert");
+        expect(alerts).toHaveLength(1);
+        expect(alerts[0]?.textContent).toContain("Files must be between 1 byte");
+        return alerts[0];
+    });
+    // Exactly one assertive region: the attachment headline owns it, and the
+    // connection state is its detail rather than a nested alert.
+    expect(composerForm.querySelectorAll('[role="alert"]')).toHaveLength(1);
+    if (attachmentAlert === undefined) {
+        throw new Error("Expected the attachment failure alert");
+    }
+    expect(attachmentAlert.textContent).toContain("Automatic retries stopped");
+    expect(queryAllByRole(attachmentAlert, "status")).toHaveLength(0);
+    expect(getByRole(attachmentAlert, "button", { name: "Retry now" })).not.toBeNull();
     expect(composer.disabled).toBe(false);
     expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", true);
     await app.user.type(composer, " even now");
-    await app.user.upload(
-        getByLabelText(document.body, "Choose attachments"),
-        new File(["Keep this unsent attachment"], "recovery-notes.json", { type: "text/plain" }),
-    );
+    fireEvent.change(getByLabelText(composerForm, "Choose attachments"), {
+        target: {
+            files: [new File(["Keep this unsent attachment"], "recovery-notes.json", { type: "text/plain" })],
+        },
+    });
     await app.waitForView(() =>
         expect(getByRole(document.body, "list", { name: "Attachments" }).textContent).toContain("recovery-notes.json"),
     );

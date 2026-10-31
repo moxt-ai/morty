@@ -1,5 +1,5 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
-import { Archive, Check, CircleAlert, WifiOff, X } from "lucide-react";
+import { Check, CircleAlert, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
@@ -738,10 +738,6 @@ function MobiusSessionPaneBody({
     const welcome = useStore(pane.welcome, (state) => state.state);
     const harness = sessionHarnessSelection(runtimeConfiguration?.runtime ?? null, pane.agentRef);
 
-    // The model owns the session connection through the same ref-cleanup
-    // protocol the chat root uses: attach starts it, the cleanup detaches,
-    // and the model's WeakSet latch ignores re-renders of the same element.
-
     const run = (action: (signal: AbortSignal) => Promise<void>) => {
         const signal = pane.operationsSignal();
         void action(signal).catch((cause: unknown) => {
@@ -786,12 +782,12 @@ function MobiusSessionPaneBody({
         agentReplyMessageGroups(model.messages).map((group) => [group.id, group.messages] as const),
     );
     const lastRenderItemIndex = renderItems.length - 1;
-    const generationActive = presentation.workingIndicatorVisible && presentation.activity.kind === "working";
+    const generationActive = presentation.workingIndicator !== null && presentation.activity.kind === "working";
     const sessionMessagesLoading =
         model.connection.kind === "first-loading" &&
         model.messages.length === 0 &&
-        model.pendingInitialMessage === null;
-    const initialMessage = model.pendingInitialMessage;
+        presentation.awaitingMessage === null;
+    const initialMessage = presentation.awaitingMessage;
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
         run(async (signal) => await pane.store.getState().configure(option, value, booleanValue, signal));
     const openLocalFile = (path: string) => {
@@ -818,7 +814,7 @@ function MobiusSessionPaneBody({
         <DesktopChatLayout>
             {(desktop) => (
                 <>
-                    <section className={chatSessionPaneFillClassName} ref={pane.onAttach}>
+                    <section className={chatSessionPaneFillClassName}>
                         {desktop ? (
                             <header className={chatSessionExecutionHeaderClassName}>
                                 <div className="min-w-0 flex-1">
@@ -842,7 +838,7 @@ function MobiusSessionPaneBody({
                             followRevision={model.followRevision}
                             jumpToLatest={{
                                 label: "Jump to latest message",
-                                working: presentation.workingIndicatorVisible,
+                                working: presentation.workingIndicator !== null,
                             }}
                             showTopFade
                             aria-label="Messages"
@@ -863,12 +859,7 @@ function MobiusSessionPaneBody({
                                     >
                                         <div className="grid w-full max-w-lg justify-items-center gap-4 text-center">
                                             <SessionLoadFailure message={model.connection.message} />
-                                            <Button
-                                                onClick={() =>
-                                                    run(async (signal) => await pane.store.getState().connect(signal))
-                                                }
-                                                variant="outline"
-                                            >
+                                            <Button onClick={() => pane.store.getState().retryNow()} variant="outline">
                                                 Reconnect
                                             </Button>
                                         </div>
@@ -1116,13 +1107,13 @@ function MobiusSessionPaneBody({
                                             onRetry={() => run(pane.store.getState().retryUnknownDelivery)}
                                         />
                                     )}
-                                    {presentation.workingIndicatorVisible &&
+                                    {presentation.workingIndicator !== null &&
                                         presentation.outputState !== "idle" &&
                                         presentation.activity.kind === "working" && (
                                             // mt-1 keeps 4px of air under the previous bubble's reserved
                                             // copy-button strip, matching the consecutive-message rhythm.
                                             <div className="mt-1">
-                                                <WorkingIndicator startedAt={presentation.activity.startedAt} />
+                                                <WorkingIndicator startedAt={presentation.workingIndicator.startedAt} />
                                             </div>
                                         )}
                                     {authenticationRecovery !== null && presentation.authenticationFailure !== null && (
@@ -1188,34 +1179,22 @@ function MobiusSessionPaneBody({
                             disabled={presentation.composerInputDisabled}
                             draft={model.draft}
                             error={presentation.composerError}
-                            statusTone={
-                                executionContext.feedback.kind === "failed" ||
-                                (executionContext.feedback.kind === "closed" &&
-                                    executionContext.feedback.reopen === "failed")
-                                    ? "error"
-                                    : "neutral"
+                            connectionNotice={
+                                executionContext.feedback.kind === "hidden"
+                                    ? undefined
+                                    : (inline) => (
+                                          <ConnectionNotice
+                                              feedback={executionContext.feedback}
+                                              inline={inline}
+                                              onRetryNow={pane.store.getState().retryNow}
+                                              onReopen={() => run(pane.store.getState().reopen)}
+                                          />
+                                      )
                             }
-                            statusIcon={
-                                executionContext.feedback.kind === "closed" &&
-                                executionContext.feedback.reopen !== "failed"
-                                    ? Archive
-                                    : executionContext.feedback.kind === "retrying" ||
-                                        executionContext.feedback.kind === "waiting"
-                                      ? WifiOff
-                                      : undefined
-                            }
-                            statusCompact={executionContext.feedback.kind === "waiting"}
-                            errorStatus={
-                                executionContext.feedback.kind !== "hidden" ? (
-                                    <ConnectionNotice
-                                        feedback={executionContext.feedback}
-                                        inline={presentation.composerError.length > 0}
-                                        onRetryNow={pane.store.getState().retryNow}
-                                        onReopen={() => run(pane.store.getState().reopen)}
-                                    />
-                                ) : model.filesRestoreNotice ? (
-                                    "Files attached to this message could not be restored here. Add them again if it had any."
-                                ) : undefined
+                            statusMessage={
+                                executionContext.feedback.kind === "hidden" && model.filesRestoreNotice
+                                    ? "Files attached to this message could not be restored here. Add them again if it had any."
+                                    : undefined
                             }
                             onDraftChange={pane.store.getState().setDraft}
                             onStop={() => run(pane.store.getState().stop)}

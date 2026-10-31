@@ -46,6 +46,15 @@ export function conversationListStatus(
         : (statuses.get(session.id) ?? session.status);
 }
 
+/** Whether any listed Session holds a reply the user has not seen, as the collapsed mobile header must say. */
+export function hasUnreadConversation(
+    sessions: readonly Pick<ManagedChatSession, "id" | "status">[] | null,
+    statuses: ReadonlyMap<string, ConversationListStatus>,
+    open: Parameters<typeof conversationListStatus>[2],
+): boolean {
+    return (sessions ?? []).some((session) => conversationListStatus(session, statuses, open).kind === "unread");
+}
+
 interface ConversationStatusState {
     readonly statuses: ReadonlyMap<string, ConversationListStatus>;
     /** A directory load starts; its snapshot will not replace statuses that change after this. */

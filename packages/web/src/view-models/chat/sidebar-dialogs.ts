@@ -14,6 +14,10 @@ interface SidebarDialogsState {
     /** Timestamp until which the mobile sessions sheet ignores outside-pointer dismissals. */
     readonly mobileSheetDismissLockedUntil: number;
     readonly nativeDialog: StoreApi<NativeSessionStore> | null;
+    /** A closed dialog's store, kept so reopening the sheet returns to the session the user was reading. */
+    readonly retainedNativeDialog: StoreApi<NativeSessionStore> | null;
+    /** The phone sheet's drill-down step: the session list, or the previewed session's detail. */
+    readonly nativeDialogStep: "list" | "detail";
     readonly sharing: StoreApi<IdentitySharingStore> | null;
     readonly openMobileNav: () => void;
     readonly closeMobileNav: () => void;
@@ -24,26 +28,24 @@ interface SidebarDialogsState {
     readonly dismissMobileRecentSessions: () => void;
     readonly openNativeDialog: () => void;
     readonly closeNativeDialog: () => void;
+    /** Stops the dialog workflow for good: after a successful open, and when the workspace ends. */
+    readonly discardNativeDialog: () => void;
+    /** The phone sheet drills into the previewed session's detail. */
+    readonly openNativeSessionDetail: () => void;
+    /** The phone sheet returns from the detail to the session list. */
+    readonly backToNativeSessionList: () => void;
     /** The Runtime configuration the page follows changed; an open Open Session dialog follows it. */
     readonly runtimeChanged: () => void;
     readonly openSharing: () => void;
     readonly closeSharing: () => void;
-    /**
-     * Announced with the sidebar's attached root element, following React's
-     * ref-cleanup protocol: the view hands it straight to its root element's
-     * ref and the returned function stops any dialog whose workflow is still
-     * running. A WeakSet latches the node so a re-render of the same element
-     * cannot re-run the cleanup.
-     */
-    readonly onAttach: (node: HTMLElement) => () => void;
 }
 
 /**
  * Owns the sidebar's ephemeral UI state and dialog workflows so the view
  * subscribes with `useStore` and wires only DOM callbacks. The native session
- * dialog's store is created when the dialog opens and stopped when it closes;
- * the sidebar detaching with a dialog still open stops it too, following the
- * same ref-cleanup protocol the chat root uses.
+ * dialog's store is created when the dialog opens and kept when it closes, so
+ * reopening the sheet returns to the session the user was reading; a successful
+ * open and the end of the workspace stop it for good.
  */
 
 const MOBILE_SHEET_DISMISS_LOCK_MILLISECONDS = 450;
@@ -59,12 +61,13 @@ export function createSidebarDialogs(options: {
     readonly onOpenedSession: () => void;
 }): SidebarDialogs {
     const { botId, clock, requests, runtime, createTransfer, onOpenSession, onOpenedSession } = options;
-    const attachedViews = new WeakSet<HTMLElement>();
     return createStore<SidebarDialogsState>()((set, get) => ({
         mobileNavOpen: false,
         mobileSessionsOpen: false,
         mobileSheetDismissLockedUntil: 0,
         nativeDialog: null,
+        retainedNativeDialog: null,
+        nativeDialogStep: "list",
         sharing: null,
         openMobileNav: () => set({ mobileNavOpen: true }),
         closeMobileNav: () => set({ mobileNavOpen: false }),
@@ -85,22 +88,37 @@ export function createSidebarDialogs(options: {
             if (get().nativeDialog !== null) {
                 return;
             }
+            const retained = get().retainedNativeDialog;
+            if (retained !== null) {
+                set({ nativeDialog: retained, retainedNativeDialog: null, nativeDialogStep: "list" });
+                // Refresh the listing for the Runtime the page follows now; the
+                // previewed entry stays selected when the refresh still lists it.
+                retained.getState().start();
+                return;
+            }
             const store = createNativeSessionStore(botId, requests, runtime, (session) => {
                 onOpenSession(session);
-                get().closeNativeDialog();
+                get().discardNativeDialog();
                 onOpenedSession();
             });
             store.getState().start();
-            set({ nativeDialog: store });
+            set({ nativeDialog: store, nativeDialogStep: "list" });
         },
         closeNativeDialog: () => {
             const dialog = get().nativeDialog;
             if (dialog === null) {
                 return;
             }
-            dialog.getState().stop();
-            set({ nativeDialog: null });
+            set({ nativeDialog: null, retainedNativeDialog: dialog });
         },
+        discardNativeDialog: () => {
+            const { nativeDialog, retainedNativeDialog } = get();
+            nativeDialog?.getState().stop();
+            retainedNativeDialog?.getState().stop();
+            set({ nativeDialog: null, retainedNativeDialog: null, nativeDialogStep: "list" });
+        },
+        openNativeSessionDetail: () => set({ nativeDialogStep: "detail" }),
+        backToNativeSessionList: () => set({ nativeDialogStep: "list" }),
         runtimeChanged: () => {
             get().nativeDialog?.getState().runtimeChanged();
         },
@@ -117,17 +135,6 @@ export function createSidebarDialogs(options: {
             }
             store.getState().dispose();
             set({ sharing: null });
-        },
-        onAttach: (node: HTMLElement) => {
-            if (attachedViews.has(node)) {
-                return () => {};
-            }
-            attachedViews.add(node);
-            return () => {
-                attachedViews.delete(node);
-                get().closeNativeDialog();
-                get().closeSharing();
-            };
         },
     }));
 }

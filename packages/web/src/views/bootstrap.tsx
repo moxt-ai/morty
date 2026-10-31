@@ -1,4 +1,5 @@
 import { ErrorBoundary, reactErrorHandler } from "@sentry/react";
+import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ImageDownloadProvider } from "../components/images/image-download.tsx";
 import { ImageViewerProvider } from "../components/images/image-gallery.tsx";
@@ -112,7 +113,8 @@ export function mountMorty(options: {
         onRecoverableError: (error, info) =>
             reactErrorHandler()(error, { componentStack: info.componentStack ?? null }),
     });
-    root.render(element);
+    // StrictMode replays mounts in development to show that nothing the application owns depends on React's.
+    root.render(<StrictMode>{element}</StrictMode>);
     return {
         application,
         unmount: () => {

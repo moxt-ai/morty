@@ -95,6 +95,25 @@ function chosenAgent(agents: readonly NativeSessionAgent[], selected: string): N
     return agents.find((item) => item.value === selected) ?? agents.find((item) => item.installed) ?? agents[0];
 }
 
+/**
+ * The listed entry a relisting should keep previewing: the one the user was reading, recognised across
+ * listings by the strongest identity the entries carry. Entry ids are per-listing for some agents, so
+ * the native session id and finally the title within its directory stand in for them.
+ */
+function relistMatch(
+    entries: readonly NativeSessionEntry[],
+    previewed: NativeSessionEntry | null,
+): NativeSessionEntry | undefined {
+    if (previewed === null) {
+        return undefined;
+    }
+    return (
+        entries.find((entry) => entry.entryId === previewed.entryId) ??
+        entries.find((entry) => entry.nativeSessionId === previewed.nativeSessionId) ??
+        entries.find((entry) => entry.title === previewed.title && entry.directoryId === previewed.directoryId)
+    );
+}
+
 /** What a listing shows for an agent, to tell whether the Runtime configuration still matches it. */
 function listingFor(agent: NativeSessionAgent | undefined): string {
     return agent === undefined ? "empty" : `${agent.installed ? "ready" : "agent-unavailable"}:${agent.value}`;
@@ -143,7 +162,7 @@ export const createNativeSessionStore = (
             const signal = AbortSignal.any([parent, attempt.signal]);
             const scope = get().selected === "" ? ("initial" as const) : ("refresh" as const);
             const previewed = get().preview;
-            const previewedEntryId = previewed.kind === "empty" ? null : previewed.entry.entryId;
+            const previewedEntry = previewed.kind === "empty" ? null : previewed.entry;
             set({ directory: { kind: "loading", scope, listing }, preview: { kind: "empty" }, error: "" });
             if (current === null) {
                 // The page has not heard from the Runtime yet; its first configuration starts the listing.
@@ -196,7 +215,7 @@ export const createNativeSessionStore = (
                 // A listing always lands with a previewed session: the one the user was reading when it is still
                 // listed, else its first entry. Opening the dialog and switching agent tabs would otherwise leave
                 // the whole right pane empty even though there is a session to show.
-                const next = entries.find((entry) => entry.entryId === previewedEntryId) ?? entries[0];
+                const next = relistMatch(entries, previewedEntry) ?? entries[0];
                 if (next !== undefined) {
                     // Only the dialog's lifetime cancels this preview. A discovery restart must not abort it, or a
                     // Runtime configuration refresh right after opening would strand the pane on its skeleton.

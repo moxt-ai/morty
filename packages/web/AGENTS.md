@@ -37,7 +37,8 @@ These rules apply to `packages/web`. Repository-wide rules in the root `AGENTS.m
 - React hooks such as `useRef`, `useMemo`, `useState`, `useEffect`, and the rest are forbidden in views.
 - Business logic stays in the view-model layer. Workflows, asynchronous operations, validation, state transitions, error mapping, and view-domain state are owned by Zustand stores with an explicit business lifecycle, not by views.
 - Data flows into views from route loaders, DOM callbacks for user interactions, and DOM attach/detach through the `onAttach(element)` pattern. Network requests are started by store actions that views invoke, not by views directly.
-- DOM attach/detach is a workaround to reconsider later; prefer explicit state and callback flow when a view can be expressed without it.
+- DOM attach/detach only acquires and releases what belongs to the attached element: listeners, observers, measurements, object URLs, and reads or operations that exist only to present that element. It never starts, stops, or invalidates a business lifetime such as a connection, subscription, selection, submission, or dialog workflow; those start and stop through explicit transitions of the store or workspace that owns them.
+- The application renders under React StrictMode, which replays mounts in development. Every attach/detach handler must leave observable behavior unchanged when setup, cleanup, and setup run again.
 - Routing remains in views, but route loading and route-level business state belong in view-model stores. Pass navigation as a callback when a completed workflow needs it.
 
 ## Testing

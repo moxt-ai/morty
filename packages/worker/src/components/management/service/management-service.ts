@@ -46,27 +46,31 @@ export class ManagementService {
         const identity = await this.#authentication.createAnonymous(userId, project.projectId, signal, token);
         const { appId } = this.#platform.configuration();
         await this.#platformProjects.save(userId, appId, project, signal);
-        const bot = await this.provisionUserBot(identity.userId, signal);
-        return { ...identity, bot };
+        const { botId, displayName } = await this.#provisionUserBot(identity.userId, signal);
+        return { ...identity, bot: { botId, displayName } };
     };
 
-    /** Gives the user its first Machine unless it already has one. */
-    readonly provisionUserBot = async (userId: string, signal: AbortSignal) => {
-        const existing = (await this.#managedBots.listBots(userId, signal))[0];
-        if (existing !== undefined) {
-            return existing;
+    /** The one Machine Morty serves a user; setup and every browser handoff resolve it here. Reading never creates. */
+    readonly userBot = async (userId: string, signal: AbortSignal) => {
+        const served = servedBot(await this.#managedBots.listBots(userId, signal));
+        if (served === undefined) {
+            throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
+        }
+        return served;
+    };
+
+    /**
+     * Gives the user its Machine unless it already has one. Only identity bootstrap and transfer redemption call this;
+     * both are retried writes, so repeating them returns the same Machine.
+     */
+    readonly #provisionUserBot = async (userId: string, signal: AbortSignal) => {
+        const served = servedBot(await this.#managedBots.listBots(userId, signal));
+        if (served !== undefined) {
+            return served;
         }
         const bot = { botId: `bot_${crypto.randomUUID()}`, displayName: "My Machine" };
         await this.#managedBots.saveClaim(userId, bot, Date.now(), signal);
-        return bot;
-    };
-
-    readonly listBots = async (userId: string, signal: AbortSignal) => await this.#managedBots.listBots(userId, signal);
-
-    readonly createBot = async (userId: string, displayName: string, signal: AbortSignal) => {
-        const bot = { botId: `bot_${crypto.randomUUID()}`, displayName };
-        await this.#managedBots.saveClaim(userId, bot, Date.now(), signal);
-        return bot;
+        return { ...bot, runtimeId: null };
     };
 
     readonly readBot = async (userId: string, botId: string, signal: AbortSignal) => {
@@ -88,31 +92,6 @@ export class ManagementService {
             throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
         return { botId: bot.botId, runtimeId: bot.configuration?.runtimeId ?? null };
-    };
-
-    readonly updateBot = async (
-        userId: string,
-        botId: string,
-        input: { readonly displayName: string; readonly instructions: string },
-        signal: AbortSignal,
-    ) => {
-        await this.readBot(userId, botId, signal);
-        if (!(await this.#managedBots.updateBot(userId, botId, input, Date.now(), signal))) {
-            throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
-        }
-        return await this.readBot(userId, botId, signal);
-    };
-
-    readonly deleteBot = async (userId: string, botId: string, signal: AbortSignal): Promise<void> => {
-        const result = await this.#managedBots.deleteBot(userId, botId, signal);
-        switch (result) {
-            case "deleted":
-                return;
-            case "last-bot":
-                throw new ManagementError("LAST_BOT_REQUIRED", "Keep at least one Machine in Morty.", 409);
-            case "not-found":
-                throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
-        }
     };
 
     readonly readProject = async (userId: string, signal: AbortSignal) => {
@@ -157,8 +136,8 @@ export class ManagementService {
         if (identity === null) {
             return null;
         }
-        const bot = await this.provisionUserBot(identity.userId, signal);
-        return { ...identity, botId: bot.botId };
+        const { botId } = await this.#provisionUserBot(identity.userId, signal);
+        return { ...identity, botId };
     };
 
     readonly #requireProject = async (userId: string, signal: AbortSignal) => {
@@ -201,4 +180,13 @@ async function derivedToken(serverKey: unknown, input: readonly string[]) {
         .replaceAll("+", "-")
         .replaceAll("/", "_")
         .replace(/=+$/u, "")}`;
+}
+
+/**
+ * Earlier releases could give a user several Machines, so the Machine bound to a Runtime is served before one that
+ * never got a Runtime, and the oldest such Machine wins. Setup binds only this Machine and a binding is permanent, so
+ * once it has a Runtime it remains the one served.
+ */
+function servedBot<Bot extends { readonly runtimeId: string | null }>(bots: readonly Bot[]): Bot | undefined {
+    return bots.find((bot) => bot.runtimeId !== null) ?? bots[0];
 }
