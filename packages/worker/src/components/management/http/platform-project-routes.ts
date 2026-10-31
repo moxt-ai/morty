@@ -32,9 +32,10 @@ export function createPlatformProjectRoutes() {
         .post("/project/replacement", async (context) => {
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(45000)]);
             const { authentication, management } = context.env.services;
-            const local = await authentication.localIdentity(context.get("bearerToken"), signal);
+            const local = await authentication.authorize(context.get("bearerToken"), "replaceProject", signal);
             switch (local.kind) {
                 case "unauthenticated":
+                case "revoked":
                     throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
                 case "forbidden":
                     throw new ManagementError(
@@ -42,7 +43,7 @@ export function createPlatformProjectRoutes() {
                         "Use the identity saved on the machine to replace its Project.",
                         403,
                     );
-                case "local":
+                case "authorized":
                     break;
             }
             // This optional correlation ID is untrusted diagnostics, never authorization.
@@ -54,14 +55,14 @@ export function createPlatformProjectRoutes() {
             };
             context.env.logger.info({ ...audit, stage: "requested" }, "Project replacement requested");
             try {
-                const project = await management.replaceProject(local.userId, signal);
+                const project = await management.replaceProject(local.credential.userId, signal);
                 // Repeating the same saved local identity reuses its successor credential, even if bootstrap
                 // committed only part of its data. An explicitly revoked successor credential is never reissued.
                 const response = await projectObject(context.env.config.bindings, project.projectId).fetch(
                     new Request("https://project.internal/__project/bootstrap", {
                         body: JSON.stringify({
                             project,
-                            userId: local.userId,
+                            userId: local.credential.userId,
                             origin: {
                                 kind: "replacement",
                                 previousProjectId: audit.previousProjectId,

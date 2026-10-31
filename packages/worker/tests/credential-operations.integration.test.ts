@@ -86,3 +86,58 @@ test.each(["v1", "migrated"] as const)(
         }
     },
 );
+
+test("Given a browser that joined through a link, When it asks for recovery access, a Runtime pairing or the Machine's binding, Then only the machine's local credential may issue them", async () => {
+    const owner = await fixture.createAnonymousUser();
+    const request = (path: string, token: string, method = "GET", body?: object) =>
+        fetchPublicApplication(
+            new Request(`${APP_ORIGIN}/morty/api${path}`, {
+                method,
+                headers: {
+                    authorization: `Bearer ${token}`,
+                    ...(body === undefined ? {} : { "content-type": "application/json" }),
+                },
+                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+            }),
+            fixture.environment(),
+        );
+    const project = `/projects/${owner.projectId}`;
+    const botId = v.parse(
+        v.object({ botId: v.string() }),
+        await (await request(`${project}/management/bot`, owner.token)).json(),
+    ).botId;
+    const transfer = await request(`${project}/identity/transfers`, owner.token, "POST");
+    const code = new URL(v.parse(v.object({ url: v.string() }), await transfer.json()).url).hash.slice(6);
+    const redeemed = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code }),
+        }),
+        fixture.environment(),
+    );
+    const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+    const recoveryResponse = await request(`${project}/identity/recovery-token`, owner.token, "POST");
+    expect(recoveryResponse.status).toBe(201);
+    const recovery = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
+
+    for (const token of [browser, recovery]) {
+        for (const refused of [
+            await request(`${project}/identity/recovery-token`, token, "POST"),
+            await request(`${project}/management/runtime-pairings`, token, "POST", {
+                idempotencyKey: "shared-pairing",
+            }),
+            await request(`/chat/projects/${owner.projectId}/bots/${botId}/setup`, token, "POST", {
+                runtimeId: "shared-runtime",
+                agentRef: "codex",
+            }),
+        ]) {
+            expect(refused.status).toBe(403);
+            expect(await refused.json()).toMatchObject({ error: { code: "LOCAL_IDENTITY_REQUIRED" } });
+        }
+    }
+    // Shared access still shares onward, as the sharing dialog offers, and still ends itself.
+    expect((await request(`${project}/identity/transfers`, browser, "POST")).status).toBe(201);
+    expect((await request(`${project}/identity/v1/browser-access`, browser, "DELETE")).status).toBe(204);
+    expect((await request(`${project}/session`, browser)).status).toBe(401);
+});

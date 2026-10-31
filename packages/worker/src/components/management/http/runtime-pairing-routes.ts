@@ -5,7 +5,7 @@ import { json } from "../../../infra/http.ts";
 import { bodyParser } from "../../../middleware/body-parser.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { platformIdentifier } from "../entity/platform-project.ts";
-import { authenticatedSession } from "./authenticated-session.ts";
+import { authenticatedSession, localSession } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 
 const pairingInput = v.strictObject({ idempotencyKey: platformIdentifier });
@@ -24,7 +24,7 @@ export function createRuntimePairingRoutes() {
                     throw new ManagementError("INVALID_REQUEST", "The request is too large.", 413);
                 },
             }),
-            authenticatedSession,
+            localSession("pairRuntime"),
             bodyParser<ManagementHttpEnvironment, typeof pairingInput>(pairingInput),
             async (context) => {
                 const session = context.get("session");
