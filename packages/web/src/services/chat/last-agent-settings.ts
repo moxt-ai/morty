@@ -3,8 +3,13 @@ import {
     type AgentSettingPreference,
     centralLocalStorage,
     lastAgentSettingsEntry,
+    MAX_AGENT_SETTING_PREFERENCES,
 } from "@/services/local-storage/central-local-storage";
 
+/**
+ * The Agent settings the user chose carry into a new draft. Only a choice is remembered: a value the Agent or the
+ * draft's directory reports is read again for each draft, so a later change of that default is picked up.
+ */
 export function restoreLastAgentSettings(
     botId: string,
     agentRef: string,
@@ -31,11 +36,11 @@ export function restoreLastAgentSettings(
     return { options: restored, restoredIds };
 }
 
-export function saveLastAgentSettings(botId: string, agentRef: string, options: readonly SessionConfigOption[]): void {
-    const preferences: readonly AgentSettingPreference[] = options.map((option) =>
-        option.type === "boolean"
-            ? { configId: option.id, kind: "boolean", value: option.booleanValue }
-            : { configId: option.id, kind: "select", value: option.currentValue },
+/** Remembers one setting the user chose, keeping their other choices for this Agent. */
+export function rememberAgentSettingChoice(botId: string, agentRef: string, choice: AgentSettingPreference): void {
+    const entry = lastAgentSettingsEntry(botId, agentRef);
+    const others = (centralLocalStorage.read(entry) ?? []).filter(
+        (preference) => preference.configId !== choice.configId,
     );
-    centralLocalStorage.write(lastAgentSettingsEntry(botId, agentRef), preferences);
+    centralLocalStorage.write(entry, [...others, choice].slice(-MAX_AGENT_SETTING_PREFERENCES));
 }
