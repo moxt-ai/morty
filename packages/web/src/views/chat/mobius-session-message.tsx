@@ -162,6 +162,7 @@ function UserMessage({
     onRetryUnknownDelivery,
     openLocalFile,
     readImage,
+    retryUnknownDeliveryDisabled,
 }: {
     readonly message: Extract<SessionMessage, { readonly role: "user" }>;
     readonly createResourceStore: SessionResourceStoreFactory;
@@ -170,6 +171,7 @@ function UserMessage({
     readonly onRetryUnknownDelivery: () => void;
     readonly openLocalFile: (path: string) => void;
     readonly readImage?: MarkdownImageReader | undefined;
+    readonly retryUnknownDeliveryDisabled: boolean;
 }) {
     const deliveryUnknown = deliveryUnknownUserMessageId !== null && message.commandId === deliveryUnknownUserMessageId;
     const copyText = message.contents
@@ -205,6 +207,7 @@ function UserMessage({
                     <button
                         aria-label="Retry message with unknown delivery"
                         className="inline-flex size-7 items-center justify-center rounded-full"
+                        disabled={retryUnknownDeliveryDisabled}
                         onClick={onRetryUnknownDelivery}
                         type="button"
                     >
@@ -256,6 +259,7 @@ export function MobiusSessionMessage({
     onRemoveUnknownDelivery,
     onRetryUnknownDelivery,
     readImage,
+    retryUnknownDeliveryDisabled,
     openLocalFile,
     active = false,
     failureApproval,
@@ -269,6 +273,7 @@ export function MobiusSessionMessage({
     readonly onRemoveUnknownDelivery: () => void;
     readonly onRetryUnknownDelivery: () => void;
     readonly readImage?: MarkdownImageReader | undefined;
+    readonly retryUnknownDeliveryDisabled: boolean;
     readonly openLocalFile: (path: string) => void;
     readonly active?: boolean;
     readonly failureApproval:
@@ -286,6 +291,7 @@ export function MobiusSessionMessage({
                 onRetryUnknownDelivery={onRetryUnknownDelivery}
                 openLocalFile={openLocalFile}
                 readImage={readImage}
+                retryUnknownDeliveryDisabled={retryUnknownDeliveryDisabled}
             />
         );
     }

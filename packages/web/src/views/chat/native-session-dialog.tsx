@@ -537,6 +537,7 @@ export function NativeSessionDialog({
                                                             onRemoveUnknownDelivery={() => undefined}
                                                             onRetryUnknownDelivery={() => undefined}
                                                             openLocalFile={() => undefined}
+                                                            retryUnknownDeliveryDisabled
                                                         />
                                                     ))}
                                                     {model.preview.content.truncated && (

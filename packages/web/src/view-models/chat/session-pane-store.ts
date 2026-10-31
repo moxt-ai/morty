@@ -70,6 +70,7 @@ import {
     canChangeSettings,
     canQueue,
     canRetryFailedMessage,
+    canRetryUnknownDelivery,
     canSendNow,
     canSubmit,
     composerHasMessage,
@@ -252,8 +253,8 @@ export function sessionPanePresentation(
         activeCommandId !== null
             ? (model.messages.findLast((message) => message.role === "assistant")?.firstEvent.eventId ?? null)
             : null;
-    const deliveryUnknownCommandId =
-        delivery.state.kind === "delivery-unknown" ? delivery.state.journal.commandId : null;
+    const unknownDelivery = delivery.state.kind === "delivery-unknown" ? journalMessage(delivery.state.journal) : null;
+    const deliveryUnknownCommandId = unknownDelivery?.commandId ?? null;
     const deliveryUnknownUserMessageId = deliveryUnknownCommandId === null ? null : deliveryUnknownCommandId;
     const deliveries = sessionDeliveryPresentation(model.messages, model.queued, delivery, queue);
     const pendingMessage = deliveries.pendingDelivery?.message ?? null;
@@ -329,6 +330,8 @@ export function sessionPanePresentation(
             facts.waitingForInput || model.turn.kind !== "current" ? null : { startedAt: model.turn.startedAt },
         shouldQueueOnSubmit,
         retryFailedDisabled: pendingMessage === null || !canRetryFailedMessage(pendingMessage.target, facts),
+        retryUnknownDeliveryDisabled:
+            unknownDelivery === null || !canRetryUnknownDelivery(unknownDelivery.target, facts),
         submitDisabled:
             !composerHasMessage(model.draft, attachments.attachments.length, attachments.state.kind === "reading") ||
             !(shouldQueueOnSubmit ? canQueue(facts) : canSendNow(facts)),
@@ -1433,7 +1436,10 @@ export function createSessionPaneModel(options: {
             },
             retryUnknownDelivery: async (signal) => {
                 const state = delivery.getState().state;
-                if (get().connection.kind !== "ready" || state.kind !== "delivery-unknown") {
+                if (
+                    state.kind !== "delivery-unknown" ||
+                    !canRetryUnknownDelivery(journalMessage(state.journal).target, operationFacts())
+                ) {
                     return;
                 }
                 const pending = state.journal;

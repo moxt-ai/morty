@@ -88,6 +88,22 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                         signal,
                     );
                 },
+                /** Starts a turn through the Platform, the way another Mobius client of this Runtime would. */
+                submitTurn: async (sessionId: string, content: string): Promise<void> => {
+                    await runtime.client.turns.submitToRuntime(
+                        runtime.runtimeId,
+                        sessionId,
+                        {
+                            additionalDirectoryIds: [],
+                            agentId: agents[0]?.id ?? "codex",
+                            attachments: [],
+                            content,
+                            directoryId: "default",
+                            idempotencyKey: crypto.randomUUID(),
+                        },
+                        AbortSignal.timeout(30_000),
+                    );
+                },
                 /** Restarts the Runtime offering these Agents, as when the user installs or removes one. */
                 replaceAgents: async (replacement: readonly ControlledAgent[]): Promise<void> => {
                     const [first, ...others] = replacement;

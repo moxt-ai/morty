@@ -367,7 +367,10 @@ function SessionRenderItemContent({
     readonly onRetryUnknownDelivery: () => void;
     readonly openLocalFile: (path: string) => void;
     readonly pane: SessionPaneModel;
-    readonly presentation: Pick<ReturnType<typeof sessionPanePresentation>, "deliveryUnknownUserMessageId">;
+    readonly presentation: Pick<
+        ReturnType<typeof sessionPanePresentation>,
+        "deliveryUnknownUserMessageId" | "retryUnknownDeliveryDisabled"
+    >;
 }) {
     if (item.kind === "assistant-text") {
         return (
@@ -404,6 +407,7 @@ function SessionRenderItemContent({
             onRetryUnknownDelivery={onRetryUnknownDelivery}
             openLocalFile={openLocalFile}
             readImage={pane.readResource}
+            retryUnknownDeliveryDisabled={presentation.retryUnknownDeliveryDisabled}
         />
     );
 }
@@ -1101,7 +1105,7 @@ function MobiusSessionPaneBody({
                                     {presentation.unconfirmedDelivery !== null && (
                                         <UnconfirmedDeliveryCard
                                             delivery={presentation.unconfirmedDelivery}
-                                            retryDisabled={model.connection.kind !== "ready"}
+                                            retryDisabled={presentation.retryUnknownDeliveryDisabled}
                                             onRemove={() => pane.store.getState().removeUnknownDelivery()}
                                             onRetry={() => run(pane.store.getState().retryUnknownDelivery)}
                                         />

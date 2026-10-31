@@ -126,3 +126,64 @@ for (const target of ["immediate", "queued"] as const) {
         });
     }
 }
+
+test("Given an unconfirmed new-turn message after a reload, When another device runs a turn, Then retry waits until the Session is idle and resends the original request once", {
+    timeout: 60_000,
+}, async () => {
+    const environment = await createChatWorkerEnvironment(true);
+    onTestFinished(() => environment.close());
+    const clock = new TestClock("2026-10-30T08:00:00Z");
+    const app = await createTestApp({ environment, connectAgent: true, clock });
+    const { network, daemon } = app;
+    if (network === null || daemon === null) {
+        throw new Error("Expected the controllable network and real Runtime");
+    }
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Established session");
+    await app.waitForView(() => {
+        expect(app.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain("Established session");
+        expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
+    });
+    network.interruptNextTurn("before-acceptance");
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Keep the original submission");
+    await app.waitForView(() => getByRole(document.body, "button", { name: "Retry message with unknown delivery" }));
+    const sessionId = new URL(window.location.href).searchParams.get("sessionId");
+    if (sessionId === null) {
+        throw new Error("Expected an open Session");
+    }
+    const original = JSON.parse(network.submissions.at(-1) ?? "{}");
+    const submissions = network.submissions.length;
+    network.reconnect();
+    const reloaded = await app.reload();
+    await reloaded.waitForView(() =>
+        expect(
+            getByRole(document.body, "button", { name: "Retry message with unknown delivery" }).hasAttribute(
+                "disabled",
+            ),
+        ).toBe(false),
+    );
+    await daemon.submitTurn(sessionId, "wait for steering");
+    await reloaded.waitForView(() => {
+        expect(reloaded.optionalElementByTestId(dataTestId.workingIndicator)).not.toBeNull();
+        expect(
+            getByRole(document.body, "button", { name: "Retry message with unknown delivery" }).hasAttribute(
+                "disabled",
+            ),
+        ).toBe(true);
+    });
+    expect(network.submissions).toHaveLength(submissions);
+    await daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
+    const retry = await reloaded.waitForView(() => {
+        const button = getByRole(document.body, "button", { name: "Retry message with unknown delivery" });
+        expect(button.hasAttribute("disabled")).toBe(false);
+        return button;
+    });
+    await reloaded.user.click(retry);
+    await reloaded.waitForView(() => {
+        expect(queryByRole(document.body, "button", { name: "Retry message with unknown delivery" })).toBeNull();
+        expect(reloaded.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain(
+            "Keep the original submission",
+        );
+    });
+    expect(network.submissions).toHaveLength(submissions + 1);
+    expect(JSON.parse(network.submissions.at(-1) ?? "{}")).toEqual(original);
+});
