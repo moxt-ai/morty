@@ -252,27 +252,22 @@ test("Given Session creation failed for my first message and I wrote a next draf
     );
 });
 
-test("Given Session creation failed for my first message, When I start a new conversation, write an unrelated draft, and reload, Then only that draft returns", {
+test("Given Session creation failed for my first message, When I start a new conversation and reload, Then the message returns to the draft once", {
     timeout: 60_000,
 }, async () => {
     const creation = heldSessionCreation();
     const app = await createTestApp({ connectAgent: true, agent: creation.agent });
-    await sendFirstMessage(app, "Abandoned first message", creation.hold);
+    await sendFirstMessage(app, "Failed first message", creation.hold);
     creation.reject();
     await app.waitForView(() => getByRole(document.body, "button", { name: "Retry message" }));
     await app.user.click(app.elementByTestId(dataTestId.newConversation));
-    const composer = await app.queryElementByTestId(
-        dataTestId.messageComposer,
-        (element) =>
-            element instanceof HTMLTextAreaElement &&
-            !element.disabled &&
-            queryByRole(document.body, "button", { name: "Retry message" }) === null,
-    );
-    await app.user.click(composer);
-    await app.user.paste("Unrelated draft");
+    await app.waitForView(() => {
+        expect(queryByRole(document.body, "button", { name: "Retry message" })).toBeNull();
+        expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "Failed first message");
+    });
     const reloaded = await app.reload();
     await reloaded.waitForView(() =>
-        expect(reloaded.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "Unrelated draft"),
+        expect(reloaded.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "Failed first message"),
     );
 });
 

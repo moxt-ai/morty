@@ -109,6 +109,19 @@ export function queuedDraftMessage(state: ConversationCreationState): QueuedDraf
     }
 }
 
+/** The first message of a creation that failed, which only the creation holds until it is retried or returned. */
+export function failedDraftMessage(state: ConversationCreationState): QueuedDraftMessage | null {
+    switch (state.kind) {
+        case "session-create-failed":
+        case "draft-message-send-failed":
+            return state.message;
+        case "draft":
+        case "session-creating":
+        case "draft-message-sending":
+            return null;
+    }
+}
+
 export function conversationCreationStatus(state: ConversationCreationState): string | null {
     switch (state.kind) {
         case "draft":

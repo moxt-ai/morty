@@ -1,3 +1,4 @@
+import { getByRole } from "@testing-library/dom";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
@@ -115,4 +116,59 @@ test("Given a first prompt whose conversation is still being created, When I sta
     await app.waitForView(() => expect(conversationEntry(app, prompt)).toBeDefined());
     const current = app.elementByTestId(dataTestId.messageComposer);
     expect(current instanceof HTMLTextAreaElement ? current.value : null).toBe(prompt);
+});
+
+test("Given a first message whose Session is still being created, When I open another Session and the creation fails, Then the message returns to the New Session draft", {
+    timeout: 60_000,
+}, async () => {
+    let creation = Promise.withResolvers<void>();
+    let holding = false;
+    onTestFinished(() => creation.resolve());
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: {
+            id: "settings-test",
+            label: "Settings Agent",
+            beforeSessionCreated: async () => {
+                if (holding) {
+                    holding = false;
+                    await creation.promise;
+                }
+            },
+        },
+    });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Earlier conversation");
+    await app.waitForView(() => {
+        expect(document.body.textContent).toContain("Settings Agent: Earlier conversation");
+        expect(conversationEntry(app, "Earlier conversation")).toBeDefined();
+    });
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    const draft = await app.queryElementByTestId(
+        dataTestId.messageComposer,
+        (element) => element instanceof HTMLTextAreaElement && !element.disabled && element.value === "",
+    );
+    creation = Promise.withResolvers<void>();
+    void creation.promise.catch(() => undefined);
+    holding = true;
+    await sendPrompt(app, draft, "My carefully written first message");
+    await app.waitForView(() =>
+        getByRole(app.elementByTestId(dataTestId.queuedMessage), "status", { name: "Sending message" }),
+    );
+
+    const earlier = conversationEntry(app, "Earlier conversation");
+    if (earlier === undefined) {
+        throw new Error("Expected the earlier conversation in the sidebar");
+    }
+    await app.user.click(earlier);
+    await app.waitForView(() => expect(document.body.textContent).toContain("Settings Agent: Earlier conversation"));
+    creation.reject(new Error("The controlled Agent could not create a Session"));
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    await app.waitForView(() =>
+        expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty(
+            "value",
+            "My carefully written first message",
+        ),
+    );
+    expect(conversationEntry(app, "My carefully written first message")).toBeUndefined();
 });

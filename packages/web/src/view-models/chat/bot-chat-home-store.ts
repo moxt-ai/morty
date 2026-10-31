@@ -18,7 +18,8 @@ import { formatError } from "../format-error.ts";
 import { type ComposerAttachmentStore, createComposerAttachmentStore } from "./composer-attachment-store.ts";
 import {
     type ConversationCreationState,
-    queuedDraftMessage,
+    failedDraftMessage,
+    type QueuedDraftMessage,
     transitionConversationCreation,
 } from "./conversation-creation-machine.ts";
 import {
@@ -233,6 +234,9 @@ export function newConversationPresentation(
     } as const;
 }
 
+/** A first message no Session took, on its way back to the New Session draft. */
+type ReturnedFirstMessage = Pick<QueuedDraftMessage, "attachments" | "commandId" | "content">;
+
 export const createBotChatHomeStore = (
     requests: Pick<
         BotChatApi,
@@ -323,18 +327,33 @@ export const createBotChatHomeStore = (
             set({ selection });
             announceSelection();
         };
-        // The draft page's reload recovery of a first message ends once its Session owns it or the user leaves its draft.
+        // The draft page's reload recovery of a first message ends once its Session owns it or the draft takes it back.
         const releaseUnsentFirstMessage = (commandId: string): void => {
             const entry = newConversationUnsentMessageEntry(botId);
             if (centralSessionStorage.read(entry)?.commandId === commandId) {
                 centralSessionStorage.remove(entry);
             }
         };
-        const abandonFirstMessage = (): void => {
-            const abandoned = queuedDraftMessage(get().creation);
-            if (abandoned !== null) {
-                releaseUnsentFirstMessage(abandoned.commandId);
+        // First messages no Session took while the New Session page was not showing them, oldest first. Each keeps
+        // its reload copy until a New Session draft takes it back.
+        let returned: readonly ReturnedFirstMessage[] = [];
+        /**
+         * Returns a first message no Session took to the New Session draft, ahead of what the draft holds, as a reload
+         * returns it. Leaving the page that sent it is not discarding it. Off the draft page, or while the draft reads
+         * files that restoring would cancel, it waits for the next draft.
+         */
+        const returnFirstMessage = (message: ReturnedFirstMessage): void => {
+            const current = get();
+            const composer = current.composerAttachments.getState();
+            if (current.selection.kind !== "draft" || composer.state.kind === "reading") {
+                returned = [...returned, message];
+                return;
             }
+            releaseUnsentFirstMessage(message.commandId);
+            if (message.attachments.length > 0) {
+                composer.restore([...message.attachments, ...composer.attachments]);
+            }
+            current.setDraft(prependToDraft(message.content, current.draft));
         };
         return {
             composerAttachments: createComposerAttachmentStore(),
@@ -413,6 +432,12 @@ export const createBotChatHomeStore = (
                         centralSessionStorage.write(newConversationDraftEntry(botId), restored);
                         centralSessionStorage.remove(newConversationUnsentMessageEntry(botId));
                         set({ draft: restored });
+                    }
+                } else if (starting.initialization.kind === "loading") {
+                    // A page that opens on another conversation keeps an earlier page's unsent first message for the next draft.
+                    const unsent = centralSessionStorage.read(newConversationUnsentMessageEntry(botId));
+                    if (unsent !== null && !returned.some((message) => message.commandId === unsent.commandId)) {
+                        returned = [...returned, { ...unsent, attachments: [] }];
                     }
                 }
                 // Entry failures and session failures belong to the request that failed.
@@ -743,7 +768,9 @@ export const createBotChatHomeStore = (
             },
             newConversation: () => {
                 restoredSessionId = null;
-                abandonFirstMessage();
+                // A first message still in creation stays with its creation; one whose Session could not be created
+                // returns to the new draft.
+                const failed = failedDraftMessage(get().creation);
                 get().composerAttachments.getState().clear();
                 const current = get();
                 centralSessionStorage.remove(newConversationDraftEntry(botId));
@@ -765,6 +792,12 @@ export const createBotChatHomeStore = (
                     draftKey,
                     scrollFollowRevision: state.scrollFollowRevision + 1,
                 }));
+                const waiting = failed === null ? returned : [...returned, failed];
+                returned = [];
+                // Each returns ahead of the draft, so the oldest goes last to end up first.
+                for (const message of [...waiting].reverse()) {
+                    returnFirstMessage(message);
+                }
                 onDraftSelected();
                 onSelectionTargeted(null);
                 if (restart) {
@@ -773,7 +806,7 @@ export const createBotChatHomeStore = (
             },
             openManaged: (id) => {
                 restoredSessionId = null;
-                abandonFirstMessage();
+                const failed = failedDraftMessage(get().creation);
                 get().composerAttachments.getState().clear();
                 options.navigation.showManaged(id);
                 set((current) => ({
@@ -784,6 +817,9 @@ export const createBotChatHomeStore = (
                     creation: transitionConversationCreation(current.creation, { kind: "reset" }),
                     scrollFollowRevision: current.scrollFollowRevision + 1,
                 }));
+                if (failed !== null) {
+                    returnFirstMessage(failed);
+                }
                 onSelectionTargeted(id);
                 onRestart();
             },
@@ -881,6 +917,11 @@ export const createBotChatHomeStore = (
                                 kind: "session-create-failed",
                             }),
                         }));
+                        // The page that sent it shows the failure with Retry; once the user has left it, the message
+                        // returns to the draft.
+                        if (failedDraftMessage(get().creation)?.commandId !== commandId) {
+                            returnFirstMessage(queuedMessage);
+                        }
                         return false;
                     }
                 }
