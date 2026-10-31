@@ -71,7 +71,7 @@ interface ConversationStatusState {
      * Whether Sessions have statuses but no stream follows them: the last one gave up, as when the Runtime went away.
      */
     readonly unfollowed: () => boolean;
-    /** Follows the listed Sessions' statuses again after their stream gave up, from a fresh snapshot. */
+    /** Follows the Sessions' statuses again after their stream gave up. */
     readonly follow: (signal: AbortSignal) => void;
     readonly close: () => void;
 }
@@ -91,8 +91,12 @@ export function createConversationStatusStore(
 ) {
     let watcher: {
         readonly botId: string;
-        readonly directoryKey: string;
         readonly controller: AbortController;
+        /**
+         * The Sessions the stream follows: every Session the user owns, or, until the stream says so or from an older
+         * Chat Worker, those listed when it started.
+         */
+        readonly follows: { readonly kind: "owned" } | { readonly kind: "listed"; readonly directoryKey: string };
     } | null = null;
     let activeBotId = "";
     // The stream and the open pane report changes as they happen, while a directory snapshot describes the moment its
@@ -129,46 +133,71 @@ export function createConversationStatusStore(
             });
         };
 
+        /**
+         * Applies the current statuses a stream reported once it followed, as a directory snapshot would be applied.
+         * They count as changes, so a directory snapshot that started earlier does not replace them.
+         */
+        const applyCurrentStatuses = (
+            statuses: readonly { readonly sessionId: string; readonly status: ManagedChatSession["status"] }[],
+            snapshotStartedAt: number,
+        ): void => {
+            for (const { sessionId, status } of statuses) {
+                if ((changedAt.get(sessionId) ?? 0) > snapshotStartedAt) {
+                    continue;
+                }
+                if (status.kind === "idle") {
+                    markCompleted(sessionId);
+                } else {
+                    replaceStatus(sessionId, status);
+                }
+            }
+        };
+
         const closeWatcher = (): void => {
             watcher?.controller.abort(new Error("Conversation status watcher closed"));
             watcher = null;
         };
 
         /**
-         * Follows the Sessions' statuses. The stream reports changes only, so following that resumes after a gap first
-         * reads a snapshot, as every recovery inside the stream does.
+         * Follows the Sessions' statuses. Each time the stream follows, it reports their current statuses with that
+         * notice, before their changes, so a gap before it needs no snapshot of its own. A stream that follows only the Sessions listed when
+         * it started starts again when they change.
          */
-        const watch = (
-            botId: string,
-            sessionIds: readonly string[],
-            parent: AbortSignal,
-            start: "current" | "after-gap" = "current",
-        ): void => {
+        const watch = (botId: string, sessionIds: readonly string[], parent: AbortSignal): void => {
             const directoryKey = JSON.stringify([...sessionIds].sort());
-            if ((watcher?.botId === botId && watcher.directoryKey === directoryKey) || parent.aborted) {
+            if (
+                (watcher?.botId === botId &&
+                    (watcher.follows.kind === "owned" || watcher.follows.directoryKey === directoryKey)) ||
+                parent.aborted
+            ) {
                 return;
             }
             closeWatcher();
             const controller = new AbortController();
-            watcher = { botId, directoryKey, controller };
+            watcher = { botId, controller, follows: { kind: "listed", directoryKey } };
             const signal = AbortSignal.any([parent, controller.signal]);
             void (async () => {
                 let recoveries = 0;
-                let snapshotNeeded = start === "after-gap";
                 try {
                     while (!signal.aborted) {
                         try {
-                            if (snapshotNeeded) {
-                                const snapshotStartedAt = changes;
-                                replaceDirectory(await requests.managedSessions(botId, signal), snapshotStartedAt);
-                                snapshotNeeded = false;
-                            }
+                            const streamStartedAt = changes;
                             await requests.subscribeManagedSessionStatuses(
                                 botId,
                                 (event) => {
-                                    // Opening the stream shows it works, but only a Session event shows it keeps working,
-                                    // so only that restores the stream's own retries.
+                                    // Opening the stream shows it works, but only a later Session event shows it keeps
+                                    // working, so only that restores the stream's own retries.
                                     if (event.kind === "managed-session.statuses.following") {
+                                        if (watcher?.controller === controller) {
+                                            watcher = {
+                                                ...watcher,
+                                                follows:
+                                                    event.sessions === "owned"
+                                                        ? { kind: "owned" }
+                                                        : { kind: "listed", directoryKey },
+                                            };
+                                        }
+                                        applyCurrentStatuses(event.statuses, streamStartedAt);
                                         onFollowing();
                                         return;
                                     }
@@ -191,7 +220,6 @@ export function createConversationStatusStore(
                                 throw cause;
                             }
                             recoveries += 1;
-                            snapshotNeeded = true;
                         }
                     }
                 } catch (cause) {
@@ -253,7 +281,7 @@ export function createConversationStatusStore(
             unfollowed: () => watcher === null && get().statuses.size > 0,
             follow: (signal) => {
                 if (watcher === null && get().statuses.size > 0) {
-                    watch(activeBotId, [...get().statuses.keys()], signal, "after-gap");
+                    watch(activeBotId, [...get().statuses.keys()], signal);
                 }
             },
             close: closeWatcher,

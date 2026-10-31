@@ -47,6 +47,10 @@ const accessSchema = v.pipe(
     v.readonly(),
 );
 export type ChatAccess = v.InferOutput<typeof accessSchema>;
+const managedSessionStatusSchema = v.variant("kind", [
+    v.pipe(v.object({ kind: v.literal("idle") }), v.readonly()),
+    v.pipe(v.object({ commandId: identifier, kind: v.literal("working") }), v.readonly()),
+]);
 const managedSessionSchema = v.pipe(
     v.object({
         createdAt: v.pipe(v.string(), v.isoTimestamp()),
@@ -59,10 +63,7 @@ const managedSessionSchema = v.pipe(
         projectId: identifier,
         /** Whether the Runtime has received the Session's first prompt, which gives the Session its title. */
         prompted: v.boolean(),
-        status: v.variant("kind", [
-            v.pipe(v.object({ kind: v.literal("idle") }), v.readonly()),
-            v.pipe(v.object({ commandId: identifier, kind: v.literal("working") }), v.readonly()),
-        ]),
+        status: managedSessionStatusSchema,
         userId: identifier,
     }),
     v.readonly(),
@@ -70,12 +71,25 @@ const managedSessionSchema = v.pipe(
 export type ManagedChatSession = v.InferOutput<typeof managedSessionSchema>;
 /** The Chat Worker sends this once the status stream reaches the Runtime and follows the Sessions. */
 const MANAGED_SESSION_STATUSES_FOLLOWING_KIND = "managed-session.statuses.following";
+/** Only the Chat Worker's `sessions: "owned"` promise is understood; anything else keeps the older contract. */
+const managedSessionStatusesFollowingSchema = v.object({ sessions: v.optional(v.unknown()) });
+const currentManagedSessionStatusesSchema = v.object({
+    statuses: v.array(v.pipe(v.object({ sessionId: identifier, status: managedSessionStatusSchema }), v.readonly())),
+});
 /**
- * What the Chat Worker's Session stream tells this page: it follows the Sessions, a Session's activity changed, or the
- * Runtime closed one.
+ * What the Chat Worker's Session stream tells this page: it follows the Sessions with their current statuses, a
+ * Session's activity changed, or the Runtime closed one. It follows every Session the user owns, including later ones
+ * (`owned`), or, from an older Chat Worker, only the Sessions listed when it started (`listed`).
  */
 export type ManagedSessionEvent =
-    | { readonly kind: typeof MANAGED_SESSION_STATUSES_FOLLOWING_KIND }
+    | {
+          readonly kind: typeof MANAGED_SESSION_STATUSES_FOLLOWING_KIND;
+          readonly sessions: "owned" | "listed";
+          readonly statuses: readonly {
+              readonly sessionId: string;
+              readonly status: ManagedChatSession["status"];
+          }[];
+      }
     | SessionStatusChangedEvent
     | SessionCloseNoticeEvent;
 const chatRuntimeSchema = v.object({
@@ -380,29 +394,76 @@ export class BotChatApi {
         if (token === null) {
             throw new CloudApiError("UNAUTHENTICATED", "Your session is unavailable.");
         }
-        await this.#subscribe(
-            new Request(
-                new URL(
-                    `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/managed-session/status-events`,
-                    this.#origin,
+        const stream = new AbortController();
+        const streamSignal = AbortSignal.any([signal, stream.signal]);
+        // Events that arrive while the current statuses are read for an older Chat Worker, delivered after them.
+        let held: ManagedSessionEvent[] | null = null;
+        const deliver = (event: ManagedSessionEvent): void => {
+            if (held === null) {
+                receive(event);
+            } else {
+                held.push(event);
+            }
+        };
+        try {
+            await this.#subscribe(
+                new Request(
+                    new URL(
+                        `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/managed-session/status-events`,
+                        this.#origin,
+                    ),
+                    { method: "POST", headers: { authorization: `Bearer ${token}` }, signal: streamSignal },
                 ),
-                { method: "POST", headers: { authorization: `Bearer ${token}` }, signal },
-            ),
-            (data) => {
-                // A newer Chat Worker may send other kinds; this page skips them and keeps its stream.
-                switch (decodeMessageKind(data)) {
-                    case MANAGED_SESSION_STATUSES_FOLLOWING_KIND:
-                        receive({ kind: MANAGED_SESSION_STATUSES_FOLLOWING_KIND });
-                        return;
-                    case SESSION_CLOSE_NOTICE_KIND:
-                        receive(decodeSessionCloseNoticeEvent(data));
-                        return;
-                    case "session.status.changed":
-                        receive(decodeSessionStatusChangedEvent(data));
-                        return;
-                }
-            },
-        );
+                (data) => {
+                    // A newer Chat Worker may send other kinds; this page skips them and keeps its stream.
+                    switch (decodeMessageKind(data)) {
+                        case MANAGED_SESSION_STATUSES_FOLLOWING_KIND: {
+                            const message: unknown = JSON.parse(data);
+                            if (v.parse(managedSessionStatusesFollowingSchema, message).sessions === "owned") {
+                                const { statuses } = v.parse(currentManagedSessionStatusesSchema, message);
+                                // Current statuses supersede a read still in progress and the changes it holds.
+                                held = null;
+                                receive({ kind: MANAGED_SESSION_STATUSES_FOLLOWING_KIND, sessions: "owned", statuses });
+                                return;
+                            }
+                            // An older Chat Worker sends no current statuses, so they are read once it follows; a
+                            // change that arrives meanwhile is delivered after them and wins.
+                            const backlog: ManagedSessionEvent[] = [];
+                            held = backlog;
+                            this.managedSessions(botId, streamSignal).then(
+                                (listed) => {
+                                    if (held !== backlog || streamSignal.aborted) {
+                                        return;
+                                    }
+                                    held = null;
+                                    receive({
+                                        kind: MANAGED_SESSION_STATUSES_FOLLOWING_KIND,
+                                        sessions: "listed",
+                                        statuses: listed.map((session) => ({
+                                            sessionId: session.id,
+                                            status: session.status,
+                                        })),
+                                    });
+                                    for (const event of backlog) {
+                                        receive(event);
+                                    }
+                                },
+                                (cause: unknown) => stream.abort(cause),
+                            );
+                            return;
+                        }
+                        case SESSION_CLOSE_NOTICE_KIND:
+                            deliver(decodeSessionCloseNoticeEvent(data));
+                            return;
+                        case "session.status.changed":
+                            deliver(decodeSessionStatusChangedEvent(data));
+                            return;
+                    }
+                },
+            );
+        } finally {
+            stream.abort(new Error("Session status stream ended"));
+        }
     };
     readonly archiveManagedSession = async (botId: string, sessionId: string, signal: AbortSignal) =>
         v.parse(

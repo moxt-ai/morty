@@ -78,3 +78,30 @@ test("Given an open conversation, When I send a message the Runtime has not rece
     });
     await app.close();
 });
+
+test("Given a conversation still answering in the background, When I start another conversation and the first one finishes before a new Runtime connection could open, Then the sidebar marks the first one unread", {
+    timeout: 30_000,
+}, async () => {
+    const heldPrompt = "hold after first delta";
+    const environment = await createChatWorkerEnvironment(false, true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true });
+    onTestFinished(() => app.close());
+    const { daemon, executionNetwork } = app;
+    if (daemon === null || executionNetwork === null) {
+        throw new Error("Expected the connected Runtime and its transport proxy");
+    }
+    await sendPrompt(app, await readyComposer(app), heldPrompt);
+    await app.waitForView(() => expect(document.body.textContent).toContain("Partial reply"));
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    await app.waitForView(() => expect(entryStatus(app, heldPrompt)).toBe("Session working"));
+
+    // Starting a conversation changes the set of Sessions; following it must not depend on a new Runtime connection.
+    const release = await executionNetwork.holdLaterRuntimeHosts();
+    onTestFinished(release);
+    await sendPrompt(app, await readyComposer(app), "Start another conversation");
+    await app.waitForView(() => expect(directoryEntry(app, "Start another conversation")).toBeDefined());
+    await daemon.continueReply(heldPrompt, { outcome: "complete", output: [] });
+
+    await app.waitForView(() => expect(entryStatus(app, heldPrompt)).toBe("Unread response"));
+});
