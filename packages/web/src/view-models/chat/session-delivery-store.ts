@@ -13,6 +13,14 @@ import { formatError } from "../format-error.ts";
 type SubmitRequest = Parameters<MobiusClient["turns"]["submit"]>[1];
 type AcceptedTurn = { readonly turnId: string };
 export type SubmitTurn = (request: SubmitRequest, signal: AbortSignal) => Promise<AcceptedTurn>;
+/**
+ * How one attempt reaches the Session through the request access it started with. Preparation uploads the message's
+ * files and freezes the request that delivery then owns through submission and recovery.
+ */
+interface DeliveryAttempt {
+    readonly prepare: (message: SubmittedMessage, signal: AbortSignal) => Promise<Journal["request"]>;
+    readonly submit: SubmitTurn;
+}
 type SubmissionOutcome =
     | { readonly kind: "accepted"; readonly turn: AcceptedTurn }
     /** The request failed, but the service had already shown it has the command. */
@@ -74,7 +82,7 @@ export function deliveryMessagePresentation(message: SubmittedMessage) {
 /** Why a submission failed before the service accepted it; delivery is the one record of it. */
 export type SubmissionFailure = { readonly code: string; readonly message: string };
 
-export function submissionFailure(cause: unknown, fallback: string): SubmissionFailure {
+function submissionFailure(cause: unknown, fallback: string): SubmissionFailure {
     return { code: cause instanceof MobiusError ? cause.code : "", message: formatError(cause, fallback) };
 }
 
@@ -144,16 +152,16 @@ export interface SessionDeliveryStore {
     readonly discardUnknown: () => void;
     /** Takes a new Session's first message, which a pane submits once it connects. */
     readonly awaitConnection: (message: SubmittedMessage) => void;
-    readonly prepare: (message: SubmittedMessage) => void;
-    readonly preparationFailed: (message: SubmittedMessage, failure: SubmissionFailure) => void;
     readonly takeFailedMessage: () => SubmittedMessage | null;
-    /** Losing an attempt's connection does not discard its submitted intent. */
-    readonly submissionInterrupted: () => void;
     readonly reconcile: (commandIds: readonly string[]) => void;
     /** Releases original input once history owns it or the Runtime confirms its withdrawal. */
     readonly releaseMessages: (commandIds: readonly string[]) => void;
-    readonly submit: (journal: Journal, submit: SubmitTurn, signal: AbortSignal) => Promise<SubmissionOutcome>;
-    readonly retry: (submit: SubmitTurn, signal: AbortSignal) => Promise<SubmissionOutcome | null>;
+    /**
+     * Prepares and submits a message on the Session's lifetime: the pane that started the attempt may stop before it
+     * settles, and the next pane shows where it is. The message is `preparing` as soon as this is called.
+     */
+    readonly send: (message: SubmittedMessage, attempt: DeliveryAttempt) => Promise<void>;
+    readonly retry: (submit: SubmitTurn) => Promise<SubmissionOutcome | null>;
 }
 
 /**
@@ -194,8 +202,10 @@ export const noSessionDelivery = createStore<Pick<SessionDeliveryStore, "state">
     state: { kind: "idle" },
 }));
 
-/** The Session owns delivery; each attempt borrows the currently connected pane's submit port. */
+/** The Session owns delivery and runs each attempt on its own lifetime, apart from the pane that started it. */
 export const createSessionDeliveryStore = (options: {
+    /** The Session's lifetime on this page; only its end cancels an attempt. */
+    readonly lifetime: AbortSignal;
     readonly pendingSubmission: Omit<Journal, "attachments"> | null;
     /** Writes the frozen request before it can leave the browser; failure prevents submission. */
     readonly pendingSubmissionChanged: (journal: Omit<Journal, "attachments"> | null) => void;
@@ -233,6 +243,18 @@ export const createSessionDeliveryStore = (options: {
             return { kind: "accepted", turn: accepted };
         } catch (cause) {
             if (signal.aborted || cause instanceof MobiusCancellationError) {
+                // The Session's lifetime on this page ended first. Losing the attempt's connection does not discard
+                // its submitted intent: what the service confirmed stays, the rest is unknown for the next page.
+                const state = get().state;
+                if (state.kind === "submitting" && state.confirmation === "delivered") {
+                    if (journal.request.disposition === "queue") {
+                        confirm(journal, set, get);
+                    } else {
+                        set({ state: { kind: "idle" } });
+                    }
+                } else if (state.kind === "submitting") {
+                    set({ state: { kind: "delivery-unknown", journal } });
+                }
                 throw cause;
             }
             if (isAuthoritativeFailure(cause)) {
@@ -273,39 +295,12 @@ export const createSessionDeliveryStore = (options: {
                 }
             },
             awaitConnection: (message) => set({ state: { kind: "awaiting-connection", message } }),
-            prepare: (message) => set({ state: { kind: "preparing", message } }),
-            preparationFailed: (message, failure) => set({ state: { kind: "preparation-failed", message, failure } }),
             takeFailedMessage: () => {
                 const failed = failedSubmission(get().state);
                 if (failed !== null) {
                     set({ state: { kind: "idle" } });
                 }
                 return failed?.message ?? null;
-            },
-            submissionInterrupted: () => {
-                const state = get().state;
-                if (state.kind === "preparing") {
-                    set({
-                        state: {
-                            kind: "preparation-failed",
-                            message: state.message,
-                            failure: {
-                                code: "",
-                                message: "Message preparation was interrupted. Retry when connected.",
-                            },
-                        },
-                    });
-                } else if (state.kind === "submitting") {
-                    if (state.confirmation === "delivered") {
-                        if (state.journal.request.disposition === "queue") {
-                            confirm(state.journal, set, get);
-                        } else {
-                            set({ state: { kind: "idle" } });
-                        }
-                    } else {
-                        set({ state: { kind: "delivery-unknown", journal: state.journal } });
-                    }
-                }
             },
             releaseMessages: (commandIds) => {
                 setState({
@@ -330,11 +325,38 @@ export const createSessionDeliveryStore = (options: {
                     }
                 }
             },
-            submit: async (journal, submit, signal) => await send(journal, submit, signal, set, get),
+            send: async (message, attempt) => {
+                const signal = options.lifetime;
+                set({ state: { kind: "preparing", message } });
+                let request: Journal["request"];
+                try {
+                    request = await attempt.prepare(message, signal);
+                    signal.throwIfAborted();
+                } catch (cause) {
+                    signal.throwIfAborted();
+                    set({
+                        state: {
+                            kind: "preparation-failed",
+                            message,
+                            failure: submissionFailure(cause, "The agent could not complete the message."),
+                        },
+                    });
+                    return;
+                }
+                // Freezing the request moves the message from unsent to possibly delivered under its identity.
+                const journal: Journal = {
+                    commandId: message.commandId,
+                    request,
+                    attachments: message.attachments.kind === "local" ? message.attachments.values : null,
+                };
+                await send(journal, attempt.submit, signal, set, get);
+            },
             // Only an unknown delivery repeats its identity; the Runtime never runs a rejected command identity again.
-            retry: async (submit, signal) => {
+            retry: async (submit) => {
                 const state = get().state;
-                return state.kind === "delivery-unknown" ? await send(state.journal, submit, signal, set, get) : null;
+                return state.kind === "delivery-unknown"
+                    ? await send(state.journal, submit, options.lifetime, set, get)
+                    : null;
             },
         };
     });

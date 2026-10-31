@@ -60,7 +60,6 @@ import {
     type SessionDeliveryStore,
     type SubmitTurn,
     type SubmittedMessage,
-    submissionFailure,
 } from "./session-delivery-store.ts";
 import { observeSessionExecution, type QueuedCommand, type SessionExecutionObservation } from "./session-execution.ts";
 import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
@@ -171,7 +170,8 @@ export interface SessionPaneStore {
     readonly setDraft: (draft: string) => void;
     readonly send: (signal: AbortSignal) => Promise<void>;
     readonly removeUnknownDelivery: () => void;
-    readonly retryUnknownDelivery: (signal: AbortSignal) => Promise<void>;
+    /** Retries on the Session's delivery: the attempt may outlive this pane. */
+    readonly retryUnknownDelivery: () => Promise<void>;
     readonly retryFailedMessage: (signal: AbortSignal) => Promise<void>;
     readonly editFailedMessage: () => void;
     readonly discardFailedMessage: () => void;
@@ -497,6 +497,7 @@ export function createSessionPaneModel(options: {
     let loadingOlderHistory = false;
     const instructionUri = "morty://bot/instructions";
     const withInstructions = async <T extends { readonly attachments: readonly PromptAttachment[] }>(
+        connected: MobiusClient,
         request: T,
         signal: AbortSignal,
     ): Promise<T> => {
@@ -504,11 +505,8 @@ export function createSessionPaneModel(options: {
         if (instructions.length === 0) {
             return request;
         }
-        if (client === null) {
-            throw new Error("The Session is not connected.");
-        }
         const attachment = await uploadPromptAttachment(
-            client.sessions,
+            connected.sessions,
             sessionId,
             {
                 bytes: new TextEncoder().encode(instructions),
@@ -524,12 +522,17 @@ export function createSessionPaneModel(options: {
             attachments: [...request.attachments.filter((item) => item.uri !== instructionUri), attachment],
         };
     };
-    const submitTurn: SubmitTurn = noticingClosure(async (request, signal) => {
-        if (client === null) {
-            throw new Error("The Session is not connected.");
-        }
-        return await client.turns.submit(sessionId, request, signal);
-    });
+    /**
+     * Submits through the client the attempt started with. Closing a client ends only its live subscriptions, so the
+     * attempt keeps its requests when this pane reconnects or stops.
+     */
+    const submitTurn = (connected: MobiusClient | null): SubmitTurn =>
+        noticingClosure(async (request, signal) => {
+            if (connected === null) {
+                throw new Error("The Session is not connected.");
+            }
+            return await connected.turns.submit(sessionId, request, signal);
+        });
     const lastSentMessageEntry = sessionLastSentMessageEntry(sessionId);
     // The projection is the only source of the timeline; every change to it updates all three fields together.
     const projectedTimeline = (state: SessionProjection) => ({
@@ -704,13 +707,18 @@ export function createSessionPaneModel(options: {
             turnMoved(previous, turn);
         };
         /**
-         * Submits `commandId` through this pane. A new turn becomes current as the service's acceptance arrives, dated
+         * Submits `commandId` through `connected`. A new turn becomes current as the service's acceptance arrives, dated
          * by when this browser sent it, or else `startedAt`; until then the turn is its delivery's.
          */
         const submitCommand =
-            (commandId: string, target: DeliveryTarget["disposition"], startedAt: number): SubmitTurn =>
+            (
+                connected: MobiusClient | null,
+                commandId: string,
+                target: DeliveryTarget["disposition"],
+                startedAt: number,
+            ): SubmitTurn =>
             async (request, signal) => {
-                const accepted = await submitTurn(request, signal);
+                const accepted = await submitTurn(connected)(request, signal);
                 signal.throwIfAborted();
                 if (target === "reject") {
                     updateTurn({
@@ -828,6 +836,12 @@ export function createSessionPaneModel(options: {
                 () => deadline.abort(new DOMException("The Session history read timed out.", "TimeoutError")),
                 () => undefined,
             );
+            // History read after the Runtime accepted an immediate message shows it, also where released Runtimes
+            // omit its command identity there, as for a message accepted while no pane followed the Session.
+            const acceptedBeforeRead = delivery
+                .getState()
+                .acceptedMessages.filter((message) => message.target.disposition === "reject")
+                .map((message) => message.commandId);
             try {
                 const history = await readSessionHistory(
                     connected,
@@ -844,7 +858,7 @@ export function createSessionPaneModel(options: {
                 }
                 const effects = commitProjection({ history, kind: "history-loaded", revision });
                 delivery.getState().reconcile(sessionEventCommandIds(history.events));
-                delivery.getState().releaseMessages(sessionUserCommandIds(get().messages));
+                delivery.getState().releaseMessages([...sessionUserCommandIds(get().messages), ...acceptedBeforeRead]);
                 if (effects.some((loaded) => loaded.kind === "read-settings")) {
                     settings
                         .getState()
@@ -911,20 +925,49 @@ export function createSessionPaneModel(options: {
         };
         /**
          * Submits a message: the composer's draft, a failed message again, or the first message the Session's
-         * delivery holds. Delivery owns that snapshot through preparation, sending, and recovery; completion never
-         * writes to the next draft.
+         * delivery holds. Delivery owns that snapshot and the attempt through preparation, sending, and recovery, so
+         * the attempt outlives this pane; completion never writes to the next draft.
          */
         const submit = async (message: SubmittedMessage, signal: AbortSignal): Promise<void> => {
             const currentDelivery = delivery.getState().state;
             if (!canSubmit(message.target, operationFacts())) {
                 return;
             }
-            const { attachments, commandId, target } = message;
+            const { commandId, target } = message;
             welcome.getState().dismiss();
             const sent = turns.recordSent(commandId, Date.now());
             void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
-            const prompt = message.content.trim();
-            delivery.getState().prepare(message);
+            const connected = client;
+            const sending = delivery.getState().send(message, {
+                prepare: async ({ attachments, content }, attemptSignal) => {
+                    if (connected === null) {
+                        throw new Error("The Session is not connected.");
+                    }
+                    const uploadedAttachments =
+                        attachments.kind === "uploaded"
+                            ? attachments.values
+                            : await uploadPromptAttachments(
+                                  connected.sessions,
+                                  sessionId,
+                                  attachments.values,
+                                  attemptSignal,
+                              );
+                    // Freeze semantic intent before delivery owns retries, including instructions and identity.
+                    return await withInstructions(
+                        connected,
+                        {
+                            ...request,
+                            ...target,
+                            agentId: session.agentRef,
+                            directoryId: session.result.ready.directoryId,
+                            attachments: uploadedAttachments,
+                            content: content.trim(),
+                        },
+                        attemptSignal,
+                    );
+                },
+                submit: submitCommand(connected, commandId, target.disposition, sent.sentAt),
+            });
             // Only a message taken from the composer leaves it; a failed or first message never was in it.
             if (currentDelivery.kind === "idle") {
                 centralSessionStorage.remove(draftEntry);
@@ -935,53 +978,9 @@ export function createSessionPaneModel(options: {
                 updateTurn({ kind: "new-turn-submitted" });
             }
             set({ followRevision: get().followRevision + 1 });
-            try {
-                if (client === null) {
-                    throw new Error("The Session is not connected.");
-                }
-                const uploadedAttachments =
-                    attachments.kind === "uploaded"
-                        ? attachments.values
-                        : await uploadPromptAttachments(client.sessions, sessionId, attachments.values, signal);
-                // Freeze semantic intent before delivery owns retries, including instructions and identity.
-                const submission = await withInstructions(
-                    {
-                        ...request,
-                        ...target,
-                        agentId: session.agentRef,
-                        directoryId: session.result.ready.directoryId,
-                        attachments: uploadedAttachments,
-                        content: prompt,
-                    },
-                    signal,
-                );
-                signal.throwIfAborted();
-                await delivery.getState().submit(
-                    {
-                        commandId,
-                        request: submission,
-                        attachments: attachments.kind === "local" ? attachments.values : null,
-                    },
-                    submitCommand(commandId, target.disposition, sent.sentAt),
-                    signal,
-                );
-                signal.throwIfAborted();
-                delivery.getState().releaseMessages(sessionUserCommandIds(get().messages));
-            } catch (cause) {
-                signal.throwIfAborted();
-                if (delivery.getState().state.kind === "preparing") {
-                    delivery
-                        .getState()
-                        .preparationFailed(
-                            message,
-                            submissionFailure(cause, "The agent could not complete the message."),
-                        );
-                } else {
-                    // Delivery already owns the frozen request, so its outcome is unknown rather than unsent.
-                    delivery.getState().submissionInterrupted();
-                }
-                // The retained submission owns its failure; the composer keeps the next draft.
-            }
+            // The retained submission owns its failure; the composer keeps the next draft.
+            await sending;
+            delivery.getState().releaseMessages(sessionUserCommandIds(get().messages));
         };
         return {
             connection: { kind: "first-loading" },
@@ -1434,7 +1433,7 @@ export function createSessionPaneModel(options: {
             removeUnknownDelivery: () => {
                 delivery.getState().discardUnknown();
             },
-            retryUnknownDelivery: async (signal) => {
+            retryUnknownDelivery: async () => {
                 const state = delivery.getState().state;
                 if (
                     state.kind !== "delivery-unknown" ||
@@ -1447,9 +1446,8 @@ export function createSessionPaneModel(options: {
                     updateTurn({ kind: "new-turn-submitted" });
                 }
                 // Without a record of when this browser sent it, the retry dates the command's work.
-                const retrying = submitCommand(pending.commandId, pending.request.disposition, Date.now());
-                await delivery.getState().retry(retrying, signal);
-                signal.throwIfAborted();
+                const retrying = submitCommand(client, pending.commandId, pending.request.disposition, Date.now());
+                await delivery.getState().retry(retrying);
                 delivery.getState().releaseMessages(sessionUserCommandIds(get().messages));
             },
             retryFailedMessage: async (signal) => {
@@ -1770,7 +1768,6 @@ export function createSessionPaneModel(options: {
         phase = "stopped";
         filePreview.getState().close();
         lifetime.abort(new Error("The session pane stopped."));
-        delivery.getState().submissionInterrupted();
         messageQueue.getState().interrupted();
         options.onReleased?.(sessionActivity(store.getState().turn, delivery.getState().state));
     };
