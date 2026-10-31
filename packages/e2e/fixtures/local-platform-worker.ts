@@ -7,7 +7,6 @@ import {
 } from "../../../third-party/mobius/packages/relay-cloudflare-platform/src/worker.ts";
 import {
     ProjectAuthenticationError,
-    standardWebSocketHost,
     VerifiedExternalIdentity,
 } from "../../../third-party/mobius/packages/relay-core/src/index.ts";
 
@@ -37,7 +36,6 @@ const authenticator = {
 const worker = createPlatformApplication(
     new PlatformAuthenticationConfiguration(authenticator, new Set([E2E_DEVELOPER_SUBJECT]), new Set(["*"])),
     createPlatformGateways,
-    standardWebSocketHost,
 );
 
 const transport = createPlatformWorker();
