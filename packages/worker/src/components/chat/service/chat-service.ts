@@ -17,15 +17,23 @@ import type { ManagedSessionStorage } from "../storage/managed-session-storage.t
 
 const STATUS_LIVENESS_MILLISECONDS = 120_000;
 
-/** Sent once the stream reaches the Runtime and follows the Sessions' statuses. */
+/**
+ * Sent once the stream reaches the Runtime. `sessions: "owned"` promises that `statuses` holds the current status of
+ * each Session the user owns and that the changes of every Session the user owns follow, including Sessions created
+ * later. An older Chat Worker sent neither: it followed only the changes of the Sessions owned when the stream started.
+ */
 export const MANAGED_SESSION_STATUSES_FOLLOWING_KIND = "managed-session.statuses.following";
 
 /**
- * What the managed Session stream tells a client: it now follows the Sessions, a Session's activity changed, or the
- * Runtime closed a Session.
+ * What the managed Session stream tells a client: it now follows the Sessions as they currently are, a Session's
+ * activity changed, or the Runtime closed a Session.
  */
 export type ManagedSessionEvent =
-    | { readonly kind: typeof MANAGED_SESSION_STATUSES_FOLLOWING_KIND }
+    | {
+          readonly kind: typeof MANAGED_SESSION_STATUSES_FOLLOWING_KIND;
+          readonly sessions: "owned";
+          readonly statuses: readonly Omit<SessionStatusChangedEvent, "kind">[];
+      }
     | SessionStatusChangedEvent
     | SessionCloseNoticeEvent;
 
@@ -290,18 +298,21 @@ export class ChatService {
         };
     };
 
-    /** Publishes the activity changes and close notices of the caller's Sessions until the stream ends. */
+    /**
+     * Publishes the current status of each of the caller's Sessions with the following notice, then their activity
+     * changes and close notices, until the stream ends. Whether a Session is the caller's is read when its event arrives, so Sessions created or
+     * archived while the stream runs need no new stream.
+     */
     readonly subscribeManagedSessionStatuses = async (
         scope: ChatScope,
         publish: (event: ManagedSessionEvent) => void,
         signal: AbortSignal,
     ): Promise<void> => {
         const runtime = await this.localRuntime(scope);
-        const ownedSessions = await this.#chatSessions.list(scope.projectId, scope.userId, scope.botId, scope.signal);
         scope.signal.throwIfAborted();
-        const owned = new Set<string>(ownedSessions.map((session) => session.id));
         const socket = await this.#platform.openChatRuntimeHost(scope.projectId, runtime.runtimeId, signal);
-        publish({ kind: MANAGED_SESSION_STATUSES_FOLLOWING_KIND });
+        // The authorization deadline bounds opening the stream, not the reads made while it runs.
+        const following: ChatScope = { ...scope, signal };
         await new Promise<void>((_resolve, reject) => {
             let settled = false;
             let liveness: ReturnType<typeof setTimeout>;
@@ -318,6 +329,25 @@ export class ChatService {
                 socket.close(1000, "Session status subscription closed");
                 reject(cause);
             };
+            // Events are published in the order they arrive, each once its ownership has been read.
+            let published = Promise.resolve();
+            const inOrder = (step: () => Promise<void>): void => {
+                published = published.then(step);
+                published.catch((cause: unknown) => finish(signal.aborted ? signal.reason : cause));
+            };
+            const publishOwned = (event: SessionStatusChangedEvent | SessionCloseNoticeEvent): void =>
+                inOrder(async () => {
+                    const owned = await this.#chatSessions.ownsSession(
+                        scope.projectId,
+                        scope.userId,
+                        scope.botId,
+                        event.sessionId,
+                        signal,
+                    );
+                    if (owned && !settled) {
+                        publish(event);
+                    }
+                });
             const refreshLiveness = (): void => {
                 clearTimeout(liveness);
                 liveness = setTimeout(
@@ -347,18 +377,11 @@ export class ChatService {
                         return;
                     }
                     if (kind === SESSION_CLOSE_NOTICE_KIND) {
-                        const notice = decodeSessionCloseNoticeEvent(event.data);
-                        if (owned.has(notice.sessionId)) {
-                            publish(notice);
-                        }
+                        publishOwned(decodeSessionCloseNoticeEvent(event.data));
                         return;
                     }
-                    if (kind !== "session.status.changed") {
-                        return;
-                    }
-                    const status = decodeSessionStatusChangedEvent(event.data);
-                    if (owned.has(status.sessionId)) {
-                        publish(status);
+                    if (kind === "session.status.changed") {
+                        publishOwned(decodeSessionStatusChangedEvent(event.data));
                     }
                 } catch (cause) {
                     finish(
@@ -378,6 +401,18 @@ export class ChatService {
             socket.addEventListener("close", closed, { once: true });
             socket.addEventListener("error", closed, { once: true });
             socket.addEventListener("message", message);
+            // The current statuses are read once the socket follows the Runtime, so no change falls between the two. A
+            // change that arrives while they are read is published after them and wins.
+            inOrder(async () => {
+                const { sessions } = await this.managedSessions(following);
+                if (!settled) {
+                    publish({
+                        kind: MANAGED_SESSION_STATUSES_FOLLOWING_KIND,
+                        sessions: "owned",
+                        statuses: sessions.map((session) => ({ sessionId: session.id, status: session.status })),
+                    });
+                }
+            });
             socket.accept();
             if (signal.aborted) {
                 aborted();

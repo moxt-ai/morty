@@ -98,7 +98,7 @@ function privateJson(value: unknown) {
 function encodeManagedSessionEvent(event: ManagedSessionEvent): string {
     switch (event.kind) {
         case MANAGED_SESSION_STATUSES_FOLLOWING_KIND:
-            return JSON.stringify({ kind: event.kind });
+            return JSON.stringify({ kind: event.kind, sessions: event.sessions, statuses: event.statuses });
         case "session.status.changed":
             return encodeSessionStatusChangedEvent(event);
         case "session.close.notice":

@@ -1,4 +1,5 @@
-import { createServer, request } from "node:http";
+import { createServer, type IncomingMessage, request } from "node:http";
+import type { Duplex } from "node:stream";
 import { WebSocket, WebSocketServer } from "ws";
 
 /** Forwards real traffic unchanged, with controllable ordering at the Platform transport boundary. */
@@ -7,6 +8,10 @@ export async function createSessionExecutionProxy(upstream: string) {
     let holdSteer: ((release: () => Promise<unknown>) => void) | null = null;
     let holdSubmission: ((release: () => void) => void) | null = null;
     let heldEvents: (() => void)[] | null = null;
+    let heldRuntimeHosts: (() => void)[] | null = null;
+    let openRuntimeHosts = 0;
+    const runtimeHostWaiters: (() => void)[] = [];
+    const heldUpgrades = new Set<Duplex>();
     const server = createServer((incoming, outgoing) => {
         const forwarded = request(
             new URL(incoming.url ?? "/", upstream),
@@ -24,8 +29,28 @@ export async function createSessionExecutionProxy(upstream: string) {
         incoming.pipe(forwarded);
     });
     const sockets = new Set<WebSocket>();
-    const connections = new WebSocketServer({ server });
-    connections.on("connection", (client, incoming) => {
+    const connections = new WebSocketServer({ noServer: true });
+    const isRuntimeHost = (url: string | undefined): boolean =>
+        new URL(url ?? "/", upstream).pathname.endsWith("/host");
+    server.on("upgrade", (incoming, socket, head) => {
+        const accept = () => {
+            if (!socket.destroyed) {
+                connections.handleUpgrade(incoming, socket, head, (client) =>
+                    connections.emit("connection", client, incoming),
+                );
+            }
+        };
+        if (heldRuntimeHosts !== null && isRuntimeHost(incoming.url)) {
+            heldUpgrades.add(socket);
+            heldRuntimeHosts.push(() => {
+                heldUpgrades.delete(socket);
+                accept();
+            });
+            return;
+        }
+        accept();
+    });
+    connections.on("connection", (client: WebSocket, incoming: IncomingMessage) => {
         const target = new URL(incoming.url ?? "/", upstream);
         target.protocol = "ws:";
         const remote = new WebSocket(target, {
@@ -33,6 +58,17 @@ export async function createSessionExecutionProxy(upstream: string) {
         });
         sockets.add(client);
         sockets.add(remote);
+        if (isRuntimeHost(incoming.url)) {
+            remote.on("open", () => {
+                openRuntimeHosts += 1;
+                for (const opened of runtimeHostWaiters.splice(0)) {
+                    opened();
+                }
+                remote.on("close", () => {
+                    openRuntimeHosts -= 1;
+                });
+            });
+        }
         const pending: (() => void)[] = [];
         const responses = new Map<string, (frame: unknown) => void>();
         client.on("message", (data, binary) => {
@@ -174,9 +210,31 @@ export async function createSessionExecutionProxy(upstream: string) {
                 }
             };
         },
+        /**
+         * Waits until a Runtime host connection is open, then keeps every later one from connecting until the
+         * returned release, as when the Runtime cannot be reached for a new connection.
+         */
+        holdLaterRuntimeHosts: async (): Promise<() => void> => {
+            if (openRuntimeHosts === 0) {
+                await new Promise<void>((resolve) => runtimeHostWaiters.push(resolve));
+            }
+            const held: (() => void)[] = [];
+            heldRuntimeHosts = held;
+            return () => {
+                if (heldRuntimeHosts === held) {
+                    heldRuntimeHosts = null;
+                }
+                for (const accept of held.splice(0)) {
+                    accept();
+                }
+            };
+        },
         close: async () => {
             for (const socket of sockets) {
                 socket.terminate();
+            }
+            for (const socket of heldUpgrades) {
+                socket.destroy();
             }
             connections.close();
             server.closeAllConnections();
