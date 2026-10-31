@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import * as acp from "@agentclientprotocol/sdk";
 import {
     ControlledEndpointConnection,
@@ -10,6 +12,22 @@ import type {
     AcpEndpointTermination,
     InProcessAcpEndpoint,
 } from "../../../third-party/mobius/packages/cli/src/engine/acp/agent/in-process-endpoint.ts";
+
+/** Like Claude Code, a new session starts with the model its working directory's `.claude/settings.json` names. */
+async function projectModel(cwd: string): Promise<string | undefined> {
+    let settings: unknown;
+    try {
+        settings = JSON.parse(await readFile(join(cwd, ".claude", "settings.json"), "utf8"));
+    } catch (cause) {
+        if (cause instanceof Error && "code" in cause && cause.code === "ENOENT") {
+            return undefined;
+        }
+        throw cause;
+    }
+    const model: unknown =
+        typeof settings === "object" && settings !== null ? Reflect.get(settings, "model") : undefined;
+    return typeof model === "string" ? model : undefined;
+}
 
 /** Registers an in-process ACP Agent with the daemon. */
 const defineAgent = (
@@ -61,7 +79,7 @@ export function createSettingsAgent(
                 authMethods: [],
                 protocolVersion: acp.PROTOCOL_VERSION,
             }))
-            .onRequest(acp.methods.agent.session.new, async () => {
+            .onRequest(acp.methods.agent.session.new, async (context) => {
                 await beforeSessionCreated?.();
                 const sessionId = crypto.randomUUID();
                 histories.set(sessionId, []);
@@ -71,7 +89,7 @@ export function createSettingsAgent(
                         name: "Model",
                         category: "model",
                         type: "select",
-                        currentValue: "test-small",
+                        currentValue: (await projectModel(context.params.cwd)) ?? "test-small",
                         options: [
                             { value: "test-small", name: "Test Small" },
                             { value: "test-large", name: "Test Large" },

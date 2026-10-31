@@ -502,9 +502,11 @@ export class BotChatApi {
     /** Imports the native session a setup handoff names into the caller's Machine. */
     readonly continueNativeSession = async (botId: string, harness: string, sessionId: string, signal: AbortSignal) =>
         continuedSession(await this.#request(botId, "continue-native-session", { harness, sessionId }, signal));
+    /** The settings a new Session of the Agent starts with in the directory. */
     readonly agentSettings = async (
         botId: string,
         agentRef: string,
+        workspaceRef: string,
         signal: AbortSignal,
     ): Promise<AgentSettingsResult> => {
         signal.throwIfAborted();
@@ -512,7 +514,12 @@ export class BotChatApi {
         const requestedAgentRef = v.parse(identifier, agentRef);
         const result = v.parse(
             v.object({ settings: v.unknown() }),
-            await this.#request(requestedBotId, "agent-settings", { agentRef: requestedAgentRef }, signal),
+            await this.#request(
+                requestedBotId,
+                "agent-settings",
+                { agentRef: requestedAgentRef, workspaceRef },
+                signal,
+            ),
         );
         const discovered = decodeAgentSettingsDiscoveredEvent(JSON.stringify(result.settings));
         const settings = {

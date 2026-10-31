@@ -420,15 +420,19 @@ export class ChatService {
         });
     };
 
-    readonly agentSettings = async (scope: ChatScope, agentRef: string) => {
+    /** The settings a new Session of this Agent starts with in the draft's directory. */
+    readonly agentSettings = async (
+        scope: ChatScope,
+        draft: { readonly agentRef: string; readonly workspaceRef: string },
+    ) => {
         const bot = await this.#bot(scope);
         if (bot?.configuration === null || bot === null) {
             throw new PlatformProjectError("AGENT_REQUIRED", "Choose a connected harness.", 409);
         }
-        await this.#requireRuntimeAgent(scope, bot.configuration.runtimeId, agentRef);
+        await this.#requireRuntimeAgent(scope, bot.configuration.runtimeId, draft.agentRef);
         const discovered = await this.#platform.discoverChatAgentSettings(
             scope.projectId,
-            { runtimeId: bot.configuration.runtimeId, agentRef, workspaceRef: "default" },
+            { runtimeId: bot.configuration.runtimeId, ...draft },
             scope.signal,
         );
         return { settings: discovered };

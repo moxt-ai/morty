@@ -359,13 +359,18 @@ export class PlatformProjectGateway {
                 const settings = await client.runtimes.discoverAgentSettings(
                     selection.runtimeId,
                     selection.agentRef,
-                    {},
+                    { directoryId: selection.workspaceRef },
                     signal,
                 );
-                if (settings.agentId !== selection.agentRef) {
+                // A Runtime that predates directory-scoped discovery ignores the directory and names none: its
+                // settings are its default directory's, as before. One that names a directory must name this one.
+                if (
+                    settings.agentId !== selection.agentRef ||
+                    (settings.directoryId !== undefined && settings.directoryId !== selection.workspaceRef)
+                ) {
                     throw new PlatformProjectError(
                         "PLATFORM_INVALID_RESPONSE",
-                        "Platform returned settings for an unexpected Agent.",
+                        "Platform returned settings for an unexpected Agent or directory.",
                         502,
                     );
                 }

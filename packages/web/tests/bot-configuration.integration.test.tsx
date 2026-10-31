@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { getAllByRole, getByRole, queryAllByRole, queryByRole } from "@testing-library/dom";
 import type { DetachedWindowAPI } from "happy-dom";
 import { expect, test } from "vitest";
@@ -418,6 +421,51 @@ test("Given the working directory browser is open, When the user edits the path,
         }),
         failure,
     ]);
+});
+
+test("Given a project directory whose Agent settings choose another model, When the user starts a conversation there, Then the draft shows and the conversation runs that directory's model", {
+    timeout: 60_000,
+}, async () => {
+    const root = await mkdtemp(join(tmpdir(), "morty-project-settings-"));
+    try {
+        const project = join(await realpath(root), "project");
+        await mkdir(join(project, ".claude"), { recursive: true });
+        await writeFile(join(project, ".claude", "settings.json"), JSON.stringify({ model: "test-large" }));
+        const app = await createTestApp({
+            connectAgent: true,
+            agent: { id: "settings-test", label: "Settings Agent" },
+        });
+        await app.queryElementByTestId(
+            dataTestId.agentConfiguration,
+            (element) => element.textContent?.includes("Test Small") === true,
+        );
+
+        await app.user.click(app.elementByTestId(dataTestId.workingDirectory));
+        await app.user.click(await app.queryElementByTestId(dataTestId.changeWorkingDirectory));
+        const path = await app.queryElementByTestId(dataTestId.workingDirectoryPath);
+        await app.user.clear(path);
+        await app.user.type(path, project);
+        await app.user.click(
+            await app.queryElementByTestId(
+                dataTestId.saveWorkingDirectory,
+                (element) => element instanceof HTMLButtonElement && !element.disabled,
+            ),
+        );
+        await app.queryElementByTestId(
+            dataTestId.agentConfiguration,
+            (element) => element.textContent?.includes("Test Large") === true,
+        );
+
+        await sendPrompt(app, app.elementByTestId(dataTestId.messageComposer), "Use the project model");
+        await app.waitForView(() =>
+            expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
+                "Settings Agent: Use the project model",
+            ),
+        );
+        expect(app.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large");
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
 });
 
 test("Given a Bot paired with the Claude harness, When the user opens its settings, Then the Claude brand mark labels the harness field and the trigger", {
