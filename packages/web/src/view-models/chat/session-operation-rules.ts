@@ -23,29 +23,46 @@ export interface SessionOperationFacts {
 const NEW_TURN: DeliveryTarget = { disposition: "reject", targetCommandId: "" };
 
 /**
- * Whether delivery can take a message for `target` now: on a connected Session whose settings are not changing, with
- * no earlier submission being prepared, submitted or unresolved. A new turn needs none current; a queued message needs
- * the turn it waits behind running and not being stopped.
+ * Whether the Session takes a message for `target` now: it is connected and its settings are not changing. A new turn
+ * needs none current; a queued message needs the turn it waits behind running and not being stopped.
  */
-export function canSubmit(
+function sessionAccepts(
     target: DeliveryTarget,
-    facts: Pick<SessionOperationFacts, "connection" | "configuring" | "delivery" | "turn" | "stopping">,
+    facts: Pick<SessionOperationFacts, "connection" | "configuring" | "turn" | "stopping">,
 ): boolean {
     return (
         facts.connection === "ready" &&
         !facts.configuring &&
-        facts.delivery !== "preparing" &&
-        facts.delivery !== "submitting" &&
-        facts.delivery !== "delivery-unknown" &&
         (target.disposition === "queue"
             ? acceptedTurn(facts.turn)?.commandId === target.targetCommandId && !facts.stopping
             : facts.turn.kind !== "current")
     );
 }
 
-/** A submission the user makes also needs a reachable Machine and no question awaiting the user's answer. */
+/**
+ * Whether delivery can take a message for `target` now: the Session accepts it, with no earlier submission being
+ * prepared, submitted or unresolved.
+ */
+export function canSubmit(
+    target: DeliveryTarget,
+    facts: Pick<SessionOperationFacts, "connection" | "configuring" | "delivery" | "turn" | "stopping">,
+): boolean {
+    return (
+        facts.delivery !== "preparing" &&
+        facts.delivery !== "submitting" &&
+        facts.delivery !== "delivery-unknown" &&
+        sessionAccepts(target, facts)
+    );
+}
+
+/** What the user's submissions also need: a reachable Machine and no question awaiting the user's answer. */
+function userCanReachSession(facts: SessionOperationFacts): boolean {
+    return facts.connectionAvailable && !facts.waitingForInput;
+}
+
+/** A submission the user makes, which delivery takes as a new submission. */
 function userCanSubmit(target: DeliveryTarget, facts: SessionOperationFacts): boolean {
-    return facts.connectionAvailable && !facts.waitingForInput && canSubmit(target, facts);
+    return userCanReachSession(facts) && canSubmit(target, facts);
 }
 
 /** Sending the composer's message as a new turn. One message is in delivery at a time. */
@@ -66,6 +83,15 @@ export function canQueue(facts: SessionOperationFacts): boolean {
 /** Retrying a failed message submits it again exactly as it was meant: as a new turn or behind its target turn. */
 export function canRetryFailedMessage(target: DeliveryTarget, facts: SessionOperationFacts): boolean {
     return userCanSubmit(target, facts);
+}
+
+/**
+ * Retrying a message whose delivery is unknown sends its request again under the same identity and target, so the
+ * Runtime runs it at most once. That unresolved delivery is the one this retry settles; otherwise the retry needs what
+ * submitting the message for that target needs, so a Runtime that would refuse it does not spend its identity.
+ */
+export function canRetryUnknownDelivery(target: DeliveryTarget, facts: SessionOperationFacts): boolean {
+    return facts.delivery === "delivery-unknown" && userCanReachSession(facts) && sessionAccepts(target, facts);
 }
 
 /**
