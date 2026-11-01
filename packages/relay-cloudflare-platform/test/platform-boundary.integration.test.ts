@@ -4725,6 +4725,13 @@ it("Given an anonymous browser knows a Runtime, When it declares a full-budget u
         runtime.sessionId +
         "/content/" +
         "a".repeat(64);
+    // Alter the first character of the 43-character signature. Its last character carries two
+    // padding bits that decoding ignores, so editing that one can leave the signature valid.
+    const signatureStart = runtime.credential.length - 43;
+    const forgedCredential =
+        runtime.credential.slice(0, signatureStart) +
+        (runtime.credential[signatureStart] === "A" ? "B" : "A") +
+        runtime.credential.slice(signatureStart + 1);
     const declaration = {
         kind: "http.request",
         requestId: "unauthorized",
@@ -4732,12 +4739,7 @@ it("Given an anonymous browser knows a Runtime, When it declares a full-budget u
         path,
         body: "",
         bodyByteLength: 12_582_912,
-        headers: [
-            [
-                "authorization",
-                `Bearer ${runtime.credential.slice(0, -1)}${runtime.credential.endsWith("A") ? "B" : "A"}`,
-            ],
-        ],
+        headers: [["authorization", `Bearer ${forgedCredential}`]],
     };
     try {
         anonymous.send(JSON.stringify({ ...declaration, headers: [], requestId: "missing-credential" }));
