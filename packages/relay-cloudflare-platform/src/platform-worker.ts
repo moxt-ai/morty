@@ -8,7 +8,6 @@ import {
     instrumentD1Database,
     interactionResponseRequest,
     PairingDirectoryError,
-    ProjectPermission,
     ProjectScope,
     type RelayContext,
     RequestAccessMetrics,
@@ -65,7 +64,11 @@ import { OrganizationAdministrators } from "./service/organization-administrator
 import { OrganizationInviteService } from "./service/organization-invite-service.ts";
 import { PlatformControlPlaneService } from "./service/platform-control-plane-service.ts";
 import { RecordingPolicyService } from "./service/recording-policy-service.ts";
-import { SessionAccessService, type SessionAccessTarget } from "./service/session-access-service.ts";
+import {
+    type SessionAccess,
+    SessionAccessService,
+    type SessionAccessTarget,
+} from "./service/session-access-service.ts";
 import { AppSessionStatusWebhookStorage } from "./storage/app-session-status-webhook-storage.ts";
 import { OrganizationInviteStorage } from "./storage/organization-invite-storage.ts";
 import { PlatformControlPlaneStorage } from "./storage/platform-control-plane-storage.ts";
@@ -106,26 +109,26 @@ function sessionOperations(context: { readonly env: PlatformApplicationBindings 
 }
 
 /** Session operations on the Runtime a Session credential authorized. */
+/** Session operations through a Session credential, each authorized for its own permission on that Session. */
 function authorizedSessionControl(
     context: {
         readonly env: PlatformApplicationBindings;
         readonly var: { readonly relay: RelayContext };
         readonly req: { readonly raw: Request };
     },
-    access: { readonly projectId: string; readonly runtimeId: string },
+    access: SessionAccess,
     sessionId: string,
 ): SessionControl {
     const scope = new ProjectScope(access.projectId);
-    return new SessionControl(
-        async (command) =>
-            await sessionOperations(context).requestProjectScopeControl(
-                scope,
-                access.runtimeId,
-                command,
-                context.req.raw.signal,
-            ),
-        sessionId,
-    );
+    return new SessionControl(async (command, permission) => {
+        await access.authorize(permission, context.req.raw.signal);
+        return await sessionOperations(context).requestProjectScopeControl(
+            scope,
+            access.runtimeId,
+            command,
+            context.req.raw.signal,
+        );
+    }, sessionId);
 }
 
 /**
@@ -353,10 +356,9 @@ export function createPlatformApplication(
                     401,
                 );
             }
-            const access = await context.var.sessionAccess.authorizeSession(
+            const access = await context.var.sessionAccess.authenticate(
                 context.var.sessionAccessTarget,
                 credential,
-                ProjectPermission.SessionRead,
                 context.req.raw.signal,
             );
             const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
@@ -380,10 +382,9 @@ export function createPlatformApplication(
                     401,
                 );
             }
-            const access = await context.var.sessionAccess.authorizeSession(
+            const access = await context.var.sessionAccess.authenticate(
                 context.var.sessionAccessTarget,
                 credential,
-                ProjectPermission.SessionRead,
                 context.req.raw.signal,
             );
             const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
@@ -400,7 +401,7 @@ export function createPlatformApplication(
                     401,
                 );
             }
-            const access = await context.var.sessionAccess.authorizeLiveEvents(
+            const access = await context.var.sessionAccess.authenticate(
                 context.var.sessionAccessTarget,
                 credential,
                 context.req.raw.signal,
@@ -424,10 +425,9 @@ export function createPlatformApplication(
                     401,
                 );
             }
-            const access = await context.var.sessionAccess.authorizeSession(
+            const access = await context.var.sessionAccess.authenticate(
                 context.var.sessionAccessTarget,
                 credential,
-                ProjectPermission.SessionWrite,
                 context.req.raw.signal,
             );
             const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
@@ -458,10 +458,9 @@ export function createPlatformApplication(
                     401,
                 );
             }
-            const access = await context.var.sessionAccess.authorizeSession(
+            const access = await context.var.sessionAccess.authenticate(
                 context.var.sessionAccessTarget,
                 credential,
-                ProjectPermission.SessionWrite,
                 context.req.raw.signal,
             );
             const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
@@ -567,10 +566,9 @@ export function createPlatformApplication(
                     401,
                 );
             }
-            const access = await context.var.sessionAccess.authorizeSession(
+            const access = await context.var.sessionAccess.authenticate(
                 context.var.sessionAccessTarget,
                 credential,
-                ProjectPermission.SessionWrite,
                 context.req.raw.signal,
             );
             const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
@@ -588,10 +586,9 @@ export function createPlatformApplication(
                     401,
                 );
             }
-            const access = await context.var.sessionAccess.authorizeSession(
+            const access = await context.var.sessionAccess.authenticate(
                 context.var.sessionAccessTarget,
                 credential,
-                ProjectPermission.SessionWrite,
                 context.req.raw.signal,
             );
             const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
@@ -609,10 +606,9 @@ export function createPlatformApplication(
                     401,
                 );
             }
-            const access = await context.var.sessionAccess.authorizeSession(
+            const access = await context.var.sessionAccess.authenticate(
                 context.var.sessionAccessTarget,
                 credential,
-                ProjectPermission.SessionWrite,
                 context.req.raw.signal,
             );
             const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
@@ -630,10 +626,9 @@ export function createPlatformApplication(
                     401,
                 );
             }
-            const access = await context.var.sessionAccess.authorizeSession(
+            const access = await context.var.sessionAccess.authenticate(
                 context.var.sessionAccessTarget,
                 credential,
-                ProjectPermission.SessionWrite,
                 context.req.raw.signal,
             );
             const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));
@@ -651,10 +646,9 @@ export function createPlatformApplication(
                     401,
                 );
             }
-            const access = await context.var.sessionAccess.authorizeSession(
+            const access = await context.var.sessionAccess.authenticate(
                 context.var.sessionAccessTarget,
                 credential,
-                ProjectPermission.SessionWrite,
                 context.req.raw.signal,
             );
             const sessionId = v.parse(sessionIdentifier, context.req.param("sessionId"));

@@ -17,11 +17,23 @@ import {
     RUNTIME_WORKSPACE_BINDING_ID,
     type SessionPromptCommand,
 } from "@moxt-ai/mobius-sdk/protocol";
+import type { ProjectPermission } from "../../entity/authentication/project-authentication.ts";
 import { PairingDirectoryError } from "../../entity/pairing/pairing.ts";
+import {
+    nativeSessionRequestPermission,
+    runtimeControlPermission,
+    runtimeControlRegistry,
+} from "./runtime-control-registry.ts";
 import type { RuntimeControlCommand, RuntimeControlResult } from "./runtime-control-request.ts";
 
-/** Runs one command on a Runtime the caller is already authorized to control, and returns the Runtime's answer. */
-export type RuntimeControl = (command: RuntimeControlCommand) => Promise<RuntimeControlResult>;
+/**
+ * Runs one command of a Session operation on a Runtime once the caller is authorized for `permission`, the operation's
+ * own, and returns the Runtime's answer.
+ */
+export type RuntimeControl = (
+    command: RuntimeControlCommand,
+    permission: ProjectPermission,
+) => Promise<RuntimeControlResult>;
 
 /** The Agent and directories a Session runs in. */
 export interface SessionExecutionIdentity {
@@ -74,8 +86,9 @@ export interface SessionConfiguration extends SessionBindingRequest {
 
 /**
  * The operations every Session API offers on one Session. Each builds the Runtime command, runs it through the
- * caller's authorized control and checks that the answer belongs to that command. Routes authenticate, decode their
- * own request format and shape their own response; they do not repeat these rules.
+ * caller's authorized control and checks that the answer belongs to that command. An operation needs the permission of
+ * the command it performs; a lookup it makes to build that command is part of it and needs nothing more. Routes
+ * authenticate, decode their own request format and shape their own response; they do not repeat these rules.
  */
 export class SessionControl {
     readonly #control: RuntimeControl;
@@ -87,7 +100,8 @@ export class SessionControl {
     }
 
     readonly submitTurn = async (turn: TurnSubmission): Promise<TurnAdmission> => {
-        const binding = await this.#binding(turn);
+        const permission = runtimeControlRegistry["session.prompt"].permission;
+        const binding = await this.#binding(turn, permission);
         let command: SessionPromptCommand;
         try {
             command = decodeSessionPromptCommand(
@@ -114,7 +128,7 @@ export class SessionControl {
             }
             throw error;
         }
-        const result = await this.#control(command);
+        const result = await this.#control(command, permission);
         if (result.kind === "session.prompt.accepted" && result.requestId === command.commandId) {
             // A retried command is answered with where the original command stands.
             return { commandId: result.requestId, state: result.state };
@@ -133,7 +147,7 @@ export class SessionControl {
     };
 
     readonly cancelTurn = async (turnId: string): Promise<{ readonly stopReason: string }> => {
-        const completed = await this.#control(
+        const completed = await this.#run(
             decodeSessionCancelCommand(
                 JSON.stringify({ commandId: turnId, kind: "session.cancel", sessionId: this.#sessionId }),
             ),
@@ -146,7 +160,7 @@ export class SessionControl {
 
     /** Withdraws a Turn that has not started; one that already started cannot be withdrawn. */
     readonly withdrawTurn = async (turnId: string): Promise<void> => {
-        const completed = await this.#control(
+        const completed = await this.#run(
             decodeSessionCancelBeforeStartCommand(
                 JSON.stringify({ commandId: turnId, kind: "session.cancel-before-start", sessionId: this.#sessionId }),
             ),
@@ -163,7 +177,7 @@ export class SessionControl {
     };
 
     readonly steerTurn = async (turnId: string): Promise<void> => {
-        const started = await this.#control(
+        const started = await this.#run(
             decodeSessionPromptDispositionCommand(
                 JSON.stringify({
                     commandId: turnId,
@@ -179,7 +193,7 @@ export class SessionControl {
     };
 
     readonly respond = async (interactionId: string, response: InteractionResponse): Promise<void> => {
-        await this.#control(
+        await this.#run(
             response.kind === "permission"
                 ? decodeSessionPermissionRespondCommand(
                       JSON.stringify({
@@ -203,7 +217,7 @@ export class SessionControl {
     };
 
     readonly readConfiguration = async () => {
-        const result = await this.#control(
+        const result = await this.#run(
             decodeSessionConfigReadCommand(
                 JSON.stringify({
                     kind: "session.config.read",
@@ -218,22 +232,25 @@ export class SessionControl {
         return result;
     };
 
-    readonly configure = async (configuration: SessionConfiguration) =>
-        await this.#control(
+    readonly configure = async (configuration: SessionConfiguration) => {
+        const permission = runtimeControlRegistry["session.configure"].permission;
+        return await this.#control(
             decodeSessionConfigureCommand(
                 JSON.stringify({
                     ...configuration,
-                    ...(await this.#binding(configuration)),
+                    ...(await this.#binding(configuration, permission)),
                     bindingId: RUNTIME_WORKSPACE_BINDING_ID,
                     kind: "session.configure",
                     requestId: crypto.randomUUID(),
                     sessionId: this.#sessionId,
                 }),
             ),
+            permission,
         );
+    };
 
     readonly rename = async (title: string) =>
-        await this.#control(
+        await this.#run(
             decodeSessionRenameCommand(
                 JSON.stringify({
                     kind: "session.rename",
@@ -246,7 +263,8 @@ export class SessionControl {
 
     /** The Session's running Turn, and the delivery of `deliveryCommandId` when the caller names one. */
     readonly activeTurn = async (supplied: SessionBindingRequest, deliveryCommandId?: string) => {
-        const identity = await this.#binding(supplied);
+        const permission = nativeSessionRequestPermission("active-turn");
+        const identity = await this.#binding(supplied, permission);
         const result = await this.#control(
             decodeNativeSessionRequest(
                 JSON.stringify({
@@ -262,6 +280,7 @@ export class SessionControl {
                     targetSessionId: this.#sessionId,
                 }),
             ),
+            permission,
         );
         if (result.kind !== "native.session.result" || result.action !== "active-turn") {
             throw new PairingDirectoryError("invalid_request", "The Runtime returned an invalid active Turn");
@@ -274,7 +293,8 @@ export class SessionControl {
         supplied: SessionBindingRequest,
         page: { readonly cursor: string | null; readonly eventLimit: number },
     ) => {
-        const identity = await this.#binding(supplied);
+        const permission = runtimeControlRegistry["session.preview-history.page.load"].permission;
+        const identity = await this.#binding(supplied, permission);
         const result = await this.#control(
             decodeSessionPreviewHistoryPageLoad(
                 JSON.stringify({
@@ -289,6 +309,7 @@ export class SessionControl {
                     sessionId: this.#sessionId,
                 }),
             ),
+            permission,
         );
         if (result.kind !== "session.preview-history.page.loaded") {
             throw new PairingDirectoryError("invalid_request", "The Runtime returned invalid V2 Session events");
@@ -298,7 +319,7 @@ export class SessionControl {
 
     /** A page of the Session's live history. */
     readonly liveEvents = async (page: { readonly cursor: string | null; readonly eventLimit: number }) => {
-        const result = await this.#control(
+        const result = await this.#run(
             decodeSessionHistoryPageLoad(
                 JSON.stringify({
                     cursor: page.cursor,
@@ -315,8 +336,18 @@ export class SessionControl {
         return result.events.events;
     };
 
-    /** The binding an operation runs with: the caller's fields, and the Session's own from its Runtime for the rest. */
-    readonly #binding = async (supplied: SessionBindingRequest): Promise<SessionExecutionIdentity> => {
+    /** Runs an operation that is one command, under that command's own permission. */
+    readonly #run = async (command: RuntimeControlCommand): Promise<RuntimeControlResult> =>
+        await this.#control(command, runtimeControlPermission(command));
+
+    /**
+     * The binding an operation runs with: the caller's fields, and the Session's own from its Runtime for the rest.
+     * Reading the Session's own binding is part of the operation, so it runs under the operation's `permission`.
+     */
+    readonly #binding = async (
+        supplied: SessionBindingRequest,
+        permission: ProjectPermission,
+    ): Promise<SessionExecutionIdentity> => {
         const { additionalDirectoryIds, agentId, directoryId } = supplied;
         if (agentId !== undefined && directoryId !== undefined && additionalDirectoryIds !== undefined) {
             return { additionalDirectoryIds, agentId, directoryId };
@@ -329,6 +360,7 @@ export class SessionControl {
                     sessionIds: [this.#sessionId],
                 }),
             ),
+            permission,
         );
         if (queried.kind !== "session.queried") {
             throw new PairingDirectoryError("invalid_request", "The Runtime returned an invalid Session query");

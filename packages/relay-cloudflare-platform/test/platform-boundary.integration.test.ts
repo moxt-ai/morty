@@ -3197,6 +3197,95 @@ describe.sequential("Platform Turn submission", () => {
         }
     });
 
+    it("Given an AppCredential that reads and changes Sessions without Runtime read access, When it submits a Turn without naming the Session's binding and another credential that only reads Sessions reads the active Turn, Then both operations reach the Runtime and succeed", async () => {
+        const runtime = await connectRuntimeDaemon("app-operation-permissions");
+        try {
+            const sessionWriter = await runtime.issueAppCredential(["session:read", "session:write"]);
+            const submitted = runtime.appSessionRequest("/turns", {
+                method: "POST",
+                credential: sessionWriter,
+                body: {
+                    attachments: [],
+                    content: "Continue in the Session's own directory.",
+                    disposition: "reject",
+                    idempotencyKey: "binding-lookup-turn",
+                    sessionConfigurations: [],
+                    targetCommandId: "",
+                },
+            });
+            const lookup = await Promise.race([
+                runtime.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
+                submitted.then((response) => ({ kind: "response" as const, response })),
+            ]);
+            if (lookup.kind === "response") {
+                throw new Error(`Expected the binding lookup, received ${lookup.response.status}`);
+            }
+            const query = decodeServiceToDaemonMessage(lookup.message);
+            if (query.kind !== "session.query") {
+                throw new Error("Expected the Session's binding to be read");
+            }
+            runtime.daemon.send(
+                JSON.stringify({
+                    kind: "session.queried",
+                    requestId: query.requestId,
+                    entries: [
+                        {
+                            additionalDirectories: [],
+                            agentId: "codex",
+                            directoryId: "root",
+                            directoryLabel: "/workspace",
+                            prompted: true,
+                            sessionId: runtime.sessionId,
+                            title: "",
+                            updatedAt: "2026-11-01T00:00:00.000Z",
+                        },
+                    ],
+                }),
+            );
+            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
+                agentId: "codex",
+                commandId: "binding-lookup-turn",
+                directoryId: "root",
+                kind: "session.prompt",
+            });
+            runtime.startTurn("binding-lookup-turn", "1");
+            expect(await responseJson(await submitted, 200)).toMatchObject({ turnId: "binding-lookup-turn" });
+
+            const sessionReader = await runtime.issueAppCredential(["session:read"]);
+            const read = runtime.appSessionRequest("/active-turn", {
+                method: "POST",
+                credential: sessionReader,
+                body: { additionalDirectoryIds: [], agentId: "codex", directoryId: "root" },
+            });
+            const first = await Promise.race([
+                runtime.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
+                read.then((response) => ({ kind: "response" as const, response })),
+            ]);
+            if (first.kind === "response") {
+                throw new Error(`Expected the active Turn read, received ${first.response.status}`);
+            }
+            const activeTurn = decodeServiceToDaemonMessage(first.message);
+            if (activeTurn.kind !== "native.session.request" || activeTurn.action !== "active-turn") {
+                throw new Error("Expected the active Turn read to reach the daemon");
+            }
+            runtime.daemon.send(
+                encodeNativeSessionResult({
+                    kind: "native.session.result",
+                    action: "active-turn",
+                    requestId: activeTurn.requestId,
+                    sessionId: runtime.sessionId,
+                    targetSessionId: runtime.sessionId,
+                    turn: null,
+                    queued: [],
+                    queuedCancellation: "before-start",
+                }),
+            );
+            expect(await responseJson(await read, 200)).toMatchObject({ action: "active-turn", turn: null });
+        } finally {
+            runtime.daemon.close(1000, "Test complete");
+        }
+    });
+
     // @no-uc: Technical regression; explicit Runtime targets must preserve credential permissions and project isolation.
     it("App access rejects unavailable permissions and targets before dispatch", async () => {
         const runtime = await connectRuntimeDaemon("app-permissions");

@@ -108,13 +108,26 @@ export class PairingService {
         token: string,
         command: RuntimeControlCommand,
         signal: AbortSignal,
-    ) => {
-        const access = await this.#pairings.authorizeProject(
+    ) =>
+        await this.requestOperationControl(
             projectId,
+            runtimeId,
             token,
+            command,
             runtimeControlPermission(command),
             signal,
         );
+
+    /** Runs one command of an operation that needs `permission`, which may be the operation's rather than the command's. */
+    readonly requestOperationControl = async (
+        projectId: string,
+        runtimeId: string,
+        token: string,
+        command: RuntimeControlCommand,
+        permission: ProjectPermission,
+        signal: AbortSignal,
+    ) => {
+        const access = await this.#pairings.authorizeProject(projectId, token, permission, signal);
         return await this.#operations().requestProjectScopeControl(access.scope, runtimeId, command, signal);
     };
 

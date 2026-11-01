@@ -23,6 +23,7 @@ import {
     type LifecycleMetadata,
     NATIVE_SESSION_CANCEL_KIND,
     NATIVE_SESSION_REQUEST_KIND,
+    type NativeSessionRequest,
     RUNTIME_HEARTBEAT_ACK_KIND,
     RUNTIME_LIVENESS_READY_KIND,
     RUNTIME_PING_KIND,
@@ -95,8 +96,8 @@ export const runtimeControlRegistry = {
     },
     "native.session.request": {
         permission: (command: RuntimeControlCommand) =>
-            command.kind === "native.session.request" && command.action === "list"
-                ? ProjectPermission.RuntimeRead
+            command.kind === "native.session.request"
+                ? nativeSessionRequestPermission(command.action)
                 : ProjectPermission.SessionWrite,
         reply: directReply("native.session.result", decodeNativeSessionResult),
     },
@@ -176,6 +177,25 @@ export const runtimeControlRegistry = {
         reply: directReply("session.restored", decodeSessionRestoredEvent),
     },
 } satisfies { readonly [K in RuntimeControlCommand["kind"]]: RuntimeControlDefinition };
+
+/**
+ * Listing reads every native session the Runtime can see, and reading the active Turn reads one Session's execution.
+ * Every other native request acts on the Agent's sessions.
+ */
+export function nativeSessionRequestPermission(action: NativeSessionRequest["action"]): ProjectPermission {
+    switch (action) {
+        case "list":
+            return ProjectPermission.RuntimeRead;
+        case "active-turn":
+            return ProjectPermission.SessionRead;
+        case "find":
+        case "import":
+        case "fork":
+            return ProjectPermission.SessionWrite;
+        default:
+            return action satisfies never;
+    }
+}
 
 export function runtimeControlPermission(command: RuntimeControlCommand): ProjectPermission {
     const { permission } = runtimeControlRegistry[command.kind];

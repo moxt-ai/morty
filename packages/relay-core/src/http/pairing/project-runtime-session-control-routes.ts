@@ -21,18 +21,19 @@ function validated<TSchema extends v.GenericSchema>(schema: TSchema, value: unkn
     return result.output;
 }
 
-/** Session operations on the Runtime this request names, authorized by its project credential for each command. */
+/** Session operations on the Runtime this request names, authorized by its project credential for each operation. */
 export function sessionControl(context: Context<RelayHttpEnvironment>): SessionControl {
     const projectId = validated(identifier, context.req.param("projectId"));
     const runtimeId = validated(identifier, context.req.param("runtimeId"));
     const token = bearerToken(context.req.raw);
     return new SessionControl(
-        async (command) =>
-            await context.env.services.runtimePairings.requestControl(
+        async (command, permission) =>
+            await context.env.services.runtimePairings.requestOperationControl(
                 projectId,
                 runtimeId,
                 token,
                 command,
+                permission,
                 context.req.raw.signal,
             ),
         validateIdentifier(context.req.param("sessionId") ?? "", "session_id"),

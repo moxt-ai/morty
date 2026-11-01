@@ -14,6 +14,23 @@ export type SessionAccessTarget =
     | { readonly kind: "session"; readonly projectId: string; readonly sessionId: string }
     | { readonly kind: "unavailable" };
 
+/** A verified Session credential: the Session it selects, and the authorization of each operation on it. */
+export interface SessionAccess {
+    readonly expiresAtEpochMilliseconds: number;
+    readonly projectId: string;
+    readonly runtimeId: string;
+    readonly authorize: (permission: ProjectPermission, signal: AbortSignal) => Promise<void>;
+}
+
+/**
+ * A Session credential confines every request to its own Session. An operation the Relay grants Runtime-wide to Runtime
+ * read access, such as reading a Session's settings or native history, reads only that Session through it, which is
+ * what Session read access permits.
+ */
+function sessionScopedPermission(permission: ProjectPermission): ProjectPermission {
+    return permission === ProjectPermission.RuntimeRead ? ProjectPermission.SessionRead : permission;
+}
+
 export class SessionAccessService {
     readonly #applications: AppCredentialAuthenticationService;
     readonly #control: PlatformControlPlaneService;
@@ -71,7 +88,11 @@ export class SessionAccessService {
         };
     };
 
-    readonly authorizeLiveEvents = async (target: SessionAccessTarget, credentialValue: string, signal: AbortSignal) =>
+    readonly authorizeLiveEvents = async (
+        target: SessionAccessTarget,
+        credentialValue: string,
+        signal: AbortSignal,
+    ): Promise<SessionAccess> =>
         await this.authorizeSession(target, credentialValue, ProjectPermission.SessionRead, signal);
 
     readonly authorizeSession = async (
@@ -79,11 +100,21 @@ export class SessionAccessService {
         credentialValue: string,
         permission: ProjectPermission,
         signal: AbortSignal,
-    ): Promise<{
-        readonly expiresAtEpochMilliseconds: number;
-        readonly projectId: string;
-        readonly runtimeId: string;
-    }> => {
+    ): Promise<SessionAccess> => {
+        const access = await this.authenticate(target, credentialValue, signal);
+        await access.authorize(permission, signal);
+        return access;
+    };
+
+    /**
+     * Verifies a Session credential for its selected Session without authorizing any operation. Each operation then
+     * authorizes the permission it needs through the Project routes, narrowed to the one Session the credential selects.
+     */
+    readonly authenticate = async (
+        target: SessionAccessTarget,
+        credentialValue: string,
+        signal: AbortSignal,
+    ): Promise<SessionAccess> => {
         if (target.kind !== "session") {
             throw new ProjectAuthenticationError(
                 "project_permission_denied",
@@ -125,11 +156,19 @@ export class SessionAccessService {
                 "The credential authorizes only the selected Session",
             );
         }
-        await this.#control.authorizePlatformCredentialRecord(target.projectId, application, permission, signal);
+        const projectId = target.projectId;
         return {
             expiresAtEpochMilliseconds: claims.expiresAtEpochMilliseconds,
             projectId: claims.projectId,
             runtimeId: claims.runtimeId,
+            authorize: async (permission, authorizationSignal) => {
+                await this.#control.authorizePlatformCredentialRecord(
+                    projectId,
+                    application,
+                    sessionScopedPermission(permission),
+                    authorizationSignal,
+                );
+            },
         };
     };
 }
