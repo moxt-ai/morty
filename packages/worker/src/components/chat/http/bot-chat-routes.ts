@@ -11,11 +11,12 @@ import { json } from "../../../infra/http.ts";
 import { bodyParser } from "../../../middleware/body-parser.ts";
 import type { Session } from "../../management/entity/authentication/session.ts";
 import { PlatformProjectError, platformIdentifier } from "../../management/entity/platform-project.ts";
-import { authenticatedSession, localSession } from "../../management/http/authenticated-session.ts";
+import { authenticatedSession, credentialRejected, localSession } from "../../management/http/authenticated-session.ts";
 import {
     type ChatScope,
     MANAGED_SESSION_STATUSES_FOLLOWING_KIND,
     type ManagedSessionEvent,
+    MINIMUM_SESSION_CREDENTIAL_SECONDS,
 } from "../service/chat-service.ts";
 import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
 
@@ -74,17 +75,38 @@ const accessInput = v.union([
 type AuthorizedChatEnvironment = ChatHttpEnvironment & {
     readonly Variables: ChatHttpEnvironment["Variables"] & {
         readonly session: Session;
+        readonly accessExpiresAt: number | null;
         readonly chatScope: ChatScope;
     };
 };
 
 async function authorizeChat(context: Context<AuthorizedChatEnvironment>, timeout = 45000) {
-    const { userId } = context.get("session");
     const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(timeout)]);
     const projectId = v.parse(platformIdentifier, context.req.param("projectId"));
     const botId = v.parse(platformIdentifier, context.req.param("botId"));
-    return await context.env.services.chat.authorize(userId, projectId, botId, signal);
+    const requester = { userId: context.get("session").userId, accessExpiresAt: context.get("accessExpiresAt") };
+    return await context.env.services.chat.authorize(requester, projectId, botId, signal);
 }
+
+/**
+ * Guards issuing a Session credential, which lives on at the Platform after this response. Access ending sooner than
+ * the shortest Session credential is refused rather than outlived, and access that ended while the credential was
+ * issued does not receive it.
+ */
+const issuesSessionCredential = createMiddleware<AuthorizedChatEnvironment>(async (context, next) => {
+    const accessExpiresAt = context.get("accessExpiresAt");
+    if (accessExpiresAt !== null && accessExpiresAt - Date.now() < MINIMUM_SESSION_CREDENTIAL_SECONDS * 1000) {
+        throw credentialRejected("revoked");
+    }
+    await next();
+    const current = await context.env.services.authentication.session(
+        context.get("bearerToken"),
+        context.req.raw.signal,
+    );
+    if (current.kind !== "authenticated") {
+        throw credentialRejected(current.kind);
+    }
+});
 
 function authorizedChat(timeout = 45000) {
     return createMiddleware<AuthorizedChatEnvironment>(async (context, next) => {
@@ -198,6 +220,7 @@ export function createBotChatRoutes() {
         .post(
             "/bots/:botId/access",
             authenticatedSession,
+            issuesSessionCredential,
             authorizedChat(),
             bodyParser<AuthorizedChatEnvironment, typeof accessInput>(accessInput),
             async (context) => {
@@ -209,6 +232,7 @@ export function createBotChatRoutes() {
         .post(
             "/bots/:botId/session-access",
             authenticatedSession,
+            issuesSessionCredential,
             authorizedChat(),
             bodyParser<AuthorizedChatEnvironment, typeof nativeSessionInput>(nativeSessionInput),
             async (context) => {

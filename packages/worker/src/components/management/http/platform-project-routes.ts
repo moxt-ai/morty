@@ -87,6 +87,16 @@ export function createPlatformProjectRoutes() {
                 if (revoked.kind !== "revoked") {
                     throw new ManagementError("UNAUTHENTICATED", "Local identity is no longer available.", 401);
                 }
+                if (revoked.sessionAccess.kind === "unconfirmed") {
+                    context.env.logger.warn(
+                        {
+                            ...audit,
+                            code: revoked.sessionAccess.cause.code,
+                            status: revoked.sessionAccess.cause.status,
+                        },
+                        "Project replacement did not reach the Session credentials already issued",
+                    );
+                }
                 context.env.logger.info(
                     { ...audit, projectId: project.projectId, stage: "access_revoked" },
                     "Earlier shared access revoked by Project replacement",

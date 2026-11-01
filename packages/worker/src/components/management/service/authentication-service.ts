@@ -1,4 +1,6 @@
 import * as v from "valibot";
+import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
+import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import {
     anonymousToken,
     type Credential,
@@ -9,11 +11,18 @@ import {
 } from "../entity/authentication/credential.ts";
 import type { Session } from "../entity/authentication/session.ts";
 import { ManagementError } from "../entity/management-error.ts";
+import { PlatformProjectError } from "../entity/platform-project.ts";
 import type { IdentityStorage, IdentityTransfer } from "../storage/identity-storage.ts";
 import type { AnonymousIdentity } from "../storage/identity-storage-common.ts";
 
 type SessionResult =
-    | { readonly kind: "authenticated"; readonly session: Session; readonly credentialKind: Credential["kind"] }
+    | {
+          readonly kind: "authenticated";
+          readonly session: Session;
+          readonly credentialKind: Credential["kind"];
+          /** When this access ends: browser access ends with the link it came through; other access does not expire. */
+          readonly accessExpiresAt: number | null;
+      }
     | { readonly kind: "unauthenticated" }
     /** The credential was issued for this Project and its access was ended since. */
     | { readonly kind: "revoked" };
@@ -36,6 +45,16 @@ type Authorization<Operation extends CredentialOperation> =
 
 type EndAccessResult = { readonly kind: "ended" | "unauthenticated" | "forbidden" };
 
+/**
+ * Whether the Platform also stopped the Session credentials issued before access was revoked. Unconfirmed, those
+ * still work until they expire.
+ */
+export type IssuedSessionAccess =
+    | { readonly kind: "revoked" }
+    | { readonly kind: "unconfirmed"; readonly cause: PlatformProjectError };
+
+const SESSION_ACCESS_REVOCATION_ATTEMPTS = 3;
+
 /** Outside the session check, revoked access answers like unknown access, so a retry after a lost reply stays safe. */
 function refused(access: { readonly kind: "unauthenticated" | "revoked" | "forbidden" }) {
     return { kind: access.kind === "forbidden" ? "forbidden" : "unauthenticated" } as const;
@@ -43,9 +62,17 @@ function refused(access: { readonly kind: "unauthenticated" | "revoked" | "forbi
 
 export class AuthenticationService {
     private readonly identities: IdentityStorage;
+    readonly #platform: Pick<PlatformProjectGateway, "revokeSessionAccess">;
+    readonly #projectId: string | null;
 
-    constructor(cx: { readonly storages: { readonly identities: IdentityStorage } }) {
+    constructor(cx: {
+        readonly config: { readonly bindings: Pick<CloudBindings, "CHAT_PROJECT_ID"> };
+        readonly storages: { readonly identities: IdentityStorage };
+        readonly gateways: { readonly platformProjects: Pick<PlatformProjectGateway, "revokeSessionAccess"> };
+    }) {
         this.identities = cx.storages.identities;
+        this.#platform = cx.gateways.platformProjects;
+        this.#projectId = cx.config.bindings.CHAT_PROJECT_ID ?? null;
     }
 
     readonly #lookup = async (token: string | undefined, signal: AbortSignal): Promise<CredentialLookup> => {
@@ -111,6 +138,7 @@ export class AuthenticationService {
                 return {
                     kind: "authenticated",
                     session: { authentication: { kind: "anonymous" }, userId: found.credential.userId },
+                    accessExpiresAt: found.credential.kind === "browser" ? found.credential.accessExpiresAt : null,
                     credentialKind: found.credential.kind,
                 };
             case "revoked":
@@ -203,13 +231,39 @@ export class AuthenticationService {
     readonly revokeAllAccess = async (
         token: string | undefined,
         signal: AbortSignal,
-    ): Promise<{ readonly kind: "revoked" | "unauthenticated" | "forbidden" }> => {
+    ): Promise<
+        | { readonly kind: "revoked"; readonly sessionAccess: IssuedSessionAccess }
+        | { readonly kind: "unauthenticated" | "forbidden" }
+    > => {
         const access = await this.authorize(token, "revokeAllAccess", signal);
         if (access.kind !== "authorized") {
             return refused(access);
         }
         await this.identities.revokeOtherAccess(access.credential.userId, access.token, Date.now(), signal);
-        return { kind: "revoked" };
+        // Revoked access can no longer obtain Session credentials; those it already holds end only at the Platform.
+        return { kind: "revoked", sessionAccess: await this.#revokeIssuedSessionAccess(signal) };
+    };
+
+    /** Revoking is safe to repeat, so a failure the Platform may recover from is retried a bounded number of times. */
+    readonly #revokeIssuedSessionAccess = async (signal: AbortSignal): Promise<IssuedSessionAccess> => {
+        const projectId = this.#projectId;
+        if (projectId === null) {
+            throw new Error("Access is revoked only inside its Project");
+        }
+        for (let attempt = 1; ; attempt += 1) {
+            try {
+                await this.#platform.revokeSessionAccess(projectId, signal);
+                return { kind: "revoked" };
+            } catch (cause) {
+                signal.throwIfAborted();
+                if (!(cause instanceof PlatformProjectError)) {
+                    throw cause;
+                }
+                if (cause.status < 500 || attempt === SESSION_ACCESS_REVOCATION_ATTEMPTS) {
+                    return { kind: "unconfirmed", cause };
+                }
+            }
+        }
     };
 
     readonly endBrowserAccess = async (token: string | undefined, signal: AbortSignal): Promise<EndAccessResult> => {

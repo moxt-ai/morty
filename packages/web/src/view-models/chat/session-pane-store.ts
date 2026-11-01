@@ -1044,6 +1044,9 @@ export function createSessionPaneModel(options: {
                     });
                 };
                 let consecutiveFailures = 0;
+                // Only the first connection reuses the access that opened the Session. Every reconnection asks Chat
+                // again, so access that ended meanwhile, including a revoked Session credential, ends the page's access.
+                let openedAccess = session.result.action === "conversation" ? session.result.access : undefined;
                 const paneSignal = signal;
                 // One grace period per interruption, shared by the bridge wait, backoff and reconciliation.
                 // Successful recovery or a terminal outcome cancels it in the connection transition above.
@@ -1068,12 +1071,9 @@ export function createSessionPaneModel(options: {
                 };
                 // The signal is this attempt's own: the pane's lifetime, and also the closing of the Session.
                 const observeSession = async (signal: AbortSignal): Promise<void> => {
-                    client = await requests.connectSession(
-                        botId,
-                        sessionId,
-                        signal,
-                        session.result.action === "conversation" ? session.result.access : undefined,
-                    );
+                    const access = openedAccess;
+                    openedAccess = undefined;
+                    client = await requests.connectSession(botId, sessionId, signal, access);
                     const connected = client;
                     const receiveLifecycle = async (
                         fact: SessionLifecycleFact,

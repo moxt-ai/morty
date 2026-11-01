@@ -1510,11 +1510,16 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (revoked["status"] !== "access_revoked") {
             fail("INVALID_RESPONSE");
         }
+        // A server that predates closing open chat windows leaves them as an unconfirmed revocation does.
+        const sessionAccess = revoked["sessionAccess"] === "revoked" ? "revoked" : "unconfirmed";
         emit({
             status: "access_revoked",
             projectId: identifier(context.config["project_id"]),
+            sessionAccess,
             message:
-                "Previous sharing links and other Morty credentials have been revoked. The local identity is retained. Existing session connections may remain usable until their access expires.",
+                sessionAccess === "revoked"
+                    ? "Previous sharing links and other Morty credentials have been revoked, and chat windows opened with them have been closed. The local identity is retained."
+                    : "Previous sharing links and other Morty credentials have been revoked. Chat windows already open elsewhere could not be closed and may remain usable for up to 15 minutes; run this command again to retry closing them. The local identity is retained.",
         });
     }
 

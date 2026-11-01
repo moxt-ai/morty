@@ -49,7 +49,9 @@ export function describePageFailure(
     return splitFailureMessage(message) ?? { title, content: message };
 }
 
-const retryableRuntimeFailureCodes = new Set(["runtime_offline", "service_unavailable"]);
+// A revoked Session credential is replaced on the next attempt, which asks Chat again and so learns whether the
+// access behind it ended.
+const retryableRuntimeFailureCodes = new Set(["runtime_offline", "service_unavailable", "credential_revoked"]);
 
 /**
  * Map a caught error to the single user-facing message for it. Known error

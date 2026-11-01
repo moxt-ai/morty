@@ -148,7 +148,15 @@ export function createAuthenticationRoutes() {
             );
             switch (result.kind) {
                 case "revoked":
-                    return json({ status: "access_revoked" }, 200, { "Cache-Control": "no-store" });
+                    if (result.sessionAccess.kind === "unconfirmed") {
+                        context.env.logger.warn(
+                            { code: result.sessionAccess.cause.code, status: result.sessionAccess.cause.status },
+                            "Revoked access did not reach the Session credentials already issued",
+                        );
+                    }
+                    return json({ status: "access_revoked", sessionAccess: result.sessionAccess.kind }, 200, {
+                        "Cache-Control": "no-store",
+                    });
                 case "unauthenticated":
                     throw new ManagementError("UNAUTHENTICATED", "Local identity is required.", 401);
                 case "forbidden":

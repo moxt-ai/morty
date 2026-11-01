@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { MobiusClient, MobiusPageRequest } from "@moxt-ai/mobius-sdk";
 import * as v from "valibot";
 import { afterEach, test as baseTest, beforeEach, expect, vi } from "vitest";
 import type { ControlledAgent } from "../../../tests/support/fake-daemon/runtime.ts";
@@ -628,4 +629,44 @@ test("Given a Runtime cannot complete Session close, When its owner archives a m
     const repeated = await fixture.request(`chat/bots/${fixture.botId}/managed-session/archive`, { sessionId });
     expect(repeated.status).toBe(200);
     expect(await repeated.json()).toEqual({ close: "unconfirmed" });
+});
+
+test("Given a chat opened with a Session credential, When the machine's owner revokes all access, Then the Platform refuses that credential at once", async ({
+    cloud,
+}) => {
+    await using fixture = await createChatFixture(cloud);
+    expect(
+        (
+            await fixture.request(`chat/bots/${fixture.botId}/setup`, {
+                runtimeId: fixture.runtime.runtimeId,
+                agentRef: "codex",
+            })
+        ).status,
+    ).toBe(202);
+    const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+        agentRef: "codex",
+        configurations: [],
+        conversationKey: "revoked-while-open",
+        title: "Open while revoked",
+        workspaceRef: "default",
+    });
+    expect(opened.status).toBe(200);
+    const access = v.parse(
+        v.object({ endpoint: v.string(), projectId: v.string(), sessionId: v.string(), credential: v.string() }),
+        await opened.json(),
+    );
+    const client = new MobiusClient({
+        endpoint: access.endpoint,
+        projectId: access.projectId,
+        credentialProvider: { credential: async () => access.credential },
+    });
+    const readHistory = () =>
+        client.events.list(access.sessionId, new MobiusPageRequest(1, ""), AbortSignal.timeout(15_000));
+    await readHistory();
+
+    const revoked = await fixture.request("identity/revoke-all-access", {});
+    expect(revoked.status).toBe(200);
+    expect(await revoked.json()).toEqual({ status: "access_revoked", sessionAccess: "revoked" });
+
+    await expect(readHistory()).rejects.toMatchObject({ code: "credential_revoked" });
 });

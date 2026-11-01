@@ -379,7 +379,12 @@ export class PlatformProjectGateway {
             120000,
         );
 
-    readonly openChatSession = async (projectId: string, input: ChatConversationInput, signal: AbortSignal) =>
+    readonly openChatSession = async (
+        projectId: string,
+        input: ChatConversationInput,
+        credentialLifetimeSeconds: number,
+        signal: AbortSignal,
+    ) =>
         await this.#withProject(
             projectId,
             signal,
@@ -463,7 +468,12 @@ export class PlatformProjectGateway {
                         }
                     }
                 }
-                const access = await client.sessions.createAccess(input.runtimeId, sessionId, 900, signal);
+                const access = await client.sessions.createAccess(
+                    input.runtimeId,
+                    sessionId,
+                    credentialLifetimeSeconds,
+                    signal,
+                );
                 return {
                     endpoint: this.configuration().origin,
                     projectId,
@@ -540,12 +550,20 @@ export class PlatformProjectGateway {
         projectId: string,
         runtimeId: string,
         sessionId: string,
+        credentialLifetimeSeconds: number,
         signal: AbortSignal,
     ) =>
         await this.#withProject(projectId, signal, async (client) => {
-            const access = await client.sessions.createAccess(runtimeId, sessionId, 600, signal);
+            const access = await client.sessions.createAccess(runtimeId, sessionId, credentialLifetimeSeconds, signal);
             return { ...access, endpoint: this.configuration().origin };
         });
+
+    /** Ends every Session credential issued for the Project until now, and the live views opened with them. */
+    readonly revokeSessionAccess = async (projectId: string, signal: AbortSignal): Promise<void> => {
+        await this.#withProject(projectId, signal, async (client) => {
+            await client.sessions.revokeAccess(signal);
+        });
+    };
 
     readonly nativeSessions = async (
         projectId: string,

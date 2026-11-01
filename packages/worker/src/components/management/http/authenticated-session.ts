@@ -4,9 +4,11 @@ import type { Session } from "../entity/authentication/session.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 
-export const authenticatedSession = createMiddleware<
-    ManagementHttpEnvironment & { Variables: { readonly session: Session } }
->(async (context, next) => {
+type SessionEnvironment = ManagementHttpEnvironment & {
+    Variables: { readonly session: Session; readonly accessExpiresAt: number | null };
+};
+
+export const authenticatedSession = createMiddleware<SessionEnvironment>(async (context, next) => {
     const result = await context.env.services.authentication.session(
         context.get("bearerToken"),
         context.req.raw.signal,
@@ -14,6 +16,7 @@ export const authenticatedSession = createMiddleware<
     switch (result.kind) {
         case "authenticated":
             context.set("session", result.session);
+            context.set("accessExpiresAt", result.accessExpiresAt);
             await next();
             return;
         case "unauthenticated":
@@ -24,29 +27,28 @@ export const authenticatedSession = createMiddleware<
 
 /** Admits only the machine's local credential, for an operation no shared or recovery access may perform. */
 export const localSession = (operation: LocalOperation) =>
-    createMiddleware<ManagementHttpEnvironment & { Variables: { readonly session: Session } }>(
-        async (context, next) => {
-            const result = await context.env.services.authentication.authorize(
-                context.get("bearerToken"),
-                operation,
-                context.req.raw.signal,
-            );
-            switch (result.kind) {
-                case "authorized":
-                    context.set("session", {
-                        authentication: { kind: "anonymous" },
-                        userId: result.credential.userId,
-                    });
-                    await next();
-                    return;
-                case "unauthenticated":
-                case "revoked":
-                    throw credentialRejected(result.kind);
-                case "forbidden":
-                    throw localIdentityRequired();
-            }
-        },
-    );
+    createMiddleware<SessionEnvironment>(async (context, next) => {
+        const result = await context.env.services.authentication.authorize(
+            context.get("bearerToken"),
+            operation,
+            context.req.raw.signal,
+        );
+        switch (result.kind) {
+            case "authorized":
+                context.set("session", {
+                    authentication: { kind: "anonymous" },
+                    userId: result.credential.userId,
+                });
+                context.set("accessExpiresAt", null);
+                await next();
+                return;
+            case "unauthenticated":
+            case "revoked":
+                throw credentialRejected(result.kind);
+            case "forbidden":
+                throw localIdentityRequired();
+        }
+    });
 
 export function localIdentityRequired(): ManagementError {
     return new ManagementError(

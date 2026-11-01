@@ -16,6 +16,22 @@ import type { ManagedSessionOperations } from "../infra/managed-session-operatio
 import type { ManagedSessionStorage } from "../storage/managed-session-storage.ts";
 
 const STATUS_LIVENESS_MILLISECONDS = 120_000;
+const OPENED_SESSION_CREDENTIAL_SECONDS = 900;
+const RENEWED_SESSION_CREDENTIAL_SECONDS = 600;
+/** The Platform issues no Session credential that lasts less than this. */
+export const MINIMUM_SESSION_CREDENTIAL_SECONDS = 60;
+
+/**
+ * A Session credential lasts `usualSeconds`, but no longer than the access that requests it, so it ends when that
+ * access expires. Access that ends sooner than the shortest credential is refused before issuing.
+ */
+function sessionCredentialLifetime(usualSeconds: number, accessExpiresAt: number | null): number {
+    if (accessExpiresAt === null) {
+        return usualSeconds;
+    }
+    const remainingSeconds = Math.floor((accessExpiresAt - Date.now()) / 1000);
+    return Math.max(MINIMUM_SESSION_CREDENTIAL_SECONDS, Math.min(usualSeconds, remainingSeconds));
+}
 
 /**
  * Sent once the stream reaches the Runtime. `sessions: "owned"` promises that `statuses` holds the current status of
@@ -39,6 +55,8 @@ export type ManagedSessionEvent =
 
 export type ChatScope = {
     readonly userId: string;
+    /** When the requesting access ends, if it does; the Session credentials it obtains end no later. */
+    readonly accessExpiresAt: number | null;
     readonly projectId: string;
     readonly botId: string;
     readonly signal: AbortSignal;
@@ -142,11 +160,12 @@ export class ChatService {
     }
 
     readonly authorize = async (
-        userId: string,
+        requester: { readonly userId: string; readonly accessExpiresAt: number | null },
         projectId: string,
         botId: string,
         signal: AbortSignal,
     ): Promise<ChatScope> => {
+        const { userId, accessExpiresAt } = requester;
         const [ownsProject, ownsBot] = await Promise.all([
             this.#identities.ownsProject(userId, projectId, signal),
             this.#managedBots.ownsBot(userId, botId, signal),
@@ -157,7 +176,7 @@ export class ChatService {
         if (!ownsBot) {
             throw new PlatformProjectError("NOT_FOUND", "Your Machine was not found.", 404);
         }
-        return { userId, projectId, botId, signal };
+        return { userId, accessExpiresAt, projectId, botId, signal };
     };
 
     readonly runtimeConfiguration = async (scope: ChatScope) => {
@@ -463,6 +482,7 @@ export class ChatService {
                 runtimeId,
                 conversationKey: await chatSessionId(scope.botId, input.conversationKey),
             },
+            sessionCredentialLifetime(OPENED_SESSION_CREDENTIAL_SECONDS, scope.accessExpiresAt),
             scope.signal,
         );
         await this.#chatSessions.save(
@@ -492,6 +512,7 @@ export class ChatService {
                 workspaceRef: metadata.directoryId,
                 additionalDirectoryIds: metadata.additionalDirectories.map((directory) => directory.directoryId),
             },
+            sessionCredentialLifetime(OPENED_SESSION_CREDENTIAL_SECONDS, scope.accessExpiresAt),
             scope.signal,
         );
     };
@@ -506,6 +527,7 @@ export class ChatService {
             scope.projectId,
             runtime.runtimeId,
             session.sessionId,
+            sessionCredentialLifetime(RENEWED_SESSION_CREDENTIAL_SECONDS, scope.accessExpiresAt),
             scope.signal,
         );
     };
