@@ -113,7 +113,7 @@ test("Given shared Morty access, When the user continues on another device, Then
     );
     expect(dialog.textContent).toContain("not just the current conversation");
     expect(dialog.textContent).toContain("24 hours");
-    expect(dialog.textContent).toContain("Access already granted does not end when the link expires");
+    expect(dialog.textContent).toContain("When the link expires, devices that joined through it lose access too");
     const copyLink = await app.waitForView(() => getByRole(dialog, "button", { name: "Copy link" }));
     expect(getByRole(dialog, "img", { name: "Continue on another device QR code" })).toBeInstanceOf(HTMLImageElement);
     const description = getByRole(dialog, "heading", { name: "Continue on another device" }).parentElement;

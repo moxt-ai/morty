@@ -33,6 +33,13 @@ export class ProjectDurableObject extends Project {
                 .run();
             return new Response(null, { status: 204 });
         }
+        if (request.url === "https://project.internal/aged-links" && request.method === "POST") {
+            // Reconstruct links whose lifetime has passed: the Durable Object's clock cannot be moved forward.
+            this.ctx.storage.sql.exec(
+                "UPDATE identity_transfer SET created_at = created_at - (expires_at - created_at), expires_at = created_at",
+            );
+            return new Response(null, { status: 204 });
+        }
         if (request.url === "https://project.internal/credential-kinds") {
             if (request.method === "DELETE") {
                 this.ctx.storage.sql.exec("UPDATE anonymous_credential SET kind = NULL");

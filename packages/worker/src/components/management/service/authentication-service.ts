@@ -56,8 +56,12 @@ export class AuthenticationService {
         if (stored === null) {
             return { kind: "unknown" };
         }
-        // Revoking a link also ends the browser access it issued.
-        if (stored.revokedAt !== null || stored.linkRevokedAt !== null) {
+        // A link ends the browser access it issued when it is revoked or expires.
+        if (
+            stored.revokedAt !== null ||
+            stored.linkRevokedAt !== null ||
+            (stored.linkExpiresAt !== null && stored.linkExpiresAt <= Date.now())
+        ) {
             return { kind: "revoked" };
         }
         // Only a successfully authenticated token can supply the missing historical fact. Hashes alone cannot.

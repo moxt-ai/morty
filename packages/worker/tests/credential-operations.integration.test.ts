@@ -141,3 +141,44 @@ test("Given a browser that joined through a link, When it asks for recovery acce
     expect((await request(`${project}/identity/v1/browser-access`, browser, "DELETE")).status).toBe(204);
     expect((await request(`${project}/session`, browser)).status).toBe(401);
 });
+
+test("Given browser access granted through a link, When the link expires, Then that access ends while the computer's own access stays", async () => {
+    const owner = await fixture.createAnonymousUser();
+    const session = (token: string) =>
+        fetchPublicApplication(
+            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/session`, {
+                headers: { authorization: `Bearer ${token}` },
+            }),
+            fixture.environment(),
+        );
+    const transfer = await fetchPublicApplication(
+        new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/transfers`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${owner.token}` },
+        }),
+        fixture.environment(),
+    );
+    const code = new URL(v.parse(v.object({ url: v.string() }), await transfer.json()).url).hash.slice(6);
+    const redeemed = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code }),
+        }),
+        fixture.environment(),
+    );
+    const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+    expect((await session(browser)).status).toBe(200);
+
+    const namespace = fixture.environment().CHAT_PROJECTS;
+    const storage = namespace.get(namespace.idFromName(owner.projectId));
+    const aged = await storage.fetch(new Request("https://project.internal/aged-links", { method: "POST" }));
+    expect(aged.status).toBe(204);
+
+    const expired = await session(browser);
+    expect(expired.status).toBe(401);
+    expect(await expired.json()).toEqual({
+        error: { code: "UNAUTHENTICATED", message: "Access to this computer has ended.", reason: "ACCESS_REVOKED" },
+    });
+    expect((await session(owner.token)).status).toBe(200);
+});

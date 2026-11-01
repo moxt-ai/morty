@@ -105,10 +105,10 @@ function identityDestination(path: "/" | "/chat", identity: AnonymousIdentity): 
 
 /**
  * Redeeming a transfer code is the only way to obtain access for a link that
- * was never opened in this browser. Once a link has been redeemed here, its
- * access stays usable even after the link itself expires or is revoked, so a
- * failed redemption falls back to the access this browser still holds for the
- * same Project.
+ * was never opened in this browser. A link that no longer opens may not be this
+ * browser's only access to its Project: another link it opened, or the
+ * computer's own access, can still open it. So a failed redemption falls back to
+ * the access this browser still holds for the same Project.
  */
 export const createContinueStore = (fetchRequest: (request: Request) => Promise<Response>) => {
     let attempt: AbortController | null = null;
@@ -275,8 +275,8 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     }
                     recordBrowserError("redeem", cause);
                     const message = formatError(cause, "This transfer link is unavailable.");
-                    // A dead transfer code does not revoke an access it already
-                    // issued. Validate only the explicit scope, or a remembered
+                    // A dead transfer code may not be this browser's only access
+                    // to its Project. Validate only the explicit scope, or a remembered
                     // scope for this exact Project when the old link has no scope.
                     if (cause instanceof IdentityApiError && cause.code === "TRANSFER_UNAVAILABLE") {
                         const projectId = transferCodeProject(state.code);

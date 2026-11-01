@@ -61,8 +61,9 @@ Return the exact clickable `url` and the working directory from the `workspace` 
 `qrPath` when present and inline images are supported; otherwise return the URL.
 If `qrPath` is null, explain that the QR image is unavailable and use the link. Never open,
 preview, or redeem the handoff URL yourself. Tell the user: **Open this link or
-scan the QR code to chat. It is valid for 24 hours and
-opens the same user and Machine. Keep the Runtime online. You can bind an account later.**
+scan the QR code to chat. It opens the same user and Machine. It expires 24 hours
+after it was created, and browsers that opened it lose access then. Keep the Runtime
+online. You can bind an account later.**
 Also tell the user, in their language: **If you want to revoke these sharing links
 later, come back and tell me: "Revoke all links I previously shared from this machine."
 I can do that for you.** Include this reminder whenever you deliver a new sharing

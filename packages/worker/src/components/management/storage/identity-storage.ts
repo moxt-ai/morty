@@ -77,6 +77,7 @@ export class IdentityStorage {
                 revokedAt: anonymousCredential.revokedAt,
                 // Durable Object rows are keyed by column name, so this column needs a name of its own.
                 linkRevokedAt: sql<number | null>`${continueLink.revokedAt}`.as("link_revoked_at"),
+                linkExpiresAt: sql<number | null>`${continueLink.expiresAt}`.as("link_expires_at"),
             })
             .from(anonymousCredential)
             .innerJoin(platformProjectMapping, eq(platformProjectMapping.userId, anonymousCredential.userId))
