@@ -9,7 +9,6 @@ on:
  
 permissions:
   contents: read
-  id-token: write
  
 concurrency:
   group: publish-sdk
@@ -21,6 +20,11 @@ jobs:
     if: github.repository == 'moxt-ai/mobius' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Only `main` can deploy to npm-release, and the npm trusted publisher accepts only this environment.
+    environment: npm-release
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v7.0.1
         with:
