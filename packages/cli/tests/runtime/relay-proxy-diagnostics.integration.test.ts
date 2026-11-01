@@ -26,7 +26,9 @@ import { z } from "zod";
 
 afterEach(() => vi.useRealTimers());
 
-async function fixture(mode: "healthy" | "reject-http1" | "reject-http2" | "reset-pairing" | "ipv6" = "healthy") {
+async function fixture(
+    mode: "healthy" | "quiet-proxy" | "reject-http1" | "reject-http2" | "reset-pairing" | "ipv6" = "healthy",
+) {
     const directory = await mkdtemp(join(tmpdir(), "mobius-relay-proxy-"));
     const key = join(directory, "key.pem");
     const certificate = join(directory, "certificate.pem");
@@ -134,7 +136,12 @@ async function fixture(mode: "healthy" | "reject-http1" | "reject-http2" | "rese
         socket.on("error", () => undefined);
         socket.on("message", (data) => {
             if (data.toString() === RUNTIME_HEARTBEAT_MESSAGE) {
-                socket.send(RUNTIME_HEARTBEAT_ACK_MESSAGE);
+                // The heartbeat follows the probe's read of Ready, so an unacknowledged proxy channel has no
+                // Relay bytes in flight. A reset queued behind unread bytes can surface as a clean EOF instead
+                // of ECONNRESET (libuv before 1.52 short-circuits POLLHUP after a partial read).
+                if (mode !== "quiet-proxy" || role !== "proxy") {
+                    socket.send(RUNTIME_HEARTBEAT_ACK_MESSAGE);
+                }
                 online.add(role);
                 if (role === "direct") {
                     directReady.resolve();
@@ -317,7 +324,7 @@ test("Given distinct fresh pairings, When direct and proxy probes run together o
 
 // @no-uc: Technical regression; a reset must retain its raw socket code and must not be attributed to a healthy concurrent channel.
 test("Given healthy concurrent channels, When only the proxy tunnel resets, Then its raw error is recorded while the direct channel remains healthy", async () => {
-    await using peer = await fixture();
+    await using peer = await fixture("quiet-proxy");
     const probe = peer.run();
     await probe.online();
     const tunnel = await peer.tunnelReady.promise;
