@@ -241,6 +241,53 @@ test("Given a follow-up is queued, When the user stops the active turn, Then the
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
 });
 
+test("Given a follow-up queued in a running Session starts while I view another Session, When I return, Then it shows once in the message list and no longer in the queue", {
+    timeout: 30_000,
+}, async () => {
+    const queuedPrompt = "hold after first delta";
+    const environment = await createChatWorkerEnvironment(false, true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true });
+    const { daemon } = app;
+    if (daemon === null) {
+        throw new Error("Expected a real Runtime");
+    }
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
+    await app.waitForView(() => expect(document.body.textContent).toContain("Waiting for steering"));
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), queuedPrompt);
+    await app.queryElementByTestId(dataTestId.queuedMessage);
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    const running = await app.waitForView(() => {
+        const entry = app
+            .elementsByTestId(dataTestId.managedConversation)
+            .find((element) => element.textContent?.includes("wait for steering"));
+        if (entry === undefined) {
+            throw new Error("Expected the running Session in the directory");
+        }
+        return entry;
+    });
+
+    await daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
+    await daemon.continueReply(queuedPrompt, {
+        outcome: "hold",
+        output: [{ kind: "text", text: "The follow-up is running" }],
+    });
+    await app.user.click(running);
+
+    await app.waitForView(() => {
+        expect(document.body.textContent).toContain("The follow-up is running");
+        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+            "wait for steering",
+            queuedPrompt,
+        ]);
+        expect(queryByRole(document.body, "region", { name: "Queued messages" })).toBeNull();
+        expect(getAllByText(document.body, queuedPrompt)).toHaveLength(1);
+    });
+    await daemon.continueReply(queuedPrompt, { outcome: "complete", output: [] });
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    await app.close();
+});
+
 test("Given a follow-up is queued and the user has started another draft, When they edit the queued follow-up, Then it leaves the queue and returns to the composer ahead of the draft", {
     timeout: 30_000,
 }, async () => {

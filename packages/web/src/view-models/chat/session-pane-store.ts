@@ -61,7 +61,12 @@ import {
     type SubmitTurn,
     type SubmittedMessage,
 } from "./session-delivery-store.ts";
-import { observeSessionExecution, type QueuedCommand, type SessionExecutionObservation } from "./session-execution.ts";
+import {
+    observeSessionExecution,
+    type QueuedCommand,
+    type SessionExecutionObservation,
+    type SessionExecutionSnapshot,
+} from "./session-execution.ts";
 import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
 import { type SessionLifecycleFact, sessionInteractionRecovery, sessionLifecycleFact } from "./session-lifecycle.ts";
 import { queuedMessages, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
@@ -772,13 +777,13 @@ export function createSessionPaneModel(options: {
                     change.interactions satisfies never;
             }
         };
-        /** Reads the Runtime's execution snapshot and observes it. */
+        /** Reads the Runtime's execution snapshot, observes it and returns it. */
         const readExecution = async (
             connected: MobiusClient,
             turnAtRead: CurrentTurn,
             signal: AbortSignal,
             deliveryCommandId: string | null = null,
-        ): Promise<void> => {
+        ): Promise<SessionExecutionSnapshot> => {
             // Only retire accepted queue inputs known before the read began. A submission accepted while this
             // snapshot was in flight may legitimately be absent from it.
             const acceptedQueue = delivery
@@ -803,6 +808,7 @@ export function createSessionPaneModel(options: {
                         )
                         .map((message) => message.commandId),
                 );
+            return snapshot;
         };
         const commitProjection = (input: SessionProjectionInput): readonly SessionProjectionEffect[] => {
             const result = transitionSessionProjection(projection, input);
@@ -1134,11 +1140,23 @@ export function createSessionPaneModel(options: {
                             // Confirm execution after history is adopted. An earlier idle snapshot
                             // cannot settle work that started while those pages were loading.
                             const submission = delivery.getState().state;
-                            await readExecution(
+                            const snapshot = await readExecution(
                                 connected,
                                 reconciliation.turn,
                                 signal,
                                 submission.kind === "delivery-unknown" ? submission.journal.commandId : null,
+                            );
+                            // The adopted history shows a queued input that started before it was read, even where
+                            // its pages omit the command identity; one that started since arrives with its identity.
+                            const running = snapshot.turn?.commandId;
+                            delivery.getState().releaseMessages(
+                                delivery
+                                    .getState()
+                                    .acceptedMessages.filter(
+                                        (message) =>
+                                            message.target.disposition === "queue" && message.commandId === running,
+                                    )
+                                    .map((message) => message.commandId),
                             );
                             switch (reconciliation.kind) {
                                 case "initial-subscription":
