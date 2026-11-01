@@ -208,6 +208,7 @@ export class PlatformControlPlaneStorage {
                         tenant_id: platformApp.tenantId,
                         project_id: platformProject.projectId,
                         lifecycle: platformProject.lifecycle,
+                        session_access_revoked_through: platformProject.sessionAccessRevokedThrough,
                     })
                     .from(platformProject)
                     .innerJoin(platformApp, eq(platformApp.appId, platformProject.appId))
@@ -216,6 +217,30 @@ export class PlatformControlPlaneStorage {
             signal,
         );
         return decodeOptionalStorageRecord(PlatformProjectScopeRowSchema, rows[0] ?? null);
+    };
+
+    /**
+     * Revokes the served Project's Session credentials issued no later than `revokedThrough`. A revocation never moves
+     * back, so retries and overlapping revocations converge. Returns the Project's revocation time, or null when the
+     * Project is not served.
+     */
+    readonly revokeSessionAccess = async (
+        projectId: string,
+        revokedThrough: number,
+        signal: AbortSignal,
+    ): Promise<number | null> => {
+        const rows = await waitForD1(
+            () =>
+                platformDrizzle(this.#database)
+                    .update(platformProject)
+                    .set({
+                        sessionAccessRevokedThrough: sql`max(${platformProject.sessionAccessRevokedThrough}, ${revokedThrough})`,
+                    })
+                    .where(and(eq(platformProject.projectId, projectId), projectServed))
+                    .returning({ revokedThrough: platformProject.sessionAccessRevokedThrough }),
+            signal,
+        );
+        return rows[0]?.revokedThrough ?? null;
     };
 
     readonly countActiveProjects = async (tenantId: string, signal: AbortSignal): Promise<number> =>
@@ -716,6 +741,7 @@ export class PlatformControlPlaneStorage {
                     updatedAt: sql<number>`${project.updated_at}`.as("updatedAt"),
                     deletedAt: sql<null>`NULL`.as("deletedAt"),
                     locationHint: sql<ProjectRow["location_hint"]>`${project.location_hint}`.as("locationHint"),
+                    sessionAccessRevokedThrough: sql<number>`0`.as("sessionAccessRevokedThrough"),
                 })
                 .from(platformApp)
                 .where(

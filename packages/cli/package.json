@@ -1,6 +1,6 @@
 {
     "name": "@moxt-ai/mobius",
-    "version": "0.0.413",
+    "version": "0.0.414",
     "description": "Mobius CLI for pairing and running local AI agent services.",
     "type": "module",
     "bin": {

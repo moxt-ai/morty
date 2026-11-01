@@ -126,6 +126,15 @@ export class MobiusSessionAccess {
     }
 }
 
+/** A revocation of a Project's Session credentials: every one issued no later than `revokedThrough`. */
+export class MobiusSessionAccessRevocation {
+    readonly revokedThrough: string;
+    constructor(value: unknown) {
+        const resource = record(value, "Session access revocation");
+        this.revokedThrough = validateTimestamp(stringField(resource, "revokedThrough", 128), "revokedThrough");
+    }
+}
+
 export interface CreateMobiusSessionRequest {
     readonly additionalDirectoryIds: readonly string[];
     readonly agentId: string;

@@ -47,6 +47,7 @@ import { AppCredentialProjectAccess } from "./app-credential-project-access.ts";
 import type { OrganizationAdministrators } from "./organization-administrators.ts";
 
 const MAXIMUM_CREDENTIAL_OVERLAP_MILLISECONDS = 60 * 60 * 1_000;
+const SESSION_ACCESS_REVOCATION_CLOCK_MARGIN_MILLISECONDS = 5_000;
 
 type ProjectProvisioningActor =
     | {
@@ -1095,19 +1096,43 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
         );
     };
 
-    readonly authorizePlatformCredentialRecord = async (
+    /** Authorizes a Session credential issued at `issuedAt` through the AppCredential that issued it. */
+    readonly authorizeSessionCredentialRecord = async (
         projectId: string,
         credential: CredentialRow,
         requiredPermission: ProjectPermission,
+        issuedAt: number,
         signal: AbortSignal,
     ): Promise<ProjectAccessContext> =>
-        await this.authorizeCredentialForProject(
+        await this.#projectAccess.authorizeSessionCredential(
             credential,
             validateIdentifier(projectId, "project_id"),
-            requiredPermission,
-            "",
+            [requiredPermission],
+            issuedAt,
             signal,
         );
+
+    /**
+     * Revokes every Session credential issued for the Project until now. An AppCredential that may issue them may
+     * revoke them. Returns the time through which issued credentials are revoked.
+     */
+    readonly revokeSessionAccess = async (
+        projectId: string,
+        credentialValue: string,
+        signal: AbortSignal,
+    ): Promise<number> => {
+        await this.authorizePlatformCredential(projectId, credentialValue, ProjectPermission.SessionWrite, "", signal);
+        // Workers that issue and verify Session credentials keep their own clocks; the margin covers their skew.
+        const revokedThrough = await this.#storage.revokeSessionAccess(
+            validateIdentifier(projectId, "project_id"),
+            Date.now() + SESSION_ACCESS_REVOCATION_CLOCK_MARGIN_MILLISECONDS,
+            signal,
+        );
+        if (revokedThrough === null) {
+            throw new ProjectAuthenticationError("project_access_denied", "The Project is unavailable");
+        }
+        return revokedThrough;
+    };
 
     readonly resolveApplicationId: ProjectApplicationResolver["resolveApplicationId"] = async (projectId, signal) => {
         const project = await this.#storage.readActiveProjectScope(validateIdentifier(projectId, "project_id"), signal);

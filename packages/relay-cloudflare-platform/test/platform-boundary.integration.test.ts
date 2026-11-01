@@ -2395,6 +2395,15 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                 }),
                 environment,
             ),
+        revokeSessionAccess: () =>
+            worker.fetch(
+                new Request(`${relayOrigin}${MOBIUS_API_PREFIX}/v1/projects/${projectId}/session-access/revocations`, {
+                    method: "POST",
+                    headers: credentialHeaders(appCredential),
+                    body: JSON.stringify({}),
+                }),
+                environment,
+            ),
         revoke: () =>
             worker.fetch(
                 new Request(`${relayOrigin}${MOBIUS_API_PREFIX}/v1/projects/${projectId}/runtimes/${runtimeId}`, {
@@ -3723,6 +3732,39 @@ describe.sequential("Platform Turn submission", () => {
             expect(await responseJson(await runtime.submitRuntimeTurn("expired"), 401)).toMatchObject({
                 error: { code: "credential_expired" },
             });
+        } finally {
+            runtime.daemon.close(1000, "Test complete");
+        }
+    });
+    it("Given a Session credential with an open live view, When the App revokes the Project's Session access, Then the credential is refused as revoked and its view closes while a credential issued afterwards still works", async () => {
+        const runtime = await connectRuntimeDaemon("session-access-revocation");
+        try {
+            const subscribed = await runtime.subscribe();
+            if (subscribed.webSocket === null) {
+                throw new Error("Expected the live Session view");
+            }
+            const view = subscribed.webSocket;
+            const viewClosed = new Promise<CloseEvent>((resolve) => {
+                view.addEventListener("close", resolve, { once: true });
+            });
+            view.accept();
+
+            const revoked = await responseJson(await runtime.revokeSessionAccess(), 200);
+            expect(Date.parse(text(revoked, "revokedThrough"))).toBeGreaterThan(Date.now());
+
+            expect(await viewClosed).toMatchObject({ code: 1008, reason: "Session access revoked" });
+            expect(await responseJson(await runtime.submitRuntimeTurn("revoked"), 401)).toMatchObject({
+                error: { code: "credential_revoked" },
+            });
+            vi.setSystemTime(Date.parse(text(revoked, "revokedThrough")) + 1);
+            const reissued = await runtime.issueRuntimeCredential(runtime.runtimeId);
+            const submitted = runtime.submitRuntimeTurn("reissued", () => reissued);
+            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
+                kind: "session.prompt",
+                commandId: "reissued",
+            });
+            runtime.startTurn("reissued", "1");
+            expect(await responseJson(await submitted, 200)).toMatchObject({ state: { kind: "running" } });
         } finally {
             runtime.daemon.close(1000, "Test complete");
         }

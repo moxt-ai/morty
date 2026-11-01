@@ -13,6 +13,7 @@ const INTERNAL_CHANNEL_ID_HEADER = "x-mobius-channel-id";
 const INTERNAL_HOST_CREDENTIAL_ID_HEADER = "x-mobius-host-credential-id";
 const INTERNAL_HOST_CREDENTIAL_KIND_HEADER = "x-mobius-host-credential-kind";
 const INTERNAL_RUNTIME_ID_HEADER = "x-mobius-runtime-id";
+const INTERNAL_SESSION_ACCESS_REVOKED_THROUGH_HEADER = "x-mobius-session-access-revoked-through";
 
 export class CloudflareChannelRuntime implements ChannelGateway {
     readonly #namespace: DurableObjectNamespace;
@@ -92,6 +93,30 @@ export class CloudflareChannelRuntime implements ChannelGateway {
         }
     };
 
+    readonly disconnectSessionViewers = async (
+        projectId: string,
+        runtimeId: string,
+        revokedThrough: number,
+        signal: AbortSignal,
+    ): Promise<void> => {
+        signal.throwIfAborted();
+        const headers = new Headers();
+        headers.set(INTERNAL_SESSION_ACCESS_REVOKED_THROUGH_HEADER, String(revokedThrough));
+        const response = await this.fetchRuntime(
+            { projectId, runtimeId },
+            new Request(`https://runtime.internal/projects/${encodeURIComponent(projectId)}/session-viewers/revoke`, {
+                headers,
+                method: "DELETE",
+                signal,
+            }),
+            signal,
+        );
+        signal.throwIfAborted();
+        if (response.status !== 204) {
+            throw new Error("The Runtime's Session views could not be revoked");
+        }
+    };
+
     readonly readRuntimeStatus = async (access: VerifiedChannelAccess, signal: AbortSignal): Promise<RuntimeStatus> => {
         const response = await this.forward(
             access,
@@ -132,7 +157,7 @@ export class CloudflareChannelRuntime implements ChannelGateway {
     };
 
     private readonly fetchRuntime = async (
-        access: VerifiedChannelAccess,
+        access: Pick<VerifiedChannelAccess, "projectId" | "runtimeId"> & { readonly channelId?: string },
         request: Request,
         signal: AbortSignal,
     ): Promise<Response> => {

@@ -80,6 +80,7 @@ export const PlatformProjectScopeRowSchema = v.object({
     app_id: v.string(),
     lifecycle,
     project_id: v.string(),
+    session_access_revoked_through: nonNegativeInteger,
     tenant_id: v.string(),
 });
 export type PlatformProjectScopeRow = Readonly<v.InferOutput<typeof PlatformProjectScopeRowSchema>>;

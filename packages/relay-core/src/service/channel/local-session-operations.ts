@@ -44,7 +44,7 @@ export interface LocalSessionOperations extends SessionRuntimeOperations {
         scope: Scope,
         runtimeId: string,
         sessionId: string,
-        expiresAt: number,
+        credential: { readonly issuedAt: number; readonly expiresAt: number },
         signal: AbortSignal,
     ) => Promise<Response>;
 }
@@ -155,7 +155,7 @@ export function createLocalSessionOperations(
                 signal,
             );
         },
-        openPublicSessionEvents: async (scope, requestedRuntime, sessionId, expiresAt, signal) => {
+        openPublicSessionEvents: async (scope, requestedRuntime, sessionId, credential, signal) => {
             checkTarget(scope.projectId, requestedRuntime);
             signal.throwIfAborted();
             await cx.services.runtime.expireSilentDaemons();
@@ -168,7 +168,8 @@ export function createLocalSessionOperations(
                 projectId,
                 runtimeId,
                 sessionFilter: sessionId,
-                expiresAt,
+                expiresAt: credential.expiresAt,
+                credentialIssuedAt: credential.issuedAt,
                 eventFormat: "events",
             }).response;
         },
@@ -203,6 +204,7 @@ export function createLocalSessionOperations(
             const accepted = cx.gateways.peers.accept({
                 role: "viewer",
                 expiresAt: Number.MAX_SAFE_INTEGER,
+                credentialIssuedAt: null,
                 eventFormat: "envelope",
                 projectId,
                 runtimeId,

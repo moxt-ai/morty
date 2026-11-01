@@ -19,6 +19,7 @@ import {
     type TurnAdmission,
     turnSteerRequest,
     turnSubmissionRequest,
+    validateIdentifier,
     type WorkerRuntimeGateways,
 } from "@moxt-ai/mobius-relay-core";
 import {
@@ -691,13 +692,42 @@ export function createPlatformApplication(
                 new ProjectScope(target.projectId),
                 target.runtimeId,
                 context.req.param("sessionId"),
-                target.expiresAtEpochMilliseconds,
+                { issuedAt: target.issuedAtEpochMilliseconds, expiresAt: target.expiresAtEpochMilliseconds },
                 context.req.raw.signal,
             );
         });
+    const sessionAccessRoutes = new Hono<DispatchEnvironment>().post("/revocations", async (context) => {
+        const credential = (context.req.header("authorization") ?? "").match(/^Bearer ([^\s]+)$/u)?.[1];
+        if (credential === undefined) {
+            return context.json(
+                { error: { code: "project_credential_required", message: "An App credential is required" } },
+                401,
+            );
+        }
+        v.parse(v.strictObject({}), await context.req.json());
+        if (!("MOBIUS_PROJECT_STORE" in context.env)) {
+            throw new Error("Session access is revoked only in the Project's ProjectDO");
+        }
+        const projectId = validateIdentifier(context.req.param("projectId") ?? "", "project_id");
+        const store = context.env.MOBIUS_PROJECT_STORE;
+        const channel = gateways(context.env).channel;
+        const revoked = await context.var.sessionAccess.revoke(
+            projectId,
+            credential,
+            {
+                runtimeIds: async (signal) => (await store.listRuntimes(signal)).map((runtime) => runtime.runtime_id),
+                disconnect: (runtimeId, revokedThrough, signal) =>
+                    channel.disconnectSessionViewers(projectId, runtimeId, revokedThrough, signal),
+            },
+            context.req.raw.signal,
+        );
+        context.header("Cache-Control", "no-store");
+        return context.json(revoked);
+    });
     const projectRoutes = new Hono<DispatchEnvironment>()
         .route("/recording", recordingReadRoutes)
         .route("/sessions", sessionRoutes)
+        .route("/session-access", sessionAccessRoutes)
         .all("/runtime-pairings/*", projectHandler)
         .all("/runtimes/*", projectHandler)
         .all("/*", projectHandler);

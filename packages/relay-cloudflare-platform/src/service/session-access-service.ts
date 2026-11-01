@@ -16,6 +16,7 @@ export type SessionAccessTarget =
 
 /** A verified Session credential: the Session it selects, and the authorization of each operation on it. */
 export interface SessionAccess {
+    readonly issuedAtEpochMilliseconds: number;
     readonly expiresAtEpochMilliseconds: number;
     readonly projectId: string;
     readonly runtimeId: string;
@@ -27,6 +28,12 @@ export interface SessionAccess {
  * read access, such as reading a Session's settings or native history, reads only that Session through it, which is
  * what Session read access permits.
  */
+/** The live Session views a Project's Runtimes hold, which a revocation of Session access must also end. */
+export interface SessionViewers {
+    readonly runtimeIds: (signal: AbortSignal) => Promise<readonly string[]>;
+    readonly disconnect: (runtimeId: string, revokedThrough: number, signal: AbortSignal) => Promise<void>;
+}
+
 function sessionScopedPermission(permission: ProjectPermission): ProjectPermission {
     return permission === ProjectPermission.RuntimeRead ? ProjectPermission.SessionRead : permission;
 }
@@ -86,6 +93,24 @@ export class SessionAccessService {
             projectId: target.projectId,
             sessionId: target.sessionId,
         };
+    };
+
+    /**
+     * Revokes every Session credential issued for the Project until now and closes the live views opened with them.
+     * The revocation commits first and every request reads it, so closing views only ends them promptly. A failure to
+     * close one leaves the revocation in force for the caller to retry; retries do not move the revocation back.
+     */
+    readonly revoke = async (
+        projectId: string,
+        appCredential: string,
+        viewers: SessionViewers,
+        signal: AbortSignal,
+    ): Promise<{ readonly revokedThrough: string }> => {
+        const revokedThrough = await this.#control.revokeSessionAccess(projectId, appCredential, signal);
+        for (const runtimeId of await viewers.runtimeIds(signal)) {
+            await viewers.disconnect(runtimeId, revokedThrough, signal);
+        }
+        return { revokedThrough: new Date(revokedThrough).toISOString() };
     };
 
     readonly authorizeLiveEvents = async (
@@ -158,14 +183,16 @@ export class SessionAccessService {
         }
         const projectId = target.projectId;
         return {
+            issuedAtEpochMilliseconds: claims.issuedAtEpochMilliseconds,
             expiresAtEpochMilliseconds: claims.expiresAtEpochMilliseconds,
             projectId: claims.projectId,
             runtimeId: claims.runtimeId,
             authorize: async (permission, authorizationSignal) => {
-                await this.#control.authorizePlatformCredentialRecord(
+                await this.#control.authorizeSessionCredentialRecord(
                     projectId,
                     application,
                     sessionScopedPermission(permission),
+                    claims.issuedAtEpochMilliseconds,
                     authorizationSignal,
                 );
             },

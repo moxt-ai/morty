@@ -73,6 +73,7 @@ import {
     type MobiusRuntimePairingStatus,
     type MobiusRuntimePairingWaitOptions,
     MobiusSessionAccess,
+    MobiusSessionAccessRevocation,
     type MobiusSessionBinding,
     type MobiusTurn,
     type MobiusTurnCancellation,
@@ -1167,6 +1168,15 @@ export class MobiusSessionResources {
                 { expiresInSeconds, runtimeId },
                 signal,
             ),
+        );
+
+    /**
+     * Revokes every Session credential issued for the Project until now and closes the live views opened with them.
+     * Retrying is safe: a later revocation never undoes an earlier one.
+     */
+    readonly revokeAccess = async (signal: AbortSignal) =>
+        new MobiusSessionAccessRevocation(
+            await this.#executor.post(projectPath(this.#projectId, "session-access/revocations"), {}, signal),
         );
 
     readonly load = async (

@@ -35,6 +35,8 @@ export type RuntimeSocketIdentity =
     | {
           readonly role: "viewer";
           readonly expiresAt: number;
+          /** When the Session credential that opened this view was issued; null for a view opened with App access. */
+          readonly credentialIssuedAt: number | null;
           readonly eventFormat: "events" | "envelope";
           readonly projectId: string;
           readonly runtimeId: string;
@@ -269,6 +271,23 @@ export class RuntimeService {
             await this.attachHost(identity.runtimeId, scope, accepted.socket, signal);
             return { kind: "accepted", response: accepted.response };
         });
+    };
+
+    /**
+     * Ends the live Session views opened with a Session credential the Project no longer honors: one issued no later
+     * than `revokedThrough`. Views opened with App access are unaffected.
+     */
+    readonly revokeSessionViewers = (scope: ProjectScope, revokedThrough: number): void => {
+        for (const { identity, socket } of this.#cx.gateways.peers.sockets()) {
+            if (
+                identity.role === "viewer" &&
+                identity.projectId === scope.projectId &&
+                identity.credentialIssuedAt !== null &&
+                identity.credentialIssuedAt <= revokedThrough
+            ) {
+                socket.close(1008, "Session access revoked");
+            }
+        }
     };
 
     readonly revokeHost = (channelId: string, credentialId: string, runtimeId: string, scope: ProjectScope): void => {
