@@ -56,7 +56,7 @@ test("Given a new visitor reviewing setup, When they expand its details, Then th
         "Runs a background connection until restart or mobius quit.",
         "Keeps this computer's Morty identity in your user data folder.",
         "Asks before replacing a missing connection, which ends earlier shared access.",
-        "Returns a private link. Anyone who opens it can control your agent until it expires in 24 hours or you revoke access.",
+        "Returns a private link for one device, valid for 10 minutes. That device can control your agent for 24 hours unless you revoke access.",
     ]);
     expect(getByRole(document.body, "link", { name: /^Read setup\.md/ })).toHaveProperty(
         "href",

@@ -113,7 +113,7 @@ test("Given shared Morty access, When the user continues on another device, Then
     );
     expect(dialog.textContent).toContain("not just the current conversation");
     expect(dialog.textContent).toContain("24 hours");
-    expect(dialog.textContent).toContain("When the link expires, devices that joined through it lose access too");
+    expect(dialog.textContent).toContain("The link adds one device and works for 10 minutes");
     const copyLink = await app.waitForView(() => getByRole(dialog, "button", { name: "Copy link" }));
     expect(getByRole(dialog, "img", { name: "Continue on another device QR code" })).toBeInstanceOf(HTMLImageElement);
     const description = getByRole(dialog, "heading", { name: "Continue on another device" }).parentElement;
@@ -212,7 +212,7 @@ test("Given an expired handoff with no retained access, When the failure page sh
     });
 
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
-    expect(alert.textContent).toContain("This transfer link has expired or been revoked.");
+    expect(alert.textContent).toContain("This link was already used, has expired, or was revoked.");
     expect(getByRole(document.body, "heading", { name: "This link is no longer available" })).toBeDefined();
     expect(queryByRole(document.body, "button", { name: "Go to Morty" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Try again" })).toBeNull();
@@ -427,7 +427,7 @@ test("Given an expired sharing link with no retained access, When I open it, The
         },
     });
     await app.waitForView(() =>
-        expect(getByRole(document.body, "alert").textContent).toContain("expired or been revoked"),
+        expect(getByRole(document.body, "alert").textContent).toContain("already used, has expired, or was revoked"),
     );
     expect(getByRole(document.body, "heading", { name: "This link is no longer available" })).toBeDefined();
     expect(document.body.textContent).toContain("Ask for a new link.");
@@ -459,7 +459,9 @@ for (const linkKind of ["handoff", "sharing"] as const) {
         app.transport.open();
         await app.user.click(retry);
         await app.waitForView(() =>
-            expect(getByRole(document.body, "alert").textContent).toContain("expired or been revoked"),
+            expect(getByRole(document.body, "alert").textContent).toContain(
+                "already used, has expired, or was revoked",
+            ),
         );
         expect(queryByRole(document.body, "button", { name: "Try again" })).toBeNull();
         expect(document.body.textContent).toContain(

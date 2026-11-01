@@ -56,7 +56,7 @@ for (const viewport of [
         );
         await expect(sharing).toContainText("not just the current conversation");
         await expect(sharing).toContainText("24 hours");
-        await expect(sharing).toContainText("When the link expires, devices that joined through it lose access too");
+        await expect(sharing).toContainText("The link adds one device and works for 10 minutes");
         const copyLink = sharing.getByRole("button", { name: "Copy link" });
         const qr = sharing.getByRole("img", { name: "Continue on another device QR code" });
         await expect(copyLink).toBeVisible();

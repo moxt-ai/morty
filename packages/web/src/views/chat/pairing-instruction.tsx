@@ -148,8 +148,8 @@ export function PairingInstruction({
                         <li>Keeps this computer's Morty identity in your user data folder.</li>
                         <li>Asks before replacing a missing connection, which ends earlier shared access.</li>
                         <li>
-                            Returns a private link. Anyone who opens it can control your agent until it expires in 24
-                            hours or you revoke access.
+                            Returns a private link for one device, valid for 10 minutes. That device can control your
+                            agent for 24 hours unless you revoke access.
                         </li>
                     </ul>
                     <p className="px-3 pb-2">

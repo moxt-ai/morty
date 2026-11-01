@@ -839,10 +839,9 @@ export function ConversationSidebar({
                                                             current conversation.
                                                         </span>
                                                         <span className="mt-2 block">
-                                                            New devices can join for 24 hours after the link is created,
-                                                            or until your own access ends if that is sooner. When the
-                                                            link expires, devices that joined through it lose access
-                                                            too.
+                                                            The link adds one device and works for 10 minutes. That
+                                                            device keeps access for 24 hours, or until your own access
+                                                            ends if that is sooner.
                                                         </span>
                                                     </>
                                                 }

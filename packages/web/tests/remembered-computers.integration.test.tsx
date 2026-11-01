@@ -497,7 +497,7 @@ test("Given another saved computer, When a transfer link cannot be redeemed, The
         },
     });
     await other.waitForView(() =>
-        expect(getByRole(document.body, "alert").textContent).toContain("expired or been revoked"),
+        expect(getByRole(document.body, "alert").textContent).toContain("already used, has expired, or was revoked"),
     );
     expect(getByRole(document.body, "link", { name: "Back to your last computer" })).toBeInstanceOf(HTMLAnchorElement);
     expect(queryByRole(document.body, "button", { name: "Try again" })).toBeNull();

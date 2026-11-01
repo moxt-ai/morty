@@ -34,9 +34,9 @@ export class ProjectDurableObject extends Project {
             return new Response(null, { status: 204 });
         }
         if (request.url === "https://project.internal/aged-links" && request.method === "POST") {
-            // Reconstruct links whose lifetime has passed: the Durable Object's clock cannot be moved forward.
+            // Reconstruct links whose device term has passed: the Durable Object's clock cannot be moved forward.
             this.ctx.storage.sql.exec(
-                "UPDATE identity_transfer SET created_at = created_at - (expires_at - created_at), expires_at = created_at",
+                "UPDATE identity_transfer SET created_at = created_at - (access_expires_at - created_at), expires_at = expires_at - (access_expires_at - created_at), access_expires_at = created_at",
             );
             return new Response(null, { status: 204 });
         }

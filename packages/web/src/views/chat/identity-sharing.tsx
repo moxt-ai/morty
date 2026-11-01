@@ -18,7 +18,7 @@ export function IdentitySharing({ store }: { readonly store: StoreApi<IdentitySh
             <img className="mx-auto size-56" src={state.image} alt="Continue on another device QR code" />
             <CopyLinkButton url={state.transfer.url} />
             <p className="text-xs leading-5 text-muted-foreground">
-                New devices can join until {new Date(state.transfer.expiresAt).toLocaleString()}.
+                One device can join with this link until {new Date(state.transfer.expiresAt).toLocaleString()}.
             </p>
         </div>
     );

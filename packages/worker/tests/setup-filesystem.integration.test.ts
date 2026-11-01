@@ -1023,7 +1023,6 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
                 },
             });
             expect((await session()).status).toBe(200);
-            expect((await redeem()).status).toBe(200);
             expect(JSON.parse(await readFile(join(paths.state, "config.json"), "utf8"))).toMatchObject(config);
         }
 
@@ -1237,11 +1236,9 @@ test("Given two shared links and redeemed access, When the local owner revokes a
         const links = [await share(owner.projectId, owner.token), await share(owner.projectId, owner.token)];
         const tokens: string[] = [];
         for (const link of links) {
-            for (let index = 0; index < 2; index++) {
-                const response = await redeem(link);
-                expect(response.status).toBe(200);
-                tokens.push(v.parse(v.object({ token: v.string() }), await response.json()).token);
-            }
+            const response = await redeem(link);
+            expect(response.status).toBe(200);
+            tokens.push(v.parse(v.object({ token: v.string() }), await response.json()).token);
         }
         const remote = v.parse(v.string(), tokens[0]);
         const recovery = await request(owner.projectId, "/identity/recovery-token", owner.token, "POST");

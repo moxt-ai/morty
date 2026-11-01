@@ -15,7 +15,7 @@ afterAll(async () => {
 });
 
 test.each(["v1", "migrated"] as const)(
-    "Given local, browser and recovery credentials, When their %s operations end access, Then each preserves the other credential kinds and only browser access closes its links",
+    "Given local, browser and recovery credentials, When their %s operations end access, Then each preserves the other credential kinds",
     async (version) => {
         const owner = await fixture.createAnonymousUser();
         const request = (path: string, token: string, method = "GET") =>
@@ -29,10 +29,12 @@ test.each(["v1", "migrated"] as const)(
         const recoveryResponse = await request("/identity/recovery-token", owner.token, "POST");
         expect(recoveryResponse.status).toBe(201);
         const recovery = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
-        const transferResponse = await request("/identity/transfers", owner.token, "POST");
-        const code = new URL(v.parse(v.object({ url: v.string() }), await transferResponse.json()).url).hash.slice(6);
-        const redeem = () =>
-            worker.fetch(
+        const share = async () => {
+            const response = await request("/identity/transfers", owner.token, "POST");
+            return new URL(v.parse(v.object({ url: v.string() }), await response.json()).url).hash.slice(6);
+        };
+        const redeem = async (code: string) =>
+            await worker.fetch(
                 new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
                     method: "POST",
                     headers: { "content-type": "application/json" },
@@ -40,8 +42,9 @@ test.each(["v1", "migrated"] as const)(
                 }),
                 fixture.environment(),
             );
-        const browser = v.parse(v.object({ token: v.string() }), await (await redeem()).json()).token;
-        const sibling = v.parse(v.object({ token: v.string() }), await (await redeem()).json()).token;
+        const browser = v.parse(v.object({ token: v.string() }), await (await redeem(await share())).json()).token;
+        // Another device that never presents its credential, so migration leaves its kind unclassified.
+        expect((await redeem(await share())).status).toBe(200);
         const operations = [
             { token: recovery, path: "/identity/v1/recovery-credential" },
             { token: owner.token, path: "/identity/v1/local-credential" },
@@ -81,8 +84,6 @@ test.each(["v1", "migrated"] as const)(
             for (const remaining of operations.slice(index + 1)) {
                 expect((await request("/session", remaining.token)).status).toBe(200);
             }
-            expect((await request("/session", sibling)).status).toBe(index === 2 ? 401 : 200);
-            expect((await redeem()).status).toBe(index === 2 ? 410 : 200);
         }
     },
 );
@@ -142,7 +143,7 @@ test("Given a browser that joined through a link, When it asks for recovery acce
     expect((await request(`${project}/session`, browser)).status).toBe(401);
 });
 
-test("Given browser access granted through a link, When the link expires, Then that access ends while the computer's own access stays", async () => {
+test("Given browser access granted through a link, When the access term its link granted passes, Then that access ends while the computer's own access stays", async () => {
     const owner = await fixture.createAnonymousUser();
     const session = (token: string) =>
         fetchPublicApplication(
@@ -183,7 +184,7 @@ test("Given browser access granted through a link, When the link expires, Then t
     expect((await session(owner.token)).status).toBe(200);
 });
 
-test("Given browser access granted through a link, When that browser shares a new link, Then the new link expires with the browser's own access", async () => {
+test("Given browser access granted through a link, When that browser shares a new link, Then the device it adds keeps access no longer than the browser's own", async () => {
     const owner = await fixture.createAnonymousUser();
     const share = async (token: string) => {
         const response = await fetchPublicApplication(
@@ -195,7 +196,7 @@ test("Given browser access granted through a link, When that browser shares a ne
         );
         expect(response.status).toBe(201);
         return v.parse(
-            v.object({ url: v.string(), expiresAt: v.pipe(v.string(), v.isoTimestamp()) }),
+            v.object({ url: v.string(), accessExpiresAt: v.pipe(v.string(), v.isoTimestamp()) }),
             await response.json(),
         );
     };
@@ -212,5 +213,5 @@ test("Given browser access granted through a link, When that browser shares a ne
 
     const browserLink = await share(browser);
 
-    expect(browserLink.expiresAt).toBe(ownerLink.expiresAt);
+    expect(browserLink.accessExpiresAt).toBe(ownerLink.accessExpiresAt);
 });

@@ -187,9 +187,8 @@ test("Given Projects in separate regions, When users reopen and transfer Morty a
         const redeemed = await redeem();
         expect(redeemed.status).toBe(200);
         expect(await redeemed.json()).toMatchObject({ userId: identity.userId, projectId: identity.projectId });
-        const reopened = await redeem();
-        expect(reopened.status).toBe(200);
-        expect(await reopened.json()).toMatchObject({ userId: identity.userId, projectId: identity.projectId });
+        // A link adds one device.
+        expect((await redeem()).status).toBe(410);
     }
 });
 
@@ -265,41 +264,49 @@ test("Given a user with a draft Bot on a Project-scoped Platform, When setup lis
     expect(await response.json()).toEqual({ runtimes: [] });
 });
 
-test("Given an anonymous user, When machine access is shared, Then its expiring continue URL remains reusable beyond five uses and issued access remains available until revoked", async () => {
+test("Given an anonymous user, When machine access is shared, Then the link adds one device within ten minutes and that device keeps access for a day until it ends it", async () => {
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();
-    const createTransfer = async () => {
-        const response = await worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/transfers`, {
-                method: "POST",
-                headers: { authorization: `Bearer ${owner.token}` },
-            }),
-            environment,
-        );
-        expect(response.status).toBe(201);
-        const transfer = v.parse(
-            v.object({ url: v.string(), expiresAt: v.pipe(v.string(), v.isoTimestamp()) }),
-            await response.json(),
-        );
-        return { ...transfer, code: new URL(transfer.url).hash.slice("#code=".length) };
-    };
-    const redeem = (code: string) =>
+    const created = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/transfers`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${owner.token}` },
+        }),
+        environment,
+    );
+    expect(created.status).toBe(201);
+    const transfer = v.parse(
+        v.object({
+            url: v.string(),
+            expiresAt: v.pipe(v.string(), v.isoTimestamp()),
+            accessExpiresAt: v.pipe(v.string(), v.isoTimestamp()),
+        }),
+        await created.json(),
+    );
+    // Both terms start when the link is created: ten minutes to open it, a day of access for the device it adds.
+    expect(Date.parse(transfer.accessExpiresAt) - Date.parse(transfer.expiresAt)).toBe(
+        24 * 60 * 60 * 1000 - 10 * 60 * 1000,
+    );
+    const redeem = () =>
         worker.fetch(
             new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
                 method: "POST",
                 headers: { "content-type": "application/json" },
-                body: JSON.stringify({ code }),
+                body: JSON.stringify({ code: new URL(transfer.url).hash.slice("#code=".length) }),
             }),
             environment,
         );
 
-    const remoteTransfer = await createTransfer();
-    const remoteTokens = [];
-    for (let redemption = 0; redemption < 2; redemption++) {
-        const response = await redeem(remoteTransfer.code);
-        expect(response.status).toBe(200);
-        remoteTokens.push(v.parse(v.object({ token: v.string() }), await response.json()).token);
-    }
+    const opened = await redeem();
+    expect(opened.status).toBe(200);
+    const device = v.parse(v.object({ token: v.string() }), await opened.json()).token;
+    const reused = await redeem();
+    expect(reused.status).toBe(410);
+    expect(await reused.json()).toMatchObject({
+        error: { code: "TRANSFER_UNAVAILABLE", message: "This link was already used, has expired, or was revoked." },
+    });
+    expect((await worker.fetch(accountRequest(device, owner.projectId), environment)).status).toBe(200);
+
     const recoveryResponse = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/recovery-token`, {
             method: "POST",
@@ -315,32 +322,14 @@ test("Given an anonymous user, When machine access is shared, Then its expiring 
     const ended = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/v1/browser-access`, {
             method: "DELETE",
-            headers: { authorization: `Bearer ${remoteTokens[0]}` },
+            headers: { authorization: `Bearer ${device}` },
         }),
         environment,
     );
     expect(ended.status).toBe(204);
-    for (const token of remoteTokens) {
-        expect((await worker.fetch(accountRequest(token, owner.projectId), environment)).status).toBe(401);
-    }
-    expect((await redeem(remoteTransfer.code)).status).toBe(410);
+    expect((await worker.fetch(accountRequest(device, owner.projectId), environment)).status).toBe(401);
     expect((await worker.fetch(accountRequest(recoveryToken, owner.projectId), environment)).status).toBe(200);
     expect((await worker.fetch(accountRequest(owner.token, owner.projectId), environment)).status).toBe(200);
-
-    const reusableTransfer = await createTransfer();
-    const issuedTokens = [];
-    for (let redemption = 0; redemption < 6; redemption++) {
-        const response = await redeem(reusableTransfer.code);
-        expect(response.status).toBe(200);
-        const received = v.parse(
-            v.object({ userId: v.string(), token: v.pipe(v.string(), v.startsWith("mobius_anon_v2_")) }),
-            await response.json(),
-        );
-        expect(received.userId).toBe(owner.userId);
-        issuedTokens.push(received.token);
-    }
-    expect(new Set(issuedTokens).size).toBe(6);
-    expect((await worker.fetch(accountRequest(issuedTokens[0] ?? "", owner.projectId), environment)).status).toBe(200);
 });
 
 test("Given an anonymous user with a Machine, When a transfer link is redeemed, Then the redemption returns the user's Bot", async () => {
@@ -480,7 +469,7 @@ test("Given browser access the owner revoked, When the browser presents its cred
     expect((await worker.fetch(accountRequest(owner.token, owner.projectId), environment)).status).toBe(200);
 });
 
-test("Given a browser that opened one link, When it opens another link for the same user and later ends its access, Then its earlier credential stops at once and both links stop opening Morty", async () => {
+test("Given a browser that opened one link, When it opens another link for the same user and later ends its access, Then its earlier credential stops at once while another device keeps its own access", async () => {
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, init: RequestInit = {}) =>
@@ -512,7 +501,7 @@ test("Given a browser that opened one link, When it opens another link for the s
     };
     const firstLink = await share();
     const secondLink = await share();
-    const phone = await opened(firstLink);
+    const phone = await opened(await share());
     const earlier = await opened(firstLink);
 
     const later = await opened(secondLink, earlier);
@@ -524,13 +513,12 @@ test("Given a browser that opened one link, When it opens another link for the s
 
     expect((await request("/identity/v1/browser-access", later, { method: "DELETE" })).status).toBe(204);
 
-    // Ending this browser's access ends every link it joined through, and what they granted.
+    // Ending this browser's access ends what it joined through; each link added one device, so others keep theirs.
     for (const code of [firstLink, secondLink]) {
         expect((await redeem(code)).status).toBe(410);
     }
-    for (const token of [later, phone]) {
-        expect((await request("/session", token)).status).toBe(401);
-    }
+    expect((await request("/session", later)).status).toBe(401);
+    expect((await request("/session", phone)).status).toBe(200);
     expect((await request("/session", owner.token)).status).toBe(200);
 });
 

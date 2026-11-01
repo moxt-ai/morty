@@ -16,17 +16,30 @@ export type Credential = {
           readonly kind: "browser";
           readonly transferId: string;
           readonly browserId: string;
-          /** When this access ends: the link it came through expires then. */
+          /** When this access ends: the term the link it came through granted. */
           readonly accessExpiresAt: number;
       }
 );
 
-const linkLifetime = 24 * 60 * 60 * 1000;
+const linkLifetime = 10 * 60 * 1000;
+const deviceAccessLifetime = 24 * 60 * 60 * 1000;
 
-/** A link ends no later than the access that shares it, so sharing never extends access. */
-export function sharedLinkExpiry(sharer: Credential, now: number): number {
-    const expiresAt = now + linkLifetime;
-    return sharer.kind === "browser" ? Math.min(expiresAt, sharer.accessExpiresAt) : expiresAt;
+/** What a shared link grants: until when it can add a device, and until when that device keeps access. */
+export interface SharedLinkTerms {
+    readonly expiresAt: number;
+    readonly accessExpiresAt: number;
+}
+
+/**
+ * A link adds one device within ten minutes, and that device keeps access for a day from the link's creation. Neither
+ * outlasts the access that shares it, so a device cannot extend its own access by adding another.
+ */
+export function sharedLinkTerms(sharer: Credential, now: number): SharedLinkTerms {
+    const limit = sharer.kind === "browser" ? sharer.accessExpiresAt : Number.POSITIVE_INFINITY;
+    return {
+        expiresAt: Math.min(now + linkLifetime, limit),
+        accessExpiresAt: Math.min(now + deviceAccessLifetime, limit),
+    };
 }
 
 /**

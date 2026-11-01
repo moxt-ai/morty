@@ -7,7 +7,7 @@ import {
     type CredentialOperation,
     mayPerform,
     type PermittedCredential,
-    sharedLinkExpiry,
+    sharedLinkTerms,
 } from "../entity/authentication/credential.ts";
 import type { Session } from "../entity/authentication/session.ts";
 import { ManagementError } from "../entity/management-error.ts";
@@ -84,11 +84,11 @@ export class AuthenticationService {
         if (stored === null) {
             return { kind: "unknown" };
         }
-        // A link ends the browser access it issued when it is revoked or expires.
+        // Browser access ends at the term its link granted, and with the link when it is revoked.
         if (
             stored.revokedAt !== null ||
             stored.linkRevokedAt !== null ||
-            (stored.linkExpiresAt !== null && stored.linkExpiresAt <= Date.now())
+            (stored.linkAccessExpiresAt !== null && stored.linkAccessExpiresAt <= Date.now())
         ) {
             return { kind: "revoked" };
         }
@@ -103,7 +103,7 @@ export class AuthenticationService {
         let credential: Credential;
         switch (kind) {
             case "browser":
-                if (stored.transferId === null || stored.linkExpiresAt === null) {
+                if (stored.transferId === null || stored.linkAccessExpiresAt === null) {
                     return { kind: "unknown" };
                 }
                 credential = {
@@ -112,7 +112,7 @@ export class AuthenticationService {
                     userId: stored.userId,
                     transferId: stored.transferId,
                     browserId: stored.browserId ?? stored.credentialId,
-                    accessExpiresAt: stored.linkExpiresAt,
+                    accessExpiresAt: stored.linkAccessExpiresAt,
                 };
                 break;
             case "local":
@@ -196,7 +196,7 @@ export class AuthenticationService {
             access.credential.userId,
             access.token,
             now,
-            sharedLinkExpiry(access.credential, now),
+            sharedLinkTerms(access.credential, now),
             signal,
         );
     };

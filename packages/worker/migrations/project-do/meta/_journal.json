@@ -190,6 +190,13 @@
             "when": 1793318884448,
             "tag": "0038_drop_agent_pairing_ticket",
             "breakpoints": true
+        },
+        {
+            "idx": 39,
+            "version": "6",
+            "when": 1793542002770,
+            "tag": "0039_single_use_device_links",
+            "breakpoints": true
         }
     ]
 }

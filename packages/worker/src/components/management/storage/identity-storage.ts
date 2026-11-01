@@ -1,14 +1,13 @@
 import { and, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import * as v from "valibot";
 import { anonymousCredential, continueLink, platformProjectMapping } from "../../../schema/project-do/index.ts";
-import type { Credential } from "../entity/authentication/credential.ts";
+import type { Credential, SharedLinkTerms } from "../entity/authentication/credential.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
 import { type AnonymousIdentity, digest, randomSecret, requireIdentityDatabase } from "./identity-storage-common.ts";
 
 const userRow = v.pipe(v.object({ userId: v.string() }), v.readonly());
-export interface IdentityTransfer {
+export interface IdentityTransfer extends SharedLinkTerms {
     readonly code: string;
-    readonly expiresAt: number;
 }
 
 export class IdentityStorage {
@@ -76,7 +75,7 @@ export class IdentityStorage {
                 revokedAt: anonymousCredential.revokedAt,
                 // Durable Object rows are keyed by column name, so this column needs a name of its own.
                 linkRevokedAt: sql<number | null>`${continueLink.revokedAt}`.as("link_revoked_at"),
-                linkExpiresAt: sql<number | null>`${continueLink.expiresAt}`.as("link_expires_at"),
+                linkAccessExpiresAt: sql<number | null>`${continueLink.accessExpiresAt}`.as("link_access_expires_at"),
             })
             .from(anonymousCredential)
             .innerJoin(platformProjectMapping, eq(platformProjectMapping.userId, anonymousCredential.userId))
@@ -138,7 +137,7 @@ export class IdentityStorage {
         userId: string,
         parentToken: string,
         now: number,
-        expiresAt: number,
+        terms: SharedLinkTerms,
         signal: AbortSignal,
     ): Promise<IdentityTransfer | null> => {
         signal.throwIfAborted();
@@ -153,7 +152,9 @@ export class IdentityStorage {
                         id: sql<string>`${`transfer_${crypto.randomUUID()}`}`.as("id"),
                         codeHash: sql<string>`${await digest(code)}`.as("code_hash"),
                         userId: anonymousCredential.userId,
-                        expiresAt: sql<number>`${expiresAt}`.as("expires_at"),
+                        expiresAt: sql<number>`${terms.expiresAt}`.as("expires_at"),
+                        accessExpiresAt: sql<number>`${terms.accessExpiresAt}`.as("access_expires_at"),
+                        redeemedAt: sql<null>`null`.as("redeemed_at"),
                         claimNonce: sql<null>`null`.as("claim_nonce"),
                         createdAt: sql<number>`${now}`.as("created_at"),
                         revokedAt: sql<null>`null`.as("revoked_at"),
@@ -169,7 +170,7 @@ export class IdentityStorage {
             )
             .run();
         signal.throwIfAborted();
-        return result.meta.changes === 1 ? { code, expiresAt } : null;
+        return result.meta.changes === 1 ? { code, ...terms } : null;
     };
 
     readonly createRecoveryToken = async (
@@ -231,14 +232,17 @@ export class IdentityStorage {
         const credentialId = `cred_${crypto.randomUUID()}`;
         const token = `mobius_anon_v2_${randomSecret()}`;
         const claimed = and(eq(continueLink.codeHash, codeHash), eq(continueLink.claimNonce, claimNonce));
+        // A link adds one device, so only its first redemption claims it.
         const claim = database
             .update(continueLink)
-            .set({ claimNonce })
+            .set({ claimNonce, redeemedAt: now })
             .where(
                 and(
                     eq(continueLink.codeHash, codeHash),
                     isNull(continueLink.revokedAt),
+                    isNull(continueLink.redeemedAt),
                     gt(continueLink.expiresAt, now),
+                    gt(continueLink.accessExpiresAt, now),
                 ),
             );
         const replacedHash = replaces === null ? null : await digest(replaces);
