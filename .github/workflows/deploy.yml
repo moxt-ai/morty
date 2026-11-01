@@ -39,6 +39,8 @@ jobs:
     concurrency:
       group: cloudflare-${{ inputs.environment }}
       cancel-in-progress: false
+    env:
+      MOBIUS_READER_CONFIGURED: ${{ secrets.MOBIUS_READER_APP_ID != '' }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -49,12 +51,27 @@ jobs:
         id: mobius
         run: echo "revision=$(git rev-parse HEAD:third-party/mobius)" >> "$GITHUB_OUTPUT"
 
+      - name: Create a read-only Mobius checkout token
+        # Mobius is private: mint a one-hour token that can only read moxt-ai/mobius. Without the App credentials
+        # (a public Mobius) the checkout falls back to the read-only GITHUB_TOKEN.
+        id: mobius-token
+        if: env.MOBIUS_READER_CONFIGURED == 'true'
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          # GitHub accepts the App ID as the JWT issuer.
+          client-id: ${{ secrets.MOBIUS_READER_APP_ID }}
+          private-key: ${{ secrets.MOBIUS_READER_PRIVATE_KEY }}
+          owner: moxt-ai
+          repositories: mobius
+          permission-contents: read
+
       - name: Checkout Mobius
         uses: actions/checkout@v7.0.1
         with:
           repository: moxt-ai/mobius
           ref: ${{ steps.mobius.outputs.revision }}
           path: third-party/mobius
+          token: ${{ steps.mobius-token.outputs.token || github.token }}
           persist-credentials: false
 
       - uses: actions/setup-node@v7.0.0

@@ -3,6 +3,11 @@ name: macOS setup compatibility
 on:
   workflow_dispatch:
   workflow_call:
+    secrets:
+      MOBIUS_READER_APP_ID:
+        required: false
+      MOBIUS_READER_PRIVATE_KEY:
+        required: false
 
 permissions:
   contents: read
@@ -17,6 +22,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: $/.github/actions/setup
+        with:
+          mobius-app-id: ${{ secrets.MOBIUS_READER_APP_ID }}
+          mobius-private-key: ${{ secrets.MOBIUS_READER_PRIVATE_KEY }}
       - name: Install real Agents
         run: >-
           npm install --global

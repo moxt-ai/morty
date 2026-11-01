@@ -1,5 +1,14 @@
 name: Set up Chat workspace
 description: Check out the pinned Mobius revision and install workspace dependencies
+inputs:
+  mobius-app-id:
+    description: ID of the GitHub App that can read moxt-ai/mobius; empty while Mobius is public
+    required: false
+    default: ""
+  mobius-private-key:
+    description: Private key of that GitHub App
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
@@ -8,13 +17,27 @@ runs:
       shell: bash
       run: echo "revision=$(git rev-parse HEAD:third-party/mobius)" >> "$GITHUB_OUTPUT"
 
+    - name: Create a read-only Mobius checkout token
+      # Mobius is private: mint a one-hour token that can only read moxt-ai/mobius. Without the App credentials
+      # (a public Mobius) the checkout falls back to the caller's read-only GITHUB_TOKEN.
+      id: mobius-token
+      if: inputs.mobius-app-id != ''
+      uses: actions/create-github-app-token@v3.3.0
+      with:
+        # GitHub accepts the App ID as the JWT issuer.
+        client-id: ${{ inputs.mobius-app-id }}
+        private-key: ${{ inputs.mobius-private-key }}
+        owner: moxt-ai
+        repositories: mobius
+        permission-contents: read
+
     - name: Checkout Mobius
-      # Mobius is public; checkout uses the caller's read-only GITHUB_TOKEN.
       uses: actions/checkout@v7.0.1
       with:
         repository: moxt-ai/mobius
         ref: ${{ steps.mobius.outputs.revision }}
         path: third-party/mobius
+        token: ${{ steps.mobius-token.outputs.token || github.token }}
         persist-credentials: false
 
     - uses: actions/setup-node@v7.0.0

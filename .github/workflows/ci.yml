@@ -32,6 +32,9 @@ jobs:
   macos-setup:
     if: github.event_name == 'workflow_dispatch' && inputs.verify_macos_setup
     uses: ./.github/workflows/setup-compatibility.yml
+    secrets:
+      MOBIUS_READER_APP_ID: ${{ secrets.MOBIUS_READER_APP_ID }}
+      MOBIUS_READER_PRIVATE_KEY: ${{ secrets.MOBIUS_READER_PRIVATE_KEY }}
 
   validate-worker-config:
     name: Validate Worker config (${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'staging' }})
@@ -71,6 +74,9 @@ jobs:
           persist-credentials: false
 
       - uses: $/.github/actions/setup
+        with:
+          mobius-app-id: ${{ secrets.MOBIUS_READER_APP_ID }}
+          mobius-private-key: ${{ secrets.MOBIUS_READER_PRIVATE_KEY }}
 
       - name: Validate Worker config with public fixtures
         run: node scripts/validate-worker-config.ts
@@ -128,6 +134,9 @@ jobs:
           persist-credentials: false
 
       - uses: $/.github/actions/setup
+        with:
+          mobius-app-id: ${{ secrets.MOBIUS_READER_APP_ID }}
+          mobius-private-key: ${{ secrets.MOBIUS_READER_PRIVATE_KEY }}
 
       - name: Run integration tests with coverage
         working-directory: packages/${{ matrix.suite }}
@@ -201,6 +210,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: $/.github/actions/setup
+        with:
+          mobius-app-id: ${{ secrets.MOBIUS_READER_APP_ID }}
+          mobius-private-key: ${{ secrets.MOBIUS_READER_PRIVATE_KEY }}
       - name: Verify native executable and private state boundaries
         run: >-
           pnpm --filter @moxt-ai/morty-worker exec vitest run
