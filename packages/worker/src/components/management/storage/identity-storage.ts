@@ -6,7 +6,6 @@ import { createProjectCredential, readProjectCredential } from "../entity/projec
 import { type AnonymousIdentity, digest, randomSecret, requireIdentityDatabase } from "./identity-storage-common.ts";
 
 const userRow = v.pipe(v.object({ userId: v.string() }), v.readonly());
-const continueLinkLifetime = 24 * 60 * 60 * 1000;
 export interface IdentityTransfer {
     readonly code: string;
     readonly expiresAt: number;
@@ -139,11 +138,11 @@ export class IdentityStorage {
         userId: string,
         parentToken: string,
         now: number,
+        expiresAt: number,
         signal: AbortSignal,
     ): Promise<IdentityTransfer | null> => {
         signal.throwIfAborted();
         const code = createProjectCredential("mobius_transfer_v2", v.parse(v.string(), this.#projectId));
-        const expiresAt = now + continueLinkLifetime;
         // Check the issuing credential in the write itself so revocation cannot race issuance.
         const database = requireIdentityDatabase(this.#database);
         const result = await database

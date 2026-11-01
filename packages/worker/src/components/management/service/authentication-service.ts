@@ -5,6 +5,7 @@ import {
     type CredentialOperation,
     mayPerform,
     type PermittedCredential,
+    sharedLinkExpiry,
 } from "../entity/authentication/credential.ts";
 import type { Session } from "../entity/authentication/session.ts";
 import { ManagementError } from "../entity/management-error.ts";
@@ -75,7 +76,7 @@ export class AuthenticationService {
         let credential: Credential;
         switch (kind) {
             case "browser":
-                if (stored.transferId === null) {
+                if (stored.transferId === null || stored.linkExpiresAt === null) {
                     return { kind: "unknown" };
                 }
                 credential = {
@@ -84,6 +85,7 @@ export class AuthenticationService {
                     userId: stored.userId,
                     transferId: stored.transferId,
                     browserId: stored.browserId ?? stored.credentialId,
+                    accessExpiresAt: stored.linkExpiresAt,
                 };
                 break;
             case "local":
@@ -158,9 +160,17 @@ export class AuthenticationService {
         signal: AbortSignal,
     ): Promise<IdentityTransfer | null> => {
         const access = await this.authorize(token, "shareAccess", signal);
-        return access.kind === "authorized"
-            ? await this.identities.createTransfer(access.credential.userId, access.token, Date.now(), signal)
-            : null;
+        if (access.kind !== "authorized") {
+            return null;
+        }
+        const now = Date.now();
+        return await this.identities.createTransfer(
+            access.credential.userId,
+            access.token,
+            now,
+            sharedLinkExpiry(access.credential, now),
+            signal,
+        );
     };
 
     readonly createRecoveryToken = async (

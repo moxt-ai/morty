@@ -182,3 +182,35 @@ test("Given browser access granted through a link, When the link expires, Then t
     });
     expect((await session(owner.token)).status).toBe(200);
 });
+
+test("Given browser access granted through a link, When that browser shares a new link, Then the new link expires with the browser's own access", async () => {
+    const owner = await fixture.createAnonymousUser();
+    const share = async (token: string) => {
+        const response = await fetchPublicApplication(
+            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/transfers`, {
+                method: "POST",
+                headers: { authorization: `Bearer ${token}` },
+            }),
+            fixture.environment(),
+        );
+        expect(response.status).toBe(201);
+        return v.parse(
+            v.object({ url: v.string(), expiresAt: v.pipe(v.string(), v.isoTimestamp()) }),
+            await response.json(),
+        );
+    };
+    const ownerLink = await share(owner.token);
+    const redeemed = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code: new URL(ownerLink.url).hash.slice(6) }),
+        }),
+        fixture.environment(),
+    );
+    const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+
+    const browserLink = await share(browser);
+
+    expect(browserLink.expiresAt).toBe(ownerLink.expiresAt);
+});

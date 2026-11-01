@@ -12,8 +12,22 @@ export type Credential = {
     readonly userId: string;
 } & (
     | { readonly kind: "local" | "recovery" }
-    | { readonly kind: "browser"; readonly transferId: string; readonly browserId: string }
+    | {
+          readonly kind: "browser";
+          readonly transferId: string;
+          readonly browserId: string;
+          /** When this access ends: the link it came through expires then. */
+          readonly accessExpiresAt: number;
+      }
 );
+
+const linkLifetime = 24 * 60 * 60 * 1000;
+
+/** A link ends no later than the access that shares it, so sharing never extends access. */
+export function sharedLinkExpiry(sharer: Credential, now: number): number {
+    const expiresAt = now + linkLifetime;
+    return sharer.kind === "browser" ? Math.min(expiresAt, sharer.accessExpiresAt) : expiresAt;
+}
 
 /**
  * The credential kinds that may perform each identity or management operation; any other operation accepts every
