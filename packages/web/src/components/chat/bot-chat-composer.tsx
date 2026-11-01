@@ -10,6 +10,7 @@ import {
 } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import type { ComposerAttachmentStore } from "../../view-models/chat/composer-attachment-store.ts";
+import { createFileSource } from "../images/file-source.ts";
 import { ImageGallery, PreviewImage } from "../images/image-gallery.tsx";
 import { Button } from "../ui/cloud-button.tsx";
 import { MortyAlert } from "../ui/morty-alert.tsx";
@@ -36,9 +37,9 @@ function attachmentName(attachment: ComposerAttachment): string {
 function AttachmentImage({ attachment }: { readonly attachment: ComposerAttachment }) {
     const [source, setSource] = useState("");
     useEffect(() => {
-        const url = URL.createObjectURL(new Blob([attachment.bytes.slice().buffer], { type: attachment.mediaType }));
-        setSource(url);
-        return () => URL.revokeObjectURL(url);
+        const file = createFileSource(attachment.bytes, attachment.mediaType);
+        setSource(file.source);
+        return file.release;
     }, [attachment]);
     return source.length === 0 ? null : (
         <span className="inline-flex size-11 shrink-0 items-center justify-center">

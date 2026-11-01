@@ -1,3 +1,5 @@
+import { createFileSource } from "../../components/images/file-source.ts";
+
 const SIDE_PANEL_QUERY = "(min-width: 40rem) and (hover: hover) and (pointer: fine)";
 
 interface FilePreviewPanel {
@@ -60,7 +62,6 @@ export function attachFilePreviewPanel(dialog: HTMLDialogElement): FilePreviewPa
 }
 
 export function createFilePreviewImage(bytes: Uint8Array, mediaType: string): FilePreviewImage {
-    const blob = new Blob([Uint8Array.from(bytes)], { type: mediaType });
-    const source = URL.createObjectURL(blob);
-    return { source, blob, dispose: () => URL.revokeObjectURL(source) };
+    const { source, release } = createFileSource(bytes, mediaType);
+    return { source, blob: new Blob([Uint8Array.from(bytes)], { type: mediaType }), dispose: release };
 }

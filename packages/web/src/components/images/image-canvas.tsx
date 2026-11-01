@@ -1,5 +1,6 @@
 import { Maximize, Minus, Plus, RotateCw } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
+import { isRasterImageType } from "../agents/displayable-image-type.ts";
 import { ImageDownload, imageControlClass, type ViewerImage } from "./image-download.tsx";
 
 type Dimensions = { readonly width: number; readonly height: number };
@@ -53,8 +54,12 @@ export function ImageCanvas({
             if (node === null) {
                 return;
             }
-            // Own a URL for the immutable bytes: the thumbnail may unmount or its file may change.
-            const ownedSource = image.blob === undefined ? null : URL.createObjectURL(image.blob);
+            // Own a URL for the immutable bytes: the thumbnail may unmount or its file may change. Only a raster image
+            // gets one on Morty's origin; any other source is the self-contained URL createFileSource gave it.
+            const ownedSource =
+                image.blob === undefined || !isRasterImageType(image.blob.type)
+                    ? null
+                    : URL.createObjectURL(image.blob);
             setSource(ownedSource ?? image.src);
             const resize = () =>
                 setViewport({ width: Math.max(1, node.clientWidth), height: Math.max(1, node.clientHeight) });

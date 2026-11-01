@@ -4,6 +4,7 @@ import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { UserMessageShell } from "../../components/chat/user-message-shell.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import { AgentMarkdown } from "../agents/agent-markdown.tsx";
+import { createFileSource } from "../images/file-source.ts";
 import { ImageGallery, PreviewImage } from "../images/image-gallery.tsx";
 import type { ComposerAttachment } from "./composer-attachment.ts";
 
@@ -18,9 +19,9 @@ interface UserPromptMessageProps {
 function PromptImage({ attachment }: { readonly attachment: ComposerAttachment }) {
     const [source, setSource] = useState("");
     useEffect(() => {
-        const url = URL.createObjectURL(new Blob([attachment.bytes.slice().buffer], { type: attachment.mediaType }));
-        setSource(url);
-        return () => URL.revokeObjectURL(url);
+        const file = createFileSource(attachment.bytes, attachment.mediaType);
+        setSource(file.source);
+        return file.release;
     }, [attachment]);
     return source.length === 0 ? null : (
         <PreviewImage

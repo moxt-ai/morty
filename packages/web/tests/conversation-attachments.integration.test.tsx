@@ -261,7 +261,7 @@ test("Given an attachment is being read, When the user removes an earlier attach
     });
 });
 
-test("Given an SVG file, When the user sends it with a prompt, Then the Agent replies and the file is shown as an image", {
+test("Given an SVG file, When the user sends it with a prompt, Then the Agent replies and the file is shown as an image whose URL cannot open as a Morty page", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -279,11 +279,15 @@ test("Given an SVG file, When the user sends it with a prompt, Then the Agent re
     const source = await reloaded.waitForView(() => {
         expect(document.body.textContent).toContain(prompt);
         const image = getByRole(document.body, "img", { name: "Your attachment" });
-        expect(image.getAttribute("src")?.startsWith("blob:")).toBe(true);
-        return image.getAttribute("src");
+        return image.getAttribute("src") ?? "";
     });
 
-    expect(await renderedImageBytes([source])).toEqual([new TextEncoder().encode(svg)]);
+    // A data URL opens with an opaque origin, so the SVG's own script can never run with Morty's stored access.
+    const prefix = "data:image/svg+xml;base64,";
+    expect(source.startsWith(prefix)).toBe(true);
+    expect(Uint8Array.from(atob(source.slice(prefix.length)), (character) => character.charCodeAt(0))).toEqual(
+        new TextEncoder().encode(svg),
+    );
 });
 
 test("Given a PDF file, When the user sends it with a prompt, Then the Agent replies and the file can be downloaded", {
