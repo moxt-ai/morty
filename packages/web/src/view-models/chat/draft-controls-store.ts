@@ -267,8 +267,9 @@ export const createDraftControlsStore = (
             if (rememberHarness) {
                 saveLastHarnessPreference(botId, selectedAgent.agentRef);
             }
+            // The directory is remembered only where the user chooses one (`rememberDirectory`, a handoff), never
+            // from the directory a draft happened to load in.
             const existingRecentCwds = readRecentCwdPreferences(botId);
-            saveLastCwdPreference(botId, selectedAgent.runtimeId, selectedAgent.agentRef, cwd.directoryId);
             const recentCwds =
                 existingRecentCwds === null
                     ? saveRecentCwdPreference(botId, {
@@ -395,6 +396,8 @@ export const createDraftControlsStore = (
                         cwd = await requests.directory(botId, savedDirectoryId, operation.signal);
                         operation.signal.throwIfAborted();
                     } catch {
+                        // An unreadable chosen directory gives way to the default for this draft only; the choice
+                        // stays remembered for when the Runtime can read it again.
                         operation.signal.throwIfAborted();
                     }
                 }

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getAllByRole, getByRole, queryAllByRole, queryByRole } from "@testing-library/dom";
@@ -517,6 +517,58 @@ test("Given a conversation whose settings the user left untouched, When the user
         await app.waitForView(() =>
             expect(app.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large"),
         );
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
+});
+
+test("Given a chosen New Session directory the Runtime briefly cannot read, When the draft loads in the default directory and the directory returns, Then the next draft starts in the chosen directory again", {
+    timeout: 90_000,
+}, async () => {
+    const root = await mkdtemp(join(tmpdir(), "morty-chosen-directory-"));
+    try {
+        const project = join(await realpath(root), "chosen-project");
+        const away = join(await realpath(root), "moved-away");
+        await mkdir(project, { recursive: true });
+        const app = await createTestApp({
+            connectAgent: true,
+            agent: { id: "settings-test", label: "Settings Agent" },
+        });
+        await app.queryElementByTestId(
+            dataTestId.agentConfiguration,
+            (element) => element.textContent?.includes("Test Small") === true,
+        );
+        await app.user.click(app.elementByTestId(dataTestId.workingDirectory));
+        await app.user.click(await app.queryElementByTestId(dataTestId.changeWorkingDirectory));
+        const path = await app.queryElementByTestId(dataTestId.workingDirectoryPath);
+        await app.user.clear(path);
+        await app.user.type(path, project);
+        await app.user.click(
+            await app.queryElementByTestId(
+                dataTestId.saveWorkingDirectory,
+                (element) => element instanceof HTMLButtonElement && !element.disabled,
+            ),
+        );
+        await app.queryElementByTestId(
+            dataTestId.workingDirectory,
+            (element) => element.textContent?.includes("chosen-project") === true,
+        );
+
+        await rename(project, away);
+        const unavailable = await app.reload();
+        await unavailable.queryElementByTestId(
+            dataTestId.agentConfiguration,
+            (element) => element.textContent?.includes("Test Small") === true,
+        );
+        expect(unavailable.elementByTestId(dataTestId.workingDirectory).textContent).not.toContain("chosen-project");
+
+        await rename(away, project);
+        const restored = await unavailable.reload();
+        await restored.queryElementByTestId(
+            dataTestId.workingDirectory,
+            (element) => element.textContent?.includes("chosen-project") === true,
+        );
+        await restored.close();
     } finally {
         await rm(root, { recursive: true, force: true });
     }
