@@ -1,4 +1,4 @@
-import { Check, Copy, Download, Maximize2 } from "lucide-react";
+import { Check, Copy, Download, ImageIcon, Maximize2 } from "lucide-react";
 import { Lexer } from "marked";
 import {
     defaultRehypePlugins,
@@ -295,12 +295,14 @@ function ConsentedRemoteImage({
         );
     }
     return (
+        // A placeholder where the image would be, not a link: nothing loads from the site until the user asks.
         <button
-            className={cn("cursor-pointer font-inherit font-medium", textLinkClassName)}
+            className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/70"
             onClick={() => consent.getState().show(src.href)}
             title={alt === undefined || alt.length === 0 ? undefined : alt}
             type="button"
         >
+            <ImageIcon aria-hidden="true" className="size-4 shrink-0" />
             Show image from {src.host}
         </button>
     );

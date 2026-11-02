@@ -111,14 +111,13 @@ test("Given shared Morty access, When the user continues on another device, Then
     await app.user.click(await app.queryElementByTestId(dataTestId.shareIdentity));
 
     const dialog = getByRole(document.body, "dialog", { name: "Continue on another device" });
-    expect(dialog.textContent).toContain(
-        "Anyone with this link can use your current Morty identity to view and control sessions in this project",
+    expect(getByRole(dialog, "alert").textContent).toContain(
+        "Anyone who opens this link can view and control every session on this computer",
     );
-    expect(dialog.textContent).toContain("not just the current conversation");
-    expect(dialog.textContent).toContain("24 hours");
-    expect(dialog.textContent).toContain("The link adds one device and works for 10 minutes");
     const copyLink = await app.waitForView(() => getByRole(dialog, "button", { name: "Copy link" }));
     expect(getByRole(dialog, "img", { name: "Continue on another device QR code" })).toBeInstanceOf(HTMLImageElement);
+    expect(dialog.textContent).toContain("Works for one device until");
+    expect(dialog.textContent).toContain("That device keeps access until");
     const description = getByRole(dialog, "heading", { name: "Continue on another device" }).parentElement;
     if (description === null) {
         throw new Error("The sharing description must precede its copy-link button.");
@@ -300,9 +299,8 @@ test("Given current Morty access, When the user opens its visible end action, Th
     await app.waitForView(() =>
         expect(getByRole(dialog, "button", { name: "End current access" }).hasAttribute("disabled")).toBe(false),
     );
-    expect(dialog.textContent).toContain("If you joined through a link");
-    expect(dialog.textContent).toContain("Other sharing links and recovery access stay active");
-    expect(dialog.textContent).toContain("Already-open sessions elsewhere may keep working until their access expires");
+    expect(dialog.textContent).toContain("This browser loses access to your computer");
+    expect(dialog.textContent).toContain("links you already shared still work until they expire");
     expect(dialog.textContent).toContain("Your local agent and tasks keep running");
     expect(queryByRole(dialog, "textbox", { name: "Current user token" })).toBeNull();
     await app.user.click(getByRole(dialog, "button", { name: "Cancel" }));
@@ -579,7 +577,7 @@ test("Given another browser joined this computer, When the user disconnects othe
         new Request(`${app.origin}/morty/api/identity/transfers/redeem`, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ code }),
+            body: JSON.stringify({ code, device: "iPhone · Safari" }),
         }),
     );
     const { token: other } = v.parse(v.object({ token: v.string() }), await redeemed.json());
@@ -587,11 +585,14 @@ test("Given another browser joined this computer, When the user disconnects othe
 
     await app.user.click(await app.queryElementByTestId(dataTestId.userMenu));
     await app.user.click(getByRole(document.body, "menuitem", { name: "Disconnect other devices" }));
-    await app.user.click(
-        getByRole(getByRole(document.body, "dialog", { name: "Disconnect other devices?" }), "button", {
-            name: "Disconnect",
-        }),
+    const confirmation = getByRole(document.body, "dialog", { name: "Disconnect other devices?" });
+    // The confirmation names the device that loses access before the user confirms.
+    await app.waitForView(() =>
+        expect(getByRole(confirmation, "list", { name: "Devices that lose access" }).textContent).toContain(
+            "iPhone · Safari",
+        ),
     );
+    await app.user.click(getByRole(confirmation, "button", { name: "Disconnect" }));
     const result = await app.waitForView(() =>
         getByRole(document.body, "dialog", { name: "Other devices disconnected" }),
     );

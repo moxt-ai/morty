@@ -845,20 +845,7 @@ export function ConversationSidebar({
                                         {sharingStore !== null && (
                                             <Dialog
                                                 title="Continue on another device"
-                                                description={
-                                                    <>
-                                                        <span className="block">
-                                                            Anyone with this link can use your current Morty identity to
-                                                            view and control sessions in this project, not just the
-                                                            current conversation.
-                                                        </span>
-                                                        <span className="mt-2 block">
-                                                            The link adds one device and works for 10 minutes. That
-                                                            device keeps access for 24 hours, or until your own access
-                                                            ends if that is sooner.
-                                                        </span>
-                                                    </>
-                                                }
+                                                description="Scan the code or open the link on the device you want to use."
                                                 onClose={dialogs.getState().closeSharing}
                                             >
                                                 <IdentitySharing store={sharingStore} />
@@ -974,14 +961,9 @@ export function ConversationSidebar({
                                                 description={
                                                     <>
                                                         <span className="block">
-                                                            End access in this browser. If you joined through a link,
-                                                            that link and the browser access it granted will also be
-                                                            revoked.
-                                                        </span>
-                                                        <span className="mt-2 block">
-                                                            Other sharing links and recovery access stay active.
-                                                            Already-open sessions elsewhere may keep working until their
-                                                            access expires.
+                                                            This browser loses access to your computer. Your computer
+                                                            and your other devices keep theirs, and links you already
+                                                            shared still work until they expire.
                                                         </span>
                                                         <span className="mt-3 block font-medium text-foreground">
                                                             Your local agent and tasks keep running.

@@ -51,12 +51,11 @@ for (const viewport of [
         await clickContinueOnAnotherDevice(page);
 
         const sharing = page.getByRole("dialog", { name: "Continue on another device" });
-        await expect(sharing).toContainText(
-            "Anyone with this link can use your current Morty identity to view and control sessions in this project",
+        await expect(sharing.getByRole("alert")).toContainText(
+            "Anyone who opens this link can view and control every session on this computer",
         );
-        await expect(sharing).toContainText("not just the current conversation");
-        await expect(sharing).toContainText("24 hours");
-        await expect(sharing).toContainText("The link adds one device and works for 10 minutes");
+        await expect(sharing).toContainText("Works for one device until");
+        await expect(sharing).toContainText("That device keeps access until");
         const copyLink = sharing.getByRole("button", { name: "Copy link" });
         const qr = sharing.getByRole("img", { name: "Continue on another device QR code" });
         await expect(copyLink).toBeVisible();
@@ -91,11 +90,8 @@ for (const viewport of [
             }
             await clickEndCurrentAccess(receiver, viewport.name);
             const confirmation = receiver.getByRole("dialog", { name: "End current access?" });
-            await expect(confirmation).toContainText("If you joined through a link");
-            await expect(confirmation).toContainText("Other sharing links and recovery access stay active");
-            await expect(confirmation).toContainText(
-                "Already-open sessions elsewhere may keep working until their access expires",
-            );
+            await expect(confirmation).toContainText("This browser loses access to your computer");
+            await expect(confirmation).toContainText("links you already shared still work until they expire");
             await expect(confirmation).toContainText("Your local agent and tasks keep running");
             await confirmation.screenshot({
                 animations: "disabled",

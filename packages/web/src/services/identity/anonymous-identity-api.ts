@@ -53,7 +53,12 @@ const anonymousSessionSchema = v.pipe(
     v.readonly(),
 );
 const transferSchema = v.pipe(
-    v.object({ expiresAt: v.pipe(v.string(), v.isoTimestamp()), url: v.pipe(v.string(), v.url()) }),
+    v.object({
+        // The link opens until `expiresAt`; the device it adds keeps access until `accessExpiresAt`.
+        expiresAt: v.pipe(v.string(), v.isoTimestamp()),
+        accessExpiresAt: v.pipe(v.string(), v.isoTimestamp()),
+        url: v.pipe(v.string(), v.url()),
+    }),
     v.readonly(),
 );
 const deviceSharerSchema = v.variant("kind", [

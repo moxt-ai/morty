@@ -508,17 +508,20 @@ export function createChatWorkspace(options: {
                   waitForBridge: requests.waitForBridge,
               });
     const endOtherBrowserAccess = options.endOtherBrowserAccess;
+    const linkedDevices = options.linkedDevices;
     return {
         computers: options.computers ?? null,
         accessNotice: options.accessNotice ?? null,
         newDevices,
         otherDevices:
-            endOtherBrowserAccess === undefined
+            endOtherBrowserAccess === undefined || linkedDevices === undefined
                 ? null
                 : createOtherDevicesStore({
+                      linkedDevices,
                       endOtherBrowserAccess,
                       // The devices it announced are gone, so the notice has nothing left to report.
                       onDisconnected: () => newDevices?.getState().dismiss(),
+                      signal: () => operationsLifetime.signal,
                   }),
         recordUserActivity: () => {
             if (options.rememberedIdentity !== undefined) {
