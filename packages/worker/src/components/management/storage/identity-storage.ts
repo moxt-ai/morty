@@ -174,6 +174,45 @@ export class IdentityStorage {
         signal.throwIfAborted();
     };
 
+    /**
+     * Ends the access of every browser that joined through a link except the one kept, and voids the links no device
+     * has used yet. The machine's own and recovery credentials never joined through a link, so they stay, including
+     * unclassified legacy ones.
+     */
+    readonly endOtherBrowserAccess = async (
+        userId: string,
+        keptCredentialId: string,
+        now: number,
+        signal: AbortSignal,
+    ): Promise<void> => {
+        signal.throwIfAborted();
+        const database = requireIdentityDatabase(this.#database);
+        await database.batch([
+            database
+                .update(continueLink)
+                .set({ revokedAt: now })
+                .where(
+                    and(
+                        eq(continueLink.userId, userId),
+                        isNull(continueLink.redeemedAt),
+                        isNull(continueLink.revokedAt),
+                    ),
+                ),
+            database
+                .update(anonymousCredential)
+                .set({ revokedAt: now })
+                .where(
+                    and(
+                        eq(anonymousCredential.userId, userId),
+                        isNotNull(anonymousCredential.remoteTransferId),
+                        ne(anonymousCredential.id, keptCredentialId),
+                        isNull(anonymousCredential.revokedAt),
+                    ),
+                ),
+        ]);
+        signal.throwIfAborted();
+    };
+
     readonly createTransfer = async (
         userId: string,
         parentToken: string,

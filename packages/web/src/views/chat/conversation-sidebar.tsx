@@ -7,6 +7,7 @@ import {
     type LucideIcon,
     MessageSquare,
     MessageSquarePlus,
+    MonitorX,
     RefreshCw,
     Share2,
     Wifi,
@@ -404,6 +405,7 @@ export function ConversationSidebar({
     const openMobileRecentSessions = dialogs.getState().openMobileRecentSessions;
     const closeMobileRecentSessions = dialogs.getState().closeMobileRecentSessions;
     const access = useStore(workspace.sidebar.remoteAccess);
+    const otherDevices = workspace.otherDevices;
     const diagnostic = useStore(workspace.sidebar.networkDiagnostic);
     const sessionDiagnostics = {
         botId,
@@ -756,6 +758,15 @@ export function ConversationSidebar({
                                                                 variant="card"
                                                                 onClick={measureNetwork}
                                                             />
+                                                            {otherDevices !== null && (
+                                                                <SidebarSessionOption
+                                                                    disabled={access.state.kind === "loading"}
+                                                                    icon={MonitorX}
+                                                                    label="Disconnect other devices"
+                                                                    variant="card"
+                                                                    onClick={otherDevices.getState().request}
+                                                                />
+                                                            )}
                                                             <SidebarSessionOption
                                                                 disabled={
                                                                     access.state.kind === "loading" ||
@@ -778,6 +789,9 @@ export function ConversationSidebar({
                                                             endAccessDisabled={
                                                                 access.state.kind === "loading" ||
                                                                 access.state.kind === "ending"
+                                                            }
+                                                            onDisconnectOtherDevices={
+                                                                otherDevices?.getState().request ?? null
                                                             }
                                                             onEndAccess={() => {
                                                                 void access.requestEnd(workspace.operationsSignal());

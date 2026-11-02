@@ -71,6 +71,12 @@ const linkedDeviceSchema = v.pipe(
 );
 export type LinkedDevice = v.InferOutput<typeof linkedDeviceSchema>;
 const linkedDevicesSchema = v.object({ devices: v.array(linkedDeviceSchema) });
+const otherBrowserAccessEndedSchema = v.object({
+    status: v.literal("other_browser_access_ended"),
+    sessionAccess: v.picklist(["revoked", "unconfirmed"]),
+});
+/** Whether the chat windows already open on the disconnected browsers were closed too. */
+export type OpenWindowsAfterDisconnect = "closed" | "unconfirmed";
 const credentialRevocationPathSchema = v.picklist([
     "/identity/v1/local-credential",
     "/identity/v1/browser-access",
@@ -234,6 +240,19 @@ export class AnonymousIdentityApi {
                 signal,
             ),
         ).devices;
+
+    /** Ends the access of every other browser that joined through a link; this browser and the computer keep theirs. */
+    readonly endOtherBrowserAccess = async (token: string, signal: AbortSignal): Promise<OpenWindowsAfterDisconnect> =>
+        v.parse(
+            otherBrowserAccessEndedSchema,
+            await this.#request(
+                "/identity/v1/other-browser-access",
+                { method: "DELETE", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
+                signal,
+            ),
+        ).sessionAccess === "revoked"
+            ? "closed"
+            : "unconfirmed";
 
     readonly endRemoteAccess = async (token: string, signal: AbortSignal): Promise<void> => {
         const headers = { authorization: `Bearer ${v.parse(tokenSchema, token)}` };

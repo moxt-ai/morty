@@ -2,8 +2,10 @@ import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getByRole, queryByRole } from "@testing-library/dom";
+import * as v from "valibot";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
+import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
 type TestApp = Awaited<ReturnType<typeof createTestApp>>;
@@ -557,3 +559,50 @@ for (const segment of ["a".repeat(220), "\u00e9".repeat(110)]) {
         expect(alert.textContent).toContain("This directory is missing or unavailable");
     });
 }
+
+test("Given another browser joined this computer, When the user disconnects other devices, Then that browser loses access while this one keeps working", {
+    timeout: 60_000,
+}, async () => {
+    // This browser joins through a link, as the owner's phone does; the redeemed link then opens the computer.
+    const joined = await createTestApp({ connectAgent: true, page: { kind: "share" } });
+    await joined.waitForView(() => expect(new URL(window.location.href).searchParams.get("identity")).not.toBeNull());
+    const app = await joined.reload();
+    const session = (token: string) =>
+        app.transport.fetch(
+            new Request(`${app.origin}/morty/api/projects/${app.identity.projectId}/session`, {
+                headers: { authorization: `Bearer ${token}` },
+            }),
+        );
+    const code = new URL(await app.createTransferUrl()).hash.slice("#code=".length);
+    const redeemed = await app.transport.fetch(
+        new Request(`${app.origin}/morty/api/identity/transfers/redeem`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code }),
+        }),
+    );
+    const { token: other } = v.parse(v.object({ token: v.string() }), await redeemed.json());
+    expect((await session(other)).status).toBe(200);
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.userMenu));
+    await app.user.click(getByRole(document.body, "menuitem", { name: "Disconnect other devices" }));
+    await app.user.click(
+        getByRole(getByRole(document.body, "dialog", { name: "Disconnect other devices?" }), "button", {
+            name: "Disconnect",
+        }),
+    );
+    const result = await app.waitForView(() =>
+        getByRole(document.body, "dialog", { name: "Other devices disconnected" }),
+    );
+    await app.user.click(getByRole(result, "button", { name: "Done" }));
+
+    expect((await session(other)).status).toBe(401);
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Still connected here");
+    await app.waitForView(
+        () =>
+            expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
+                "Codex turn 1: Still connected here",
+            ),
+        30_000,
+    );
+});

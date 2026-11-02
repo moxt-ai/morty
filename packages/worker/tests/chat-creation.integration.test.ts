@@ -3,7 +3,7 @@ import { MobiusClient, MobiusPageRequest } from "@moxt-ai/mobius-sdk";
 import * as v from "valibot";
 import { afterEach, test as baseTest, beforeEach, expect, vi } from "vitest";
 import type { ControlledAgent } from "../../../tests/support/fake-daemon/runtime.ts";
-import worker from "../src/application.ts";
+import worker, { fetchPublicApplication } from "../src/application.ts";
 import { projectObject } from "../src/gateway/project-object-routing.ts";
 import { APP_ORIGIN, AUTH_TIME, createIdentityFixture } from "./support/identity-fixture.ts";
 
@@ -753,4 +753,76 @@ test("Given a browser following its chats' statuses, When the machine's owner re
 
     expect(await nextFrame()).toEqual({ kind: "subscription.end", subscriptionId: "statuses" });
     bridge.close(1000, "Test complete");
+});
+
+test("Given two browsers joined through links, When one disconnects the other browsers, Then only it and the machine keep access and the other's open chat window is refused", async ({
+    cloud,
+}) => {
+    await using fixture = await createChatFixture(cloud);
+    expect(
+        (
+            await fixture.request(`chat/bots/${fixture.botId}/setup`, {
+                runtimeId: fixture.runtime.runtimeId,
+                agentRef: "codex",
+            })
+        ).status,
+    ).toBe(202);
+    const share = async () => {
+        const shared = await fixture.request("identity/transfers", {});
+        return new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
+    };
+    const redeem = async (code: string) =>
+        await worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code }),
+            }),
+            cloud.environment(),
+        );
+    const join = async () => v.parse(v.object({ token: v.string() }), await (await redeem(await share())).json()).token;
+    const owner = await join();
+    const other = await join();
+    const unused = await share();
+    // The Web application reaches chat routes through its WebSocket bridge and identity routes over public HTTP.
+    const asBrowser = (token: string, path: string, method = "GET", body?: object) =>
+        (path.startsWith("chat/") ? worker.fetch : fetchPublicApplication)(
+            new Request(`${APP_ORIGIN}/morty/api/${path}`, {
+                method,
+                headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+                ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+            }),
+            cloud.environment(),
+        );
+    const opened = await asBrowser(other, `chat/projects/${fixture.projectId}/bots/${fixture.botId}/access`, "POST", {
+        agentRef: "codex",
+        configurations: [],
+        conversationKey: "other-browser-window",
+        title: "Other browser window",
+        workspaceRef: "default",
+    });
+    expect(opened.status).toBe(200);
+    const window = v.parse(
+        v.object({ endpoint: v.string(), projectId: v.string(), sessionId: v.string(), credential: v.string() }),
+        await opened.json(),
+    );
+    const readHistory = () =>
+        new MobiusClient({
+            endpoint: window.endpoint,
+            projectId: window.projectId,
+            credentialProvider: { credential: async () => window.credential },
+        }).events.list(window.sessionId, new MobiusPageRequest(1, ""), AbortSignal.timeout(15_000));
+    await readHistory();
+
+    const ended = await asBrowser(owner, `projects/${fixture.projectId}/identity/v1/other-browser-access`, "DELETE");
+
+    expect(ended.status).toBe(200);
+    expect(await ended.json()).toEqual({ status: "other_browser_access_ended", sessionAccess: "revoked" });
+    expect((await asBrowser(owner, `projects/${fixture.projectId}/session`)).status).toBe(200);
+    expect((await fixture.request("session")).status).toBe(200);
+    const refused = await asBrowser(other, `projects/${fixture.projectId}/session`);
+    expect(refused.status).toBe(401);
+    expect(await refused.json()).toMatchObject({ error: { reason: "ACCESS_REVOKED" } });
+    await expect(readHistory()).rejects.toMatchObject({ code: "credential_revoked" });
+    expect((await redeem(unused)).status).toBe(410);
 });

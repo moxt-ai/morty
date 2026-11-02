@@ -306,6 +306,31 @@ export class AuthenticationService {
         return { kind: "revoked", sessionAccess: await this.#revokeIssuedSessionAccess(signal) };
     };
 
+    /**
+     * Disconnects every other browser that joined through a link while the caller keeps its access, so the owner can
+     * remove a device without locking themselves out. The Platform cannot tell browsers apart, so it closes every chat
+     * window opened until now; those of the access that remains reopen with a new Session credential.
+     */
+    readonly endOtherBrowserAccess = async (
+        token: string | undefined,
+        signal: AbortSignal,
+    ): Promise<
+        | { readonly kind: "ended"; readonly sessionAccess: IssuedSessionAccess }
+        | { readonly kind: "unauthenticated" | "forbidden" }
+    > => {
+        const access = await this.authorize(token, "endOtherBrowserAccess", signal);
+        if (access.kind !== "authorized") {
+            return refused(access);
+        }
+        await this.identities.endOtherBrowserAccess(
+            access.credential.userId,
+            access.credential.credentialId,
+            Date.now(),
+            signal,
+        );
+        return { kind: "ended", sessionAccess: await this.#revokeIssuedSessionAccess(signal) };
+    };
+
     /** Revoking is safe to repeat, so a failure the Platform may recover from is retried a bounded number of times. */
     readonly #revokeIssuedSessionAccess = async (signal: AbortSignal): Promise<IssuedSessionAccess> => {
         const projectId = this.#projectId;

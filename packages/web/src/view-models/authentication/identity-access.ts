@@ -3,6 +3,7 @@ import {
     IdentityApiError,
     type IdentityTransfer,
     type LinkedDevice,
+    type OpenWindowsAfterDisconnect,
 } from "../../services/identity/anonymous-identity-api.ts";
 import { createRemoteAccessOperations } from "../chat/remote-access-store.ts";
 
@@ -12,6 +13,8 @@ export interface IdentityAccess {
     /** Ends the access this browser holds when it runs. */
     readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
     readonly linkedDevices: (signal: AbortSignal) => Promise<readonly LinkedDevice[]>;
+    /** Disconnects every other browser that joined through a link while this one keeps its access. */
+    readonly endOtherBrowserAccess: (signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>;
 }
 
 class IdentitySharingUnavailable extends Error {
@@ -35,19 +38,23 @@ export function createIdentityAccess(options: {
 }): IdentityAccess {
     const api = new AnonymousIdentityApi({ fetchRequest: options.fetchRequest, origin: options.origin });
     const remoteAccess = createRemoteAccessOperations({ ...options, onEnded: options.onAccessEnded });
+    /** A refusal of this browser's own access is reported to its owner before the caller sees it. */
+    const withCurrentAccess = async <T>(signal: AbortSignal, operation: (token: string) => Promise<T>): Promise<T> => {
+        try {
+            return await operation(await remoteAccess.currentAccessToken(signal));
+        } catch (cause) {
+            signal.throwIfAborted();
+            if (cause instanceof IdentityApiError && cause.status === 401) {
+                await options.credentialRejected();
+            }
+            throw cause;
+        }
+    };
     return {
         ...remoteAccess,
-        linkedDevices: async (signal) => {
-            try {
-                return await api.linkedDevices(await remoteAccess.currentAccessToken(signal), signal);
-            } catch (cause) {
-                signal.throwIfAborted();
-                if (cause instanceof IdentityApiError && cause.status === 401) {
-                    await options.credentialRejected();
-                }
-                throw cause;
-            }
-        },
+        linkedDevices: (signal) => withCurrentAccess(signal, (token) => api.linkedDevices(token, signal)),
+        endOtherBrowserAccess: (signal) =>
+            withCurrentAccess(signal, (token) => api.endOtherBrowserAccess(token, signal)),
         createTransfer: async (signal) => {
             const localIdentity = await options.currentAccess(signal);
             signal.throwIfAborted();

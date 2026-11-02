@@ -186,6 +186,7 @@ export function createMortyApplication(options: {
             currentAccessToken: access.currentAccessToken,
             endRemoteAccess: access.endRemoteAccess,
             linkedDevices: access.linkedDevices,
+            endOtherBrowserAccess: access.endOtherBrowserAccess,
             networkDiagnostics: {
                 measureBrowserMobius: transport.measureMobiusLatency,
                 measureBrowserMorty: transport.measureMortyLatency,

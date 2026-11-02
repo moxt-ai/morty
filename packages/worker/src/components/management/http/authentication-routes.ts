@@ -197,6 +197,36 @@ export function createAuthenticationRoutes() {
                     );
             }
         })
+        .delete("/identity/v1/other-browser-access", async (context) => {
+            const result = await context.env.services.authentication.endOtherBrowserAccess(
+                context.get("bearerToken"),
+                context.req.raw.signal,
+            );
+            switch (result.kind) {
+                case "ended":
+                    if (result.sessionAccess.kind === "unconfirmed") {
+                        context.env.logger.warn(
+                            { code: result.sessionAccess.cause.code, status: result.sessionAccess.cause.status },
+                            "Disconnected browsers did not reach the Session credentials already issued",
+                        );
+                    }
+                    return json(
+                        { status: "other_browser_access_ended", sessionAccess: result.sessionAccess.kind },
+                        200,
+                        {
+                            "Cache-Control": "no-store",
+                        },
+                    );
+                case "unauthenticated":
+                    throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
+                case "forbidden":
+                    throw new ManagementError(
+                        "CREDENTIAL_KIND_REQUIRED",
+                        "This operation requires a different credential kind.",
+                        403,
+                    );
+            }
+        })
         .delete(credentialRevocationPaths.browser, async (context) => {
             return endAccessResponse(
                 await context.env.services.authentication.endBrowserAccess(

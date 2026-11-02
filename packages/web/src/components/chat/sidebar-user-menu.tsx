@@ -1,4 +1,4 @@
-import { LoaderCircle, LogOut, UserRound, Wifi } from "lucide-react";
+import { LoaderCircle, LogOut, MonitorX, UserRound, Wifi } from "lucide-react";
 import { DropdownMenu, Tooltip } from "radix-ui";
 import { useRef } from "react";
 import { dataTestId } from "../../data-testid.ts";
@@ -22,11 +22,13 @@ export function SidebarUserMenu({
     disabled,
     endAccessDisabled,
     onMeasureNetwork,
+    onDisconnectOtherDevices,
     onEndAccess,
 }: {
     readonly disabled: boolean;
     readonly endAccessDisabled: boolean;
     readonly onMeasureNetwork: () => void;
+    readonly onDisconnectOtherDevices: (() => void) | null;
     readonly onEndAccess: () => void;
 }) {
     const openedByPointer = useRef(false);
@@ -89,6 +91,15 @@ export function SidebarUserMenu({
                         Network latency
                     </DropdownMenu.Item>
                     <DropdownMenu.Separator className={cn("-mx-1.5 my-1.5", overlayMenuSeparatorClassName)} />
+                    {onDisconnectOtherDevices !== null && (
+                        <DropdownMenu.Item
+                            className="flex h-9 cursor-pointer items-center gap-2 rounded-full px-3 outline-none data-[highlighted]:bg-accent"
+                            onSelect={onDisconnectOtherDevices}
+                        >
+                            <MonitorX aria-hidden="true" className="size-4" />
+                            Disconnect other devices
+                        </DropdownMenu.Item>
+                    )}
                     <DropdownMenu.Item
                         className="flex h-9 cursor-pointer items-center gap-2 rounded-full px-3 outline-none data-[highlighted]:bg-accent"
                         data-testid={dataTestId.endRemoteAccess}

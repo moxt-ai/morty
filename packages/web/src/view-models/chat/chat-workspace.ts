@@ -1,6 +1,10 @@
 import type { StoreApi } from "zustand/vanilla";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import type { IdentityTransfer, LinkedDevice } from "../../services/identity/anonymous-identity-api.ts";
+import type {
+    IdentityTransfer,
+    LinkedDevice,
+    OpenWindowsAfterDisconnect,
+} from "../../services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope, type IdentityScope } from "../../services/identity/identity-scope-url.ts";
 import { rememberComputerName, rememberComputerVisit } from "../../services/identity/remembered-computers.ts";
 import {
@@ -24,6 +28,7 @@ import { createDraftControlsStore, type DraftControlsStore, draftConfiguration }
 import { createNetworkDiagnosticStore, type NetworkDiagnosticStore } from "./network-diagnostic-store.ts";
 import { createNewDeviceNoticeStore, type NewDeviceNoticeStore } from "./new-device-notice-store.ts";
 import type { SelectedMobiusSession } from "./open-session.ts";
+import { createOtherDevicesStore, type OtherDevicesStore } from "./other-devices-store.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
 import { createRuntimeRecovery } from "./runtime-recovery.ts";
 import { connectionWaitsForRuntime } from "./session-connection.ts";
@@ -49,6 +54,8 @@ export interface ChatWorkspace {
     readonly accessNotice: string | null;
     /** Tells this browser about devices that joined its computer since it last looked. */
     readonly newDevices: StoreApi<NewDeviceNoticeStore> | null;
+    /** Disconnects the other devices while this browser keeps its access; null when this page cannot. */
+    readonly otherDevices: StoreApi<OtherDevicesStore> | null;
     /** The chat API this workspace was composed with. */
     readonly requests: BotChatApi;
     /** The application-owned bug-report dialog state, flowing to entry points. */
@@ -131,6 +138,7 @@ export function createChatWorkspace(options: {
     readonly currentAccessToken?: ((signal: AbortSignal) => Promise<string>) | undefined;
     readonly endRemoteAccess?: ((signal: AbortSignal) => Promise<void>) | undefined;
     readonly linkedDevices?: ((signal: AbortSignal) => Promise<readonly LinkedDevice[]>) | undefined;
+    readonly endOtherBrowserAccess?: ((signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>) | undefined;
     readonly networkDiagnostics?: {
         readonly measureBrowserMobius: (origin: string, signal: AbortSignal) => Promise<number>;
         readonly measureBrowserMorty: (signal: AbortSignal) => Promise<number>;
@@ -487,13 +495,23 @@ export function createChatWorkspace(options: {
         model.start();
     };
 
+    const newDevices =
+        options.projectId === undefined || options.linkedDevices === undefined
+            ? null
+            : createNewDeviceNoticeStore({ projectId: options.projectId, linkedDevices: options.linkedDevices });
+    const endOtherBrowserAccess = options.endOtherBrowserAccess;
     return {
         computers: options.computers ?? null,
         accessNotice: options.accessNotice ?? null,
-        newDevices:
-            options.projectId === undefined || options.linkedDevices === undefined
+        newDevices,
+        otherDevices:
+            endOtherBrowserAccess === undefined
                 ? null
-                : createNewDeviceNoticeStore({ projectId: options.projectId, linkedDevices: options.linkedDevices }),
+                : createOtherDevicesStore({
+                      endOtherBrowserAccess,
+                      // The devices it announced are gone, so the notice has nothing left to report.
+                      onDisconnected: () => newDevices?.getState().dismiss(),
+                  }),
         recordUserActivity: () => {
             if (options.rememberedIdentity !== undefined) {
                 const selection = home.getState().selection;

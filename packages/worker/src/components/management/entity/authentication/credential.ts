@@ -44,9 +44,10 @@ export function sharedLinkTerms(sharer: Credential, now: number): SharedLinkTerm
 
 /**
  * The credential kinds that may perform each identity or management operation; any other operation accepts every
- * active credential. Browser and recovery access may use and share the Machine, but only the machine's local credential
- * may issue a recovery credential (which ending browser access does not reach), pair a Runtime, bind the Machine or
- * administer access.
+ * active credential. Browser and recovery access may use and share the Machine and disconnect the other browsers, so
+ * whoever notices a device they did not add can remove it without losing their own access. Only the machine's local
+ * credential may issue a recovery credential (which ending browser access does not reach), pair a Runtime, bind the
+ * Machine or revoke all access.
  */
 const permittedKinds = {
     shareAccess: ["local", "browser", "recovery"],
@@ -57,6 +58,7 @@ const permittedKinds = {
     revokeAllAccess: ["local"],
     replaceProject: ["local"],
     endBrowserAccess: ["browser"],
+    endOtherBrowserAccess: ["browser", "recovery"],
     revokeRecoveryCredential: ["recovery"],
     retireLocalCredential: ["local"],
 } as const satisfies Record<string, readonly Credential["kind"][]>;
