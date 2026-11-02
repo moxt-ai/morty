@@ -142,7 +142,19 @@ function sessionStatusStream(context: Context<AuthorizedChatEnvironment>): Respo
             void context.env.services.chat
                 .subscribeManagedSessionStatuses(
                     context.get("chatScope"),
-                    (event) => controller.enqueue(encoder.encode(`${encodeManagedSessionEvent(event)}\n`)),
+                    async (event) => {
+                        // The stream outlives the authorization that opened it, so each event is sent only while that
+                        // access still holds; ending access ends the stream, and the reopened stream is refused.
+                        const access = await context.env.services.authentication.session(
+                            context.get("bearerToken"),
+                            lifetime.signal,
+                        );
+                        if (access.kind !== "authenticated") {
+                            lifetime.abort(credentialRejected(access.kind));
+                            return;
+                        }
+                        controller.enqueue(encoder.encode(`${encodeManagedSessionEvent(event)}\n`));
+                    },
                     lifetime.signal,
                 )
                 .then(

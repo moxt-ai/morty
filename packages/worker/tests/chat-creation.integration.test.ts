@@ -670,3 +670,87 @@ test("Given a chat opened with a Session credential, When the machine's owner re
 
     await expect(readHistory()).rejects.toMatchObject({ code: "credential_revoked" });
 });
+
+test("Given a browser following its chats' statuses, When the machine's owner revokes all access, Then the status stream ends without sending later statuses", async ({
+    cloud,
+}) => {
+    await using fixture = await createChatFixture(cloud);
+    expect(
+        (
+            await fixture.request(`chat/bots/${fixture.botId}/setup`, {
+                runtimeId: fixture.runtime.runtimeId,
+                agentRef: "codex",
+            })
+        ).status,
+    ).toBe(202);
+    const shared = await fixture.request("identity/transfers", {});
+    const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
+    const redeemed = await worker.fetch(
+        new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code }),
+        }),
+        cloud.environment(),
+    );
+    const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+    const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+        agentRef: "codex",
+        configurations: [],
+        conversationKey: "followed-while-revoked",
+        title: "Followed while revoked",
+        workspaceRef: "default",
+    });
+    const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
+    const upgraded = await cloud.dispatchFetch(`${APP_ORIGIN}/morty/ws`, {
+        headers: { Origin: APP_ORIGIN, Upgrade: "websocket" },
+    });
+    const bridge = upgraded.webSocket;
+    if (bridge === null) {
+        throw new Error("Expected the Chat WebSocket bridge.");
+    }
+    const frames: unknown[] = [];
+    let arrived = (): void => {};
+    bridge.addEventListener("message", (event) => {
+        frames.push(JSON.parse(String(event.data)));
+        arrived();
+    });
+    const nextFrame = async () => {
+        while (frames.length === 0) {
+            await new Promise<void>((resolve) => {
+                arrived = resolve;
+            });
+        }
+        return frames.shift();
+    };
+    bridge.accept();
+    bridge.send(
+        JSON.stringify({
+            kind: "subscribe",
+            subscriptionId: "statuses",
+            method: "POST",
+            path: `/morty/api/chat/projects/${fixture.projectId}/bots/${fixture.botId}/managed-session/status-events`,
+            headers: [["authorization", `Bearer ${browser}`]],
+            body: null,
+        }),
+    );
+    expect(await nextFrame()).toMatchObject({ kind: "event", subscriptionId: "statuses" });
+
+    expect((await fixture.request("identity/revoke-all-access", {})).status).toBe(200);
+    await fixture.runtime.client.turns.submitToRuntime(
+        fixture.runtime.runtimeId,
+        sessionId,
+        {
+            additionalDirectoryIds: [],
+            agentId: "codex",
+            content: "Reply after revoke",
+            directoryId: "default",
+            idempotencyKey: crypto.randomUUID(),
+            attachments: [],
+        },
+        AbortSignal.timeout(10_000),
+    );
+
+    expect(await nextFrame()).toEqual({ kind: "subscription.end", subscriptionId: "statuses" });
+    bridge.close(1000, "Test complete");
+});

@@ -4,7 +4,7 @@ import { ProjectDurableObject as Project } from "../../src/components/project/pr
 import { DurableObjectDatabase } from "../../src/infra/durable-object-database.ts";
 import { managedBot, platformProjectMapping } from "../../src/schema/project-do/index.ts";
 
-export { default } from "../../src/index.ts";
+export { ChatWebSocketDurableObject, default } from "../../src/index.ts";
 
 /** Seeds the persisted legacy shape while leaving authentication and revocation on the production HTTP path. */
 export class ProjectDurableObject extends Project {

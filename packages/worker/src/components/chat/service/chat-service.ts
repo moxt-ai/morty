@@ -324,7 +324,7 @@ export class ChatService {
      */
     readonly subscribeManagedSessionStatuses = async (
         scope: ChatScope,
-        publish: (event: ManagedSessionEvent) => void,
+        publish: (event: ManagedSessionEvent) => Promise<void>,
         signal: AbortSignal,
     ): Promise<void> => {
         const runtime = await this.localRuntime(scope);
@@ -364,7 +364,7 @@ export class ChatService {
                         signal,
                     );
                     if (owned && !settled) {
-                        publish(event);
+                        await publish(event);
                     }
                 });
             const refreshLiveness = (): void => {
@@ -425,7 +425,7 @@ export class ChatService {
             inOrder(async () => {
                 const { sessions } = await this.managedSessions(following);
                 if (!settled) {
-                    publish({
+                    await publish({
                         kind: MANAGED_SESSION_STATUSES_FOLLOWING_KIND,
                         sessions: "owned",
                         statuses: sessions.map((session) => ({ sessionId: session.id, status: session.status })),
