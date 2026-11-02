@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import * as v from "valibot";
 import { beforeAll, expect, test } from "vitest";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
+import { processPlatformSupportFor } from "../../../third-party/mobius/packages/cli/src/engine/util/process/platform/index.ts";
 import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
 import worker from "../src/application.ts";
 import { prepareIdentityFixture } from "./support/identity-fixture.ts";
@@ -650,12 +651,8 @@ process.exitCode = await runSetup(process.argv.slice(2), {
                             "utf8",
                         ),
                     );
-                    let running = true;
-                    try {
-                        process.kill(download, 0);
-                    } catch {
-                        running = false;
-                    }
+                    // An exited child its new parent has not reaped yet is a zombie; the platform rule counts it as gone.
+                    const running = processPlatformSupportFor(process.platform).processExists(download);
                     if (running) {
                         process.kill(download, "SIGKILL");
                     }

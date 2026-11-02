@@ -385,15 +385,59 @@ async function waitForHttp(url, accept, timeoutMilliseconds, description, proces
     throw new Error(`Timed out waiting for ${description}: ${last}`);
 }
 
+/**
+ * The Mobius packages Morty's workspace also lists. Both workspaces link these packages' dependencies, each to its own
+ * store; whichever installs last decides which copy of a shared library, such as the ACP SDK, they load.
+ */
+function sharedMobiusPackages() {
+    return fs
+        .readFileSync(path.join(REPO_ROOT, "pnpm-workspace.yaml"), "utf8")
+        .split("\n")
+        .map((line) => /^\s*-\s*["']?(third-party\/mobius\/[^"'\s]+)["']?\s*$/u.exec(line)?.[1])
+        .filter((entry) => entry !== undefined)
+        .map((entry) => path.join(REPO_ROOT, entry));
+}
+
+/** Whether a package's dependencies resolve into the submodule's own store rather than Morty's. */
+function linkedToSubmoduleStore(packageDirectory) {
+    const modules = path.join(packageDirectory, "node_modules");
+    const submoduleStore = path.join(MOBIUS_ROOT, "node_modules") + path.sep;
+    const entries = fs.existsSync(modules) ? fs.readdirSync(modules, { withFileTypes: true }) : [];
+    const links = entries.flatMap((entry) =>
+        entry.name.startsWith("@") && entry.isDirectory()
+            ? fs.readdirSync(path.join(modules, entry.name)).map((name) => path.join(modules, entry.name, name))
+            : entry.isSymbolicLink()
+              ? [path.join(modules, entry.name)]
+              : [],
+    );
+    return links.some((link) => {
+        try {
+            return fs.realpathSync(link).startsWith(submoduleStore);
+        } catch {
+            return false;
+        }
+    });
+}
+
 async function ensureMobiusDependencies() {
     const installed =
         fs.existsSync(MOBIUS_INSTALLED_LOCKFILE) &&
         fs.readFileSync(MOBIUS_LOCKFILE).equals(fs.readFileSync(MOBIUS_INSTALLED_LOCKFILE));
-    if (installed) {
+    if (!installed) {
+        log("installing Mobius submodule dependencies from the lockfile");
+        await run("pnpm", ["install", "--frozen-lockfile"], { cwd: MOBIUS_ROOT });
+    }
+    // A submodule install relinks the packages Morty shares with it, so Chat code and the Runtime code it loads would
+    // each get their own copy of the same libraries. Give those packages back to Morty, as CI's install order does.
+    const relinked = sharedMobiusPackages().filter(linkedToSubmoduleStore);
+    if (relinked.length === 0) {
         return;
     }
-    log("installing Mobius submodule dependencies from the lockfile");
-    await run("pnpm", ["install", "--frozen-lockfile"], { cwd: MOBIUS_ROOT });
+    log("restoring Morty's dependency links for the Mobius packages it shares");
+    for (const packageDirectory of relinked) {
+        fs.rmSync(path.join(packageDirectory, "node_modules"), { recursive: true, force: true });
+    }
+    await run("pnpm", ["install", "--frozen-lockfile"], { cwd: REPO_ROOT });
 }
 
 async function httpJson(url, options = {}) {
