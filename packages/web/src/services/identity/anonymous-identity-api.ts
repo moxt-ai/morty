@@ -1,5 +1,6 @@
 import { type Identifier, isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
+import type { ApiTransport } from "../api/api-transport.ts";
 import { anonymousCredentialsEntry } from "../local-storage/central-local-storage.ts";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 import { describeBrowser } from "./device-label.ts";
@@ -230,6 +231,20 @@ export class AnonymousIdentityApi {
         return identity;
     };
 
+    /** Resolves once the devices holding this access through a link differ from the list this client last read. */
+    readonly waitForLinkedDevicesChange = async (
+        token: string,
+        waitForChange: ApiTransport["waitForChange"],
+        signal: AbortSignal,
+    ): Promise<void> =>
+        await waitForChange(
+            new Request(this.#url("/identity/devices"), {
+                method: "GET",
+                headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` },
+                signal,
+            }),
+        );
+
     /** The other devices that hold this access through a link now. */
     readonly linkedDevices = async (token: string, signal: AbortSignal): Promise<readonly LinkedDevice[]> =>
         v.parse(
@@ -330,17 +345,19 @@ export class AnonymousIdentityApi {
         return value;
     };
 
-    readonly #response = async (path: string, init: RequestInit, requestSignal: AbortSignal): Promise<Response> => {
-        const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(30_000)]);
-        const headers = new Headers(init.headers);
+    readonly #url = (path: string): URL => {
         const scope = readIdentityScope();
         const scopedPath =
             scope !== null && !path.startsWith("/projects/") && path !== "/identity/transfers/redeem"
                 ? `/projects/${encodeURIComponent(scope.projectId)}${path}`
                 : path;
-        const response = await this.#fetchRequest(
-            new Request(new URL(`/morty/api${scopedPath}`, this.#origin), { ...init, headers, signal }),
-        );
+        return new URL(`/morty/api${scopedPath}`, this.#origin);
+    };
+
+    readonly #response = async (path: string, init: RequestInit, requestSignal: AbortSignal): Promise<Response> => {
+        const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(30_000)]);
+        const headers = new Headers(init.headers);
+        const response = await this.#fetchRequest(new Request(this.#url(path), { ...init, headers, signal }));
         signal.throwIfAborted();
         if (!response.ok) {
             const value: unknown = await response.json();

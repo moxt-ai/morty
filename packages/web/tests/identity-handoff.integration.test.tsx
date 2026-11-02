@@ -5,6 +5,7 @@ import { getByRole, queryByRole } from "@testing-library/dom";
 import * as v from "valibot";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
+import { centralLocalStorage, linkedDevicesSeenEntry } from "../src/services/local-storage/central-local-storage.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 
@@ -605,4 +606,39 @@ test("Given another browser joined this computer, When the user disconnects othe
             ),
         30_000,
     );
+});
+
+test("Given a browser that acknowledged a new device, When another device joins through a link, Then a new notice appears without reloading or leaving the page", {
+    timeout: 60_000,
+}, async () => {
+    const joined = await createTestApp({ connectAgent: true, page: { kind: "share" } });
+    await joined.waitForView(() => expect(new URL(window.location.href).searchParams.get("identity")).not.toBeNull());
+    const join = async (page: typeof joined, device: string) => {
+        const code = new URL(await page.createTransferUrl()).hash.slice("#code=".length);
+        const redeemed = await page.transport.fetch(
+            new Request(`${page.origin}/morty/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code, device }),
+            }),
+        );
+        expect(redeemed.status).toBe(200);
+    };
+    // This browser looked at its devices before, when there were none; a device joined since.
+    centralLocalStorage.write(linkedDevicesSeenEntry(joined.identity.projectId), new Date(0).toISOString());
+    await join(joined, "iPhone · Safari");
+    const app = await joined.reload();
+    const first = await app.waitForView(() => getByRole(document.body, "status", { name: "New device connected" }));
+    expect(first.textContent).toContain("iPhone · Safari");
+    await app.user.click(getByRole(first, "button", { name: "Got it" }));
+    expect(queryByRole(document.body, "status", { name: "New device connected" })).toBeNull();
+
+    await join(app, "Mac · Edge");
+
+    const next = await app.waitForView(
+        () => getByRole(document.body, "status", { name: "New device connected" }),
+        30_000,
+    );
+    expect(next.textContent).toContain("Mac · Edge");
+    expect(next.textContent).not.toContain("iPhone · Safari");
 });

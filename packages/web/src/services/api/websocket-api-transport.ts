@@ -105,7 +105,8 @@ interface PendingRequest {
 function isWatchable(method: string, pathname: string): boolean {
     return (
         (method === "POST" && pathname.endsWith("/workspace")) ||
-        (method === "GET" && pathname.endsWith("/runtime-binding"))
+        (method === "GET" && pathname.endsWith("/runtime-binding")) ||
+        (method === "GET" && pathname.endsWith("/identity/devices"))
     );
 }
 

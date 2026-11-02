@@ -138,6 +138,7 @@ export function createChatWorkspace(options: {
     readonly currentAccessToken?: ((signal: AbortSignal) => Promise<string>) | undefined;
     readonly endRemoteAccess?: ((signal: AbortSignal) => Promise<void>) | undefined;
     readonly linkedDevices?: ((signal: AbortSignal) => Promise<readonly LinkedDevice[]>) | undefined;
+    readonly waitForLinkedDevicesChange?: ((signal: AbortSignal) => Promise<void>) | undefined;
     readonly endOtherBrowserAccess?: ((signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>) | undefined;
     readonly networkDiagnostics?: {
         readonly measureBrowserMobius: (origin: string, signal: AbortSignal) => Promise<number>;
@@ -496,9 +497,16 @@ export function createChatWorkspace(options: {
     };
 
     const newDevices =
-        options.projectId === undefined || options.linkedDevices === undefined
+        options.projectId === undefined ||
+        options.linkedDevices === undefined ||
+        options.waitForLinkedDevicesChange === undefined
             ? null
-            : createNewDeviceNoticeStore({ projectId: options.projectId, linkedDevices: options.linkedDevices });
+            : createNewDeviceNoticeStore({
+                  projectId: options.projectId,
+                  linkedDevices: options.linkedDevices,
+                  waitForChange: options.waitForLinkedDevicesChange,
+                  waitForBridge: requests.waitForBridge,
+              });
     const endOtherBrowserAccess = options.endOtherBrowserAccess;
     return {
         computers: options.computers ?? null,

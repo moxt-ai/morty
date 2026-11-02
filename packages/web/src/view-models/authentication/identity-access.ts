@@ -1,3 +1,4 @@
+import type { ApiTransport } from "../../services/api/api-transport.ts";
 import {
     AnonymousIdentityApi,
     IdentityApiError,
@@ -13,6 +14,8 @@ export interface IdentityAccess {
     /** Ends the access this browser holds when it runs. */
     readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
     readonly linkedDevices: (signal: AbortSignal) => Promise<readonly LinkedDevice[]>;
+    /** Resolves once the linked devices differ from the list this page last read. */
+    readonly waitForLinkedDevicesChange: (signal: AbortSignal) => Promise<void>;
     /** Disconnects every other browser that joined through a link while this one keeps its access. */
     readonly endOtherBrowserAccess: (signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>;
 }
@@ -28,6 +31,7 @@ class IdentitySharingUnavailable extends Error {
 
 export function createIdentityAccess(options: {
     readonly fetchRequest: (request: Request) => Promise<Response>;
+    readonly waitForChange: ApiTransport["waitForChange"];
     readonly origin: string;
     readonly identity: { readonly projectId: string; readonly getToken: (signal: AbortSignal) => Promise<string> };
     readonly onAccessEnded: () => void;
@@ -53,6 +57,12 @@ export function createIdentityAccess(options: {
     return {
         ...remoteAccess,
         linkedDevices: (signal) => withCurrentAccess(signal, (token) => api.linkedDevices(token, signal)),
+        waitForLinkedDevicesChange: async (signal) =>
+            await api.waitForLinkedDevicesChange(
+                await remoteAccess.currentAccessToken(signal),
+                options.waitForChange,
+                signal,
+            ),
         endOtherBrowserAccess: (signal) =>
             withCurrentAccess(signal, (token) => api.endOtherBrowserAccess(token, signal)),
         createTransfer: async (signal) => {

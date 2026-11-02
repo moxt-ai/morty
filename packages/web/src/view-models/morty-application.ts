@@ -135,6 +135,7 @@ export function createMortyApplication(options: {
         };
         const access = createIdentityAccess({
             fetchRequest: transport.fetch,
+            waitForChange: transport.waitForChange,
             origin: options.origin,
             identity: scope,
             onAccessEnded: () => window.location.reload(),
@@ -186,6 +187,7 @@ export function createMortyApplication(options: {
             currentAccessToken: access.currentAccessToken,
             endRemoteAccess: access.endRemoteAccess,
             linkedDevices: access.linkedDevices,
+            waitForLinkedDevicesChange: access.waitForLinkedDevicesChange,
             endOtherBrowserAccess: access.endOtherBrowserAccess,
             networkDiagnostics: {
                 measureBrowserMobius: transport.measureMobiusLatency,
@@ -283,6 +285,7 @@ export function createMortyApplication(options: {
         identityAccess: (identity, onAccessEnded) =>
             createIdentityAccess({
                 fetchRequest: transport.fetch,
+                waitForChange: transport.waitForChange,
                 origin: options.origin,
                 identity,
                 onAccessEnded,
