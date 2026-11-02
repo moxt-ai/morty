@@ -200,7 +200,7 @@ test("Given a tool image is open while the agent works, When the user collapses 
     expect(document.activeElement).toBe(getByRole(document.body, "button", { name: "1 step" }));
 });
 
-test("Given an Agent reply that embeds an image from another site, When the reply is shown, Then the image loads only after the user asks for it", {
+test("Given an Agent reply that embeds an image from another site, When the reply is shown, Then the image loads only after the user asks for it and stays shown when the user returns to the session", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -214,4 +214,9 @@ test("Given an Agent reply that embeds an image from another site, When the repl
 
     const image = await app.waitForView(() => getByRole(document.body, "img", { name: "Architecture" }));
     expect(image.getAttribute("src")).toBe("https://images.example/diagram.png");
+    await app.user.click(getByRole(document.body, "button", { name: "New Session" }));
+    await app.waitForView(() => expect(queryByRole(document.body, "img", { name: "Architecture" })).toBeNull());
+    await app.user.click(getByRole(document.body, "button", { name: "Open show remote image" }));
+    await app.waitForView(() => getByRole(document.body, "img", { name: "Architecture" }));
+    expect(queryByRole(document.body, "button", { name: "Show image from images.example" })).toBeNull();
 });

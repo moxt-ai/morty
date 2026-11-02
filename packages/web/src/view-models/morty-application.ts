@@ -13,6 +13,7 @@ import { createIdentityAccess, type IdentityAccess } from "./authentication/iden
 import { createBugReportDialogStore } from "./bug-report-dialog-store.ts";
 import { type ChatWorkspace, createChatWorkspace } from "./chat/chat-workspace.ts";
 import { createComputerSwitcher } from "./chat/computer-switcher-store.ts";
+import { createRemoteImageConsentStore } from "./chat/remote-image-consent-store.ts";
 import { type SetupHandoffModel, setupHandoffModel } from "./send-link-store.ts";
 
 /**
@@ -44,6 +45,8 @@ export interface MortyApplication {
     readonly anonymousSession: ReturnType<typeof createAnonymousSessionStore>;
     /** The shared bug-report dialog state for every bug-report entry point. */
     readonly bugReportDialog: ReturnType<typeof createBugReportDialogStore>;
+    /** The images on other sites the user asked to load while the page is open. */
+    readonly remoteImages: ReturnType<typeof createRemoteImageConsentStore>;
     /**
      * The /continue handoff redeem. Created with the application: its store
      * reads the transfer code from the location at creation, and only a real
@@ -280,6 +283,7 @@ export function createMortyApplication(options: {
         setupHandoff,
         anonymousSession,
         bugReportDialog,
+        remoteImages: createRemoteImageConsentStore(),
         continuation,
         sessionWorkspace,
         identityAccess: (identity, onAccessEnded) =>

@@ -23,6 +23,21 @@ function latestJoin(devices: readonly LinkedDevice[]): string {
 }
 
 /**
+ * What reading the devices means for a browser that last looked at `seenAt`, or never did: the notice to show and
+ * when it has now looked through. A browser is not told about the devices that joined before it first looked.
+ */
+function readDevices(
+    devices: readonly LinkedDevice[],
+    seenAt: string | null,
+): { readonly state: NewDeviceNoticeState; readonly seenAt: string } {
+    if (seenAt === null) {
+        return { state: { kind: "none" }, seenAt: latestJoin(devices) };
+    }
+    const joined = devices.filter((device) => Date.parse(device.joinedAt) > Date.parse(seenAt));
+    return { state: joined.length === 0 ? { kind: "none" } : { kind: "notice", devices: joined }, seenAt };
+}
+
+/**
  * Tells this browser when another device joined its computer since it last looked, so the owner can notice a device
  * they did not add. Joining times come from the Worker, so this browser's clock does not decide what is new. While the
  * page is visible it follows the device list, so a device that joins through a link just shared shows up at once.
@@ -49,13 +64,11 @@ export function createNewDeviceNoticeStore(options: {
                 return false;
             }
             const seenAt = centralLocalStorage.read(seen);
-            if (seenAt === null) {
-                // A browser is not told about the devices that joined before it first looked.
-                centralLocalStorage.write(seen, latestJoin(devices));
-                return true;
+            const read = readDevices(devices, seenAt);
+            if (read.seenAt !== seenAt) {
+                centralLocalStorage.write(seen, read.seenAt);
             }
-            const joined = devices.filter((device) => Date.parse(device.joinedAt) > Date.parse(seenAt));
-            set({ state: joined.length === 0 ? { kind: "none" } : { kind: "notice", devices: joined } });
+            set({ state: read.state });
             return true;
         };
         /**

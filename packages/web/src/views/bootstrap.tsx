@@ -1,6 +1,7 @@
 import { ErrorBoundary, reactErrorHandler } from "@sentry/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { RemoteImageConsentProvider } from "../components/agents/remote-image-consent.tsx";
 import { ImageDownloadProvider } from "../components/images/image-download.tsx";
 import { ImageViewerProvider } from "../components/images/image-gallery.tsx";
 import { ToastProvider } from "../components/ui/toast.tsx";
@@ -64,11 +65,13 @@ export function assembleMorty(options: {
                 <ToastProvider>
                     <ErrorBoundary fallback={<MortyCrashFallback dialog={application.bugReportDialog} />}>
                         <ImageViewerProvider>
-                            <SessionApplication
-                                application={application}
-                                signedInRouter={signedInRouter}
-                                continuationRouter={continuationRouter}
-                            />
+                            <RemoteImageConsentProvider store={application.remoteImages}>
+                                <SessionApplication
+                                    application={application}
+                                    signedInRouter={signedInRouter}
+                                    continuationRouter={continuationRouter}
+                                />
+                            </RemoteImageConsentProvider>
                         </ImageViewerProvider>
                     </ErrorBoundary>
                 </ToastProvider>

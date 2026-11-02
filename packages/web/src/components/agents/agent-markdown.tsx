@@ -10,12 +10,15 @@ import {
 import { ImageGallery, PreviewImage } from "../images/image-gallery.tsx";
 import "streamdown/styles.css";
 import { type ComponentProps, createContext, type SVGProps, useContext, useEffect, useMemo, useState } from "react";
+import { useStore } from "zustand";
+import type { StoreApi } from "zustand/vanilla";
 import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
 import { boundedCodeHighlighter } from "../../components/agents/bounded-code-highlighter.ts";
 import { MermaidCodeBlock } from "../../components/agents/mermaid-code-block.tsx";
 import { remarkMermaidCompletion } from "../../components/agents/remark-mermaid-completion.ts";
 import { textLinkClassName } from "../ui/text-link.ts";
+import { RemoteImageConsent, type RemoteImageConsentModel } from "./remote-image-consent.tsx";
 import type { SessionResourceReader as MarkdownImageReader, SessionResourceStoreFactory } from "./resource-reader.ts";
 import { SessionResource } from "./session-resource.tsx";
 
@@ -258,17 +261,28 @@ function imageOrigin(value: string): { readonly kind: "embedded" | "remote"; rea
     return null;
 }
 
+type RemoteImageProps = Pick<ComponentProps<"img">, "alt" | "className" | "title"> & { readonly src: URL };
+
 /**
  * An image on another site loads only when the user asks for it. Loading it on display would let whatever the Agent
  * read make it emit an image URL that carries data out the moment the message is shown.
  */
-function RemoteMarkdownImage({
+function RemoteMarkdownImage(props: RemoteImageProps) {
+    const consent = useContext(RemoteImageConsent);
+    if (consent === null) {
+        return <span className="text-xs text-muted-foreground">Image from {props.src.host}</span>;
+    }
+    return <ConsentedRemoteImage consent={consent} {...props} />;
+}
+
+function ConsentedRemoteImage({
     alt,
     className,
+    consent,
     src,
     title,
-}: Pick<ComponentProps<"img">, "alt" | "className" | "title"> & { readonly src: URL }) {
-    const [shown, setShown] = useState(false);
+}: RemoteImageProps & { readonly consent: StoreApi<RemoteImageConsentModel> }) {
+    const shown = useStore(consent, (model) => model.shown.has(src.href));
     if (shown) {
         return (
             <PreviewImage
@@ -283,7 +297,7 @@ function RemoteMarkdownImage({
     return (
         <button
             className={cn("cursor-pointer font-inherit font-medium", textLinkClassName)}
-            onClick={() => setShown(true)}
+            onClick={() => consent.getState().show(src.href)}
             title={alt === undefined || alt.length === 0 ? undefined : alt}
             type="button"
         >
