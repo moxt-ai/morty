@@ -596,7 +596,13 @@ test("Given browsers that joined through links shared by the computer and by ano
         return v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
     };
     const listed = async (token: string) => {
-        const response = await request("/identity/devices", token);
+        // Through the public entry, as browsers without the WebSocket bridge and other clients reach it.
+        const response = await fetchPublicApplication(
+            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/identity/devices`, {
+                headers: { authorization: `Bearer ${token}` },
+            }),
+            environment,
+        );
         expect(response.status).toBe(200);
         const { devices } = v.parse(
             v.object({ devices: v.array(v.looseObject({ joinedAt: v.pipe(v.string(), v.isoTimestamp()) })) }),

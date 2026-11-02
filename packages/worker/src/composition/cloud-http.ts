@@ -46,6 +46,7 @@ export const publicCloudRoutes = new Hono<{ readonly Bindings: CloudBindings }>(
         cloudRoutes.fetch(context.req.raw, context.env),
     )
     .post("/projects/:projectId/identity/transfers", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .get("/projects/:projectId/identity/devices", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .post("/projects/:projectId/identity/revoke-all-access", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
