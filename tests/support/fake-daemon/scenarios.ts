@@ -310,6 +310,16 @@ export function mortyReply(prompt: string, turnNumber: number, mode: "prompt" | 
                     }),
                 ),
             };
+        case "show remote image":
+            return {
+                outcome: "complete",
+                output: [
+                    {
+                        kind: "text",
+                        text: "Here is the diagram:\n\n![Architecture](https://images.example/diagram.png)",
+                    },
+                ],
+            };
         case "show image gallery":
             return {
                 outcome: "hold",

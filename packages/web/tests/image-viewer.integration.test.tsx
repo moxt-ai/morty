@@ -199,3 +199,19 @@ test("Given a tool image is open while the agent works, When the user collapses 
     await app.waitForView(() => expect(queryByRole(document.body, "dialog", { name: "Image viewer" })).toBeNull());
     expect(document.activeElement).toBe(getByRole(document.body, "button", { name: "1 step" }));
 });
+
+test("Given an Agent reply that embeds an image from another site, When the reply is shown, Then the image loads only after the user asks for it", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "show remote image");
+    const show = await app.waitForView(() =>
+        getByRole(document.body, "button", { name: "Show image from images.example" }),
+    );
+    expect(document.querySelector('img[src^="https://images.example"]')).toBeNull();
+
+    await app.user.click(show);
+
+    const image = await app.waitForView(() => getByRole(document.body, "img", { name: "Architecture" }));
+    expect(image.getAttribute("src")).toBe("https://images.example/diagram.png");
+});

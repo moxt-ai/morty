@@ -243,27 +243,69 @@ function AgentMarkdownLink({ children, href }: ComponentProps<"a">) {
     );
 }
 
-function directImageSource(value: string): string {
-    if (localFilePath(value) !== null) {
-        return "";
+/** Where an image Markdown names comes from: embedded data, another site, or the session's own files. */
+function imageOrigin(value: string): { readonly kind: "embedded" | "remote"; readonly url: URL } | null {
+    if (localFilePath(value) !== null || !URL.canParse(value)) {
+        return null;
     }
-    if (value.startsWith("https://") || value.startsWith("http://") || value.startsWith("data:image/")) {
-        return value;
+    const url = new URL(value);
+    if (url.protocol === "data:" && url.pathname.startsWith("image/")) {
+        return { kind: "embedded", url };
     }
-    return "";
+    if (url.protocol === "https:" || url.protocol === "http:") {
+        return { kind: "remote", url };
+    }
+    return null;
 }
 
-function AgentMarkdownImage({ alt, className, src, title }: ComponentProps<"img">) {
-    const { createResourceStore, readImage } = useContext(MarkdownResources);
-    const directSource = typeof src === "string" ? directImageSource(src) : "";
-    const requestedSource = typeof src === "string" ? (localFilePath(src) ?? src) : "";
-    if (directSource.length > 0) {
+/**
+ * An image on another site loads only when the user asks for it. Loading it on display would let whatever the Agent
+ * read make it emit an image URL that carries data out the moment the message is shown.
+ */
+function RemoteMarkdownImage({
+    alt,
+    className,
+    src,
+    title,
+}: Pick<ComponentProps<"img">, "alt" | "className" | "title"> & { readonly src: URL }) {
+    const [shown, setShown] = useState(false);
+    if (shown) {
         return (
             <PreviewImage
                 alt={alt ?? ""}
                 className={cn("max-h-[min(60vh,360px)]", className)}
                 loading="lazy"
-                src={directSource}
+                src={src.href}
+                title={title}
+            />
+        );
+    }
+    return (
+        <button
+            className={cn("cursor-pointer font-inherit font-medium", textLinkClassName)}
+            onClick={() => setShown(true)}
+            title={alt === undefined || alt.length === 0 ? undefined : alt}
+            type="button"
+        >
+            Show image from {src.host}
+        </button>
+    );
+}
+
+function AgentMarkdownImage({ alt, className, src, title }: ComponentProps<"img">) {
+    const { createResourceStore, readImage } = useContext(MarkdownResources);
+    const origin = typeof src === "string" ? imageOrigin(src) : null;
+    const requestedSource = typeof src === "string" ? (localFilePath(src) ?? src) : "";
+    if (origin?.kind === "remote") {
+        return <RemoteMarkdownImage alt={alt} className={className} src={origin.url} title={title} />;
+    }
+    if (origin?.kind === "embedded") {
+        return (
+            <PreviewImage
+                alt={alt ?? ""}
+                className={cn("max-h-[min(60vh,360px)]", className)}
+                loading="lazy"
+                src={origin.url.href}
                 title={title}
             />
         );
