@@ -106,7 +106,11 @@ specific tool.
    unchanged lockfile can skip installation even when migrations have changed.
    If diagnosing startup manually, use
    `pnpm --dir third-party/mobius install --frozen-lockfile`; a root `pnpm install`
-   does not install the submodule workspace.
+   does not install the submodule workspace. That install also relinks the Mobius
+   packages the root workspace lists to the submodule's own store, so tests that
+   start an Agent load two copies of shared libraries and fail. The
+   local-development entrypoint links them back; otherwise remove those packages'
+   `node_modules` and rerun the root `pnpm install --frozen-lockfile`.
 3. Run `scripts/local-dev web-server`. It builds the Worker and setup
    bundle by default; pass `--no-build` only when those artifacts are fresh.
 4. Reproduce through a supported boundary: the browser app for user flows, or the
