@@ -39,6 +39,7 @@ import materializePairedBots from "../../migrations/project-do/0037_materialize_
 import dropAgentPairingTicket from "../../migrations/project-do/0038_drop_agent_pairing_ticket.sql?raw";
 import singleUseDeviceLinks from "../../migrations/project-do/0039_single_use_device_links.sql?raw";
 import deviceLabels from "../../migrations/project-do/0040_device_labels.sql?raw";
+import linkCreator from "../../migrations/project-do/0041_link_creator.sql?raw";
 
 /** Generated Project Durable Object migrations, in order. The ledger records each by its tag. */
 const migrations = [
@@ -82,6 +83,7 @@ const migrations = [
     { tag: "0038_drop_agent_pairing_ticket", sql: dropAgentPairingTicket },
     { tag: "0039_single_use_device_links", sql: singleUseDeviceLinks },
     { tag: "0040_device_labels", sql: deviceLabels },
+    { tag: "0041_link_creator", sql: linkCreator },
 ];
 
 /**

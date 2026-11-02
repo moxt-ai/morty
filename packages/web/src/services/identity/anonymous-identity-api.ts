@@ -55,8 +55,18 @@ const transferSchema = v.pipe(
     v.object({ expiresAt: v.pipe(v.string(), v.isoTimestamp()), url: v.pipe(v.string(), v.url()) }),
     v.readonly(),
 );
+const deviceSharerSchema = v.variant("kind", [
+    v.object({ kind: v.literal("computer") }),
+    v.object({ kind: v.literal("recovery") }),
+    v.object({ kind: v.literal("device"), label: v.nullable(v.string()) }),
+]);
 const linkedDeviceSchema = v.pipe(
-    v.object({ joinedAt: v.pipe(v.string(), v.isoTimestamp()), label: v.nullable(v.string()) }),
+    v.object({
+        joinedAt: v.pipe(v.string(), v.isoTimestamp()),
+        label: v.nullable(v.string()),
+        // A Worker that predates sharers, or a sharer it does not know, names none.
+        addedBy: v.fallback(v.nullable(deviceSharerSchema), null),
+    }),
     v.readonly(),
 );
 export type LinkedDevice = v.InferOutput<typeof linkedDeviceSchema>;

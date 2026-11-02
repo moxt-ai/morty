@@ -143,6 +143,7 @@ export function createAuthenticationRoutes() {
                     devices: result.devices.map((device) => ({
                         joinedAt: new Date(device.joinedAt).toISOString(),
                         label: device.label,
+                        addedBy: device.addedBy,
                     })),
                 },
                 200,

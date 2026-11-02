@@ -93,23 +93,32 @@ export class IdentityStorage {
     };
 
     /**
-     * The browsers that hold the user's access through a link now, each with when it first joined and how it described
-     * itself then. A browser that opened another link since keeps its first joining.
+     * The browsers that hold the user's access through a link now, each described by its first joining: when it joined,
+     * how it described itself, and who shared the link it joined through. A browser that opened another link since
+     * keeps that first joining.
      */
     readonly linkedDevices = async (userId: string, now: number, signal: AbortSignal) => {
         signal.throwIfAborted();
         const first = alias(anonymousCredential, "first_credential");
+        const firstLink = alias(continueLink, "first_link");
+        const sharer = alias(anonymousCredential, "sharer_credential");
+        const sharerFirst = alias(anonymousCredential, "sharer_first_credential");
         const browser = sql<string>`coalesce(${anonymousCredential.browserId}, ${anonymousCredential.id})`;
         const rows = await requireIdentityDatabase(this.#database)
             .select({
                 // Durable Object rows are keyed by column name, so each joined column needs a name of its own.
                 browserId: browser.as("device_browser_id"),
                 joinedAt: sql<number>`${first.createdAt}`.as("device_joined_at"),
-                label: sql<string | null>`${anonymousCredential.deviceLabel}`.as("device_label"),
+                label: sql<string | null>`${first.deviceLabel}`.as("device_label"),
+                sharerKind: sql<Credential["kind"] | null>`${sharer.kind}`.as("sharer_kind"),
+                sharerLabel: sql<string | null>`${sharerFirst.deviceLabel}`.as("sharer_label"),
             })
             .from(anonymousCredential)
             .innerJoin(continueLink, eq(continueLink.id, anonymousCredential.remoteTransferId))
             .innerJoin(first, eq(first.id, browser))
+            .leftJoin(firstLink, eq(firstLink.id, first.remoteTransferId))
+            .leftJoin(sharer, eq(sharer.id, firstLink.createdByCredentialId))
+            .leftJoin(sharerFirst, eq(sharerFirst.id, sql`coalesce(${sharer.browserId}, ${sharer.id})`))
             .where(
                 and(
                     eq(anonymousCredential.userId, userId),
@@ -190,6 +199,7 @@ export class IdentityStorage {
                         claimNonce: sql<null>`null`.as("claim_nonce"),
                         createdAt: sql<number>`${now}`.as("created_at"),
                         revokedAt: sql<null>`null`.as("revoked_at"),
+                        createdByCredentialId: anonymousCredential.id,
                     })
                     .from(anonymousCredential)
                     .where(

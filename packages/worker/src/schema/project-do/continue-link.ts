@@ -15,6 +15,8 @@ export const continueLink = sqliteTable(
         claimNonce: text("claim_nonce"),
         createdAt: integer("created_at").notNull(),
         revokedAt: integer("revoked_at"),
+        /** The credential that shared the link; links shared before this was recorded have none. */
+        createdByCredentialId: text("created_by_credential_id"),
     },
     (table) => [index("identity_transfer_expiry_idx").on(table.expiresAt)],
 );

@@ -55,6 +55,26 @@ export type IssuedSessionAccess =
 
 const SESSION_ACCESS_REVOCATION_ATTEMPTS = 3;
 
+/** Who shared the link a device joined through, as the owner recognizes it. */
+export type DeviceSharer =
+    | { readonly kind: "computer" }
+    | { readonly kind: "recovery" }
+    | { readonly kind: "device"; readonly label: string | null };
+
+/** Null when the link's sharer is unknown, such as a credential from before credential kinds were recorded. */
+function deviceSharer(kind: Credential["kind"] | null, label: string | null): DeviceSharer | null {
+    switch (kind) {
+        case "local":
+            return { kind: "computer" };
+        case "recovery":
+            return { kind: "recovery" };
+        case "browser":
+            return { kind: "device", label };
+        case null:
+            return null;
+    }
+}
+
 /** Outside the session check, revoked access answers like unknown access, so a retry after a lost reply stays safe. */
 function refused(access: { readonly kind: "unauthenticated" | "revoked" | "forbidden" }) {
     return { kind: access.kind === "forbidden" ? "forbidden" : "unauthenticated" } as const;
@@ -237,7 +257,11 @@ export class AuthenticationService {
     ): Promise<
         | {
               readonly kind: "listed";
-              readonly devices: readonly { readonly joinedAt: number; readonly label: string | null }[];
+              readonly devices: readonly {
+                  readonly joinedAt: number;
+                  readonly label: string | null;
+                  readonly addedBy: DeviceSharer | null;
+              }[];
           }
         | { readonly kind: "unauthenticated" | "revoked" }
     > => {
@@ -250,7 +274,11 @@ export class AuthenticationService {
                     kind: "listed",
                     devices: devices
                         .filter((device) => device.browserId !== own)
-                        .map(({ joinedAt, label }) => ({ joinedAt, label }))
+                        .map((device) => ({
+                            joinedAt: device.joinedAt,
+                            label: device.label,
+                            addedBy: deviceSharer(device.sharerKind, device.sharerLabel),
+                        }))
                         .sort((left, right) => left.joinedAt - right.joinedAt),
                 };
             }

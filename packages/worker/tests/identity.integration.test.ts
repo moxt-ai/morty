@@ -570,7 +570,7 @@ test("Given two tabs of one browser open new links at once, When the browser lat
     }
 });
 
-test("Given two browsers that joined through links, When one lists the linked devices, Then it sees the other as it described itself but not itself", async () => {
+test("Given browsers that joined through links shared by the computer and by another browser, When one lists the linked devices, Then each other device appears as it first joined and with who shared its link", async () => {
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, init: RequestInit = {}) =>
@@ -581,14 +581,14 @@ test("Given two browsers that joined through links, When one lists the linked de
             }),
             environment,
         );
-    const join = async (device: string) => {
-        const shared = await request("/identity/transfers", owner.token, { method: "POST" });
+    const join = async (sharer: string, device: string, replaces?: string) => {
+        const shared = await request("/identity/transfers", sharer, { method: "POST" });
         const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
         const redeemed = await worker.fetch(
             new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
                 method: "POST",
                 headers: { "content-type": "application/json" },
-                body: JSON.stringify({ code, device }),
+                body: JSON.stringify({ code, device, ...(replaces === undefined ? {} : { replaces }) }),
             }),
             environment,
         );
@@ -598,21 +598,25 @@ test("Given two browsers that joined through links, When one lists the linked de
     const listed = async (token: string) => {
         const response = await request("/identity/devices", token);
         expect(response.status).toBe(200);
-        return v
-            .parse(
-                v.object({
-                    devices: v.array(
-                        v.object({ joinedAt: v.pipe(v.string(), v.isoTimestamp()), label: v.nullable(v.string()) }),
-                    ),
-                }),
-                await response.json(),
-            )
-            .devices.map((device) => device.label);
+        const { devices } = v.parse(
+            v.object({ devices: v.array(v.looseObject({ joinedAt: v.pipe(v.string(), v.isoTimestamp()) })) }),
+            await response.json(),
+        );
+        return devices.map(({ joinedAt: _joinedAt, ...device }) => device);
     };
 
-    const laptop = await join("Mac · Chrome");
-    await join("iPhone · Safari");
+    const laptop = await join(owner.token, "Mac · Chrome");
+    const phone = await join(laptop, "iPhone · Safari");
+    // The same browser opening another link stays the device that first joined.
+    await join(owner.token, "iPhone · Chrome", phone);
 
-    expect(await listed(laptop)).toEqual(["iPhone · Safari"]);
-    expect(await listed(owner.token)).toEqual(["Mac · Chrome", "iPhone · Safari"]);
+    const phoneAddedByLaptop = {
+        label: "iPhone · Safari",
+        addedBy: { kind: "device", label: "Mac · Chrome" },
+    };
+    expect(await listed(laptop)).toEqual([phoneAddedByLaptop]);
+    expect(await listed(owner.token)).toEqual([
+        { label: "Mac · Chrome", addedBy: { kind: "computer" } },
+        phoneAddedByLaptop,
+    ]);
 });

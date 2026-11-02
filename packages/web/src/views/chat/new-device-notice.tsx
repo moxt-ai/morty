@@ -1,7 +1,21 @@
 import { useStore } from "zustand";
 import type { StoreApi } from "zustand/vanilla";
 import { Button } from "../../components/ui/cloud-button.tsx";
+import type { LinkedDevice } from "../../services/identity/anonymous-identity-api.ts";
 import type { NewDeviceNoticeStore } from "../../view-models/chat/new-device-notice-store.ts";
+
+function addedBy(device: LinkedDevice): string {
+    switch (device.addedBy?.kind) {
+        case "computer":
+            return ", added from your computer";
+        case "recovery":
+            return ", added with recovery access";
+        case "device":
+            return `, added from ${device.addedBy.label ?? "another browser"}`;
+        case undefined:
+            return "";
+    }
+}
 
 function joinedAt(time: string): string {
     return new Date(time).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -27,6 +41,7 @@ export function NewDeviceNotice({ store }: { readonly store: StoreApi<NewDeviceN
                         {state.devices.map((device) => (
                             <li key={`${device.joinedAt}:${device.label ?? ""}`}>
                                 {device.label ?? "Unknown browser"}, joined {joinedAt(device.joinedAt)}
+                                {addedBy(device)}
                             </li>
                         ))}
                     </ul>
