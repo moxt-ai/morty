@@ -73,7 +73,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
         void this.failure.catch(() => undefined);
     }
 
-    readonly run: SetupRuntime["run"] = async (directory, args, _cwd, signal) => {
+    readonly run: SetupRuntime["run"] = async (directory, args, _cwd, signal, input) => {
         signal.throwIfAborted();
         const result = { pid: process.pid, logPath: join(directory, "controlled-runtime.log") };
         if (args[0] === "--version") {
@@ -134,13 +134,17 @@ export class ControlledSetupRuntime implements SetupRuntime {
         if (args[0] !== "pair") {
             throw new Error(`Unsupported controlled Runtime command: ${args[0]}`);
         }
+        // Like the released CLI's `--code-stdin`: the code arrives on standard input and never in the arguments.
+        if (!args.includes("--code-stdin") || input === undefined || args.includes(input.trim())) {
+            throw new Error("Setup must pass the pairing code on standard input");
+        }
         const origin = option("--url");
         const daemon = createMortyFakeDaemon(this.#options);
         const claim = await jsonRequest(origin, `/mobius/api/v1/runtime-pairings/${option("--pairing")}/redeem`, {
             body: {
                 agents: daemon.catalog,
                 machineName: this.#machineName,
-                pairingCode: option("--code"),
+                pairingCode: input.trim(),
                 workspaceName: "Test project",
             },
             signal,

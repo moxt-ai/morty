@@ -118,11 +118,11 @@ export async function createTestRuntime(
                         text(pairing["relayUrl"], "relay URL"),
                         "--pairing",
                         text(pairing["pairingId"], "pairing ID"),
-                        "--code",
-                        text(pairing["pairingCode"], "pairing code"),
+                        "--code-stdin",
                     ],
                     stack.directories.workspace,
                     harness.signal,
+                    text(pairing["pairingCode"], "pairing code"),
                 );
                 const paired = await chat.readPairedAgent(text(pairing["pairingId"], "pairing ID"), agentId);
                 await chat.bindAgent(paired.runtimeId, agentId);
@@ -151,11 +151,11 @@ export async function createTestRuntime(
                         text(pairing["relayUrl"], "relay URL"),
                         "--pairing",
                         text(pairing["pairingId"], "pairing ID"),
-                        "--code",
-                        text(pairing["pairingCode"], "pairing code"),
+                        "--code-stdin",
                     ],
                     stack.directories.workspace,
                     harness.signal,
+                    text(pairing["pairingCode"], "pairing code"),
                 );
                 await unrelated.readPairedAgent(text(pairing["pairingId"], "unrelated pairingId"), agentId);
             },

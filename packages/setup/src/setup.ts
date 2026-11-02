@@ -20,11 +20,13 @@ import {
 import { resolveStateDirectory } from "./platform/index.ts";
 
 export interface SetupRuntime {
+    /** Runs a Mobius command; `input`, when given, is written to its standard input, which is then closed. */
     readonly run: (
         directory: string,
         args: readonly string[],
         cwd: string,
         signal: AbortSignal,
+        input?: string,
     ) => Promise<{
         readonly pid: number;
         readonly logPath: string;
@@ -860,10 +862,16 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         };
     }
 
-    async function runMobius(context: Context, args: readonly string[], cwd: string, operation = signal) {
+    async function runMobius(
+        context: Context,
+        args: readonly string[],
+        cwd: string,
+        operation = signal,
+        input?: string,
+    ) {
         operation.throwIfAborted();
         if (host.runtime !== undefined) {
-            return await host.runtime.run(context.directory, args, cwd, operation);
+            return await host.runtime.run(context.directory, args, cwd, operation, input);
         }
         const logPath = join(context.directory, `runtime-${crypto.randomUUID()}.log`);
         const log = await open(
@@ -895,9 +903,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             }
             child = spawn(launch.command, [...launch.arguments], {
                 cwd,
-                stdio: ["ignore", log.fd, log.fd],
+                stdio: [input === undefined ? "ignore" : "pipe", log.fd, log.fd],
                 windowsHide: true,
             });
+            if (input !== undefined) {
+                // A Mobius that exits before reading reports its own failure; the closed pipe adds nothing.
+                child.stdin?.on("error", () => {});
+                child.stdin?.end(input);
+            }
             await once(child, "spawn", { signal: AbortSignal.any([operation, AbortSignal.timeout(10000)]) });
             if (child.pid === undefined || !Number.isSafeInteger(child.pid) || child.pid < 2) {
                 fail("RUNTIME_START_FAILED");
@@ -1112,21 +1125,28 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return { context: await saveConfiguration(context, { pairing_runtime_id: runtime.runtimeId }), runtime };
     }
 
-    function runtimeArguments(runtime: RuntimeSelection, cwd: string): readonly string[] {
+    function runtimeCommand(
+        runtime: RuntimeSelection,
+        cwd: string,
+    ): { readonly args: readonly string[]; readonly input?: string } {
         if (runtime.kind === "existing") {
-            return ["start", "--connection", runtime.connectionId];
+            return { args: ["start", "--connection", runtime.connectionId] };
         }
-        return [
-            "pair",
-            "--url",
-            runtime.relayUrl,
-            "--pairing",
-            runtime.pairingId,
-            "--code",
-            runtime.pairingCode,
-            "--workspace",
-            cwd,
-        ];
+        // The pairing code goes through standard input: a command line is visible to every user of this computer,
+        // who could redeem the code while it is valid and take over this Runtime's pairing.
+        return {
+            args: [
+                "pair",
+                "--url",
+                runtime.relayUrl,
+                "--pairing",
+                runtime.pairingId,
+                "--code-stdin",
+                "--workspace",
+                cwd,
+            ],
+            input: runtime.pairingCode,
+        };
     }
 
     async function startRuntime(
@@ -1150,7 +1170,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 return await saveConfiguration(context, { workspace: cwd });
             }
             try {
-                const started = await runMobius(context, runtimeArguments(runtime, cwd), cwd);
+                const command = runtimeCommand(runtime, cwd);
+                const started = await runMobius(context, command.args, cwd, signal, command.input);
                 emit({ status: "runtime_started", ...started });
                 return await saveConfiguration(context, { workspace: cwd });
             } catch (cause) {
