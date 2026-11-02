@@ -6,6 +6,7 @@ import remoteAccess from "../migrations/project-do/0008_remote_access.sql?raw";
 import credentialBrowser from "../migrations/project-do/0032_lively_arachne.sql?raw";
 import anonymousCredentialRevocation from "../migrations/project-do/0034_anonymous_credential_revocation.sql?raw";
 import anonymousCredentialKind from "../migrations/project-do/0035_anonymous_credential_kind.sql?raw";
+import { migrations } from "../src/infra/durable-object-database.ts";
 
 test("Given saved active and revoked credentials, When their schema is migrated, Then credential facts and revocation times are preserved", () => {
     using database = new DatabaseSync(":memory:");
@@ -92,4 +93,85 @@ test("Given an untyped credential database, When credential kinds are added, The
     expect(database.prepare("SELECT id FROM anonymous_credential WHERE revoked_at IS NULL").all()).toEqual([
         { id: "rollback" },
     ]);
+});
+
+test("Given browsers that joined before devices had their own record, When the schema is migrated, Then each browser becomes one device described by its first joining and keeps its credentials", () => {
+    using database = new DatabaseSync(":memory:");
+    const position = migrations.findIndex((migration) => migration.tag === "0042_browser_devices");
+    for (const migration of migrations.slice(0, position)) {
+        database.exec(migration.sql);
+    }
+    const link = database.prepare(
+        "INSERT INTO identity_transfer (id, code_hash, user_id, expires_at, access_expires_at, redeemed_at, created_at, created_by_credential_id) VALUES (?, ?, 'usr_owner', 2, 3, ?, 1, 'cred_local')",
+    );
+    link.run("transfer_legacy", "legacy-code", 1);
+    link.run("transfer_first", "first-code", 1);
+    link.run("transfer_again", "again-code", 2);
+    link.run("transfer_unused", "unused-code", null);
+    const credential = database.prepare(
+        "INSERT INTO anonymous_credential (id, user_id, token_hash, kind, created_at, revoked_at, remote_transfer_id, browser_id, device_label) VALUES (?, 'usr_owner', ?, ?, ?, ?, ?, ?, ?)",
+    );
+    credential.run("cred_local", "local-hash", "local", 0, null, null, null, null);
+    // Saved before credentials had a kind, and before browsers described themselves.
+    credential.run("cred_legacy", "legacy-hash", null, 1, null, "transfer_legacy", null, null);
+    // A browser that joined, then opened another link: its first credential names it.
+    credential.run("cred_first", "first-hash", "browser", 1, 2, "transfer_first", null, "iPhone · Safari");
+    credential.run("cred_again", "again-hash", "browser", 2, null, "transfer_again", "cred_first", "iPhone · Safari");
+
+    for (const migration of migrations.slice(position)) {
+        database.exec(migration.sql);
+    }
+
+    expect(database.prepare("SELECT * FROM browser_device ORDER BY id").all()).toEqual([
+        {
+            id: "cred_first",
+            user_id: "usr_owner",
+            joined_at: 1,
+            label: "iPhone · Safari",
+            joined_through_transfer_id: "transfer_first",
+        },
+        {
+            id: "cred_legacy",
+            user_id: "usr_owner",
+            joined_at: 1,
+            label: null,
+            joined_through_transfer_id: "transfer_legacy",
+        },
+    ]);
+    expect(
+        database
+            .prepare("SELECT id, kind, revoked_at, remote_transfer_id, device_id FROM anonymous_credential ORDER BY id")
+            .all(),
+    ).toEqual([
+        {
+            id: "cred_again",
+            kind: "browser",
+            revoked_at: null,
+            remote_transfer_id: "transfer_again",
+            device_id: "cred_first",
+        },
+        {
+            id: "cred_first",
+            kind: "browser",
+            revoked_at: 2,
+            remote_transfer_id: "transfer_first",
+            device_id: "cred_first",
+        },
+        {
+            id: "cred_legacy",
+            kind: "browser",
+            revoked_at: null,
+            remote_transfer_id: "transfer_legacy",
+            device_id: "cred_legacy",
+        },
+        { id: "cred_local", kind: "local", revoked_at: null, remote_transfer_id: null, device_id: null },
+    ]);
+    expect(database.prepare("SELECT id, access_expires_at FROM identity_transfer ORDER BY id").all()).toHaveLength(4);
+    expect(() =>
+        database
+            .prepare(
+                "INSERT INTO anonymous_credential (id, user_id, token_hash, kind, created_at) VALUES ('cred_orphan', 'usr_owner', 'orphan-hash', 'browser', 3)",
+            )
+            .run(),
+    ).toThrow();
 });

@@ -8,11 +8,8 @@ export const continueLink = sqliteTable(
         userId: text("user_id").notNull(),
         /** Until when the link can add a device. */
         expiresAt: integer("expires_at").notNull(),
-        /** Until when the device the link adds keeps access. Links issued before devices had their own term have none. */
-        accessExpiresAt: integer("access_expires_at").notNull().default(0),
-        /** A link adds one device: set when it does. */
-        redeemedAt: integer("redeemed_at"),
-        claimNonce: text("claim_nonce"),
+        /** Until when the device the link adds keeps access. A link adds one device: the credential it issued. */
+        accessExpiresAt: integer("access_expires_at").notNull(),
         createdAt: integer("created_at").notNull(),
         revokedAt: integer("revoked_at"),
         /** The credential that shared the link; links shared before this was recorded have none. */

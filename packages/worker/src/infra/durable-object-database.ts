@@ -40,9 +40,12 @@ import dropAgentPairingTicket from "../../migrations/project-do/0038_drop_agent_
 import singleUseDeviceLinks from "../../migrations/project-do/0039_single_use_device_links.sql?raw";
 import deviceLabels from "../../migrations/project-do/0040_device_labels.sql?raw";
 import linkCreator from "../../migrations/project-do/0041_link_creator.sql?raw";
+import browserDevices from "../../migrations/project-do/0042_browser_devices.sql?raw";
+import backfillBrowserDevices from "../../migrations/project-do/0043_backfill_browser_devices.sql?raw";
+import deviceOwnedBrowserFacts from "../../migrations/project-do/0044_device_owned_browser_facts.sql?raw";
 
 /** Generated Project Durable Object migrations, in order. The ledger records each by its tag. */
-const migrations = [
+export const migrations = [
     { tag: "0001_initial", sql: management },
     { tag: "0002_anonymous_identity", sql: anonymousIdentity },
     { tag: "0003_platform_project", sql: platformProject },
@@ -84,6 +87,9 @@ const migrations = [
     { tag: "0039_single_use_device_links", sql: singleUseDeviceLinks },
     { tag: "0040_device_labels", sql: deviceLabels },
     { tag: "0041_link_creator", sql: linkCreator },
+    { tag: "0042_browser_devices", sql: browserDevices },
+    { tag: "0043_backfill_browser_devices", sql: backfillBrowserDevices },
+    { tag: "0044_device_owned_browser_facts", sql: deviceOwnedBrowserFacts },
 ];
 
 /**

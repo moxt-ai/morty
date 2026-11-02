@@ -1,12 +1,27 @@
-import { and, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, exists, gt, inArray, isNotNull, isNull, ne, notExists, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import * as v from "valibot";
-import { anonymousCredential, continueLink, platformProjectMapping } from "../../../schema/project-do/index.ts";
+import {
+    anonymousCredential,
+    browserDevice,
+    continueLink,
+    platformProjectMapping,
+} from "../../../schema/project-do/index.ts";
 import type { Credential, SharedLinkTerms } from "../entity/authentication/credential.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
 import { type AnonymousIdentity, digest, randomSecret, requireIdentityDatabase } from "./identity-storage-common.ts";
 
 const userRow = v.pipe(v.object({ userId: v.string() }), v.readonly());
+
+/** A link no device has used yet: it issued no credential. */
+function unusedLink(database: ReturnType<typeof requireIdentityDatabase>) {
+    return notExists(
+        database
+            .select({ id: anonymousCredential.id })
+            .from(anonymousCredential)
+            .where(eq(anonymousCredential.remoteTransferId, continueLink.id)),
+    );
+}
 export interface IdentityTransfer extends SharedLinkTerms {
     readonly code: string;
 }
@@ -72,11 +87,10 @@ export class IdentityStorage {
                 userId: anonymousCredential.userId,
                 kind: anonymousCredential.kind,
                 transferId: anonymousCredential.remoteTransferId,
-                browserId: anonymousCredential.browserId,
+                deviceId: anonymousCredential.deviceId,
                 revokedAt: anonymousCredential.revokedAt,
                 // Durable Object rows are keyed by column name, so this column needs a name of its own.
-                linkRevokedAt: sql<number | null>`${continueLink.revokedAt}`.as("link_revoked_at"),
-                linkAccessExpiresAt: sql<number | null>`${continueLink.accessExpiresAt}`.as("link_access_expires_at"),
+                accessExpiresAt: sql<number | null>`${continueLink.accessExpiresAt}`.as("link_access_expires_at"),
             })
             .from(anonymousCredential)
             .innerJoin(platformProjectMapping, eq(platformProjectMapping.userId, anonymousCredential.userId))
@@ -93,40 +107,35 @@ export class IdentityStorage {
     };
 
     /**
-     * The browsers that hold the user's access through a link now, each described by its first joining: when it joined,
-     * how it described itself, and who shared the link it joined through. A browser that opened another link since
-     * keeps that first joining.
+     * The user's browser devices with each credential that is not revoked, so the caller can apply the access rule: a
+     * device described by its first joining, the term of each credential's link, and who shared the link it joined
+     * through.
      */
-    readonly linkedDevices = async (userId: string, now: number, signal: AbortSignal) => {
+    readonly linkedDevices = async (userId: string, signal: AbortSignal) => {
         signal.throwIfAborted();
-        const first = alias(anonymousCredential, "first_credential");
-        const firstLink = alias(continueLink, "first_link");
+        const currentLink = alias(continueLink, "current_link");
+        const joinedThrough = alias(continueLink, "joined_through_link");
         const sharer = alias(anonymousCredential, "sharer_credential");
-        const sharerFirst = alias(anonymousCredential, "sharer_first_credential");
-        const browser = sql<string>`coalesce(${anonymousCredential.browserId}, ${anonymousCredential.id})`;
+        const sharerDevice = alias(browserDevice, "sharer_device");
         const rows = await requireIdentityDatabase(this.#database)
             .select({
                 // Durable Object rows are keyed by column name, so each joined column needs a name of its own.
-                browserId: browser.as("device_browser_id"),
-                joinedAt: sql<number>`${first.createdAt}`.as("device_joined_at"),
-                label: sql<string | null>`${first.deviceLabel}`.as("device_label"),
+                deviceId: sql<string>`${browserDevice.id}`.as("device_id"),
+                joinedAt: browserDevice.joinedAt,
+                label: browserDevice.label,
+                revokedAt: anonymousCredential.revokedAt,
+                accessExpiresAt: sql<number>`${currentLink.accessExpiresAt}`.as("access_expires_at"),
                 sharerKind: sql<Credential["kind"] | null>`${sharer.kind}`.as("sharer_kind"),
-                sharerLabel: sql<string | null>`${sharerFirst.deviceLabel}`.as("sharer_label"),
+                sharerLabel: sql<string | null>`${sharerDevice.label}`.as("sharer_label"),
             })
-            .from(anonymousCredential)
-            .innerJoin(continueLink, eq(continueLink.id, anonymousCredential.remoteTransferId))
-            .innerJoin(first, eq(first.id, browser))
-            .leftJoin(firstLink, eq(firstLink.id, first.remoteTransferId))
-            .leftJoin(sharer, eq(sharer.id, firstLink.createdByCredentialId))
-            .leftJoin(sharerFirst, eq(sharerFirst.id, sql`coalesce(${sharer.browserId}, ${sharer.id})`))
-            .where(
-                and(
-                    eq(anonymousCredential.userId, userId),
-                    isNull(anonymousCredential.revokedAt),
-                    isNull(continueLink.revokedAt),
-                    gt(continueLink.accessExpiresAt, now),
-                ),
-            )
+            .from(browserDevice)
+            .innerJoin(anonymousCredential, eq(anonymousCredential.deviceId, browserDevice.id))
+            .innerJoin(currentLink, eq(currentLink.id, anonymousCredential.remoteTransferId))
+            .leftJoin(joinedThrough, eq(joinedThrough.id, browserDevice.joinedThroughTransferId))
+            .leftJoin(sharer, eq(sharer.id, joinedThrough.createdByCredentialId))
+            .leftJoin(sharerDevice, eq(sharerDevice.id, sharer.deviceId))
+            // A revoked credential never holds access again; reading only the others keeps the list short.
+            .where(and(eq(browserDevice.userId, userId), isNull(anonymousCredential.revokedAt)))
             .all();
         signal.throwIfAborted();
         return rows;
@@ -159,7 +168,7 @@ export class IdentityStorage {
             database
                 .update(continueLink)
                 .set({ revokedAt: now })
-                .where(and(eq(continueLink.userId, userId), isNull(continueLink.revokedAt))),
+                .where(and(eq(continueLink.userId, userId), isNull(continueLink.revokedAt), unusedLink(database))),
             database
                 .update(anonymousCredential)
                 .set({ revokedAt: now })
@@ -175,13 +184,12 @@ export class IdentityStorage {
     };
 
     /**
-     * Ends the access of every browser that joined through a link except the one kept, and voids the links no device
-     * has used yet. The machine's own and recovery credentials never joined through a link, so they stay, including
-     * unclassified legacy ones.
+     * Ends the access of every browser device except the one kept, and voids the links no device has used yet. The
+     * machine's own and recovery credentials belong to no device, so they stay, including unclassified legacy ones.
      */
     readonly endOtherBrowserAccess = async (
         userId: string,
-        keptCredentialId: string,
+        keptDeviceId: string | null,
         now: number,
         signal: AbortSignal,
     ): Promise<void> => {
@@ -191,21 +199,15 @@ export class IdentityStorage {
             database
                 .update(continueLink)
                 .set({ revokedAt: now })
-                .where(
-                    and(
-                        eq(continueLink.userId, userId),
-                        isNull(continueLink.redeemedAt),
-                        isNull(continueLink.revokedAt),
-                    ),
-                ),
+                .where(and(eq(continueLink.userId, userId), isNull(continueLink.revokedAt), unusedLink(database))),
             database
                 .update(anonymousCredential)
                 .set({ revokedAt: now })
                 .where(
                     and(
                         eq(anonymousCredential.userId, userId),
-                        isNotNull(anonymousCredential.remoteTransferId),
-                        ne(anonymousCredential.id, keptCredentialId),
+                        isNotNull(anonymousCredential.deviceId),
+                        keptDeviceId === null ? undefined : ne(anonymousCredential.deviceId, keptDeviceId),
                         isNull(anonymousCredential.revokedAt),
                     ),
                 ),
@@ -222,7 +224,8 @@ export class IdentityStorage {
     ): Promise<IdentityTransfer | null> => {
         signal.throwIfAborted();
         const code = createProjectCredential("mobius_transfer_v2", v.parse(v.string(), this.#projectId));
-        // Check the issuing credential in the write itself so revocation cannot race issuance.
+        // Check the issuing credential in the write itself so revocation cannot race issuance. Its term needs no check
+        // here: the terms are capped by it, so a link shared after it ended adds no device.
         const database = requireIdentityDatabase(this.#database);
         const result = await database
             .insert(continueLink)
@@ -234,8 +237,6 @@ export class IdentityStorage {
                         userId: anonymousCredential.userId,
                         expiresAt: sql<number>`${terms.expiresAt}`.as("expires_at"),
                         accessExpiresAt: sql<number>`${terms.accessExpiresAt}`.as("access_expires_at"),
-                        redeemedAt: sql<null>`null`.as("redeemed_at"),
-                        claimNonce: sql<null>`null`.as("claim_nonce"),
                         createdAt: sql<number>`${now}`.as("created_at"),
                         revokedAt: sql<null>`null`.as("revoked_at"),
                         createdByCredentialId: anonymousCredential.id,
@@ -275,8 +276,7 @@ export class IdentityStorage {
                         createdAt: sql<number>`${now}`.as("created_at"),
                         revokedAt: sql<null>`null`.as("revoked_at"),
                         remoteTransferId: sql<null>`null`.as("remote_transfer_id"),
-                        browserId: sql<null>`null`.as("browser_id"),
-                        deviceLabel: sql<null>`null`.as("device_label"),
+                        deviceId: sql<null>`null`.as("device_id"),
                     })
                     .from(anonymousCredential)
                     .where(
@@ -294,8 +294,8 @@ export class IdentityStorage {
 
     /**
      * Opens a link in a browser. `replaces` is the credential the browser already holds for this Project: a browser
-     * keeps one credential, so the new one replaces it at once and belongs to the same browser. A credential another
-     * redemption already replaced still names that browser, so concurrent or retried redemptions stay in it too.
+     * keeps one credential, so the new one replaces it at once and belongs to the same device. A browser holding none
+     * becomes a new device, described by this joining.
      */
     readonly redeemTransfer = async (
         code: string,
@@ -311,37 +311,38 @@ export class IdentityStorage {
         signal.throwIfAborted();
         const database = requireIdentityDatabase(this.#database);
         const codeHash = await digest(code);
-        const claimNonce = crypto.randomUUID();
         const credentialId = `cred_${crypto.randomUUID()}`;
+        const newDeviceId = `device_${crypto.randomUUID()}`;
         const token = `mobius_anon_v2_${randomSecret()}`;
-        const claimed = and(eq(continueLink.codeHash, codeHash), eq(continueLink.claimNonce, claimNonce));
-        // A link adds one device, so only its first redemption claims it.
-        const claim = database
-            .update(continueLink)
-            .set({ claimNonce, redeemedAt: now })
-            .where(
-                and(
-                    eq(continueLink.codeHash, codeHash),
-                    isNull(continueLink.revokedAt),
-                    isNull(continueLink.redeemedAt),
-                    gt(continueLink.expiresAt, now),
-                    gt(continueLink.accessExpiresAt, now),
-                ),
-            );
+        // A link adds one device: only while no credential was issued through it.
+        const open = and(
+            eq(continueLink.codeHash, codeHash),
+            isNull(continueLink.revokedAt),
+            gt(continueLink.expiresAt, now),
+            gt(continueLink.accessExpiresAt, now),
+            unusedLink(database),
+        );
         const replacedHash = replaces === null ? null : await digest(replaces);
-        // Only a browser credential of the link's own user names the browser.
+        // Only a browser credential of the link's own user names the device.
         const replaced = and(
             eq(anonymousCredential.tokenHash, replacedHash ?? ""),
-            isNotNull(anonymousCredential.remoteTransferId),
+            isNotNull(anonymousCredential.deviceId),
             inArray(
                 anonymousCredential.userId,
-                database.select({ userId: continueLink.userId }).from(continueLink).where(claimed),
+                database
+                    .select({ userId: continueLink.userId })
+                    .from(continueLink)
+                    .where(eq(continueLink.codeHash, codeHash)),
             ),
         );
-        const browser = database
-            .select({ browserId: sql<string>`coalesce(${anonymousCredential.browserId}, ${anonymousCredential.id})` })
+        const replacedDevice = database
+            .select({ deviceId: anonymousCredential.deviceId })
             .from(anonymousCredential)
             .where(replaced);
+        const issued = database
+            .select({ id: anonymousCredential.id })
+            .from(anonymousCredential)
+            .where(eq(anonymousCredential.id, credentialId));
         const issue = database.insert(anonymousCredential).select(
             database
                 .select({
@@ -352,25 +353,34 @@ export class IdentityStorage {
                     createdAt: sql<number>`${now}`.as("created_at"),
                     revokedAt: sql<null>`null`.as("revoked_at"),
                     remoteTransferId: continueLink.id,
-                    browserId: (replacedHash === null ? sql<null>`null` : sql<string | null>`(${browser})`).as(
-                        "browser_id",
-                    ),
-                    deviceLabel: sql<string | null>`${deviceLabel}`.as("device_label"),
+                    deviceId: (replacedHash === null
+                        ? sql<string>`${newDeviceId}`
+                        : sql<string>`coalesce((${replacedDevice}), ${newDeviceId})`
+                    ).as("device_id"),
                 })
                 .from(continueLink)
-                .where(claimed),
+                .where(open),
         );
-        const results =
-            replacedHash === null
-                ? await database.batch([claim, issue])
-                : await database.batch([
-                      claim,
-                      issue,
-                      database
-                          .update(anonymousCredential)
-                          .set({ revokedAt: now })
-                          .where(and(replaced, isNull(anonymousCredential.revokedAt))),
-                  ]);
+        const describe = database.insert(browserDevice).select(
+            database
+                .select({
+                    id: sql<string>`${newDeviceId}`.as("id"),
+                    userId: anonymousCredential.userId,
+                    joinedAt: sql<number>`${now}`.as("joined_at"),
+                    label: sql<string | null>`${deviceLabel}`.as("label"),
+                    joinedThroughTransferId: anonymousCredential.remoteTransferId,
+                })
+                .from(anonymousCredential)
+                .where(and(eq(anonymousCredential.id, credentialId), eq(anonymousCredential.deviceId, newDeviceId))),
+        );
+        const results = await database.batch([
+            issue,
+            describe,
+            database
+                .update(anonymousCredential)
+                .set({ revokedAt: now })
+                .where(and(replaced, isNull(anonymousCredential.revokedAt), exists(issued))),
+        ]);
         signal.throwIfAborted();
         if (results[0]?.meta.changes !== 1) {
             return null;
@@ -405,65 +415,26 @@ export class IdentityStorage {
         return revoked.meta.changes === 1;
     };
 
+    /** Ends a browser device's access: every credential it holds, so a retried or concurrent redemption ends too. */
     readonly revokeBrowserAccess = async (
         credential: Extract<Credential, { readonly kind: "browser" }>,
         now: number,
         signal: AbortSignal,
     ): Promise<boolean> => {
         signal.throwIfAborted();
-        const database = requireIdentityDatabase(this.#database);
-        // The browser joined through this credential's link and through the links of every credential it held.
-        const browserId = credential.browserId;
-        const held = await database
-            .select({ transferId: anonymousCredential.remoteTransferId })
-            .from(anonymousCredential)
+        const revoked = await requireIdentityDatabase(this.#database)
+            .update(anonymousCredential)
+            .set({ revokedAt: now })
             .where(
                 and(
                     eq(anonymousCredential.userId, credential.userId),
-                    or(eq(anonymousCredential.id, browserId), eq(anonymousCredential.browserId, browserId)),
+                    eq(anonymousCredential.deviceId, credential.deviceId),
+                    isNull(anonymousCredential.revokedAt),
                 ),
             )
-            .all();
+            .run();
         signal.throwIfAborted();
-        const transferIds = [
-            ...new Set([
-                credential.transferId,
-                ...held.flatMap((entry) => (entry.transferId === null ? [] : [entry.transferId])),
-            ]),
-        ];
-        const results = await database.batch([
-            database
-                .update(continueLink)
-                .set({ revokedAt: now })
-                .where(
-                    and(
-                        eq(continueLink.id, credential.transferId),
-                        eq(continueLink.userId, credential.userId),
-                        isNull(continueLink.revokedAt),
-                    ),
-                ),
-            database
-                .update(continueLink)
-                .set({ revokedAt: now })
-                .where(
-                    and(
-                        inArray(continueLink.id, transferIds),
-                        eq(continueLink.userId, credential.userId),
-                        isNull(continueLink.revokedAt),
-                    ),
-                ),
-            database
-                .update(anonymousCredential)
-                .set({ revokedAt: now })
-                .where(
-                    and(
-                        inArray(anonymousCredential.remoteTransferId, transferIds),
-                        isNull(anonymousCredential.revokedAt),
-                    ),
-                ),
-        ]);
-        signal.throwIfAborted();
-        return results[0]?.meta.changes === 1;
+        return revoked.meta.changes > 0;
     };
 
     readonly ownsProject = async (userId: string, projectId: string, signal: AbortSignal): Promise<boolean> => {

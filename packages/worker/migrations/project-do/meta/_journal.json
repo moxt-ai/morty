@@ -211,6 +211,27 @@
             "when": 1793584934953,
             "tag": "0041_link_creator",
             "breakpoints": true
+        },
+        {
+            "idx": 42,
+            "version": "6",
+            "when": 1793618333277,
+            "tag": "0042_browser_devices",
+            "breakpoints": true
+        },
+        {
+            "idx": 43,
+            "version": "6",
+            "when": 1793618340950,
+            "tag": "0043_backfill_browser_devices",
+            "breakpoints": true
+        },
+        {
+            "idx": 44,
+            "version": "6",
+            "when": 1793618363066,
+            "tag": "0044_device_owned_browser_facts",
+            "breakpoints": true
         }
     ]
 }

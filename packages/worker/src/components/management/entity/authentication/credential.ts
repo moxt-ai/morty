@@ -15,11 +15,24 @@ export type Credential = {
     | {
           readonly kind: "browser";
           readonly transferId: string;
-          readonly browserId: string;
+          /** The browser device this credential belongs to. */
+          readonly deviceId: string;
           /** When this access ends: the term the link it came through granted. */
           readonly accessExpiresAt: number;
       }
 );
+
+/**
+ * The one rule for whether a credential still grants access: it is not revoked, and a browser credential is within
+ * the term of the link that issued it. Access ends only through these, so ending a browser's access revokes its
+ * credentials, and revoking a link only stops it from adding a device.
+ */
+export function accessHolds(
+    credential: { readonly revokedAt: number | null; readonly accessExpiresAt: number | null },
+    now: number,
+): boolean {
+    return credential.revokedAt === null && (credential.accessExpiresAt === null || credential.accessExpiresAt > now);
+}
 
 const linkLifetime = 10 * 60 * 1000;
 const deviceAccessLifetime = 24 * 60 * 60 * 1000;

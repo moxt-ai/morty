@@ -2,6 +2,7 @@ import * as v from "valibot";
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import {
+    accessHolds,
     anonymousToken,
     type Credential,
     type CredentialOperation,
@@ -104,18 +105,10 @@ export class AuthenticationService {
         if (stored === null) {
             return { kind: "unknown" };
         }
-        // Browser access ends at the term its link granted, and with the link when it is revoked.
-        if (
-            stored.revokedAt !== null ||
-            stored.linkRevokedAt !== null ||
-            (stored.linkAccessExpiresAt !== null && stored.linkAccessExpiresAt <= Date.now())
-        ) {
-            return { kind: "revoked" };
-        }
         // Only a successfully authenticated token can supply the missing historical fact. Hashes alone cannot.
         const kind =
             stored.kind ??
-            (stored.transferId !== null
+            (stored.deviceId !== null
                 ? "browser"
                 : parsed.output.startsWith("mobius_recovery_v1.")
                   ? "recovery"
@@ -123,7 +116,7 @@ export class AuthenticationService {
         let credential: Credential;
         switch (kind) {
             case "browser":
-                if (stored.transferId === null || stored.linkAccessExpiresAt === null) {
+                if (stored.transferId === null || stored.deviceId === null || stored.accessExpiresAt === null) {
                     return { kind: "unknown" };
                 }
                 credential = {
@@ -131,19 +124,30 @@ export class AuthenticationService {
                     credentialId: stored.credentialId,
                     userId: stored.userId,
                     transferId: stored.transferId,
-                    browserId: stored.browserId ?? stored.credentialId,
-                    accessExpiresAt: stored.linkAccessExpiresAt,
+                    deviceId: stored.deviceId,
+                    accessExpiresAt: stored.accessExpiresAt,
                 };
                 break;
             case "local":
             case "recovery":
-                if (stored.transferId !== null || stored.browserId !== null) {
+                if (stored.transferId !== null || stored.deviceId !== null) {
                     return { kind: "unknown" };
                 }
                 credential = { kind, credentialId: stored.credentialId, userId: stored.userId };
                 break;
             default:
                 return { kind: "unknown" };
+        }
+        if (
+            !accessHolds(
+                {
+                    revokedAt: stored.revokedAt,
+                    accessExpiresAt: credential.kind === "browser" ? credential.accessExpiresAt : null,
+                },
+                Date.now(),
+            )
+        ) {
+            return { kind: "revoked" };
         }
         if (stored.kind === null) {
             await this.identities.identifyLegacyCredential(stored.credentialId, kind, signal);
@@ -268,12 +272,17 @@ export class AuthenticationService {
         const access = await this.authorize(token, "listDevices", signal);
         switch (access.kind) {
             case "authorized": {
-                const own = access.credential.kind === "browser" ? access.credential.browserId : null;
-                const devices = await this.identities.linkedDevices(access.credential.userId, Date.now(), signal);
+                const own = access.credential.kind === "browser" ? access.credential.deviceId : null;
+                const now = Date.now();
+                // A device holds access while any of its credentials does.
+                const holding = new Map(
+                    (await this.identities.linkedDevices(access.credential.userId, signal))
+                        .filter((device) => device.deviceId !== own && accessHolds(device, now))
+                        .map((device) => [device.deviceId, device]),
+                );
                 return {
                     kind: "listed",
-                    devices: devices
-                        .filter((device) => device.browserId !== own)
+                    devices: [...holding.values()]
                         .map((device) => ({
                             joinedAt: device.joinedAt,
                             label: device.label,
@@ -324,7 +333,7 @@ export class AuthenticationService {
         }
         await this.identities.endOtherBrowserAccess(
             access.credential.userId,
-            access.credential.credentialId,
+            access.credential.kind === "browser" ? access.credential.deviceId : null,
             Date.now(),
             signal,
         );
