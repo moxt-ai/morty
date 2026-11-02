@@ -1167,13 +1167,13 @@ export async function claudeCliPath(): Promise<string> {
     if (process.env.CLAUDE_CODE_EXECUTABLE) {
         return process.env.CLAUDE_CODE_EXECUTABLE;
     }
-    // The SDK's CLI is a native binary shipped as a platform-specific optional
-    // dependency of @anthropic-ai/claude-agent-sdk. Resolve via a require bound
-    // to the SDK so nested installs are found even when npm doesn't hoist.
+    // The SDK's CLI is a native binary shipped as a platform-specific package.
+    // Mobius bundles the SDK and installs those packages as its own optional
+    // dependencies, so resolve them from this module.
     // `import.meta.url` is used rather than `import.meta.resolve`: the latter is
     // not shimmed when this Agent is bundled to CJS, while `import.meta.url` is.
     const { createRequire } = await import("node:module");
-    const req = createRequire(createRequire(import.meta.url).resolve("@anthropic-ai/claude-agent-sdk"));
+    const req = createRequire(import.meta.url);
     const ext = process.platform === "win32" ? ".exe" : "";
     // On linux, both glibc and musl variants may be installed side-by-side
     // (e.g. bunx hydrates every optional dep), so picking one by trial is
@@ -1201,7 +1201,7 @@ export async function claudeCliPath(): Promise<string> {
     }
     throw new Error(
         `Claude native binary not found for ${process.platform}-${process.arch}. ` +
-            `Reinstall @anthropic-ai/claude-agent-sdk without --omit=optional, or set CLAUDE_CODE_EXECUTABLE.`,
+            `Reinstall @moxt-ai/mobius without --omit=optional, or set CLAUDE_CODE_EXECUTABLE.`,
     );
 }
 
