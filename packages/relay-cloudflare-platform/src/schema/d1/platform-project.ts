@@ -16,8 +16,6 @@ export const platformProject = sqliteTable(
         updatedAt: integer("updated_at").notNull(),
         deletedAt: integer("deleted_at"),
         locationHint: text("location_hint", { enum: PROJECT_LOCATION_HINTS }).notNull().default("apac"),
-        /** Session credentials issued no later than this time are revoked. */
-        sessionAccessRevokedThrough: integer("session_access_revoked_through").notNull().default(0),
     },
     (table) => [
         check("platform_projects_lifecycle_check", sql`${table.lifecycle} in ('active', 'deleted')`),

@@ -24,6 +24,7 @@ import {
     platformAppCredentialScope,
     platformDashboardAuditEvent,
     platformProject,
+    platformProjectSessionAccessRevocation,
     platformTenant,
 } from "../schema/d1/index.ts";
 import { waitForD1 } from "./d1-operation.ts";
@@ -208,7 +209,6 @@ export class PlatformControlPlaneStorage {
                         tenant_id: platformApp.tenantId,
                         project_id: platformProject.projectId,
                         lifecycle: platformProject.lifecycle,
-                        session_access_revoked_through: platformProject.sessionAccessRevokedThrough,
                     })
                     .from(platformProject)
                     .innerJoin(platformApp, eq(platformApp.appId, platformProject.appId))
@@ -220,27 +220,47 @@ export class PlatformControlPlaneStorage {
     };
 
     /**
-     * Revokes the served Project's Session credentials issued no later than `revokedThrough`. A revocation never moves
-     * back, so retries and overlapping revocations converge. Returns the Project's revocation time, or null when the
-     * Project is not served.
+     * Records that the Project revoked its Session credentials at `revokedAt`. The latest revocation is kept, so retries
+     * and overlapping revocations converge. Returns the Project's latest revocation time.
      */
-    readonly revokeSessionAccess = async (
+    readonly recordSessionAccessRevocation = async (
         projectId: string,
-        revokedThrough: number,
+        revokedAt: number,
         signal: AbortSignal,
-    ): Promise<number | null> => {
+    ): Promise<number> => {
         const rows = await waitForD1(
             () =>
                 platformDrizzle(this.#database)
-                    .update(platformProject)
-                    .set({
-                        sessionAccessRevokedThrough: sql`max(${platformProject.sessionAccessRevokedThrough}, ${revokedThrough})`,
+                    .insert(platformProjectSessionAccessRevocation)
+                    .values({ projectId, revokedAt })
+                    .onConflictDoUpdate({
+                        target: platformProjectSessionAccessRevocation.projectId,
+                        set: {
+                            revokedAt: sql`max(${platformProjectSessionAccessRevocation.revokedAt}, excluded.revoked_at)`,
+                        },
                     })
-                    .where(and(eq(platformProject.projectId, projectId), projectServed))
-                    .returning({ revokedThrough: platformProject.sessionAccessRevokedThrough }),
+                    .returning({ revokedAt: platformProjectSessionAccessRevocation.revokedAt }),
             signal,
         );
-        return rows[0]?.revokedThrough ?? null;
+        const row = rows[0];
+        if (row === undefined) {
+            throw new Error("The Session access revocation was not recorded");
+        }
+        return row.revokedAt;
+    };
+
+    /** The latest time the Project revoked its Session credentials, or null when it never did. */
+    readonly readSessionAccessRevocation = async (projectId: string, signal: AbortSignal): Promise<number | null> => {
+        const rows = await waitForD1(
+            () =>
+                platformDrizzle(this.#database)
+                    .select({ revokedAt: platformProjectSessionAccessRevocation.revokedAt })
+                    .from(platformProjectSessionAccessRevocation)
+                    .where(eq(platformProjectSessionAccessRevocation.projectId, projectId))
+                    .limit(1),
+            signal,
+        );
+        return rows[0]?.revokedAt ?? null;
     };
 
     readonly countActiveProjects = async (tenantId: string, signal: AbortSignal): Promise<number> =>
@@ -741,7 +761,6 @@ export class PlatformControlPlaneStorage {
                     updatedAt: sql<number>`${project.updated_at}`.as("updatedAt"),
                     deletedAt: sql<null>`NULL`.as("deletedAt"),
                     locationHint: sql<ProjectRow["location_hint"]>`${project.location_hint}`.as("locationHint"),
-                    sessionAccessRevokedThrough: sql<number>`0`.as("sessionAccessRevokedThrough"),
                 })
                 .from(platformApp)
                 .where(

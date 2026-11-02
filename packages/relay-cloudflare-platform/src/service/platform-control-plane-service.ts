@@ -37,6 +37,7 @@ import type {
     ProjectRow,
     TenantRow,
 } from "../entity/platform-records.ts";
+import { sessionAccessRevokedThrough } from "../entity/session-access-revocation.ts";
 import type { PlatformControlPlaneStorage } from "../storage/platform-control-plane-storage.ts";
 import {
     type AppCredentialAuthenticationService,
@@ -47,7 +48,6 @@ import { AppCredentialProjectAccess } from "./app-credential-project-access.ts";
 import type { OrganizationAdministrators } from "./organization-administrators.ts";
 
 const MAXIMUM_CREDENTIAL_OVERLAP_MILLISECONDS = 60 * 60 * 1_000;
-const SESSION_ACCESS_REVOCATION_CLOCK_MARGIN_MILLISECONDS = 5_000;
 
 type ProjectProvisioningActor =
     | {
@@ -1122,16 +1122,13 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
         signal: AbortSignal,
     ): Promise<number> => {
         await this.authorizePlatformCredential(projectId, credentialValue, ProjectPermission.SessionWrite, "", signal);
-        // Workers that issue and verify Session credentials keep their own clocks; the margin covers their skew.
-        const revokedThrough = await this.#storage.revokeSessionAccess(
-            validateIdentifier(projectId, "project_id"),
-            Date.now() + SESSION_ACCESS_REVOCATION_CLOCK_MARGIN_MILLISECONDS,
-            signal,
+        return sessionAccessRevokedThrough(
+            await this.#storage.recordSessionAccessRevocation(
+                validateIdentifier(projectId, "project_id"),
+                Date.now(),
+                signal,
+            ),
         );
-        if (revokedThrough === null) {
-            throw new ProjectAuthenticationError("project_access_denied", "The Project is unavailable");
-        }
-        return revokedThrough;
     };
 
     readonly resolveApplicationId: ProjectApplicationResolver["resolveApplicationId"] = async (projectId, signal) => {
