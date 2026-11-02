@@ -569,3 +569,50 @@ test("Given two tabs of one browser open new links at once, When the browser lat
         expect((await request("/session", credential)).status).toBe(401);
     }
 });
+
+test("Given two browsers that joined through links, When one lists the linked devices, Then it sees the other as it described itself but not itself", async () => {
+    const environment = fixture.environment();
+    const owner = await fixture.createAnonymousUser();
+    const request = (path: string, token: string, init: RequestInit = {}) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}${path}`, {
+                ...init,
+                headers: { authorization: `Bearer ${token}` },
+            }),
+            environment,
+        );
+    const join = async (device: string) => {
+        const shared = await request("/identity/transfers", owner.token, { method: "POST" });
+        const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
+        const redeemed = await worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code, device }),
+            }),
+            environment,
+        );
+        expect(redeemed.status).toBe(200);
+        return v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+    };
+    const listed = async (token: string) => {
+        const response = await request("/identity/devices", token);
+        expect(response.status).toBe(200);
+        return v
+            .parse(
+                v.object({
+                    devices: v.array(
+                        v.object({ joinedAt: v.pipe(v.string(), v.isoTimestamp()), label: v.nullable(v.string()) }),
+                    ),
+                }),
+                await response.json(),
+            )
+            .devices.map((device) => device.label);
+    };
+
+    const laptop = await join("Mac · Chrome");
+    await join("iPhone · Safari");
+
+    expect(await listed(laptop)).toEqual(["iPhone · Safari"]);
+    expect(await listed(owner.token)).toEqual(["Mac · Chrome", "iPhone · Safari"]);
+});

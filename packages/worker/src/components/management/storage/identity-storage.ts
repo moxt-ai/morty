@@ -1,4 +1,5 @@
 import { and, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import * as v from "valibot";
 import { anonymousCredential, continueLink, platformProjectMapping } from "../../../schema/project-do/index.ts";
 import type { Credential, SharedLinkTerms } from "../entity/authentication/credential.ts";
@@ -89,6 +90,37 @@ export class IdentityStorage {
             .get();
         signal.throwIfAborted();
         return result ?? null;
+    };
+
+    /**
+     * The browsers that hold the user's access through a link now, each with when it first joined and how it described
+     * itself then. A browser that opened another link since keeps its first joining.
+     */
+    readonly linkedDevices = async (userId: string, now: number, signal: AbortSignal) => {
+        signal.throwIfAborted();
+        const first = alias(anonymousCredential, "first_credential");
+        const browser = sql<string>`coalesce(${anonymousCredential.browserId}, ${anonymousCredential.id})`;
+        const rows = await requireIdentityDatabase(this.#database)
+            .select({
+                // Durable Object rows are keyed by column name, so each joined column needs a name of its own.
+                browserId: browser.as("device_browser_id"),
+                joinedAt: sql<number>`${first.createdAt}`.as("device_joined_at"),
+                label: sql<string | null>`${anonymousCredential.deviceLabel}`.as("device_label"),
+            })
+            .from(anonymousCredential)
+            .innerJoin(continueLink, eq(continueLink.id, anonymousCredential.remoteTransferId))
+            .innerJoin(first, eq(first.id, browser))
+            .where(
+                and(
+                    eq(anonymousCredential.userId, userId),
+                    isNull(anonymousCredential.revokedAt),
+                    isNull(continueLink.revokedAt),
+                    gt(continueLink.accessExpiresAt, now),
+                ),
+            )
+            .all();
+        signal.throwIfAborted();
+        return rows;
     };
 
     readonly identifyLegacyCredential = async (
@@ -195,6 +227,7 @@ export class IdentityStorage {
                         revokedAt: sql<null>`null`.as("revoked_at"),
                         remoteTransferId: sql<null>`null`.as("remote_transfer_id"),
                         browserId: sql<null>`null`.as("browser_id"),
+                        deviceLabel: sql<null>`null`.as("device_label"),
                     })
                     .from(anonymousCredential)
                     .where(
@@ -218,6 +251,7 @@ export class IdentityStorage {
     readonly redeemTransfer = async (
         code: string,
         replaces: string | null,
+        deviceLabel: string | null,
         now: number,
         signal: AbortSignal,
     ): Promise<AnonymousIdentity | null> => {
@@ -272,6 +306,7 @@ export class IdentityStorage {
                     browserId: (replacedHash === null ? sql<null>`null` : sql<string | null>`(${browser})`).as(
                         "browser_id",
                     ),
+                    deviceLabel: sql<string | null>`${deviceLabel}`.as("device_label"),
                 })
                 .from(continueLink)
                 .where(claimed),

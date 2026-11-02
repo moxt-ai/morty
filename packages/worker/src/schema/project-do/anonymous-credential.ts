@@ -16,6 +16,8 @@ export const anonymousCredential = sqliteTable(
          * another link replaces the one it holds and keeps its browser. Null names the credential itself.
          */
         browserId: text("browser_id"),
+        /** How the browser described itself when it joined, so its owner can recognize it; null when it did not. */
+        deviceLabel: text("device_label"),
     },
     (table) => [
         index("anonymous_credential_user_idx").on(table.userId, table.revokedAt),

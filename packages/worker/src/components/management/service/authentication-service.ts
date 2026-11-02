@@ -225,8 +225,42 @@ export class AuthenticationService {
     readonly redeemTransfer = async (
         code: string,
         replaces: string | null,
+        deviceLabel: string | null,
         signal: AbortSignal,
-    ): Promise<AnonymousIdentity | null> => await this.identities.redeemTransfer(code, replaces, Date.now(), signal);
+    ): Promise<AnonymousIdentity | null> =>
+        await this.identities.redeemTransfer(code, replaces, deviceLabel, Date.now(), signal);
+
+    /** The other devices that hold this access through a link now, so its holder can tell when one is new. */
+    readonly linkedDevices = async (
+        token: string | undefined,
+        signal: AbortSignal,
+    ): Promise<
+        | {
+              readonly kind: "listed";
+              readonly devices: readonly { readonly joinedAt: number; readonly label: string | null }[];
+          }
+        | { readonly kind: "unauthenticated" | "revoked" }
+    > => {
+        const access = await this.authorize(token, "listDevices", signal);
+        switch (access.kind) {
+            case "authorized": {
+                const own = access.credential.kind === "browser" ? access.credential.browserId : null;
+                const devices = await this.identities.linkedDevices(access.credential.userId, Date.now(), signal);
+                return {
+                    kind: "listed",
+                    devices: devices
+                        .filter((device) => device.browserId !== own)
+                        .map(({ joinedAt, label }) => ({ joinedAt, label }))
+                        .sort((left, right) => left.joinedAt - right.joinedAt),
+                };
+            }
+            case "revoked":
+                return { kind: "revoked" };
+            case "unauthenticated":
+            case "forbidden":
+                return { kind: "unauthenticated" };
+        }
+    };
 
     readonly revokeAllAccess = async (
         token: string | undefined,

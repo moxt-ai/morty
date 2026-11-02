@@ -16,6 +16,8 @@ const transferInput = v.pipe(
         code: v.string(),
         /** The credential this browser already holds for the link's Project, which the new one replaces. */
         replaces: v.optional(v.pipe(v.string(), v.maxLength(512))),
+        /** How the browser describes itself, such as "iPhone · Safari"; shown to the owner's other devices. */
+        device: v.optional(v.pipe(v.string(), v.trim(), v.regex(/^[^\p{C}]{1,80}$/u))),
     }),
     v.readonly(),
 );
@@ -128,6 +130,25 @@ export function createAuthenticationRoutes() {
                     throw localIdentityRequired();
             }
         })
+        .get("/identity/devices", async (context) => {
+            const result = await context.env.services.authentication.linkedDevices(
+                context.get("bearerToken"),
+                context.req.raw.signal,
+            );
+            if (result.kind !== "listed") {
+                throw credentialRejected(result.kind);
+            }
+            return json(
+                {
+                    devices: result.devices.map((device) => ({
+                        joinedAt: new Date(device.joinedAt).toISOString(),
+                        label: device.label,
+                    })),
+                },
+                200,
+                { "Cache-Control": "no-store" },
+            );
+        })
         .post(
             "/identity/transfers/redeem",
             bodyParser<ManagementHttpEnvironment, typeof transferInput>(transferInput),
@@ -136,6 +157,7 @@ export function createAuthenticationRoutes() {
                 const identity = await context.env.services.management.redeemTransfer(
                     input.code,
                     input.replaces ?? null,
+                    input.device ?? null,
                     context.req.raw.signal,
                 );
                 if (identity === null) {

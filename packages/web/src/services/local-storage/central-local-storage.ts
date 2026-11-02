@@ -251,3 +251,14 @@ export function readableComputer(value: unknown): RememberedComputer | null {
     const parsed = v.safeParse(rememberedComputerSchema, value);
     return parsed.success ? parsed.output : null;
 }
+
+// ---------------------------------------------------------------------------
+// Linked devices this browser has been told about
+// ---------------------------------------------------------------------------
+
+/** When the latest device this browser was told about joined the Project; later joins are new to it. */
+export const linkedDevicesSeenEntry = (projectId: string): LocalStorageEntry<string> =>
+    stringLocalStorageEntry({
+        key: scopedKey("morty:linked-devices-seen:v1:", projectId),
+        schema: v.pipe(v.string(), v.isoTimestamp()),
+    });

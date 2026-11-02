@@ -2,6 +2,7 @@ import { type Identifier, isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import * as v from "valibot";
 import { anonymousCredentialsEntry } from "../local-storage/central-local-storage.ts";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
+import { describeBrowser } from "./device-label.ts";
 import {
     type IdentityScope,
     leaveComputerAddress,
@@ -54,6 +55,12 @@ const transferSchema = v.pipe(
     v.object({ expiresAt: v.pipe(v.string(), v.isoTimestamp()), url: v.pipe(v.string(), v.url()) }),
     v.readonly(),
 );
+const linkedDeviceSchema = v.pipe(
+    v.object({ joinedAt: v.pipe(v.string(), v.isoTimestamp()), label: v.nullable(v.string()) }),
+    v.readonly(),
+);
+export type LinkedDevice = v.InferOutput<typeof linkedDeviceSchema>;
+const linkedDevicesSchema = v.object({ devices: v.array(linkedDeviceSchema) });
 const credentialRevocationPathSchema = v.picklist([
     "/identity/v1/local-credential",
     "/identity/v1/browser-access",
@@ -194,7 +201,11 @@ export class AnonymousIdentityApi {
                 {
                     method: "POST",
                     headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ code, ...(replaces === null ? {} : { replaces }) }),
+                    body: JSON.stringify({
+                        code,
+                        ...(replaces === null ? {} : { replaces }),
+                        device: describeBrowser(navigator.userAgent),
+                    }),
                 },
                 signal,
             ),
@@ -202,6 +213,17 @@ export class AnonymousIdentityApi {
         this.#saveIdentity(identity);
         return identity;
     };
+
+    /** The other devices that hold this access through a link now. */
+    readonly linkedDevices = async (token: string, signal: AbortSignal): Promise<readonly LinkedDevice[]> =>
+        v.parse(
+            linkedDevicesSchema,
+            await this.#request(
+                "/identity/devices",
+                { method: "GET", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
+                signal,
+            ),
+        ).devices;
 
     readonly endRemoteAccess = async (token: string, signal: AbortSignal): Promise<void> => {
         const headers = { authorization: `Bearer ${v.parse(tokenSchema, token)}` };

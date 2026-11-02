@@ -50,6 +50,7 @@ export function sharedLinkTerms(sharer: Credential, now: number): SharedLinkTerm
  */
 const permittedKinds = {
     shareAccess: ["local", "browser", "recovery"],
+    listDevices: ["local", "browser", "recovery"],
     issueRecoveryCredential: ["local"],
     pairRuntime: ["local"],
     configureBot: ["local"],

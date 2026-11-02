@@ -1,4 +1,9 @@
-import { AnonymousIdentityApi, type IdentityTransfer } from "../../services/identity/anonymous-identity-api.ts";
+import {
+    AnonymousIdentityApi,
+    IdentityApiError,
+    type IdentityTransfer,
+    type LinkedDevice,
+} from "../../services/identity/anonymous-identity-api.ts";
 import { createRemoteAccessOperations } from "../chat/remote-access-store.ts";
 
 export interface IdentityAccess {
@@ -6,6 +11,7 @@ export interface IdentityAccess {
     readonly currentAccessToken: (signal: AbortSignal) => Promise<string>;
     /** Ends the access this browser holds when it runs. */
     readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
+    readonly linkedDevices: (signal: AbortSignal) => Promise<readonly LinkedDevice[]>;
 }
 
 class IdentitySharingUnavailable extends Error {
@@ -28,8 +34,20 @@ export function createIdentityAccess(options: {
     readonly credentialRejected: () => Promise<void>;
 }): IdentityAccess {
     const api = new AnonymousIdentityApi({ fetchRequest: options.fetchRequest, origin: options.origin });
+    const remoteAccess = createRemoteAccessOperations({ ...options, onEnded: options.onAccessEnded });
     return {
-        ...createRemoteAccessOperations({ ...options, onEnded: options.onAccessEnded }),
+        ...remoteAccess,
+        linkedDevices: async (signal) => {
+            try {
+                return await api.linkedDevices(await remoteAccess.currentAccessToken(signal), signal);
+            } catch (cause) {
+                signal.throwIfAborted();
+                if (cause instanceof IdentityApiError && cause.status === 401) {
+                    await options.credentialRejected();
+                }
+                throw cause;
+            }
+        },
         createTransfer: async (signal) => {
             const localIdentity = await options.currentAccess(signal);
             signal.throwIfAborted();

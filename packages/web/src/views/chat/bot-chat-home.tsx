@@ -50,6 +50,7 @@ import { OnlineComputerAlternative } from "./computer-switcher.tsx";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { MobiusSessionPane, MobiusSessionPaneLoading, SessionMessageListSkeleton } from "./mobius-session-pane.tsx";
+import { NewDeviceNotice } from "./new-device-notice.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 
 /** The centered pre-session failure block: card, grouped action buttons and the report entry. */
@@ -263,6 +264,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                 onOpen={(session) => openManaged(session.id)}
                 onNewConversation={newConversation}
             />
+            {workspace.newDevices !== null && <NewDeviceNotice store={workspace.newDevices} />}
             {workspace.accessNotice !== null && (
                 <div
                     role="status"

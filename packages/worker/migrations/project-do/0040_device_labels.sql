@@ -1,0 +1,1 @@
+ALTER TABLE `anonymous_credential` ADD `device_label` text;
