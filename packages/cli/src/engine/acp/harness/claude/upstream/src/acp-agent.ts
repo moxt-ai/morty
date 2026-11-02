@@ -1163,55 +1163,6 @@ function recoveredToolInput(prefix: string): Record<string, unknown> | undefined
     }
 }
 
-export async function claudeCliPath(): Promise<string> {
-    if (process.env.CLAUDE_CODE_EXECUTABLE) {
-        return process.env.CLAUDE_CODE_EXECUTABLE;
-    }
-    // The SDK's CLI is a native binary shipped as a platform-specific package.
-    // Mobius bundles the SDK and installs those packages as its own optional
-    // dependencies, so resolve them from this module.
-    // `import.meta.url` is used rather than `import.meta.resolve`: the latter is
-    // not shimmed when this Agent is bundled to CJS, while `import.meta.url` is.
-    const { createRequire } = await import("node:module");
-    const req = createRequire(import.meta.url);
-    const ext = process.platform === "win32" ? ".exe" : "";
-    // On linux, both glibc and musl variants may be installed side-by-side
-    // (e.g. bunx hydrates every optional dep), so picking one by trial is
-    // unreliable: the wrong binary segfaults at runtime instead of failing to
-    // spawn. Detect the runtime libc and prefer the matching variant, falling
-    // back to the other only if the preferred one isn't installed.
-    const candidates =
-        process.platform === "linux"
-            ? isMuslLibc()
-                ? [
-                      `@anthropic-ai/claude-agent-sdk-linux-${process.arch}-musl/claude${ext}`,
-                      `@anthropic-ai/claude-agent-sdk-linux-${process.arch}/claude${ext}`,
-                  ]
-                : [
-                      `@anthropic-ai/claude-agent-sdk-linux-${process.arch}/claude${ext}`,
-                      `@anthropic-ai/claude-agent-sdk-linux-${process.arch}-musl/claude${ext}`,
-                  ]
-            : [`@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/claude${ext}`];
-    for (const candidate of candidates) {
-        try {
-            return req.resolve(candidate);
-        } catch {
-            // try next candidate
-        }
-    }
-    throw new Error(
-        `Claude native binary not found for ${process.platform}-${process.arch}. ` +
-            `Reinstall @moxt-ai/mobius without --omit=optional, or set CLAUDE_CODE_EXECUTABLE.`,
-    );
-}
-
-function isMuslLibc(): boolean {
-    // process.report.getReport().header.glibcVersionRuntime is populated when
-    // Node is dynamically linked against glibc, and absent on musl.
-    const report = process.report?.getReport() as { header?: { glibcVersionRuntime?: string } } | undefined;
-    return !report?.header?.glibcVersionRuntime;
-}
-
 function shouldHideClaudeAuth(): boolean {
     return process.argv.includes("--hide-claude-auth");
 }
@@ -2069,6 +2020,18 @@ export class ClaudeAcpAgent {
         };
     }
 
+    /**
+     * The Claude Code executable this Agent runs: the installation its host discovered and checked, so sessions and
+     * logout use the same Claude the user installed rather than a copy shipped with the SDK.
+     */
+    private claudeExecutable(): string {
+        const executable = this.environment.CLAUDE_CODE_EXECUTABLE;
+        if (executable === undefined || executable === "") {
+            throw RequestError.internalError(undefined, "No Claude Code executable is configured for this Agent.");
+        }
+        return executable;
+    }
+
     async logout(_params: LogoutRequest): Promise<void> {
         // Clear in-memory gateway credentials supplied via `authenticate` and any
         // provider routing set via `providers/set`. Neither touches the on-disk
@@ -2086,9 +2049,9 @@ export class ClaudeAcpAgent {
         // For the Claude/Console login methods the credentials live in the native
         // CLI's store (keychain or config dir), which only the binary can clear.
         // `claude auth logout` is non-interactive and idempotent.
-        const cliPath = await claudeCliPath();
+        const executable = this.claudeExecutable();
         try {
-            await execFileAsync(cliPath, ["auth", "logout"]);
+            await execFileAsync(executable, ["auth", "logout"]);
         } catch (error) {
             const stderr =
                 typeof error === "object" && error && "stderr" in error
@@ -6525,7 +6488,7 @@ export class ClaudeAcpAgent {
                       supportedDialogKinds: [REFUSAL_FALLBACK_DIALOG_KIND],
                   }
                 : {}),
-            pathToClaudeCodeExecutable: this.environment.CLAUDE_CODE_EXECUTABLE ?? (await claudeCliPath()),
+            pathToClaudeCodeExecutable: this.claudeExecutable(),
             ...(this.spawnClaudeCodeProcess === undefined
                 ? {}
                 : { spawnClaudeCodeProcess: this.spawnClaudeCodeProcess }),

@@ -31,39 +31,30 @@ const result = await build({
 });
 
 // The release installs only what it cannot bundle: exact versions of packages without dependencies of their own, so
-// installing a release can never resolve a newer package than the one it was built and tested with. The Claude binary
-// packages are the bundled SDK's own optional dependencies, declared here because the SDK's peers are not needed.
+// installing a release can never resolve a newer package than the one it was built and tested with. Claude Code is not
+// among them: the Claude Agent runs the installation the user has, which the daemon discovers and checks.
 const manifest = async (path: string): Promise<unknown> => JSON.parse(await readFile(resolve(directory, path), "utf8"));
 const dependencyVersions = z.record(z.string(), z.string());
-const release = z
-    .object({ dependencies: dependencyVersions, optionalDependencies: dependencyVersions })
-    .parse(await manifest("package.json"));
-for (const [name, version] of Object.entries({ ...release.dependencies, ...release.optionalDependencies })) {
+const declaredDependencies = z.object({
+    dependencies: dependencyVersions.optional(),
+    peerDependencies: dependencyVersions.optional(),
+    optionalDependencies: dependencyVersions.optional(),
+});
+const release = declaredDependencies.parse(await manifest("package.json"));
+if (Object.keys({ ...release.peerDependencies, ...release.optionalDependencies }).length > 0) {
+    throw new Error("A release declares no peer or optional dependencies.");
+}
+for (const [name, version] of Object.entries(release.dependencies ?? {})) {
     if (!/^\d+\.\d+\.\d+$/.test(version)) {
         throw new Error(`Runtime dependency is not an exact version: ${name}@${version}`);
     }
-}
-for (const name of Object.keys(release.dependencies)) {
-    const installed = z
-        .object({
-            dependencies: dependencyVersions.optional(),
-            peerDependencies: dependencyVersions.optional(),
-            optionalDependencies: dependencyVersions.optional(),
-        })
-        .parse(await manifest(`node_modules/${name}/package.json`));
+    const installed = declaredDependencies.parse(await manifest(`node_modules/${name}/package.json`));
     if (
         Object.keys({ ...installed.dependencies, ...installed.peerDependencies, ...installed.optionalDependencies })
             .length > 0
     ) {
         throw new Error(`Runtime dependency has dependencies of its own: ${name}`);
     }
-}
-const claudeSdk = z
-    .object({ optionalDependencies: dependencyVersions })
-    .parse(await manifest("node_modules/@anthropic-ai/claude-agent-sdk/package.json"));
-const declaredBinaries = JSON.stringify(Object.entries(release.optionalDependencies).sort());
-if (declaredBinaries !== JSON.stringify(Object.entries(claudeSdk.optionalDependencies).sort())) {
-    throw new Error("optionalDependencies must equal the Claude Agent SDK's platform binary packages.");
 }
 
 const inputs = Object.keys(result.metafile.inputs).map((input) => input.replaceAll("\\", "/"));
