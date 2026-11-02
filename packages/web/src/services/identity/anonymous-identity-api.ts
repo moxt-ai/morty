@@ -149,8 +149,13 @@ export class AnonymousIdentityApi {
                 return checked;
             }
             // A tab replacing this access holds the lock until it saves the replacement, so forgetting waits for it
-            // and checks the replacement instead.
-            if (await withStoredAccessLock(signal, async () => forgetComputerAccess(scope, token))) {
+            // and checks the replacement instead. Access another check already forgot keeps this check's verdict.
+            if (
+                await withStoredAccessLock(
+                    signal,
+                    async () => forgetComputerAccess(scope, token) || storedToken(scope.userId) === null,
+                )
+            ) {
                 return checked;
             }
         }
@@ -180,11 +185,15 @@ export class AnonymousIdentityApi {
             signal.throwIfAborted();
         } catch (cause) {
             signal.throwIfAborted();
-            if (
-                cause instanceof CloudApiError &&
-                (cause.code === "BOT_NOT_FOUND" || cause.status === 401 || cause.status === 403)
-            ) {
+            if (cause instanceof CloudApiError && cause.code === "BOT_NOT_FOUND") {
                 return { kind: "gone" };
+            }
+            if (cause instanceof CloudApiError && (cause.status === 401 || cause.status === 403)) {
+                // The session answered before the computer refused this access: access ended in between is reported
+                // as ended, not as a link that does not open the computer.
+                const session = await this.#anonymousSession(identity, signal);
+                signal.throwIfAborted();
+                return session === "revoked" ? { kind: "revoked" } : { kind: "gone" };
             }
             throw cause;
         }

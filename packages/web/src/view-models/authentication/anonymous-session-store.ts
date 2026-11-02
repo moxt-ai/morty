@@ -102,6 +102,11 @@ export const createAnonymousSessionStore = (
             if (state.kind !== "active") {
                 return null;
             }
+            // Access this browser no longer holds was forgotten by the check that found out it ended, which explains
+            // it, or by another tab, which reloads this page; not finding it here is no verdict of its own.
+            if (storedToken(state.identity.userId) === null) {
+                return null;
+            }
             const check = await api.checkScope(state.identity, signal);
             signal.throwIfAborted();
             if (check.kind === "open") {
