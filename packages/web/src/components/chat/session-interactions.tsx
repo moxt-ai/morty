@@ -1,12 +1,13 @@
 import type { SessionElicitationField } from "@moxt-ai/mobius-sdk";
 import type { ElicitationResponseRequest } from "@moxt-ai/mobius-sdk/channel";
 import { ArrowUpRight, ChevronDown, HelpCircle, ShieldCheck } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Button } from "@/components/ui/cloud-button";
 import { MortyAlert } from "@/components/ui/morty-alert";
 import { Select as OptionSelect } from "@/components/ui/option-select";
 import { textLinkClassName } from "@/components/ui/text-link";
+import { useWrappedButtonRadius } from "@/components/utils/use-wrapped-button-radius";
 import { cn } from "@/lib/utils";
 import { encodeElicitationForm, readMultiselectDefaults } from "@/services/chat/elicitation-form";
 import { permissionPresentation } from "@/view-models/chat/session-interaction-store";
@@ -330,6 +331,8 @@ function PermissionCard({
     const command = executeCommand(permission);
     const [detailsOpen, setDetailsOpen] = useState(false);
     const detailsContentId = useId();
+    const actionRow = useRef<HTMLDivElement>(null);
+    useWrappedButtonRadius(actionRow);
     const decidedOptionId = permission.state.kind === "pending" ? undefined : permission.state.optionId;
     if (decidedOptionId !== undefined) {
         const chosen = permission.options.find((option) => option.optionId === decidedOptionId);
@@ -426,10 +429,13 @@ function PermissionCard({
                     )}
                     {/* Pinned to the bottom of the bounded interaction scroller, above its edge fade, so long
                         details scroll behind the decisions instead of pushing them out of view on short screens. */}
-                    <div className="sticky bottom-0 z-20 flex flex-wrap items-center gap-2 bg-surface-elevated pt-3">
+                    <div
+                        className="sticky bottom-0 z-20 flex flex-wrap items-center gap-2 bg-surface-elevated pt-3"
+                        ref={actionRow}
+                    >
                         {permission.options.map((option) => (
                             <Button
-                                className="h-auto min-h-11 max-w-full whitespace-normal break-all py-2 md:min-h-9"
+                                className="max-w-full whitespace-normal break-all py-[7.5px]!"
                                 disabled={busy}
                                 key={option.optionId}
                                 onClick={() => {
@@ -447,7 +453,7 @@ function PermissionCard({
                             </Button>
                         ))}
                         <Button
-                            className="h-auto min-h-11 max-w-full whitespace-normal break-all py-2 md:min-h-9"
+                            className="max-w-full whitespace-normal break-all py-[7.5px]!"
                             disabled={busy}
                             onClick={stop}
                             size="sm"

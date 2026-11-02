@@ -1,8 +1,9 @@
 import { getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
+import { TestClock } from "./infra/test-clock.ts";
 
 async function requestInput(prompt = "request user input") {
     const app = await createTestApp({
@@ -164,6 +165,35 @@ for (const [label, optionId] of [
         await app.waitForView(() => expect(document.body.textContent).toContain(`Selected decision: ${optionId}`));
     });
 }
+
+test("Given a pending permission card, When the Runtime drops and the retry notice appears, Then the notice joins the flow above the composer instead of covering the card's actions", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock("2026-10-30T08:00:00Z");
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: { id: "interaction-test", label: "Interaction Agent" },
+        clock,
+    });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "request user input");
+    const permission = await app.waitForView(() =>
+        getByRole(document.body, "alertdialog", { name: "Agent permission request" }),
+    );
+    expect(getByRole(permission, "button", { name: "Allow" })).toBeDefined();
+    if (app.daemon === null) {
+        throw new Error("Expected the connected Runtime");
+    }
+    await app.daemon.disconnect();
+    await showReconnectNotice(app, clock);
+    // A floating notice would sit exactly on the permission card and hide its
+    // Allow/Deny row; an in-flow notice stacks above the composer instead.
+    const notices = app.elementsByTestId(dataTestId.sessionReconnectNotice);
+    expect(notices).toHaveLength(1);
+    const slot = notices[0]?.closest("[data-notice-placement]");
+    expect(slot?.getAttribute("data-notice-placement")).toBe("in-flow");
+    expect(queryByRole(document.body, "alertdialog", { name: "Agent permission request" })).not.toBeNull();
+    expect(getByRole(permission, "button", { name: "Allow" })).toBeDefined();
+});
 
 test("Given a background permission after the foreground turn ends, When the user reloads and approves it, Then the request is recovered and stays resolved after another reload", {
     timeout: 30_000,

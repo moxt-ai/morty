@@ -19,6 +19,7 @@ import {
     chatSessionPaneFillClassName,
 } from "../../components/chat/chat-session-layout.ts";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
+import { ComposerNoticeSlot, composerErrorMessage } from "../../components/chat/composer-notice-slot.tsx";
 import { ConnectionNotice } from "../../components/chat/connection-notice.tsx";
 import { ReadonlyWorkingDirectory, WorkingDirectorySkeleton } from "../../components/chat/cwd-selector.tsx";
 import { HarnessMark } from "../../components/chat/harness-mark.tsx";
@@ -768,10 +769,44 @@ function MobiusSessionPaneBody({
         interactionModel,
         executionContext.available,
     );
+    // The composer notice floats over the log only while nothing stands between
+    // the log and the composer. With a queue or interaction card present it joins
+    // the flow instead, so it can never cover their actions or be lifted past the
+    // pane's clipped top edge. Derived from the same state that renders them.
+    const noticePlacement =
+        presentation.queuedMessages.length +
+            presentation.pendingQueueMessages.length +
+            interactions.permissions.length +
+            interactions.elicitations.length >
+        0
+            ? ("in-flow" as const)
+            : ("overlay" as const);
     const authenticationRecovery =
         presentation.authenticationFailure === null
             ? null
             : authenticationGuidance(presentation.authenticationFailure.code, pane.agentRef, executionContext.machine);
+    // The notice slot's three inputs, shared by the pane-level in-flow slot and the
+    // composer's overlay slot so both placements render the very same card.
+    const slotConnectionNotice =
+        executionContext.feedback.kind === "hidden"
+            ? undefined
+            : (inline: boolean) => (
+                  <ConnectionNotice
+                      feedback={executionContext.feedback}
+                      inline={inline}
+                      onRetryNow={pane.store.getState().retryNow}
+                      onReopen={() => run(pane.store.getState().reopen)}
+                  />
+              );
+    const slotErrorMessage = composerErrorMessage(presentation.composerError, attachmentModel.state);
+    const slotStatusMessage =
+        executionContext.feedback.kind === "hidden" && model.filesRestoreNotice
+            ? "Files attached to this message could not be restored here. Add them again if it had any."
+            : undefined;
+    // Mirrors the slot's own visibility rule: when the notice heads the stack, the
+    // interaction card drops its top margin so the slot's 8px is the whole gap.
+    const stackNoticeVisible =
+        slotErrorMessage.length > 0 || slotConnectionNotice !== undefined || slotStatusMessage !== undefined;
     const renderItems = sessionRenderItems(model.messages);
     const renderGroups = sessionRenderGroups(renderItems);
     const executionStates = sessionExecutionStates(model.messages, presentation.activity.kind === "working");
@@ -1138,6 +1173,36 @@ function MobiusSessionPaneBody({
                                 </div>
                             )}
                         </FollowLatestScrollArea>
+                        {noticePlacement === "in-flow" && (
+                            <ComposerNoticeSlot
+                                connectionNotice={slotConnectionNotice}
+                                errorMessage={slotErrorMessage}
+                                placement="in-flow"
+                                statusMessage={slotStatusMessage}
+                            />
+                        )}
+                        {(interactions.elicitations.length > 0 || interactions.permissions.length > 0) && (
+                            <ScrollEdgeFade
+                                fadeFromClassName="from-card"
+                                fadeToClassName="to-card/0"
+                                // The card yields the height the header and composer need: it shrinks inside
+                                // the clipped pane and keeps scrolling its own content instead of pushing
+                                // the composer below the pane's bottom edge. The floor keeps its first row
+                                // reachable when an in-flow notice stacks above the composer as well.
+                                frameClassName={`${chatSessionInteractionColumnClassName} ${stackNoticeVisible ? "mb-2" : "mt-4 mb-2 sm:mt-5"} flex min-h-24 shrink flex-col`}
+                                className="max-h-[min(50vh,360px)] min-h-0 flex-1 overflow-y-auto [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]"
+                            >
+                                <SessionInteractionCards
+                                    elicitations={interactions.elicitations}
+                                    permissions={interactions.permissions}
+                                    busyInteractionIds={interactions.busyInteractionIds}
+                                    error={interactions.error}
+                                    onElicitationResponse={respondToElicitation}
+                                    onPermissionResponse={respondToPermission}
+                                    onStop={() => run(pane.store.getState().stop)}
+                                />
+                            </ScrollEdgeFade>
+                        )}
                         <ChatMessageQueue
                             messages={presentation.queuedMessages}
                             pendingMessages={presentation.pendingQueueMessages}
@@ -1154,27 +1219,6 @@ function MobiusSessionPaneBody({
                                 )
                             }
                         />
-                        {(interactions.elicitations.length > 0 || interactions.permissions.length > 0) && (
-                            <ScrollEdgeFade
-                                fadeFromClassName="from-card"
-                                fadeToClassName="to-card/0"
-                                // The card yields the height the header and composer need: it shrinks inside
-                                // the clipped pane and keeps scrolling its own content instead of pushing
-                                // the composer below the pane's bottom edge.
-                                frameClassName={`${chatSessionInteractionColumnClassName} mt-4 mb-2 flex min-h-0 shrink flex-col sm:mt-5`}
-                                className="max-h-[min(50vh,360px)] min-h-0 flex-1 overflow-y-auto [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]"
-                            >
-                                <SessionInteractionCards
-                                    elicitations={interactions.elicitations}
-                                    permissions={interactions.permissions}
-                                    busyInteractionIds={interactions.busyInteractionIds}
-                                    error={interactions.error}
-                                    onElicitationResponse={respondToElicitation}
-                                    onPermissionResponse={respondToPermission}
-                                    onStop={() => run(pane.store.getState().stop)}
-                                />
-                            </ScrollEdgeFade>
-                        )}
                         <BotChatComposer
                             attachmentModel={attachmentModel}
                             focusScope={workspace}
@@ -1182,24 +1226,10 @@ function MobiusSessionPaneBody({
                             attachmentSignal={pane.attachmentSignal}
                             disabled={presentation.composerInputDisabled}
                             draft={model.draft}
-                            error={presentation.composerError}
-                            connectionNotice={
-                                executionContext.feedback.kind === "hidden"
-                                    ? undefined
-                                    : (inline) => (
-                                          <ConnectionNotice
-                                              feedback={executionContext.feedback}
-                                              inline={inline}
-                                              onRetryNow={pane.store.getState().retryNow}
-                                              onReopen={() => run(pane.store.getState().reopen)}
-                                          />
-                                      )
-                            }
-                            statusMessage={
-                                executionContext.feedback.kind === "hidden" && model.filesRestoreNotice
-                                    ? "Files attached to this message could not be restored here. Add them again if it had any."
-                                    : undefined
-                            }
+                            error={slotErrorMessage}
+                            connectionNotice={slotConnectionNotice}
+                            statusMessage={slotStatusMessage}
+                            noticePlacement={noticePlacement}
                             onDraftChange={pane.store.getState().setDraft}
                             onStop={() => run(pane.store.getState().stop)}
                             onSubmit={() =>

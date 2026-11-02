@@ -13,16 +13,15 @@ import type { ComposerAttachmentStore } from "../../view-models/chat/composer-at
 import { createFileSource } from "../images/file-source.ts";
 import { ImageGallery, PreviewImage } from "../images/image-gallery.tsx";
 import { Button } from "../ui/cloud-button.tsx";
-import { MortyAlert } from "../ui/morty-alert.tsx";
 import { ScrollArea } from "../ui/scroll-area.tsx";
 import { Textarea } from "../ui/textarea.tsx";
 import { useAutoGrowingTextarea } from "../utils/use-auto-growing-textarea.ts";
 import { useComposerFocus } from "../utils/use-composer-focus.ts";
-import { useComposerNoticeLayout } from "../utils/use-composer-notice-layout.ts";
 import { useScrollClippedEdges } from "../utils/use-scroll-clipped-edges.ts";
 import { useSoftwareKeyboardMarker } from "../utils/use-software-keyboard-marker.ts";
 import { chatSessionComposerClassName } from "./chat-session-layout.ts";
 import type { ComposerAttachment } from "./composer-attachment.ts";
+import { type ComposerNoticePlacement, ComposerNoticeSlot, composerErrorMessage } from "./composer-notice-slot.tsx";
 
 const composerMaxHeightPx = 256;
 /** Outer vertical padding and footer height. */
@@ -101,6 +100,7 @@ export function BotChatComposer({
     error,
     connectionNotice,
     statusMessage,
+    noticePlacement = "overlay",
     onDraftChange,
     onStop,
     onSubmit,
@@ -130,6 +130,13 @@ export function BotChatComposer({
     readonly connectionNotice?: ((inline: boolean) => ReactNode) | undefined;
     /** Plain status text with no notice of its own; the composer gives it a neutral alert surface. */
     readonly statusMessage?: string | undefined;
+    /**
+     * Where the notice slot sits. "overlay" renders it inside this form, floating
+     * over the message log with the frosted tuck; "in-flow" lets the pane render it
+     * at the top of the queue/interaction stack instead, so the queue card keeps
+     * sitting against the input box and the notice covers nothing.
+     */
+    readonly noticePlacement?: ComposerNoticePlacement;
     readonly onDraftChange: (draft: string) => void;
     readonly onStop: () => void;
     readonly onSubmit: () => void;
@@ -142,7 +149,6 @@ export function BotChatComposer({
     readonly stopDisabled?: boolean;
 }) {
     const fileInput = useRef<HTMLInputElement>(null);
-    const notice = useRef<HTMLDivElement>(null);
     const textarea = useRef<HTMLTextAreaElement>(null);
     const scrollViewport = useRef<HTMLDivElement>(null);
     const attachTextarea = useComposerFocus(textarea, focusScope);
@@ -197,40 +203,18 @@ export function BotChatComposer({
         attachmentModel.addFiles(images, attachmentSignal);
     };
     const submitAction = outputState === "idle" || (outputState === "running" && !submitDisabled);
-    const composerErrorMessage =
-        error.length > 0 ? error : attachmentState.kind === "failed" ? attachmentState.message : "";
-    // Any headline this composer shows means the connection state has to become the
-    // description's inline detail, not a second alert inside the first.
-    const connection = connectionNotice?.(composerErrorMessage.length > 0);
-    const showComposerNotice =
-        composerErrorMessage.length > 0 || connection !== undefined || statusMessage !== undefined;
-    // A send failure owns the headline, but a standing status (such as unrestored
-    // attachments) still explains the draft: keep it as the error alert's detail
-    // instead of letting the failure branch hide it.
-    const errorDetail =
-        statusMessage === undefined ? (
-            connection
-        ) : (
-            <>
-                {connection}
-                <span className="block">{statusMessage}</span>
-            </>
-        );
-    useComposerNoticeLayout(notice, showComposerNotice);
+    const errorMessage = composerErrorMessage(error, attachmentState);
     const attachKeyboardMarker = useSoftwareKeyboardMarker();
 
     return (
         <form className={chatSessionComposerClassName} onSubmit={submit} ref={attachKeyboardMarker}>
-            {showComposerNotice && (
-                <div className="absolute inset-x-0 bottom-[calc(100%+8px)] z-10" ref={notice}>
-                    {composerErrorMessage.length > 0 ? (
-                        <MortyAlert description={errorDetail}>{composerErrorMessage}</MortyAlert>
-                    ) : connection !== undefined ? (
-                        connection
-                    ) : statusMessage !== undefined ? (
-                        <MortyAlert tone="neutral">{statusMessage}</MortyAlert>
-                    ) : null}
-                </div>
+            {noticePlacement === "overlay" && (
+                <ComposerNoticeSlot
+                    connectionNotice={connectionNotice}
+                    errorMessage={errorMessage}
+                    placement="overlay"
+                    statusMessage={statusMessage}
+                />
             )}
             <div className="flex max-h-64 flex-col rounded-[24px] border-[0.5px] border-border bg-surface-elevated px-3 pt-3 pb-2.5 shadow-[0_8px_28px_rgba(23,30,36,0.06)] has-[:focus]:border-[var(--color-border)] sm:min-h-[128px] sm:pb-3">
                 {attachments.length > 0 && (

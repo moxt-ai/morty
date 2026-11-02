@@ -31,6 +31,12 @@ function retrySeconds(app: TestApp): number {
     return Number(match[1]);
 }
 
+/** How the composer notice slot is placed: floating over the log, or in flow above a queue/interaction stack. */
+function noticePlacement(app: TestApp): string | null {
+    const notice = app.optionalElementByTestId(dataTestId.sessionReconnectNotice);
+    return notice?.closest("[data-notice-placement]")?.getAttribute("data-notice-placement") ?? null;
+}
+
 const CLOCK_ORIGIN = "2026-10-13T08:00:00Z";
 
 test("Given a new session with an unsent draft, When the browser resumes after repeated background bridge drops, Then it reconnects without flashing a notice or sending the draft", {
@@ -102,6 +108,8 @@ test("Given a new session with an interrupted bridge, When recovery takes thirty
     });
     await act(async () => clock.advanceBy(30_000));
     await notice;
+    // Nothing sits between the log and this draft composer, so the notice floats over the log.
+    expect(noticePlacement(app)).toBe("overlay");
     await app.waitForView(() =>
         expect(getByRole(document.body, "button", { name: "Send message" })).toHaveProperty("disabled", false),
     );
@@ -237,6 +245,7 @@ test("Given an offline Runtime, When the retry deadline elapses, Then the countd
         throw new Error("Expected the composer form");
     }
     expect(queryByRole(form, "alert")).toBeNull();
+    expect(noticePlacement(app)).toBe("overlay");
     await act(async () => clock.advanceBy(1000));
     expect(retrySeconds(app)).toBe(firstDelay - 1);
     await act(async () => clock.advanceBy((firstDelay - 2) * 1000));
@@ -545,4 +554,36 @@ test("Given an active turn and an unsent follow-up, When connection freshness is
         dataTestId.queuedMessage,
         (element) => element.textContent?.includes("Keep my follow-up") === true,
     );
+});
+
+test("Given a queued follow-up on an active turn, When the Runtime drops and the retry notice appears, Then the notice joins the flow and the queue stays visible", {
+    timeout: 30_000,
+}, async () => {
+    const clock = new TestClock(CLOCK_ORIGIN);
+    const app = await createTestApp({ connectAgent: true, clock });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
+    await app.queryElementByTestId(dataTestId.sessionStatus);
+    await app.waitForView(() =>
+        getByRole(document.body, "button", { name: /Switch computer/, description: "Connection available" }),
+    );
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Queue this follow-up");
+    await app.queryElementByTestId(
+        dataTestId.queuedMessage,
+        (element) => element.textContent?.includes("Queue this follow-up") === true,
+    );
+    if (app.daemon === null) {
+        throw new Error("Expected the connected Runtime");
+    }
+    await app.daemon.disconnect();
+    await showReconnectNotice(app, clock);
+    // With a queue block between the log and the composer, a floating notice would
+    // be lifted over it and clipped by the pane; the in-flow notice stacks instead.
+    const notices = app.elementsByTestId(dataTestId.sessionReconnectNotice);
+    expect(notices).toHaveLength(1);
+    expect(noticePlacement(app)).toBe("in-flow");
+    expect(
+        app
+            .elementsByTestId(dataTestId.queuedMessage)
+            .some((element) => element.textContent?.includes("Queue this follow-up")),
+    ).toBe(true);
 });

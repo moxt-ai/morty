@@ -6,8 +6,9 @@ export const mortyThinScrollbarClassName = "[scrollbar-color:#d4d7db_transparent
 
 export const chatSessionColumnClassName = `mx-auto w-full min-w-0 max-w-[920px] ${chatSessionContentInsetClassName}`;
 
-/** Interaction cards keep a 12px inset at every breakpoint. */
-export const chatSessionInteractionColumnClassName = "mx-auto w-full min-w-0 max-w-[920px] px-3";
+/** Interaction cards keep the composer column's gutters: 12px on phones, flush to it from `sm:` up. */
+export const chatSessionInteractionColumnClassName =
+    "mx-auto w-full min-w-0 px-3 sm:w-[min(920px,calc(100%-24px))] sm:px-0";
 
 /**
  * `--composer-notice-tuck` sinks the message tail under the frosted composer
