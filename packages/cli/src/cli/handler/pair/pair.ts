@@ -1,4 +1,4 @@
-import type { Command } from "commander";
+import { type Command, Option } from "commander";
 import { reloadDaemon } from "../../../daemon/lifecycle/daemon.ts";
 import { ensureDaemon } from "../../../daemon/lifecycle/daemon-client.ts";
 import {
@@ -14,10 +14,13 @@ export function registerPairAction(command: Command, context: CliContext): void 
     command
         .addOption(valueOption("--url <relay-url>", "relay HTTP or HTTPS URL"))
         .addOption(valueOption("--code <pairing-code>", "pairing code shown in the browser"))
+        .addOption(
+            new Option("--code-stdin", "read the pairing code from standard input instead of --code").conflicts("code"),
+        )
         .addOption(valueOption("--pairing <runtime-pairing-id>", "Runtime pairing identifier"))
         .addOption(valueOption("--workspace <directory>", "default workspace directory"))
         .action(async (options: ParsedPairOptions) => {
-            const requested = requirePairOptions(options, command);
+            const requested = await requirePairOptions(options, command, process.stdin, context.shutdownSignal);
             const control = await openMobiusControlInstallation(context.shutdownSignal, process.env);
             await ensureDaemon(control.stateDirectory, context.version, context.shutdownSignal);
             const installation = await openMobiusCliInstallation(context.shutdownSignal, process.env);

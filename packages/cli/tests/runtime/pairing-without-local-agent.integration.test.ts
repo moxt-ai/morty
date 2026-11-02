@@ -1,8 +1,9 @@
+import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { Socket } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { listen, port } from "@moxt-ai/mobius-test/websocket";
 import { describe, expect, it } from "vitest";
@@ -21,6 +22,11 @@ async function createPairingRelay(): Promise<PairingRelay> {
     const claims: Array<Readonly<Record<string, unknown>>> = [];
     const sockets = new Set<Socket>();
     const server: Server = createServer((request, response) => {
+        // A daemon the CLI reloads after pairing also dials the Relay; only redemptions are answered.
+        if (request.method !== "POST" || request.url?.endsWith("/redeem") !== true) {
+            response.writeHead(404).end();
+            return;
+        }
         let body = "";
         request.setEncoding("utf8");
         request.on("data", (chunk: string) => {
@@ -76,7 +82,60 @@ function agentlessEnvironment(stateDirectory: string): Readonly<NodeJS.ProcessEn
     });
 }
 
+/** Runs the built CLI with `input` piped to its standard input. */
+async function runCli(
+    arguments_: readonly string[],
+    environment: Readonly<NodeJS.ProcessEnv>,
+    input = "",
+): Promise<{ readonly code: number | null; readonly stderr: string }> {
+    const child = spawn(process.execPath, [resolve(import.meta.dirname, "../../dist/cli.js"), ...arguments_], {
+        env: environment,
+        signal: AbortSignal.timeout(60_000),
+        stdio: ["pipe", "ignore", "pipe"],
+    });
+    let stderr = "";
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk: string) => {
+        stderr += chunk;
+    });
+    child.stdin.end(input);
+    const code = await new Promise<number | null>((resolve_, reject) => {
+        child.once("error", reject);
+        child.once("exit", resolve_);
+    });
+    return { code, stderr };
+}
+
 describe("pairing a machine without a local Agent", () => {
+    it("Given a pairing code piped to the CLI, When the user pairs with --code-stdin, Then the machine redeems that code without it appearing in the command line", async () => {
+        const home = await mkdtemp(join(tmpdir(), "mobius-piped-pairing-"));
+        const relay = await createPairingRelay();
+        const environment = { ...agentlessEnvironment(join(home, "state")), HOME: home, TMPDIR: home };
+        const pairing = [
+            "pair",
+            "--url",
+            relay.origin,
+            "--pairing",
+            "piped-pairing",
+            "--workspace",
+            join(home, "workspace"),
+            "--code-stdin",
+        ];
+
+        try {
+            const paired = await runCli(pairing, environment, "ABCD-EFGH-JKLM-NPQR-STUV\n");
+
+            expect(paired.code, paired.stderr).toBe(0);
+            expect(relay.claims).toHaveLength(1);
+            expect(relay.claims[0]).toMatchObject({ pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV" });
+            expect(pairing.join(" ")).not.toContain("ABCD-EFGH");
+        } finally {
+            await runCli(["quit"], environment);
+            await relay.dispose();
+            await rm(home, { force: true, recursive: true });
+        }
+    });
+
     it("Given no supported Agent is discoverable, When the machine redeems its pairing, Then it pairs and advertises an empty Agent directory", async () => {
         const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-unattended-pairing-"));
         const relay = await createPairingRelay();
