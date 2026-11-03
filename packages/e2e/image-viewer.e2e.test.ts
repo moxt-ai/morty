@@ -12,6 +12,9 @@ test("Given a tool image is open, When the agent finishes and its tools collapse
     await runtime.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("hold image tool");
     await page.getByRole("button", { name: "Send message" }).click();
+    // The agent's work sits behind its step summary until the user expands it.
+    const steps = page.getByRole("button", { name: "1 step" });
+    await steps.click();
     await page.getByRole("button", { name: "Generate image Tool succeeded" }).click();
     await page.getByRole("button", { name: "View image: Image" }).click();
     const viewer = page.getByRole("dialog", { name: "Image viewer" });
@@ -20,12 +23,12 @@ test("Given a tool image is open, When the agent finishes and its tools collapse
         outcome: "complete",
         output: [{ kind: "text", text: "The generated image is ready." }],
     });
-    await expect(page.getByRole("button", { name: "1 step", includeHidden: true })).toBeVisible();
+    await expect(page.getByText("The generated image is ready.")).toBeVisible();
     await expect(viewer.getByRole("img", { name: "Image" })).toBeVisible();
     await expect(viewer.getByLabel("Zoom level")).toHaveText("100%");
     await viewer.getByRole("button", { name: "Close image viewer" }).click();
     await expect(viewer).toBeHidden();
-    await expect(page.getByRole("button", { name: "1 step" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "View image: Image" })).toBeFocused();
 });
 
 test("Given draft screenshots, When the user zooms, pans, switches and saves, Then the viewer preserves the draft and returns focus", async ({
@@ -128,7 +131,6 @@ test("Given a streaming local image gallery, When its source changes on disk, Th
     const viewer = page.getByRole("dialog", { name: "Image viewer" });
     await expect(viewer.getByRole("button", { name: "Zoom in" })).toBeEnabled();
     const messages = page.getByRole("log", { name: "Messages" });
-    const originalScroll = await messages.evaluate((node) => node.scrollTop);
     await runtime.writeFiles(
         new Map([["/workspace/generated-picture.png", { content: smallImage, mediaType: "image/png" }]]),
     );
@@ -148,15 +150,13 @@ test("Given a streaming local image gallery, When its source changes on disk, Th
     await viewer.getByRole("button", { name: "Next image" }).click();
     await viewer.getByRole("button", { name: "Actual size" }).click();
     await expect(viewer.getByRole("img", { name: "Second picture" })).toHaveCSS("width", "1600px");
+    await expect(page.getByRole("button", { name: "View image: Third picture" })).toBeAttached();
+    // The conversation kept following the reply behind the viewer; closing it returns focus without moving it.
+    const scrollBeforeClose = await messages.evaluate((node) => node.scrollTop);
     await viewer.getByRole("button", { name: "Close image viewer" }).click();
     await expect(page.getByRole("button", { name: "View image: Third picture" })).toBeVisible();
     await expect(trigger).toBeFocused();
-    expect(await messages.evaluate((node) => node.scrollTop)).toBe(
-        await messages.evaluate(
-            (node, original) => Math.min(original, node.scrollHeight - node.clientHeight),
-            originalScroll,
-        ),
-    );
+    expect(await messages.evaluate((node) => node.scrollTop)).toBe(scrollBeforeClose);
     await trigger.click();
     await expect(viewer.getByText("1 of 3")).toBeVisible();
     await page.keyboard.press("Escape");

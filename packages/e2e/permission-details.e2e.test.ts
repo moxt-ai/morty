@@ -12,14 +12,16 @@ for (const width of [1440, 390]) {
         await page.getByRole("button", { name: "Send message" }).click();
         const permission = page.getByRole("alertdialog", { name: "Agent permission request" });
         await expect(permission).toContainText("pnpm test -- --reporter=verbose");
-        await expect(permission).toContainText("src/<entry>.ts");
+        // The affected paths sit behind the card's details disclosure.
+        await permission.getByRole("button", { name: /^Details ·/u }).click();
+        await expect(permission.getByRole("region", { name: "Affected paths" })).toContainText("src/<entry>.ts");
         await page.reload();
-        await expect(permission).toContainText("pnpm test -- --reporter=verbose");
-        await expect(permission.getByRole("region", { name: "Session working directory" })).toContainText("/workspace");
-        await expect(permission.getByRole("button", { name: "Deny: No" })).toBeVisible();
+        // The command reads with the directory it runs in.
+        await expect(permission).toContainText("/workspace $ pnpm test -- --reporter=verbose");
+        await expect(permission.getByRole("button", { name: "Deny", exact: true })).toBeVisible();
         await expect(permission.getByRole("button", { name: "Stop turn" })).toBeVisible();
         await page.screenshot({ path: testInfo.outputPath(`permission-${width}.png`), fullPage: true });
-        await permission.getByRole("button", { name: "Allow: Yes" }).click();
+        await permission.getByRole("button", { name: "Allow", exact: true }).click();
         const form = page.getByRole("dialog", { name: "Agent information request" });
         await form.getByRole("textbox", { name: "Branch" }).fill("feature/permissions");
         await form.getByRole("button", { name: "Continue" }).click();
@@ -29,11 +31,11 @@ for (const width of [1440, 390]) {
         await expect(permission).toBeHidden();
         await page.getByRole("textbox", { name: "Message" }).fill("request session permission");
         await page.getByRole("button", { name: "Send message" }).click();
-        await expect(permission.getByRole("button", { name: "Allow: Allow for this session" })).toBeVisible();
-        await expect(permission.getByRole("button", { name: "Deny: Deny for this session" })).toBeVisible();
+        await expect(permission.getByRole("button", { name: "Allow for this session", exact: true })).toBeVisible();
+        await expect(permission.getByRole("button", { name: "Deny for this session", exact: true })).toBeVisible();
         await expect(permission).not.toContainText("Always");
         await page.screenshot({ path: testInfo.outputPath(`session-permission-${width}.png`), fullPage: true });
-        await permission.getByRole("button", { name: "Allow: Allow for this session" }).click();
+        await permission.getByRole("button", { name: "Allow for this session", exact: true }).click();
         await expect(page.getByRole("article", { name: "Agent response" }).last()).toContainText(
             "Selected decision: allow-session",
         );
@@ -59,14 +61,10 @@ for (const width of [320, 390]) {
         expect(box.x).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(width);
         expect(await permission.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+        // The raw input wraps inside the card instead of scrolling sideways.
         const rawInput = permission.locator("pre");
-        expect(await rawInput.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
-        const beforeScroll = await rawInput.evaluate((element) => element.scrollLeft);
-        await rawInput.evaluate((element) => {
-            element.scrollLeft = element.scrollWidth;
-        });
-        expect(await rawInput.evaluate((element) => element.scrollLeft)).toBeGreaterThan(beforeScroll);
-        const allow = permission.getByRole("button", { name: /^Allow: Allow reading/ });
+        expect(await rawInput.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+        const allow = permission.getByRole("button", { name: /^Allow reading/u });
         await allow.scrollIntoViewIfNeeded();
         await page.screenshot({ path: testInfo.outputPath(`long-permission-decision-${width}.png`), fullPage: true });
         await allow.click();
@@ -91,8 +89,8 @@ test("Given a pending permission on a phone-height screen, When it appears, Then
     const permission = page.getByRole("alertdialog", { name: "Agent permission request" });
     await expect(permission).toContainText("pnpm test -- --reporter=verbose");
     await page.screenshot({ path: testInfo.outputPath("phone-height-permission.png") });
-    for (const name of ["Allow: Yes", "Deny: No", "Stop turn"]) {
-        const decision = permission.getByRole("button", { name });
+    for (const name of ["Allow", "Deny", "Stop turn"]) {
+        const decision = permission.getByRole("button", { name, exact: true });
         await expect(decision).toBeInViewport({ ratio: 1 });
         // Nothing, including an edge fade, may cover the decision the user taps.
         expect(
@@ -103,7 +101,7 @@ test("Given a pending permission on a phone-height screen, When it appears, Then
             }),
         ).toBe(true);
     }
-    await permission.getByRole("button", { name: "Allow: Yes" }).click();
+    await permission.getByRole("button", { name: "Allow", exact: true }).click();
     const form = page.getByRole("dialog", { name: "Agent information request" });
     await form.getByRole("textbox", { name: "Branch" }).fill("feature/phone-permission");
     await form.getByRole("button", { name: "Continue" }).click();

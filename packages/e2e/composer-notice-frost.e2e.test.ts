@@ -20,8 +20,8 @@ test("Given a session pinned to its latest reply, When an unreadable attachment 
     const empty = testInfo.outputPath("empty.txt");
     writeFileSync(empty, "");
     await page.locator("input[aria-label='Choose attachments']").setInputFiles(empty);
-    const notice = page.locator("form > div.absolute.inset-x-0");
-    await expect(notice).toContainText("Files must be between 1 byte and 32 MB.");
+    const notice = page.getByRole("alert").filter({ hasText: "Files must be between 1 byte and 32 MB." });
+    await expect(notice).toBeVisible();
     await page.screenshot({ animations: "disabled", path: testInfo.outputPath("notice-frost.png") });
 
     // The notice is frosted glass over the log: the latest reply keeps its tail

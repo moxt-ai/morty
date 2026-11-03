@@ -22,7 +22,12 @@ test("Given desktop configuration, When the user opens settings and selects a mo
     await expect(fast).toBeChecked();
     await page.screenshot({ animations: "disabled", path: testInfo.outputPath("desktop-configuration.png") });
     await model.click();
-    await expect(page.getByRole("dialog")).toHaveCount(1);
+    // On desktop the options open in a submenu beside the panel, which stays in place.
+    const modelOptions = page.getByRole("dialog", { name: "Model options" });
+    await expect(modelOptions).toBeVisible();
+    const [optionsBounds, modelBounds] = await Promise.all([modelOptions.boundingBox(), model.boundingBox()]);
+    expect(optionsBounds?.x).toBeGreaterThanOrEqual((modelBounds?.x ?? 0) + (modelBounds?.width ?? 0));
+    await expect(panel).toBeVisible();
     const search = page.getByRole("searchbox", { name: "Search models" });
     await search.click();
     const before = await search.boundingBox();
@@ -35,11 +40,11 @@ test("Given desktop configuration, When the user opens settings and selects a mo
     await expect(model).toBeFocused();
     await model.click();
     await page.keyboard.press("Escape");
+    await expect(modelOptions).toBeHidden();
+    await expect(panel).toBeVisible();
     await expect(model).toBeFocused();
     await page.getByRole("combobox", { name: "Mode", exact: true }).click();
-    const plan = page.getByRole("option", { name: "Plan", exact: true });
-    await plan.focus();
-    expect((await panel.boundingBox())?.height).toBeLessThan(260);
+    const plan = page.getByRole("dialog", { name: "Mode options" }).getByRole("option", { name: "Plan", exact: true });
     await plan.click();
     await expect(page.getByRole("combobox", { name: "Mode", exact: true })).toContainText("Plan");
     await page.keyboard.press("Escape");

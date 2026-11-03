@@ -13,7 +13,7 @@ test.describe("answer request spacing", () => {
         await page.getByRole("button", { name: "Send message" }).click();
         const permission = page.getByRole("alertdialog", { name: "Agent permission request" });
         await expect(permission).toBeVisible();
-        await permission.getByRole("button", { name: "Allow: Yes" }).click();
+        await permission.getByRole("button", { name: "Allow", exact: true }).click();
 
         const form = page.getByRole("dialog", { name: "Agent information request" });
         await expect(form).toBeVisible();
@@ -38,7 +38,7 @@ test.describe("answer request spacing", () => {
         await page.getByRole("button", { name: "Send message" }).click();
         const permission = page.getByRole("alertdialog", { name: "Agent permission request" });
         await expect(permission).toBeVisible();
-        await permission.getByRole("button", { name: "Allow: Yes" }).click();
+        await permission.getByRole("button", { name: "Allow", exact: true }).click();
 
         const form = page.getByRole("dialog", { name: "Agent information request" });
         await expect(form).toBeVisible();

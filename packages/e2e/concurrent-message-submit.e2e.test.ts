@@ -45,13 +45,24 @@ test("Given two devices share an idle conversation, When both send a draft, Then
                 return { kind: "rejected" as const, participant };
             }),
             page
-                .getByTestId(dataTestId.queuedMessage)
+                .getByLabel("Queued messages", { exact: true })
                 .waitFor()
                 .then(() => ({ kind: "queued" as const })),
         ]);
         if (outcome.kind === "rejected") {
             const { participant } = outcome;
-            await expect(participant.page.getByRole("textbox", { name: "Message" })).toHaveValue(participant.prompt);
+            // Send again only once this device sees the other device's turn running, so the message queues behind
+            // it instead of being refused again.
+            await expect(participant.page.getByRole("button", { name: "Stop agent output" })).toBeVisible();
+            // The rejected message stays in the conversation; editing it returns its text and attachment.
+            const composer = participant.page.getByRole("textbox", { name: "Message" });
+            await expect(composer).toHaveValue("");
+            await participant.page
+                .getByTestId(dataTestId.queuedMessage)
+                .filter({ hasText: "Another prompt is already running" })
+                .getByRole("button", { name: "Edit failed message" })
+                .click();
+            await expect(composer).toHaveValue(participant.prompt);
             await expect(participant.page.getByRole("list", { name: "Attachments" })).toContainText(
                 participant.fileName,
             );
@@ -61,13 +72,14 @@ test("Given two devices share an idle conversation, When both send a draft, Then
             });
             await participant.page.getByRole("button", { name: "Send message" }).click();
         }
-        await expect(page.getByTestId(dataTestId.queuedMessage)).toBeVisible();
+        const queue = page.getByLabel("Queued messages", { exact: true });
+        await expect(queue).toBeVisible();
         for (const participant of participants) {
             await expect(participant.page.getByRole("textbox", { name: "Message" })).toHaveValue("");
             await expect(participant.page.getByRole("list", { name: "Attachments" })).toBeHidden();
         }
         await page.getByRole("button", { name: "Stop agent output" }).click();
-        await expect(page.getByTestId(dataTestId.queuedMessage)).toBeHidden();
+        await expect(queue).toBeHidden();
         await expect(page.getByRole("log", { name: "Messages" })).toContainText("Partial reply");
         await expect(page.getByRole("log", { name: "Messages" })).toContainText("Waiting for steering");
         await page.getByRole("button", { name: "Stop agent output" }).click();
@@ -75,8 +87,9 @@ test("Given two devices share an idle conversation, When both send a draft, Then
         await secondPage.reload();
         for (const participant of participants) {
             await expect(secondPage.getByRole("log", { name: "Messages" })).toContainText(participant.prompt);
+            // Each message keeps its attachment, offered as a download.
             await expect(secondPage.getByRole("log", { name: "Messages" })).toContainText(
-                `Attachment contents for ${participant.fileName}`,
+                `Download ${participant.fileName}`,
             );
         }
         await secondPage.screenshot({

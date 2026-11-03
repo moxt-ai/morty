@@ -37,12 +37,21 @@ test("Given a touch gallery, When the user pinches, pans and swipes at fit size,
         await input.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
         await expect(viewer.getByLabel("Zoom level")).not.toHaveText(fit ?? "");
         const top = await canvas.evaluate((node) => node.scrollTop);
+        // Pan in steps and rest before lifting, as a finger does: one instant jump reads as a fling, whose
+        // momentum the browser stops with the next tap instead of delivering that tap.
         await input.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 290, y: 550, id: 1 }] });
-        await input.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 80, y: 350, id: 1 }] });
+        for (let step = 1; step <= 5; step += 1) {
+            await input.send("Input.dispatchTouchEvent", {
+                type: "touchMove",
+                touchPoints: [{ x: 290 - step * 42, y: 550 - step * 40, id: 1 }],
+            });
+        }
+        await page.waitForTimeout(200);
         await input.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
         expect(await canvas.evaluate((node) => node.scrollTop)).toBeGreaterThan(top);
         await expect(viewer.getByText("1 of 2")).toBeVisible();
         await viewer.getByRole("button", { name: "Fit image" }).tap();
+        await expect(viewer.getByRole("button", { name: "Fit image" })).toHaveAttribute("aria-pressed", "true");
         await input.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 300, y: 400, id: 1 }] });
         await input.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 80, y: 400, id: 1 }] });
         await input.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });

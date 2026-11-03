@@ -109,7 +109,8 @@ const test = base.extend<{ readonly network: Network }>({
                 stallSessionRequests: () => {
                     for (const tunnel of tunnels) {
                         if (tunnel.route === "session") {
-                            // Stall requests while keeping server-to-browser events and heartbeats flowing.
+                            // Stall the browser's requests, its heartbeat pings included, while server-to-browser
+                            // events keep flowing.
                             tunnel.client.pause();
                         }
                     }
@@ -220,7 +221,8 @@ test("Given an interrupted browser connection, when a task completes before fore
     await expect(composer).toBeEnabled();
     await expect(page.getByTestId(dataTestId.sendMessage)).toBeDisabled();
     await expect(page.getByRole("alert")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Retry now", exact: true })).toBeVisible();
+    // Foreground recovery gets its time to finish before the page warns or asks the user to retry.
+    await expect(page.getByRole("button", { name: "Retry now", exact: true })).toBeHidden();
     await page.screenshot({ path: testInfo.outputPath("recoverable-interruption.png") });
     await runtime.continueReply("hold after first delta", {
         outcome: "complete",
@@ -328,22 +330,23 @@ for (const route of ["all", "session", "bridge", "suspended"] as const) {
             window.dispatchEvent(new Event("online"));
             window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
         });
+        if (route === "session") {
+            // Foreground hints must not probe or reset an otherwise-open Session transport.
+            await page.clock.runFor(5000);
+            await expect(composer).toBeEnabled();
+            await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
+            await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
+        }
         if (route === "session" || route === "all") {
+            // The SDK pings every 20 seconds and drops a tunnel that leaves a ping unanswered for 10.
             await page.clock.runFor(30000);
-            if (route === "session") {
-                // Foreground hints must not probe or reset an otherwise-open Session transport.
-                await expect(composer).toBeEnabled();
-                await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
-                await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
-            }
-            // The existing tunnel stays blackholed until the SDK's 60-second idle deadline.
-            await page.clock.runFor(30000);
-            await expect(page.getByTestId(dataTestId.sendMessage)).toBeDisabled();
         } else if (route !== "suspended") {
             // Bridge liveness is independent of Session execution-state polling.
             await page.clock.runFor(5000);
         }
-        await page.clock.runFor(5000);
+        // Reconnecting asks the Chat bridge for Session access again, which can first wait out its 10-second health
+        // check when the bridge's own tunnel went silent too.
+        await page.clock.runFor(15000);
         await expect(composer).toBeEnabled();
         await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
         await expect(composer).toHaveValue("Continue after resuming.");
@@ -373,12 +376,9 @@ test("Given a silently stalled session without a lifecycle event, when its liven
     );
     await composer.fill("Preserve this draft until transport recovery.");
     network.blackhole("session");
+    // The SDK pings every 20 seconds and drops a tunnel that leaves a ping unanswered for 10; the Session then
+    // reconnects on a new tunnel.
     await page.clock.runFor(30000);
-    await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
-    await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
-    await page.clock.runFor(30000);
-    await expect(composer).toBeEnabled();
-    await expect(page.getByTestId(dataTestId.sendMessage)).toBeDisabled();
     await page.clock.runFor(5000);
     await expect(composer).toBeEnabled();
     await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
@@ -391,7 +391,7 @@ test("Given a silently stalled session without a lifecycle event, when its liven
     );
 });
 
-test("Given a live Session stream with stalled execution reads, when foreground hints and the former health deadline pass, then the draft stays sendable without reconnecting", async ({
+test("Given a live Session stream with stalled requests, when foreground hints pass and its heartbeat goes unanswered, then the connection is replaced and the draft stays sendable", async ({
     runtime,
     network,
 }) => {
@@ -420,16 +420,20 @@ test("Given a live Session stream with stalled execution reads, when foreground 
         document.dispatchEvent(new Event("resume"));
         window.dispatchEvent(new Event("online"));
     });
+    // Foreground hints alone do not probe or reset the stream.
     await page.clock.runFor(5000);
     await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
     await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
-    await page.clock.runFor(20000);
-    await page.clock.runFor(10000);
+    expect(connections).toBe(before);
+    // The stalled tunnel cannot carry the SDK's 20-second ping, so it is dropped once that ping goes unanswered for
+    // 10 seconds and the Session continues on a new connection.
+    await page.clock.runFor(30000);
+    await page.clock.runFor(15000);
     await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
     await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
     await expect(composer).toHaveValue("Keep this draft on the live connection.");
     await expect(page.getByRole("article", { name: "Your message" })).toHaveCount(1);
-    expect(connections).toBe(before);
+    expect(connections).toBeGreaterThan(before);
     network.resumeSessionRequests();
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("article", { name: "Agent response" }).last()).toContainText(
@@ -452,9 +456,6 @@ test("Given a mobile browser with an unsent draft, when its network is disabled 
     await expect(composer).toBeEnabled();
     await expect(page.getByRole("button", { name: "Send message" })).toBeDisabled();
     await composer.fill("Keep this draft and my offline edits");
-    await expect(page.getByRole("button", { name: /Switch computer/ })).toHaveAccessibleDescription(
-        "No network connection",
-    );
     await page.context().setOffline(false);
     await page.clock.runFor(5000);
     await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();

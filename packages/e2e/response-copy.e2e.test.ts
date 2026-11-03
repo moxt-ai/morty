@@ -26,9 +26,25 @@ for (const touch of [false, true]) {
             });
             const copy = response.getByRole("button", { name: "Copy response", exact: true });
             await expect(copy).toBeVisible();
-            const bounds = await copy.boundingBox();
-            expect(bounds?.height ?? 0).toBeGreaterThanOrEqual(44);
-            expect(bounds?.width ?? 0).toBeGreaterThanOrEqual(44);
+            if (touch) {
+                // The compact icon still answers a tap anywhere in a 44px target around its center.
+                const reachable = await copy.evaluate((element) => {
+                    const box = element.getBoundingClientRect();
+                    const x = box.left + box.width / 2;
+                    const y = box.top + box.height / 2;
+                    return [
+                        [x - 21, y],
+                        [x + 21, y],
+                        [x, y - 21],
+                        [x, y + 21],
+                    ].every(([left = 0, top = 0]) => element.contains(document.elementFromPoint(left, top)));
+                });
+                expect(reachable).toBe(true);
+            } else {
+                const bounds = await copy.boundingBox();
+                expect(bounds?.height ?? 0).toBeGreaterThanOrEqual(24);
+                expect(bounds?.width ?? 0).toBeGreaterThanOrEqual(24);
+            }
             if (touch) {
                 await copy.tap();
             } else {

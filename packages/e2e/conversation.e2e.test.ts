@@ -163,7 +163,9 @@ test("Given a working reply, When the user reloads after 65 seconds, Then elapse
     const partialResponse = page.getByRole("article", { name: "Agent response" }).filter({ hasText: "Partial reply" });
     await expect(partialResponse).toHaveCount(1);
     await expect(partialResponse).toBeVisible();
-    await expect(page.getByText("partial.bin", { exact: true })).toBeVisible();
+    // The scenario links a file that is not in the workspace, so its block reports that it cannot be loaded.
+    const linkedFile = "Content could not be loaded: partial.bin";
+    await expect(page.getByText(linkedFile, { exact: true })).toBeVisible();
     const activeSessionUrl = page.url();
     await page.clock.setFixedTime(new Date("2026-10-13T08:01:05Z"));
     await page.reload();
@@ -178,7 +180,7 @@ test("Given a working reply, When the user reloads after 65 seconds, Then elapse
             .filter({ hasText: "Partial reply" });
         await expect(secondPagePartialResponse).toHaveCount(1);
         await expect(secondPagePartialResponse).toBeVisible();
-        await expect(secondPage.getByText("partial.bin", { exact: true })).toBeVisible();
+        await expect(secondPage.getByText(linkedFile, { exact: true })).toBeVisible();
         await expect(secondPage.getByRole("button", { name: "Stop agent output", exact: true })).toBeVisible();
         await secondPage.screenshot({ fullPage: true, path: testInfo.outputPath("active-turn-secondary.png") });
 

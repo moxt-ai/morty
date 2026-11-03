@@ -18,15 +18,10 @@ test("Given a selected model, When the Runtime restarts, Then the conversation a
     await page.keyboard.press("Escape");
     await expect(configuration).toContainText("Test Large");
 
-    // Hold automatic retry timers so recovery is observed through the visible control.
-    await page.clock.install({ time: new Date("2026-10-21T07:00:00Z") });
-    await page.clock.pauseAt(new Date("2026-10-21T07:00:01Z"));
+    // The conversation reconnects on its own once the Runtime is back.
     await runtime.restartRuntime();
-    const retry = page.getByRole("button", { name: "Retry now" });
-    await expect(retry).toBeVisible();
-    await retry.click();
     await expect(composer).toBeEnabled();
-    await expect(retry).toBeHidden();
+    await expect(page.getByRole("button", { name: "Retry now" })).toBeHidden();
     await expect(configuration).toContainText("Test Large");
 
     await composer.fill("After the Runtime restart");

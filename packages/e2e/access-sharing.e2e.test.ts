@@ -142,11 +142,10 @@ test("Given a recent session on mobile, When the user expands the session list, 
         .filter({ hasText: "Mobile session navigation" });
     await expect(response).toBeVisible();
     const sessionUrl = page.url();
-    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+    // New Session and Recent sessions sit in the phone's header, outside the navigation drawer.
     await page.getByRole("button", { name: "New Session" }).click();
     await expect(response).toBeHidden();
 
-    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
     const recentSessions = page.getByRole("button", { name: "Recent sessions", exact: true });
     await recentSessions.click();
     const session = page.getByRole("button", { name: "Open Mobile session navigation", exact: true });
@@ -187,8 +186,8 @@ test("Given one browser opened two setup links in two tabs, When the user ends c
         .click();
     await expect(secondTab.getByRole("status")).toContainText("Current access ended");
 
-    // The first tab ends with the browser's access, without the user touching it.
-    await expect(firstTab.getByRole("heading", { name: "This link is no longer valid" })).toBeVisible();
+    // The first tab explains that the browser's access ended, without the user touching it.
+    await expect(firstTab.getByRole("status")).toContainText("Current access ended");
     await expect(firstTab.getByRole("textbox", { name: "Message" })).toHaveCount(0);
     for (const link of [first.url, second.url]) {
         await firstTab.goto(link);
@@ -215,7 +214,7 @@ test("Given the end-access confirmation is open in one tab, When another tab ope
     await confirmation.getByRole("button", { name: "End current access", exact: true }).click();
 
     await expect(firstTab.getByRole("status")).toContainText("Current access ended");
-    await expect(secondTab.getByRole("heading", { name: "This link is no longer valid" })).toBeVisible();
+    await expect(secondTab.getByRole("status")).toContainText("Current access ended");
     for (const link of [first.url, second.url]) {
         await secondTab.goto(link);
         await expect(secondTab.getByRole("heading", { name: "This link is no longer available" })).toBeVisible();
@@ -241,7 +240,7 @@ test("Given a browser without Morty access opens two setup links in two tabs at 
         .click();
     await expect(secondTab.getByRole("status")).toContainText("Current access ended");
 
-    await expect(firstTab.getByRole("heading", { name: "This link is no longer valid" })).toBeVisible();
+    await expect(firstTab.getByRole("status")).toContainText("Current access ended");
     for (const link of [first.url, second.url]) {
         await secondTab.goto(link);
         await expect(secondTab.getByRole("heading", { name: "This link is no longer available" })).toBeVisible();

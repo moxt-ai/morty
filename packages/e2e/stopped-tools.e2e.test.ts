@@ -1,4 +1,18 @@
 import { expect, test } from "./infra/test.ts";
+import type { createTestRuntime } from "./infra/test-runtime.ts";
+
+type E2EPage = Awaited<ReturnType<typeof createTestRuntime>>["page"];
+
+/** Tools sit behind each turn's step summary; expands every summary, including ones that streamed in since. */
+async function expectTools(page: E2EPage, label: string, count: number) {
+    await expect(async () => {
+        const collapsed = page.getByRole("button", { name: /^\d+ steps?\b/u, expanded: false });
+        for (let remaining = await collapsed.count(); remaining > 0; remaining = await collapsed.count()) {
+            await collapsed.first().click();
+        }
+        await expect(page.getByLabel(label, { exact: true })).toHaveCount(count, { timeout: 1000 });
+    }).toPass();
+}
 
 test.use({ runtimeAgent: { id: "tool-lifecycle-test", name: "Tool Lifecycle Agent" } });
 for (const width of [1440, 390]) {
@@ -11,25 +25,26 @@ for (const width of [1440, 390]) {
         const composer = page.getByRole("textbox", { name: "Message" });
         await composer.fill("hold unfinished tools");
         await page.getByRole("button", { name: "Send message" }).click();
-        await expect(page.getByLabel("Tool running", { exact: true })).toHaveCount(2);
+        await expectTools(page, "Tool running", 2);
         await composer.fill("Add another verification");
         await page.getByRole("button", { name: "Send message" }).click();
         await page.getByRole("button", { name: "Steer queued message: Add another verification" }).click();
-        await expect(page.getByLabel("Tool running", { exact: true })).toHaveCount(3);
+        await expectTools(page, "Tool running", 3);
         await page.getByRole("button", { name: "Stop agent output" }).click();
-        await expect(page.getByLabel("Tool interrupted", { exact: true })).toHaveCount(3);
+        await expectTools(page, "Tool interrupted", 3);
         await expect(page.getByText("Turn stopped.", { exact: true })).toBeVisible();
         await page.reload();
-        await expect(page.getByLabel("Tool running", { exact: true })).toHaveCount(0);
-        await expect(page.getByLabel("Tool interrupted", { exact: true })).toHaveCount(3);
-        await expect(page.getByLabel("Tool succeeded", { exact: true })).toHaveCount(1);
-        await expect(page.getByLabel("Tool failed", { exact: true })).toHaveCount(1);
-        await expect(page.getByText("Turn stopped.", { exact: true })).toBeVisible();
+        await expectTools(page, "Tool running", 0);
+        await expectTools(page, "Tool interrupted", 3);
+        await expectTools(page, "Tool succeeded", 1);
+        await expectTools(page, "Tool failed", 1);
+        // A turn's stop reason is live-only: reloaded history keeps the interrupted tools, not the notice.
+        await expect(page.getByText("Turn stopped.", { exact: true })).toHaveCount(0);
         await page.screenshot({ path: testInfo.outputPath(`stopped-tools-${width}.png`), fullPage: true });
         await composer.fill("complete unfinished tools");
         await page.getByRole("button", { name: "Send message" }).click();
-        await expect(page.getByLabel("Tool interrupted", { exact: true })).toHaveCount(5);
-        await expect(page.getByLabel("Tool running", { exact: true })).toHaveCount(0);
-        await expect(page.getByText("Turn stopped.", { exact: true })).toHaveCount(1);
+        await expectTools(page, "Tool interrupted", 5);
+        await expectTools(page, "Tool running", 0);
+        await expect(page.getByText("Turn stopped.", { exact: true })).toHaveCount(0);
     });
 }

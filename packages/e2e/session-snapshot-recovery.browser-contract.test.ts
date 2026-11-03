@@ -260,8 +260,8 @@ for (const schedule of ["before-snapshot", "after-snapshot", "after-recovery"] a
                 ? null
                 : network.gateHistory(schedule === "before-snapshot" ? "request" : "response");
         phase = "recovery";
+        // Recovery runs quietly first: the page offers no manual retry while it reconnects on its own.
         network.interrupt();
-        await expect(page.getByRole("button", { name: "Retry now", exact: true })).toBeVisible();
         const resumed = page.clock.runFor(5000);
         if (gate !== null) {
             await gate.reached;
@@ -322,8 +322,8 @@ test("Given a partial reply, when it finishes while the browser is disconnected,
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(responses).toContainText("Waiting for steering");
     await composer.fill("Preserve this draft.");
+    // Recovery runs quietly first: the page offers no manual retry while it reconnects on its own.
     network.interrupt();
-    await expect(page.getByRole("button", { name: "Retry now", exact: true })).toBeVisible();
     await runtime.continueReply("wait for steering", {
         outcome: "complete",
         output: [{ kind: "text", text: "|OFFLINE_END|" }],
@@ -375,8 +375,8 @@ test("Given the user has loaded older messages, when the connection recovers, th
     const reading = messages.nth(1);
     await reading.evaluate((element) => element.scrollIntoView({ block: "center" }));
     const before = await reading.boundingBox();
+    // Recovery runs quietly first: the page offers no manual retry while it reconnects on its own.
     network.interrupt();
-    await expect(page.getByRole("button", { name: "Retry now", exact: true })).toBeVisible();
     await page.clock.runFor(5000);
     await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
     expect(await messages.allTextContents()).toEqual(loaded);

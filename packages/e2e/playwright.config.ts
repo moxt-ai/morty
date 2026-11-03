@@ -26,5 +26,8 @@ export default defineConfig({
     retries: process.env["CI"] === "true" ? 1 : 0,
     timeout: Number(process.env["MOBIUS_E2E_TIMEOUT_MS"] ?? 600000),
     expect: { timeout: 30000 },
+    // An action whose target never becomes actionable fails as an assertion does, instead of holding the shard until
+    // the journey's timeout.
+    use: { actionTimeout: 30000 },
     reporter: "list",
 });

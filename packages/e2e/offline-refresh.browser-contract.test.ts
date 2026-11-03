@@ -39,7 +39,7 @@ for (const layout of ["desktop", "mobile"] as const) {
                 ).toBeVisible();
                 await expect(page.getByRole("heading", { name: "New session", exact: true })).toHaveCount(0);
                 await expect(page.getByRole("log", { name: "Messages" })).toContainText(
-                    "Your conversation is saved on your computer. History will load when it reconnects.",
+                    "History is temporarily unavailable. It will load when the connection returns.",
                 );
                 await expect(page.getByRole("alert")).toHaveCount(0);
             }
