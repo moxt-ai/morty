@@ -47,7 +47,7 @@ import { activeHarnessMark, pendingExecutionContext } from "../../view-models/ch
 import { pendingConversationPresentation } from "../../view-models/chat/pending-conversation-presentation.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
-import { AccessEndingNotice } from "./access-term.tsx";
+import { AccessNotice } from "./access-term.tsx";
 import { OnlineComputerAlternative } from "./computer-switcher.tsx";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DevicesDialog } from "./devices-dialog.tsx";
@@ -274,7 +274,13 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                         onReviewDevices={workspace.deviceAccess?.getState().open ?? null}
                     />
                 )}
-                {workspace.accessExpiry !== null && <AccessEndingNotice store={workspace.accessExpiry} />}
+                {workspace.accessExpiry !== null && (
+                    <AccessNotice
+                        computerName={model.runtimeConfiguration?.runtime?.machineName ?? ""}
+                        onOpenDevices={workspace.deviceAccess?.getState().open ?? null}
+                        store={workspace.accessExpiry}
+                    />
+                )}
             </TopNoticeStack>
             {workspace.deviceAccess !== null && (
                 <DevicesDialog

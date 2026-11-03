@@ -700,3 +700,24 @@ test("Given a browser whose access ends within the hour, When the page stays ope
     await accountMenu(reloaded);
     expect(queryByRole(document.body, "status", { name: "Access ending soon" })).toBeNull();
 });
+
+test("Given a browser that just joined through a link, When its page opens, Then it is told once until when it can use the computer and where to manage devices", {
+    timeout: 60_000,
+}, async () => {
+    const joined = await createTestApp({ connectAgent: true, page: { kind: "share" } });
+    await joined.waitForView(() => expect(new URL(window.location.href).searchParams.get("identity")).not.toBeNull());
+    const app = await joined.reload();
+    const notice = await app.waitForView(() => getByRole(document.body, "status", { name: "This browser's access" }));
+    expect(notice.textContent).toContain("This browser can use");
+    expect(notice.textContent).toContain(" until ");
+    expect(getByRole(notice, "button", { name: "Devices" })).toBeInstanceOf(HTMLButtonElement);
+    await app.user.click(getByRole(notice, "button", { name: "Got it" }));
+    expect(queryByRole(document.body, "status", { name: "This browser's access" })).toBeNull();
+
+    const reloaded = await app.reload();
+    await reloaded.user.click(await reloaded.queryElementByTestId(dataTestId.userMenu));
+    await reloaded.waitForView(() =>
+        expect(getByRole(document.body, "menu").textContent).toContain("Access in this browser"),
+    );
+    expect(queryByRole(document.body, "status", { name: "This browser's access" })).toBeNull();
+});

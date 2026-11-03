@@ -263,6 +263,13 @@ export const linkedDevicesSeenEntry = (projectId: string): LocalStorageEntry<str
         schema: v.pipe(v.string(), v.isoTimestamp()),
     });
 
+/** The access this browser was told it joined with, so that explanation is not repeated for it. */
+export const accessJoinedAcknowledgedEntry = (projectId: string): LocalStorageEntry<string> =>
+    stringLocalStorageEntry({
+        key: scopedKey("morty:access-joined-acknowledged:v1:", projectId),
+        schema: v.pipe(v.string(), v.isoTimestamp()),
+    });
+
 /** The end of this browser's access the user was already told about, so the reminder for it is not repeated. */
 export const accessEndingAcknowledgedEntry = (projectId: string): LocalStorageEntry<string> =>
     stringLocalStorageEntry({

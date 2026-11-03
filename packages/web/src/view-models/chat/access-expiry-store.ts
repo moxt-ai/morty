@@ -1,6 +1,7 @@
 import { createStore } from "zustand/vanilla";
 import {
     accessEndingAcknowledgedEntry,
+    accessJoinedAcknowledgedEntry,
     centralLocalStorage,
 } from "../../services/local-storage/central-local-storage.ts";
 import type { Clock } from "../../services/time/clock.ts";
@@ -13,16 +14,22 @@ function accessReminderAt(expiresAt: string): number {
     return Date.parse(expiresAt) - reminderLead;
 }
 
+/**
+ * What this browser is told about its access, one thing at a time: that it joined and until when, once for each
+ * access, and that the access ends soon, which supersedes it.
+ */
+type AccessNotice = "none" | "joined" | "ending";
+
 type AccessExpiryState =
     | { readonly kind: "unknown" }
-    /** `expiresAt` is null for access that does not end on its own. */
-    | { readonly kind: "known"; readonly expiresAt: string | null; readonly reminding: boolean };
+    /** `expiresAt` is null for access that does not end on its own, which has no notice. */
+    | { readonly kind: "known"; readonly expiresAt: string | null; readonly notice: AccessNotice };
 
 export interface AccessExpiryStore {
     readonly state: AccessExpiryState;
-    /** Reads when access ends while the page is visible, and reminds once when that is near. */
+    /** Reads when access ends while the page is visible, and tells this browser about it at most once each way. */
     readonly onAttach: (node: HTMLElement | null) => (() => void) | undefined;
-    /** The user saw the reminder; it is not shown again for the same access. */
+    /** The user saw the notice shown; it is not shown again for the same access. */
     readonly dismiss: () => void;
 }
 
@@ -36,7 +43,8 @@ export function createAccessExpiryStore(options: {
     readonly accessExpiresAt: (signal: AbortSignal) => Promise<string | null>;
     readonly clock: Clock;
 }) {
-    const acknowledged = accessEndingAcknowledgedEntry(options.projectId);
+    const joinedAcknowledged = accessJoinedAcknowledgedEntry(options.projectId);
+    const endingAcknowledged = accessEndingAcknowledgedEntry(options.projectId);
     return createStore<AccessExpiryStore>()((set, get) => {
         const follow = async (signal: AbortSignal): Promise<void> => {
             let expiresAt: string | null;
@@ -49,20 +57,24 @@ export function createAccessExpiryStore(options: {
             if (signal.aborted) {
                 return;
             }
-            const due = expiresAt === null || centralLocalStorage.read(acknowledged) === expiresAt ? null : expiresAt;
-            set({ state: { kind: "known", expiresAt, reminding: false } });
-            if (due === null) {
+            if (expiresAt === null) {
+                set({ state: { kind: "known", expiresAt, notice: "none" } });
                 return;
             }
-            const wait = accessReminderAt(due) - options.clock.now();
-            if (wait > 0) {
-                try {
-                    await options.clock.sleep(wait, signal);
-                } catch {
-                    return;
-                }
+            const remindAt =
+                centralLocalStorage.read(endingAcknowledged) === expiresAt ? null : accessReminderAt(expiresAt);
+            const ending = remindAt !== null && options.clock.now() >= remindAt;
+            const joined = centralLocalStorage.read(joinedAcknowledged) !== expiresAt;
+            set({ state: { kind: "known", expiresAt, notice: ending ? "ending" : joined ? "joined" : "none" } });
+            if (remindAt === null || ending) {
+                return;
             }
-            set({ state: { kind: "known", expiresAt, reminding: true } });
+            try {
+                await options.clock.sleep(remindAt - options.clock.now(), signal);
+            } catch {
+                return;
+            }
+            set({ state: { kind: "known", expiresAt, notice: "ending" } });
         };
         return {
             state: { kind: "unknown" },
@@ -86,10 +98,14 @@ export function createAccessExpiryStore(options: {
             },
             dismiss: () => {
                 const state = get().state;
-                if (state.kind === "known" && state.expiresAt !== null) {
-                    centralLocalStorage.write(acknowledged, state.expiresAt);
-                    set({ state: { ...state, reminding: false } });
+                if (state.kind !== "known" || state.expiresAt === null || state.notice === "none") {
+                    return;
                 }
+                centralLocalStorage.write(
+                    state.notice === "joined" ? joinedAcknowledged : endingAcknowledged,
+                    state.expiresAt,
+                );
+                set({ state: { ...state, notice: "none" } });
             },
         };
     });
