@@ -176,6 +176,10 @@ function SettingPicker({
     readonly focusOnOpen?: boolean;
 }) {
     const [search, setSearch] = useState("");
+    // Filtering keeps the picker at the height it had when the user started typing: a shorter list would otherwise
+    // let the menu or sheet reposition and move the search field under the user's typing.
+    const [searchHeight, setSearchHeight] = useState<number | null>(null);
+    const pickerRef = useRef<HTMLDivElement | null>(null);
     const listRef = useRef<HTMLElement | null>(null);
     const searchInputRef = useRef<HTMLInputElement | null>(null);
     const query = search.trim().toLocaleLowerCase();
@@ -214,7 +218,11 @@ function SettingPicker({
         };
     }, [control.searchable, focusOnOpen]);
     return (
-        <div className="flex min-h-0 flex-col">
+        <div
+            className="flex min-h-0 flex-col"
+            ref={pickerRef}
+            style={searchHeight === null ? undefined : { minHeight: searchHeight }}
+        >
             {control.searchable && (
                 <div className={cn("relative mb-2 shrink-0", nested ? "mx-2 mt-2" : "mx-4")}>
                     <Search
@@ -226,7 +234,12 @@ function SettingPicker({
                         autoComplete="off"
                         className="h-9 w-full rounded-lg border border-border bg-background pr-3 pl-9 text-base outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/20"
                         data-testid={dataTestId.modelSearch}
-                        onChange={(event) => setSearch(event.currentTarget.value)}
+                        onChange={(event) => {
+                            if (searchHeight === null && pickerRef.current !== null) {
+                                setSearchHeight(pickerRef.current.offsetHeight);
+                            }
+                            setSearch(event.currentTarget.value);
+                        }}
                         onKeyDown={(event) => {
                             if (event.key === "ArrowDown") {
                                 event.preventDefault();

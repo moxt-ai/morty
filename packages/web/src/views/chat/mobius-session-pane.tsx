@@ -23,6 +23,7 @@ import { ComposerNoticeSlot, composerErrorMessage } from "../../components/chat/
 import { ConnectionNotice } from "../../components/chat/connection-notice.tsx";
 import { ReadonlyWorkingDirectory, WorkingDirectorySkeleton } from "../../components/chat/cwd-selector.tsx";
 import { HarnessMark } from "../../components/chat/harness-mark.tsx";
+import { InlineEditFocus } from "../../components/chat/inline-edit-focus.tsx";
 import { MessageDeliveryStatus } from "../../components/chat/message-delivery-status.tsx";
 import { MobileRenameOverlay } from "../../components/chat/mobile-rename-overlay.tsx";
 import { MobileSessionTitlePortal } from "../../components/chat/mobile-session-title-portal.tsx";
@@ -494,7 +495,8 @@ function SessionConversationTitleBar({
                 testId={dataTestId.sessionTitleHarnessMark}
             />
         );
-    if (titleEdit.kind === "closed" || titleEdit.kind === "failed") {
+    const saving = titleEdit.kind === "saving";
+    const closedTitle = (ref: (node: HTMLElement | null) => void) => {
         if (titleLoading) {
             return (
                 <h2
@@ -537,63 +539,71 @@ function SessionConversationTitleBar({
                     )}
                     title="Rename conversation"
                     onClick={onOpenTitleEdit}
+                    ref={ref}
                 >
                     {displayTitle}
                 </button>
             </h2>
         );
-    }
-    const saving = titleEdit.kind === "saving";
+    };
     return (
-        <div
-            className={cn(
+        <InlineEditFocus
+            control={closedTitle}
+            editing={titleEdit.kind !== "closed" && titleEdit.kind !== "failed"}
+            editor={
+                <>
+                    {titleHarnessMark(false)}
+                    <AutoFocusInput
+                        aria-label="Conversation title"
+                        className={cn(
+                            "appearance-none rounded-none border-0 bg-transparent px-0 py-0 font-semibold shadow-none outline-none ring-0 keyboard-focus:focus:ring-0 keyboard-focus:focus-visible:ring-0",
+                            titleTextClassName,
+                            centered ? "w-[10rem] min-w-[8rem] shrink text-center" : "min-w-0 flex-1",
+                        )}
+                        disabled={saving}
+                        maxLength={500}
+                        value={
+                            titleEdit.kind === "closed" || titleEdit.kind === "failed" ? displayTitle : titleEdit.draft
+                        }
+                        onChange={(event) => onSetTitleDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                                event.preventDefault();
+                                onConfirmTitleEdit();
+                            }
+                            if (event.key === "Escape") {
+                                onCancelTitleEdit();
+                            }
+                        }}
+                    />
+                    <div className="flex shrink-0 items-center gap-1">
+                        <Button
+                            aria-label="Cancel rename"
+                            disabled={saving}
+                            size="icon"
+                            variant="ghost"
+                            onClick={onCancelTitleEdit}
+                        >
+                            <X className="size-4" />
+                        </Button>
+                        <Button
+                            aria-label="Save title"
+                            disabled={saving}
+                            size="icon"
+                            variant="ghost"
+                            onClick={onConfirmTitleEdit}
+                        >
+                            <Check className="size-4" />
+                        </Button>
+                    </div>
+                </>
+            }
+            editorClassName={cn(
                 "flex items-center",
                 centered ? "w-max min-w-[14rem] max-w-[70vw] justify-center gap-1" : "min-w-0 flex-1 gap-2.5",
             )}
-        >
-            {titleHarnessMark(false)}
-            <AutoFocusInput
-                aria-label="Conversation title"
-                className={cn(
-                    "appearance-none rounded-none border-0 bg-transparent px-0 py-0 font-semibold shadow-none outline-none ring-0 keyboard-focus:focus:ring-0 keyboard-focus:focus-visible:ring-0",
-                    titleTextClassName,
-                    centered ? "w-[10rem] min-w-[8rem] shrink text-center" : "min-w-0 flex-1",
-                )}
-                disabled={saving}
-                maxLength={500}
-                value={titleEdit.draft}
-                onChange={(event) => onSetTitleDraft(event.target.value)}
-                onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                        event.preventDefault();
-                        onConfirmTitleEdit();
-                    }
-                    if (event.key === "Escape") {
-                        onCancelTitleEdit();
-                    }
-                }}
-            />
-            <div className="flex shrink-0 items-center gap-1">
-                <Button
-                    aria-label="Cancel rename"
-                    disabled={saving}
-                    size="icon"
-                    variant="ghost"
-                    onClick={onCancelTitleEdit}
-                >
-                    <X className="size-4" />
-                </Button>
-                <Button
-                    aria-label="Save title"
-                    disabled={saving}
-                    size="icon"
-                    variant="ghost"
-                    onClick={onConfirmTitleEdit}
-                >
-                    <Check className="size-4" />
-                </Button>
-            </div>
-        </div>
+            label="Rename conversation"
+        />
     );
 }
 
@@ -1187,9 +1197,10 @@ function MobiusSessionPaneBody({
                                 fadeToClassName="to-card/0"
                                 // The card yields the height the header and composer need: it shrinks inside
                                 // the clipped pane and keeps scrolling its own content instead of pushing
-                                // the composer below the pane's bottom edge. The floor keeps its first row
-                                // reachable when an in-flow notice stacks above the composer as well.
-                                frameClassName={`${chatSessionInteractionColumnClassName} ${stackNoticeVisible ? "mb-2" : "mt-4 mb-2 sm:mt-5"} flex min-h-24 shrink flex-col`}
+                                // the composer below the pane's bottom edge. Only when an in-flow notice
+                                // stacks above the composer as well does a floor keep its first row reachable;
+                                // otherwise the card yields all the way so the composer stays whole.
+                                frameClassName={`${chatSessionInteractionColumnClassName} ${stackNoticeVisible ? "mb-2 min-h-24" : "mt-4 mb-2 sm:mt-5"} flex shrink flex-col`}
                                 className="max-h-[min(50vh,360px)] min-h-0 flex-1 overflow-y-auto [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]"
                             >
                                 <SessionInteractionCards

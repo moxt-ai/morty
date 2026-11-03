@@ -1,4 +1,5 @@
 import { Check, X } from "lucide-react";
+import { useCallback } from "react";
 import { createPortal } from "react-dom";
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
@@ -27,12 +28,26 @@ export function MobileRenameOverlay({
 }) {
     const viewport = useConfigurationViewport();
     const attachKeyboardMarker = useSoftwareKeyboardMarker();
+    // Like any modal, closing returns focus to what opened it, unless the user already moved focus elsewhere.
+    const returnFocus = useCallback((node: HTMLDivElement | null) => {
+        if (node === null) {
+            return;
+        }
+        const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        return () => {
+            const current = document.activeElement;
+            if (opener?.isConnected && (current === null || current === document.body || node.contains(current))) {
+                opener.focus();
+            }
+        };
+    }, []);
     return createPortal(
         <div
             role="dialog"
             aria-modal="true"
             aria-label="Rename conversation"
             className="fixed inset-0 z-[132] sm:hidden"
+            ref={returnFocus}
         >
             <button
                 type="button"

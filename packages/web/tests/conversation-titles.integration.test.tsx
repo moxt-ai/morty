@@ -166,6 +166,8 @@ test("Given a saved title differs from the native session listing, When reopenin
     await reopened.user.type(input, "My renamed session");
     await reopened.user.click(getByRole(document.body, "button", { name: "Save title" }));
     await reopened.waitForView(() => getByRole(document.body, "heading", { name: "My renamed session" }));
+    // The saved title takes focus back from the editor it replaced.
+    expect(document.activeElement).toBe(getByRole(document.body, "button", { name: "My renamed session" }));
     await reopened.user.click(getByRole(document.body, "button", { name: "Open Session" }));
     const renamedDialog = await reopened.waitForView(() =>
         getByRole(document.body, "dialog", { name: "Open Session" }),
@@ -275,7 +277,8 @@ test("Given an open session on a phone, When the user renames it from the header
         await app.waitForView(() =>
             expect(queryByRole(document.body, "dialog", { name: "Rename conversation" })).toBeNull(),
         );
-        expect(getByRole(slot, "button", { name: original })).toBeTruthy();
+        // Closing the editor returns focus to the title that opened it.
+        expect(document.activeElement).toBe(getByRole(slot, "button", { name: original }));
         await app.user.click(getByRole(slot, "button", { name: original }));
         const second = getByRole(document.body, "dialog", { name: "Rename conversation" });
         const secondInput = getByRole(second, "textbox", { name: "Conversation title" });
@@ -283,6 +286,7 @@ test("Given an open session on a phone, When the user renames it from the header
         await app.user.type(secondInput, "Renamed on a phone");
         await app.user.click(getByRole(second, "button", { name: "Save title" }));
         await app.waitForView(() => expect(getByRole(slot, "button", { name: "Renamed on a phone" })).toBeTruthy());
+        expect(document.activeElement).toBe(getByRole(slot, "button", { name: "Renamed on a phone" }));
     } finally {
         if (app !== null) {
             await app.close();
