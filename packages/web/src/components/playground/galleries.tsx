@@ -555,6 +555,7 @@ function ComposerNoticeGallery() {
         kind: "retrying",
         description: "Updates are paused. We’ll retry automatically. Your draft is saved.",
         remainingSeconds: 12,
+        restartCommand: null,
         title: "Reconnecting…",
     };
     const failed: ConnectionFeedback = {
@@ -565,6 +566,7 @@ function ComposerNoticeGallery() {
     const waiting: ConnectionFeedback = {
         kind: "waiting",
         description: "You can keep writing while we connect.",
+        restartCommand: null,
         title: "Connecting…",
     };
     const closed: ConnectionFeedback = {

@@ -3,8 +3,9 @@ import { type BotChatHomeStore, botConnectionStatus } from "./bot-chat-home-stor
 import type { SessionConnection } from "./session-connection.ts";
 
 /** A computer goes offline when it sleeps, loses its network, or restarts; only a restart needs the user to start Mobius again. */
-const COMPUTER_OFFLINE_RECOVERY =
-    "Make sure it’s awake and online. After a restart, run npx @moxt-ai/mobius@latest start on it. Your draft is saved.";
+const COMPUTER_OFFLINE_RECOVERY = "Make sure it’s awake and online. Your draft is saved.";
+/** Starts the daemon, which resumes the saved connection. */
+const MOBIUS_START_COMMAND = "npx @moxt-ai/mobius@latest start";
 
 type ConnectionPresentation = Pick<
     ExecutionContext,
@@ -80,6 +81,7 @@ export function connectionPresentation(
                 kind: "waiting",
                 title: "No network connection",
                 description: "Your draft is saved. We’ll reconnect when your network returns.",
+                restartCommand: null,
             },
         );
     }
@@ -101,6 +103,7 @@ export function connectionPresentation(
                 kind: "waiting",
                 title: "Connect a computer",
                 description: "Connect your local agent to start chatting.",
+                restartCommand: null,
             },
         );
     }
@@ -121,6 +124,7 @@ export function connectionPresentation(
                         ? COMPUTER_OFFLINE_RECOVERY
                         : "Updates are paused. We’ll retry automatically. Your draft is saved.",
                 remainingSeconds: session.retry.kind === "scheduled" ? session.retry.remainingSeconds : null,
+                restartCommand: computer.kind === "disconnected" ? MOBIUS_START_COMMAND : null,
             },
         );
     }
@@ -131,6 +135,7 @@ export function connectionPresentation(
                 kind: "waiting",
                 title: "Computer is offline",
                 description: COMPUTER_OFFLINE_RECOVERY,
+                restartCommand: MOBIUS_START_COMMAND,
             },
         );
     }
@@ -141,6 +146,7 @@ export function connectionPresentation(
                 kind: "waiting",
                 title: "Reconnecting…",
                 description: "Updates are paused. Your draft is saved.",
+                restartCommand: null,
             },
         );
     }
@@ -155,6 +161,7 @@ export function connectionPresentation(
                 title: "Connection interrupted",
                 description: "You can keep writing. Retry to check the connection.",
                 remainingSeconds: null,
+                restartCommand: null,
             },
         );
     }
@@ -165,6 +172,7 @@ export function connectionPresentation(
                 kind: "waiting",
                 title: "Checking connection…",
                 description: "You can keep writing while we connect.",
+                restartCommand: null,
             },
         );
     }

@@ -27,14 +27,23 @@ export interface ExecutionContext {
         | "Closed";
 }
 
+/** The command that brings an offline computer back after a restart; null while the computer is not offline. */
+type RestartCommand = string | null;
+
 export type ConnectionFeedback =
     | { readonly kind: "hidden" }
-    | { readonly kind: "waiting"; readonly title: string; readonly description: string }
+    | {
+          readonly kind: "waiting";
+          readonly title: string;
+          readonly description: string;
+          readonly restartCommand: RestartCommand;
+      }
     | {
           readonly kind: "retrying";
           readonly title: string;
           readonly description: string;
           readonly remainingSeconds: number | null;
+          readonly restartCommand: RestartCommand;
       }
     | {
           readonly kind: "failed";

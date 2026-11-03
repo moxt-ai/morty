@@ -2,8 +2,9 @@ import { fireEvent, getByLabelText, getByRole, queryAllByRole, queryByRole } fro
 import { act } from "@testing-library/react";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
+import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
+import { TestClock } from "./infra/test-clock.ts";
 
 // The Worker checks the Runtime every 5 s and retries a failed check 5 s later, so one change can take two checks.
 const RUNTIME_CHANGE_TIMEOUT_MS = 20_000;
@@ -252,6 +253,29 @@ test("Given a remembered title for a session that no longer exists, When the ser
     });
 });
 
+test("Given an open conversation, When its computer goes offline, Then the notice offers the restart command to copy", {
+    timeout: 90_000,
+}, async () => {
+    const clock = new TestClock("2026-11-03T08:00:00Z");
+    const app = await createTestApp({ connectAgent: true, clock });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected a connected controlled Agent Runtime");
+    }
+    await sendPrompt(app, await readyComposer(app), "Check the build");
+    await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: Check the build")).toBe(true));
+    await daemon.disconnect();
+    await showReconnectNotice(app, clock);
+    const notice = await app.waitForView(() => {
+        const element = app.elementByTestId(dataTestId.sessionReconnectNotice);
+        expect(element.textContent).toContain("Computer is offline");
+        return element;
+    }, RUNTIME_CHANGE_TIMEOUT_MS);
+    expect(getByRole(notice, "code").textContent).toBe("npx @moxt-ai/mobius@latest start");
+    await app.user.click(getByRole(notice, "button", { name: "Copy command" }));
+    expect(await navigator.clipboard.readText()).toBe("npx @moxt-ai/mobius@latest start");
+});
+
 test("Given the New Session page while the computer is offline, When an attachment is rejected, Then the connection status is detail inside that one alert", {
     timeout: 90_000,
 }, async () => {
@@ -288,5 +312,5 @@ test("Given the New Session page while the computer is offline, When an attachme
     // One headline, one assertive region: the offline status is its inline detail.
     expect(queryAllByRole(alert, "alert")).toHaveLength(0);
     expect(queryAllByRole(alert, "status")).toHaveLength(0);
-    expect(alert.textContent).toContain("After a restart, run npx @moxt-ai/mobius@latest start on it.");
+    expect(alert.textContent).toContain("Make sure it’s awake and online.");
 });

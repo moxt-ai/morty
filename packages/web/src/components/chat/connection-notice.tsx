@@ -1,6 +1,7 @@
-import { Archive, type LucideIcon, WifiOff } from "lucide-react";
+import { Archive, Check, Copy, type LucideIcon, WifiOff } from "lucide-react";
 import type { ReactNode } from "react";
 import { dataTestId } from "../../data-testid.ts";
+import { CopyToClipboardButton } from "../ui/copy-to-clipboard-button.tsx";
 import { LinkButton } from "../ui/link-button.tsx";
 import { MortyAlert, type MortyAlertTone } from "../ui/morty-alert.tsx";
 import type { ConnectionFeedback } from "./execution-context.ts";
@@ -57,6 +58,35 @@ function ReopenAction({
     );
 }
 
+/**
+ * The restart command on its own row: monospace and unbroken so it can be typed exactly,
+ * with a copy action for when Morty is open on that computer.
+ */
+function RestartCommand({ command }: { readonly command: string }) {
+    return (
+        <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 font-normal">
+            <span>After a restart, run</span>
+            <span className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1">
+                <code className="max-w-full shrink-0 overflow-x-auto whitespace-nowrap rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] leading-4 text-foreground">
+                    {command}
+                </code>
+                <CopyToClipboardButton
+                    className="w-7 px-0"
+                    copiedContent={<Check aria-hidden="true" className="size-3.5" />}
+                    failureToast={{ description: "Select the command and copy it manually.", title: "Could not copy" }}
+                    label="Copy command"
+                    size="xs"
+                    successToast={{ description: "Run it in a terminal on that computer.", title: "Command copied" }}
+                    value={command}
+                    variant="ghost"
+                >
+                    <Copy aria-hidden="true" className="size-3.5" />
+                </CopyToClipboardButton>
+            </span>
+        </div>
+    );
+}
+
 function retryButton(feedback: VisibleFeedback, onRetryNow: () => void, className: string): ReactNode {
     if (feedback.kind !== "retrying" && feedback.kind !== "failed") {
         return null;
@@ -110,6 +140,10 @@ export function ConnectionNotice({
             <ReopenAction className={actionClassName} feedback={feedback} onReopen={onReopen} />
         ) : null;
     const testId = noticeTestId(feedback);
+    const restart =
+        (feedback.kind === "waiting" || feedback.kind === "retrying") && feedback.restartCommand !== null ? (
+            <RestartCommand command={feedback.restartCommand} />
+        ) : null;
 
     // The waiting state reads as a quiet chip, not a card: title only, in a
     // button-like shape on the chat surface so it sits left-aligned with the
@@ -161,6 +195,15 @@ export function ConnectionNotice({
         );
         // The host's own action (switching to another online computer) is part of the
         // recovery the inline line describes, so it stays reachable inside the alert.
+        if (restart !== null) {
+            return (
+                <div className="flex min-w-0 flex-col items-start gap-y-1">
+                    {line}
+                    {restart}
+                    {footer}
+                </div>
+            );
+        }
         return footer === undefined ? (
             line
         ) : (
@@ -186,7 +229,13 @@ export function ConnectionNotice({
     return (
         <MortyAlert
             description={
-                footer === undefined ? (
+                restart !== null ? (
+                    <div className="grid min-w-0 gap-y-1">
+                        {detail}
+                        {restart}
+                        {footer}
+                    </div>
+                ) : footer === undefined ? (
                     detail
                 ) : (
                     <>
