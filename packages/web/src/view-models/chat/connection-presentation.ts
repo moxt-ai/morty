@@ -2,6 +2,10 @@ import type { ConnectionFeedback, ExecutionContext } from "../../components/chat
 import { type BotChatHomeStore, botConnectionStatus } from "./bot-chat-home-store.ts";
 import type { SessionConnection } from "./session-connection.ts";
 
+/** A computer goes offline when it sleeps, loses its network, or restarts; only a restart needs the user to start Mobius again. */
+const COMPUTER_OFFLINE_RECOVERY =
+    "Make sure it’s awake and online. After a restart, run npx @moxt-ai/mobius@latest start on it. Your draft is saved.";
+
 type ConnectionPresentation = Pick<
     ExecutionContext,
     "computerStatus" | "lastConfirmed" | "connection" | "indicator" | "feedback" | "available"
@@ -114,7 +118,7 @@ export function connectionPresentation(
                 title: computer.kind === "disconnected" ? "Computer is offline" : "Reconnecting…",
                 description:
                     computer.kind === "disconnected"
-                        ? "Start Morty on this computer to reconnect. Your draft is saved."
+                        ? COMPUTER_OFFLINE_RECOVERY
                         : "Updates are paused. We’ll retry automatically. Your draft is saved.",
                 remainingSeconds: session.retry.kind === "scheduled" ? session.retry.remainingSeconds : null,
             },
@@ -126,7 +130,7 @@ export function connectionPresentation(
             {
                 kind: "waiting",
                 title: "Computer is offline",
-                description: "Start Morty on this computer to reconnect. Your draft is saved.",
+                description: COMPUTER_OFFLINE_RECOVERY,
             },
         );
     }

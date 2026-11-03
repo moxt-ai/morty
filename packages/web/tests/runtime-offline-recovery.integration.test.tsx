@@ -288,5 +288,5 @@ test("Given the New Session page while the computer is offline, When an attachme
     // One headline, one assertive region: the offline status is its inline detail.
     expect(queryAllByRole(alert, "alert")).toHaveLength(0);
     expect(queryAllByRole(alert, "status")).toHaveLength(0);
-    expect(alert.textContent).toContain("Start Morty on this computer to reconnect");
+    expect(alert.textContent).toContain("After a restart, run npx @moxt-ai/mobius@latest start on it.");
 });
