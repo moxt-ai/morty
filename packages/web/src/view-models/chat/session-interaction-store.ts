@@ -1,5 +1,6 @@
 import type { SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
+import type { AgentDisplayContent } from "../../components/agents/display-content.ts";
 import { formatError } from "../format-error.ts";
 import {
     requestedInteraction,
@@ -12,6 +13,7 @@ import type {
     PermissionInteractionResponse,
     SessionInteraction,
 } from "./session-pane-types.ts";
+import type { SessionMessage } from "./session-presentation.ts";
 
 // The Session's interaction contract: the requests the Agent made, how each
 // was resolved, and the user's in-flight responses. The pane forwards lifecycle
@@ -188,7 +190,29 @@ export function createSessionInteractionStore(ports: {
     });
 }
 
-export function sessionInteractionPresentation(model: SessionInteractionStore) {
+export type PermissionFileChange = Extract<AgentDisplayContent, { readonly type: "diff" }>;
+
+/**
+ * The diffs of the tool call a permission asks about. A request names its tool call and may omit
+ * what the Agent already announced for it, so the timeline's merged call is the one that carries them.
+ */
+function requestedFileChanges(
+    messages: readonly SessionMessage[],
+    toolCallId: string,
+): readonly PermissionFileChange[] {
+    const announced = messages
+        .flatMap((message) =>
+            message.role === "assistant" &&
+            message.presentation.kind === "tool" &&
+            message.presentation.entry.id === toolCallId
+                ? [message.presentation.entry]
+                : [],
+        )
+        .at(-1);
+    return announced?.content.flatMap((content) => (content.type === "diff" ? [content] : [])) ?? [];
+}
+
+export function sessionInteractionPresentation(model: SessionInteractionStore, messages: readonly SessionMessage[]) {
     const interactions = model.interactions;
     const permissions = interactions.flatMap((interaction) =>
         interaction.kind === "permission" &&
@@ -207,6 +231,12 @@ export function sessionInteractionPresentation(model: SessionInteractionStore) {
     const visibleIds = new Set([...permissions, ...elicitations].map((interaction) => interaction.interactionId));
     return {
         permissions,
+        fileChanges: new Map(
+            permissions.map((permission) => [
+                permission.interactionId,
+                requestedFileChanges(messages, permission.toolCallId),
+            ]),
+        ),
         elicitations,
         busyInteractionIds: new Set(
             Array.from(model.submissions).flatMap(([id, operation]) => (operation.kind === "submitting" ? [id] : [])),

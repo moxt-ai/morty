@@ -734,7 +734,7 @@ function MobiusSessionPaneBody({
     const attachmentModel = useStore(pane.composerAttachments);
     const interactionModel = useStore(pane.interactions);
     const settingsModel = useStore(pane.settings);
-    const interactions = sessionInteractionPresentation(interactionModel);
+    const interactions = sessionInteractionPresentation(interactionModel, model.messages);
     const preview = useStore(pane.filePreview);
     const delivery = useStore(pane.delivery);
     const messageQueue = useStore(pane.messageQueue);
@@ -1194,6 +1194,7 @@ function MobiusSessionPaneBody({
                             >
                                 <SessionInteractionCards
                                     elicitations={interactions.elicitations}
+                                    fileChanges={interactions.fileChanges}
                                     permissions={interactions.permissions}
                                     busyInteractionIds={interactions.busyInteractionIds}
                                     error={interactions.error}

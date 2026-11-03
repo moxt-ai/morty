@@ -95,6 +95,9 @@ export function createInteractionAgent(onBackgroundPermissionReady?: (request: (
                 const sessionScope = context.params.prompt.some(
                     (content) => content.type === "text" && content.text === "request session permission",
                 );
+                const fileEdit = context.params.prompt.some(
+                    (content) => content.type === "text" && content.text === "request file edit",
+                );
                 const options: acp.PermissionOption[] = sessionScope
                     ? [
                           { optionId: "allow-session", kind: "allow_always", name: "Allow for this session" },
@@ -155,6 +158,52 @@ export function createInteractionAgent(onBackgroundPermissionReady?: (request: (
                                 sessionUpdate: "agent_message_chunk",
                                 messageId: crypto.randomUUID(),
                                 content: { type: "text", text: `Text answers: ${JSON.stringify(input)}` },
+                            },
+                        });
+                        return { stopReason: "end_turn" };
+                    }
+                    if (fileEdit) {
+                        // Like Claude Code and Codex, announce the edit with its diff, then ask about it by reference.
+                        const toolCallId = crypto.randomUUID();
+                        await onSessionUpdate({
+                            sessionId,
+                            update: {
+                                sessionUpdate: "tool_call",
+                                toolCallId,
+                                kind: "edit",
+                                status: "pending",
+                                title: "Edit src/todo.ts",
+                                rawInput: {
+                                    file_path: "src/todo.ts",
+                                    old_string: "  return list.length;",
+                                    new_string: "  const next = list.length + 1;\n  return next;",
+                                    replace_all: false,
+                                },
+                                content: [
+                                    {
+                                        type: "diff",
+                                        path: "src/todo.ts",
+                                        oldText: "  return list.length;",
+                                        newText: "  const next = list.length + 1;\n  return next;",
+                                    },
+                                ],
+                                locations: [{ path: "src/todo.ts" }],
+                            },
+                        });
+                        const edit = await context.client.request(
+                            acp.methods.client.session.requestPermission,
+                            { sessionId, toolCall: { toolCallId, title: "Edit src/todo.ts" }, options },
+                            { cancellationSignal: signal },
+                        );
+                        await onSessionUpdate({
+                            sessionId,
+                            update: {
+                                sessionUpdate: "agent_message_chunk",
+                                messageId: crypto.randomUUID(),
+                                content: {
+                                    type: "text",
+                                    text: `Edit decision: ${edit.outcome.outcome === "selected" ? edit.outcome.optionId : "cancelled"}`,
+                                },
                             },
                         });
                         return { stopReason: "end_turn" };

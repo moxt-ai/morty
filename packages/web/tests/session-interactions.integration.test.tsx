@@ -106,6 +106,21 @@ test("Given a pending permission, When Chat remounts and the user allows it and 
     expect(queryByRole(document.body, "dialog", { name: "Agent information request" })).toBeNull();
 });
 
+test("Given the agent asks to edit a file it announced, When the user reviews the request, Then the card shows the change as before and after text and keeps the full input in its details", {
+    timeout: 30_000,
+}, async () => {
+    const app = await requestInput("request file edit");
+    const permission = getByRole(document.body, "alertdialog", { name: "Agent permission request" });
+    expect(permission.textContent).toContain("Edit src/todo.ts");
+    expect(permission.textContent).toContain("  return list.length;");
+    expect(permission.textContent).toContain("  const next = list.length + 1;\n  return next;");
+    expect(permission.textContent).not.toContain('"new_string"');
+    await app.user.click(getByRole(permission, "button", { name: /Details ·/ }));
+    expect(permission.textContent).toContain('"replace_all": false');
+    await app.user.click(getByRole(permission, "button", { name: "Allow" }));
+    await app.waitForView(() => expect(document.body.textContent).toContain("Edit decision: allow-once"));
+});
+
 test("Given a pending permission, When the user rejects it, Then the agent receives the rejection without showing an input form", {
     timeout: 30_000,
 }, async () => {

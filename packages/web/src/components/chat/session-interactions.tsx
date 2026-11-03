@@ -10,13 +10,14 @@ import { textLinkClassName } from "@/components/ui/text-link";
 import { useWrappedButtonRadius } from "@/components/utils/use-wrapped-button-radius";
 import { cn } from "@/lib/utils";
 import { encodeElicitationForm, readMultiselectDefaults } from "@/services/chat/elicitation-form";
-import { permissionPresentation } from "@/view-models/chat/session-interaction-store";
+import { type PermissionFileChange, permissionPresentation } from "@/view-models/chat/session-interaction-store";
 import type {
     ElicitationInteraction,
     ElicitationInteractionResponse,
     PermissionInteraction,
     PermissionInteractionResponse,
 } from "@/view-models/chat/session-pane-types";
+import { AgentRichContent } from "../agents/agent-rich-content.tsx";
 import {
     agentThinkStepChevronClassName,
     agentThinkStepInlineLabelClassName,
@@ -24,6 +25,7 @@ import {
     agentThinkStepTriggerClassName,
 } from "./tools/tool-call-status";
 
+export type { PermissionFileChange } from "@/view-models/chat/session-interaction-store";
 export type {
     ElicitationInteraction,
     ElicitationInteractionResponse,
@@ -303,7 +305,7 @@ function isAllowKind(kind: PermissionOption["kind"]): boolean {
     return kind === "allow_once" || kind === "allow_always";
 }
 
-/** The shell command when this is an `execute` request carrying one; raw JSON stays the fallback for every other tool shape. */
+/** The shell command when this is an `execute` request carrying one. */
 function executeCommand(permission: PermissionInteraction): string | undefined {
     if (permission.toolKind !== "execute") {
         return undefined;
@@ -316,19 +318,64 @@ function executeCommand(permission: PermissionInteraction): string | undefined {
     return typeof command === "string" && command.length > 0 ? command : undefined;
 }
 
+/** What the card shows first: the change itself when the tool call carries diffs, then the command, then the raw input. */
+type PermissionPreview =
+    | { readonly kind: "changes"; readonly changes: readonly PermissionFileChange[] }
+    | { readonly kind: "command"; readonly command: string; readonly cwd: string }
+    | { readonly kind: "input" }
+    | { readonly kind: "none" };
+
+function permissionPreview(
+    permission: PermissionInteraction,
+    fileChanges: readonly PermissionFileChange[],
+): PermissionPreview {
+    if (fileChanges.length > 0) {
+        return { kind: "changes", changes: fileChanges };
+    }
+    if (permission.details === undefined) {
+        return { kind: "none" };
+    }
+    const command = executeCommand(permission);
+    return command === undefined ? { kind: "input" } : { kind: "command", command, cwd: permission.details.cwd };
+}
+
+function PermissionPreviewContent({ input, preview }: { readonly input: string; readonly preview: PermissionPreview }) {
+    switch (preview.kind) {
+        case "changes":
+            return <AgentRichContent contents={preview.changes} />;
+        case "command":
+            return (
+                <pre className={interactionMonoClassName}>
+                    <span className="text-muted-foreground">{preview.cwd} $ </span>
+                    {preview.command}
+                </pre>
+            );
+        case "input":
+            return <pre className={interactionMonoClassName}>{input}</pre>;
+        case "none":
+            return (
+                <p className="mt-3 rounded-md bg-muted p-3 text-12 leading-5 text-muted-foreground">
+                    The agent sent no details with this request.
+                </p>
+            );
+    }
+}
+
 function PermissionCard({
     busy,
+    fileChanges,
     permission,
     respond,
     stop,
 }: {
     readonly busy: boolean;
+    readonly fileChanges: readonly PermissionFileChange[];
     readonly permission: PermissionInteraction;
     readonly stop: () => void;
     readonly respond: (response: PermissionInteractionResponse) => void;
 }) {
     const presentation = permissionPresentation(permission);
-    const command = executeCommand(permission);
+    const preview = permissionPreview(permission, fileChanges);
     const [detailsOpen, setDetailsOpen] = useState(false);
     const detailsContentId = useId();
     const actionRow = useRef<HTMLDivElement>(null);
@@ -361,7 +408,7 @@ function PermissionCard({
     const disclosureLabel =
         presentation.locations.length > 0
             ? `Details · ${locationsLabel}`
-            : command === undefined
+            : preview.kind === "input"
               ? "Details · working directory"
               : "Details · full input";
     return (
@@ -371,18 +418,7 @@ function PermissionCard({
                 <div className="min-w-0 flex-1">
                     <p className={interactionTitleClassName}>Agent needs permission</p>
                     <p className="mt-1 break-all text-13 leading-5 text-foreground">{permission.title}</p>
-                    {permission.details === undefined ? (
-                        <p className="mt-3 rounded-md bg-muted p-3 text-12 leading-5 text-muted-foreground">
-                            The agent sent no details with this request.
-                        </p>
-                    ) : command === undefined ? (
-                        <pre className={interactionMonoClassName}>{presentation.input}</pre>
-                    ) : (
-                        <pre className={interactionMonoClassName}>
-                            <span className="text-muted-foreground">{permission.details.cwd} $ </span>
-                            {command}
-                        </pre>
-                    )}
+                    <PermissionPreviewContent input={presentation.input} preview={preview} />
                     {permission.details !== undefined && (
                         <div className="mt-3 min-w-0">
                             <button
@@ -405,7 +441,7 @@ function PermissionCard({
                             </button>
                             {detailsOpen && (
                                 <div className="mb-2 grid gap-2 text-12 leading-5" id={detailsContentId}>
-                                    {command === undefined && (
+                                    {preview.kind !== "command" && (
                                         <p className="break-all">
                                             <span className="text-muted-foreground">Session working directory: </span>
                                             <code>{presentation.cwd}</code>
@@ -418,7 +454,7 @@ function PermissionCard({
                                             ))}
                                         </section>
                                     )}
-                                    {command !== undefined && (
+                                    {preview.kind !== "input" && (
                                         <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-mono">
                                             {presentation.input}
                                         </pre>
@@ -700,6 +736,7 @@ function ElicitationCard({
 
 export function SessionInteractionCards({
     elicitations,
+    fileChanges,
     permissions,
     onElicitationResponse,
     onPermissionResponse,
@@ -708,6 +745,8 @@ export function SessionInteractionCards({
     error,
 }: {
     readonly elicitations: readonly ElicitationInteraction[];
+    /** The diffs announced for each permission's tool call, by interaction id. */
+    readonly fileChanges: ReadonlyMap<string, readonly PermissionFileChange[]>;
     readonly permissions: readonly PermissionInteraction[];
     readonly onStop: () => void;
     readonly onElicitationResponse: (response: ElicitationInteractionResponse) => void;
@@ -723,6 +762,7 @@ export function SessionInteractionCards({
             {permissions.map((permission) => (
                 <PermissionCard
                     busy={busyInteractionIds.has(permission.interactionId)}
+                    fileChanges={fileChanges.get(permission.interactionId) ?? []}
                     key={permission.interactionId}
                     permission={permission}
                     respond={onPermissionResponse}

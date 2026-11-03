@@ -12,6 +12,7 @@ import { NativeSessionDirectoryPlaceholder } from "../chat/native-session-direct
 import { SessionAgentTabs } from "../chat/session-agent-tabs.tsx";
 import {
     type ElicitationInteraction,
+    type PermissionFileChange,
     type PermissionInteraction,
     SessionInteractionCards,
 } from "../chat/session-interactions.tsx";
@@ -995,6 +996,7 @@ function AttemptFailureGallery() {
 
 const previewSessionId = "preview-session";
 const noBusyInteractions: ReadonlySet<string> = new Set();
+const noFileChanges: ReadonlyMap<string, readonly PermissionFileChange[]> = new Map();
 
 const previewPermissionOptions = [
     { kind: "allow_once", name: "Yes", optionId: "allow-once" },
@@ -1209,6 +1211,7 @@ function SessionInteractionsGallery() {
                         }
                         elicitations={specimen.elicitations}
                         error={specimen.error}
+                        fileChanges={noFileChanges}
                         onElicitationResponse={noop}
                         onPermissionResponse={noop}
                         onStop={noop}
