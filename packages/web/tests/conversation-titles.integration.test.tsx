@@ -4,7 +4,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
-import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
+import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
 async function readyComposer(app: TestApp): Promise<HTMLTextAreaElement> {
     const composer = await app.queryElementByTestId(
@@ -22,7 +22,7 @@ function directoryTitles(app: TestApp): readonly string[] {
 }
 
 test("Given an open session renamed by another client, When its directory refreshes, Then the header and title editor use the same current title", {
-    timeout: 30_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(false, true);
     onTestFinished(() => environment.close());
@@ -51,7 +51,7 @@ test("Given an open session renamed by another client, When its directory refres
 });
 
 test("Given a selected session renamed elsewhere, When the user selects it again and later reloads offline, Then the title learned by the re-read survives", {
-    timeout: 60_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(false, true);
     onTestFinished(() => environment.close());
@@ -241,7 +241,7 @@ test("Given a conversation is being reopened, When the title has not loaded yet,
 });
 
 test("Given an open session on a phone, When the user renames it from the header, Then the editor masks the conversation and saves or cancels through its buttons", {
-    timeout: 30_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const desktopViewport = { height: window.innerHeight, width: window.innerWidth };
     window.happyDOM.setViewport({ height: 844, width: 390 });

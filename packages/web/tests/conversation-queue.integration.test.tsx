@@ -5,10 +5,10 @@ import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
-import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
+import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
 test("Given a running turn, When I queue a message before the Runtime receives it, Then it stays visible exactly once through admission and execution", {
-    timeout: 30_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(false, true);
     onTestFinished(() => environment.close());
@@ -47,7 +47,7 @@ test("Given a running turn, When I queue a message before the Runtime receives i
 
 for (const eventOrder of ["before refusal", "after refusal"] as const) {
     test(`Given a released Runtime starts queued work before a delayed steer arrives, When its lifecycle arrives ${eventOrder}, Then the completed reply has no stale queue error`, {
-        timeout: 30_000,
+        timeout: dedicatedEnvironmentTimeout,
     }, async () => {
         const environment = await createChatWorkerEnvironment(false, true);
         onTestFinished(() => environment.close());
@@ -242,7 +242,7 @@ test("Given a follow-up is queued, When the user stops the active turn, Then the
 });
 
 test("Given a follow-up queued in a running Session starts while I view another Session, When I return, Then it shows once in the message list and no longer in the queue", {
-    timeout: 30_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const queuedPrompt = "hold after first delta";
     const environment = await createChatWorkerEnvironment(false, true);
@@ -375,7 +375,7 @@ test("Given a reply is running with a queued follow-up, When I edit the follow-u
 });
 
 test("Given two queued submissions are accepted before their snapshot arrives, When I switch Sessions then edit and resend, Then the original file is restored and delivered", {
-    timeout: 30_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const queuedPrompt = "Describe the queued image";
     const imageBytes = Uint8Array.from(
@@ -533,7 +533,7 @@ test("Given a follow-up with a file was queued from another browser, When this v
 });
 
 test("Given a viewer is loading running history, When another viewer stops before its execution read, Then the partial reply retains its stopped notice", {
-    timeout: 30_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(false, true);
     onTestFinished(() => environment.close());
@@ -576,7 +576,7 @@ test("Given a viewer is loading running history, When another viewer stops befor
 });
 
 test("Given a viewer is loading history before seeing a queue item, When another viewer withdraws that item, Then the running reply never gains a stopped notice", {
-    timeout: 30_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(false, true);
     onTestFinished(() => environment.close());

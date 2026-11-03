@@ -6,6 +6,12 @@ import { createIdentityFixture } from "../../../worker/tests/support/identity-fi
 import { WebSocketApiTransport } from "../../src/services/api/websocket-api-transport.ts";
 import type { Clock } from "../../src/services/time/clock.ts";
 
+/**
+ * The budget of a scenario that starts its own Chat and Platform Workers. Starting them costs seconds on a busy
+ * runner, on top of the waits the shared test budget already covers, so these scenarios get room for both.
+ */
+export const dedicatedEnvironmentTimeout = 60_000;
+
 export async function createChatWorkerEnvironment(loseTurnResponses = false, delayExecutionReads = false) {
     const cloud = await createIdentityFixture({
         listenOnLoopback: true,

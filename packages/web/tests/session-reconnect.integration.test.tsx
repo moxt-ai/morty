@@ -13,7 +13,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
-import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
+import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
 function reconnectStatusText(app: TestApp): string | null {
     const notice = app.optionalElementByTestId(dataTestId.sessionReconnectNotice);
@@ -121,7 +121,7 @@ test("Given a new session with an interrupted bridge, When recovery takes thirty
 });
 
 test("Given an online computer and a saved session, When the session first loads, Then the composer stays writable without a connection notice until sending becomes available", {
-    timeout: 30_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(false, true);
     onTestFinished(() => environment.close());
@@ -150,7 +150,7 @@ test("Given an online computer and a saved session, When the session first loads
 });
 
 test("Given an open conversation with a draft, When recovery after two background suspensions takes twelve seconds, Then it stays quiet without sending the draft", {
-    timeout: 30_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
     const environment = await createChatWorkerEnvironment(false, true);

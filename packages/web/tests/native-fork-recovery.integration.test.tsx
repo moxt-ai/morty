@@ -2,10 +2,10 @@ import { getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
-import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
+import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
 test("Given a Fork completes before Morty loses its response, When the user retries, Then the original Session is registered once and opened", {
-    timeout: 60_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
     let application: TestApp | undefined;

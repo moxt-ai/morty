@@ -21,6 +21,21 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+/**
+ * happy-dom aliases PageTransitionEvent to Event, which drops `persisted`, so a page restored from the back/forward
+ * cache would look like a fresh load and Morty's restore path would never run. Browsers carry it; so do the tests.
+ */
+class BrowserPageTransitionEvent extends Event {
+    readonly persisted: boolean;
+
+    constructor(type: string, init: PageTransitionEventInit = {}) {
+        super(type, init);
+        this.persisted = init.persisted ?? false;
+    }
+}
+Object.defineProperty(globalThis, "PageTransitionEvent", { value: BrowserPageTransitionEvent, configurable: true });
+Object.defineProperty(window, "PageTransitionEvent", { value: BrowserPageTransitionEvent, configurable: true });
+
 type Environment = Awaited<ReturnType<typeof createChatWorkerEnvironment>>;
 type Application = Awaited<ReturnType<Environment["createApplication"]>>;
 

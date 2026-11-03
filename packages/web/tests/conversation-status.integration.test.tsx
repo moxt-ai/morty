@@ -2,7 +2,7 @@ import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
-import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
+import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
 async function readyComposer(app: TestApp): Promise<HTMLTextAreaElement> {
     const composer = await app.queryElementByTestId(
@@ -48,7 +48,7 @@ test("Given a conversation whose turn failed, When the directory reloads with th
 });
 
 test("Given an open conversation, When I send a message the Runtime has not received yet, Then the sidebar marks it working with the pane and clears the mark when the reply completes", {
-    timeout: 30_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const firstPrompt = "Start a conversation to follow up";
     const environment = await createChatWorkerEnvironment(false, true);
@@ -80,7 +80,7 @@ test("Given an open conversation, When I send a message the Runtime has not rece
 });
 
 test("Given a conversation still answering in the background, When I start another conversation and the first one finishes before a new Runtime connection could open, Then the sidebar marks the first one unread", {
-    timeout: 30_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const heldPrompt = "hold after first delta";
     const environment = await createChatWorkerEnvironment(false, true);

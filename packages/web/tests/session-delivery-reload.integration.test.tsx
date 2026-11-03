@@ -4,12 +4,12 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
-import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
+import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
 for (const target of ["immediate", "queued"] as const) {
     for (const interruption of ["before-acceptance", "after-acceptance"] as const) {
         test(`Given an unconfirmed ${target} message disconnected ${interruption}, When I reload and recover it, Then its original request executes once and my next draft survives`, {
-            timeout: 60_000,
+            timeout: dedicatedEnvironmentTimeout,
         }, async () => {
             const environment = await createChatWorkerEnvironment(true);
             onTestFinished(() => environment.close());
@@ -128,7 +128,7 @@ for (const target of ["immediate", "queued"] as const) {
 }
 
 test("Given an unconfirmed new-turn message after a reload, When another device runs a turn, Then retry waits until the Session is idle and resends the original request once", {
-    timeout: 60_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
     onTestFinished(() => environment.close());

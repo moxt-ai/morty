@@ -3,7 +3,7 @@ import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
-import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
+import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
 test("Given a slow Session creation, When I send text and an attachment and write the next draft, Then the submitted message appears once and the new draft survives the handoff", {
     timeout: 30_000,
@@ -119,7 +119,7 @@ test("Given Session creation fails after I write another draft, When I retry the
 });
 
 test("Given an existing Session and a held submission, When I send a message and attach a file to my next draft before acknowledgement, Then the message appears once and its completion never clears the new text or file", {
-    timeout: 30_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
     onTestFinished(() => environment.close());

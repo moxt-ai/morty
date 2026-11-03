@@ -4,10 +4,10 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
-import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
+import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
 test("Given a running message whose admission response was lost, When Chat reconnects, Then delivery is confirmed without retrying or waiting for completion", {
-    timeout: 60_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
     onTestFinished(() => environment.close());
@@ -51,7 +51,7 @@ test("Given a running message whose admission response was lost, When Chat recon
 
 for (const message of ["first", "subsequent"] as const) {
     test(`Given an unconfirmed ${message} message with an attachment, When Chat remounts and I retry, Then the original submission is delivered once`, {
-        timeout: 60_000,
+        timeout: dedicatedEnvironmentTimeout,
     }, async () => {
         const environment = await createChatWorkerEnvironment(true);
         onTestFinished(() => environment.close());
@@ -120,7 +120,7 @@ for (const message of ["first", "subsequent"] as const) {
 }
 
 test("Given a message on its way to the Runtime, When Chat remounts, Then it is delivered once and its reply arrives without asking to retry", {
-    timeout: 60_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
     onTestFinished(() => environment.close());
@@ -167,7 +167,7 @@ function sessionEntry(app: TestApp, title: string): HTMLElement {
 }
 
 test("Given a message the network has not delivered yet, When I switch to another Session, it finishes in the background and I switch back, Then it shows once with its reply and I can keep chatting", {
-    timeout: 60_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
     onTestFinished(() => environment.close());

@@ -4,7 +4,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { openAgentModelPicker, sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
-import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
+import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
 test("Given two clients of the current Runtime, When one changes the model and the other sends, Then the Session keeps the explicit choice", {
     timeout: 60_000,
@@ -45,7 +45,7 @@ test("Given two clients of the current Runtime, When one changes the model and t
 
 for (const delivery of ["before-acceptance", "after-acceptance"] as const) {
     test(`Given delivery is unknown ${delivery}, When settings change and I recover, Then retries preserve intent and completed turns are not rerun`, {
-        timeout: 60_000,
+        timeout: dedicatedEnvironmentTimeout,
     }, async () => {
         const environment = await createChatWorkerEnvironment(true);
         onTestFinished(() => environment.close());

@@ -5,7 +5,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
-import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
+import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
 const recoveredFailure = "Internal error: The controlled Agent rejected this turn.";
 
@@ -145,7 +145,7 @@ function entryStatus(app: TestApp, title: string): string | null {
 }
 
 test("Given a turn that fails while I am in another Session, When I return, Then I see its failure, the sidebar agrees, and my next message clears it", {
-    timeout: 60_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
     onTestFinished(() => environment.close());
@@ -195,7 +195,7 @@ test("Given a turn that fails while I am in another Session, When I return, Then
 });
 
 test("Given my last turn completed while I was away after an earlier failure, When I return, Then no stale failure is shown", {
-    timeout: 60_000,
+    timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
     onTestFinished(() => environment.close());

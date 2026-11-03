@@ -4,11 +4,11 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt, showReconnectNotice } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
-import { createChatWorkerEnvironment } from "./support/chat-worker.ts";
+import { createChatWorkerEnvironment, dedicatedEnvironmentTimeout } from "./support/chat-worker.ts";
 
 for (const interruption of ["before-acceptance", "after-acceptance"] as const) {
     test(`Given a queued message disconnects ${interruption}, When I reconnect and recover delivery, Then the instruction executes once and my next draft survives`, {
-        timeout: 60_000,
+        timeout: dedicatedEnvironmentTimeout,
     }, async () => {
         const environment = await createChatWorkerEnvironment(true);
         onTestFinished(() => environment.close());
