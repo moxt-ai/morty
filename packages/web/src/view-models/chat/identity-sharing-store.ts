@@ -3,16 +3,16 @@ import { createStore } from "zustand/vanilla";
 import type { DeviceAccessDuration, IdentityTransfer, SharingTerms } from "@/services/identity/anonymous-identity-api";
 
 type IdentitySharingState =
-    | { readonly kind: "loading"; readonly duration: DeviceAccessDuration }
+    /** `duration` is the one chosen, or null while the first link takes the Worker's default. */
+    | { readonly kind: "loading"; readonly duration: DeviceAccessDuration | null }
     | {
           readonly kind: "ready";
-          readonly duration: DeviceAccessDuration;
           readonly image: string;
           readonly transfer: IdentityTransfer;
           /** Whether choosing these terms stopped an earlier link from this dialog working. */
           readonly replacedEarlier: boolean;
       }
-    | { readonly kind: "failed"; readonly duration: DeviceAccessDuration };
+    | { readonly kind: "failed"; readonly duration: DeviceAccessDuration | null };
 
 export interface IdentitySharingStore {
     readonly state: IdentitySharingState;
@@ -22,14 +22,12 @@ export interface IdentitySharingStore {
     readonly dispose: () => void;
 }
 
-const defaultDuration: DeviceAccessDuration = "1d";
-
 function linkCode(transfer: IdentityTransfer): string {
     return new URLSearchParams(new URL(transfer.url).hash.slice(1)).get("code") ?? "";
 }
 
 /**
- * Starts loading the sharing transfer immediately, with a day of device access. The store lives exactly as long as
+ * Starts loading the sharing transfer immediately, with the Worker's default device access. The store lives exactly as long as
  * the sharing dialog, so the dialog's close path owns cancellation. Only one link it shared works at a time: choosing
  * other terms issues a new link that replaces the one shown.
  */
@@ -42,9 +40,9 @@ export const createIdentitySharingStore = (
     const store = createStore<IdentitySharingStore>()(() => ({
         choose: (duration) => share(duration),
         dispose: () => lifetime.abort(new Error("Identity sharing closed.")),
-        state: { kind: "loading", duration: defaultDuration },
+        state: { kind: "loading", duration: null },
     }));
-    const share = (duration: DeviceAccessDuration) => {
+    const share = (duration: DeviceAccessDuration | null) => {
         attempt?.abort();
         const controller = new AbortController();
         attempt = controller;
@@ -61,7 +59,7 @@ export const createIdentitySharingStore = (
                 signal.throwIfAborted();
                 shown = transfer;
                 store.setState({
-                    state: { kind: "ready", duration, image, transfer, replacedEarlier: replaces !== null },
+                    state: { kind: "ready", image, transfer, replacedEarlier: replaces !== null },
                 });
             } catch {
                 if (!signal.aborted) {
@@ -70,6 +68,6 @@ export const createIdentitySharingStore = (
             }
         })();
     };
-    share(defaultDuration);
+    share(null);
     return store;
 };

@@ -53,11 +53,16 @@ const anonymousSessionSchema = v.pipe(
     v.readonly(),
 );
 const accessTermSchema = v.object({ accessExpiresAt: v.nullable(v.pipe(v.string(), v.isoTimestamp())) });
+/** How long the device a link adds keeps access; the options this page offers; the Worker decides which it accepts. */
+export const deviceAccessDurations = ["1h", "1d", "7d", "30d"] as const;
+export type DeviceAccessDuration = (typeof deviceAccessDurations)[number];
 const transferSchema = v.pipe(
     v.object({
         // The link opens until `expiresAt`; the device it adds keeps access until `accessExpiresAt`.
         expiresAt: v.pipe(v.string(), v.isoTimestamp()),
         accessExpiresAt: v.pipe(v.string(), v.isoTimestamp()),
+        /** The duration the Worker applied, its default unless one was chosen. */
+        accessDuration: v.picklist(deviceAccessDurations),
         /** Whether the sharer's own access ends first, and so ends the added device's access earlier than chosen. */
         accessLimitedBySharer: v.boolean(),
         url: v.pipe(v.string(), v.url()),
@@ -106,12 +111,10 @@ const credentialRevocationPathSchema = v.picklist([
 ]);
 export type AnonymousIdentity = v.InferOutput<typeof identitySchema>;
 export type IdentityTransfer = v.InferOutput<typeof transferSchema>;
-/** How long the device a link adds keeps access; the Worker accepts only these. */
-export const deviceAccessDurations = ["1h", "1d", "7d", "30d"] as const;
-export type DeviceAccessDuration = (typeof deviceAccessDurations)[number];
 /** What a new link grants, and the unopened link from this page it replaces. */
 export interface SharingTerms {
-    readonly accessDuration: DeviceAccessDuration;
+    /** The chosen duration, or null for the Worker's default. */
+    readonly accessDuration: DeviceAccessDuration | null;
     /** The code of a link this page shared that no one opened yet; it stops working. */
     readonly replaces: string | null;
 }
@@ -246,7 +249,7 @@ export class AnonymousIdentityApi {
                         "content-type": "application/json",
                     },
                     body: JSON.stringify({
-                        accessDuration: terms.accessDuration,
+                        ...(terms.accessDuration === null ? {} : { accessDuration: terms.accessDuration }),
                         ...(terms.replaces === null ? {} : { replaces: terms.replaces }),
                     }),
                 },

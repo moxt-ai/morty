@@ -655,7 +655,12 @@ test("Given the owner chooses how long a shared device keeps access, When the li
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
         });
-    const link = v.object({ url: v.string(), expiresAt: v.string(), accessExpiresAt: v.string() });
+    const link = v.object({
+        url: v.string(),
+        expiresAt: v.string(),
+        accessExpiresAt: v.string(),
+        accessDuration: v.string(),
+    });
     const codeOf = (url: string) => new URL(url).hash.slice("#code=".length);
     const redeem = (code: string) =>
         worker.fetch(
@@ -669,9 +674,12 @@ test("Given the owner chooses how long a shared device keeps access, When the li
 
     expect((await share({ accessDuration: "1y" })).status).toBe(400);
     const first = v.parse(link, await (await share({})).json());
+    // Without a choice the link grants the default day, and says so: callers show what the Worker applied.
+    expect(first.accessDuration).toBe("1d");
     const created = await share({ accessDuration: "7d", replaces: codeOf(first.url) });
     expect(created.status).toBe(201);
     const week = v.parse(link, await created.json());
+    expect(week.accessDuration).toBe("7d");
     // The device term runs from the link's creation, a week past the ten minutes the link itself stays open.
     expect(Date.parse(week.accessExpiresAt) - Date.parse(week.expiresAt)).toBe(
         7 * 24 * 60 * 60 * 1000 - 10 * 60 * 1000,

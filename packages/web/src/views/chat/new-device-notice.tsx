@@ -5,33 +5,30 @@ import { DeviceList } from "../../components/chat/device-list.tsx";
 import { topNoticeActionClassName, topNoticeCardClassName } from "../../components/chat/top-notice.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { describeLinkedDevice } from "../../view-models/chat/access-presentation.ts";
-import type { NewDeviceNoticeStore } from "../../view-models/chat/new-device-notice-store.ts";
+import { type LinkedDevicesStore, newDevicesSince } from "../../view-models/chat/linked-devices-store.ts";
 
 /** Tells the owner that a device joined their computer, and lets them disconnect it if they did not add it. */
 export function NewDeviceNotice({
     store,
     onReviewDevices,
 }: {
-    readonly store: StoreApi<NewDeviceNoticeStore>;
+    readonly store: StoreApi<LinkedDevicesStore>;
     /** Opens the devices with access, where any of them can be disconnected; null when this page cannot. */
     readonly onReviewDevices: (() => void) | null;
 }) {
-    const { state, onAttach, dismiss } = useStore(store);
+    const { state, onAttach, acknowledge } = useStore(store);
+    const joined = newDevicesSince(state.devices, state.seenAt);
     return (
         <div className="contents" ref={onAttach}>
-            {state.kind === "notice" && (
+            {joined.length > 0 && (
                 <section aria-label="New device connected" className={topNoticeCardClassName} role="status">
                     <p className="flex items-center gap-2 font-medium">
                         <ShieldAlert aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-                        {state.devices.length === 1
+                        {joined.length === 1
                             ? "A new device connected to your computer"
-                            : `${state.devices.length.toString()} new devices connected to your computer`}
+                            : `${joined.length.toString()} new devices connected to your computer`}
                     </p>
-                    <DeviceList
-                        className="mt-3"
-                        devices={state.devices.map(describeLinkedDevice)}
-                        label="New devices"
-                    />
+                    <DeviceList className="mt-3" devices={joined.map(describeLinkedDevice)} label="New devices" />
                     <p className="mt-3 text-muted-foreground">
                         {onReviewDevices === null
                             ? "Not you? Ask the agent on your computer to revoke all access. Every device that joined through a link is disconnected at once."
@@ -48,7 +45,7 @@ export function NewDeviceNotice({
                                 Review devices
                             </Button>
                         )}
-                        <Button className={topNoticeActionClassName} onClick={dismiss} size="sm">
+                        <Button className={topNoticeActionClassName} onClick={acknowledge} size="sm">
                             Got it
                         </Button>
                     </div>

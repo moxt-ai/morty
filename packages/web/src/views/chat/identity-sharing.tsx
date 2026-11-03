@@ -20,23 +20,27 @@ const durationOptions = deviceAccessDurations.map((value) => ({ value, label: du
 export function IdentitySharing({ store }: { readonly store: StoreApi<IdentitySharingStore> }) {
     const state = useExternalStore(store, (state) => state.state);
     const choose = useExternalStore(store, (state) => state.choose);
+    // The Worker states the duration a link grants; until the first link exists there is nothing to show.
+    const duration = state.kind === "ready" ? state.transfer.accessDuration : state.duration;
     return (
         <div className="space-y-4">
             <MortyAlert tone="warning">
                 Anyone who opens this link can view and control every session on this computer.
             </MortyAlert>
-            <Select
-                label="Device access"
-                leading={<span className="text-muted-foreground">Device access</span>}
-                onValueChange={(value) => {
-                    const duration = deviceAccessDurations.find((option) => option === value);
-                    if (duration !== undefined) {
-                        choose(duration);
-                    }
-                }}
-                options={durationOptions}
-                value={state.duration}
-            />
+            {duration !== null && (
+                <Select
+                    label="Device access"
+                    leading={<span className="text-muted-foreground">Device access</span>}
+                    onValueChange={(value) => {
+                        const chosen = deviceAccessDurations.find((option) => option === value);
+                        if (chosen !== undefined) {
+                            choose(chosen);
+                        }
+                    }}
+                    options={durationOptions}
+                    value={duration}
+                />
+            )}
             {state.kind === "loading" && <p role="status">Creating secure QR code…</p>}
             {state.kind === "failed" && <p role="alert">Could not create a sharing link.</p>}
             {state.kind === "ready" && (

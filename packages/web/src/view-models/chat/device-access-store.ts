@@ -1,42 +1,30 @@
 import { createStore } from "zustand/vanilla";
-import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
-import type { LinkedDevice, OpenWindowsAfterDisconnect } from "../../services/identity/anonymous-identity-api.ts";
+import type { OpenWindowsAfterDisconnect } from "../../services/identity/anonymous-identity-api.ts";
 
-/** The devices other than this browser that hold access, as the Worker last listed them. */
-type DeviceList =
-    | { readonly kind: "loading" }
-    | { readonly kind: "failed" }
-    | { readonly kind: "listed"; readonly devices: readonly LinkedDevice[] };
-
-/** What a disconnection reaches: one device, or every device but this browser and the computer. */
-export type DisconnectTarget = { readonly kind: "device"; readonly id: string } | { readonly kind: "others" };
+/** What a disconnection reaches: one device, named as the list showed it, or every device but this browser and the computer. */
+export type DisconnectTarget =
+    | { readonly kind: "device"; readonly id: string; readonly name: string }
+    | { readonly kind: "others" };
 
 /** The disconnection in progress: one at a time, confirmed before it runs. */
 type Disconnection =
     | { readonly kind: "idle" }
     | { readonly kind: "confirming" | "disconnecting" | "failed"; readonly target: DisconnectTarget };
 
-/** What the last finished disconnection reached; `name` is the device's, which has left the list by then. */
+/** What the last finished disconnection reached; a device's name is kept because it has left the list by then. */
 type Disconnected =
     | { readonly kind: "device"; readonly name: string; readonly openWindows: OpenWindowsAfterDisconnect }
     | { readonly kind: "others"; readonly openWindows: OpenWindowsAfterDisconnect };
 
 type DeviceAccessState =
     | { readonly kind: "closed" }
-    | {
-          readonly kind: "open";
-          readonly list: DeviceList;
-          readonly disconnection: Disconnection;
-          readonly disconnected: Disconnected | null;
-      };
+    | { readonly kind: "open"; readonly disconnection: Disconnection; readonly disconnected: Disconnected | null };
 
 export interface DeviceAccessStore {
     readonly state: DeviceAccessState;
-    /** Shows the devices with access, following changes while open. */
+    /** Shows the devices with access. */
     readonly open: () => void;
     readonly close: () => void;
-    /** Reads the list again after it could not be read. */
-    readonly retry: () => void;
     /** Asks the user to confirm disconnecting `target`. */
     readonly request: (target: DisconnectTarget) => void;
     readonly cancel: () => void;
@@ -45,23 +33,16 @@ export interface DeviceAccessStore {
 }
 
 /**
- * The devices that hold access to this computer and the disconnections the user makes from them. The list has one
- * source, the Worker: every change, including one this browser makes, is read back rather than applied here.
+ * The Devices list's disconnections. The devices themselves are the page's one linked-device list: this store only
+ * asks it to read again, when the list opens and after a disconnection changed it.
  */
 export function createDeviceAccessStore(options: {
-    readonly linkedDevices: (signal: AbortSignal) => Promise<readonly LinkedDevice[]>;
-    /** Resolves once the devices differ from the list last read. */
-    readonly waitForChange: (signal: AbortSignal) => Promise<void>;
-    readonly waitForBridge: (signal: AbortSignal) => Promise<void>;
     readonly endDeviceAccess: (deviceId: string, signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>;
     readonly endOtherBrowserAccess: (signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>;
-    /** Every other device is gone, so nothing the new-device notice announced remains. */
-    readonly onOthersDisconnected: () => void;
-    /** The workspace's operations; reading the devices ends with it. */
-    readonly signal: () => AbortSignal;
+    /** Reads the linked devices again. */
+    readonly readDevices: () => void;
 }) {
     return createStore<DeviceAccessStore>()((set, get) => {
-        let shown: AbortController | null = null;
         const update = (
             change: (state: Extract<DeviceAccessState, { readonly kind: "open" }>) => DeviceAccessState,
         ) => {
@@ -70,67 +51,17 @@ export function createDeviceAccessStore(options: {
                 set({ state: change(state) });
             }
         };
-        const read = async (signal: AbortSignal): Promise<boolean> => {
-            try {
-                const devices = await options.linkedDevices(AbortSignal.any([signal, AbortSignal.timeout(15_000)]));
-                if (!signal.aborted) {
-                    update((state) => ({ ...state, list: { kind: "listed", devices } }));
-                }
-                return true;
-            } catch {
-                if (!signal.aborted) {
-                    update((state) => ({ ...state, list: { kind: "failed" } }));
-                }
-                return false;
-            }
-        };
-        /** Reads, then reads again whenever the list differs from that read, until the list closes. */
-        const follow = async (signal: AbortSignal): Promise<void> => {
-            while (await read(signal)) {
-                try {
-                    await options.waitForChange(signal);
-                } catch (cause) {
-                    if (signal.aborted || !isChatBridgeError(cause)) {
-                        return;
-                    }
-                    try {
-                        await options.waitForBridge(signal);
-                    } catch {
-                        return;
-                    }
-                }
-            }
-        };
-        const show = () => {
-            shown?.abort();
-            shown = new AbortController();
-            void follow(AbortSignal.any([options.signal(), shown.signal]));
-        };
         return {
             state: { kind: "closed" },
             open: () => {
-                set({
-                    state: {
-                        kind: "open",
-                        list: { kind: "loading" },
-                        disconnection: { kind: "idle" },
-                        disconnected: null,
-                    },
-                });
-                show();
+                set({ state: { kind: "open", disconnection: { kind: "idle" }, disconnected: null } });
+                options.readDevices();
             },
             close: () => {
                 const state = get().state;
-                if (state.kind === "open" && state.disconnection.kind === "disconnecting") {
-                    return;
+                if (state.kind === "open" && state.disconnection.kind !== "disconnecting") {
+                    set({ state: { kind: "closed" } });
                 }
-                shown?.abort();
-                shown = null;
-                set({ state: { kind: "closed" } });
-            },
-            retry: () => {
-                update((state) => ({ ...state, list: { kind: "loading" } }));
-                show();
             },
             request: (target) => update((state) => ({ ...state, disconnection: { kind: "confirming", target } })),
             cancel: () =>
@@ -148,10 +79,6 @@ export function createDeviceAccessStore(options: {
                     return;
                 }
                 const target = state.disconnection.target;
-                const name =
-                    target.kind === "device" && state.list.kind === "listed"
-                        ? (state.list.devices.find((device) => device.id === target.id)?.label ?? "Unknown browser")
-                        : "Unknown browser";
                 update((current) => ({ ...current, disconnection: { kind: "disconnecting", target } }));
                 const bounded = AbortSignal.any([signal, AbortSignal.timeout(30_000)]);
                 try {
@@ -165,13 +92,10 @@ export function createDeviceAccessStore(options: {
                         disconnection: { kind: "idle" },
                         disconnected:
                             target.kind === "device"
-                                ? { kind: "device", name, openWindows }
+                                ? { kind: "device", name: target.name, openWindows }
                                 : { kind: "others", openWindows },
                     }));
-                    if (target.kind === "others") {
-                        options.onOthersDisconnected();
-                    }
-                    show();
+                    options.readDevices();
                 } catch {
                     // Access that no longer opens the computer may have ended this page's workspace, and this store with it.
                     if (!signal.aborted) {

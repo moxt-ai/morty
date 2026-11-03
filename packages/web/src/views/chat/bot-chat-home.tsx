@@ -268,9 +268,9 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                 onNewConversation={newConversation}
             />
             <TopNoticeStack>
-                {workspace.newDevices !== null && (
+                {workspace.linkedDevices !== null && (
                     <NewDeviceNotice
-                        store={workspace.newDevices}
+                        store={workspace.linkedDevices}
                         onReviewDevices={workspace.deviceAccess?.getState().open ?? null}
                     />
                 )}
@@ -282,9 +282,10 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                     />
                 )}
             </TopNoticeStack>
-            {workspace.deviceAccess !== null && (
+            {workspace.deviceAccess !== null && workspace.linkedDevices !== null && (
                 <DevicesDialog
                     accessExpiry={workspace.accessExpiry}
+                    devices={workspace.linkedDevices}
                     computerName={model.runtimeConfiguration?.runtime?.machineName ?? ""}
                     signal={workspace.operationsSignal}
                     store={workspace.deviceAccess}

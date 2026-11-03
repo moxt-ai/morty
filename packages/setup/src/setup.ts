@@ -129,13 +129,10 @@ interface SetupIdentity {
     readonly project: Exclude<ProjectOutcome, "replaced">;
 }
 
-/** How long the browser that opens setup's link keeps access; the Worker accepts only these. */
-const deviceAccessDurations = ["1h", "1d", "7d", "30d"] as const;
-type DeviceAccessDuration = (typeof deviceAccessDurations)[number];
-
 interface SetupOptions {
     readonly base: string;
-    readonly deviceAccess: DeviceAccessDuration;
+    /** How long the browser that opens setup's link keeps access, or null for Morty's default; Morty validates it. */
+    readonly deviceAccess: string | null;
     readonly cwd: string;
     readonly harness: string;
     readonly sessionId: string;
@@ -763,10 +760,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (values["base-url"] === undefined) {
             fail("BASE_URL_REQUIRED");
         }
-        const deviceAccess = deviceAccessDurations.find((duration) => duration === (values["device-access"] ?? "1d"));
-        if (deviceAccess === undefined) {
-            fail("INVALID_DEVICE_ACCESS");
-        }
         if (values.harness === undefined) {
             fail("HARNESS_REQUIRED");
         }
@@ -776,7 +769,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const harness = identifier(values.harness);
         return {
             base: origin(values["base-url"]),
-            deviceAccess,
+            deviceAccess: values["device-access"] ?? null,
             replaceProject: values["replace-project"] === undefined ? null : identifier(values["replace-project"]),
             cwd: text(values.cwd),
             harness,
@@ -1454,7 +1447,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         await waitForReadiness(context, runtime, options.harness);
         const botId = context.botId;
         const workingDirectory = text(context.config["workspace"]);
-        const transfer = await request(context, "/identity/transfers", { accessDuration: options.deviceAccess });
+        const transfer = await request(
+            context,
+            "/identity/transfers",
+            options.deviceAccess === null ? {} : { accessDuration: options.deviceAccess },
+        );
         const url = new URL(text(transfer["url"]));
         if (
             url.origin !== context.base ||

@@ -138,6 +138,7 @@ export function createAuthenticationRoutes() {
                     {
                         expiresAt: new Date(transfer.expiresAt).toISOString(),
                         accessExpiresAt: new Date(transfer.accessExpiresAt).toISOString(),
+                        accessDuration: transfer.accessDuration,
                         accessLimitedBySharer: transfer.accessLimitedBySharer,
                         url: url.toString(),
                     },

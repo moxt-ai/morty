@@ -50,6 +50,8 @@ export const defaultDeviceAccessDuration: DeviceAccessDuration = "1d";
 
 /** What a shared link grants: until when it can add a device, and until when that device keeps access. */
 export interface SharedLinkTerms {
+    /** The duration chosen for the device's access, which callers show rather than assume. */
+    readonly accessDuration: DeviceAccessDuration;
     readonly expiresAt: number;
     readonly accessExpiresAt: number;
     /** Whether the sharer's own access ends before the chosen duration, and so ends the device's access too. */
@@ -64,6 +66,7 @@ export function sharedLinkTerms(sharer: Credential, now: number, duration: Devic
     const limit = sharer.kind === "browser" ? sharer.accessExpiresAt : Number.POSITIVE_INFINITY;
     const chosen = now + deviceAccessLifetimes[duration];
     return {
+        accessDuration: duration,
         expiresAt: Math.min(now + linkLifetime, limit),
         accessExpiresAt: Math.min(chosen, limit),
         accessLimitedBySharer: limit < chosen,

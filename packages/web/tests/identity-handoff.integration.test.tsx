@@ -611,6 +611,8 @@ test("Given other browsers joined this computer, When the user disconnects one f
     await app.waitForView(() =>
         expect(queryByRole(devices, "button", { name: "Disconnect iPhone · Safari" })).toBeNull(),
     );
+    // The notice and the list show the page's one device list, so the disconnected device leaves both.
+    expect(queryByRole(document.body, "status", { name: "New device connected" })).toBeNull();
     expect((await session(phone)).status).toBe(401);
 
     const laptop = await join("macOS · Chrome");

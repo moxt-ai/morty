@@ -11,6 +11,7 @@ import type { LinkedDevice } from "../../services/identity/anonymous-identity-ap
 import type { AccessExpiryStore } from "../../view-models/chat/access-expiry-store.ts";
 import { describeLinkedDevice, formatMoment } from "../../view-models/chat/access-presentation.ts";
 import type { DeviceAccessStore, DisconnectTarget } from "../../view-models/chat/device-access-store.ts";
+import type { LinkedDevicesStore } from "../../view-models/chat/linked-devices-store.ts";
 import { mortyRepository } from "../morty-repository.ts";
 
 const dataPolicy = `${mortyRepository}#what-morty-does-with-your-data`;
@@ -92,22 +93,26 @@ function ThisBrowser({ accessExpiry }: { readonly accessExpiry: StoreApi<AccessE
 export function DevicesDialog({
     accessExpiry,
     computerName,
+    devices,
     signal,
     store,
 }: {
     readonly accessExpiry: StoreApi<AccessExpiryStore> | null;
     readonly computerName: string;
+    /** The page's one list of the other devices with access. */
+    readonly devices: StoreApi<LinkedDevicesStore>;
     readonly signal: () => AbortSignal;
     readonly store: StoreApi<DeviceAccessStore>;
 }) {
-    const { state, close, retry, request, cancel, confirm } = useStore(store);
+    const { state, close, request, cancel, confirm } = useStore(store);
+    const { state: list, refresh } = useStore(devices);
     if (state.kind === "closed") {
         return null;
     }
     const others: DisconnectTarget = { kind: "others" };
     const row = (device: LinkedDevice) => {
-        const target: DisconnectTarget = { kind: "device", id: device.id };
         const description = describeLinkedDevice(device);
+        const target: DisconnectTarget = { kind: "device", id: device.id, name: description.name };
         return (
             <li className="py-3" key={device.id}>
                 <DeviceSummary
@@ -168,26 +173,27 @@ export function DevicesDialog({
                         </div>
                     </div>
                 </li>
-                {state.list.kind === "listed" &&
+                {
                     // The newest device first: the one the owner is most likely checking.
-                    state.list.devices
-                        .toSorted((left, right) => Date.parse(right.joinedAt) - Date.parse(left.joinedAt))
-                        .map(row)}
+                    list.devices
+                        ?.toSorted((left, right) => Date.parse(right.joinedAt) - Date.parse(left.joinedAt))
+                        .map(row)
+                }
             </ul>
-            {state.list.kind === "loading" && (
+            {list.devices === null && !list.failed && (
                 <p className="mt-2 text-sm text-muted-foreground" role="status">
                     Checking which devices have access…
                 </p>
             )}
-            {state.list.kind === "failed" && (
+            {list.failed && (
                 <div className="mt-2 flex items-center justify-between gap-2 text-sm" role="alert">
                     <span className="text-muted-foreground">We couldn't load your devices.</span>
-                    <Button className={topNoticeActionClassName} onClick={retry} size="sm" variant="ghost">
+                    <Button className={topNoticeActionClassName} onClick={refresh} size="sm" variant="ghost">
                         Try again
                     </Button>
                 </div>
             )}
-            {state.list.kind === "listed" && state.list.devices.length === 0 && (
+            {list.devices !== null && list.devices.length === 0 && (
                 <p className="mt-2 text-sm text-muted-foreground">No other device has access.</p>
             )}
             <div className="mt-4 border-t border-border pt-4">

@@ -28,8 +28,8 @@ import { selectedConversationId } from "./conversation-selection-machine.ts";
 import { type ConversationStatusStoreApi, createConversationStatusStore } from "./conversation-status-store.ts";
 import { createDeviceAccessStore, type DeviceAccessStore } from "./device-access-store.ts";
 import { createDraftControlsStore, type DraftControlsStore, draftConfiguration } from "./draft-controls-store.ts";
+import { createLinkedDevicesStore, type LinkedDevicesStore } from "./linked-devices-store.ts";
 import { createNetworkDiagnosticStore, type NetworkDiagnosticStore } from "./network-diagnostic-store.ts";
-import { createNewDeviceNoticeStore, type NewDeviceNoticeStore } from "./new-device-notice-store.ts";
 import type { SelectedMobiusSession } from "./open-session.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
 import { createRuntimeRecovery } from "./runtime-recovery.ts";
@@ -54,8 +54,8 @@ interface ChatWorkspacePaneEntry {
 export interface ChatWorkspace {
     readonly computers: ComputerSwitcherModel | null;
     readonly accessNotice: string | null;
-    /** Tells this browser about devices that joined its computer since it last looked. */
-    readonly newDevices: StoreApi<NewDeviceNoticeStore> | null;
+    /** The page's one list of the other devices with access, and when this browser last looked at it. */
+    readonly linkedDevices: StoreApi<LinkedDevicesStore> | null;
     /** When this browser's access ends; null when the page cannot read its own access. */
     readonly accessExpiry: StoreApi<AccessExpiryStore> | null;
     /** The devices with access to this computer and the disconnections made from them; null when this page cannot. */
@@ -504,12 +504,12 @@ export function createChatWorkspace(options: {
         model.start();
     };
 
-    const newDevices =
+    const linkedDevices =
         options.projectId === undefined ||
         options.linkedDevices === undefined ||
         options.waitForLinkedDevicesChange === undefined
             ? null
-            : createNewDeviceNoticeStore({
+            : createLinkedDevicesStore({
                   projectId: options.projectId,
                   linkedDevices: options.linkedDevices,
                   waitForChange: options.waitForLinkedDevicesChange,
@@ -517,7 +517,6 @@ export function createChatWorkspace(options: {
               });
     const endOtherBrowserAccess = options.endOtherBrowserAccess;
     const endDeviceAccess = options.endDeviceAccess;
-    const linkedDevices = options.linkedDevices;
     const accessExpiry =
         options.projectId === undefined || options.accessExpiresAt === undefined
             ? null
@@ -529,23 +528,15 @@ export function createChatWorkspace(options: {
     return {
         computers: options.computers ?? null,
         accessNotice: options.accessNotice ?? null,
-        newDevices,
+        linkedDevices,
         accessExpiry,
         deviceAccess:
-            endOtherBrowserAccess === undefined ||
-            endDeviceAccess === undefined ||
-            linkedDevices === undefined ||
-            options.waitForLinkedDevicesChange === undefined
+            endOtherBrowserAccess === undefined || endDeviceAccess === undefined || linkedDevices === null
                 ? null
                 : createDeviceAccessStore({
-                      linkedDevices,
-                      waitForChange: options.waitForLinkedDevicesChange,
-                      waitForBridge: requests.waitForBridge,
                       endDeviceAccess,
                       endOtherBrowserAccess,
-                      // The devices it announced are gone, so the notice has nothing left to report.
-                      onOthersDisconnected: () => newDevices?.getState().dismiss(),
-                      signal: () => operationsLifetime.signal,
+                      readDevices: linkedDevices.getState().refresh,
                   }),
         recordUserActivity: () => {
             if (options.rememberedIdentity !== undefined) {
