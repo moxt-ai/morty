@@ -267,21 +267,6 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                 onOpen={(session) => openManaged(session.id)}
                 onNewConversation={newConversation}
             />
-            <TopNoticeStack>
-                {workspace.linkedDevices !== null && (
-                    <NewDeviceNotice
-                        store={workspace.linkedDevices}
-                        onReviewDevices={workspace.deviceAccess?.getState().open ?? null}
-                    />
-                )}
-                {workspace.accessExpiry !== null && (
-                    <AccessNotice
-                        computerName={model.runtimeConfiguration?.runtime?.machineName ?? ""}
-                        onOpenDevices={workspace.deviceAccess?.getState().open ?? null}
-                        store={workspace.accessExpiry}
-                    />
-                )}
-            </TopNoticeStack>
             {workspace.deviceAccess !== null && workspace.linkedDevices !== null && (
                 <DevicesDialog
                     accessExpiry={workspace.accessExpiry}
@@ -299,177 +284,199 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                     {workspace.accessNotice}
                 </div>
             )}
-            <section aria-label="Conversation" className={chatSessionPaneSectionClassName}>
-                {model.selection.kind === "ready" ? (
-                    <div className={chatSessionPaneEnterClassName} key={model.selection.session.result.ready.sessionId}>
-                        <MobiusSessionPane workspace={workspace} />
-                    </div>
-                ) : (model.selection.kind === "loading" ||
-                      (model.selection.kind === "pending" && model.initialization.kind === "loading")) &&
-                  pendingConversation.recovery === null ? (
-                    <MobiusSessionPaneLoading
-                        footer={
-                            <BotChatComposer
-                                attachmentModel={attachmentModel}
-                                focusScope={workspace}
-                                canAttach={canAddAttachments(attachmentModel)}
-                                attachmentSignal={workspace.operationsSignal()}
-                                disabled
-                                draft=""
-                                error=""
-                                onDraftChange={() => {}}
-                                onStop={() => {}}
-                                onSubmit={() => {}}
-                                outputState={creationBusy ? "sending" : "idle"}
-                                submitDisabled
-                            >
-                                {null}
-                            </BotChatComposer>
-                        }
-                    />
-                ) : (
-                    <>
-                        {desktop ? (
-                            <header className={cn(chatSessionExecutionHeaderClassName, "justify-between")}>
-                                {pendingTitle}
-                            </header>
-                        ) : (
-                            <MobileSessionTitlePortal>{pendingTitle}</MobileSessionTitlePortal>
-                        )}
-                        <FollowLatestScrollArea
-                            followThreshold={80}
-                            followRevision={model.scrollFollowRevision}
-                            className={`flex flex-col gap-8 ${chatSessionMessageScrollClassName}`}
-                            role="log"
-                            aria-label="Messages"
+            {/* Notices about this browser's access stand above the conversation and move it down, never covering it. */}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                <TopNoticeStack>
+                    {workspace.linkedDevices !== null && (
+                        <NewDeviceNotice
+                            store={workspace.linkedDevices}
+                            onReviewDevices={workspace.deviceAccess?.getState().open ?? null}
+                        />
+                    )}
+                    {workspace.accessExpiry !== null && (
+                        <AccessNotice
+                            computerName={model.runtimeConfiguration?.runtime?.machineName ?? ""}
+                            onOpenDevices={workspace.deviceAccess?.getState().open ?? null}
+                            store={workspace.accessExpiry}
+                        />
+                    )}
+                </TopNoticeStack>
+                <section aria-label="Conversation" className={chatSessionPaneSectionClassName}>
+                    {model.selection.kind === "ready" ? (
+                        <div
+                            className={chatSessionPaneEnterClassName}
+                            key={model.selection.session.result.ready.sessionId}
                         >
-                            <div className="flex min-h-full flex-col gap-8">
-                                {pendingConversation.recovery !== null ? (
-                                    <div className="m-auto grid max-w-lg justify-items-center gap-4 px-6 text-center">
-                                        <ComputerOfflineIcon />
-                                        <div role="status" aria-live="polite" aria-atomic="true">
-                                            <p className="font-medium">{pendingConversation.recovery.title}</p>
-                                            <p className="mt-2 text-sm text-muted-foreground">
-                                                {pendingConversation.recovery.description}
-                                            </p>
-                                            <p className="mt-2 text-sm text-muted-foreground">
-                                                Your unsent draft will be restored with this session.
-                                            </p>
-                                        </div>
-                                        <Button onClick={store.getState().retry}>Reconnect</Button>
-                                    </div>
-                                ) : model.selection.kind === "loading" || model.initialization.kind === "loading" ? (
-                                    <SessionMessageListSkeleton />
-                                ) : model.initialization.kind === "failed" || model.selection.kind === "failed" ? (
-                                    <PreSessionFailure
-                                        action={<Button onClick={store.getState().retry}>Reconnect</Button>}
-                                        message={
-                                            model.selection.kind === "failed"
-                                                ? model.selection.message
-                                                : model.initialization.kind === "failed"
-                                                  ? model.initialization.message
-                                                  : "Chat is unavailable."
-                                        }
-                                        report={reportEntry}
-                                    />
-                                ) : queuedInitialMessage !== null && creationStatus !== null ? (
-                                    <div className={`${chatSessionColumnClassName} flex flex-col gap-2`}>
-                                        <div data-testid={dataTestId.queuedMessage}>
-                                            <UserPromptMessage
-                                                attachments={queuedInitialMessage.attachments}
-                                                status={
-                                                    <MessageDeliveryStatus
-                                                        data-testid={dataTestId.initialMessageStatus}
-                                                        delivery={creationBusy ? "sending" : "failed"}
-                                                        label={creationStatus}
-                                                    />
-                                                }
-                                                text={queuedInitialMessage.content}
-                                            />
-                                        </div>
-                                        {creationError.length > 0 && (
-                                            <div
-                                                aria-live="assertive"
-                                                className="ml-auto flex max-w-[85%] items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-right text-xs text-destructive"
-                                                role="alert"
-                                            >
-                                                <span className="min-w-0 flex-1 break-words">{creationError}</span>
-                                                <Button
-                                                    disabled={presentation.retryDisabled}
-                                                    onClick={createConversation}
-                                                >
-                                                    Retry message
-                                                </Button>
-                                                {reportButton}
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <div className="m-auto flex max-w-lg flex-col items-center px-6">
-                                        <div className="text-center" data-testid={dataTestId.chatLanding}>
-                                            <MortyLogoMark className="mx-auto mb-5 block" size={56} />
-                                            <h1 className="text-[18px] leading-6 font-semibold tracking-[-0.025em]">
-                                                Morty
-                                            </h1>
-                                            <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
-                                                Ask a question, explore your project, or start a task with your local
-                                                agent.
-                                            </p>
-                                        </div>
-                                        {canStartConversation && model.selection.kind === "draft" && (
-                                            <DraftLandingDirectory
-                                                disabled={composerLocked}
-                                                settingsKind={draftControls.settings.kind}
-                                                signal={workspace.chatSignal()}
-                                                viewModel={draftControls}
-                                            />
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        </FollowLatestScrollArea>
-                        {model.runtimeConfiguration !== null && model.selection.kind === "draft" && (
-                            <BotChatComposer
-                                attachmentModel={attachmentModel}
-                                focusScope={workspace}
-                                canAttach={canAddAttachments(attachmentModel)}
-                                attachmentSignal={workspace.operationsSignal()}
-                                disabled={false}
-                                draft={draft}
-                                error=""
-                                connectionNotice={
-                                    executionContext.feedback.kind === "hidden"
-                                        ? undefined
-                                        : (inline) => (
-                                              <ConnectionNotice
-                                                  feedback={executionContext.feedback}
-                                                  footer={
-                                                      workspace.computers === null ? undefined : (
-                                                          <OnlineComputerAlternative model={workspace.computers} />
-                                                      )
-                                                  }
-                                                  inline={inline}
-                                                  onRetryNow={store.getState().retry}
-                                                  onReopen={store.getState().retry}
-                                              />
-                                          )
-                                }
-                                onDraftChange={store.getState().setDraft}
-                                onStop={() => {}}
-                                onSubmit={createConversation}
-                                outputState={creationBusy ? "sending" : "idle"}
-                                submitDisabled={presentation.submitDisabled}
+                            <MobiusSessionPane workspace={workspace} />
+                        </div>
+                    ) : (model.selection.kind === "loading" ||
+                          (model.selection.kind === "pending" && model.initialization.kind === "loading")) &&
+                      pendingConversation.recovery === null ? (
+                        <MobiusSessionPaneLoading
+                            footer={
+                                <BotChatComposer
+                                    attachmentModel={attachmentModel}
+                                    focusScope={workspace}
+                                    canAttach={canAddAttachments(attachmentModel)}
+                                    attachmentSignal={workspace.operationsSignal()}
+                                    disabled
+                                    draft=""
+                                    error=""
+                                    onDraftChange={() => {}}
+                                    onStop={() => {}}
+                                    onSubmit={() => {}}
+                                    outputState={creationBusy ? "sending" : "idle"}
+                                    submitDisabled
+                                >
+                                    {null}
+                                </BotChatComposer>
+                            }
+                        />
+                    ) : (
+                        <>
+                            {desktop ? (
+                                <header className={cn(chatSessionExecutionHeaderClassName, "justify-between")}>
+                                    {pendingTitle}
+                                </header>
+                            ) : (
+                                <MobileSessionTitlePortal>{pendingTitle}</MobileSessionTitlePortal>
+                            )}
+                            <FollowLatestScrollArea
+                                followThreshold={80}
+                                followRevision={model.scrollFollowRevision}
+                                className={`flex flex-col gap-8 ${chatSessionMessageScrollClassName}`}
+                                role="log"
+                                aria-label="Messages"
                             >
-                                <DraftChatControls
-                                    key={model.selection.key}
-                                    workspace={workspace}
-                                    disabled={composerLocked || !canStartConversation}
-                                />
-                            </BotChatComposer>
-                        )}
-                    </>
-                )}
-            </section>
+                                <div className="flex min-h-full flex-col gap-8">
+                                    {pendingConversation.recovery !== null ? (
+                                        <div className="m-auto grid max-w-lg justify-items-center gap-4 px-6 text-center">
+                                            <ComputerOfflineIcon />
+                                            <div role="status" aria-live="polite" aria-atomic="true">
+                                                <p className="font-medium">{pendingConversation.recovery.title}</p>
+                                                <p className="mt-2 text-sm text-muted-foreground">
+                                                    {pendingConversation.recovery.description}
+                                                </p>
+                                                <p className="mt-2 text-sm text-muted-foreground">
+                                                    Your unsent draft will be restored with this session.
+                                                </p>
+                                            </div>
+                                            <Button onClick={store.getState().retry}>Reconnect</Button>
+                                        </div>
+                                    ) : model.selection.kind === "loading" ||
+                                      model.initialization.kind === "loading" ? (
+                                        <SessionMessageListSkeleton />
+                                    ) : model.initialization.kind === "failed" || model.selection.kind === "failed" ? (
+                                        <PreSessionFailure
+                                            action={<Button onClick={store.getState().retry}>Reconnect</Button>}
+                                            message={
+                                                model.selection.kind === "failed"
+                                                    ? model.selection.message
+                                                    : model.initialization.kind === "failed"
+                                                      ? model.initialization.message
+                                                      : "Chat is unavailable."
+                                            }
+                                            report={reportEntry}
+                                        />
+                                    ) : queuedInitialMessage !== null && creationStatus !== null ? (
+                                        <div className={`${chatSessionColumnClassName} flex flex-col gap-2`}>
+                                            <div data-testid={dataTestId.queuedMessage}>
+                                                <UserPromptMessage
+                                                    attachments={queuedInitialMessage.attachments}
+                                                    status={
+                                                        <MessageDeliveryStatus
+                                                            data-testid={dataTestId.initialMessageStatus}
+                                                            delivery={creationBusy ? "sending" : "failed"}
+                                                            label={creationStatus}
+                                                        />
+                                                    }
+                                                    text={queuedInitialMessage.content}
+                                                />
+                                            </div>
+                                            {creationError.length > 0 && (
+                                                <div
+                                                    aria-live="assertive"
+                                                    className="ml-auto flex max-w-[85%] items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-right text-xs text-destructive"
+                                                    role="alert"
+                                                >
+                                                    <span className="min-w-0 flex-1 break-words">{creationError}</span>
+                                                    <Button
+                                                        disabled={presentation.retryDisabled}
+                                                        onClick={createConversation}
+                                                    >
+                                                        Retry message
+                                                    </Button>
+                                                    {reportButton}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="m-auto flex max-w-lg flex-col items-center px-6">
+                                            <div className="text-center" data-testid={dataTestId.chatLanding}>
+                                                <MortyLogoMark className="mx-auto mb-5 block" size={56} />
+                                                <h1 className="text-[18px] leading-6 font-semibold tracking-[-0.025em]">
+                                                    Morty
+                                                </h1>
+                                                <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
+                                                    Ask a question, explore your project, or start a task with your
+                                                    local agent.
+                                                </p>
+                                            </div>
+                                            {canStartConversation && model.selection.kind === "draft" && (
+                                                <DraftLandingDirectory
+                                                    disabled={composerLocked}
+                                                    settingsKind={draftControls.settings.kind}
+                                                    signal={workspace.chatSignal()}
+                                                    viewModel={draftControls}
+                                                />
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </FollowLatestScrollArea>
+                            {model.runtimeConfiguration !== null && model.selection.kind === "draft" && (
+                                <BotChatComposer
+                                    attachmentModel={attachmentModel}
+                                    focusScope={workspace}
+                                    canAttach={canAddAttachments(attachmentModel)}
+                                    attachmentSignal={workspace.operationsSignal()}
+                                    disabled={false}
+                                    draft={draft}
+                                    error=""
+                                    connectionNotice={
+                                        executionContext.feedback.kind === "hidden"
+                                            ? undefined
+                                            : (inline) => (
+                                                  <ConnectionNotice
+                                                      feedback={executionContext.feedback}
+                                                      footer={
+                                                          workspace.computers === null ? undefined : (
+                                                              <OnlineComputerAlternative model={workspace.computers} />
+                                                          )
+                                                      }
+                                                      inline={inline}
+                                                      onRetryNow={store.getState().retry}
+                                                      onReopen={store.getState().retry}
+                                                  />
+                                              )
+                                    }
+                                    onDraftChange={store.getState().setDraft}
+                                    onStop={() => {}}
+                                    onSubmit={createConversation}
+                                    outputState={creationBusy ? "sending" : "idle"}
+                                    submitDisabled={presentation.submitDisabled}
+                                >
+                                    <DraftChatControls
+                                        key={model.selection.key}
+                                        workspace={workspace}
+                                        disabled={composerLocked || !canStartConversation}
+                                    />
+                                </BotChatComposer>
+                            )}
+                        </>
+                    )}
+                </section>
+            </div>
             {pairingNotice && model.pairing.kind === "unpaired" && (
                 <Dialog
                     appearance="setup"

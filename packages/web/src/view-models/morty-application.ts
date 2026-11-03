@@ -111,10 +111,7 @@ export function createMortyApplication(options: {
     let workspace: ChatWorkspace | null = null;
     let workspaceRequests: BotChatApi | null = null;
     let disposed = false;
-    // The identity this page works as. Its access is the one this browser stores for that user, shared by every tab.
-    let activeUserId: string | null = null;
     const releaseWorkspace = (): void => {
-        activeUserId = null;
         workspace?.dispose();
         // The workspace receives the chat API by injection; the application
         // owns it, so it closes the pooled session transports here.
@@ -127,7 +124,6 @@ export function createMortyApplication(options: {
     const credentialRejected = () => anonymousSession.getState().credentialRejected(lifetime.signal);
     const activateWorkspace = (session: ActiveAnonymousSession): void => {
         const identity = session.identity;
-        activeUserId = identity.userId;
         const scope: ChatIdentity = {
             botId: identity.botId,
             projectId: identity.projectId,
@@ -256,14 +252,12 @@ export function createMortyApplication(options: {
         }
     };
     // Another tab ended this browser's access, or opened a link that replaced it. Every tab uses the stored access,
-    // so a replacement needs nothing; access that is gone ends here too.
+    // so a replacement for the same user needs nothing; access that is gone ends here too.
     const accessChanged = (event: StorageEvent): void => {
         if (event.key !== null && event.key !== ANONYMOUS_CREDENTIAL_KEY_NAME) {
             return;
         }
-        if (activeUserId !== null && storedToken(activeUserId) === null) {
-            window.location.reload();
-        }
+        anonymousSession.getState().storedAccessRemoved();
     };
     const networkChanged = (): void => {
         workspace?.home.getState().setNetworkAvailable(navigator.onLine);

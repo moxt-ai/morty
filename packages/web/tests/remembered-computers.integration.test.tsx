@@ -3,6 +3,7 @@ import { getAllByRole, getByRole, queryByRole } from "@testing-library/dom";
 import { expect, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { WebSocketApiTransport } from "../src/services/api/websocket-api-transport.ts";
+import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../src/services/identity/identity-scope-url.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
@@ -359,6 +360,24 @@ test("Given an open conversation, When its access is revoked elsewhere and I sta
     );
     expect(document.body.textContent).toContain("Your local agent and tasks keep running");
     expect(document.body.textContent).not.toMatch(/sign in|something went wrong/iu);
+    expect(queryByRole(document.body, "textbox", { name: "Message" })).toBeNull();
+    expect(new URL(window.location.href).searchParams.has("identity")).toBe(false);
+});
+
+test("Given an open conversation, When another tab removes this browser's access, Then Morty explains that the current access ended", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    await startConversation(app, "Before another tab ended access");
+
+    // Another tab ended the access every tab of this browser shares.
+    window.localStorage.removeItem(ANONYMOUS_CREDENTIAL_KEY_NAME);
+    window.dispatchEvent(new StorageEvent("storage", { key: ANONYMOUS_CREDENTIAL_KEY_NAME }));
+
+    await app.waitForView(() =>
+        expect(getByRole(document.body, "status").textContent).toContain("Current access ended"),
+    );
+    expect(queryByRole(document.body, "heading", { name: "Browser not paired" })).toBeNull();
     expect(queryByRole(document.body, "textbox", { name: "Message" })).toBeNull();
     expect(new URL(window.location.href).searchParams.has("identity")).toBe(false);
 });

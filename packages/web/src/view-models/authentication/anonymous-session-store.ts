@@ -57,6 +57,12 @@ export interface AnonymousSessionStore {
      * requests refused together, and left when it no longer opens the computer. Settles once that check has.
      */
     readonly credentialRejected: (signal: AbortSignal) => Promise<void>;
+    /**
+     * Another tab removed the access this page works with: it ended that access, found it ended, or replaced it with
+     * access for someone else. Either way this browser no longer holds it, so the page leaves its computer as it does
+     * for ended access.
+     */
+    readonly storedAccessRemoved: () => void;
 }
 
 /** The application owns and releases the workspace at these explicit transitions. */
@@ -103,7 +109,7 @@ export const createAnonymousSessionStore = (
                 return null;
             }
             // Access this browser no longer holds was forgotten by the check that found out it ended, which explains
-            // it, or by another tab, which reloads this page; not finding it here is no verdict of its own.
+            // it, or by another tab, which reports it here; not finding it here is no verdict of its own.
             if (storedToken(state.identity.userId) === null) {
                 return null;
             }
@@ -145,6 +151,14 @@ export const createAnonymousSessionStore = (
                         confirming = null;
                     });
                 await confirming;
+            },
+            storedAccessRemoved: () => {
+                const state = get().state;
+                if (state.kind !== "active" || storedToken(state.identity.userId) !== null) {
+                    return;
+                }
+                onIdentityChanged(null);
+                leave({ kind: "revoked" });
             },
             load: async (signal, options) => {
                 const fromFailedRetry = options?.fromFailedRetry === true;
