@@ -1,6 +1,6 @@
 import { LoaderCircle, LogOut, MonitorX, UserRound, Wifi } from "lucide-react";
 import { DropdownMenu, Tooltip } from "radix-ui";
-import { useRef } from "react";
+import { type ReactNode, useRef } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
 import { Button } from "../ui/cloud-button.tsx";
@@ -19,12 +19,15 @@ import {
  * to its trigger when it closes, so the trigger's tooltip does not reopen.
  */
 export function SidebarUserMenu({
+    header,
     disabled,
     endAccessDisabled,
     onMeasureNetwork,
     onDisconnectOtherDevices,
     onEndAccess,
 }: {
+    /** Read-only facts about this browser's access, shown above the actions. */
+    readonly header?: ReactNode;
     readonly disabled: boolean;
     readonly endAccessDisabled: boolean;
     readonly onMeasureNetwork: () => void;
@@ -83,6 +86,7 @@ export function SidebarUserMenu({
                     side="top"
                     sideOffset={overlayTriggerOffsetPx}
                 >
+                    {header}
                     <DropdownMenu.Item
                         className="flex h-9 cursor-pointer items-center gap-2 rounded-full px-3 outline-none data-[highlighted]:bg-accent"
                         onSelect={onMeasureNetwork}

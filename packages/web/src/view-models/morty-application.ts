@@ -189,6 +189,7 @@ export function createMortyApplication(options: {
             createTransfer: access.createTransfer,
             currentAccessToken: access.currentAccessToken,
             endRemoteAccess: access.endRemoteAccess,
+            accessExpiresAt: access.accessExpiresAt,
             linkedDevices: access.linkedDevices,
             waitForLinkedDevicesChange: access.waitForLinkedDevicesChange,
             endOtherBrowserAccess: access.endOtherBrowserAccess,

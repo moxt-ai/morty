@@ -53,10 +53,19 @@ export function createAuthenticationRoutes() {
             const result = await context.env.services.authentication.session(token, request.signal);
             switch (result.kind) {
                 case "authenticated":
-                    return json(result.session, 200, {
-                        "Cache-Control": "no-store",
-                        "Morty-Credential-Revocation": credentialRevocationPaths[result.credentialKind],
-                    });
+                    // A browser's access ends at the term of the link it came through; other credentials have none.
+                    return json(
+                        {
+                            ...result.session,
+                            accessExpiresAt:
+                                result.accessExpiresAt === null ? null : new Date(result.accessExpiresAt).toISOString(),
+                        },
+                        200,
+                        {
+                            "Cache-Control": "no-store",
+                            "Morty-Credential-Revocation": credentialRevocationPaths[result.credentialKind],
+                        },
+                    );
                 case "unauthenticated":
                 case "revoked":
                     throw credentialRejected(result.kind);

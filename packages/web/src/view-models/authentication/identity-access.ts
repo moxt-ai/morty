@@ -13,6 +13,8 @@ export interface IdentityAccess {
     readonly currentAccessToken: (signal: AbortSignal) => Promise<string>;
     /** Ends the access this browser holds when it runs. */
     readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
+    /** When this browser's access ends, or null when it does not end on its own. */
+    readonly accessExpiresAt: (signal: AbortSignal) => Promise<string | null>;
     readonly linkedDevices: (signal: AbortSignal) => Promise<readonly LinkedDevice[]>;
     /** Resolves once the linked devices differ from the list this page last read. */
     readonly waitForLinkedDevicesChange: (signal: AbortSignal) => Promise<void>;
@@ -56,6 +58,7 @@ export function createIdentityAccess(options: {
     };
     return {
         ...remoteAccess,
+        accessExpiresAt: (signal) => withCurrentAccess(signal, (token) => api.accessExpiresAt(token, signal)),
         linkedDevices: (signal) => withCurrentAccess(signal, (token) => api.linkedDevices(token, signal)),
         waitForLinkedDevicesChange: async (signal) =>
             await api.waitForLinkedDevicesChange(

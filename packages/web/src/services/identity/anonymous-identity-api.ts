@@ -52,6 +52,7 @@ const anonymousSessionSchema = v.pipe(
     v.object({ authentication: v.object({ kind: v.literal("anonymous") }), userId: v.string() }),
     v.readonly(),
 );
+const accessTermSchema = v.object({ accessExpiresAt: v.nullable(v.pipe(v.string(), v.isoTimestamp())) });
 const transferSchema = v.pipe(
     v.object({
         // The link opens until `expiresAt`; the device it adds keeps access until `accessExpiresAt`.
@@ -258,6 +259,17 @@ export class AnonymousIdentityApi {
                 signal,
             }),
         );
+
+    /** When this access ends: the term of the link a browser came through, or null for access without one. */
+    readonly accessExpiresAt = async (token: string, signal: AbortSignal): Promise<string | null> =>
+        v.parse(
+            accessTermSchema,
+            await this.#request(
+                "/session",
+                { method: "GET", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
+                signal,
+            ),
+        ).accessExpiresAt;
 
     /** The other devices that hold this access through a link now. */
     readonly linkedDevices = async (token: string, signal: AbortSignal): Promise<readonly LinkedDevice[]> =>

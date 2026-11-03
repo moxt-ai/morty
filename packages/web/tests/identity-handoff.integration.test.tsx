@@ -8,6 +8,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { centralLocalStorage, linkedDevicesSeenEntry } from "../src/services/local-storage/central-local-storage.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
+import { TestClock } from "./infra/test-clock.ts";
 
 type TestApp = Awaited<ReturnType<typeof createTestApp>>;
 
@@ -642,4 +643,37 @@ test("Given a browser that acknowledged a new device, When another device joins 
     );
     expect(next.textContent).toContain("Mac · Edge");
     expect(next.textContent).not.toContain("iPhone · Safari");
+});
+
+test("Given a browser whose access ends within the hour, When the page stays open, Then it is reminded once and the account menu states the term", {
+    timeout: 60_000,
+}, async () => {
+    // The Worker grants the device term from its own clock, so the page's clock starts at that same moment.
+    const clock = new TestClock(new Date().toISOString());
+    const joined = await createTestApp({ connectAgent: true, page: { kind: "share" }, clock });
+    await joined.waitForView(() => expect(new URL(window.location.href).searchParams.get("identity")).not.toBeNull());
+    const app = await joined.reload();
+    const accountMenu = async (page: typeof app) => {
+        await page.user.click(await page.queryElementByTestId(dataTestId.userMenu));
+        const menu = await page.waitForView(() => {
+            const shown = getByRole(document.body, "menu");
+            expect(shown.textContent).toContain("Access in this browser");
+            return shown;
+        });
+        await page.user.keyboard("{Escape}");
+        return menu.textContent;
+    };
+    expect(await accountMenu(app)).toContain("Until ");
+    expect(queryByRole(document.body, "status", { name: "Access ending soon" })).toBeNull();
+
+    clock.advanceBy(23 * 60 * 60 * 1000 + 60_000);
+    const reminder = await app.waitForView(() => getByRole(document.body, "status", { name: "Access ending soon" }));
+    expect(reminder.textContent).toContain("Access in this browser ends");
+    expect(reminder.textContent).toContain("open a new link from your computer or another device");
+    await app.user.click(getByRole(reminder, "button", { name: "Got it" }));
+    expect(queryByRole(document.body, "status", { name: "Access ending soon" })).toBeNull();
+
+    const reloaded = await app.reload();
+    await accountMenu(reloaded);
+    expect(queryByRole(document.body, "status", { name: "Access ending soon" })).toBeNull();
 });

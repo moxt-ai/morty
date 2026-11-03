@@ -16,6 +16,7 @@ import { HarnessMark } from "../../components/chat/harness-mark.tsx";
 import { MessageDeliveryStatus } from "../../components/chat/message-delivery-status.tsx";
 import { MobileSessionTitlePortal } from "../../components/chat/mobile-session-title-portal.tsx";
 import { SessionLoadFailure } from "../../components/chat/session-load-failure.tsx";
+import { TopNoticeStack } from "../../components/chat/top-notice.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -46,6 +47,7 @@ import { activeHarnessMark, pendingExecutionContext } from "../../view-models/ch
 import { pendingConversationPresentation } from "../../view-models/chat/pending-conversation-presentation.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
+import { AccessEndingNotice } from "./access-term.tsx";
 import { OnlineComputerAlternative } from "./computer-switcher.tsx";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
@@ -265,12 +267,15 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                 onOpen={(session) => openManaged(session.id)}
                 onNewConversation={newConversation}
             />
-            {workspace.newDevices !== null && (
-                <NewDeviceNotice
-                    store={workspace.newDevices}
-                    onDisconnectOthers={workspace.otherDevices?.getState().request ?? null}
-                />
-            )}
+            <TopNoticeStack>
+                {workspace.newDevices !== null && (
+                    <NewDeviceNotice
+                        store={workspace.newDevices}
+                        onDisconnectOthers={workspace.otherDevices?.getState().request ?? null}
+                    />
+                )}
+                {workspace.accessExpiry !== null && <AccessEndingNotice store={workspace.accessExpiry} />}
+            </TopNoticeStack>
             {workspace.otherDevices !== null && (
                 <OtherDevicesDialog store={workspace.otherDevices} signal={workspace.operationsSignal} />
             )}

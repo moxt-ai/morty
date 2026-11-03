@@ -16,6 +16,7 @@ import {
 import type { Clock } from "../../services/time/clock.ts";
 import type { BugReportDialogStore } from "../bug-report-dialog-store.ts";
 import { reportApplicationError } from "../report-error.ts";
+import { type AccessExpiryStore, createAccessExpiryStore } from "./access-expiry-store.ts";
 import { type BotChatHomeStoreApi, createBotChatHomeStore, homeWaitsForRuntime } from "./bot-chat-home-store.ts";
 import { createComposerAttachmentStore } from "./composer-attachment-store.ts";
 import type { ComputerSwitcherModel } from "./computer-switcher-store.ts";
@@ -54,6 +55,8 @@ export interface ChatWorkspace {
     readonly accessNotice: string | null;
     /** Tells this browser about devices that joined its computer since it last looked. */
     readonly newDevices: StoreApi<NewDeviceNoticeStore> | null;
+    /** When this browser's access ends; null when the page cannot read its own access. */
+    readonly accessExpiry: StoreApi<AccessExpiryStore> | null;
     /** Disconnects the other devices while this browser keeps its access; null when this page cannot. */
     readonly otherDevices: StoreApi<OtherDevicesStore> | null;
     /** The chat API this workspace was composed with. */
@@ -137,6 +140,7 @@ export function createChatWorkspace(options: {
     readonly createTransfer?: ((signal: AbortSignal) => Promise<IdentityTransfer>) | undefined;
     readonly currentAccessToken?: ((signal: AbortSignal) => Promise<string>) | undefined;
     readonly endRemoteAccess?: ((signal: AbortSignal) => Promise<void>) | undefined;
+    readonly accessExpiresAt?: ((signal: AbortSignal) => Promise<string | null>) | undefined;
     readonly linkedDevices?: ((signal: AbortSignal) => Promise<readonly LinkedDevice[]>) | undefined;
     readonly waitForLinkedDevicesChange?: ((signal: AbortSignal) => Promise<void>) | undefined;
     readonly endOtherBrowserAccess?: ((signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>) | undefined;
@@ -509,10 +513,19 @@ export function createChatWorkspace(options: {
               });
     const endOtherBrowserAccess = options.endOtherBrowserAccess;
     const linkedDevices = options.linkedDevices;
+    const accessExpiry =
+        options.projectId === undefined || options.accessExpiresAt === undefined
+            ? null
+            : createAccessExpiryStore({
+                  projectId: options.projectId,
+                  accessExpiresAt: options.accessExpiresAt,
+                  clock: options.clock,
+              });
     return {
         computers: options.computers ?? null,
         accessNotice: options.accessNotice ?? null,
         newDevices,
+        accessExpiry,
         otherDevices:
             endOtherBrowserAccess === undefined || linkedDevices === undefined
                 ? null

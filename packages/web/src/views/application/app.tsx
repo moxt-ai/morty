@@ -176,7 +176,10 @@ function SetupApplication({
             >
                 <p>
                     <span className="font-medium">Current access ended</span>{" "}
-                    <span className="text-muted-foreground">Your local agent and tasks keep running.</span>
+                    <span className="text-muted-foreground">
+                        Your local agent and tasks keep running. To continue here, open a new link from your computer or
+                        another device.
+                    </span>
                 </p>
             </MortyAlert>
         ) : undefined;

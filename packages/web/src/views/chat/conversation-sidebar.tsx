@@ -58,6 +58,7 @@ import { nativeSessionAgentTabs } from "../../view-models/chat/native-session-ag
 import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
 import { noSessionDelivery } from "../../view-models/chat/session-delivery-store.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
+import { AccessTerm } from "./access-term.tsx";
 import {
     ComputerSwitcher,
     mobileDrawerCardClassName,
@@ -751,6 +752,12 @@ export function ConversationSidebar({
                                                                 "mt-4 sm:hidden",
                                                             )}
                                                         >
+                                                            {workspace.accessExpiry !== null && (
+                                                                <AccessTerm
+                                                                    layout="card"
+                                                                    store={workspace.accessExpiry}
+                                                                />
+                                                            )}
                                                             <SidebarSessionOption
                                                                 disabled={access.state.kind === "loading"}
                                                                 icon={Wifi}
@@ -785,6 +792,14 @@ export function ConversationSidebar({
                                                     ) : null}
                                                     {desktop && access.state.kind !== "ended" ? (
                                                         <SidebarUserMenu
+                                                            header={
+                                                                workspace.accessExpiry === null ? undefined : (
+                                                                    <AccessTerm
+                                                                        layout="menu"
+                                                                        store={workspace.accessExpiry}
+                                                                    />
+                                                                )
+                                                            }
                                                             disabled={access.state.kind === "loading"}
                                                             endAccessDisabled={
                                                                 access.state.kind === "loading" ||

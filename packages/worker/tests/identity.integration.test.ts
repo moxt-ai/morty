@@ -200,6 +200,7 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
     expect(await response.json()).toEqual({
         authentication: { kind: "anonymous" },
         userId: identity.userId,
+        accessExpiresAt: null,
     });
     const served = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management/bot`, {
@@ -409,6 +410,7 @@ test("Given anonymous Morty sessions, When the account endpoint authenticates th
     expect(await response.json()).toEqual({
         authentication: { kind: "anonymous" },
         userId: local.userId,
+        accessExpiresAt: null,
     });
 });
 

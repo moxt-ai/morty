@@ -2,6 +2,7 @@ import { ShieldAlert } from "lucide-react";
 import { useStore } from "zustand";
 import type { StoreApi } from "zustand/vanilla";
 import { DeviceList } from "../../components/chat/device-list.tsx";
+import { topNoticeActionClassName, topNoticeCardClassName } from "../../components/chat/top-notice.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { describeLinkedDevice } from "../../view-models/chat/access-presentation.ts";
 import type { NewDeviceNoticeStore } from "../../view-models/chat/new-device-notice-store.ts";
@@ -18,12 +19,7 @@ export function NewDeviceNotice({
     return (
         <div className="contents" ref={onAttach}>
             {state.kind === "notice" && (
-                // Below the dialog overlay, so a confirmation it opens covers it instead of repeating its actions.
-                <section
-                    aria-label="New device connected"
-                    className="fixed top-3 left-1/2 z-40 w-[min(28rem,calc(100%-2rem))] -translate-x-1/2 rounded-lg border border-border bg-background px-4 py-3 text-sm shadow-lg"
-                    role="status"
-                >
+                <section aria-label="New device connected" className={topNoticeCardClassName} role="status">
                     <p className="flex items-center gap-2 font-medium">
                         <ShieldAlert aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
                         {state.devices.length === 1
@@ -42,11 +38,16 @@ export function NewDeviceNotice({
                     </p>
                     <div className="mt-3 flex justify-end gap-2">
                         {onDisconnectOthers !== null && (
-                            <Button onClick={onDisconnectOthers} size="sm" variant="ghost">
+                            <Button
+                                className={topNoticeActionClassName}
+                                onClick={onDisconnectOthers}
+                                size="sm"
+                                variant="ghost"
+                            >
                                 Disconnect other devices
                             </Button>
                         )}
-                        <Button onClick={dismiss} size="sm">
+                        <Button className={topNoticeActionClassName} onClick={dismiss} size="sm">
                             Got it
                         </Button>
                     </div>
