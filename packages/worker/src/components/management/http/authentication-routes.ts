@@ -9,6 +9,7 @@ import {
     defaultDeviceAccessDuration,
     deviceAccessDurations,
 } from "../entity/authentication/credential.ts";
+import { clientLocationHeader, decodeClientLocation } from "../entity/client-location.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { anonymousCreationKey } from "../entity/project-bootstrap.ts";
 import { projectLocationHint } from "../util/project-location.ts";
@@ -170,9 +171,12 @@ export function createAuthenticationRoutes() {
             return json(
                 {
                     devices: result.devices.map((device) => ({
+                        id: device.id,
                         joinedAt: new Date(device.joinedAt).toISOString(),
                         label: device.label,
+                        location: device.location,
                         addedBy: device.addedBy,
+                        accessExpiresAt: new Date(device.accessExpiresAt).toISOString(),
                     })),
                 },
                 200,
@@ -187,7 +191,10 @@ export function createAuthenticationRoutes() {
                 const identity = await context.env.services.management.redeemTransfer(
                     input.code,
                     input.replaces ?? null,
-                    input.device ?? null,
+                    {
+                        label: input.device ?? null,
+                        location: decodeClientLocation(context.req.raw.headers.get(clientLocationHeader)),
+                    },
                     context.req.raw.signal,
                 );
                 if (identity === null) {
@@ -246,6 +253,41 @@ export function createAuthenticationRoutes() {
                             "Cache-Control": "no-store",
                         },
                     );
+                case "unauthenticated":
+                    throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
+                case "forbidden":
+                    throw new ManagementError(
+                        "CREDENTIAL_KIND_REQUIRED",
+                        "This operation requires a different credential kind.",
+                        403,
+                    );
+            }
+        })
+        .delete("/identity/v1/devices/:deviceId", async (context) => {
+            const result = await context.env.services.authentication.endDeviceAccess(
+                context.get("bearerToken"),
+                context.req.param("deviceId"),
+                context.req.raw.signal,
+            );
+            switch (result.kind) {
+                case "ended":
+                    if (result.sessionAccess.kind === "unconfirmed") {
+                        context.env.logger.warn(
+                            { code: result.sessionAccess.cause.code, status: result.sessionAccess.cause.status },
+                            "A disconnected device did not reach the Session credentials already issued",
+                        );
+                    }
+                    return json({ status: "device_access_ended", sessionAccess: result.sessionAccess.kind }, 200, {
+                        "Cache-Control": "no-store",
+                    });
+                case "own":
+                    throw new ManagementError(
+                        "OWN_DEVICE",
+                        "End this browser's access with End current access instead.",
+                        409,
+                    );
+                case "unknown":
+                    throw new ManagementError("DEVICE_NOT_FOUND", "No such device has access to this computer.", 404);
                 case "unauthenticated":
                     throw new ManagementError("UNAUTHENTICATED", "Sign in to continue.", 401);
                 case "forbidden":

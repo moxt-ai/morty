@@ -21,6 +21,8 @@ export interface IdentityAccess {
     readonly waitForLinkedDevicesChange: (signal: AbortSignal) => Promise<void>;
     /** Disconnects every other browser that joined through a link while this one keeps its access. */
     readonly endOtherBrowserAccess: (signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>;
+    /** Disconnects one other device; this browser and the computer keep their access. */
+    readonly endDeviceAccess: (deviceId: string, signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>;
 }
 
 class IdentitySharingUnavailable extends Error {
@@ -69,6 +71,8 @@ export function createIdentityAccess(options: {
             ),
         endOtherBrowserAccess: (signal) =>
             withCurrentAccess(signal, (token) => api.endOtherBrowserAccess(token, signal)),
+        endDeviceAccess: (deviceId, signal) =>
+            withCurrentAccess(signal, (token) => api.endDeviceAccess(token, deviceId, signal)),
         createTransfer: async (terms, signal) => {
             const localIdentity = await options.currentAccess(signal);
             signal.throwIfAborted();

@@ -2,6 +2,11 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
 import { instructionDocumentRoutes } from "./components/instruction-documents/http/index.ts";
+import {
+    clientLocationHeader,
+    clientLocationOf,
+    encodeClientLocation,
+} from "./components/management/entity/client-location.ts";
 import { projectBootstrap } from "./components/management/entity/project-bootstrap.ts";
 import { createApplicationDependencies } from "./composition/application-context.ts";
 import { cloudRoutes, publicCloudRoutes } from "./composition/cloud-http.ts";
@@ -59,7 +64,15 @@ const application: Hono<{ readonly Bindings: CloudBindings }> = new Hono<{ reado
     .route("/", setupArtifact)
     .get("/morty/ws", (context) => {
         const namespace = v.parse(webSocketNamespaceBindingSchema, context.env.CHAT_WEBSOCKETS);
-        return namespace.get(namespace.newUniqueId()).fetch(context.req.raw);
+        // The bridge learns where the browser connected from only here, from Cloudflare, never from the browser.
+        const headers = new Headers(context.req.raw.headers);
+        const location = clientLocationOf(context.req.raw);
+        if (location === null) {
+            headers.delete(clientLocationHeader);
+        } else {
+            headers.set(clientLocationHeader, encodeClientLocation(location));
+        }
+        return namespace.get(namespace.newUniqueId()).fetch(new Request(context.req.raw, { headers }));
     })
     .post("/__project/bootstrap", (context) => bootstrapProject(context.req.raw, context.env))
     .route("/morty/api", cloudRoutes)

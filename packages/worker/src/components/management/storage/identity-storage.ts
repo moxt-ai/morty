@@ -8,6 +8,7 @@ import {
     platformProjectMapping,
 } from "../../../schema/project-do/index.ts";
 import type { Credential, SharedLinkTerms } from "../entity/authentication/credential.ts";
+import type { ClientLocation } from "../entity/client-location.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
 import { type AnonymousIdentity, digest, randomSecret, requireIdentityDatabase } from "./identity-storage-common.ts";
 
@@ -22,6 +23,12 @@ function unusedLink(database: ReturnType<typeof requireIdentityDatabase>) {
             .where(eq(anonymousCredential.remoteTransferId, continueLink.id)),
     );
 }
+/** How a browser joining through a link describes itself, and roughly where Cloudflare saw it connect from. */
+export interface JoiningDevice {
+    readonly label: string | null;
+    readonly location: ClientLocation | null;
+}
+
 export interface IdentityTransfer extends SharedLinkTerms {
     readonly code: string;
 }
@@ -123,6 +130,8 @@ export class IdentityStorage {
                 deviceId: sql<string>`${browserDevice.id}`.as("device_id"),
                 joinedAt: browserDevice.joinedAt,
                 label: browserDevice.label,
+                joinedCity: browserDevice.joinedCity,
+                joinedCountry: browserDevice.joinedCountry,
                 revokedAt: anonymousCredential.revokedAt,
                 accessExpiresAt: sql<number>`${currentLink.accessExpiresAt}`.as("access_expires_at"),
                 sharerKind: sql<Credential["kind"] | null>`${sharer.kind}`.as("sharer_kind"),
@@ -326,7 +335,7 @@ export class IdentityStorage {
     readonly redeemTransfer = async (
         code: string,
         replaces: string | null,
-        deviceLabel: string | null,
+        joining: JoiningDevice,
         now: number,
         signal: AbortSignal,
     ): Promise<AnonymousIdentity | null> => {
@@ -393,7 +402,9 @@ export class IdentityStorage {
                     id: sql<string>`${newDeviceId}`.as("id"),
                     userId: anonymousCredential.userId,
                     joinedAt: sql<number>`${now}`.as("joined_at"),
-                    label: sql<string | null>`${deviceLabel}`.as("label"),
+                    label: sql<string | null>`${joining.label}`.as("label"),
+                    joinedCity: sql<string | null>`${joining.location?.city ?? null}`.as("joined_city"),
+                    joinedCountry: sql<string | null>`${joining.location?.country ?? null}`.as("joined_country"),
                     joinedThroughTransferId: anonymousCredential.remoteTransferId,
                 })
                 .from(anonymousCredential)
@@ -442,6 +453,42 @@ export class IdentityStorage {
     };
 
     /** Ends a browser device's access: every credential it holds, so a retried or concurrent redemption ends too. */
+    /**
+     * Ends the access of one of the user's browser devices: every credential it holds. Returns false when the user has
+     * no such device; a device whose access already ended is ended still, so repeating the request is harmless.
+     */
+    readonly endDeviceAccess = async (
+        userId: string,
+        deviceId: string,
+        now: number,
+        signal: AbortSignal,
+    ): Promise<boolean> => {
+        signal.throwIfAborted();
+        const database = requireIdentityDatabase(this.#database);
+        const device = await database
+            .select({ id: browserDevice.id })
+            .from(browserDevice)
+            .where(and(eq(browserDevice.userId, userId), eq(browserDevice.id, deviceId)))
+            .get();
+        if (device === undefined) {
+            signal.throwIfAborted();
+            return false;
+        }
+        await database
+            .update(anonymousCredential)
+            .set({ revokedAt: now })
+            .where(
+                and(
+                    eq(anonymousCredential.userId, userId),
+                    eq(anonymousCredential.deviceId, deviceId),
+                    isNull(anonymousCredential.revokedAt),
+                ),
+            )
+            .run();
+        signal.throwIfAborted();
+        return true;
+    };
+
     readonly revokeBrowserAccess = async (
         credential: Extract<Credential, { readonly kind: "browser" }>,
         now: number,

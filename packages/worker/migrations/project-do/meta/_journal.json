@@ -232,6 +232,13 @@
             "when": 1793618363066,
             "tag": "0044_device_owned_browser_facts",
             "breakpoints": true
+        },
+        {
+            "idx": 45,
+            "version": "6",
+            "when": 1793671299518,
+            "tag": "0045_browser_device_join_location",
+            "breakpoints": true
         }
     ]
 }

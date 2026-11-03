@@ -43,6 +43,7 @@ import linkCreator from "../../migrations/project-do/0041_link_creator.sql?raw";
 import browserDevices from "../../migrations/project-do/0042_browser_devices.sql?raw";
 import backfillBrowserDevices from "../../migrations/project-do/0043_backfill_browser_devices.sql?raw";
 import deviceOwnedBrowserFacts from "../../migrations/project-do/0044_device_owned_browser_facts.sql?raw";
+import browserDeviceJoinLocation from "../../migrations/project-do/0045_browser_device_join_location.sql?raw";
 
 /** Generated Project Durable Object migrations, in order. The ledger records each by its tag. */
 export const migrations = [
@@ -90,6 +91,7 @@ export const migrations = [
     { tag: "0042_browser_devices", sql: browserDevices },
     { tag: "0043_backfill_browser_devices", sql: backfillBrowserDevices },
     { tag: "0044_device_owned_browser_facts", sql: deviceOwnedBrowserFacts },
+    { tag: "0045_browser_device_join_location", sql: browserDeviceJoinLocation },
 ];
 
 /**

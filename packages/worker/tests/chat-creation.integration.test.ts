@@ -826,3 +826,46 @@ test("Given two browsers joined through links, When one disconnects the other br
     await expect(readHistory()).rejects.toMatchObject({ code: "credential_revoked" });
     expect((await redeem(unused)).status).toBe(410);
 });
+
+test("Given a browser connecting from a city, When it opens a link through the bridge, Then the device list shows roughly where it joined, never what the browser claimed", async ({
+    cloud,
+}) => {
+    await using fixture = await createChatFixture(cloud);
+    const shared = await fixture.request("identity/transfers", {});
+    const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
+    const upgraded = await cloud.dispatchFetch(`${APP_ORIGIN}/morty/ws`, {
+        headers: {
+            Origin: APP_ORIGIN,
+            Upgrade: "websocket",
+            // A browser cannot name its own location: the Worker replaces this with Cloudflare's.
+            "Morty-Client-Location": encodeURIComponent(JSON.stringify({ city: "Elsewhere", country: "AQ" })),
+        },
+        cf: { city: "Shanghai", country: "CN" },
+    });
+    const bridge = upgraded.webSocket;
+    if (bridge === null) {
+        throw new Error("Expected the Chat WebSocket bridge.");
+    }
+    bridge.accept();
+    const reply = new Promise<unknown>((resolve) => {
+        bridge.addEventListener("message", (event) => resolve(JSON.parse(String(event.data))), { once: true });
+    });
+    bridge.send(
+        JSON.stringify({
+            kind: "request",
+            requestId: "redeem",
+            method: "POST",
+            path: "/morty/api/identity/transfers/redeem",
+            headers: [["content-type", "application/json"]],
+            body: JSON.stringify({ code, device: "iPhone · Safari" }),
+        }),
+    );
+    expect(await reply).toMatchObject({ kind: "response", status: 200 });
+    bridge.close();
+
+    const listed = v.parse(
+        v.object({ devices: v.array(v.object({ label: v.nullable(v.string()), location: v.unknown() })) }),
+        await (await fixture.request("identity/devices")).json(),
+    );
+    expect(listed.devices).toEqual([{ label: "iPhone · Safari", location: { city: "Shanghai", country: "CN" } }]);
+});

@@ -50,10 +50,10 @@ import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { AccessEndingNotice } from "./access-term.tsx";
 import { OnlineComputerAlternative } from "./computer-switcher.tsx";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
+import { DevicesDialog } from "./devices-dialog.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { MobiusSessionPane, MobiusSessionPaneLoading, SessionMessageListSkeleton } from "./mobius-session-pane.tsx";
 import { NewDeviceNotice } from "./new-device-notice.tsx";
-import { OtherDevicesDialog } from "./other-devices-dialog.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 
 /** The centered pre-session failure block: card, grouped action buttons and the report entry. */
@@ -271,13 +271,18 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                 {workspace.newDevices !== null && (
                     <NewDeviceNotice
                         store={workspace.newDevices}
-                        onDisconnectOthers={workspace.otherDevices?.getState().request ?? null}
+                        onReviewDevices={workspace.deviceAccess?.getState().open ?? null}
                     />
                 )}
                 {workspace.accessExpiry !== null && <AccessEndingNotice store={workspace.accessExpiry} />}
             </TopNoticeStack>
-            {workspace.otherDevices !== null && (
-                <OtherDevicesDialog store={workspace.otherDevices} signal={workspace.operationsSignal} />
+            {workspace.deviceAccess !== null && (
+                <DevicesDialog
+                    accessExpiry={workspace.accessExpiry}
+                    computerName={model.runtimeConfiguration?.runtime?.machineName ?? ""}
+                    signal={workspace.operationsSignal}
+                    store={workspace.deviceAccess}
+                />
             )}
             {workspace.accessNotice !== null && (
                 <div

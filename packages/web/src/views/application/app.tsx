@@ -8,6 +8,7 @@ import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-s
 import type { SetupHandoffModel } from "../../view-models/send-link-store.ts";
 import { PairingInstruction } from "../chat/pairing-instruction.tsx";
 import { BugReportButton, BugReportDialogHost } from "../diagnostics/bug-report-button.tsx";
+import { mortyRepository } from "../morty-repository.ts";
 import { GlobalLoadingPage } from "../setup/global-loading-page.tsx";
 import {
     SetupCardAlert,
@@ -144,8 +145,6 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
             return <RouterProvider router={state.router} />;
     }
 }
-
-const mortyRepository = "https://github.com/moxt-ai/morty";
 
 /** Where a visitor verifies what Morty does before running setup. */
 const mortyResources = [

@@ -128,6 +128,8 @@ test("Given browsers that joined before devices had their own record, When the s
             user_id: "usr_owner",
             joined_at: 1,
             label: "iPhone · Safari",
+            joined_city: null,
+            joined_country: null,
             joined_through_transfer_id: "transfer_first",
         },
         {
@@ -135,6 +137,8 @@ test("Given browsers that joined before devices had their own record, When the s
             user_id: "usr_owner",
             joined_at: 1,
             label: null,
+            joined_city: null,
+            joined_country: null,
             joined_through_transfer_id: "transfer_legacy",
         },
     ]);

@@ -8,6 +8,7 @@ import { json } from "../../infra/http.ts";
 import { toHttpError } from "../../infra/http-error.ts";
 import { RequestError } from "../../infra/request-error.ts";
 import { createWebSocketApiBridge } from "../../infra/websocket-api-bridge.ts";
+import { clientLocationHeader } from "../management/entity/client-location.ts";
 
 export class ChatWebSocketDurableObject extends DurableObject<CloudBindings> {
     #connection:
@@ -43,6 +44,12 @@ export class ChatWebSocketDurableObject extends DurableObject<CloudBindings> {
                             headers.delete("CF-Connecting-IP");
                         } else {
                             headers.set("CF-Connecting-IP", address);
+                        }
+                        const location = request.headers.get(clientLocationHeader);
+                        if (location === null) {
+                            headers.delete(clientLocationHeader);
+                        } else {
+                            headers.set(clientLocationHeader, location);
                         }
                         const response = await application.fetch(new Request(dispatched, { headers }), this.env);
                         // Only the browser application talks to Morty over this bridge.

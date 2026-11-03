@@ -25,9 +25,33 @@ function addedBy(device: LinkedDevice): string | null {
     }
 }
 
-/** How a device that holds access through a link reads in lists: its name, then when and how it joined. */
-export function describeLinkedDevice(device: LinkedDevice): { readonly name: string; readonly detail: string } {
-    const sharer = addedBy(device);
-    const joined = `Joined ${formatMoment(device.joinedAt)}`;
-    return { name: device.label ?? "Unknown browser", detail: sharer === null ? joined : `${joined} · ${sharer}` };
+const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
+
+/** Where a device joined from, as approximate as Cloudflare's location of its connection. */
+function joinedNear(location: LinkedDevice["location"]): string | null {
+    const country = location?.country == null ? null : (regionNames.of(location.country) ?? location.country);
+    const city = location?.city ?? null;
+    if (city !== null && country !== null) {
+        return `Near ${city}, ${country}`;
+    }
+    if (city !== null || country !== null) {
+        return `Near ${city ?? country}`;
+    }
+    return null;
+}
+
+/**
+ * How a device that holds access through a link reads in lists: its name, then when and roughly where it joined, then
+ * who added it and until when it keeps access.
+ */
+export function describeLinkedDevice(device: LinkedDevice): {
+    readonly name: string;
+    readonly details: readonly string[];
+} {
+    const joined = [`Joined ${formatMoment(device.joinedAt)}`, joinedNear(device.location)];
+    const term = [addedBy(device), `Until ${formatMoment(device.accessExpiresAt)}`];
+    return {
+        name: device.label ?? "Unknown browser",
+        details: [joined, term].map((parts) => parts.filter((part) => part !== null).join(" · ")),
+    };
 }

@@ -193,6 +193,7 @@ export function createMortyApplication(options: {
             linkedDevices: access.linkedDevices,
             waitForLinkedDevicesChange: access.waitForLinkedDevicesChange,
             endOtherBrowserAccess: access.endOtherBrowserAccess,
+            endDeviceAccess: access.endDeviceAccess,
             networkDiagnostics: {
                 measureBrowserMobius: transport.measureMobiusLatency,
                 measureBrowserMorty: transport.measureMortyLatency,

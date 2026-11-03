@@ -12,9 +12,10 @@ import {
     sharedLinkTerms,
 } from "../entity/authentication/credential.ts";
 import type { Session } from "../entity/authentication/session.ts";
+import type { ClientLocation } from "../entity/client-location.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { PlatformProjectError } from "../entity/platform-project.ts";
-import type { IdentityStorage, IdentityTransfer } from "../storage/identity-storage.ts";
+import type { IdentityStorage, IdentityTransfer, JoiningDevice } from "../storage/identity-storage.ts";
 import type { AnonymousIdentity } from "../storage/identity-storage-common.ts";
 
 type SessionResult =
@@ -253,10 +254,10 @@ export class AuthenticationService {
     readonly redeemTransfer = async (
         code: string,
         replaces: string | null,
-        deviceLabel: string | null,
+        joining: JoiningDevice,
         signal: AbortSignal,
     ): Promise<AnonymousIdentity | null> =>
-        await this.identities.redeemTransfer(code, replaces, deviceLabel, Date.now(), signal);
+        await this.identities.redeemTransfer(code, replaces, joining, Date.now(), signal);
 
     /** The other devices that hold this access through a link now, so its holder can tell when one is new. */
     readonly linkedDevices = async (
@@ -266,9 +267,13 @@ export class AuthenticationService {
         | {
               readonly kind: "listed";
               readonly devices: readonly {
+                  readonly id: string;
                   readonly joinedAt: number;
                   readonly label: string | null;
+                  readonly location: ClientLocation | null;
                   readonly addedBy: DeviceSharer | null;
+                  /** The latest term among the credentials the device holds. */
+                  readonly accessExpiresAt: number;
               }[];
           }
         | { readonly kind: "unauthenticated" | "revoked" }
@@ -278,19 +283,31 @@ export class AuthenticationService {
             case "authorized": {
                 const own = access.credential.kind === "browser" ? access.credential.deviceId : null;
                 const now = Date.now();
-                // A device holds access while any of its credentials does.
-                const holding = new Map(
-                    (await this.identities.linkedDevices(access.credential.userId, signal))
-                        .filter((device) => device.deviceId !== own && accessHolds(device, now))
-                        .map((device) => [device.deviceId, device]),
-                );
+                // A device holds access while any of its credentials does, until the latest of their terms.
+                const holding = new Map<string, Awaited<ReturnType<IdentityStorage["linkedDevices"]>>[number]>();
+                for (const device of await this.identities.linkedDevices(access.credential.userId, signal)) {
+                    const known = holding.get(device.deviceId);
+                    if (
+                        device.deviceId !== own &&
+                        accessHolds(device, now) &&
+                        (known === undefined || device.accessExpiresAt > known.accessExpiresAt)
+                    ) {
+                        holding.set(device.deviceId, device);
+                    }
+                }
                 return {
                     kind: "listed",
                     devices: [...holding.values()]
                         .map((device) => ({
+                            id: device.deviceId,
                             joinedAt: device.joinedAt,
                             label: device.label,
+                            location:
+                                device.joinedCity === null && device.joinedCountry === null
+                                    ? null
+                                    : { city: device.joinedCity, country: device.joinedCountry },
                             addedBy: deviceSharer(device.sharerKind, device.sharerLabel),
+                            accessExpiresAt: device.accessExpiresAt,
                         }))
                         .sort((left, right) => left.joinedAt - right.joinedAt),
                 };
@@ -341,6 +358,32 @@ export class AuthenticationService {
             Date.now(),
             signal,
         );
+        return { kind: "ended", sessionAccess: await this.#revokeIssuedSessionAccess(signal) };
+    };
+
+    /**
+     * Ends one other device's access and closes the chat windows open on it. Windows close Project-wide, so this
+     * browser's own windows reconnect. A device whose access already ended is ended still, so retrying is safe.
+     */
+    readonly endDeviceAccess = async (
+        token: string | undefined,
+        deviceId: string,
+        signal: AbortSignal,
+    ): Promise<
+        | { readonly kind: "ended"; readonly sessionAccess: IssuedSessionAccess }
+        | { readonly kind: "own" | "unknown" }
+        | { readonly kind: "unauthenticated" | "forbidden" }
+    > => {
+        const access = await this.authorize(token, "endDeviceAccess", signal);
+        if (access.kind !== "authorized") {
+            return refused(access);
+        }
+        if (access.credential.kind === "browser" && access.credential.deviceId === deviceId) {
+            return { kind: "own" };
+        }
+        if (!(await this.identities.endDeviceAccess(access.credential.userId, deviceId, Date.now(), signal))) {
+            return { kind: "unknown" };
+        }
         return { kind: "ended", sessionAccess: await this.#revokeIssuedSessionAccess(signal) };
     };
 

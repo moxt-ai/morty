@@ -607,10 +607,18 @@ test("Given browsers that joined through links shared by the computer and by ano
         );
         expect(response.status).toBe(200);
         const { devices } = v.parse(
-            v.object({ devices: v.array(v.looseObject({ joinedAt: v.pipe(v.string(), v.isoTimestamp()) })) }),
+            v.object({
+                devices: v.array(
+                    v.looseObject({
+                        joinedAt: v.pipe(v.string(), v.isoTimestamp()),
+                        id: v.string(),
+                        accessExpiresAt: v.pipe(v.string(), v.isoTimestamp()),
+                    }),
+                ),
+            }),
             await response.json(),
         );
-        return devices.map(({ joinedAt: _joinedAt, ...device }) => device);
+        return devices.map(({ joinedAt: _joinedAt, id: _id, accessExpiresAt: _term, ...device }) => device);
     };
 
     const laptop = await join(owner.token, "Mac · Chrome");
@@ -620,11 +628,12 @@ test("Given browsers that joined through links shared by the computer and by ano
 
     const phoneAddedByLaptop = {
         label: "iPhone · Safari",
+        location: null,
         addedBy: { kind: "device", label: "Mac · Chrome" },
     };
     expect(await listed(laptop)).toEqual([phoneAddedByLaptop]);
     expect(await listed(owner.token)).toEqual([
-        { label: "Mac · Chrome", addedBy: { kind: "computer" } },
+        { label: "Mac · Chrome", location: null, addedBy: { kind: "computer" } },
         phoneAddedByLaptop,
     ]);
 });
@@ -677,4 +686,50 @@ test("Given the owner chooses how long a shared device keeps access, When the li
         await (await request("/session", device)).json(),
     );
     expect(session.accessExpiresAt).toBe(week.accessExpiresAt);
+});
+
+test("Given two devices that joined through links, When one disconnects the other, Then only that device loses access, retrying is harmless and no device can disconnect itself", async () => {
+    const environment = fixture.environment();
+    const owner = await fixture.createAnonymousUser();
+    const request = (path: string, token: string, init: RequestInit = {}) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}${path}`, {
+                ...init,
+                headers: { authorization: `Bearer ${token}`, ...init.headers },
+            }),
+            environment,
+        );
+    const join = async (device: string) => {
+        const shared = await request("/identity/transfers", owner.token, { method: "POST" });
+        const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
+        const opened = await worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code, device }),
+            }),
+            environment,
+        );
+        return v.parse(v.object({ token: v.string() }), await opened.json()).token;
+    };
+    const devices = async (token: string) =>
+        v.parse(
+            v.object({ devices: v.array(v.object({ id: v.string(), label: v.nullable(v.string()) })) }),
+            await (await request("/identity/devices", token)).json(),
+        ).devices;
+    const phone = await join("iPhone · Safari");
+    const laptop = await join("macOS · Chrome");
+    const laptopId = (await devices(phone)).find((device) => device.label === "macOS · Chrome")?.id ?? "";
+    const phoneId = (await devices(laptop)).find((device) => device.label === "iPhone · Safari")?.id ?? "";
+
+    const ended = await request(`/identity/v1/devices/${laptopId}`, phone, { method: "DELETE" });
+
+    expect(ended.status).toBe(200);
+    expect((await request("/session", laptop)).status).toBe(401);
+    expect((await request("/session", phone)).status).toBe(200);
+    expect((await request("/session", owner.token)).status).toBe(200);
+    expect((await devices(phone)).map((device) => device.label)).toEqual([]);
+    expect((await request(`/identity/v1/devices/${laptopId}`, phone, { method: "DELETE" })).status).toBe(200);
+    expect((await request(`/identity/v1/devices/${phoneId}`, phone, { method: "DELETE" })).status).toBe(409);
+    expect((await request("/session", phone)).status).toBe(200);
 });

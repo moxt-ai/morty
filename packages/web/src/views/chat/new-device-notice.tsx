@@ -10,10 +10,11 @@ import type { NewDeviceNoticeStore } from "../../view-models/chat/new-device-not
 /** Tells the owner that a device joined their computer, and lets them disconnect it if they did not add it. */
 export function NewDeviceNotice({
     store,
-    onDisconnectOthers,
+    onReviewDevices,
 }: {
     readonly store: StoreApi<NewDeviceNoticeStore>;
-    readonly onDisconnectOthers: (() => void) | null;
+    /** Opens the devices with access, where any of them can be disconnected; null when this page cannot. */
+    readonly onReviewDevices: (() => void) | null;
 }) {
     const { state, onAttach, dismiss } = useStore(store);
     return (
@@ -32,19 +33,19 @@ export function NewDeviceNotice({
                         label="New devices"
                     />
                     <p className="mt-3 text-muted-foreground">
-                        {onDisconnectOthers === null
+                        {onReviewDevices === null
                             ? "Not you? Ask the agent on your computer to revoke all access. Every device that joined through a link is disconnected at once."
-                            : "Not you? Disconnect the other devices. This browser and your computer keep access."}
+                            : "Not you? Review your devices and disconnect any you don't recognize."}
                     </p>
                     <div className="mt-3 flex justify-end gap-2">
-                        {onDisconnectOthers !== null && (
+                        {onReviewDevices !== null && (
                             <Button
                                 className={topNoticeActionClassName}
-                                onClick={onDisconnectOthers}
+                                onClick={onReviewDevices}
                                 size="sm"
                                 variant="ghost"
                             >
-                                Disconnect other devices
+                                Review devices
                             </Button>
                         )}
                         <Button className={topNoticeActionClassName} onClick={dismiss} size="sm">

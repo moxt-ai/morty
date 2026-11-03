@@ -7,7 +7,7 @@ import {
     type LucideIcon,
     MessageSquare,
     MessageSquarePlus,
-    MonitorX,
+    MonitorSmartphone,
     RefreshCw,
     Share2,
     Wifi,
@@ -406,7 +406,7 @@ export function ConversationSidebar({
     const openMobileRecentSessions = dialogs.getState().openMobileRecentSessions;
     const closeMobileRecentSessions = dialogs.getState().closeMobileRecentSessions;
     const access = useStore(workspace.sidebar.remoteAccess);
-    const otherDevices = workspace.otherDevices;
+    const deviceAccess = workspace.deviceAccess;
     const diagnostic = useStore(workspace.sidebar.networkDiagnostic);
     const sessionDiagnostics = {
         botId,
@@ -765,13 +765,13 @@ export function ConversationSidebar({
                                                                 variant="card"
                                                                 onClick={measureNetwork}
                                                             />
-                                                            {otherDevices !== null && (
+                                                            {deviceAccess !== null && (
                                                                 <SidebarSessionOption
                                                                     disabled={access.state.kind === "loading"}
-                                                                    icon={MonitorX}
-                                                                    label="Disconnect other devices"
+                                                                    icon={MonitorSmartphone}
+                                                                    label="Devices"
                                                                     variant="card"
-                                                                    onClick={otherDevices.getState().request}
+                                                                    onClick={deviceAccess.getState().open}
                                                                 />
                                                             )}
                                                             <SidebarSessionOption
@@ -805,9 +805,7 @@ export function ConversationSidebar({
                                                                 access.state.kind === "loading" ||
                                                                 access.state.kind === "ending"
                                                             }
-                                                            onDisconnectOtherDevices={
-                                                                otherDevices?.getState().request ?? null
-                                                            }
+                                                            onOpenDevices={deviceAccess?.getState().open ?? null}
                                                             onEndAccess={() => {
                                                                 void access.requestEnd(workspace.operationsSignal());
                                                             }}

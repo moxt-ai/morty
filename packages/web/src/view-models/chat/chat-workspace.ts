@@ -26,11 +26,11 @@ import { type ConversationDirectoryStore, createConversationDirectoryStore } fro
 import type { ConversationSelectionState } from "./conversation-selection-machine.ts";
 import { selectedConversationId } from "./conversation-selection-machine.ts";
 import { type ConversationStatusStoreApi, createConversationStatusStore } from "./conversation-status-store.ts";
+import { createDeviceAccessStore, type DeviceAccessStore } from "./device-access-store.ts";
 import { createDraftControlsStore, type DraftControlsStore, draftConfiguration } from "./draft-controls-store.ts";
 import { createNetworkDiagnosticStore, type NetworkDiagnosticStore } from "./network-diagnostic-store.ts";
 import { createNewDeviceNoticeStore, type NewDeviceNoticeStore } from "./new-device-notice-store.ts";
 import type { SelectedMobiusSession } from "./open-session.ts";
-import { createOtherDevicesStore, type OtherDevicesStore } from "./other-devices-store.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
 import { createRuntimeRecovery } from "./runtime-recovery.ts";
 import { connectionWaitsForRuntime } from "./session-connection.ts";
@@ -58,8 +58,8 @@ export interface ChatWorkspace {
     readonly newDevices: StoreApi<NewDeviceNoticeStore> | null;
     /** When this browser's access ends; null when the page cannot read its own access. */
     readonly accessExpiry: StoreApi<AccessExpiryStore> | null;
-    /** Disconnects the other devices while this browser keeps its access; null when this page cannot. */
-    readonly otherDevices: StoreApi<OtherDevicesStore> | null;
+    /** The devices with access to this computer and the disconnections made from them; null when this page cannot. */
+    readonly deviceAccess: StoreApi<DeviceAccessStore> | null;
     /** The chat API this workspace was composed with. */
     readonly requests: BotChatApi;
     /** The application-owned bug-report dialog state, flowing to entry points. */
@@ -145,6 +145,9 @@ export function createChatWorkspace(options: {
     readonly linkedDevices?: ((signal: AbortSignal) => Promise<readonly LinkedDevice[]>) | undefined;
     readonly waitForLinkedDevicesChange?: ((signal: AbortSignal) => Promise<void>) | undefined;
     readonly endOtherBrowserAccess?: ((signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>) | undefined;
+    readonly endDeviceAccess?:
+        | ((deviceId: string, signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>)
+        | undefined;
     readonly networkDiagnostics?: {
         readonly measureBrowserMobius: (origin: string, signal: AbortSignal) => Promise<number>;
         readonly measureBrowserMorty: (signal: AbortSignal) => Promise<number>;
@@ -513,6 +516,7 @@ export function createChatWorkspace(options: {
                   waitForBridge: requests.waitForBridge,
               });
     const endOtherBrowserAccess = options.endOtherBrowserAccess;
+    const endDeviceAccess = options.endDeviceAccess;
     const linkedDevices = options.linkedDevices;
     const accessExpiry =
         options.projectId === undefined || options.accessExpiresAt === undefined
@@ -527,14 +531,20 @@ export function createChatWorkspace(options: {
         accessNotice: options.accessNotice ?? null,
         newDevices,
         accessExpiry,
-        otherDevices:
-            endOtherBrowserAccess === undefined || linkedDevices === undefined
+        deviceAccess:
+            endOtherBrowserAccess === undefined ||
+            endDeviceAccess === undefined ||
+            linkedDevices === undefined ||
+            options.waitForLinkedDevicesChange === undefined
                 ? null
-                : createOtherDevicesStore({
+                : createDeviceAccessStore({
                       linkedDevices,
+                      waitForChange: options.waitForLinkedDevicesChange,
+                      waitForBridge: requests.waitForBridge,
+                      endDeviceAccess,
                       endOtherBrowserAccess,
                       // The devices it announced are gone, so the notice has nothing left to report.
-                      onDisconnected: () => newDevices?.getState().dismiss(),
+                      onOthersDisconnected: () => newDevices?.getState().dismiss(),
                       signal: () => operationsLifetime.signal,
                   }),
         recordUserActivity: () => {

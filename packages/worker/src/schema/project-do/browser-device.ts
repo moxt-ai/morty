@@ -12,6 +12,12 @@ export const browserDevice = sqliteTable(
         joinedAt: integer("joined_at").notNull(),
         /** How the browser described itself when it joined, so its owner can recognize it; null when it did not. */
         label: text("label"),
+        /**
+         * Roughly where it joined from, as Cloudflare located the connection: a city and an ISO country code, each null
+         * when unknown. The address itself is never kept.
+         */
+        joinedCity: text("joined_city"),
+        joinedCountry: text("joined_country"),
         /** The link it first joined through, which names who added it. */
         joinedThroughTransferId: text("joined_through_transfer_id").notNull(),
     },

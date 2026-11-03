@@ -71,8 +71,17 @@ const deviceSharerSchema = v.variant("kind", [
 ]);
 const linkedDeviceSchema = v.pipe(
     v.object({
+        id: v.string(),
         joinedAt: v.pipe(v.string(), v.isoTimestamp()),
         label: v.nullable(v.string()),
+        /** Roughly where it joined from, as Cloudflare located it; null for devices that joined before this was kept. */
+        location: v.nullable(
+            v.object({
+                city: v.nullable(v.string()),
+                country: v.nullable(v.pipe(v.string(), v.regex(/^[A-Z]{2}$/u))),
+            }),
+        ),
+        accessExpiresAt: v.pipe(v.string(), v.isoTimestamp()),
         // A Worker that predates sharers, or a sharer it does not know, names none.
         addedBy: v.fallback(v.nullable(deviceSharerSchema), null),
     }),
@@ -80,6 +89,10 @@ const linkedDeviceSchema = v.pipe(
 );
 export type LinkedDevice = v.InferOutput<typeof linkedDeviceSchema>;
 const linkedDevicesSchema = v.object({ devices: v.array(linkedDeviceSchema) });
+const deviceAccessEndedSchema = v.object({
+    status: v.literal("device_access_ended"),
+    sessionAccess: v.picklist(["revoked", "unconfirmed"]),
+});
 const otherBrowserAccessEndedSchema = v.object({
     status: v.literal("other_browser_access_ended"),
     sessionAccess: v.picklist(["revoked", "unconfirmed"]),
@@ -313,6 +326,23 @@ export class AnonymousIdentityApi {
             otherBrowserAccessEndedSchema,
             await this.#request(
                 "/identity/v1/other-browser-access",
+                { method: "DELETE", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
+                signal,
+            ),
+        ).sessionAccess === "revoked"
+            ? "closed"
+            : "unconfirmed";
+
+    /** Ends one other device's access; repeating it after an uncertain result is safe. */
+    readonly endDeviceAccess = async (
+        token: string,
+        deviceId: string,
+        signal: AbortSignal,
+    ): Promise<OpenWindowsAfterDisconnect> =>
+        v.parse(
+            deviceAccessEndedSchema,
+            await this.#request(
+                `/identity/v1/devices/${encodeURIComponent(deviceId)}`,
                 { method: "DELETE", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
                 signal,
             ),

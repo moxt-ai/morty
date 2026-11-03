@@ -87,6 +87,7 @@ const permittedKinds = {
     replaceProject: ["local"],
     endBrowserAccess: ["browser"],
     endOtherBrowserAccess: ["browser", "recovery"],
+    endDeviceAccess: ["local", "browser", "recovery"],
     revokeRecoveryCredential: ["recovery"],
     retireLocalCredential: ["local"],
 } as const satisfies Record<string, readonly Credential["kind"][]>;

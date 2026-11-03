@@ -570,7 +570,7 @@ for (const segment of ["a".repeat(220), "\u00e9".repeat(110)]) {
     });
 }
 
-test("Given another browser joined this computer, When the user disconnects other devices, Then that browser loses access while this one keeps working", {
+test("Given other browsers joined this computer, When the user disconnects one from Devices and then all others, Then each loses access while this browser keeps working", {
     timeout: 60_000,
 }, async () => {
     // This browser joins through a link, as the owner's phone does; the redeemed link then opens the computer.
@@ -583,33 +583,46 @@ test("Given another browser joined this computer, When the user disconnects othe
                 headers: { authorization: `Bearer ${token}` },
             }),
         );
-    const code = new URL(await app.createTransferUrl()).hash.slice("#code=".length);
-    const redeemed = await app.transport.fetch(
-        new Request(`${app.origin}/morty/api/identity/transfers/redeem`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ code, device: "iPhone · Safari" }),
-        }),
-    );
-    const { token: other } = v.parse(v.object({ token: v.string() }), await redeemed.json());
-    expect((await session(other)).status).toBe(200);
+    const join = async (device: string) => {
+        const code = new URL(await app.createTransferUrl()).hash.slice("#code=".length);
+        const redeemed = await app.transport.fetch(
+            new Request(`${app.origin}/morty/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code, device }),
+            }),
+        );
+        return v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+    };
+    const phone = await join("iPhone · Safari");
 
     await app.user.click(await app.queryElementByTestId(dataTestId.userMenu));
-    await app.user.click(getByRole(document.body, "menuitem", { name: "Disconnect other devices" }));
-    const confirmation = getByRole(document.body, "dialog", { name: "Disconnect other devices?" });
-    // The confirmation names the device that loses access before the user confirms.
+    await app.user.click(getByRole(document.body, "menuitem", { name: "Devices" }));
+    const devices = getByRole(document.body, "dialog", { name: "Devices with access" });
+    const disconnectPhone = await app.waitForView(() =>
+        getByRole(devices, "button", { name: "Disconnect iPhone · Safari" }),
+    );
+    expect(getByRole(devices, "list", { name: "Devices with access" }).textContent).toContain("This browser");
+    await app.user.click(disconnectPhone);
+    await app.user.click(getByRole(devices, "button", { name: "Disconnect" }));
     await app.waitForView(() =>
-        expect(getByRole(confirmation, "list", { name: "Devices that lose access" }).textContent).toContain(
-            "iPhone · Safari",
-        ),
+        expect(getByRole(devices, "status").textContent).toContain("iPhone · Safari can no longer use your computer."),
     );
-    await app.user.click(getByRole(confirmation, "button", { name: "Disconnect" }));
-    const result = await app.waitForView(() =>
-        getByRole(document.body, "dialog", { name: "Other devices disconnected" }),
+    await app.waitForView(() =>
+        expect(queryByRole(devices, "button", { name: "Disconnect iPhone · Safari" })).toBeNull(),
     );
-    await app.user.click(getByRole(result, "button", { name: "Done" }));
+    expect((await session(phone)).status).toBe(401);
 
-    expect((await session(other)).status).toBe(401);
+    const laptop = await join("macOS · Chrome");
+    await app.waitForView(() => getByRole(devices, "button", { name: "Disconnect macOS · Chrome" }));
+    await app.user.click(getByRole(devices, "button", { name: "Disconnect other devices" }));
+    await app.user.click(getByRole(devices, "button", { name: "Disconnect" }));
+    await app.waitForView(() =>
+        expect(getByRole(devices, "status").textContent).toContain("Other devices can no longer use your computer"),
+    );
+    expect((await session(laptop)).status).toBe(401);
+    await app.user.click(getByRole(devices, "button", { name: "Close dialog" }));
+
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Still connected here");
     await app.waitForView(
         () =>

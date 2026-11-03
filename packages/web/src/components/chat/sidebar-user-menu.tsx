@@ -1,4 +1,4 @@
-import { LoaderCircle, LogOut, MonitorX, UserRound, Wifi } from "lucide-react";
+import { LoaderCircle, LogOut, MonitorSmartphone, UserRound, Wifi } from "lucide-react";
 import { DropdownMenu, Tooltip } from "radix-ui";
 import { type ReactNode, useRef } from "react";
 import { dataTestId } from "../../data-testid.ts";
@@ -23,7 +23,7 @@ export function SidebarUserMenu({
     disabled,
     endAccessDisabled,
     onMeasureNetwork,
-    onDisconnectOtherDevices,
+    onOpenDevices,
     onEndAccess,
 }: {
     /** Read-only facts about this browser's access, shown above the actions. */
@@ -31,7 +31,8 @@ export function SidebarUserMenu({
     readonly disabled: boolean;
     readonly endAccessDisabled: boolean;
     readonly onMeasureNetwork: () => void;
-    readonly onDisconnectOtherDevices: (() => void) | null;
+    /** Shows the devices with access to this computer; null when this page cannot list them. */
+    readonly onOpenDevices: (() => void) | null;
     readonly onEndAccess: () => void;
 }) {
     const openedByPointer = useRef(false);
@@ -95,13 +96,13 @@ export function SidebarUserMenu({
                         Network latency
                     </DropdownMenu.Item>
                     <DropdownMenu.Separator className={cn("-mx-1.5 my-1.5", overlayMenuSeparatorClassName)} />
-                    {onDisconnectOtherDevices !== null && (
+                    {onOpenDevices !== null && (
                         <DropdownMenu.Item
                             className="flex h-9 cursor-pointer items-center gap-2 rounded-full px-3 outline-none data-[highlighted]:bg-accent"
-                            onSelect={onDisconnectOtherDevices}
+                            onSelect={onOpenDevices}
                         >
-                            <MonitorX aria-hidden="true" className="size-4" />
-                            Disconnect other devices
+                            <MonitorSmartphone aria-hidden="true" className="size-4" />
+                            Devices
                         </DropdownMenu.Item>
                     )}
                     <DropdownMenu.Item

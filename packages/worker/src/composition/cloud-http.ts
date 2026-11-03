@@ -54,6 +54,9 @@ export const publicCloudRoutes = new Hono<{ readonly Bindings: CloudBindings }>(
     .delete("/projects/:projectId/identity/v1/browser-access", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
+    .delete("/projects/:projectId/identity/v1/devices/:deviceId", (context) =>
+        cloudRoutes.fetch(context.req.raw, context.env),
+    )
     .delete("/projects/:projectId/identity/v1/other-browser-access", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )

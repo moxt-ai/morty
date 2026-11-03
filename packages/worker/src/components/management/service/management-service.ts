@@ -5,6 +5,7 @@ import { ManagementError } from "../entity/management-error.ts";
 import { type PlatformProject, PlatformProjectError } from "../entity/platform-project.ts";
 import type { BootstrapOrigin } from "../entity/project-bootstrap.ts";
 import { projectRegion } from "../entity/project-region.ts";
+import type { JoiningDevice } from "../storage/identity-storage.ts";
 import type { ManagedBotStorage } from "../storage/managed-bot-storage.ts";
 import type { PlatformProjectStorage } from "../storage/platform-project-storage.ts";
 import type { AuthenticationService } from "./authentication-service.ts";
@@ -134,10 +135,10 @@ export class ManagementService {
     readonly redeemTransfer = async (
         code: string,
         replaces: string | null,
-        deviceLabel: string | null,
+        joining: JoiningDevice,
         signal: AbortSignal,
     ) => {
-        const identity = await this.#authentication.redeemTransfer(code, replaces, deviceLabel, signal);
+        const identity = await this.#authentication.redeemTransfer(code, replaces, joining, signal);
         if (identity === null) {
             return null;
         }
