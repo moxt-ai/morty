@@ -149,7 +149,8 @@ export function PairingInstruction({
                         <li>Asks before replacing a missing connection, which ends earlier shared access.</li>
                         <li>
                             Returns a private link for one device, valid for 10 minutes. That device can control your
-                            agent for 24 hours unless you revoke access.
+                            agent for one day unless you revoke access; ask the agent for 1 hour, 7 days or 30 days
+                            instead.
                         </li>
                     </ul>
                     <p className="px-3 pb-2">

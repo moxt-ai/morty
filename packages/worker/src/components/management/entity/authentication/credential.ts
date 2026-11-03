@@ -35,23 +35,38 @@ export function accessHolds(
 }
 
 const linkLifetime = 10 * 60 * 1000;
-const deviceAccessLifetime = 24 * 60 * 60 * 1000;
+const hour = 60 * 60 * 1000;
+
+/** How long a device added through a link keeps access, chosen when the link is shared. */
+export const deviceAccessDurations = ["1h", "1d", "7d", "30d"] as const;
+export type DeviceAccessDuration = (typeof deviceAccessDurations)[number];
+const deviceAccessLifetimes: Readonly<Record<DeviceAccessDuration, number>> = {
+    "1h": hour,
+    "1d": 24 * hour,
+    "7d": 7 * 24 * hour,
+    "30d": 30 * 24 * hour,
+};
+export const defaultDeviceAccessDuration: DeviceAccessDuration = "1d";
 
 /** What a shared link grants: until when it can add a device, and until when that device keeps access. */
 export interface SharedLinkTerms {
     readonly expiresAt: number;
     readonly accessExpiresAt: number;
+    /** Whether the sharer's own access ends before the chosen duration, and so ends the device's access too. */
+    readonly accessLimitedBySharer: boolean;
 }
 
 /**
- * A link adds one device within ten minutes, and that device keeps access for a day from the link's creation. Neither
- * outlasts the access that shares it, so a device cannot extend its own access by adding another.
+ * A link adds one device within ten minutes, and that device keeps access for the chosen duration from the link's
+ * creation. Neither outlasts the access that shares it, so a device cannot extend its own access by adding another.
  */
-export function sharedLinkTerms(sharer: Credential, now: number): SharedLinkTerms {
+export function sharedLinkTerms(sharer: Credential, now: number, duration: DeviceAccessDuration): SharedLinkTerms {
     const limit = sharer.kind === "browser" ? sharer.accessExpiresAt : Number.POSITIVE_INFINITY;
+    const chosen = now + deviceAccessLifetimes[duration];
     return {
         expiresAt: Math.min(now + linkLifetime, limit),
-        accessExpiresAt: Math.min(now + deviceAccessLifetime, limit),
+        accessExpiresAt: Math.min(chosen, limit),
+        accessLimitedBySharer: limit < chosen,
     };
 }
 

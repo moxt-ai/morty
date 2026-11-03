@@ -5,11 +5,12 @@ import {
     type IdentityTransfer,
     type LinkedDevice,
     type OpenWindowsAfterDisconnect,
+    type SharingTerms,
 } from "../../services/identity/anonymous-identity-api.ts";
 import { createRemoteAccessOperations } from "../chat/remote-access-store.ts";
 
 export interface IdentityAccess {
-    readonly createTransfer: (signal: AbortSignal) => Promise<IdentityTransfer>;
+    readonly createTransfer: (terms: SharingTerms, signal: AbortSignal) => Promise<IdentityTransfer>;
     readonly currentAccessToken: (signal: AbortSignal) => Promise<string>;
     /** Ends the access this browser holds when it runs. */
     readonly endRemoteAccess: (signal: AbortSignal) => Promise<void>;
@@ -68,13 +69,13 @@ export function createIdentityAccess(options: {
             ),
         endOtherBrowserAccess: (signal) =>
             withCurrentAccess(signal, (token) => api.endOtherBrowserAccess(token, signal)),
-        createTransfer: async (signal) => {
+        createTransfer: async (terms, signal) => {
             const localIdentity = await options.currentAccess(signal);
             signal.throwIfAborted();
             if (localIdentity === null || localIdentity.projectId !== options.identity.projectId) {
                 throw new IdentitySharingUnavailable();
             }
-            return await api.createTransfer(localIdentity.token, signal);
+            return await api.createTransfer(localIdentity.token, terms, signal);
         },
     };
 }

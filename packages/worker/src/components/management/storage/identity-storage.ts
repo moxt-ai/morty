@@ -215,11 +215,16 @@ export class IdentityStorage {
         signal.throwIfAborted();
     };
 
+    /**
+     * Issues a link, and stops `replaces` from working when it is a link the same access shared that no one opened, so
+     * choosing other terms leaves one link to hand out. Both happen in one write with the issuing credential checked.
+     */
     readonly createTransfer = async (
         userId: string,
         parentToken: string,
         now: number,
         terms: SharedLinkTerms,
+        replaces: string | null,
         signal: AbortSignal,
     ): Promise<IdentityTransfer | null> => {
         signal.throwIfAborted();
@@ -227,32 +232,53 @@ export class IdentityStorage {
         // Check the issuing credential in the write itself so revocation cannot race issuance. Its term needs no check
         // here: the terms are capped by it, so a link shared after it ended adds no device.
         const database = requireIdentityDatabase(this.#database);
-        const result = await database
-            .insert(continueLink)
-            .select(
-                database
-                    .select({
-                        id: sql<string>`${`transfer_${crypto.randomUUID()}`}`.as("id"),
-                        codeHash: sql<string>`${await digest(code)}`.as("code_hash"),
-                        userId: anonymousCredential.userId,
-                        expiresAt: sql<number>`${terms.expiresAt}`.as("expires_at"),
-                        accessExpiresAt: sql<number>`${terms.accessExpiresAt}`.as("access_expires_at"),
-                        createdAt: sql<number>`${now}`.as("created_at"),
-                        revokedAt: sql<null>`null`.as("revoked_at"),
-                        createdByCredentialId: anonymousCredential.id,
-                    })
-                    .from(anonymousCredential)
-                    .where(
-                        and(
-                            eq(anonymousCredential.userId, userId),
-                            eq(anonymousCredential.tokenHash, await digest(parentToken)),
-                            isNull(anonymousCredential.revokedAt),
-                        ),
-                    ),
-            )
-            .run();
+        const parentTokenHash = await digest(parentToken);
+        const issuer = and(
+            eq(anonymousCredential.userId, userId),
+            eq(anonymousCredential.tokenHash, parentTokenHash),
+            isNull(anonymousCredential.revokedAt),
+        );
+        const issue = database.insert(continueLink).select(
+            database
+                .select({
+                    id: sql<string>`${`transfer_${crypto.randomUUID()}`}`.as("id"),
+                    codeHash: sql<string>`${await digest(code)}`.as("code_hash"),
+                    userId: anonymousCredential.userId,
+                    expiresAt: sql<number>`${terms.expiresAt}`.as("expires_at"),
+                    accessExpiresAt: sql<number>`${terms.accessExpiresAt}`.as("access_expires_at"),
+                    createdAt: sql<number>`${now}`.as("created_at"),
+                    revokedAt: sql<null>`null`.as("revoked_at"),
+                    createdByCredentialId: anonymousCredential.id,
+                })
+                .from(anonymousCredential)
+                .where(issuer),
+        );
+        const [issued] =
+            replaces === null
+                ? [await issue.run()]
+                : await database.batch([
+                      issue,
+                      database
+                          .update(continueLink)
+                          .set({ revokedAt: now })
+                          .where(
+                              and(
+                                  eq(continueLink.codeHash, await digest(replaces)),
+                                  eq(continueLink.userId, userId),
+                                  isNull(continueLink.revokedAt),
+                                  unusedLink(database),
+                                  inArray(
+                                      continueLink.createdByCredentialId,
+                                      database
+                                          .select({ id: anonymousCredential.id })
+                                          .from(anonymousCredential)
+                                          .where(issuer),
+                                  ),
+                              ),
+                          ),
+                  ]);
         signal.throwIfAborted();
-        return result.meta.changes === 1 ? { code, ...terms } : null;
+        return issued.meta.changes === 1 ? { code, ...terms } : null;
     };
 
     readonly createRecoveryToken = async (

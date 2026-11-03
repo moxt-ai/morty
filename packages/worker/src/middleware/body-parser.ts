@@ -16,6 +16,25 @@ export function bodyParser<TEnvironment extends Env, TSchema extends v.GenericSc
     });
 }
 
+/**
+ * Like `bodyParser`, for a request whose body is optional: an empty request without a content type reads as an empty
+ * object, and anything else must be valid JSON. Forwarding may turn a missing body into an empty one.
+ */
+export function optionalBodyParser<TEnvironment extends Env, TSchema extends v.GenericSchema<unknown, object>>(
+    schema: TSchema,
+) {
+    return createMiddleware<
+        TEnvironment,
+        string,
+        { in: { json: v.InferInput<TSchema> }; out: { json: v.InferOutput<TSchema> } }
+    >(async (context, next) => {
+        const request = context.req.raw;
+        const empty = !request.headers.has("content-type") && (await request.clone().text()) === "";
+        context.req.addValidatedData("json", v.parse(schema, empty ? {} : await readJsonBody(request)));
+        await next();
+    });
+}
+
 type JsonRequest = Pick<Request, "headers" | "json" | "signal">;
 
 export async function readJsonBody(request: JsonRequest): Promise<unknown> {

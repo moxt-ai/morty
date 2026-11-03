@@ -3,14 +3,27 @@ import * as v from "valibot";
 import { admitAnonymousCreation } from "../../../gateway/anonymous-creation-admission.ts";
 import { projectObject } from "../../../gateway/project-object-routing.ts";
 import { json } from "../../../infra/http.ts";
-import { bodyParser, readJsonBody } from "../../../middleware/body-parser.ts";
-import { credentialRevocationPaths } from "../entity/authentication/credential.ts";
+import { bodyParser, optionalBodyParser, readJsonBody } from "../../../middleware/body-parser.ts";
+import {
+    credentialRevocationPaths,
+    defaultDeviceAccessDuration,
+    deviceAccessDurations,
+} from "../entity/authentication/credential.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { anonymousCreationKey } from "../entity/project-bootstrap.ts";
 import { projectLocationHint } from "../util/project-location.ts";
 import { credentialRejected, localIdentityRequired } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 
+const shareInput = v.pipe(
+    v.object({
+        /** How long the device the link adds keeps access; a day unless chosen. */
+        accessDuration: v.optional(v.picklist(deviceAccessDurations)),
+        /** A link this access shared that no one opened yet; it stops working once the new one is issued. */
+        replaces: v.optional(v.pipe(v.string(), v.maxLength(512))),
+    }),
+    v.readonly(),
+);
 const transferInput = v.pipe(
     v.object({
         code: v.string(),
@@ -102,28 +115,35 @@ export function createAuthenticationRoutes() {
             signal.throwIfAborted();
             return response;
         })
-        .post("/identity/transfers", async (context) => {
-            const transfer = await context.env.services.authentication.createTransfer(
-                context.get("bearerToken"),
-                context.req.raw.signal,
-            );
-            if (transfer === null) {
-                throw new ManagementError("UNAUTHENTICATED", "Anonymous identity is required.", 401);
-            }
-            const url = new URL(
-                "/continue",
-                v.parse(v.pipe(v.string(), v.url()), context.env.config.bindings.APP_ORIGIN),
-            );
-            url.hash = `code=${transfer.code}`;
-            return json(
-                {
-                    expiresAt: new Date(transfer.expiresAt).toISOString(),
-                    accessExpiresAt: new Date(transfer.accessExpiresAt).toISOString(),
-                    url: url.toString(),
-                },
-                201,
-            );
-        })
+        .post(
+            "/identity/transfers",
+            optionalBodyParser<ManagementHttpEnvironment, typeof shareInput>(shareInput),
+            async (context) => {
+                const input = context.req.valid("json");
+                const transfer = await context.env.services.authentication.createTransfer(
+                    context.get("bearerToken"),
+                    { duration: input.accessDuration ?? defaultDeviceAccessDuration, replaces: input.replaces ?? null },
+                    context.req.raw.signal,
+                );
+                if (transfer === null) {
+                    throw new ManagementError("UNAUTHENTICATED", "Anonymous identity is required.", 401);
+                }
+                const url = new URL(
+                    "/continue",
+                    v.parse(v.pipe(v.string(), v.url()), context.env.config.bindings.APP_ORIGIN),
+                );
+                url.hash = `code=${transfer.code}`;
+                return json(
+                    {
+                        expiresAt: new Date(transfer.expiresAt).toISOString(),
+                        accessExpiresAt: new Date(transfer.accessExpiresAt).toISOString(),
+                        accessLimitedBySharer: transfer.accessLimitedBySharer,
+                        url: url.toString(),
+                    },
+                    201,
+                );
+            },
+        )
         .post("/identity/recovery-token", async (context) => {
             const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(15000)]);
             const result = await context.env.services.authentication.createRecoveryToken(

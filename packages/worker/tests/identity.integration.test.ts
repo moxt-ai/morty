@@ -628,3 +628,53 @@ test("Given browsers that joined through links shared by the computer and by ano
         phoneAddedByLaptop,
     ]);
 });
+
+test("Given the owner chooses how long a shared device keeps access, When the link is opened or replaced, Then the device keeps exactly that term and only the latest link works", async () => {
+    const environment = fixture.environment();
+    const owner = await fixture.createAnonymousUser();
+    const request = (path: string, token: string, init: RequestInit = {}) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}${path}`, {
+                ...init,
+                headers: { authorization: `Bearer ${token}`, ...init.headers },
+            }),
+            environment,
+        );
+    const share = (body: object) =>
+        request("/identity/transfers", owner.token, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+        });
+    const link = v.object({ url: v.string(), expiresAt: v.string(), accessExpiresAt: v.string() });
+    const codeOf = (url: string) => new URL(url).hash.slice("#code=".length);
+    const redeem = (code: string) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code }),
+            }),
+            environment,
+        );
+
+    expect((await share({ accessDuration: "1y" })).status).toBe(400);
+    const first = v.parse(link, await (await share({})).json());
+    const created = await share({ accessDuration: "7d", replaces: codeOf(first.url) });
+    expect(created.status).toBe(201);
+    const week = v.parse(link, await created.json());
+    // The device term runs from the link's creation, a week past the ten minutes the link itself stays open.
+    expect(Date.parse(week.accessExpiresAt) - Date.parse(week.expiresAt)).toBe(
+        7 * 24 * 60 * 60 * 1000 - 10 * 60 * 1000,
+    );
+
+    expect((await redeem(codeOf(first.url))).status).toBe(410);
+    const opened = await redeem(codeOf(week.url));
+    expect(opened.status).toBe(200);
+    const device = v.parse(v.object({ token: v.string() }), await opened.json()).token;
+    const session = v.parse(
+        v.object({ accessExpiresAt: v.string() }),
+        await (await request("/session", device)).json(),
+    );
+    expect(session.accessExpiresAt).toBe(week.accessExpiresAt);
+});

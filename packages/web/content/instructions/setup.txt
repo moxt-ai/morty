@@ -30,6 +30,9 @@ Chat origin: {{BASE_URL}}
 node <downloaded-setup.mjs> setup --base-url {{BASE_URL}} --cwd <absolute-current-working-directory> --harness <own-harness-id>
 ```
 
+The browser that opens the link keeps access for one day. Only when the user asks for a different period, add
+`--device-access 1h`, `--device-access 7d`, or `--device-access 30d`; nothing longer than 30 days is available.
+
 The script keeps this computer's Morty identity in the operating system's local
 application data directory for the current user, which is not synced to other
 computers, and protects it using filesystem permissions. Each computer has its own.
@@ -62,8 +65,8 @@ Return the exact clickable `url` and the working directory from the `workspace` 
 If `qrPath` is null, explain that the QR image is unavailable and use the link. Never open,
 preview, or redeem the handoff URL yourself. Tell the user: **Open this link or
 scan the QR code to chat within 10 minutes. It works on one device only and opens the same
-user and Machine; that device keeps access for 24 hours. Keep the Runtime online. You can
-bind an account later.**
+user and Machine; that device keeps access until <`accessExpiresAt` in the user's local time>. Keep the Runtime online.
+You can bind an account later.**
 Also tell the user, in their language: **If you want to revoke these sharing links
 later, come back and tell me: "Revoke all links I previously shared from this machine."
 I can do that for you.** Include this reminder whenever you deliver a new sharing

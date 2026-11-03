@@ -4,6 +4,7 @@ import type {
     IdentityTransfer,
     LinkedDevice,
     OpenWindowsAfterDisconnect,
+    SharingTerms,
 } from "../../services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope, type IdentityScope } from "../../services/identity/identity-scope-url.ts";
 import { rememberComputerName, rememberComputerVisit } from "../../services/identity/remembered-computers.ts";
@@ -137,7 +138,7 @@ export function createChatWorkspace(options: {
     readonly projectId?: string;
     readonly requests: BotChatApi;
     readonly url?: string;
-    readonly createTransfer?: ((signal: AbortSignal) => Promise<IdentityTransfer>) | undefined;
+    readonly createTransfer?: ((terms: SharingTerms, signal: AbortSignal) => Promise<IdentityTransfer>) | undefined;
     readonly currentAccessToken?: ((signal: AbortSignal) => Promise<string>) | undefined;
     readonly endRemoteAccess?: ((signal: AbortSignal) => Promise<void>) | undefined;
     readonly accessExpiresAt?: ((signal: AbortSignal) => Promise<string | null>) | undefined;
@@ -263,11 +264,11 @@ export function createChatWorkspace(options: {
             botId,
             requests,
             runtime: () => home.getState().runtimeConfiguration?.runtime ?? null,
-            createTransfer: (signal) => {
+            createTransfer: (terms, signal) => {
                 if (options.createTransfer === undefined) {
                     return Promise.reject(new Error("Identity sharing is unavailable."));
                 }
-                return options.createTransfer(signal);
+                return options.createTransfer(terms, signal);
             },
             onOpenSession: (session) => {
                 home.getState().openManaged(session.result.ready.sessionId);

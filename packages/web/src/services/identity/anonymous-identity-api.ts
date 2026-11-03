@@ -58,6 +58,8 @@ const transferSchema = v.pipe(
         // The link opens until `expiresAt`; the device it adds keeps access until `accessExpiresAt`.
         expiresAt: v.pipe(v.string(), v.isoTimestamp()),
         accessExpiresAt: v.pipe(v.string(), v.isoTimestamp()),
+        /** Whether the sharer's own access ends first, and so ends the added device's access earlier than chosen. */
+        accessLimitedBySharer: v.boolean(),
         url: v.pipe(v.string(), v.url()),
     }),
     v.readonly(),
@@ -91,6 +93,15 @@ const credentialRevocationPathSchema = v.picklist([
 ]);
 export type AnonymousIdentity = v.InferOutput<typeof identitySchema>;
 export type IdentityTransfer = v.InferOutput<typeof transferSchema>;
+/** How long the device a link adds keeps access; the Worker accepts only these. */
+export const deviceAccessDurations = ["1h", "1d", "7d", "30d"] as const;
+export type DeviceAccessDuration = (typeof deviceAccessDurations)[number];
+/** What a new link grants, and the unopened link from this page it replaces. */
+export interface SharingTerms {
+    readonly accessDuration: DeviceAccessDuration;
+    /** The code of a link this page shared that no one opened yet; it stops working. */
+    readonly replaces: string | null;
+}
 
 /**
  * What checking access this browser stores found. Access that no longer opens its computer is forgotten either way;
@@ -206,12 +217,26 @@ export class AnonymousIdentityApi {
         return { kind: "open", identity };
     };
 
-    readonly createTransfer = async (token: string, signal: AbortSignal): Promise<IdentityTransfer> =>
+    readonly createTransfer = async (
+        token: string,
+        terms: SharingTerms,
+        signal: AbortSignal,
+    ): Promise<IdentityTransfer> =>
         v.parse(
             transferSchema,
             await this.#request(
                 "/identity/transfers",
-                { method: "POST", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
+                {
+                    method: "POST",
+                    headers: {
+                        authorization: `Bearer ${v.parse(tokenSchema, token)}`,
+                        "content-type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        accessDuration: terms.accessDuration,
+                        ...(terms.replaces === null ? {} : { replaces: terms.replaces }),
+                    }),
+                },
                 signal,
             ),
         );

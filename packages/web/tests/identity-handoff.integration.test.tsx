@@ -126,6 +126,16 @@ test("Given shared Morty access, When the user continues on another device, Then
     expect(description.compareDocumentPosition(copyLink) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     expect(queryByRole(dialog, "link")).toBeNull();
     expect(queryByRole(dialog, "button", { name: "Confirm" })).toBeNull();
+
+    // Choosing a longer device access shares a new link in place of the one shown, with the term it grants.
+    const qr = () => getByRole(dialog, "img", { name: "Continue on another device QR code" }).getAttribute("src");
+    const dayLink = qr();
+    const dayTerms = dialog.textContent;
+    await app.user.click(getByRole(dialog, "combobox", { name: "Device access" }));
+    await app.user.click(getByRole(document.body, "option", { name: "7 days" }));
+    await app.waitForView(() => expect(dialog.textContent).toContain("The previous link no longer works."));
+    expect(qr()).not.toBe(dayLink);
+    expect(dialog.textContent).not.toBe(dayTerms);
 });
 
 test("Given a native session handoff without a matching Agent, When the page loads, Then opening fails with the reason", {

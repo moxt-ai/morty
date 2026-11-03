@@ -6,6 +6,7 @@ import {
     anonymousToken,
     type Credential,
     type CredentialOperation,
+    type DeviceAccessDuration,
     mayPerform,
     type PermittedCredential,
     sharedLinkTerms,
@@ -207,8 +208,10 @@ export class AuthenticationService {
         }
     };
 
+    /** Shares this access through a link whose device keeps access for `duration`, replacing an unopened link. */
     readonly createTransfer = async (
         token: string | undefined,
+        request: { readonly duration: DeviceAccessDuration; readonly replaces: string | null },
         signal: AbortSignal,
     ): Promise<IdentityTransfer | null> => {
         const access = await this.authorize(token, "shareAccess", signal);
@@ -220,7 +223,8 @@ export class AuthenticationService {
             access.credential.userId,
             access.token,
             now,
-            sharedLinkTerms(access.credential, now),
+            sharedLinkTerms(access.credential, now, request.duration),
+            request.replaces,
             signal,
         );
     };
