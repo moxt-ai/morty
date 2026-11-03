@@ -101,12 +101,18 @@ running it. Read it yourself before you paste the prompt.
   Morty identity in your user's local application data directory, protected by
   filesystem permissions. It is not synced between computers, and each computer has
   its own.
-- **Sharing is explicit, and revocable.** Anyone who opens a sharing link within 24
-  hours can view and control sessions in that project, and keeps that access until
-  you revoke it, so treat the link like a password. To withdraw every link and browser
-  access previously shared from a machine, tell your agent:
-  *"Revoke all links I previously shared from this machine."* A browser already
-  connected to a session can keep it for up to an hour after you revoke.
+- **Sharing is explicit, time-limited and revocable.** A sharing link opens Morty on
+  one device, once, within 10 minutes. That device can view and control sessions in
+  the project for the term chosen when sharing (1 hour to 30 days; a day by default),
+  so treat the link like a password. **Devices** lists every device with access and
+  disconnects any of them; to withdraw everything shared from a machine, tell your
+  agent: *"Revoke all links I previously shared from this machine."* Chat windows open
+  on a disconnected device close at once, or within 15 minutes if the relay cannot be
+  reached.
+- **Morty records roughly where a device joined from, never its address.** When a
+  browser opens a sharing link, Morty keeps the city and country Cloudflare locates
+  the connection in, so you can recognize your devices. It does not store IP
+  addresses.
 - **Mobius keeps itself up to date.** Setup installs the Mobius CLI
   (`@moxt-ai/mobius`) from npm. While it runs, Mobius checks npm for a new release
   every hour, installs it without running package scripts, and switches over once
