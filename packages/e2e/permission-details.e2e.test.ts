@@ -110,3 +110,39 @@ test("Given a pending permission on a phone-height screen, When it appears, Then
     );
     await expect(permission).toBeHidden();
 });
+
+test("Given a permission whose title and choice are longer than a phone line, When it appears at 390px, Then the text wraps between words and only the long path breaks", async ({
+    runtime,
+}) => {
+    const { page } = runtime;
+    await page.setViewportSize({ width: 390, height: 900 });
+    await runtime.openPairedChat();
+    await page.getByRole("textbox", { name: "Message" }).fill("request long permission");
+    await page.getByRole("button", { name: "Send message" }).click();
+    const permission = page.getByRole("alertdialog", { name: "Agent permission request" });
+    const allow = permission.getByRole("button", { name: /^Allow reading/ });
+    await expect(allow).toBeVisible();
+    expect(await permission.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    for (const text of [permission.getByText(/^Read \//), allow]) {
+        // A word the browser split across lines reports one client rect per line.
+        const splitWords = await text.evaluate((element) => {
+            const words: string[] = [];
+            const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+            for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+                for (const match of (node.textContent ?? "").matchAll(/[^\s/]+(?=\s|$)/g)) {
+                    if (match[0].includes("-")) {
+                        continue;
+                    }
+                    const range = document.createRange();
+                    range.setStart(node, match.index);
+                    range.setEnd(node, match.index + match[0].length);
+                    if (new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size > 1) {
+                        words.push(match[0]);
+                    }
+                }
+            }
+            return words;
+        });
+        expect(splitWords).toEqual([]);
+    }
+});

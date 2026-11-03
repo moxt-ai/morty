@@ -389,12 +389,12 @@ function PermissionCard({
                     <ShieldCheck aria-hidden="true" className={interactionIconClassName} />
                     <div className="min-w-0 flex-1">
                         <p className={interactionTitleClassName}>Confirmed</p>
-                        <p className="mt-1 break-all text-13 leading-5 text-foreground">{permission.title}</p>
+                        <p className="mt-1 text-13 leading-5 text-foreground">{permission.title}</p>
                         {chosen !== undefined && (
                             <dl className="mt-2 grid gap-1 text-12 leading-5">
                                 <div className="flex flex-wrap gap-x-1.5">
                                     <dt className="text-muted-foreground">Decision:</dt>
-                                    <dd className="break-all font-medium text-foreground">{optionLabel(chosen)}</dd>
+                                    <dd className="font-medium text-foreground">{optionLabel(chosen)}</dd>
                                 </div>
                             </dl>
                         )}
@@ -417,7 +417,7 @@ function PermissionCard({
                 <ShieldCheck aria-hidden="true" className={interactionIconClassName} />
                 <div className="min-w-0 flex-1">
                     <p className={interactionTitleClassName}>Agent needs permission</p>
-                    <p className="mt-1 break-all text-13 leading-5 text-foreground">{permission.title}</p>
+                    <p className="mt-1 text-13 leading-5 text-foreground">{permission.title}</p>
                     <PermissionPreviewContent input={presentation.input} preview={preview} />
                     {permission.details !== undefined && (
                         <div className="mt-3 min-w-0">
@@ -442,9 +442,9 @@ function PermissionCard({
                             {detailsOpen && (
                                 <div className="mb-2 grid gap-2 text-12 leading-5" id={detailsContentId}>
                                     {preview.kind !== "command" && (
-                                        <p className="break-all">
+                                        <p>
                                             <span className="text-muted-foreground">Session working directory: </span>
-                                            <code>{presentation.cwd}</code>
+                                            <code className="break-all">{presentation.cwd}</code>
                                         </p>
                                     )}
                                     {presentation.locations.length > 0 && (
@@ -471,7 +471,7 @@ function PermissionCard({
                     >
                         {permission.options.map((option) => (
                             <Button
-                                className="max-w-full whitespace-normal break-all py-[7.5px]!"
+                                className="max-w-full whitespace-normal py-[7.5px]!"
                                 disabled={busy}
                                 key={option.optionId}
                                 onClick={() => {
@@ -489,7 +489,7 @@ function PermissionCard({
                             </Button>
                         ))}
                         <Button
-                            className="max-w-full whitespace-normal break-all py-[7.5px]!"
+                            className="max-w-full whitespace-normal py-[7.5px]!"
                             disabled={busy}
                             onClick={stop}
                             size="sm"
@@ -569,13 +569,13 @@ function ElicitationCard({
                     <HelpCircle aria-hidden="true" className={interactionIconClassName} />
                     <div className="min-w-0 flex-1">
                         <p className={interactionTitleClassName}>Asked</p>
-                        <p className="mt-1 break-all text-13 leading-5 text-foreground">{elicitation.message}</p>
+                        <p className="mt-1 text-13 leading-5 text-foreground">{elicitation.message}</p>
                         {outcome.kind === "answers" ? (
                             <dl className="mt-2 grid gap-1 text-12 leading-5">
                                 {outcome.parts.map((part) => (
                                     <div className="flex flex-wrap gap-x-1.5" key={part.title}>
                                         <dt className="text-muted-foreground">{part.title}:</dt>
-                                        <dd className="break-all font-medium text-foreground">{part.value}</dd>
+                                        <dd className="font-medium text-foreground">{part.value}</dd>
                                     </div>
                                 ))}
                             </dl>
