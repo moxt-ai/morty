@@ -869,6 +869,10 @@ export class AgentSession implements AgentSessionRestore {
                     payload: {
                         commandId: options.commandId,
                         kind: "prompt.completed",
+                        // The steering's own user message, so a reloaded history shows it inside the turn it joined.
+                        ...(outcome.outcome === "injected" && outcome.messageId !== undefined
+                            ? { messageId: outcome.messageId }
+                            : {}),
                         stopReason: "steered",
                     },
                     type: "lifecycle-metadata",

@@ -275,7 +275,11 @@ export class AcpExecutionConnections {
         );
         if (isRecord(response)) {
             const outcome = response["outcome"];
-            if (outcome === "injected" || outcome === "startedNewTurn") {
+            const messageId = response["messageId"];
+            if (outcome === "injected") {
+                return typeof messageId === "string" && messageId.length > 0 ? { outcome, messageId } : { outcome };
+            }
+            if (outcome === "startedNewTurn") {
                 return { outcome };
             }
             if (outcome === "promptRequired") {

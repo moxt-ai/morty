@@ -8,7 +8,9 @@ import {
     decodeSessionHistoryPageLoaded,
     encodeSessionHistoryPageLoad,
     encodeSessionPromptCommand,
+    encodeSessionPromptDispositionCommand,
     type NativeSessionEvents,
+    SESSION_PROMPT_DISPOSITION_KIND,
     type SessionLiveEvent,
 } from "@moxt-ai/mobius-sdk/protocol";
 import { expect, test } from "vitest";
@@ -16,7 +18,7 @@ import { ControlledAcpAgentSpecification } from "../support/agents/controlled-ac
 import { prepareNewRealSession, type RealDaemonPeer, withControlledDaemon } from "../support/agents/real-daemon.ts";
 import { writeControlledAcpExecutable } from "../support/controlled-acp-executable.ts";
 
-const submit = (peer: RealDaemonPeer, sessionId: string, commandId: string, prompt: string) =>
+const submit = (peer: RealDaemonPeer, sessionId: string, commandId: string, prompt: string, targetCommandId?: string) =>
     peer.send(
         encodeSessionPromptCommand({
             additionalDirectoryIds: [],
@@ -25,11 +27,12 @@ const submit = (peer: RealDaemonPeer, sessionId: string, commandId: string, prom
             bindingId: peer.bindingId,
             commandId,
             directoryId: "default",
-            disposition: "reject",
+            ...(targetCommandId === undefined
+                ? { disposition: "reject", targetCommandId: "" }
+                : { disposition: "queue", targetCommandId }),
             kind: "session.prompt",
             prompt,
             sessionId,
-            targetCommandId: "",
         }),
     );
 
@@ -128,6 +131,77 @@ test("Given a failed turn and a completed turn, When a client reads the Session 
                     ]),
                 );
                 expect(page.events.promptOutcomes).toHaveLength(2);
+            },
+        );
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
+}, 120_000);
+
+test("Given a turn steered by a queued prompt, When a client reads the Session history, Then the steering's outcome names the user message it added to that turn", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "history-steered-"));
+    try {
+        const executableDirectory = await writeControlledAcpExecutable(directory, { loadSession: true });
+        await withControlledDaemon(
+            new ControlledAcpAgentSpecification(),
+            { MOBIUS_FAKE_ACP_STATE_DIRECTORY: join(directory, "agent"), PATH: executableDirectory },
+            async (peer) => {
+                const turn = randomUUID();
+                const steering = randomUUID();
+                const sessionId = await prepareNewRealSession(peer, "controlled-acp");
+                submit(peer, sessionId, turn, "wait for steering");
+                await liveUntil(
+                    peer,
+                    (event) =>
+                        event.type === "lifecycle-metadata" &&
+                        event.payload.kind === "prompt.started" &&
+                        event.payload.commandId === turn,
+                );
+                submit(peer, sessionId, steering, "Apply the steering instruction", turn);
+                await liveUntil(
+                    peer,
+                    (event) => event.type === "lifecycle-metadata" && event.payload.kind === "session.queue.changed",
+                );
+                peer.send(
+                    encodeSessionPromptDispositionCommand({
+                        commandId: steering,
+                        disposition: "steer",
+                        kind: SESSION_PROMPT_DISPOSITION_KIND,
+                        sessionId,
+                    }),
+                );
+                // The steering prompt and the turn it joined settle in either order.
+                const settled = new Set<string>();
+                await liveUntil(peer, (event) => {
+                    for (const commandId of [turn, steering]) {
+                        if (terminal(commandId)(event)) {
+                            settled.add(commandId);
+                        }
+                    }
+                    return settled.size === 2;
+                });
+
+                const page = await historyPage(peer, sessionId);
+
+                const userMessages = page.events.events.flatMap((event) =>
+                    event.type === "acp" && event.payload.sessionUpdate === "user_message_chunk"
+                        ? [event.payload.messageId]
+                        : [],
+                );
+                expect(userMessages).toHaveLength(2);
+                expect(page.events.promptOutcomes).toEqual(
+                    expect.arrayContaining([
+                        {
+                            payload: {
+                                commandId: steering,
+                                kind: "prompt.completed",
+                                messageId: userMessages[1],
+                                stopReason: "steered",
+                            },
+                            recordedAt: expect.any(String),
+                        },
+                    ]),
+                );
             },
         );
     } finally {
