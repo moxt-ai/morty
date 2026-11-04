@@ -97,6 +97,7 @@ import {
     sessionProjectionPagination,
     transitionSessionProjection,
 } from "./session-projection.ts";
+import type { SessionRename, SessionRenameStore } from "./session-rename-store.ts";
 import { createSessionSettingsStore } from "./session-settings-store.ts";
 import {
     createSessionTaskControlsStore,
@@ -126,6 +127,23 @@ export type TitleEdit =
     | { readonly kind: "saving"; readonly draft: string }
     | { readonly kind: "failed"; readonly message: string };
 
+/** What the title editor shows: the draft being edited in this pane, otherwise the rename the Session holds. */
+export function sessionTitleEdit(draft: string | null, rename: SessionRename): TitleEdit {
+    if (draft !== null) {
+        return { kind: "editing", draft };
+    }
+    switch (rename.kind) {
+        case "none":
+            return { kind: "closed" };
+        case "pending":
+            return { kind: "saving", draft: rename.title };
+        case "failed":
+            return { kind: "failed", message: rename.message };
+        default:
+            return rename satisfies never;
+    }
+}
+
 /** Loading the page of history before the oldest message shown. A failure lasts until the next load. */
 type OlderHistory =
     | { readonly kind: "idle" }
@@ -138,7 +156,8 @@ const SESSION_EVENT_PAGE_LIMIT = 30;
 const HISTORY_MESSAGE_TARGET = 20;
 export interface SessionPaneStore {
     readonly connection: SessionConnection;
-    readonly titleEdit: TitleEdit;
+    /** The title being edited in this pane; null while the editor is closed. */
+    readonly titleDraft: string | null;
     readonly messages: readonly SessionExecutionMessage[];
     readonly olderHistory: OlderHistory;
     readonly historyRevision: number;
@@ -232,6 +251,7 @@ function sessionOperationFacts(
 
 export function sessionPanePresentation(
     model: SessionPaneStore,
+    rename: SessionRenameStore,
     delivery: SessionDeliveryStore,
     tasks: SessionTaskControlsStore,
     queue: SessionMessageQueueStore,
@@ -298,7 +318,7 @@ export function sessionPanePresentation(
                 ? ""
                 : ([
                       activity,
-                      model.titleEdit,
+                      sessionTitleEdit(model.titleDraft, rename.rename),
                       model.olderHistory,
                       model.operation,
                       delivery.state.kind === "failed"
@@ -424,6 +444,8 @@ export function createSessionPaneModel(options: {
     readonly attachmentSignal: AbortSignal;
     readonly delivery: StoreApi<SessionDeliveryStore>;
     readonly messageQueue: StoreApi<SessionMessageQueueStore>;
+    /** The rename the Session holds, which outlives this pane. */
+    readonly rename: StoreApi<SessionRenameStore>;
     readonly botId: string;
     readonly requests: Pick<
         BotChatApi,
@@ -447,7 +469,7 @@ export function createSessionPaneModel(options: {
     /** The connection used up its automatic retries and waits for the owner's `reconnect`. */
     readonly onWaitingForRuntime: () => void;
 }) {
-    const { session, botId, requests, clock, composerAttachments, delivery, messageQueue, titles } = options;
+    const { session, botId, requests, clock, composerAttachments, delivery, messageQueue, rename, titles } = options;
     const sessionId = session.result.ready.sessionId;
     // Working in a conversation makes its harness the reference for the next draft. Its settings carry into New
     // Session only where the user changes them: the others are the Agent's and its directory's, which the draft reads
@@ -986,7 +1008,7 @@ export function createSessionPaneModel(options: {
         };
         return {
             connection: { kind: "first-loading" },
-            titleEdit: { kind: "closed" },
+            titleDraft: null,
             ...projectedTimeline(projection),
             olderHistory: { kind: "idle" },
             draft: centralSessionStorage.read(draftEntry) ?? "",
@@ -1215,6 +1237,8 @@ export function createSessionPaneModel(options: {
                             await submit(awaiting);
                             signal.throwIfAborted();
                         }
+                        // So is a rename a pane that stopped before connecting left pending.
+                        void sendRename(paneSignal);
                         await subscription.completed;
                     } finally {
                         monitoring.abort();
@@ -1609,51 +1633,32 @@ export function createSessionPaneModel(options: {
                 }
             },
             openTitleEdit: () => {
-                set({ titleEdit: { draft: sessionTitle(titles.getState().titles, sessionId), kind: "editing" } });
+                // A new edit replaces the failure the last rename left.
+                if (rename.getState().rename.kind === "failed") {
+                    rename.getState().clear();
+                }
+                set({ titleDraft: sessionTitle(titles.getState().titles, sessionId) });
             },
             setTitleDraft: (draft) => {
-                if (get().titleEdit.kind === "editing") {
-                    set({ titleEdit: { draft, kind: "editing" } });
+                if (get().titleDraft !== null) {
+                    set({ titleDraft: draft });
                 }
             },
             cancelTitleEdit: () => {
-                set({ titleEdit: { kind: "closed" } });
+                set({ titleDraft: null });
             },
             confirmTitleEdit: async (signal) => {
-                const edit = get().titleEdit;
-                if (edit.kind !== "editing") {
+                const draft = get().titleDraft;
+                if (draft === null) {
                     return;
                 }
-                const trimmed = edit.draft.trim();
+                set({ titleDraft: null });
+                const trimmed = draft.trim();
                 if (trimmed.length === 0 || trimmed === sessionTitle(titles.getState().titles, sessionId)) {
-                    set({ titleEdit: { kind: "closed" } });
                     return;
                 }
-                set({ titleEdit: { draft: trimmed, kind: "saving" } });
-                const reopeningsAtStart = reopenings;
-                // The title is editable while the Session is still connecting. The rename waits for the connection
-                // within its own budget instead of being dropped; a connection that fails or closes fails the rename.
-                const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(45_000)]);
-                try {
-                    const connected = await waitForConnectionReady(requestSignal);
-                    const result = await connected.sessions.rename(sessionId, trimmed, requestSignal);
-                    signal.throwIfAborted();
-                    titles.getState().observed(sessionId, result.title);
-                    set({ titleEdit: { kind: "closed" } });
-                } catch (cause) {
-                    signal.throwIfAborted();
-                    if (closedNow(cause, reopeningsAtStart)) {
-                        set({ titleEdit: { kind: "closed" } });
-                        get().sessionClosed(null);
-                        return;
-                    }
-                    set({
-                        titleEdit: {
-                            kind: "failed",
-                            message: cause instanceof Error ? cause.message : "The conversation could not be renamed.",
-                        },
-                    });
-                }
+                rename.getState().confirm(trimmed);
+                await sendRename(signal);
             },
             stop: async (signal) => await tasks.getState().stop(signal),
         };
@@ -1664,6 +1669,7 @@ export function createSessionPaneModel(options: {
         fillEmptyDraft: (text) => {
             const presentation = sessionPanePresentation(
                 store.getState(),
+                rename.getState(),
                 delivery.getState(),
                 tasks.getState(),
                 messageQueue.getState(),
@@ -1678,6 +1684,55 @@ export function createSessionPaneModel(options: {
             return true;
         },
     });
+    /**
+     * Sends the rename the Session holds once this pane's connection is ready, within its own budget, and then any
+     * title confirmed meanwhile. A pane that stops first leaves the rename pending for the next pane that connects; a
+     * connection that fails or closes fails or closes the rename.
+     */
+    const sendPendingRenames = async (signal: AbortSignal): Promise<void> => {
+        for (;;) {
+            const pending = rename.getState().rename;
+            if (pending.kind !== "pending" || signal.aborted) {
+                return;
+            }
+            const reopeningsAtStart = reopenings;
+            const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(45_000)]);
+            try {
+                const connected = await waitForConnectionReady(requestSignal);
+                const result = await connected.sessions.rename(sessionId, pending.title, requestSignal);
+                titles.getState().observed(sessionId, result.title);
+                rename.getState().settled(pending.title);
+            } catch (cause) {
+                if (signal.aborted) {
+                    return;
+                }
+                if (closedNow(cause, reopeningsAtStart)) {
+                    rename.getState().clear();
+                    store.getState().sessionClosed(null);
+                    return;
+                }
+                rename
+                    .getState()
+                    .failed(
+                        pending.title,
+                        cause instanceof Error ? cause.message : "The conversation could not be renamed.",
+                    );
+            }
+        }
+    };
+    /** The renames this pane is sending; one sender at a time, so a pane never sends the Session's rename twice at once. */
+    let renaming: Promise<void> | null = null;
+    const sendRename = (signal: AbortSignal): Promise<void> => {
+        if (renaming === null) {
+            const sending = sendPendingRenames(signal).finally(() => {
+                if (renaming === sending) {
+                    renaming = null;
+                }
+            });
+            renaming = sending;
+        }
+        return renaming;
+    };
     const waitForConnectionReady = async (signal: AbortSignal): Promise<MobiusClient> => {
         while (true) {
             signal.throwIfAborted();
@@ -1784,6 +1839,7 @@ export function createSessionPaneModel(options: {
         settings,
         store: paneStore,
         delivery,
+        rename,
         filePreview,
         messageQueue,
         tasks,

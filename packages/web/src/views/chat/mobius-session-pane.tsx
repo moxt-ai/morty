@@ -55,6 +55,7 @@ import { sessionInteractionPresentation } from "../../view-models/chat/session-i
 import {
     type SessionPaneModel,
     sessionPanePresentation,
+    sessionTitleEdit,
     type TitleEdit,
 } from "../../view-models/chat/session-pane-store.ts";
 import {
@@ -738,6 +739,8 @@ function MobiusSessionPaneBody({
     const home = useStore(workspace.home);
     const runtimeConfiguration = home.runtimeConfiguration;
     const model = useStore(pane.store);
+    const rename = useStore(pane.rename);
+    const titleEdit = sessionTitleEdit(model.titleDraft, rename.rename);
     const title = useStore(workspace.titles, (state) =>
         sessionTitle(state.titles, pane.session.result.ready.sessionId),
     );
@@ -772,6 +775,7 @@ function MobiusSessionPaneBody({
     const executionContext = sessionExecutionContext(pane.session, home, model.connection);
     const presentation = sessionPanePresentation(
         model,
+        rename,
         delivery,
         taskControls,
         messageQueue,
@@ -848,7 +852,7 @@ function MobiusSessionPaneBody({
     const workingDirectoryLabel = executionContext.directory ?? executionContext.directoryPlaceholder;
     const titleBarProps = {
         title,
-        titleEdit: model.titleEdit,
+        titleEdit,
         titleLoading: sessionMessagesLoading,
         agentRef: executionContext.agentRef,
         agentLabel: executionContext.agent,
@@ -1323,10 +1327,10 @@ function MobiusSessionPaneBody({
                     </section>
                     {desktop ? null : (
                         <>
-                            {model.titleEdit.kind === "editing" || model.titleEdit.kind === "saving" ? (
+                            {titleEdit.kind === "editing" || titleEdit.kind === "saving" ? (
                                 <MobileRenameOverlay
-                                    draft={model.titleEdit.draft}
-                                    saving={model.titleEdit.kind === "saving"}
+                                    draft={titleEdit.draft}
+                                    saving={titleEdit.kind === "saving"}
                                     onSetTitleDraft={titleBarProps.onSetTitleDraft}
                                     onCancelTitleEdit={titleBarProps.onCancelTitleEdit}
                                     onConfirmTitleEdit={titleBarProps.onConfirmTitleEdit}
@@ -1335,7 +1339,7 @@ function MobiusSessionPaneBody({
                             <MobileSessionTitlePortal>
                                 <div className="flex min-w-0 w-full flex-col items-center">
                                     <SessionConversationTitleBar
-                                        {...(model.titleEdit.kind === "editing" || model.titleEdit.kind === "saving"
+                                        {...(titleEdit.kind === "editing" || titleEdit.kind === "saving"
                                             ? { ...titleBarProps, titleEdit: CLOSED_TITLE_EDIT }
                                             : titleBarProps)}
                                         centered

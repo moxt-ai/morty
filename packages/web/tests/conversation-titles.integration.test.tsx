@@ -327,3 +327,31 @@ test("Given a new conversation still connecting, When the user saves a new title
     await app.waitForView(() => getByRole(document.body, "heading", { name: renamed }));
     expect(queryByRole(document.body, "textbox", { name: "Conversation title" })).toBeNull();
 });
+
+test("Given a new conversation still connecting, When the user saves a new title and leaves before it connects, Then the rename applies when the conversation opens again", {
+    timeout: dedicatedEnvironmentTimeout,
+}, async () => {
+    const environment = await createChatWorkerEnvironment(false, true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true });
+    if (app.executionNetwork === null) {
+        throw new Error("Expected the real execution-read proxy");
+    }
+    const original = "Rename then leave";
+    const renamed = "Renamed then left";
+    const held = app.executionNetwork.holdNextExecution();
+    await sendPrompt(app, await readyComposer(app), original);
+    const release = await held;
+    onTestFinished(release);
+    await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: original })));
+    const input = getByRole(document.body, "textbox", { name: "Conversation title" });
+    await app.user.clear(input);
+    await app.user.type(input, renamed);
+    await app.user.click(getByRole(document.body, "button", { name: "Save title" }));
+    // The user moves on while the rename waits for the connection.
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    release();
+    await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: `Open ${original}` })));
+    await app.waitForView(() => getByRole(document.body, "heading", { name: renamed }));
+    await app.waitForView(() => expect(directoryTitles(app).some((title) => title.includes(renamed))).toBe(true));
+});

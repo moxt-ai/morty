@@ -37,6 +37,7 @@ import { connectionWaitsForRuntime } from "./session-connection.ts";
 import { createSessionDeliveryStore, prependToDraft } from "./session-delivery-store.ts";
 import { createSessionMessageQueueStore } from "./session-message-queue-store.ts";
 import { createSessionPaneModel, type SessionPaneModel } from "./session-pane-store.ts";
+import { createSessionRenameStore } from "./session-rename-store.ts";
 import { createSessionTitlesStore, type SessionTitlesStore } from "./session-titles-store.ts";
 import { createSidebarDialogs, type SidebarDialogs } from "./sidebar-dialogs.ts";
 
@@ -410,6 +411,8 @@ export function createChatWorkspace(options: {
     // Submitted intent belongs to the Session until confirmed or discarded, across pane replacements.
     const sessionDeliveries = new Map<string, ReturnType<typeof createSessionDeliveryStore>>();
     const sessionQueues = new Map<string, ReturnType<typeof createSessionMessageQueueStore>>();
+    // A confirmed title belongs to the Session until the Runtime takes it, across pane replacements.
+    const sessionRenames = new Map<string, ReturnType<typeof createSessionRenameStore>>();
     /** The Session's delivery on this page, which persists what it holds for the next page to recover. */
     const sessionDelivery = (sessionId: string): ReturnType<typeof createSessionDeliveryStore> => {
         const existing = sessionDeliveries.get(sessionId);
@@ -481,12 +484,18 @@ export function createChatWorkspace(options: {
             messageQueue = createSessionMessageQueueStore();
             sessionQueues.set(sessionId, messageQueue);
         }
+        let rename = sessionRenames.get(sessionId);
+        if (rename === undefined) {
+            rename = createSessionRenameStore();
+            sessionRenames.set(sessionId, rename);
+        }
         const model = createSessionPaneModel({
             clock: options.clock,
             session: selection.session,
             composerAttachments,
             delivery,
             messageQueue,
+            rename,
             attachmentSignal: operationsLifetime.signal,
             botId,
             requests,
@@ -604,6 +613,7 @@ export function createChatWorkspace(options: {
             operationsLifetime.abort(new Error("The chat workspace was disposed."));
             sessionDeliveries.clear();
             sessionQueues.clear();
+            sessionRenames.clear();
             statuses.getState().close();
         },
     };
