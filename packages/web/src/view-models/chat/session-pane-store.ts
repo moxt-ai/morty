@@ -1625,23 +1625,18 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 const trimmed = edit.draft.trim();
-                if (
-                    trimmed.length === 0 ||
-                    trimmed === sessionTitle(titles.getState().titles, sessionId) ||
-                    client === null ||
-                    get().connection.kind !== "ready"
-                ) {
+                if (trimmed.length === 0 || trimmed === sessionTitle(titles.getState().titles, sessionId)) {
                     set({ titleEdit: { kind: "closed" } });
                     return;
                 }
                 set({ titleEdit: { draft: trimmed, kind: "saving" } });
                 const reopeningsAtStart = reopenings;
+                // The title is editable while the Session is still connecting. The rename waits for the connection
+                // within its own budget instead of being dropped; a connection that fails or closes fails the rename.
+                const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(45_000)]);
                 try {
-                    const result = await client.sessions.rename(
-                        sessionId,
-                        trimmed,
-                        AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
-                    );
+                    const connected = await waitForConnectionReady(requestSignal);
+                    const result = await connected.sessions.rename(sessionId, trimmed, requestSignal);
                     signal.throwIfAborted();
                     titles.getState().observed(sessionId, result.title);
                     set({ titleEdit: { kind: "closed" } });
@@ -1683,12 +1678,12 @@ export function createSessionPaneModel(options: {
             return true;
         },
     });
-    const waitForConnectionReady = async (signal: AbortSignal): Promise<void> => {
+    const waitForConnectionReady = async (signal: AbortSignal): Promise<MobiusClient> => {
         while (true) {
             signal.throwIfAborted();
             const current = store.getState().connection;
             if (current.kind === "ready") {
-                return;
+                return current.client;
             }
             if (current.kind === "failed" || (current.kind === "disconnected" && current.retry.kind === "exhausted")) {
                 throw new MobiusError("session_not_connected", current.message);

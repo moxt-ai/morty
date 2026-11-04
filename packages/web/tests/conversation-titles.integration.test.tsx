@@ -285,7 +285,10 @@ test("Given an open session on a phone, When the user renames it from the header
         await app.user.clear(secondInput);
         await app.user.type(secondInput, "Renamed on a phone");
         await app.user.click(getByRole(second, "button", { name: "Save title" }));
-        await app.waitForView(() => expect(getByRole(slot, "button", { name: "Renamed on a phone" })).toBeTruthy());
+        // The editor closes once the Runtime acknowledges the rename. Its live title event may reach the header first.
+        await app.waitForView(() =>
+            expect(queryByRole(document.body, "dialog", { name: "Rename conversation" })).toBeNull(),
+        );
         expect(document.activeElement).toBe(getByRole(slot, "button", { name: "Renamed on a phone" }));
     } finally {
         if (app !== null) {
@@ -294,4 +297,33 @@ test("Given an open session on a phone, When the user renames it from the header
         await environment.close();
         window.happyDOM.setViewport(desktopViewport);
     }
+});
+
+test("Given a new conversation still connecting, When the user saves a new title, Then the rename waits for the connection and applies", {
+    timeout: dedicatedEnvironmentTimeout,
+}, async () => {
+    const environment = await createChatWorkerEnvironment(false, true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true });
+    if (app.executionNetwork === null) {
+        throw new Error("Expected the real execution-read proxy");
+    }
+    const original = "Rename before connected";
+    const renamed = "Renamed while connecting";
+    // Holding the first execution read keeps the new conversation's connection from becoming ready.
+    const held = app.executionNetwork.holdNextExecution();
+    await sendPrompt(app, await readyComposer(app), original);
+    const release = await held;
+    onTestFinished(release);
+    await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: original })));
+    const input = getByRole(document.body, "textbox", { name: "Conversation title" });
+    await app.user.clear(input);
+    await app.user.type(input, renamed);
+    await app.user.click(getByRole(document.body, "button", { name: "Save title" }));
+    // The rename keeps the user's title on screen while it waits, rather than discarding it.
+    expect(getByRole(document.body, "textbox", { name: "Conversation title" })).toHaveProperty("value", renamed);
+    expect(getByRole(document.body, "textbox", { name: "Conversation title" })).toHaveProperty("disabled", true);
+    release();
+    await app.waitForView(() => getByRole(document.body, "heading", { name: renamed }));
+    expect(queryByRole(document.body, "textbox", { name: "Conversation title" })).toBeNull();
 });
