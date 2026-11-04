@@ -5,6 +5,7 @@ import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
 import { MortyTooltipContent } from "../ui/morty-tooltip-content.tsx";
 import {
+    agentConfigurationPopoverWidthClassName,
     overlaySurfacePanelClassName,
     overlaySurfaceRadiusClassName,
     overlayTriggerOffsetPx,
@@ -944,7 +945,8 @@ export function ChatConfigurationMenu({
                     align="start"
                     aria-label="Agent configuration"
                     className={cn(
-                        "z-50 flex h-auto max-h-[min(calc(100dvh-2rem),var(--radix-popover-content-available-height))] w-[min(calc(100vw-2rem),360px)] min-h-0 flex-col overflow-hidden",
+                        "z-50 flex h-auto max-h-[min(calc(100dvh-2rem),var(--radix-popover-content-available-height))] min-h-0 flex-col overflow-hidden",
+                        agentConfigurationPopoverWidthClassName,
                         overlaySurfacePanelClassName,
                         overlaySurfaceRadiusClassName,
                     )}

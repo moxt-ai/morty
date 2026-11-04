@@ -28,6 +28,7 @@ import {
 } from "../../components/chat/mobile-sheet.ts";
 import { MobileSheetTitle } from "../../components/chat/mobile-sheet-title.tsx";
 import { PanelPresence } from "../../components/chat/panel-presence.tsx";
+import { SidebarAccessNoticeHost } from "../../components/chat/sidebar-access-notice-host.tsx";
 import { panelMotionClassName } from "../../components/chat/sidebar-panel-presence.ts";
 import { SidebarUserMenu } from "../../components/chat/sidebar-user-menu.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
@@ -58,7 +59,7 @@ import { nativeSessionAgentTabs } from "../../view-models/chat/native-session-ag
 import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
 import { noSessionDelivery } from "../../view-models/chat/session-delivery-store.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
-import { AccessTerm } from "./access-term.tsx";
+import { AccessNotice, AccessTerm } from "./access-term.tsx";
 import {
     ComputerSwitcher,
     mobileDrawerCardClassName,
@@ -67,6 +68,7 @@ import {
 } from "./computer-switcher.tsx";
 import { IdentitySharing } from "./identity-sharing.tsx";
 import { NativeSessionDialog } from "./native-session-dialog.tsx";
+import { NewDeviceNotice } from "./new-device-notice.tsx";
 
 /** Releases pointer-click focus so the action's tooltip and focus ring do not linger. */
 function blurAfterPointerClick(event: MouseEvent<HTMLButtonElement>): void {
@@ -445,6 +447,27 @@ export function ConversationSidebar({
         operationsSignal: workspace.operationsSignal,
     };
     const unreadReplies = hasUnreadConversation(sessions, sessionStatuses, sessionListProps.openPane);
+    const accessNotices =
+        workspace.linkedDevices !== null || workspace.accessExpiry !== null ? (
+            <SidebarAccessNoticeHost
+                attachAccess={workspace.accessExpiry?.getState().onAttach ?? null}
+                attachLinkedDevices={workspace.linkedDevices?.getState().onAttach ?? null}
+            >
+                {workspace.linkedDevices !== null && (
+                    <NewDeviceNotice
+                        onReviewDevices={deviceAccess?.getState().open ?? null}
+                        store={workspace.linkedDevices}
+                    />
+                )}
+                {workspace.accessExpiry !== null && (
+                    <AccessNotice
+                        computerName={computerName}
+                        onOpenDevices={deviceAccess?.getState().open ?? null}
+                        store={workspace.accessExpiry}
+                    />
+                )}
+            </SidebarAccessNoticeHost>
+        ) : null;
     return (
         <DesktopChatLayout>
             {(desktop) => (
@@ -453,11 +476,10 @@ export function ConversationSidebar({
                         <PanelPresence open={mobileSessionsOpen}>
                             {(sessionsMotion) => (
                                 <>
-                                    {/* Desktop isolate keeps sticky group labels under the session pane shadow. */}
                                     <aside
                                         id="conversation-sidebar-mobile-panel"
                                         aria-label="Morty navigation"
-                                        className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-card/90 px-3 pt-0 max-sm:overflow-visible sm:isolate sm:w-[264px] sm:gap-0 sm:bg-sidebar sm:px-2.5 sm:pt-2 sm:pb-4"
+                                        className="flex min-h-0 w-full shrink-0 flex-col overflow-visible bg-card/90 px-3 pt-0 sm:w-[264px] sm:gap-0 sm:bg-sidebar sm:px-2.5 sm:pt-2 sm:pb-4"
                                     >
                                         <header className="relative flex min-w-0 shrink-0 items-center justify-between gap-4 py-0 max-sm:z-[110] max-sm:grid max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:bg-card/90 max-sm:py-2 sm:gap-3">
                                             <div
@@ -600,6 +622,7 @@ export function ConversationSidebar({
                                                 )}
                                             </div>
                                         </header>
+                                        {!desktop ? <div className="relative z-[115] pb-3">{accessNotices}</div> : null}
                                         {navigationMotion.present ? (
                                             <button
                                                 type="button"
@@ -653,8 +676,9 @@ export function ConversationSidebar({
                                                     />
                                                 </nav>
                                             )}
+                                            {/* Isolate only the list so sticky labels stay under the session pane shadow. */}
                                             {desktop && (
-                                                <div className="hidden min-h-0 flex-1 sm:flex sm:min-h-0 sm:flex-col sm:gap-0">
+                                                <div className="hidden min-h-0 flex-1 sm:isolate sm:flex sm:min-h-0 sm:flex-col sm:gap-0">
                                                     <Tooltip.Provider delayDuration={150}>
                                                         <div className="flex min-w-0 items-center justify-between gap-2.5 pl-2.5 sm:mb-0 sm:w-full sm:pl-3.5">
                                                             <h2 className="font-inter text-13 font-semibold tracking-normal text-copy-secondary">
@@ -706,6 +730,7 @@ export function ConversationSidebar({
                                                     </Tooltip.Provider>
                                                 </div>
                                             )}
+                                            {desktop ? accessNotices : null}
                                             <Tooltip.Provider delayDuration={150} disableHoverableContent>
                                                 <div className="col-span-2 flex w-full min-w-0 flex-col gap-0 overflow-y-auto pt-1 max-sm:min-h-0 max-sm:flex-1 sm:mt-auto sm:shrink-0 sm:flex-row sm:items-center sm:justify-between sm:gap-1 sm:overflow-visible sm:pt-3">
                                                     {!desktop && workspace.computers !== null ? (
@@ -758,13 +783,6 @@ export function ConversationSidebar({
                                                                     store={workspace.accessExpiry}
                                                                 />
                                                             )}
-                                                            <SidebarSessionOption
-                                                                disabled={access.state.kind === "loading"}
-                                                                icon={Wifi}
-                                                                label="Network latency"
-                                                                variant="card"
-                                                                onClick={measureNetwork}
-                                                            />
                                                             {deviceAccess !== null && (
                                                                 <SidebarSessionOption
                                                                     disabled={access.state.kind === "loading"}
@@ -774,6 +792,13 @@ export function ConversationSidebar({
                                                                     onClick={deviceAccess.getState().open}
                                                                 />
                                                             )}
+                                                            <SidebarSessionOption
+                                                                disabled={access.state.kind === "loading"}
+                                                                icon={Wifi}
+                                                                label="Network latency"
+                                                                variant="card"
+                                                                onClick={measureNetwork}
+                                                            />
                                                             <SidebarSessionOption
                                                                 disabled={
                                                                     access.state.kind === "loading" ||
@@ -857,6 +882,7 @@ export function ConversationSidebar({
                                         )}
                                         {sharingStore !== null && (
                                             <Dialog
+                                                variant="identitySharing"
                                                 title="Continue on another device"
                                                 description="Scan the code or open the link on the device you want to use."
                                                 onClose={dialogs.getState().closeSharing}
@@ -866,6 +892,7 @@ export function ConversationSidebar({
                                         )}
                                         {diagnostic.state.kind !== "closed" && (
                                             <Dialog
+                                                variant="networkLatency"
                                                 title="Network latency"
                                                 description={
                                                     <>
@@ -969,6 +996,7 @@ export function ConversationSidebar({
                                             access.state.kind === "ending" ||
                                             access.state.kind === "failed") && (
                                             <Dialog
+                                                variant="endAccess"
                                                 busy={access.state.kind === "loading" || access.state.kind === "ending"}
                                                 title="End current access?"
                                                 description={

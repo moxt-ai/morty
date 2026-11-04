@@ -141,6 +141,7 @@ function BugReportDialog({
         useExternalStore(report);
     return (
         <Dialog
+            variant="bugReport"
             title="Report a bug"
             description="Send a description, optional images and recent technical and network diagnostics to the Morty team. Session text, other files and credentials are not collected automatically."
             onClose={() => {

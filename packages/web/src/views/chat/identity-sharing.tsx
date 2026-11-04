@@ -16,6 +16,9 @@ const durationLabels: Readonly<Record<DeviceAccessDuration, string>> = {
 };
 const durationOptions = deviceAccessDurations.map((value) => ({ value, label: durationLabels[value] }));
 
+const shareMethodSectionTitleClassName = "text-sm font-medium text-foreground";
+const shareMethodSubheadingClassName = "text-12 font-medium leading-4 text-morty-text-3";
+
 /** Renders the sharing dialog's transfer, whose store is created when the dialog opens. */
 export function IdentitySharing({ store }: { readonly store: StoreApi<IdentitySharingStore> }) {
     const state = useExternalStore(store, (state) => state.state);
@@ -23,31 +26,56 @@ export function IdentitySharing({ store }: { readonly store: StoreApi<IdentitySh
     // The Worker states the duration a link grants; until the first link exists there is nothing to show.
     const duration = state.kind === "ready" ? state.transfer.accessDuration : state.duration;
     return (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
             <MortyAlert tone="warning">
                 Anyone who opens this link can view and control every session on this computer.
             </MortyAlert>
             {duration !== null && (
-                <Select
-                    label="Device access"
-                    leading={<span className="text-muted-foreground">Device access</span>}
-                    onValueChange={(value) => {
-                        const chosen = deviceAccessDurations.find((option) => option === value);
-                        if (chosen !== undefined) {
-                            choose(chosen);
-                        }
-                    }}
-                    options={durationOptions}
-                    value={duration}
-                />
+                <div className="grid gap-2">
+                    <p className="text-sm font-medium text-foreground">Device access</p>
+                    <Select
+                        label="Device access"
+                        onValueChange={(value) => {
+                            const chosen = deviceAccessDurations.find((option) => option === value);
+                            if (chosen !== undefined) {
+                                choose(chosen);
+                            }
+                        }}
+                        options={durationOptions}
+                        value={duration}
+                    />
+                </div>
             )}
             {state.kind === "loading" && <p role="status">Creating secure QR code…</p>}
             {state.kind === "failed" && <p role="alert">Could not create a sharing link.</p>}
             {state.kind === "ready" && (
-                <div className="space-y-4 text-center" data-testid={dataTestId.identitySharing}>
-                    <img className="mx-auto size-56" src={state.image} alt="Continue on another device QR code" />
-                    <CopyLinkButton url={state.transfer.url} />
-                    <p className="text-xs leading-5 text-muted-foreground">
+                <div className="mt-2 space-y-4" data-testid={dataTestId.identitySharing}>
+                    <div className="space-y-3">
+                        <h3 className={shareMethodSectionTitleClassName}>Sharing method</h3>
+                        <div className="grid grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-x-8 gap-y-3">
+                            <p className={`col-start-1 row-start-1 ${shareMethodSubheadingClassName}`}>
+                                QR code sharing
+                            </p>
+                            <p className={`col-start-3 row-start-1 ${shareMethodSubheadingClassName}`}>Link sharing</p>
+                            <div className="col-start-1 row-start-2 shrink-0 rounded-lg bg-white p-3">
+                                <img
+                                    className="size-40 shrink-0"
+                                    src={state.image}
+                                    alt="Continue on another device QR code"
+                                />
+                            </div>
+                            <div
+                                aria-hidden="true"
+                                className="col-start-2 row-start-2 flex min-h-0 shrink-0 flex-col items-center self-stretch"
+                            >
+                                <div className="min-h-0 w-[0.5px] flex-1 bg-border/60" />
+                                <p className="py-2 text-11 font-medium uppercase tracking-wide text-morty-text-4">or</p>
+                                <div className="min-h-0 w-[0.5px] flex-1 bg-border/60" />
+                            </div>
+                            <CopyLinkButton className="col-start-3 row-start-2 min-w-0" url={state.transfer.url} />
+                        </div>
+                    </div>
+                    <p className="text-center text-xs leading-5 text-morty-text-3">
                         Works for one device until {formatMoment(state.transfer.expiresAt)}. That device keeps access
                         until {formatMoment(state.transfer.accessExpiresAt)}.
                         {state.transfer.accessLimitedBySharer &&

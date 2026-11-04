@@ -246,12 +246,10 @@ export function NativeSessionDialog({
     };
     return (
         <Dialog
+            variant="openSession"
             title="Open Session"
             onClose={closeDialog}
             busy={model.operation === "import" || model.operation === "fork"}
-            appearance="surface"
-            mobileSheet
-            wide
         >
             {(title) => (
                 <>

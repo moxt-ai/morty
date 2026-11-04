@@ -88,14 +88,6 @@ export function SidebarUserMenu({
                     sideOffset={overlayTriggerOffsetPx}
                 >
                     {header}
-                    <DropdownMenu.Item
-                        className="flex h-9 cursor-pointer items-center gap-2 rounded-full px-3 outline-none data-[highlighted]:bg-accent"
-                        onSelect={onMeasureNetwork}
-                    >
-                        <Wifi aria-hidden="true" className="size-4" />
-                        Network latency
-                    </DropdownMenu.Item>
-                    <DropdownMenu.Separator className={cn("-mx-1.5 my-1.5", overlayMenuSeparatorClassName)} />
                     {onOpenDevices !== null && (
                         <DropdownMenu.Item
                             className="flex h-9 cursor-pointer items-center gap-2 rounded-full px-3 outline-none data-[highlighted]:bg-accent"
@@ -105,6 +97,14 @@ export function SidebarUserMenu({
                             Devices
                         </DropdownMenu.Item>
                     )}
+                    <DropdownMenu.Item
+                        className="flex h-9 cursor-pointer items-center gap-2 rounded-full px-3 outline-none data-[highlighted]:bg-accent"
+                        onSelect={onMeasureNetwork}
+                    >
+                        <Wifi aria-hidden="true" className="size-4" />
+                        Network latency
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Separator className={cn("-mx-1.5 my-1.5", overlayMenuSeparatorClassName)} />
                     <DropdownMenu.Item
                         className="flex h-9 cursor-pointer items-center gap-2 rounded-full px-3 outline-none data-[highlighted]:bg-accent"
                         data-testid={dataTestId.endRemoteAccess}
