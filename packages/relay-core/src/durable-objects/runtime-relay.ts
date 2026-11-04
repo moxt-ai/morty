@@ -97,6 +97,11 @@ export class RuntimeRelay {
         }
     }
 
+    /** Closes the host connections whose credential no longer authorizes them. */
+    async reauthorizeHosts(): Promise<void> {
+        await this.withOperationSignal((signal) => this.#dependencies.services.runtime.reauthorizeHosts(signal));
+    }
+
     webSocketError(socket: WebSocket, error: unknown): void {
         this.#logger.error(
             { ...socketLogContext(socket), err: error, event: "runtime_websocket_error" },

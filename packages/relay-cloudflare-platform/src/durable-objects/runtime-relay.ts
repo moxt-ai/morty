@@ -23,6 +23,9 @@ import {
 } from "../platform-worker.ts";
 import { createPlatformDurableObjectContext } from "./platform-durable-object-context.ts";
 
+// How long a host connection may keep receiving after its credential stops authorizing it.
+const HOST_REAUTHORIZATION_INTERVAL_MILLISECONDS = 60_000;
+
 export class RuntimeRelay extends DurableObject<ConfiguredPlatformRelayBindings> {
     readonly #uploads = new WebSocketUploadBudget();
     readonly #runtime: RuntimeRelayImplementation;
@@ -73,7 +76,7 @@ export class RuntimeRelay extends DurableObject<ConfiguredPlatformRelayBindings>
                     async (operation) => {
                         const response = await this.#application.fetch(operation, environment);
                         if (response.status === 101) {
-                            await this.scheduleViewerExpiry();
+                            await this.scheduleConnectionChecks();
                         }
                         return response;
                     },
@@ -102,20 +105,37 @@ export class RuntimeRelay extends DurableObject<ConfiguredPlatformRelayBindings>
             }
             const response = await this.#application.fetch(request, environment);
             if (response.status === 101) {
-                await this.scheduleViewerExpiry();
+                await this.scheduleConnectionChecks();
             }
             return response;
         }
-        return await this.#runtime.fetch(request);
+        const response = await this.#runtime.fetch(request);
+        if (response.status === 101) {
+            await this.scheduleConnectionChecks();
+        }
+        return response;
     }
 
-    private readonly scheduleViewerExpiry = async (): Promise<void> => {
-        const viewers = this.#context.gateways.peers.viewers().filter(({ socket }) => socket.isOpen());
-        if (viewers.length > 0) {
-            await this.#state.storage.setAlarm(Math.min(...viewers.map(({ expiresAt }) => expiresAt)));
-        } else {
-            await this.#state.storage.deleteAlarm();
+    /**
+     * Sets the alarm for the earliest open connection check: a viewer's expiry, or the next re-authorization of the
+     * hosts. A pending check that is earlier is kept, so new connections never postpone it.
+     */
+    private readonly scheduleConnectionChecks = async (): Promise<void> => {
+        const checks = this.#context.gateways.peers
+            .viewers()
+            .filter(({ socket }) => socket.isOpen())
+            .map(({ expiresAt }) => expiresAt);
+        if (this.#context.gateways.peers.hosts().some((host) => host.isOpen())) {
+            checks.push(Date.now() + HOST_REAUTHORIZATION_INTERVAL_MILLISECONDS);
         }
+        if (checks.length === 0) {
+            await this.#state.storage.deleteAlarm();
+            return;
+        }
+        // An alarm that is already due (the one running now) is not a pending check.
+        const scheduled = await this.#state.storage.getAlarm();
+        const pending = scheduled !== null && scheduled > Date.now() ? scheduled : Number.POSITIVE_INFINITY;
+        await this.#state.storage.setAlarm(Math.min(...checks, pending));
     };
 
     override async alarm(): Promise<void> {
@@ -124,7 +144,11 @@ export class RuntimeRelay extends DurableObject<ConfiguredPlatformRelayBindings>
                 viewer.socket.close(1000, "Session access expired");
             }
         }
-        await this.scheduleViewerExpiry();
+        try {
+            await this.#runtime.reauthorizeHosts();
+        } finally {
+            await this.scheduleConnectionChecks();
+        }
     }
 
     override async webSocketMessage(socket: WebSocket, message: unknown): Promise<void> {

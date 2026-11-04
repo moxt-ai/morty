@@ -345,6 +345,21 @@ export class RuntimeService {
         }
     };
 
+    /**
+     * Closes the host connections whose credential no longer authorizes them. A host's own messages are authorized as
+     * they arrive, but nothing the Runtime sends to a quiet host is, so the Relay runs this while hosts are connected.
+     */
+    readonly reauthorizeHosts = async (signal: AbortSignal): Promise<void> => {
+        for (const { identity, socket } of this.#cx.gateways.peers.sockets()) {
+            if (
+                identity.role === "host" &&
+                (await this.#cx.services.credentials.authorizeHostMessage(identity, null, signal)) === "revoked"
+            ) {
+                socket.close(1008, "Channel access revoked");
+            }
+        }
+    };
+
     /** Closes daemon connections that stopped heartbeating or were superseded, so presence reads report them offline. */
     readonly expireSilentDaemons = async (): Promise<void> => {
         await this.detachDaemons(this.closeSilentDaemons());

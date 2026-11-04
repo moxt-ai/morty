@@ -2,9 +2,12 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { registerRuntimeFixture } from "./registered-runtime.ts";
 
+// Time stands still from the real present, so connection checks the Relay schedules stay in the future.
+let start = 0;
 beforeEach(() => {
+    start = Date.now();
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-10-27T00:00:00.000Z"));
+    vi.setSystemTime(start);
 });
 afterEach(() => vi.useRealTimers());
 
@@ -154,7 +157,7 @@ it("Given future unroutable daemon variants, When the Relay receives them, Then 
         const status = { kind: "session.status.changed", sessionId: "session-1", status: { kind: "idle" } };
         daemon.socket.send(JSON.stringify(status));
         expect(await host.inbox.next()).toEqual(status);
-        vi.setSystemTime(new Date("2026-10-27T00:01:00.000Z"));
+        vi.setSystemTime(start + 60_000);
         daemon.socket.send(JSON.stringify({ version: 4 }));
         daemon.socket.send(JSON.stringify(status));
         expect(await host.inbox.next()).toEqual(status);
