@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { afterEach, expect, test } from "vitest";
 import { installationDirectory } from "../../src/engine/storage/installation/installation-files.ts";
-import { acquireDaemonLock } from "../../src/storage/daemon/daemon-lock.ts";
+import { acquireDaemonLock, daemonLockExists } from "../../src/storage/daemon/daemon-lock.ts";
 
 const lockModule = new URL("../../src/storage/daemon/daemon-lock.ts", import.meta.url).href;
 const cleanups: (() => Promise<void>)[] = [];
@@ -87,4 +87,19 @@ test("Given a daemon that crashed and whose PID now names a live process, When t
 
     expect(release).not.toBeNull();
     await release?.();
+});
+
+test("Given a running daemon, When another daemon starts and the running one then stops, Then the newcomer gave up instead of taking over", async () => {
+    const directory = await stateDirectory();
+    const running = await acquireDaemonLock(directory);
+    expect(running).not.toBeNull();
+
+    const startAt = Date.now() + 1_000;
+    const newcomer = contender(directory, startAt);
+    // The running daemon stops while the newcomer would still be waiting for the lock.
+    await new Promise((resolve) => setTimeout(resolve, startAt + 300 - Date.now()));
+    await running?.();
+
+    expect(await newcomer.outcome).toBe("lost");
+    expect(await daemonLockExists(directory)).toBe(false);
 });

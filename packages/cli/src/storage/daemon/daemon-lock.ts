@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { setTimeout as delay } from "node:timers/promises";
 import {
     createInstallationFile,
     type InstallationDirectory,
@@ -9,6 +10,7 @@ import {
 import { isNodeError } from "../../engine/util/node-error.ts";
 
 const SQLITE_BUSY = 5;
+// How long contenders that start together keep retrying while none of them has become the daemon yet.
 const OWNERSHIP_CONTENTION_MILLISECONDS = 2_000;
 
 /**
@@ -38,9 +40,6 @@ function holdDaemonOwnership(
 ): { readonly previousOwner: number | null; readonly release: () => void } | null {
     const database = new DatabaseSync(path);
     try {
-        // Contenders starting together briefly hold the file's other locks; waiting out that moment lets one of them
-        // win instead of all of them failing. A held daemon lock outlasts the wait, so later contenders give up.
-        database.exec(`PRAGMA busy_timeout = ${OWNERSHIP_CONTENTION_MILLISECONDS.toString()}`);
         database.exec("BEGIN EXCLUSIVE");
         // Only the winner keeps its locks: the exclusive locking mode retains the lock after the transaction commits,
         // until the connection closes. Set before winning, it would also keep a loser's read lock and block the winner.
@@ -104,13 +103,38 @@ async function takeLockFile(path: string, previousOwner: number | null): Promise
     return null;
 }
 
+/**
+ * Takes the ownership lock, or gives up once another process is the daemon. Contenders that start together briefly
+ * hold the lock file's database for each other, so while no daemon holds the lock file yet they retry for a moment
+ * and one of them wins. A contender that finds a daemon gives up at once, so it never waits long enough to take over
+ * when that daemon stops: a stop then leaves no daemon behind, rather than one the stopping client did not start.
+ */
+async function contendForDaemonOwnership(
+    stateDirectory: InstallationDirectory,
+    filename: "manager.lock" | "worker.lock",
+): Promise<ReturnType<typeof holdDaemonOwnership>> {
+    const path = join(stateDirectory, filename);
+    const deadline = Date.now() + OWNERSHIP_CONTENTION_MILLISECONDS;
+    for (;;) {
+        const ownership = holdDaemonOwnership(`${path}.sqlite`);
+        if (ownership !== null) {
+            return ownership;
+        }
+        if ((await daemonLockExists(stateDirectory, filename)) || Date.now() >= deadline) {
+            return null;
+        }
+        // Jitter keeps contenders that collided from colliding again in step.
+        await delay(20 + Math.random() * 30);
+    }
+}
+
 /** Makes this process the only daemon. Returns the release function, or null when another daemon holds the lock. */
 export async function acquireDaemonLock(
     stateDirectory: InstallationDirectory,
     filename: "manager.lock" | "worker.lock" = "manager.lock",
 ): Promise<(() => Promise<void>) | null> {
     const path = join(stateDirectory, filename);
-    const ownership = holdDaemonOwnership(`${path}.sqlite`);
+    const ownership = await contendForDaemonOwnership(stateDirectory, filename);
     if (ownership === null) {
         return null;
     }
