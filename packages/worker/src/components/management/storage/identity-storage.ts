@@ -1,4 +1,4 @@
-import { and, eq, exists, gt, inArray, isNotNull, isNull, ne, notExists, sql } from "drizzle-orm";
+import { and, eq, exists, gt, inArray, isNotNull, isNull, ne, notExists, type SQL, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import * as v from "valibot";
 import {
@@ -7,7 +7,7 @@ import {
     continueLink,
     platformProjectMapping,
 } from "../../../schema/project-do/index.ts";
-import type { Credential, SharedLinkTerms } from "../entity/authentication/credential.ts";
+import { accessHolds, type Credential, type SharedLinkTerms } from "../entity/authentication/credential.ts";
 import type { ClientLocation } from "../entity/client-location.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
 import { type AnonymousIdentity, digest, randomSecret, requireIdentityDatabase } from "./identity-storage-common.ts";
@@ -327,10 +327,35 @@ export class IdentityStorage {
         return result.meta.changes === 1 ? token : null;
     };
 
+    /** The device named by the `replaced` credential, if any of that device's credentials still holds access. */
+    readonly #deviceHoldingAccess = async (replaced: SQL | undefined, now: number): Promise<string | null> => {
+        const database = requireIdentityDatabase(this.#database);
+        const credentials = await database
+            .select({
+                deviceId: sql<string>`${anonymousCredential.deviceId}`.as("device_id"),
+                revokedAt: anonymousCredential.revokedAt,
+                accessExpiresAt: continueLink.accessExpiresAt,
+            })
+            .from(anonymousCredential)
+            .innerJoin(continueLink, eq(continueLink.id, anonymousCredential.remoteTransferId))
+            .where(
+                inArray(
+                    anonymousCredential.deviceId,
+                    database
+                        .select({ deviceId: anonymousCredential.deviceId })
+                        .from(anonymousCredential)
+                        .where(replaced),
+                ),
+            )
+            .all();
+        return credentials.find((credential) => accessHolds(credential, now))?.deviceId ?? null;
+    };
+
     /**
      * Opens a link in a browser. `replaces` is the credential the browser already holds for this Project: a browser
-     * keeps one credential, so the new one replaces it at once and belongs to the same device. A browser holding none
-     * becomes a new device, described by this joining.
+     * keeps one credential, so the new one replaces it at once and belongs to the same device while that device still
+     * holds access. A browser holding none, or whose device's access ended, becomes a new device, described by this
+     * joining.
      */
     readonly redeemTransfer = async (
         code: string,
@@ -358,6 +383,7 @@ export class IdentityStorage {
             unusedLink(database),
         );
         const replacedHash = replaces === null ? null : await digest(replaces);
+        const tokenHash = await digest(token);
         // Only a browser credential of the link's own user names the device.
         const replaced = and(
             eq(anonymousCredential.tokenHash, replacedHash ?? ""),
@@ -370,10 +396,11 @@ export class IdentityStorage {
                     .where(eq(continueLink.codeHash, codeHash)),
             ),
         );
-        const replacedDevice = database
-            .select({ deviceId: anonymousCredential.deviceId })
-            .from(anonymousCredential)
-            .where(replaced);
+        // The replaced credential may already be revoked by a concurrent or retried redemption in the same browser;
+        // the device it names is kept while any of the device's credentials still holds access. The read and the
+        // writes below run with no other request in between: the Project's Durable Object runs its SQL synchronously.
+        const deviceId =
+            replacedHash === null ? newDeviceId : ((await this.#deviceHoldingAccess(replaced, now)) ?? newDeviceId);
         const issued = database
             .select({ id: anonymousCredential.id })
             .from(anonymousCredential)
@@ -383,15 +410,12 @@ export class IdentityStorage {
                 .select({
                     id: sql<string>`${credentialId}`.as("id"),
                     userId: continueLink.userId,
-                    tokenHash: sql<string>`${await digest(token)}`.as("token_hash"),
+                    tokenHash: sql<string>`${tokenHash}`.as("token_hash"),
                     kind: sql<"browser">`'browser'`.as("kind"),
                     createdAt: sql<number>`${now}`.as("created_at"),
                     revokedAt: sql<null>`null`.as("revoked_at"),
                     remoteTransferId: continueLink.id,
-                    deviceId: (replacedHash === null
-                        ? sql<string>`${newDeviceId}`
-                        : sql<string>`coalesce((${replacedDevice}), ${newDeviceId})`
-                    ).as("device_id"),
+                    deviceId: sql<string>`${deviceId}`.as("device_id"),
                 })
                 .from(continueLink)
                 .where(open),

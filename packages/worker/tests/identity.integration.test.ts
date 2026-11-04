@@ -696,7 +696,7 @@ test("Given the owner chooses how long a shared device keeps access, When the li
     expect(session.accessExpiresAt).toBe(week.accessExpiresAt);
 });
 
-test("Given two devices that joined through links, When one disconnects the other, Then only that device loses access, retrying is harmless and no device can disconnect itself", async () => {
+test("Given two devices that joined through links, When one disconnects the other, Then only that device loses access, retrying is harmless, no device can disconnect itself and the other rejoins only as a new device", async () => {
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, init: RequestInit = {}) =>
@@ -707,14 +707,14 @@ test("Given two devices that joined through links, When one disconnects the othe
             }),
             environment,
         );
-    const join = async (device: string) => {
+    const join = async (device: string, replaces?: string) => {
         const shared = await request("/identity/transfers", owner.token, { method: "POST" });
         const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
         const opened = await worker.fetch(
             new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
                 method: "POST",
                 headers: { "content-type": "application/json" },
-                body: JSON.stringify({ code, device }),
+                body: JSON.stringify({ code, device, ...(replaces === undefined ? {} : { replaces }) }),
             }),
             environment,
         );
@@ -722,7 +722,9 @@ test("Given two devices that joined through links, When one disconnects the othe
     };
     const devices = async (token: string) =>
         v.parse(
-            v.object({ devices: v.array(v.object({ id: v.string(), label: v.nullable(v.string()) })) }),
+            v.object({
+                devices: v.array(v.object({ id: v.string(), joinedAt: v.string(), label: v.nullable(v.string()) })),
+            }),
             await (await request("/identity/devices", token)).json(),
         ).devices;
     const phone = await join("iPhone · Safari");
@@ -740,4 +742,12 @@ test("Given two devices that joined through links, When one disconnects the othe
     expect((await request(`/identity/v1/devices/${laptopId}`, phone, { method: "DELETE" })).status).toBe(200);
     expect((await request(`/identity/v1/devices/${phoneId}`, phone, { method: "DELETE" })).status).toBe(409);
     expect((await request("/session", phone)).status).toBe(200);
+
+    // The disconnected browser opens a later link with the credential it still stores: it joins as a new device, so
+    // the phone is told about it again.
+    const rejoined = await join("macOS · Chrome", laptop);
+    expect((await request("/session", rejoined)).status).toBe(200);
+    expect(await devices(phone)).toEqual([
+        { id: expect.not.stringMatching(laptopId), joinedAt: expect.any(String), label: "macOS · Chrome" },
+    ]);
 });
