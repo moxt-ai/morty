@@ -48,7 +48,16 @@ const accessSchema = v.pipe(
 );
 export type ChatAccess = v.InferOutput<typeof accessSchema>;
 const managedSessionStatusSchema = v.variant("kind", [
-    v.pipe(v.object({ kind: v.literal("idle") }), v.readonly()),
+    v.pipe(
+        v.object({
+            kind: v.literal("idle"),
+            /** The Runtime's account that the Session's last turn failed; Runtimes before it existed omit it. */
+            failedTurn: v.optional(
+                v.pipe(v.object({ code: v.string(), commandId: identifier, message: v.string() }), v.readonly()),
+            ),
+        }),
+        v.readonly(),
+    ),
     v.pipe(v.object({ commandId: identifier, kind: v.literal("working") }), v.readonly()),
 ]);
 const managedSessionSchema = v.pipe(
