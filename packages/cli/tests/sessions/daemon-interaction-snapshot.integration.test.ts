@@ -148,6 +148,7 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
             }),
         );
         await messages.nextKind(SESSION_READY_KIND);
+        const submittedAt = Date.now();
         socket.send(
             encodeSessionPromptCommand({
                 additionalDirectoryIds: [],
@@ -206,10 +207,15 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
                 locations: [{ path: "src/<entry>.ts", line: 12 }],
             },
         });
-        expect(await snapshot("permission_snapshot")).toMatchObject({
+        const running = await snapshot("permission_snapshot");
+        expect(running).toMatchObject({
             action: "active-turn",
             turn: { interaction: permission },
         });
+        // The turn is dated by the Runtime's start, not by whoever reads it.
+        const startedAt = running.action === "active-turn" ? Date.parse(running.turn?.startedAt ?? "") : Number.NaN;
+        expect(startedAt).toBeGreaterThanOrEqual(submittedAt);
+        expect(startedAt).toBeLessThanOrEqual(Date.now());
         socket.send(
             encodeSessionPermissionRespondCommand({
                 interactionId: permission.interactionId,

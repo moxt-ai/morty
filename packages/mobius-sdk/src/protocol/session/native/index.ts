@@ -46,6 +46,8 @@ export const activeTurnSnapshotSchema = z
             .discriminatedUnion("kind", [sessionPermissionRequestedEventSchema, sessionElicitationRequestedEventSchema])
             .nullable(),
         sequence: z.number().int().nonnegative(),
+        // When the turn started, as the Runtime recorded it. Absent from older Runtimes.
+        startedAt: z.iso.datetime({ offset: true }).optional(),
         state: z.literal("running"),
     })
     .readonly();

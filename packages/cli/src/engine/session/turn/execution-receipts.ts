@@ -64,7 +64,8 @@ export type CancellationBeforeAdmission =
 
 type ExecutionState =
     | { readonly kind: "pending" }
-    | { readonly kind: "started" }
+    // `startedAt` is when `prompt.started` was recorded; a start read back from the table after a restart has none.
+    | { readonly kind: "started"; readonly startedAt?: string }
     | { readonly kind: "settled-before-start"; readonly outcome: string }
     | { readonly kind: "settled-after-start"; readonly outcome: string };
 
@@ -383,6 +384,13 @@ export class ExecutionReceipts {
                 };
         }
     };
+    /** When the Session's running command started, while its receipt holds the time. */
+    readonly startedAt = (commandId: string, sessionId: string): string | undefined => {
+        const receipt = this.#executions.get(commandId);
+        return receipt?.sessionId === sessionId && receipt.state.kind === "started"
+            ? receipt.state.startedAt
+            : undefined;
+    };
     /** Started identities remain authoritative after their detailed receipt is evicted. */
     readonly hasStarted = (commandId: string, sessionId: string): boolean => {
         const standing = this.#standing(commandId, sessionId);
@@ -478,7 +486,10 @@ export class ExecutionReceipts {
             const receipt = this.#executions.get(payload.commandId);
             // A start reported after settlement does not reopen the execution.
             if (receipt?.state.kind === "pending") {
-                this.#save(payload.commandId, { ...receipt, state: { kind: "started" } });
+                this.#save(payload.commandId, {
+                    ...receipt,
+                    state: { kind: "started", startedAt: event.recordedAt },
+                });
             }
             return;
         }

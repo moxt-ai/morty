@@ -46,6 +46,7 @@ export class ActiveRuntimeTurn {
     readonly #controller: AbortController;
     readonly #finished = Promise.withResolvers<void>();
     readonly #started: () => boolean;
+    readonly #startedAt: () => string | undefined;
     #cancellationRequested = false;
     #admission: TurnAdmission = { kind: "waiting" };
     #sequence = 0;
@@ -54,12 +55,21 @@ export class ActiveRuntimeTurn {
         { readonly kind: typeof SESSION_PERMISSION_REQUESTED_KIND | typeof SESSION_ELICITATION_REQUESTED_KIND }
     > | null = null;
 
-    /** `started` reads the command's execution receipt, the single owner of whether the command started. */
-    constructor(command: SessionPromptCommand, attemptId: string, started: () => boolean) {
+    /**
+     * `started` and `startedAt` read the command's execution receipt, the single owner of whether and when the command
+     * started.
+     */
+    constructor(
+        command: SessionPromptCommand,
+        attemptId: string,
+        started: () => boolean,
+        startedAt: () => string | undefined,
+    ) {
         this.attemptId = attemptId;
         this.command = command;
         this.#controller = new AbortController();
         this.#started = started;
+        this.#startedAt = startedAt;
     }
 
     readonly enqueue = (): void => {
@@ -168,11 +178,13 @@ export class ActiveRuntimeTurn {
         if (!this.#started()) {
             return null;
         }
+        const startedAt = this.#startedAt();
         return {
             commandId: decodeIdentifier(this.command.commandId),
             epoch: this.epoch,
             interaction: this.#interaction,
             sequence: this.#sequence,
+            ...(startedAt === undefined ? {} : { startedAt }),
             state: "running",
         };
     };

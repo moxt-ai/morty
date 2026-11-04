@@ -56,8 +56,11 @@ export class SessionExecutionState {
     readonly isEmpty = (): boolean => this.#turnsByCommandId.size === 0;
 
     readonly start = (command: SessionPromptCommand, attemptId: string): ActiveRuntimeTurn => {
-        const turn = new ActiveRuntimeTurn(command, attemptId, () =>
-            this.#operations.hasStarted(command.commandId, this.#sessionId),
+        const turn = new ActiveRuntimeTurn(
+            command,
+            attemptId,
+            () => this.#operations.hasStarted(command.commandId, this.#sessionId),
+            () => this.#operations.startedAt(command.commandId, this.#sessionId),
         );
         this.#turnsByCommandId.set(command.commandId, turn);
         return turn;
