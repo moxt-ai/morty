@@ -3,6 +3,7 @@ import * as v from "valibot";
 import type { ApiTransport } from "../api/api-transport.ts";
 import { anonymousCredentialsEntry } from "../local-storage/central-local-storage.ts";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
+import { centralSessionStorage, transferRedemptionEntry } from "../session-storage/central-session-storage.ts";
 import { describeBrowser } from "./device-label.ts";
 import {
     type IdentityScope,
@@ -149,6 +150,23 @@ interface Options {
     readonly origin: string;
 }
 
+/**
+ * This tab's key for redeeming `code`. It is kept until the access the redemption returns is saved, so retrying or
+ * reloading after a lost reply repeats the same redemption and gets that access back.
+ */
+function transferRedemptionKey(code: string): string {
+    const kept = centralSessionStorage.read(transferRedemptionEntry);
+    if (kept?.code === code) {
+        return kept.key;
+    }
+    const key = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
+        .replaceAll("+", "-")
+        .replaceAll("/", "_")
+        .replace(/=+$/u, "");
+    centralSessionStorage.write(transferRedemptionEntry, { code, key });
+    return key;
+}
+
 export class AnonymousIdentityApi {
     readonly #fetchRequest: (request: Request) => Promise<Response>;
     readonly #origin: string;
@@ -267,6 +285,7 @@ export class AnonymousIdentityApi {
     readonly #redeemTransfer = async (code: string, signal: AbortSignal): Promise<AnonymousIdentity> => {
         const projectId = transferCodeProject(code);
         const replaces = projectId === null ? null : storedTokenForProject(projectId);
+        const redemptionKey = transferRedemptionKey(code);
         const identity = v.parse(
             identitySchema,
             await this.#request(
@@ -278,12 +297,14 @@ export class AnonymousIdentityApi {
                         code,
                         ...(replaces === null ? {} : { replaces }),
                         device: describeBrowser(navigator.userAgent),
+                        redemptionKey,
                     }),
                 },
                 signal,
             ),
         );
         this.#saveIdentity(identity);
+        centralSessionStorage.remove(transferRedemptionEntry);
         return identity;
     };
 

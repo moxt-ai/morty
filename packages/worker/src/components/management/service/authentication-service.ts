@@ -255,9 +255,10 @@ export class AuthenticationService {
         code: string,
         replaces: string | null,
         joining: JoiningDevice,
+        token: string,
         signal: AbortSignal,
     ): Promise<AnonymousIdentity | null> =>
-        await this.identities.redeemTransfer(code, replaces, joining, Date.now(), signal);
+        await this.identities.redeemTransfer(code, replaces, joining, token, Date.now(), signal);
 
     /** The other devices that hold this access through a link now, so its holder can tell when one is new. */
     readonly linkedDevices = async (

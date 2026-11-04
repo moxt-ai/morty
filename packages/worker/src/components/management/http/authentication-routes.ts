@@ -32,6 +32,8 @@ const transferInput = v.pipe(
         replaces: v.optional(v.pipe(v.string(), v.maxLength(512))),
         /** How the browser describes itself, such as "iPhone · Safari"; shown to the owner's other devices. */
         device: v.optional(v.pipe(v.string(), v.trim(), v.regex(/^[^\p{C}]{1,80}$/u))),
+        /** A browser-held secret naming this redemption, so repeating it after a lost reply returns the same access. */
+        redemptionKey: v.optional(v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/u))),
     }),
     v.readonly(),
 );
@@ -196,6 +198,7 @@ export function createAuthenticationRoutes() {
                         label: input.device ?? null,
                         location: decodeClientLocation(context.req.raw.headers.get(clientLocationHeader)),
                     },
+                    input.redemptionKey ?? null,
                     context.req.raw.signal,
                 );
                 if (identity === null) {

@@ -1,4 +1,3 @@
-import * as v from "valibot";
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
 import { ManagementError } from "../entity/management-error.ts";
@@ -6,6 +5,7 @@ import { type PlatformProject, PlatformProjectError } from "../entity/platform-p
 import type { BootstrapOrigin } from "../entity/project-bootstrap.ts";
 import { projectRegion } from "../entity/project-region.ts";
 import type { JoiningDevice } from "../storage/identity-storage.ts";
+import { randomSecret } from "../storage/identity-storage-common.ts";
 import type { ManagedBotStorage } from "../storage/managed-bot-storage.ts";
 import type { PlatformProjectStorage } from "../storage/platform-project-storage.ts";
 import type { AuthenticationService } from "./authentication-service.ts";
@@ -15,7 +15,7 @@ export class ManagementService {
     readonly #managedBots: ManagedBotStorage;
     readonly #platformProjects: PlatformProjectStorage;
     readonly #platform: PlatformProjectGateway;
-    readonly #credentialKey: unknown;
+    readonly #credentialKey: CloudBindings["CHAT_CREDENTIAL_KEY"];
 
     constructor(cx: {
         readonly config: { readonly bindings: CloudBindings };
@@ -43,7 +43,7 @@ export class ManagementService {
         signal: AbortSignal,
         origin: BootstrapOrigin,
     ) => {
-        const token = await bootstrapToken(this.#credentialKey, userId, project.projectId, origin);
+        const token = await bootstrapToken(this.#credentialKey, userId, project.projectId, origin, signal);
         const identity = await this.#authentication.createAnonymous(userId, project.projectId, signal, token);
         const { appId } = this.#platform.configuration();
         await this.#platformProjects.save(userId, appId, project, signal);
@@ -132,13 +132,24 @@ export class ManagementService {
         return await this.#platform.readPairing(project.projectId, pairingId, signal);
     };
 
+    /**
+     * The credential derives from the link and the browser's redemption key, so repeating a redemption whose reply was
+     * lost returns the same identity. A request without a key gets a credential no retry can name.
+     */
     readonly redeemTransfer = async (
         code: string,
         replaces: string | null,
         joining: JoiningDevice,
+        redemptionKey: string | null,
         signal: AbortSignal,
     ) => {
-        const identity = await this.#authentication.redeemTransfer(code, replaces, joining, signal);
+        // The version and input encoding are part of the persisted retry contract; keep them stable.
+        const token = await derivedToken(
+            this.#credentialKey,
+            ["morty-transfer-redemption-v1", code, redemptionKey ?? randomSecret()],
+            signal,
+        );
+        const identity = await this.#authentication.redeemTransfer(code, replaces, joining, token, signal);
         if (identity === null) {
             return null;
         }
@@ -156,24 +167,39 @@ export class ManagementService {
 }
 
 /** The credential a bootstrap issues, derived so that repeating the same bootstrap issues it again. */
-async function bootstrapToken(serverKey: unknown, userId: string, projectId: string, origin: BootstrapOrigin) {
+async function bootstrapToken(
+    serverKey: CloudBindings["CHAT_CREDENTIAL_KEY"],
+    userId: string,
+    projectId: string,
+    origin: BootstrapOrigin,
+    signal: AbortSignal,
+) {
     // The versions and input encodings are part of the persisted retry contract; keep them stable.
     switch (origin.kind) {
         case "created":
-            return await derivedToken(serverKey, ["morty-anonymous-user-v1", userId, projectId, origin.creationKey]);
+            return await derivedToken(
+                serverKey,
+                ["morty-anonymous-user-v1", userId, projectId, origin.creationKey],
+                signal,
+            );
         case "replacement":
-            return await derivedToken(serverKey, [
-                "morty-project-replacement-v1",
-                userId,
-                origin.previousProjectId,
-                projectId,
-                origin.token,
-            ]);
+            return await derivedToken(
+                serverKey,
+                ["morty-project-replacement-v1", userId, origin.previousProjectId, projectId, origin.token],
+                signal,
+            );
     }
 }
 
-async function derivedToken(serverKey: unknown, input: readonly string[]) {
-    const secret = v.parse(v.instance(Uint8Array), serverKey);
+async function derivedToken(
+    serverKey: CloudBindings["CHAT_CREDENTIAL_KEY"],
+    input: readonly string[],
+    signal: AbortSignal,
+) {
+    if (serverKey === undefined) {
+        throw new Error("Deriving a credential needs the Project object's key.");
+    }
+    const secret = await serverKey(signal);
     const key = await crypto.subtle.importKey(
         "raw",
         Uint8Array.from(secret),

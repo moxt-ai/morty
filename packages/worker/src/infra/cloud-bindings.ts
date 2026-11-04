@@ -52,7 +52,8 @@ export interface CloudBindings {
     readonly DATABASE?: unknown;
     readonly CHAT_PROJECT_ID?: string;
     readonly CHAT_SESSION_OPERATIONS?: ManagedSessionOperations;
-    readonly CHAT_CREDENTIAL_KEY?: unknown;
+    /** The Project object's own key for credentials that a repeated request derives again. */
+    readonly CHAT_CREDENTIAL_KEY?: (signal: AbortSignal) => Promise<Uint8Array>;
     readonly MOBIUS_BASE_URL?: unknown;
     readonly MOBIUS_APP_ID?: unknown;
     readonly MOBIUS_APP_SECRET?: unknown;

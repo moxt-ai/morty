@@ -10,9 +10,7 @@ import {
 import { accessHolds, type Credential, type SharedLinkTerms } from "../entity/authentication/credential.ts";
 import type { ClientLocation } from "../entity/client-location.ts";
 import { createProjectCredential, readProjectCredential } from "../entity/project-credential.ts";
-import { type AnonymousIdentity, digest, randomSecret, requireIdentityDatabase } from "./identity-storage-common.ts";
-
-const userRow = v.pipe(v.object({ userId: v.string() }), v.readonly());
+import { type AnonymousIdentity, digest, requireIdentityDatabase } from "./identity-storage-common.ts";
 
 /** A link no device has used yet: it issued no credential. */
 function unusedLink(database: ReturnType<typeof requireIdentityDatabase>) {
@@ -372,11 +370,16 @@ export class IdentityStorage {
      * keeps one credential, so the new one replaces it at once and belongs to the same device while that device still
      * holds access; the device keeps the later of its term and this link's. A browser holding none, or whose device's
      * access ended, becomes a new device, described by this joining.
+     *
+     * `token` is the credential this redemption issues. A link issues one credential, so repeating the redemption that
+     * used it, with the same token, returns that credential while it still holds access instead of refusing the browser
+     * whose first reply was lost; it never issues another.
      */
     readonly redeemTransfer = async (
         code: string,
         replaces: string | null,
         joining: JoiningDevice,
+        token: string,
         now: number,
         signal: AbortSignal,
     ): Promise<AnonymousIdentity | null> => {
@@ -389,7 +392,6 @@ export class IdentityStorage {
         const codeHash = await digest(code);
         const credentialId = `cred_${crypto.randomUUID()}`;
         const newDeviceId = `device_${crypto.randomUUID()}`;
-        const token = `mobius_anon_v2_${randomSecret()}`;
         // A link adds one device: only while no credential was issued through it.
         const open = and(
             eq(continueLink.codeHash, codeHash),
@@ -450,7 +452,7 @@ export class IdentityStorage {
                 .from(anonymousCredential)
                 .where(and(eq(anonymousCredential.id, credentialId), eq(anonymousCredential.deviceId, newDeviceId))),
         );
-        const results = await database.batch([
+        await database.batch([
             issue,
             describe,
             database
@@ -459,16 +461,24 @@ export class IdentityStorage {
                 .where(and(replaced, isNull(anonymousCredential.revokedAt), exists(issued))),
         ]);
         signal.throwIfAborted();
-        if (results[0]?.meta.changes !== 1) {
+        const issuedThroughLink = await database
+            .select({
+                userId: anonymousCredential.userId,
+                revokedAt: anonymousCredential.revokedAt,
+                accessExpiresAt: deviceAccessExpiresAt(database, anonymousCredential.deviceId).as(
+                    "device_access_expires_at",
+                ),
+            })
+            .from(anonymousCredential)
+            .innerJoin(continueLink, eq(continueLink.id, anonymousCredential.remoteTransferId))
+            .where(and(eq(anonymousCredential.tokenHash, tokenHash), eq(continueLink.codeHash, codeHash)))
+            .get();
+        signal.throwIfAborted();
+        // Issued just now, or by an earlier attempt of this redemption whose reply was lost.
+        if (issuedThroughLink === undefined || !accessHolds(issuedThroughLink, now)) {
             return null;
         }
-        const row = await database
-            .select({ userId: anonymousCredential.userId })
-            .from(anonymousCredential)
-            .where(eq(anonymousCredential.id, credentialId))
-            .get();
-        const user = v.parse(userRow, row);
-        return { token, userId: user.userId, projectId: parsed.projectId };
+        return { token, userId: issuedThroughLink.userId, projectId: parsed.projectId };
     };
 
     readonly revokeCredential = async (

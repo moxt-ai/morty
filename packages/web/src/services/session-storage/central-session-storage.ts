@@ -100,6 +100,29 @@ export const accessEndedComputerEntry = stringSessionStorageEntry({
     schema: v.pipe(v.string(), v.maxLength(256)),
 });
 
+const transferRedemptionSchema = v.pipe(
+    v.object({
+        code: v.pipe(v.string(), v.minLength(1), v.maxLength(4_096)),
+        key: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/u)),
+    }),
+    v.readonly(),
+);
+
+/** The key naming this tab's redemption of a link; a retry or reload after a lost reply repeats that redemption. */
+export const transferRedemptionEntry = customSessionStorageEntry({
+    key: "morty:transfer-redemption:v1",
+    schema: transferRedemptionSchema,
+    encode: (value) => JSON.stringify(v.parse(transferRedemptionSchema, value)),
+    decode: (raw) => {
+        try {
+            const parsed = v.safeParse(transferRedemptionSchema, JSON.parse(raw));
+            return parsed.success ? parsed.output : null;
+        } catch {
+            return null;
+        }
+    },
+});
+
 /** Carries first-visit guidance from a successful native handoff to its session. */
 export const sessionWelcomeEntry = (botId: string, sessionId: string): SessionStorageEntry<"pending"> => ({
     key: scopedKey("morty:session-welcome:v1:", botId, sessionId),

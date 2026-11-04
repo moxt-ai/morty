@@ -56,6 +56,50 @@ test("Given an identity creation whose reply was lost, When the client retries i
     expect(await session.json()).toMatchObject({ userId: lost.userId });
 });
 
+test("Given a device that opened a link and opens the next one, When the reply is lost and the browser repeats the redemption with the same key, Then it gets the same access back and stays one device", async () => {
+    const environment = fixture.environment();
+    const owner = await fixture.createAnonymousUser();
+    const request = (path: string, token: string, init: RequestInit = {}) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}${path}`, {
+                ...init,
+                headers: { authorization: `Bearer ${token}`, ...init.headers },
+            }),
+            environment,
+        );
+    const share = async () => {
+        const shared = await request("/identity/transfers", owner.token, { method: "POST" });
+        return new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
+    };
+    const redeem = async (code: string, redemptionKey: string, replaces?: string) =>
+        await worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code, redemptionKey, ...(replaces === undefined ? {} : { replaces }) }),
+            }),
+            environment,
+        );
+    const token = async (response: Response) => {
+        expect(response.status).toBe(200);
+        return v.parse(v.object({ token: v.string() }), await response.json()).token;
+    };
+    const held = await token(await redeem(await share(), anonymousCreationKey()));
+
+    const next = await share();
+    const redemptionKey = anonymousCreationKey();
+    const lost = await token(await redeem(next, redemptionKey, held));
+    const repeated = await token(await redeem(next, redemptionKey, held));
+
+    expect(repeated).toBe(lost);
+    expect((await request("/session", repeated)).status).toBe(200);
+    expect((await request("/session", held)).status).toBe(401);
+    const listed = await request("/identity/devices", owner.token);
+    expect(v.parse(v.object({ devices: v.array(v.unknown()) }), await listed.json()).devices).toHaveLength(1);
+    // The link still adds one device: another browser's redemption is refused.
+    expect((await redeem(next, anonymousCreationKey())).status).toBe(410);
+});
+
 test("Given visitors across Cloudflare regions, When Chat provisions and reopens Morty data, Then Platform preserves every placement", {
     timeout: 30_000,
 }, async () => {

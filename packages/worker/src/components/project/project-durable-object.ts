@@ -43,10 +43,7 @@ export class ProjectDurableObject extends DurableObject<CloudBindings> {
                 method: "POST",
                 signal: request.signal,
             }),
-            {
-                ...this.#bindings(parsed.project.projectId),
-                CHAT_CREDENTIAL_KEY: await this.#credentialKey(request.signal),
-            },
+            this.#bindings(parsed.project.projectId),
         );
     };
 
@@ -91,6 +88,7 @@ export class ProjectDurableObject extends DurableObject<CloudBindings> {
         ...this.env,
         CHAT_PROJECT_ID: projectId,
         CHAT_SESSION_OPERATIONS: this.#sessionOperations,
+        CHAT_CREDENTIAL_KEY: this.#credentialKey,
         DATABASE: this.#database,
     });
 }
