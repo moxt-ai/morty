@@ -3736,7 +3736,9 @@ describe.sequential("Platform Turn submission", () => {
             runtime.daemon.close(1000, "Test complete");
         }
     });
-    it("Given a Session credential with an open live view, When the App revokes the Project's Session access, Then the credential is refused as revoked and its view closes while a credential issued afterwards still works", async () => {
+    it("Given a Session credential with an open live view, When the App revokes the Project's Session access, Then the credential is refused as revoked and its view closes while a credential issued right afterwards works", async () => {
+        // Issuing right after a revocation waits out the revocation's clock margin, which takes real time.
+        vi.useRealTimers();
         const runtime = await connectRuntimeDaemon("session-access-revocation");
         try {
             const subscribed = await runtime.subscribe();
@@ -3756,7 +3758,6 @@ describe.sequential("Platform Turn submission", () => {
             expect(await responseJson(await runtime.submitRuntimeTurn("revoked"), 401)).toMatchObject({
                 error: { code: "credential_revoked" },
             });
-            vi.setSystemTime(Date.parse(text(revoked, "revokedThrough")) + 1);
             const reissued = await runtime.issueRuntimeCredential(runtime.runtimeId);
             const submitted = runtime.submitRuntimeTurn("reissued", () => reissued);
             expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({

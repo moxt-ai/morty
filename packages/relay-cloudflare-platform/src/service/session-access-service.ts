@@ -34,6 +34,21 @@ export interface SessionViewers {
     readonly disconnect: (runtimeId: string, revokedThrough: number, signal: AbortSignal) => Promise<void>;
 }
 
+async function waitFor(milliseconds: number, signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted();
+    await new Promise<void>((resolve, reject) => {
+        const abort = (): void => {
+            clearTimeout(timer);
+            reject(signal.reason);
+        };
+        const timer = setTimeout(() => {
+            signal.removeEventListener("abort", abort);
+            resolve();
+        }, milliseconds);
+        signal.addEventListener("abort", abort, { once: true });
+    });
+}
+
 function sessionScopedPermission(permission: ProjectPermission): ProjectPermission {
     return permission === ProjectPermission.RuntimeRead ? ProjectPermission.SessionRead : permission;
 }
@@ -76,6 +91,13 @@ export class SessionAccessService {
             "",
             signal,
         );
+        // A revocation also revokes credentials issued within a clock margin after it, so a credential issued inside
+        // that margin would be refused from its first use. Issuing waits the margin out instead: a credential issued
+        // after a revocation is never revoked by it.
+        const revokedThrough = await this.#control.readSessionAccessRevokedThrough(target.projectId, signal);
+        if (revokedThrough !== null && Date.now() <= revokedThrough) {
+            await waitFor(revokedThrough + 1 - Date.now(), signal);
+        }
         const issuedAtEpochMilliseconds = Date.now();
         const expiresAtEpochMilliseconds = issuedAtEpochMilliseconds + expiresInSeconds * 1_000;
         const credential = await issueSessionAccessCredential(appCredential, {

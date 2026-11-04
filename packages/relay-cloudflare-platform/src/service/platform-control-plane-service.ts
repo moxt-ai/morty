@@ -1131,6 +1131,18 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
         );
     };
 
+    /** The latest issue time of the Session credentials the Project's revocations revoke, or null before any. */
+    readonly readSessionAccessRevokedThrough = async (
+        projectId: string,
+        signal: AbortSignal,
+    ): Promise<number | null> => {
+        const revokedAt = await this.#storage.readSessionAccessRevocation(
+            validateIdentifier(projectId, "project_id"),
+            signal,
+        );
+        return revokedAt === null ? null : sessionAccessRevokedThrough(revokedAt);
+    };
+
     readonly resolveApplicationId: ProjectApplicationResolver["resolveApplicationId"] = async (projectId, signal) => {
         const project = await this.#storage.readActiveProjectScope(validateIdentifier(projectId, "project_id"), signal);
         if (project === null) {
