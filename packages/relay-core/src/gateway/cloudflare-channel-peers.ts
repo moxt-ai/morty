@@ -26,6 +26,8 @@ const attachmentSchema = v.union([
         expiresAt: v.number(),
         // Views a Relay opened before credential issue times were recorded end only when their credential expires.
         credentialIssuedAt: v.optional(v.nullable(v.number()), null),
+        // Views a Relay opened before it recorded the issuing AppCredential are re-checked only at expiry.
+        credentialId: v.optional(v.nullable(v.string()), null),
         eventFormat: v.picklist(["events", "envelope"]),
         projectId: v.string(),
         runtimeId: v.string(),

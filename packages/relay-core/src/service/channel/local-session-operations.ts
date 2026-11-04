@@ -44,7 +44,7 @@ export interface LocalSessionOperations extends SessionRuntimeOperations {
         scope: Scope,
         runtimeId: string,
         sessionId: string,
-        credential: { readonly issuedAt: number; readonly expiresAt: number },
+        credential: { readonly credentialId: string; readonly issuedAt: number; readonly expiresAt: number },
         signal: AbortSignal,
     ) => Promise<Response>;
 }
@@ -170,6 +170,7 @@ export function createLocalSessionOperations(
                 sessionFilter: sessionId,
                 expiresAt: credential.expiresAt,
                 credentialIssuedAt: credential.issuedAt,
+                credentialId: credential.credentialId,
                 eventFormat: "events",
             }).response;
         },
@@ -205,6 +206,7 @@ export function createLocalSessionOperations(
                 role: "viewer",
                 expiresAt: Number.MAX_SAFE_INTEGER,
                 credentialIssuedAt: null,
+                credentialId: null,
                 eventFormat: "envelope",
                 projectId,
                 runtimeId,

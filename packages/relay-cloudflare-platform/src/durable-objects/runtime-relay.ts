@@ -23,8 +23,8 @@ import {
 } from "../platform-worker.ts";
 import { createPlatformDurableObjectContext } from "./platform-durable-object-context.ts";
 
-// How long a host connection may keep receiving after its credential stops authorizing it.
-const HOST_REAUTHORIZATION_INTERVAL_MILLISECONDS = 60_000;
+// How long a host connection or a live Session view may keep receiving after its credential stops authorizing it.
+const REAUTHORIZATION_INTERVAL_MILLISECONDS = 60_000;
 
 export class RuntimeRelay extends DurableObject<ConfiguredPlatformRelayBindings> {
     readonly #uploads = new WebSocketUploadBudget();
@@ -118,15 +118,13 @@ export class RuntimeRelay extends DurableObject<ConfiguredPlatformRelayBindings>
 
     /**
      * Sets the alarm for the earliest open connection check: a viewer's expiry, or the next re-authorization of the
-     * hosts. A pending check that is earlier is kept, so new connections never postpone it.
+     * hosts and viewers. A pending check that is earlier is kept, so new connections never postpone it.
      */
     private readonly scheduleConnectionChecks = async (): Promise<void> => {
-        const checks = this.#context.gateways.peers
-            .viewers()
-            .filter(({ socket }) => socket.isOpen())
-            .map(({ expiresAt }) => expiresAt);
-        if (this.#context.gateways.peers.hosts().some((host) => host.isOpen())) {
-            checks.push(Date.now() + HOST_REAUTHORIZATION_INTERVAL_MILLISECONDS);
+        const viewers = this.#context.gateways.peers.viewers().filter(({ socket }) => socket.isOpen());
+        const checks = viewers.map(({ expiresAt }) => expiresAt);
+        if (viewers.length > 0 || this.#context.gateways.peers.hosts().some((host) => host.isOpen())) {
+            checks.push(Date.now() + REAUTHORIZATION_INTERVAL_MILLISECONDS);
         }
         if (checks.length === 0) {
             await this.#state.storage.deleteAlarm();
@@ -145,7 +143,7 @@ export class RuntimeRelay extends DurableObject<ConfiguredPlatformRelayBindings>
             }
         }
         try {
-            await this.#runtime.reauthorizeHosts();
+            await this.#runtime.reauthorizeConnections();
         } finally {
             await this.scheduleConnectionChecks();
         }

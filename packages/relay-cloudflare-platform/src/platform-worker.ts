@@ -692,7 +692,11 @@ export function createPlatformApplication(
                 new ProjectScope(target.projectId),
                 target.runtimeId,
                 context.req.param("sessionId"),
-                { issuedAt: target.issuedAtEpochMilliseconds, expiresAt: target.expiresAtEpochMilliseconds },
+                {
+                    credentialId: target.credentialId,
+                    issuedAt: target.issuedAtEpochMilliseconds,
+                    expiresAt: target.expiresAtEpochMilliseconds,
+                },
                 context.req.raw.signal,
             );
         });

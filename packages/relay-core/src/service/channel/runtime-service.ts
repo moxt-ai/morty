@@ -37,6 +37,8 @@ export type RuntimeSocketIdentity =
           readonly expiresAt: number;
           /** When the Session credential that opened this view was issued; null for a view opened with App access. */
           readonly credentialIssuedAt: number | null;
+          /** The AppCredential that issued the Session credential; null for a view opened with App access. */
+          readonly credentialId: string | null;
           readonly eventFormat: "events" | "envelope";
           readonly projectId: string;
           readonly runtimeId: string;
@@ -99,6 +101,11 @@ interface RuntimeContext {
                 permission: ProjectPermission | null,
                 signal: AbortSignal,
             ) => Promise<"granted" | "revoked" | "denied">;
+            /** Whether the Session credential that opened a live Session view still authorizes reading it. */
+            readonly authorizeViewer: (
+                identity: Extract<RuntimeSocketIdentity, { readonly role: "viewer" }>,
+                signal: AbortSignal,
+            ) => Promise<"granted" | "revoked">;
         };
         readonly channel: (runtimeId: string, scope: ProjectScope) => ChannelActor;
     };
@@ -346,16 +353,23 @@ export class RuntimeService {
     };
 
     /**
-     * Closes the host connections whose credential no longer authorizes them. A host's own messages are authorized as
-     * they arrive, but nothing the Runtime sends to a quiet host is, so the Relay runs this while hosts are connected.
+     * Closes the host connections and live Session views whose credential no longer authorizes them. A host's own
+     * messages are authorized as they arrive, but nothing the Runtime sends to a quiet host or to a view is, so the
+     * Relay runs this while either is connected. Revocation pushes stay the fast path; this bounds what they miss.
      */
-    readonly reauthorizeHosts = async (signal: AbortSignal): Promise<void> => {
+    readonly reauthorizeConnections = async (signal: AbortSignal): Promise<void> => {
         for (const { identity, socket } of this.#cx.gateways.peers.sockets()) {
             if (
                 identity.role === "host" &&
                 (await this.#cx.services.credentials.authorizeHostMessage(identity, null, signal)) === "revoked"
             ) {
                 socket.close(1008, "Channel access revoked");
+            }
+            if (
+                identity.role === "viewer" &&
+                (await this.#cx.services.credentials.authorizeViewer(identity, signal)) === "revoked"
+            ) {
+                socket.close(1008, "Session access revoked");
             }
         }
     };

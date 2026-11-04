@@ -1,4 +1,4 @@
-import { PROJECT_HOST_PERMISSIONS } from "../entity/authentication/project-authentication.ts";
+import { PROJECT_HOST_PERMISSIONS, ProjectPermission } from "../entity/authentication/project-authentication.ts";
 import { ProjectScope } from "../entity/do/session.ts";
 import type { ProjectCredentialAuthority } from "../gateway/project-access-authorizer.ts";
 import { createRuntimeRoutes } from "../http/do/runtime-routes.ts";
@@ -85,6 +85,21 @@ function createRuntimeRelayDependencies(cx: {
                         : "denied";
                 }
             }
+        },
+        authorizeViewer: async (identity, signal) => {
+            // A view opened with App access, or recorded without its issuing credential, ends at its expiry.
+            if (identity.credentialId === null || identity.credentialIssuedAt === null) {
+                return "granted";
+            }
+            return (await cx.gateways.projectCredentials.grantsSessionCredential(
+                identity.projectId,
+                identity.credentialId,
+                identity.credentialIssuedAt,
+                [ProjectPermission.SessionRead],
+                signal,
+            ))
+                ? "granted"
+                : "revoked";
         },
         isRuntimeActive: async (identity, signal) => {
             const service = await credentialService(new ProjectScope(identity.projectId), signal);

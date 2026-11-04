@@ -98,13 +98,38 @@ export class AppCredentialProjectAccess implements ProjectCredentialAuthority {
         credentialId,
         requiredPermissions,
         signal,
-    ) => {
+    ) =>
+        await this.#grantsThrough(
+            credentialId,
+            async (row) => await this.authorize(row, projectId, requiredPermissions, signal),
+            signal,
+        );
+
+    readonly grantsSessionCredential: ProjectCredentialAuthority["grantsSessionCredential"] = async (
+        projectId,
+        credentialId,
+        issuedAt,
+        requiredPermissions,
+        signal,
+    ) =>
+        await this.#grantsThrough(
+            credentialId,
+            async (row) => await this.authorizeSessionCredential(row, projectId, requiredPermissions, issuedAt, signal),
+            signal,
+        );
+
+    /** Whether the AppCredential, while still active, passes `authorize`. */
+    readonly #grantsThrough = async (
+        credentialId: string,
+        authorize: (row: CredentialRow) => Promise<ProjectAccessContext>,
+        signal: AbortSignal,
+    ): Promise<boolean> => {
         const row = await this.#storage.readCredentialById(credentialId, signal);
         if (row === null || !appCredentialActive(row, Date.now())) {
             return false;
         }
         try {
-            await this.authorize(row, projectId, requiredPermissions, signal);
+            await authorize(row);
             return true;
         } catch (cause) {
             if (cause instanceof ProjectAuthenticationError) {

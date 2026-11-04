@@ -22,4 +22,16 @@ export interface ProjectCredentialAuthority {
         requiredPermissions: readonly ProjectPermission[],
         signal: AbortSignal,
     ) => Promise<boolean>;
+    /**
+     * The host's current answer for a Session credential the project credential issued at `issuedAt`, which opened a
+     * live Session view: the same rule its requests apply, so revoking the credential or the Project's Session access
+     * ends the view.
+     */
+    readonly grantsSessionCredential: (
+        projectId: string,
+        credentialId: string,
+        issuedAt: number,
+        requiredPermissions: readonly ProjectPermission[],
+        signal: AbortSignal,
+    ) => Promise<boolean>;
 }
