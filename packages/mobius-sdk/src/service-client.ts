@@ -1156,6 +1156,10 @@ export class MobiusSessionResources {
             ),
         );
 
+    /**
+     * Has the Platform issue a Session credential. Issued after a Session access revocation, it is never covered by
+     * that revocation, unlike one signed locally with `issueSessionAccessCredential`.
+     */
     readonly createAccess = async (
         runtimeId: string,
         sessionId: string,

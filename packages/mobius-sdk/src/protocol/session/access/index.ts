@@ -76,6 +76,12 @@ async function digestCredential(credential: string): Promise<string> {
     return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * Signs a Session credential locally with the AppCredential's secret. Signing consults no Platform state: a credential
+ * issued at or shortly after the Project's latest Session access revocation (`revokeAccess`) is refused for its whole
+ * lifetime, and so is one whose AppCredential is revoked or rotated out. To have the Platform issue a credential that
+ * a revocation it just recorded does not cover, use a Session resource's `createAccess`.
+ */
 export async function issueSessionAccessCredential(
     appCredential: string,
     claims: SessionAccessClaims,
