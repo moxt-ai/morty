@@ -1,5 +1,5 @@
-import { and, eq, exists, gt, inArray, isNotNull, isNull, ne, notExists, type SQL, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/sqlite-core";
+import { and, eq, exists, gt, inArray, isNotNull, isNull, max, ne, notExists, type SQL, sql } from "drizzle-orm";
+import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import * as v from "valibot";
 import {
     anonymousCredential,
@@ -23,6 +23,22 @@ function unusedLink(database: ReturnType<typeof requireIdentityDatabase>) {
             .where(eq(anonymousCredential.remoteTransferId, continueLink.id)),
     );
 }
+const openedCredential = alias(anonymousCredential, "opened_credential");
+const openedLink = alias(continueLink, "opened_link");
+
+/**
+ * When a browser device's access ends: the latest term among the links the device opened, so opening another link
+ * never shortens it. The device holds access until then while one of its credentials is not revoked (`accessHolds`).
+ * Every device opened at least one link.
+ */
+function deviceAccessExpiresAt(database: ReturnType<typeof requireIdentityDatabase>, deviceId: SQLiteColumn) {
+    return sql<number>`(${database
+        .select({ term: max(openedLink.accessExpiresAt) })
+        .from(openedCredential)
+        .innerJoin(openedLink, eq(openedLink.id, openedCredential.remoteTransferId))
+        .where(eq(openedCredential.deviceId, deviceId))})`;
+}
+
 /** How a browser joining through a link describes itself, and roughly where Cloudflare saw it connect from. */
 export interface JoiningDevice {
     readonly label: string | null;
@@ -88,7 +104,8 @@ export class IdentityStorage {
             return null;
         }
         signal.throwIfAborted();
-        const result = await requireIdentityDatabase(this.#database)
+        const database = requireIdentityDatabase(this.#database);
+        const result = await database
             .select({
                 credentialId: anonymousCredential.id,
                 userId: anonymousCredential.userId,
@@ -97,11 +114,13 @@ export class IdentityStorage {
                 deviceId: anonymousCredential.deviceId,
                 revokedAt: anonymousCredential.revokedAt,
                 // Durable Object rows are keyed by column name, so this column needs a name of its own.
-                accessExpiresAt: sql<number | null>`${continueLink.accessExpiresAt}`.as("link_access_expires_at"),
+                // A local or recovery credential belongs to no device and has no term.
+                accessExpiresAt: sql<
+                    number | null
+                >`${deviceAccessExpiresAt(database, anonymousCredential.deviceId)}`.as("device_access_expires_at"),
             })
             .from(anonymousCredential)
             .innerJoin(platformProjectMapping, eq(platformProjectMapping.userId, anonymousCredential.userId))
-            .leftJoin(continueLink, eq(continueLink.id, anonymousCredential.remoteTransferId))
             .where(
                 and(
                     eq(anonymousCredential.tokenHash, await digest(token)),
@@ -115,16 +134,15 @@ export class IdentityStorage {
 
     /**
      * The user's browser devices with each credential that is not revoked, so the caller can apply the access rule: a
-     * device described by its first joining, the term of each credential's link, and who shared the link it joined
-     * through.
+     * device described by its first joining, its term, and who shared the link it joined through.
      */
     readonly linkedDevices = async (userId: string, signal: AbortSignal) => {
         signal.throwIfAborted();
-        const currentLink = alias(continueLink, "current_link");
+        const database = requireIdentityDatabase(this.#database);
         const joinedThrough = alias(continueLink, "joined_through_link");
         const sharer = alias(anonymousCredential, "sharer_credential");
         const sharerDevice = alias(browserDevice, "sharer_device");
-        const rows = await requireIdentityDatabase(this.#database)
+        const rows = await database
             .select({
                 // Durable Object rows are keyed by column name, so each joined column needs a name of its own.
                 deviceId: sql<string>`${browserDevice.id}`.as("device_id"),
@@ -133,13 +151,12 @@ export class IdentityStorage {
                 joinedCity: browserDevice.joinedCity,
                 joinedCountry: browserDevice.joinedCountry,
                 revokedAt: anonymousCredential.revokedAt,
-                accessExpiresAt: sql<number>`${currentLink.accessExpiresAt}`.as("access_expires_at"),
+                accessExpiresAt: deviceAccessExpiresAt(database, browserDevice.id).as("access_expires_at"),
                 sharerKind: sql<Credential["kind"] | null>`${sharer.kind}`.as("sharer_kind"),
                 sharerLabel: sql<string | null>`${sharerDevice.label}`.as("sharer_label"),
             })
             .from(browserDevice)
             .innerJoin(anonymousCredential, eq(anonymousCredential.deviceId, browserDevice.id))
-            .innerJoin(currentLink, eq(currentLink.id, anonymousCredential.remoteTransferId))
             .leftJoin(joinedThrough, eq(joinedThrough.id, browserDevice.joinedThroughTransferId))
             .leftJoin(sharer, eq(sharer.id, joinedThrough.createdByCredentialId))
             .leftJoin(sharerDevice, eq(sharerDevice.id, sharer.deviceId))
@@ -334,10 +351,9 @@ export class IdentityStorage {
             .select({
                 deviceId: sql<string>`${anonymousCredential.deviceId}`.as("device_id"),
                 revokedAt: anonymousCredential.revokedAt,
-                accessExpiresAt: continueLink.accessExpiresAt,
+                accessExpiresAt: deviceAccessExpiresAt(database, anonymousCredential.deviceId).as("access_expires_at"),
             })
             .from(anonymousCredential)
-            .innerJoin(continueLink, eq(continueLink.id, anonymousCredential.remoteTransferId))
             .where(
                 inArray(
                     anonymousCredential.deviceId,
@@ -354,8 +370,8 @@ export class IdentityStorage {
     /**
      * Opens a link in a browser. `replaces` is the credential the browser already holds for this Project: a browser
      * keeps one credential, so the new one replaces it at once and belongs to the same device while that device still
-     * holds access. A browser holding none, or whose device's access ended, becomes a new device, described by this
-     * joining.
+     * holds access; the device keeps the later of its term and this link's. A browser holding none, or whose device's
+     * access ended, becomes a new device, described by this joining.
      */
     readonly redeemTransfer = async (
         code: string,

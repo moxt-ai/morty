@@ -524,6 +524,71 @@ test("Given a browser that opened one link, When it opens another link for the s
     expect((await request("/session", owner.token)).status).toBe(200);
 });
 
+test("Given a device with a month of access, When it opens a link that grants less, Then it keeps its month, in its session, the device list and what it can share", async () => {
+    const environment = fixture.environment();
+    const owner = await fixture.createAnonymousUser();
+    const request = (path: string, token: string, init: RequestInit = {}) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}${path}`, {
+                ...init,
+                headers: { authorization: `Bearer ${token}`, ...init.headers },
+            }),
+            environment,
+        );
+    const share = async (token: string, accessDuration: string) => {
+        const response = await request("/identity/transfers", token, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ accessDuration }),
+        });
+        expect(response.status).toBe(201);
+        const link = v.parse(v.object({ url: v.string(), accessExpiresAt: v.string() }), await response.json());
+        return { code: new URL(link.url).hash.slice("#code=".length), accessExpiresAt: link.accessExpiresAt };
+    };
+    const opened = async (code: string, device: string, replaces?: string) => {
+        const response = await worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code, device, ...(replaces === undefined ? {} : { replaces }) }),
+            }),
+            environment,
+        );
+        expect(response.status).toBe(200);
+        return v.parse(v.object({ token: v.string() }), await response.json()).token;
+    };
+    const term = async (token: string) =>
+        v.parse(v.object({ accessExpiresAt: v.string() }), await (await request("/session", token)).json())
+            .accessExpiresAt;
+    const listed = async () =>
+        v.parse(
+            v.object({
+                devices: v.array(v.object({ label: v.nullable(v.string()), accessExpiresAt: v.string() })),
+            }),
+            await (await request("/identity/devices", owner.token)).json(),
+        ).devices;
+
+    const month = await share(owner.token, "30d");
+    const phone = await opened(month.code, "iPhone · Safari");
+    const guest = await opened((await share(owner.token, "1h")).code, "Guest · Chrome");
+    // The guest's link is capped at the guest's own hour.
+    const guestLink = await share(guest, "30d");
+    expect(Date.parse(guestLink.accessExpiresAt)).toBeLessThan(Date.parse(month.accessExpiresAt));
+
+    const reopened = await opened(guestLink.code, "iPhone · Safari", phone);
+
+    expect((await request("/session", phone)).status).toBe(401);
+    expect(await term(reopened)).toBe(month.accessExpiresAt);
+    expect((await listed()).filter((device) => device.label === "iPhone · Safari")).toStrictEqual([
+        { label: "iPhone · Safari", accessExpiresAt: month.accessExpiresAt },
+    ]);
+    expect((await share(reopened, "30d")).accessExpiresAt).toBe(month.accessExpiresAt);
+
+    // Ending the device's access still ends it at once.
+    expect((await request("/identity/v1/browser-access", reopened, { method: "DELETE" })).status).toBe(204);
+    expect((await request("/session", reopened)).status).toBe(401);
+});
+
 test("Given two tabs of one browser open new links at once, When the browser later ends its access from either tab, Then every link it joined through stops opening Morty", async () => {
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();

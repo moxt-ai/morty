@@ -272,7 +272,7 @@ export class AuthenticationService {
                   readonly label: string | null;
                   readonly location: ClientLocation | null;
                   readonly addedBy: DeviceSharer | null;
-                  /** The latest term among the credentials the device holds. */
+                  /** When the device's access ends. */
                   readonly accessExpiresAt: number;
               }[];
           }
@@ -283,15 +283,10 @@ export class AuthenticationService {
             case "authorized": {
                 const own = access.credential.kind === "browser" ? access.credential.deviceId : null;
                 const now = Date.now();
-                // A device holds access while any of its credentials does, until the latest of their terms.
+                // A device holds access while any of its credentials does; each row carries the device's term.
                 const holding = new Map<string, Awaited<ReturnType<IdentityStorage["linkedDevices"]>>[number]>();
                 for (const device of await this.identities.linkedDevices(access.credential.userId, signal)) {
-                    const known = holding.get(device.deviceId);
-                    if (
-                        device.deviceId !== own &&
-                        accessHolds(device, now) &&
-                        (known === undefined || device.accessExpiresAt > known.accessExpiresAt)
-                    ) {
+                    if (device.deviceId !== own && accessHolds(device, now)) {
                         holding.set(device.deviceId, device);
                     }
                 }

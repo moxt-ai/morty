@@ -17,14 +17,14 @@ export type Credential = {
           readonly transferId: string;
           /** The browser device this credential belongs to. */
           readonly deviceId: string;
-          /** When this access ends: the term the link it came through granted. */
+          /** When this access ends: the device's term, the latest among the links the device opened. */
           readonly accessExpiresAt: number;
       }
 );
 
 /**
  * The one rule for whether a credential still grants access: it is not revoked, and a browser credential is within
- * the term of the link that issued it. Access ends only through these, so ending a browser's access revokes its
+ * its device's term. Access ends only through these, so ending a browser's access revokes its
  * credentials, and revoking a link only stops it from adding a device.
  */
 export function accessHolds(
