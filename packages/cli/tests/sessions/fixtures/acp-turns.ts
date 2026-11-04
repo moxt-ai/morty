@@ -64,6 +64,20 @@ export function registerTurns(agent: ReturnType<typeof acp.agent>) {
             const respond = async (): Promise<acp.PromptResponse> => {
                 context.signal.throwIfAborted();
                 const prompt = readPromptText(context.params.prompt);
+                // Like Claude Code, the transcript keeps the user message of a prompt that then fails.
+                const transcript = nativeHistory.get(context.params.sessionId) ?? [];
+                transcript.push({
+                    messageId: `user-${turnNumber.toString()}`,
+                    role: "user",
+                    text: prompt,
+                    images: context.params.prompt.flatMap((block) =>
+                        block.type === "image" ? [{ data: block.data, mimeType: block.mimeType }] : [],
+                    ),
+                });
+                nativeHistory.set(context.params.sessionId, transcript);
+                const state = previousState.withTurnCount(turnNumber);
+                sessions.set(context.params.sessionId, state);
+                persistState(context.params.sessionId, state);
                 if (prompt === "fail with model unavailable") {
                     throw acp.RequestError.internalError(undefined, "Model unavailable: controlled/test-model");
                 }
@@ -88,16 +102,6 @@ export function registerTurns(agent: ReturnType<typeof acp.agent>) {
                         type: "error",
                     });
                 }
-                const transcript = nativeHistory.get(context.params.sessionId) ?? [];
-                transcript.push({
-                    messageId: `user-${turnNumber.toString()}`,
-                    role: "user",
-                    text: prompt,
-                    images: context.params.prompt.flatMap((block) =>
-                        block.type === "image" ? [{ data: block.data, mimeType: block.mimeType }] : [],
-                    ),
-                });
-                nativeHistory.set(context.params.sessionId, transcript);
                 if (process.env["MOBIUS_FAKE_ACP_OVERSIZED_HISTORY_IMAGE"] === "1") {
                     await context.client.notify(acp.methods.client.session.update, {
                         sessionId: context.params.sessionId,
@@ -118,8 +122,6 @@ export function registerTurns(agent: ReturnType<typeof acp.agent>) {
                         title: prompt,
                     });
                 }
-                const state = previousState.withTurnCount(turnNumber);
-                sessions.set(context.params.sessionId, state);
                 persistState(context.params.sessionId, state);
                 const cancellation = new AbortController();
                 turnCancellations.set(context.params.sessionId, cancellation);

@@ -331,6 +331,9 @@ export const acpSessionUpdateSchema = z.discriminatedUnion("sessionUpdate", [
 export type AcpSessionUpdate = z.infer<typeof acpSessionUpdateSchema>;
 
 const lifecycleBase = { commandId: identifier };
+// The user message the Agent recorded for the prompt, as its message identity. Agents that report none, and Runtimes
+// before it existed, omit it.
+const promptMessageId = z.string().min(1).max(2_048);
 export interface PromptExecutionContext {
     readonly agentId: string;
     readonly directoryId: string;
@@ -344,6 +347,25 @@ const promptExecutionContextSchema = z
     })
     .readonly() satisfies z.ZodType<PromptExecutionContext>;
 
+const promptCompletedSchema = z
+    .object({
+        ...lifecycleBase,
+        kind: z.literal("prompt.completed"),
+        execution: z.literal("not-started").optional(),
+        messageId: promptMessageId.optional(),
+        stopReason: shortString,
+    })
+    .readonly();
+const promptFailedSchema = z
+    .object({
+        ...lifecycleBase,
+        attemptId: identifier,
+        code: identifier,
+        kind: z.literal("prompt.failed"),
+        message: z.string().min(1).max(500),
+        messageId: promptMessageId.optional(),
+    })
+    .readonly();
 export const lifecycleMetadataSchema = z.discriminatedUnion("kind", [
     // `changedByCommandId` names the command whose admission to or departure from the queue changed it. Runtimes
     // before it existed omit it, so a reader must treat an unnamed change as possibly any command's.
@@ -373,14 +395,7 @@ export const lifecycleMetadataSchema = z.discriminatedUnion("kind", [
     z
         .object({ ...lifecycleBase, attemptId: identifier, epoch: identifier, kind: z.literal("prompt.started") })
         .readonly(),
-    z
-        .object({
-            ...lifecycleBase,
-            kind: z.literal("prompt.completed"),
-            execution: z.literal("not-started").optional(),
-            stopReason: shortString,
-        })
-        .readonly(),
+    promptCompletedSchema,
     z
         .object({
             ...lifecycleBase,
@@ -389,15 +404,7 @@ export const lifecycleMetadataSchema = z.discriminatedUnion("kind", [
             message: z.string().min(1).max(500),
         })
         .readonly(),
-    z
-        .object({
-            ...lifecycleBase,
-            attemptId: identifier,
-            code: identifier,
-            kind: z.literal("prompt.failed"),
-            message: z.string().min(1).max(500),
-        })
-        .readonly(),
+    promptFailedSchema,
 ]);
 export type LifecycleMetadata = z.infer<typeof lifecycleMetadataSchema>;
 /** A lifecycle event that settles its prompt command: no later lifecycle event of that command follows it. */
@@ -554,10 +561,25 @@ export const sessionEventEnvelopeSchema = z
     .object({ events: sessionLiveEventBatchSchema, kind: z.literal(SESSION_EVENT_KIND) })
     .readonly();
 export type SessionEventEnvelope = z.infer<typeof sessionEventEnvelopeSchema>;
+/**
+ * A settled prompt's terminal lifecycle event as the Runtime recorded it, which names the user message the prompt
+ * recorded. History pages hold the Agent's events only, so a client attributes a reloaded user message to its command,
+ * and shows how that turn ended, from these.
+ */
+const promptMessageOutcomeSchema = z
+    .object({
+        payload: z.discriminatedUnion("kind", [promptCompletedSchema, promptFailedSchema]),
+        recordedAt: z.iso.datetime({ offset: true }),
+    })
+    .readonly();
+export type PromptMessageOutcome = z.infer<typeof promptMessageOutcomeSchema>;
 export const sessionEventLogPageSchema = z
     .object({
         events: z.array(sessionEventSchema).max(MAX_EVENT_COUNT).readonly(),
         nextCursor: z.string().min(1).max(512).nullable(),
+        // The settled prompts, among those the Runtime still retains, whose user message is on this page. Absent from
+        // older Runtimes and from pages that are not a Session's own history.
+        promptOutcomes: z.array(promptMessageOutcomeSchema).max(MAX_EVENT_COUNT).readonly().optional(),
         sessionGenerationId: identifier,
         tailCursor: z.string().max(512),
         // The generation-scoped live position covered by this snapshot, including
@@ -631,9 +653,7 @@ function sanitizeConsumableNativeSessionEvents(value: unknown): unknown {
     const queuedPromptRequests = input["queuedPromptRequests"];
     return {
         ...input,
-        events: isRecord(page)
-            ? { ...page, events: decodedEntries(page["events"], sessionEventSchema, MAX_EVENT_COUNT) }
-            : page,
+        events: sanitizeConsumableSessionEventLogPage(page),
         queuedPromptRequests: decodedEntries(
             queuedPromptRequests,
             queuedPromptRequestEventLogSchema,
@@ -644,7 +664,11 @@ function sanitizeConsumableNativeSessionEvents(value: unknown): unknown {
 function sanitizeConsumableSessionEventLogPage(value: unknown): unknown {
     const input = inputValue(value);
     return isRecord(input)
-        ? { ...input, events: decodedEntries(input["events"], sessionEventSchema, MAX_EVENT_COUNT) }
+        ? {
+              ...input,
+              events: decodedEntries(input["events"], sessionEventSchema, MAX_EVENT_COUNT),
+              promptOutcomes: decodedEntries(input["promptOutcomes"], promptMessageOutcomeSchema, MAX_EVENT_COUNT),
+          }
         : input;
 }
 const knownSessionLiveEventBatchSchema = z.array(sessionLiveEventSchema).max(SESSION_EVENT_BATCH_MAX_SIZE).readonly();

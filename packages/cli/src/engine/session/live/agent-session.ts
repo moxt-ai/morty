@@ -10,7 +10,7 @@ import {
     type SessionConfigOption,
     type SessionEventPayload,
 } from "@moxt-ai/mobius-sdk/protocol";
-import { AcpExecutionError } from "../../acp/acp-error.ts";
+import { AcpExecutionError, AcpPromptExecutionError } from "../../acp/acp-error.ts";
 import { RetryableAcpInitializationError, validateAgentRuntime } from "../../acp/adapter/agent-initialization.ts";
 import type { AdapterSessionEvent, AdapterSessionSubscriber } from "../../acp/adapter/session-events.ts";
 import type { AcpAgentDefinition } from "../../acp/agent/agent-definition.ts";
@@ -778,10 +778,12 @@ export class AgentSession implements AgentSessionRestore {
             );
             this.writeStoredSession(new Date().toISOString());
             if (lifecycle !== undefined) {
+                const messageId = result._meta?.messageId;
                 await this.recordLifecycleEvent({
                     payload: {
                         commandId: options.commandId,
                         kind: "prompt.completed",
+                        ...(messageId === undefined ? {} : { messageId }),
                         stopReason: result.stopReason,
                     },
                     type: "lifecycle-metadata",
@@ -794,16 +796,23 @@ export class AgentSession implements AgentSessionRestore {
                     ? error
                     : new AcpExecutionError("ACP agent execution failed", { cause: error });
             if (lifecycle !== undefined) {
+                const message = failure instanceof AcpPromptExecutionError ? { messageId: failure.messageId } : {};
                 await this.recordLifecycleEvent({
                     payload:
                         options.cancellationRequested?.() === true
-                            ? { commandId: options.commandId, kind: "prompt.completed", stopReason: "cancelled" }
+                            ? {
+                                  commandId: options.commandId,
+                                  kind: "prompt.completed",
+                                  ...message,
+                                  stopReason: "cancelled",
+                              }
                             : {
                                   attemptId: lifecycle.attemptId,
                                   code: failure.code,
                                   commandId: options.commandId,
                                   kind: "prompt.failed",
                                   message: truncate(failure.message, 500),
+                                  ...message,
                               },
                     type: "lifecycle-metadata",
                 });

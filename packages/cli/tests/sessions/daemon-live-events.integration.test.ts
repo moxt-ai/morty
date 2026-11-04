@@ -688,7 +688,7 @@ describe("daemon V2 live delivery", () => {
         },
     );
 
-    it("Given a harness identifies a user message and fails its prompt, When the daemon publishes the failure, Then only the user chunk carries its identity", async () => {
+    it("Given a harness identifies a user message and fails its prompt, When the daemon publishes the failure, Then the failure names the user message it recorded", async () => {
         const fixture = await startControlledDaemon();
         try {
             sendText(fixture.socket, encodeSessionPromptCommand(prompt(fixture, "fail with model unavailable")));
@@ -697,7 +697,7 @@ describe("daemon V2 live delivery", () => {
                 const event = await nextLive(fixture, true);
                 events.push(event);
                 if (event.type === "lifecycle-metadata" && event.payload.kind === "prompt.failed") {
-                    expect(event.payload).not.toHaveProperty("messageId");
+                    expect(event.payload).toMatchObject({ messageId: "user-1" });
                     break;
                 }
             }
@@ -817,7 +817,7 @@ describe("daemon V2 live delivery", () => {
                 const completed = live.find(
                     (event) => event.type === "lifecycle-metadata" && event.payload.kind === "prompt.completed",
                 );
-                expect(completed?.payload).not.toHaveProperty("messageId");
+                expect(completed?.payload).toMatchObject({ messageId: "user-1" });
 
                 const page = await history(fixture, command);
                 expect(page.events.length).toBeGreaterThan(0);

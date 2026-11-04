@@ -173,6 +173,13 @@ class ControlledAgentState {
         try {
             await this.#apply(active, this.#options.reply(prompt, turnNumber, "prompt"));
             return await completion.promise;
+        } catch (cause) {
+            // Like the Claude adapter, a failed prompt still names the user message it recorded.
+            if (cause instanceof acp.RequestError) {
+                const data = typeof cause.data === "object" && cause.data !== null ? cause.data : {};
+                cause.data = { ...data, messageId };
+            }
+            throw cause;
         } finally {
             signal.removeEventListener("abort", abort);
             this.#forget(active);

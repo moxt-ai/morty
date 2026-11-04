@@ -5,6 +5,7 @@ import {
     encodeSessionCancelBeforeStartCommand,
     isPromptTerminal,
     type LastTurnOutcome,
+    type PromptMessageOutcome,
     promptCompletion,
     type SessionEventPayload,
     type SessionLiveEvent,
@@ -390,6 +391,29 @@ export class ExecutionReceipts {
         return receipt?.sessionId === sessionId && receipt.state.kind === "started"
             ? receipt.state.startedAt
             : undefined;
+    };
+    /**
+     * The recorded terminal events of the Session's settled prompts whose Agent reported the user message they
+     * recorded, while their receipts are retained.
+     */
+    readonly promptOutcomes = (sessionId: string): readonly PromptMessageOutcome[] => {
+        const outcomes: PromptMessageOutcome[] = [];
+        for (const [commandId, receipt] of this.#executions) {
+            if (receipt.sessionId !== sessionId) {
+                continue;
+            }
+            const outcome = this.restatedOutcome(commandId);
+            const event = outcome?.event;
+            if (
+                outcome?.recordedAt !== undefined &&
+                event?.type === "lifecycle-metadata" &&
+                (event.payload.kind === "prompt.completed" || event.payload.kind === "prompt.failed") &&
+                event.payload.messageId !== undefined
+            ) {
+                outcomes.push({ payload: event.payload, recordedAt: outcome.recordedAt });
+            }
+        }
+        return outcomes;
     };
     /** Started identities remain authoritative after their detailed receipt is evicted. */
     readonly hasStarted = (commandId: string, sessionId: string): boolean => {

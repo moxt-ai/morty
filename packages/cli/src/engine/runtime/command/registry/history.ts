@@ -2,6 +2,7 @@ import {
     type decodeSessionHistoryPageLoad,
     type decodeSessionPreviewHistoryPageLoad,
     type NativeSessionEvents,
+    type PromptMessageOutcome,
     type QueuedPromptRequestEventLog,
     SESSION_HISTORY_PAGE_LOAD_KIND,
     SESSION_HISTORY_PAGE_LOADED_KIND,
@@ -27,6 +28,22 @@ import { reportOperationFailure, send } from "../transport.ts";
 interface OrderedHistoryEvent {
     readonly cursor: string | null;
     readonly event: SessionEvent;
+}
+
+/** The outcomes whose prompt recorded a user message among `events`. */
+function onPage(outcomes: readonly PromptMessageOutcome[], events: readonly SessionEvent[]): PromptMessageOutcome[] {
+    const messageIds = new Set<string>();
+    for (const event of events) {
+        if (
+            event.type === "acp" &&
+            event.payload.sessionUpdate === "user_message_chunk" &&
+            event.payload.messageId !== undefined &&
+            event.payload.messageId !== null
+        ) {
+            messageIds.add(event.payload.messageId);
+        }
+    }
+    return outcomes.filter(({ payload }) => payload.messageId !== undefined && messageIds.has(payload.messageId));
 }
 
 async function loadHistoryPage(
@@ -124,6 +141,9 @@ export async function executeSessionHistoryPageLoad(
             signal,
         };
         const recovery = eventProjection.promptRequestRecovery(command.sessionId);
+        // Read before the page: a prompt's terminal event is stored before its receipt settles, so every outcome read
+        // here is within the page's live boundary and never arrives again as a live event.
+        const settled = eventProjection.promptOutcomes(command.sessionId);
         const events = await loadHistoryPage(
             command.sessionId,
             command.eventLimit,
@@ -133,7 +153,13 @@ export async function executeSessionHistoryPageLoad(
         );
         signal.throwIfAborted();
         send(socket, {
-            events,
+            events: {
+                ...events,
+                events: {
+                    ...events.events,
+                    promptOutcomes: onPage(settled, events.events.events),
+                },
+            },
             kind: SESSION_HISTORY_PAGE_LOADED_KIND,
             requestId: command.requestId,
             sessionId: command.sessionId,
