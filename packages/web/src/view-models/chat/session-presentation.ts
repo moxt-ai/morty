@@ -765,6 +765,8 @@ function reduceSessionEvents(
         ),
     );
     let entries: readonly ReducedSessionEntry[] = [];
+    // The command whose turn the latest user message started, when an outcome named it.
+    let turnCommand: string | null = null;
     for (const event of events) {
         const result = consumeSessionEvent(entries, event, leadingEvent);
         const messageId =
@@ -776,10 +778,36 @@ function reduceSessionEvents(
                 : null;
         const outcome = messageId == null ? undefined : byMessage.get(messageId);
         if (outcome === undefined) {
+            if (messageId != null) {
+                turnCommand = null;
+            }
             entries = applySessionEvent(entries, event, result);
             continue;
         }
         const { commandId } = outcome.payload;
+        if (outcome.payload.kind === "prompt.completed" && promptCompletion(outcome.payload).kind === "steered") {
+            // Steering added this message to the running turn, as its start would live; the turn's ending stays
+            // where that turn ends. Steering into a turn no outcome named keeps the message as it is.
+            entries =
+                turnCommand === null
+                    ? applySessionEvent(entries, event, result)
+                    : applySessionEvent(
+                          [
+                              ...entries,
+                              {
+                                  kind: "execution-owner",
+                                  commandId,
+                                  executionCommandId: turnCommand,
+                                  execution: "steers",
+                              },
+                              { kind: "turn-started", commandId },
+                          ],
+                          event,
+                          result,
+                      );
+            continue;
+        }
+        turnCommand = commandId;
         entries = [
             ...applySessionEvent(
                 [
@@ -797,9 +825,10 @@ function reduceSessionEvents(
 }
 
 /**
- * Places each restated ending where its turn ends: after the turn's events, before the next user message or another
- * command's execution, or after the last loaded entry. The place follows from the loaded entries alone, however many
- * pages they arrived in. A turn whose ending a loaded lifecycle event reports keeps that one.
+ * Places each restated ending where its turn ends: after the turn's events, before the next user message that does not
+ * steer into it or another command's execution, or after the last loaded entry. The place follows from the loaded
+ * entries alone, however many pages they arrived in. A turn whose ending a loaded lifecycle event reports keeps that
+ * one.
  */
 function placeTurnOutcomes(entries: readonly ReducedSessionEntry[]): readonly ReducedSessionEntry[] {
     const reported = new Set(
@@ -813,6 +842,10 @@ function placeTurnOutcomes(entries: readonly ReducedSessionEntry[]): readonly Re
     );
     const placed: ReducedSessionEntry[] = [];
     let open: Extract<ReducedSessionEntry, { readonly kind: "turn-outcome" }> | null = null;
+    // The execution each command belongs to: its own, or the turn it steered.
+    const executions = new Map<string, string>();
+    // The turn the next user message joins as steering, if it was steered into one.
+    let joining: string | null = null;
     const end = () => {
         if (open !== null) {
             placed.push({
@@ -830,12 +863,21 @@ function placeTurnOutcomes(entries: readonly ReducedSessionEntry[]): readonly Re
             open = reported.has(entry.commandId) ? null : entry;
             continue;
         }
+        if (entry.kind === "execution-owner") {
+            executions.set(entry.commandId, entry.executionCommandId);
+            joining = entry.execution === "steers" ? entry.executionCommandId : null;
+        }
+        const userMessage =
+            entry.kind === "message" && entry.message.role === "user" && entry.message.firstEvent.type === "acp";
         const startsAnotherTurn =
-            (entry.kind === "message" && entry.message.role === "user" && entry.message.firstEvent.type === "acp") ||
+            (userMessage && joining !== open?.commandId) ||
             (entry.kind === "execution-owner" && entry.executionCommandId !== open?.commandId) ||
-            (entry.kind === "turn-started" && entry.commandId !== open?.commandId);
+            (entry.kind === "turn-started" && (executions.get(entry.commandId) ?? entry.commandId) !== open?.commandId);
         if (startsAnotherTurn) {
             end();
+        }
+        if (userMessage) {
+            joining = null;
         }
         placed.push(entry);
     }

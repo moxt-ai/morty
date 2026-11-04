@@ -320,3 +320,61 @@ test("Given a stopped turn whose messages span two history pages, When I reopen 
     });
     await app.close();
 });
+
+test("Given a turn I steered and then stopped, When I reopen the Session, Then its ending stays after the steered reply, as it showed live", {
+    timeout: 90_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected the controlled Agent");
+    }
+    const firstPrompt = "wait for steering";
+    // The controlled Agent holds the turn after this steering, so it can be stopped.
+    const instruction = "Use the revised requirement";
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), firstPrompt);
+    await app.waitForView(() => expect(document.body.textContent).toContain("Waiting for steering"));
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), instruction);
+    const queued = await app.queryElementByTestId(
+        dataTestId.queuedMessage,
+        (element) => element.textContent?.includes(instruction) === true,
+    );
+    await app.user.click(getByLabelText(queued, `Steer queued message: ${instruction}`));
+    await app.waitForView(() => expect(document.body.textContent).toContain(`Steered: ${instruction}`));
+    await app.user.click(getByRole(document.body, "button", { name: "Stop agent output" }));
+
+    const order = () => {
+        const notice = app
+            .elementsByTestId(dataTestId.agentReplyStatus)
+            .find((element) => element.textContent === "Turn stopped.");
+        const steer = app
+            .elementsByTestId(dataTestId.userMessage)
+            .find((element) => element.textContent?.includes(instruction) === true);
+        if (notice === undefined || steer === undefined) {
+            throw new Error(`Missing notice or steer: ${document.body.textContent}`);
+        }
+        return notice.compareDocumentPosition(steer) === Node.DOCUMENT_POSITION_FOLLOWING
+            ? "notice-before-steer"
+            : "notice-after-steer";
+    };
+    // Live, the ending follows the whole turn, including the steered reply.
+    await app.waitForView(() => expect(order()).toBe("notice-after-steer"));
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+
+    // Reopened, history restates the turn's outcome and names the steering as part of that turn.
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    await app.user.click(
+        await app.waitForView(() => {
+            const entry = app
+                .elementsByTestId(dataTestId.managedConversation)
+                .find((element) => element.textContent?.includes(firstPrompt) === true);
+            if (entry === undefined) {
+                throw new Error(`The conversation is unavailable: ${document.body.textContent}`);
+            }
+            return entry;
+        }),
+    );
+    await app.waitForView(() => expect(document.body.textContent).toContain(`Steered: ${instruction}`));
+    await app.waitForView(() => expect(order()).toBe("notice-after-steer"));
+    await app.close();
+});
