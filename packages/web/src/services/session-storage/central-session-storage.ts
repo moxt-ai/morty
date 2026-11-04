@@ -150,6 +150,37 @@ export const sessionUnsentMessageEntry = (sessionId: string): SessionStorageEntr
         schema: messageDraftSchema,
     });
 
+const elicitationFieldValueSchema = v.union([
+    v.pipe(v.string(), v.maxLength(100_000)),
+    v.boolean(),
+    v.pipe(v.array(v.pipe(v.string(), v.maxLength(2_048))), v.maxLength(500), v.readonly()),
+]);
+const elicitationAnswerDraftsSchema = v.pipe(
+    v.record(
+        v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
+        v.pipe(v.record(v.pipe(v.string(), v.maxLength(256)), elicitationFieldValueSchema), v.readonly()),
+    ),
+    v.readonly(),
+);
+
+export type ElicitationAnswerDrafts = v.InferOutput<typeof elicitationAnswerDraftsSchema>;
+
+/** Answers typed into the Agent's pending questions in a Session, by question; a reload returns them to the form. */
+export const elicitationAnswerDraftsEntry = (sessionId: string): SessionStorageEntry<ElicitationAnswerDrafts> =>
+    customSessionStorageEntry({
+        key: scopedKey("morty:elicitation-answers:v1:", sessionId),
+        schema: elicitationAnswerDraftsSchema,
+        encode: (value) => JSON.stringify(v.parse(elicitationAnswerDraftsSchema, value)),
+        decode: (raw) => {
+            try {
+                const parsed = v.safeParse(elicitationAnswerDraftsSchema, JSON.parse(raw));
+                return parsed.success ? parsed.output : null;
+            } catch {
+                return null;
+            }
+        },
+    });
+
 const unsentFirstMessageSchema = v.pipe(
     v.object({
         commandId: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),

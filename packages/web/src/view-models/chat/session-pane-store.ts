@@ -20,7 +20,11 @@ import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { rememberAgentSettingChoice } from "../../services/chat/last-agent-settings.ts";
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import { recordBrowserDiagnostic } from "../../services/diagnostics/browser-diagnostics.ts";
-import { centralSessionStorage, sessionDraftEntry } from "../../services/session-storage/central-session-storage.ts";
+import {
+    centralSessionStorage,
+    elicitationAnswerDraftsEntry,
+    sessionDraftEntry,
+} from "../../services/session-storage/central-session-storage.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError, isRetryableRuntimeConnectionFailure, isSessionClosedFailure } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
@@ -648,6 +652,8 @@ export function createSessionPaneModel(options: {
             throw cause;
         }
     };
+    // Answers typed into the Agent's questions belong to the Session, as its composer draft does.
+    const answerDraftsEntry = elicitationAnswerDraftsEntry(sessionId);
     const interactions = createSessionInteractionStore({
         read: async (signal) => {
             if (client === null) {
@@ -659,6 +665,14 @@ export function createSessionPaneModel(options: {
         },
         permission: respondToPermission,
         elicitation: respondToElicitation,
+        answerDrafts: new Map(Object.entries(centralSessionStorage.read(answerDraftsEntry) ?? {})),
+        answerDraftsChanged: (drafts) => {
+            if (drafts.size === 0) {
+                centralSessionStorage.remove(answerDraftsEntry);
+            } else {
+                centralSessionStorage.write(answerDraftsEntry, Object.fromEntries(drafts));
+            }
+        },
     });
 
     // Connection waiters are woken where the connection settles. No wrapped set, no subscriptions.

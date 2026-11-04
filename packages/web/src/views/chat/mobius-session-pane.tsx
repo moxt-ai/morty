@@ -1208,7 +1208,11 @@ function MobiusSessionPaneBody({
                                 className="max-h-[min(50vh,360px)] min-h-0 flex-1 overflow-y-auto [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]"
                             >
                                 <SessionInteractionCards
+                                    answerDrafts={interactions.answerDrafts}
                                     elicitations={interactions.elicitations}
+                                    onElicitationAnswer={(interactionId, fieldName, value) =>
+                                        interactionModel.editAnswer(interactionId, fieldName, value)
+                                    }
                                     fileChanges={interactions.fileChanges}
                                     permissions={interactions.permissions}
                                     busyInteractionIds={interactions.busyInteractionIds}

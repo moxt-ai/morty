@@ -64,6 +64,45 @@ for (const empty of [false, true]) {
     });
 }
 
+test("Given a half-typed answer to the agent's question, When the user switches to another conversation and back, Then the answer is still there and is what the agent receives", {
+    timeout: 60_000,
+}, async () => {
+    const app = await createTestApp({
+        connectAgent: true,
+        agent: { id: "interaction-test", label: "Interaction Agent" },
+    });
+    const composer = await app.queryElementByTestId(dataTestId.messageComposer);
+    if (!(composer instanceof HTMLTextAreaElement)) {
+        throw new Error("Expected the composer");
+    }
+    await sendPrompt(app, composer, "request text answers");
+    const form = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Agent information request" }));
+    await app.user.clear(getByRole(form, "textbox", { name: "Name" }));
+    await app.user.type(getByRole(form, "textbox", { name: "Name" }), "Half typed");
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    await app.user.click(
+        await app.waitForView(() => {
+            const entry = app
+                .elementsByTestId(dataTestId.managedConversation)
+                .find((element) => element.textContent?.includes("request text answers") === true);
+            if (entry === undefined) {
+                throw new Error("Expected the conversation in the sidebar");
+            }
+            return entry;
+        }),
+    );
+    const returned = await app.waitForView(() =>
+        getByRole(document.body, "dialog", { name: "Agent information request" }),
+    );
+    const name = getByRole(returned, "textbox", { name: "Name" });
+    expect(name).toHaveProperty("value", "Half typed");
+
+    await app.user.type(name, " answer");
+    await app.user.click(getByRole(returned, "button", { name: "Continue" }));
+    await app.waitForView(() => expect(document.body.textContent).toContain('"name":"Half typed answer"'));
+});
+
 test("Given the agent asks a question, When the user reads and answers it, Then Chat shows a waiting status instead of working and clears it after the answer", {
     timeout: 30_000,
 }, async () => {

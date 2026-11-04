@@ -9,7 +9,11 @@ import { Select as OptionSelect } from "@/components/ui/option-select";
 import { textLinkClassName } from "@/components/ui/text-link";
 import { useWrappedButtonRadius } from "@/components/utils/use-wrapped-button-radius";
 import { cn } from "@/lib/utils";
-import { encodeElicitationForm, readMultiselectDefaults } from "@/services/chat/elicitation-form";
+import {
+    type ElicitationFieldValue,
+    elicitationFieldValue,
+    encodeElicitationAnswers,
+} from "@/services/chat/elicitation-form";
 import { type PermissionFileChange, permissionPresentation } from "@/view-models/chat/session-interaction-store";
 import type {
     ElicitationInteraction,
@@ -60,26 +64,24 @@ const fieldDescriptionClassName = "font-normal text-muted-foreground";
 function BooleanFieldControl({
     disabled,
     field,
-    value,
+    on,
+    onChange,
 }: {
     readonly disabled: boolean;
     readonly field: SessionElicitationField;
-    readonly value: unknown;
+    readonly on: boolean;
+    readonly onChange: (value: ElicitationFieldValue) => void;
 }) {
-    const [on, setOn] = useState(
-        typeof value === "boolean" ? value : field.hasDefaultValue && field.defaultBooleanValue,
-    );
     return (
         <div className={fieldLabelClassName}>
             <span>{field.title}</span>
-            {on && <input name={field.name} type="hidden" value="on" />}
             <fieldset aria-label={field.title} className="m-0 min-w-0 border-0 p-0">
                 <ButtonGroup orientation="horizontal" size="sm">
                     <Button
                         aria-pressed={on}
                         className="min-h-11 rounded-full! md:min-h-9"
                         disabled={disabled}
-                        onClick={() => setOn(true)}
+                        onClick={() => onChange(true)}
                         size="sm"
                         type="button"
                         variant={on ? "primary" : "outline"}
@@ -90,7 +92,7 @@ function BooleanFieldControl({
                         aria-pressed={!on}
                         className="min-h-11 rounded-full! md:min-h-9"
                         disabled={disabled}
-                        onClick={() => setOn(false)}
+                        onClick={() => onChange(false)}
                         size="sm"
                         type="button"
                         variant={!on ? "primary" : "outline"}
@@ -104,28 +106,25 @@ function BooleanFieldControl({
     );
 }
 
-/** Controlled library Select; a hidden input keeps the FormData contract `encodeElicitationForm` reads. */
 function SelectFieldControl({
     disabled,
     field,
-    value,
+    selected,
+    onChange,
 }: {
     readonly disabled: boolean;
     readonly field: SessionElicitationField;
-    readonly value: unknown;
+    readonly selected: string;
+    readonly onChange: (value: ElicitationFieldValue) => void;
 }) {
-    const [selected, setSelected] = useState(
-        typeof value === "string" ? value : field.hasDefaultValue ? field.defaultStringValue : "",
-    );
     return (
         <div className={fieldLabelClassName}>
             <span>{field.title}</span>
-            <input name={field.name} type="hidden" value={selected} />
             <OptionSelect
                 className="min-h-11 rounded-full md:min-h-9"
                 disabled={disabled}
                 label={field.title}
-                onValueChange={setSelected}
+                onValueChange={onChange}
                 options={field.options.map((option) =>
                     option.description.length > 0
                         ? { label: option.label, title: option.description, value: option.value }
@@ -139,35 +138,45 @@ function SelectFieldControl({
     );
 }
 
+/** One field of the Agent's question, showing `value` and reporting each change; the form keeps no state itself. */
 function FieldControl({
     disabled,
     field,
     value,
+    onChange,
 }: {
     readonly disabled: boolean;
     readonly field: SessionElicitationField;
-    readonly value: unknown;
+    readonly value: ElicitationFieldValue;
+    readonly onChange: (value: ElicitationFieldValue) => void;
 }) {
     if (field.type === "boolean") {
-        return <BooleanFieldControl disabled={disabled} field={field} value={value} />;
+        return <BooleanFieldControl disabled={disabled} field={field} on={value === true} onChange={onChange} />;
     }
     if (field.type === "select") {
-        return <SelectFieldControl disabled={disabled} field={field} value={value} />;
+        return (
+            <SelectFieldControl
+                disabled={disabled}
+                field={field}
+                selected={typeof value === "string" ? value : ""}
+                onChange={onChange}
+            />
+        );
     }
+    const text = typeof value === "string" ? value : "";
     if (field.type === "multiselect") {
         return (
             <label className={fieldLabelClassName}>
                 {field.title}
                 <select
                     className={cn(nativeFieldClassName, "min-h-11 rounded-full font-normal md:min-h-9")}
-                    defaultValue={
-                        Array.isArray(value)
-                            ? value.filter((entry): entry is string => typeof entry === "string")
-                            : readMultiselectDefaults(field)
-                    }
+                    value={Array.isArray(value) ? [...value] : []}
                     disabled={disabled}
                     multiple
                     name={field.name}
+                    onChange={(event) =>
+                        onChange(Array.from(event.currentTarget.selectedOptions, (option) => option.value))
+                    }
                     required={field.required}
                 >
                     {field.options.map((option) => (
@@ -187,9 +196,8 @@ function FieldControl({
                 {field.title}
                 <textarea
                     className={`min-h-20 resize-y py-2 font-normal ${nativeFieldClassName}`}
-                    defaultValue={
-                        typeof value === "string" ? value : field.hasDefaultValue ? field.defaultStringValue : undefined
-                    }
+                    value={text}
+                    onChange={(event) => onChange(event.currentTarget.value)}
                     disabled={disabled}
                     maxLength={field.maximumLength.length > 0 ? Number(field.maximumLength) : undefined}
                     minLength={field.minimumLength.length > 0 ? Number(field.minimumLength) : undefined}
@@ -207,15 +215,8 @@ function FieldControl({
             {field.title}
             <input
                 className={cn(nativeFieldClassName, "min-h-11 rounded-full font-normal md:min-h-9")}
-                defaultValue={
-                    typeof value === "string" || typeof value === "number"
-                        ? value
-                        : field.hasDefaultValue
-                          ? numeric
-                              ? field.defaultNumberValue
-                              : field.defaultStringValue
-                          : undefined
-                }
+                value={text}
+                onChange={(event) => onChange(event.currentTarget.value)}
                 disabled={disabled}
                 max={field.maximum.length > 0 ? field.maximum : undefined}
                 maxLength={!numeric && field.maximumLength.length > 0 ? Number(field.maximumLength) : undefined}
@@ -543,15 +544,19 @@ function answeredOutcome(elicitation: ElicitationInteraction): AnsweredOutcome {
 function ElicitationCard({
     busy,
     elicitation,
+    draft,
     respond,
+    editAnswer,
 }: {
     readonly busy: boolean;
     readonly elicitation: ElicitationInteraction;
+    /** What the user typed into this question so far. */
+    readonly draft: Readonly<Record<string, ElicitationFieldValue>>;
     readonly respond: (response: ElicitationInteractionResponse) => void;
+    readonly editAnswer: (fieldName: string, value: ElicitationFieldValue) => void;
 }) {
     const externalUrl = safeExternalUrl(elicitation.url);
     const answered = elicitation.state.kind !== "pending";
-    const answers = elicitationAnswers(elicitation);
     const [missingRequiredTitle, setMissingRequiredTitle] = useState("");
     const cancel = (action: ElicitationResponseRequest["action"]): void => {
         respond({
@@ -668,11 +673,12 @@ function ElicitationCard({
                             className="mt-3 grid gap-3"
                             onSubmit={(event) => {
                                 event.preventDefault();
-                                const formData = new FormData(event.currentTarget);
                                 // The library Select is not a native form control, so its required gate is checked here.
                                 const missing = elicitation.fields.find(
                                     (field) =>
-                                        field.type === "select" && field.required && formData.get(field.name) === "",
+                                        field.type === "select" &&
+                                        field.required &&
+                                        elicitationFieldValue(field, draft) === "",
                                 );
                                 if (missing !== undefined) {
                                     setMissingRequiredTitle(missing.title);
@@ -681,7 +687,7 @@ function ElicitationCard({
                                 setMissingRequiredTitle("");
                                 respond({
                                     action: "accept",
-                                    content: encodeElicitationForm(formData, elicitation.fields),
+                                    content: encodeElicitationAnswers(elicitation.fields, draft),
                                     interactionId: elicitation.interactionId,
                                     sessionId: elicitation.sessionId,
                                 });
@@ -692,7 +698,8 @@ function ElicitationCard({
                                     disabled={busy || answered}
                                     field={field}
                                     key={field.name}
-                                    value={Reflect.get(answers, field.name)}
+                                    value={elicitationFieldValue(field, draft)}
+                                    onChange={(value) => editAnswer(field.name, value)}
                                 />
                             ))}
                             {missingRequiredTitle.length > 0 && (
@@ -734,8 +741,12 @@ function ElicitationCard({
     );
 }
 
+const NO_ANSWERS: Readonly<Record<string, ElicitationFieldValue>> = {};
+
 export function SessionInteractionCards({
     elicitations,
+    answerDrafts,
+    onElicitationAnswer,
     fileChanges,
     permissions,
     onElicitationResponse,
@@ -745,6 +756,9 @@ export function SessionInteractionCards({
     error,
 }: {
     readonly elicitations: readonly ElicitationInteraction[];
+    /** What the user typed into each pending question, by interaction id. */
+    readonly answerDrafts: ReadonlyMap<string, Readonly<Record<string, ElicitationFieldValue>>>;
+    readonly onElicitationAnswer: (interactionId: string, fieldName: string, value: ElicitationFieldValue) => void;
     /** The diffs announced for each permission's tool call, by interaction id. */
     readonly fileChanges: ReadonlyMap<string, readonly PermissionFileChange[]>;
     readonly permissions: readonly PermissionInteraction[];
@@ -772,6 +786,8 @@ export function SessionInteractionCards({
             {elicitations.map((elicitation) => (
                 <ElicitationCard
                     busy={busyInteractionIds.has(elicitation.interactionId)}
+                    draft={answerDrafts.get(elicitation.interactionId) ?? NO_ANSWERS}
+                    editAnswer={(fieldName, value) => onElicitationAnswer(elicitation.interactionId, fieldName, value)}
                     elicitation={elicitation}
                     key={elicitation.interactionId}
                     respond={onElicitationResponse}

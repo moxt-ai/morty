@@ -1,6 +1,7 @@
 import type { SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore } from "zustand/vanilla";
 import type { AgentDisplayContent } from "../../components/agents/display-content.ts";
+import type { ElicitationFieldValue } from "../../services/chat/elicitation-form.ts";
 import { formatError } from "../format-error.ts";
 import {
     requestedInteraction,
@@ -91,9 +92,15 @@ type InteractionOperation =
     | { readonly kind: "submitted" }
     | { readonly kind: "failed"; readonly message: string };
 
+/** The answers typed so far into each pending question, by question and then by field. */
+export type ElicitationAnswerDrafts = ReadonlyMap<string, Readonly<Record<string, ElicitationFieldValue>>>;
+
 export interface SessionInteractionStore {
     /** The Agent's requests in arrival order, each with its latest resolution. */
     readonly interactions: readonly SessionInteraction[];
+    /** What the user typed into questions not yet answered; it belongs to the Session, not to this pane. */
+    readonly answerDrafts: ElicitationAnswerDrafts;
+    readonly editAnswer: (interactionId: string, fieldName: string, value: ElicitationFieldValue) => void;
     readonly submissions: ReadonlyMap<string, InteractionOperation>;
     readonly coverage: { readonly sessionGenerationId: string; readonly throughPosition: string } | null;
     readonly apply: (fact: SessionInteractionFact, event: SessionLiveEvent, signal: AbortSignal) => Promise<void>;
@@ -108,8 +115,29 @@ export function createSessionInteractionStore(ports: {
     readonly read: (signal: AbortSignal) => Promise<SessionInteractionRecovery>;
     readonly permission: (response: PermissionInteractionResponse, signal: AbortSignal) => Promise<void>;
     readonly elicitation: (response: ElicitationInteractionResponse, signal: AbortSignal) => Promise<void>;
+    /** The answer drafts the Session kept, and where changes to them are kept. */
+    readonly answerDrafts: ElicitationAnswerDrafts;
+    readonly answerDraftsChanged: (drafts: ElicitationAnswerDrafts) => void;
 }) {
     return createStore<SessionInteractionStore>()((set, get) => {
+        const replaceAnswerDrafts = (drafts: ElicitationAnswerDrafts): void => {
+            set({ answerDrafts: drafts });
+            ports.answerDraftsChanged(drafts);
+        };
+        /** Drafts last only while their question is pending; an answered or withdrawn question drops its draft. */
+        const keepPendingDrafts = (): void => {
+            const pending = new Set(
+                get().interactions.flatMap((interaction) =>
+                    interaction.kind === "elicitation" && interaction.elicitation.state.kind === "pending"
+                        ? [interaction.elicitation.interactionId]
+                        : [],
+                ),
+            );
+            const drafts = get().answerDrafts;
+            if ([...drafts.keys()].some((id) => !pending.has(id))) {
+                replaceAnswerDrafts(new Map([...drafts].filter(([id]) => pending.has(id))));
+            }
+        };
         const record = (id: string, operation: InteractionOperation): void => {
             set((current) => ({ submissions: new Map(current.submissions).set(id, operation) }));
         };
@@ -122,6 +150,9 @@ export function createSessionInteractionStore(ports: {
             record(id, { kind: "submitting" });
             void respond().then(
                 () => {
+                    if (get().answerDrafts.has(id)) {
+                        replaceAnswerDrafts(new Map([...get().answerDrafts].filter(([draftId]) => draftId !== id)));
+                    }
                     if (!signal.aborted) {
                         record(id, { kind: "submitted" });
                     }
@@ -139,6 +170,13 @@ export function createSessionInteractionStore(ports: {
         };
         return {
             interactions: [],
+            answerDrafts: ports.answerDrafts,
+            editAnswer: (interactionId, fieldName, value) => {
+                const current = get().answerDrafts;
+                replaceAnswerDrafts(
+                    new Map(current).set(interactionId, { ...(current.get(interactionId) ?? {}), [fieldName]: value }),
+                );
+            },
             coverage: null,
             submissions: new Map(),
             apply: async (fact, event, signal) => {
@@ -172,6 +210,7 @@ export function createSessionInteractionStore(ports: {
                                 throughPosition: recovery.snapshot.throughPosition,
                             },
                         });
+                        keepPendingDrafts();
                         return;
                     case "legacy-turn":
                         // Preserve the old foreground recovery contract without claiming full session coverage.
@@ -231,6 +270,7 @@ export function sessionInteractionPresentation(model: SessionInteractionStore, m
     const visibleIds = new Set([...permissions, ...elicitations].map((interaction) => interaction.interactionId));
     return {
         permissions,
+        answerDrafts: model.answerDrafts,
         fileChanges: new Map(
             permissions.map((permission) => [
                 permission.interactionId,

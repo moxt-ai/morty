@@ -2,6 +2,7 @@ import type { SessionElicitationField } from "@moxt-ai/mobius-sdk";
 import { ChevronRight, CircleAlert, FileText, Inbox, MessageSquare, PackageOpen, Plus, Unplug } from "lucide-react";
 import { Tooltip } from "radix-ui";
 import { type ComponentType, type ReactNode, useState } from "react";
+import type { ElicitationFieldValue } from "@/services/chat/elicitation-form";
 import { AttemptFailure } from "../chat/attempt-failure.tsx";
 import { ConnectionNotice } from "../chat/connection-notice.tsx";
 import type { ConnectionFeedback, ExecutionContext } from "../chat/execution-context.ts";
@@ -1403,6 +1404,10 @@ function SessionInteractionsGallery() {
             title: "Stacked: permission above an information request",
         },
     ] as const;
+    // Each specimen's form keeps what was typed, as the Session's answer drafts do in the product.
+    const [answerDrafts, setAnswerDrafts] = useState<
+        ReadonlyMap<string, Readonly<Record<string, ElicitationFieldValue>>>
+    >(new Map());
     return (
         <div className="grid max-w-xl gap-6">
             {specimens.map((specimen) => (
@@ -1411,9 +1416,18 @@ function SessionInteractionsGallery() {
                         busyInteractionIds={
                             "busyInteractionIds" in specimen ? specimen.busyInteractionIds : noBusyInteractions
                         }
+                        answerDrafts={answerDrafts}
                         elicitations={specimen.elicitations}
                         error={specimen.error}
                         fileChanges={noFileChanges}
+                        onElicitationAnswer={(interactionId, fieldName, value) =>
+                            setAnswerDrafts((drafts) =>
+                                new Map(drafts).set(interactionId, {
+                                    ...(drafts.get(interactionId) ?? {}),
+                                    [fieldName]: value,
+                                }),
+                            )
+                        }
                         onElicitationResponse={noop}
                         onPermissionResponse={noop}
                         onStop={noop}
