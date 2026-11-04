@@ -225,11 +225,43 @@ test("Given an expired handoff with no retained access, When the failure page sh
     });
 
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
-    expect(alert.textContent).toContain("This link was already used, has expired, or was revoked.");
+    expect(alert.textContent).toContain(
+        "This link was already used, has expired, or was revoked. Run setup again on that computer.",
+    );
     expect(getByRole(document.body, "heading", { name: "This link is no longer available" })).toBeDefined();
     expect(queryByRole(document.body, "button", { name: "Go to Morty" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Try again" })).toBeNull();
-    expect(document.body.textContent).toContain("Run setup again on that computer to get a new link.");
+    expect(document.body.textContent).toContain("Next: paste it into the agent running on your computer.");
+    expect(queryByRole(document.body, "textbox", { name: "Agent setup prompt" })).toBeNull();
+    expect(document.body.textContent).not.toContain("complete the Morty setup for me");
+    expect(document.body.textContent).not.toContain("Review what setup does");
+    expect(document.body.textContent).not.toContain("Setup interrupts the agent's current task");
+    expect(queryByRole(document.body, "group", { name: "Setup details" })).toBeNull();
+});
+
+test("Given an expired handoff with no retained access, When the user copies the setup prompt, Then the clipboard holds the instruction and no toast appears", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({
+        page: {
+            code: (application) => `mobius_transfer_v2.${application.identity.projectId}.${"a".repeat(43)}`,
+            harness: "pi",
+            kind: "continue",
+            sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
+        },
+    });
+
+    const copy = await app.waitForView(() => getByRole(document.body, "button", { name: "Copy setup prompt" }));
+    await app.user.click(copy);
+
+    expect(await navigator.clipboard.readText()).toBe(
+        `Fetch ${window.location.origin}/setup.md and complete the Morty setup for me. You may install missing prerequisites and pair this machine.`,
+    );
+    expect(getByRole(document.body, "button", { name: "Copied" })).toBeInstanceOf(HTMLButtonElement);
+    expect(queryByRole(document.body, "button", { name: "Dismiss notification" })).toBeNull();
+    expect(getByRole(document.body, "status", { name: "Setup next step" }).textContent).toContain(
+        "Paste into your agent, then open the link it returns.",
+    );
 });
 
 test("Given a native session handoff whose Runtime went offline, When the page loads, Then the page reports Mobius is disconnected instead of a transfer-link problem", {
@@ -439,11 +471,14 @@ test("Given an expired sharing link with no retained access, When I open it, The
         },
     });
     await app.waitForView(() =>
-        expect(getByRole(document.body, "alert").textContent).toContain("already used, has expired, or was revoked"),
+        expect(getByRole(document.body, "alert").textContent).toContain(
+            "This link was already used, has expired, or was revoked. Ask for a new link.",
+        ),
     );
     expect(getByRole(document.body, "heading", { name: "This link is no longer available" })).toBeDefined();
-    expect(document.body.textContent).toContain("Ask for a new link.");
+    expect(document.body.textContent).not.toContain("Next step");
     expect(document.body.textContent).not.toContain("Run setup again");
+    expect(queryByRole(document.body, "button", { name: "Copy setup prompt" })).toBeNull();
     expect(queryByRole(document.body, "button", { name: "Try again" })).toBeNull();
 });
 
@@ -472,13 +507,13 @@ for (const linkKind of ["handoff", "sharing"] as const) {
         await app.user.click(retry);
         await app.waitForView(() =>
             expect(getByRole(document.body, "alert").textContent).toContain(
-                "already used, has expired, or was revoked",
+                linkKind === "handoff"
+                    ? "This link was already used, has expired, or was revoked. Run setup again on that computer."
+                    : "This link was already used, has expired, or was revoked. Ask for a new link.",
             ),
         );
         expect(queryByRole(document.body, "button", { name: "Try again" })).toBeNull();
-        expect(document.body.textContent).toContain(
-            linkKind === "handoff" ? "Run setup again on that computer to get a new link." : "Ask for a new link.",
-        );
+        expect(document.body.textContent).not.toContain("Next step");
     });
 }
 

@@ -196,13 +196,17 @@ function SetupApplication({
     return (
         <SetupCardShell
             headerAction={
-                <ExternalLink
-                    className="text-14 font-medium text-morty-text-2 hover:text-foreground"
-                    href={mortyRepository}
+                <Button
+                    onClick={() => {
+                        window.open(mortyRepository, "_blank", "noopener,noreferrer");
+                    }}
+                    size="sm"
+                    variant="ghost"
                 >
                     GitHub
-                    <ArrowUpRight aria-hidden="true" className="size-3.5" />
-                </ExternalLink>
+                    <ArrowUpRight aria-hidden="true" />
+                    <span className="sr-only">(opens in a new tab)</span>
+                </Button>
             }
             pageAction={pageAction}
             pageFooter={

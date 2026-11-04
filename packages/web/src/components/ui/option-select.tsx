@@ -13,6 +13,9 @@ import {
 /** A few pixels of scroll before the top wash appears, matching other edge fades. */
 const TOP_FADE_THRESHOLD_PX = 4;
 
+const optionItemClassName =
+    "relative flex cursor-default select-none items-center rounded-full py-2 pr-4 pl-8.5 text-[13px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-accent";
+
 export function Select({
     compact = false,
     label,
@@ -112,6 +115,18 @@ export function Select({
         ? options.find((option) => option.value === value && !optionMatchesSearch(option))
         : undefined;
     const renderedOptions = concealedSelected === undefined ? visibleOptions : [...visibleOptions, concealedSelected];
+    const triggerClassName = cn(
+        "flex h-9 min-w-0 items-center justify-between gap-1.5 rounded-lg text-left text-[13px] outline-none transition-colors keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 motion-reduce:transition-none",
+        valueLoading
+            ? "pointer-events-none"
+            : mutedWhenDisabled
+              ? "hover:bg-accent disabled:opacity-50"
+              : "hover:bg-accent disabled:cursor-not-allowed",
+        compact
+            ? "w-auto max-w-48 border-transparent bg-transparent px-2"
+            : "w-full gap-2 border border-border bg-background px-3",
+        className,
+    );
     return (
         <Primitive.Root
             disabled={disabled || valueLoading}
@@ -126,18 +141,7 @@ export function Select({
             <Primitive.Trigger
                 aria-busy={valueLoading}
                 aria-label={label}
-                className={cn(
-                    "flex h-9 min-w-0 items-center justify-between gap-1.5 rounded-lg text-left text-[13px] outline-none transition-colors keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/50 motion-reduce:transition-none",
-                    valueLoading
-                        ? "pointer-events-none"
-                        : mutedWhenDisabled
-                          ? "hover:bg-accent disabled:opacity-50"
-                          : "hover:bg-accent disabled:cursor-not-allowed",
-                    compact
-                        ? "w-auto max-w-48 border-transparent bg-transparent px-2"
-                        : "w-full gap-2 border border-border bg-background px-3",
-                    className,
-                )}
+                className={triggerClassName}
                 data-testid={testId}
             >
                 <span className="flex min-w-0 items-center gap-1.5">
@@ -154,7 +158,7 @@ export function Select({
                     </span>
                 </span>
                 <Primitive.Icon className="shrink-0">
-                    <ChevronDown aria-hidden="true" className="size-4 text-muted-foreground" />
+                    <ChevronDown aria-hidden="true" className="size-3.5 text-muted-foreground" />
                 </Primitive.Icon>
             </Primitive.Trigger>
             <Primitive.Portal>
@@ -249,10 +253,7 @@ export function Select({
                                         className={
                                             concealed
                                                 ? "hidden"
-                                                : cn(
-                                                      "relative flex cursor-default select-none items-center rounded-full py-2 pr-4 pl-8.5 text-[13px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[highlighted]:bg-accent",
-                                                      truncateOptions && "w-full min-w-0",
-                                                  )
+                                                : cn(optionItemClassName, truncateOptions && "w-full min-w-0")
                                         }
                                         data-testid={
                                             concealed ? undefined : dataTestId.sessionConfigValue(option.value)

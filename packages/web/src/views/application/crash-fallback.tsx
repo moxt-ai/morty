@@ -1,10 +1,14 @@
+import { Button } from "../../index.ts";
 import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-store.ts";
 import { BugReportButton, BugReportDialogHost } from "../diagnostics/bug-report-button.tsx";
 import {
     SetupCardDescription,
     SetupCardFailureIcon,
+    SetupCardSection,
     SetupCardShell,
     SetupCardTitle,
+    setupPrimaryButtonClassName,
+    setupPrimaryButtonSize,
 } from "../setup/setup-card-shell.tsx";
 
 /** The document-level fallback shown when rendering the application throws. */
@@ -21,6 +25,17 @@ export function MortyCrashFallback({ dialog }: { readonly dialog: BugReportDialo
                     <SetupCardTitle id="crash-title">Morty encountered an error</SetupCardTitle>
                     <SetupCardDescription>Please reload to try again.</SetupCardDescription>
                 </div>
+                <SetupCardSection className="mt-4">
+                    <Button
+                        className={setupPrimaryButtonClassName}
+                        onClick={() => {
+                            window.location.reload();
+                        }}
+                        size={setupPrimaryButtonSize}
+                    >
+                        Try again
+                    </Button>
+                </SetupCardSection>
             </SetupCardShell>
             <BugReportButton appearance="floating" dialog={dialog} />
             <BugReportDialogHost dialog={dialog} />

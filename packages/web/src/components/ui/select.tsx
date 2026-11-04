@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import {
     type OverlayContentOpenAutoFocus,
     overlayMenuSeparatorClassName,
+    overlaySurfacePanelClassName,
+    overlaySurfaceRadiusClassName,
     overlayTriggerOffsetPx,
 } from "./overlay-surface.ts";
 
@@ -24,10 +26,7 @@ export function SelectGroup(props: ComponentProps<typeof SelectPrimitive.Group>)
 export function SelectLabel({ className, ...props }: ComponentProps<typeof SelectPrimitive.Label>) {
     return (
         <SelectPrimitive.Label
-            className={cn(
-                "px-2.5 pt-2 pb-1 text-[10px] leading-4 font-semibold tracking-[0.04em] text-muted-foreground",
-                className,
-            )}
+            className={cn("px-3 pt-1 pb-1 text-xs font-normal text-morty-text-3", className)}
             data-slot="select-label"
             {...props}
         />
@@ -67,7 +66,9 @@ export function SelectContent({
                 {...({
                     ...props,
                     className: cn(
-                        "relative z-50 max-h-72 min-w-[9rem] overflow-hidden rounded-[10px] border-[0.5px] border-black/10 bg-white text-foreground shadow-[0_10px_32px_rgba(0,0,0,0.12)]",
+                        "relative z-50 max-h-72 min-w-[9rem] animate-cloud-enter overflow-hidden text-sm text-foreground outline-none motion-reduce:animate-none",
+                        overlaySurfacePanelClassName,
+                        overlaySurfaceRadiusClassName,
                         className,
                     ),
                     onOpenAutoFocus: (event: Event) => {
@@ -78,19 +79,18 @@ export function SelectContent({
                     sideOffset,
                 } satisfies ComponentProps<typeof SelectPrimitive.Content> & OverlayContentOpenAutoFocus)}
             >
-                <SelectPrimitive.ScrollUpButton className="flex h-6 cursor-default items-center justify-center bg-white">
+                <SelectPrimitive.ScrollUpButton className="flex h-6 cursor-default items-center justify-center bg-background">
                     <ChevronUp className="size-3.5" />
                 </SelectPrimitive.ScrollUpButton>
                 <SelectPrimitive.Viewport
                     className={cn(
-                        "p-1",
-                        position === "popper" &&
-                            "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)] scroll-my-1",
+                        "p-1.5",
+                        position === "popper" && "w-full min-w-[var(--radix-select-trigger-width)] scroll-my-1",
                     )}
                 >
                     {children}
                 </SelectPrimitive.Viewport>
-                <SelectPrimitive.ScrollDownButton className="flex h-6 cursor-default items-center justify-center bg-white">
+                <SelectPrimitive.ScrollDownButton className="flex h-6 cursor-default items-center justify-center bg-background">
                     <ChevronDown className="size-3.5" />
                 </SelectPrimitive.ScrollDownButton>
             </SelectPrimitive.Content>
@@ -102,7 +102,7 @@ export function SelectItem({ className, children, ...props }: ComponentProps<typ
     return (
         <SelectPrimitive.Item
             className={cn(
-                "relative flex min-h-11 w-full cursor-default select-none items-center rounded-[7px] py-2 pr-8 pl-2.5 text-xs outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-black/5 data-[state=checked]:font-medium data-[disabled]:opacity-50 md:min-h-9",
+                "relative flex h-9 w-full cursor-pointer select-none items-center rounded-full pr-8 pl-3 text-sm outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-accent data-[disabled]:opacity-50",
                 className,
             )}
             data-slot="select-item"
@@ -110,7 +110,7 @@ export function SelectItem({ className, children, ...props }: ComponentProps<typ
         >
             <span className="absolute right-2 flex size-4 items-center justify-center">
                 <SelectPrimitive.ItemIndicator>
-                    <Check className="size-3.5 text-primary" />
+                    <Check className="size-3.5" />
                 </SelectPrimitive.ItemIndicator>
             </span>
             <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
@@ -121,7 +121,7 @@ export function SelectItem({ className, children, ...props }: ComponentProps<typ
 export function SelectSeparator({ className, ...props }: ComponentProps<typeof SelectPrimitive.Separator>) {
     return (
         <SelectPrimitive.Separator
-            className={cn("my-1", overlayMenuSeparatorClassName, className)}
+            className={cn("-mx-1.5 my-1.5", overlayMenuSeparatorClassName, className)}
             data-slot="select-separator"
             {...props}
         />

@@ -10,6 +10,11 @@ export type SetupHandoff =
 /** Touch-first by capability, not by user agent: a tablet with a trackpad keeps the desktop flow. */
 const touchFirstQuery = "(hover: none) and (pointer: coarse)";
 
+/** The instruction a person pastes into the agent on the computer that should run setup. */
+export function agentSetupPrompt(): string {
+    return `Fetch ${window.location.origin}/setup.md and complete the Morty setup for me. You may install missing prerequisites and pair this machine.`;
+}
+
 export function browserSetupHandoff(): SetupHandoff {
     if (!window.matchMedia(touchFirstQuery).matches) {
         return { kind: "copy-prompt" };

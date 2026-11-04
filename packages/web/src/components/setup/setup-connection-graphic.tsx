@@ -6,6 +6,11 @@ import { cn } from "@/lib/utils";
 /** Soft gradient artwork painted inside the setup connection arc. */
 const setupConnectionBandArtworkUrl = "/setup-connection-band.png";
 
+/** Plate and glyph both use 70% opacity; icons were full `#171717` so they did not follow `bg-white/*` alone. */
+const setupHarnessTileClassName =
+    "absolute top-6 flex size-11 -translate-x-1/2 items-center justify-center rounded-[14px] bg-white/70";
+const setupHarnessMarkClassName = "text-[#171717]/70";
+
 /**
  * The harnesses that can connect to Morty, laid over a band that curves toward
  * the Morty mark. The clip path needs a per-instance id, so this stays a
@@ -44,37 +49,33 @@ export function SetupConnectionGraphic({ className = "" }: { readonly className?
                     strokeWidth="1"
                 />
             </svg>
-            <span
-                aria-hidden="true"
-                className="absolute top-6 left-[30%] flex size-11 -translate-x-1/2 items-center justify-center rounded-[14px] bg-white/80"
-            >
-                <HarnessMark agentRef="codex" appearance="line" className="size-[20px] text-[#171717]" label="Codex" />
+            <span aria-hidden="true" className={cn(setupHarnessTileClassName, "left-[30%]")}>
+                <HarnessMark
+                    agentRef="codex"
+                    appearance="line"
+                    className={cn(setupHarnessMarkClassName, "size-[20px]")}
+                    label="Codex"
+                />
             </span>
-            <span
-                aria-hidden="true"
-                className="absolute top-6 left-1/2 flex size-11 -translate-x-1/2 items-center justify-center rounded-[14px] bg-white/80"
-            >
+            <span aria-hidden="true" className={cn(setupHarnessTileClassName, "left-1/2")}>
                 <HarnessMark
                     agentRef="claude"
                     appearance="line"
-                    className="size-[18px] text-[#171717]"
+                    className={cn(setupHarnessMarkClassName, "size-[18px]")}
                     label="Claude Code"
                 />
             </span>
-            <span
-                aria-hidden="true"
-                className="absolute top-6 left-[70%] flex size-11 -translate-x-1/2 items-center justify-center rounded-[14px] bg-white/80"
-            >
+            <span aria-hidden="true" className={cn(setupHarnessTileClassName, "left-[70%]")}>
                 <HarnessMark
                     agentRef="pi"
                     appearance="line"
-                    className="size-[14px] rounded-none text-foreground [&>svg]:size-[14px]"
+                    className={cn(setupHarnessMarkClassName, "size-[14px] rounded-none [&>svg]:size-[14px]")}
                     label="Pi"
                 />
             </span>
             <span
                 aria-hidden="true"
-                className="absolute top-[77px] left-1/2 flex size-[70px] -translate-x-1/2 items-center justify-center rounded-[22px] border-[1px] border-white bg-card shadow-[0_2px_8px_rgba(23,30,36,0.08)]"
+                className="absolute top-[77px] left-1/2 flex size-[70px] -translate-x-1/2 items-center justify-center rounded-[22px] border-[1px] border-white bg-card shadow-[0_4px_16px_rgba(23,30,36,0.12)]"
             >
                 <MortyLogoMark size={45} />
             </span>

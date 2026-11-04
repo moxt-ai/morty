@@ -36,7 +36,8 @@ export function CopyToClipboardButton({
     readonly value: string;
     readonly label: string;
     readonly failureToast: { readonly description: string; readonly title: string };
-    readonly successToast: { readonly description?: string; readonly title: string };
+    /** Shown when the copy succeeds and the caller has no inline success content. */
+    readonly successToast?: { readonly description?: string; readonly title: string };
     /** Inline feedback for a next step that should stay visible instead of a toast. */
     readonly successContent?: ReactNode;
     /** Guidance occupying the same place before the copy succeeds. */
@@ -70,7 +71,7 @@ export function CopyToClipboardButton({
                     kind: "confirming",
                     attempt: current.kind === "idle" ? 1 : current.attempt + 1,
                 }));
-                if (successContent === undefined) {
+                if (successContent === undefined && successToast !== undefined) {
                     showToast(successToast);
                 }
                 onCopied?.();

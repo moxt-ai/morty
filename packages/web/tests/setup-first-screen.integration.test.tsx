@@ -26,8 +26,8 @@ test("Given a new visitor, When the setup page opens, Then it explains what Mort
         "Check in and reply from any browser. Your agent keeps running on your computer.",
     );
     const repository = "https://github.com/moxt-ai/morty";
+    expect(getByRole(document.body, "button", { name: /^GitHub/ }).tagName).toBe("BUTTON");
     for (const [name, href] of [
-        ["GitHub", repository],
         ["How Morty handles data", `${repository}#what-morty-does-with-your-data`],
         ["Security", `${repository}/blob/main/SECURITY.md`],
         ["Report an issue", `${repository}/issues/new`],

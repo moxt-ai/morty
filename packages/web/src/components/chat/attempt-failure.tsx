@@ -15,7 +15,7 @@ export function AttemptFailure({
             : "";
     return (
         <div
-            className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm [overflow-wrap:anywhere]"
+            className="rounded-[24px] border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm [overflow-wrap:anywhere]"
             role="alert"
         >
             <p className="font-medium text-destructive">Response failed</p>

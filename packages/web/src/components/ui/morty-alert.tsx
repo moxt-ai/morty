@@ -29,7 +29,7 @@ const alertTones = {
         role: "status",
         iconClassName: undefined,
         surface:
-            "items-start border-[oklch(0.55_0.1_250/0.28)] bg-[oklch(0.97_0.02_250/0.6)] text-[oklch(0.45_0.12_255)] backdrop-blur-[80px]",
+            "items-start border-[oklch(0.68_0.11_250/0.26)] bg-[oklch(0.98_0.035_248/0.55)] text-[oklch(0.53_0.10_252)] backdrop-blur-[80px]",
     },
     neutral: {
         icon: null,

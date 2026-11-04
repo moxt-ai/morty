@@ -1,6 +1,10 @@
+import { Check, Copy } from "lucide-react";
 import type { ReactNode } from "react";
+import { SetupPromptCopiedHint, SetupPromptIdleHint } from "../../components/setup/setup-prompt-guidance.tsx";
 import { ButtonGroup } from "../../components/ui/button-group.tsx";
+import { CopyToClipboardButton } from "../../components/ui/copy-to-clipboard-button.tsx";
 import { Button } from "../../index.ts";
+import { agentSetupPrompt } from "../../services/device/setup-handoff.ts";
 import type { ContinueState } from "../../view-models/authentication/continue-store.ts";
 import { describePageFailure } from "../../view-models/format-error.ts";
 import { GlobalLoadingPage } from "../setup/global-loading-page.tsx";
@@ -16,13 +20,10 @@ import {
 function ContinueError({
     title,
     content,
-    detail,
     children,
 }: {
     readonly title: string;
     readonly content: ReactNode;
-    /** Extra guidance that belongs to the failure itself, announced with it. */
-    readonly detail?: ReactNode;
     readonly children?: ReactNode;
 }) {
     return (
@@ -35,7 +36,6 @@ function ContinueError({
             <div className="w-full" role="alert">
                 <SetupCardTitle id="continue-title">{title}</SetupCardTitle>
                 <SetupCardDescription>{content}</SetupCardDescription>
-                {detail}
             </div>
             {children}
         </SetupCardShell>
@@ -101,29 +101,52 @@ export function ContinuePageContent({
                 </ContinueError>
             );
         }
-        case "link-unavailable":
+        case "link-unavailable": {
+            const setupPrompt = state.recovery === "setup" ? agentSetupPrompt() : null;
             return (
                 <ContinueError
-                    detail={
-                        <div className="mt-4 w-full rounded-[16px] bg-muted/60 px-5 py-3.5">
-                            <p className="text-12 tracking-[0.04em] text-morty-text-3 uppercase">Next step</p>
-                            <p className="mt-0.5 text-14 leading-[22px] text-foreground">
-                                {state.recovery === "setup"
-                                    ? "Run setup again on that computer to get a new link."
-                                    : "Ask for a new link."}
-                            </p>
-                        </div>
-                    }
                     title="This link is no longer available"
-                    content={state.message}
+                    content={
+                        state.recovery === "setup"
+                            ? `${state.message} Run setup again on that computer.`
+                            : `${state.message} Ask for a new link.`
+                    }
                 >
-                    {fallback !== null && (
-                        <ButtonGroup className="mt-5 w-full" size={setupPrimaryButtonSize}>
-                            {fallback}
-                        </ButtonGroup>
+                    {setupPrompt !== null ? (
+                        <div className="mt-5 w-full">
+                            <CopyToClipboardButton
+                                className={setupPrimaryButtonClassName}
+                                copiedContent={
+                                    <>
+                                        <Check aria-hidden="true" className="size-4" />
+                                        Copied
+                                    </>
+                                }
+                                failureToast={{
+                                    description: "Your browser blocked the copy. Try again.",
+                                    title: "Could not copy",
+                                }}
+                                idleContent={<SetupPromptIdleHint />}
+                                label="Copy setup prompt"
+                                size={setupPrimaryButtonSize}
+                                successContent={<SetupPromptCopiedHint />}
+                                value={setupPrompt}
+                            >
+                                <Copy aria-hidden="true" className="size-4" />
+                                <span>Copy setup prompt</span>
+                            </CopyToClipboardButton>
+                            {fallback !== null && <div className="mt-3">{fallback}</div>}
+                        </div>
+                    ) : (
+                        fallback !== null && (
+                            <ButtonGroup className="mt-5 w-full" size={setupPrimaryButtonSize}>
+                                {fallback}
+                            </ButtonGroup>
+                        )
                     )}
                 </ContinueError>
             );
+        }
         case "identity-redeeming":
             return <GlobalLoadingPage label="Securely transferring Morty access" />;
         case "failed": {

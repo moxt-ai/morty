@@ -1,5 +1,5 @@
 import type { SessionElicitationField } from "@moxt-ai/mobius-sdk";
-import { CircleAlert, FileText, Inbox, MessageSquare, PackageOpen, Plus, Unplug } from "lucide-react";
+import { ChevronRight, CircleAlert, FileText, Inbox, MessageSquare, PackageOpen, Plus, Unplug } from "lucide-react";
 import { Tooltip } from "radix-ui";
 import { type ComponentType, type ReactNode, useState } from "react";
 import { AttemptFailure } from "../chat/attempt-failure.tsx";
@@ -21,7 +21,6 @@ import type { ToolCallState } from "../chat/tools/tool-renderer.ts";
 import { UserMessageShell } from "../chat/user-message-shell.tsx";
 import { WorkingIndicator } from "../chat/working-indicator.tsx";
 import { AutoSelectInput } from "../ui/auto-select-input.tsx";
-import { Button as FieldButton } from "../ui/button.tsx";
 import { ButtonGroup } from "../ui/button-group.tsx";
 import { Card } from "../ui/card.tsx";
 import { Button } from "../ui/cloud-button.tsx";
@@ -49,7 +48,7 @@ import {
     SelectValue,
 } from "../ui/select.tsx";
 import { Spinner } from "../ui/spinner.tsx";
-import { textLinkClassName } from "../ui/text-link.ts";
+import { darkTextLinkClassName, mutedTextLinkClassName, textLinkClassName } from "../ui/text-link.ts";
 import { Textarea } from "../ui/textarea.tsx";
 import { useToast } from "../ui/toast.tsx";
 import type { PlaygroundEntryId } from "./catalog.ts";
@@ -84,10 +83,14 @@ const radii = [
     { className: overlaySurfaceRadiusClassName, name: "overlay · 24px" },
 ] as const;
 
-const cloudVariants = ["primary", "outline", "ghost", "destructive"] as const;
-const cloudSizes = ["default", "lg", "sm", "xs", "icon"] as const;
-const fieldVariants = ["default", "outline", "secondary", "ghost"] as const;
-const fieldSizes = ["xs", "sm", "default", "lg", "icon"] as const;
+const cloudVariants = ["primary", "outline", "secondary", "ghost", "destructive"] as const;
+const cloudSizes = ["xs", "sm", "default", "lg", "icon"] as const;
+/** Smallest to largest; used where specimens show every text size in one row. */
+const textButtonSizes = ["xs", "sm", "default", "lg"] as const;
+/** Added beside the pill xs. Text edges are 8px; an icon edge is 6px; radius is 10px. */
+const xsSmallRadiusClassName = "rounded-[10px] pl-2 pr-2";
+const xsSmallRadiusLeadingClassName = "rounded-[10px] pl-1.5 pr-2";
+const xsSmallRadiusTrailingClassName = "rounded-[10px] pl-2 pr-1.5";
 
 const agentOptions = [
     { label: "Codex", value: "codex" },
@@ -111,8 +114,6 @@ const toolStates = [
 
 type CloudVariant = (typeof cloudVariants)[number];
 type CloudSize = (typeof cloudSizes)[number];
-type FieldVariant = (typeof fieldVariants)[number];
-type FieldSize = (typeof fieldSizes)[number];
 type DialogAppearance = "default" | "setup" | "surface" | "wide" | "busy";
 
 function ChoiceRow<T extends string>({
@@ -164,7 +165,7 @@ function ColorTokenRow({ token }: { readonly token: ColorToken }) {
     return (
         <div className="flex items-center gap-3">
             <div
-                className="size-10 shrink-0 rounded-md border border-border"
+                className="size-10 shrink-0 rounded-sm border border-border"
                 style={{ backgroundColor: `var(${token.variable})` }}
             />
             <dl className="grid min-w-0 gap-0.5">
@@ -224,6 +225,7 @@ function CloudButtonGallery() {
     const [variant, setVariant] = useState<CloudVariant>("primary");
     const [size, setSize] = useState<CloudSize>("default");
     const [disabled, setDisabled] = useState(false);
+    const [textButtonUsed, setTextButtonUsed] = useState(false);
     return (
         <div className="grid gap-6">
             <Specimen layout="stack" title="Try it">
@@ -238,7 +240,7 @@ function CloudButtonGallery() {
                     size={size}
                     variant={variant}
                 >
-                    {size === "icon" ? <Plus aria-hidden="true" className="size-4" /> : "Continue"}
+                    {size === "icon" ? <Plus aria-hidden="true" /> : "Continue"}
                 </Button>
             </Specimen>
             <Specimen layout="stack" title="All variants">
@@ -252,7 +254,7 @@ function CloudButtonGallery() {
                                 size={itemSize}
                                 variant={item}
                             >
-                                {itemSize === "icon" ? <Plus aria-hidden="true" className="size-4" /> : itemSize}
+                                {itemSize === "icon" ? <Plus aria-hidden="true" /> : itemSize}
                             </Button>
                         ))}
                         <Button disabled variant={item}>
@@ -260,6 +262,131 @@ function CloudButtonGallery() {
                         </Button>
                     </div>
                 ))}
+            </Specimen>
+            <Specimen layout="stack" title="Leading and trailing icons">
+                <div className="flex flex-wrap items-center gap-3">
+                    <span className="w-24 text-12 text-muted-foreground">Leading</span>
+                    {textButtonSizes.map((itemSize) => (
+                        <Button key={itemSize} size={itemSize}>
+                            <Plus aria-hidden="true" />
+                            Continue
+                        </Button>
+                    ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                    <span className="w-24 text-12 text-muted-foreground">Trailing</span>
+                    {textButtonSizes.map((itemSize) => (
+                        <Button key={itemSize} size={itemSize}>
+                            Continue
+                            <ChevronRight aria-hidden="true" />
+                        </Button>
+                    ))}
+                </div>
+            </Specimen>
+            <Specimen layout="stack" title="xs · 10px radius">
+                <div className="flex flex-wrap items-center gap-3">
+                    <span className="w-24 text-12 text-muted-foreground">Text</span>
+                    {cloudVariants.map((item) => (
+                        <Button className={xsSmallRadiusClassName} key={item} size="xs" variant={item}>
+                            {item}
+                        </Button>
+                    ))}
+                    <Button className={xsSmallRadiusClassName} disabled size="xs">
+                        Disabled
+                    </Button>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                    <span className="w-24 text-12 text-muted-foreground">Leading</span>
+                    <Button className={xsSmallRadiusLeadingClassName} size="xs">
+                        <Plus aria-hidden="true" />
+                        Continue
+                    </Button>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                    <span className="w-24 text-12 text-muted-foreground">Trailing</span>
+                    <Button className={xsSmallRadiusTrailingClassName} size="xs">
+                        Continue
+                        <ChevronRight aria-hidden="true" />
+                    </Button>
+                </div>
+            </Specimen>
+            <Specimen layout="stack" title="Text button">
+                <div className="flex flex-wrap items-center gap-3">
+                    <span className="w-24 text-12 text-muted-foreground">Default</span>
+                    <LinkButton onClick={() => setTextButtonUsed(true)}>Retry now</LinkButton>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                    <span className="w-24 text-12 text-muted-foreground">Gray</span>
+                    <LinkButton className={mutedTextLinkClassName} onClick={() => setTextButtonUsed(true)}>
+                        Switch computer
+                    </LinkButton>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                    <span className="w-24 text-12 text-muted-foreground">Dark</span>
+                    <LinkButton className={darkTextLinkClassName} onClick={() => setTextButtonUsed(true)}>
+                        Switch computer
+                    </LinkButton>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                    <span className="w-24 text-12 text-muted-foreground">Disabled</span>
+                    <LinkButton disabled>Reopen it</LinkButton>
+                </div>
+                <p className="text-14 text-foreground">
+                    Keep your computer online, or{" "}
+                    <LinkButton onClick={() => setTextButtonUsed(true)}>open the pairing steps</LinkButton>. You can
+                    also{" "}
+                    <LinkButton className={mutedTextLinkClassName} onClick={() => setTextButtonUsed(true)}>
+                        switch computer
+                    </LinkButton>{" "}
+                    or{" "}
+                    <LinkButton className={darkTextLinkClassName} onClick={() => setTextButtonUsed(true)}>
+                        use another computer
+                    </LinkButton>
+                    .
+                </p>
+                <p className="text-13 text-muted-foreground" role="status">
+                    {textButtonUsed ? "Text button used in this preview." : "The text button has not been used."}
+                </p>
+            </Specimen>
+            <Specimen layout="stack" title="Text link">
+                <p className="text-14 text-foreground">
+                    Ask the owner in{" "}
+                    <a className={textLinkClassName} href="mailto:wuhuajia@paraflow.com">
+                        wuhuajia@paraflow.com
+                    </a>{" "}
+                    before changing the timeout, then check{" "}
+                    <a className={textLinkClassName} href="https://moxt.ai/chat-replay">
+                        the chat replay
+                    </a>
+                    .
+                </p>
+                <p className="text-14 text-foreground">
+                    The session stays on this computer.{" "}
+                    <a className={mutedTextLinkClassName} href="#status">
+                        View the status note
+                    </a>{" "}
+                    or{" "}
+                    <a className={mutedTextLinkClassName} href="#logs">
+                        open local logs
+                    </a>
+                    .
+                </p>
+                <p className="text-14 text-foreground">
+                    The notes stay on this computer.{" "}
+                    <a className={darkTextLinkClassName} href="#status">
+                        View the status note
+                    </a>{" "}
+                    or{" "}
+                    <a className={darkTextLinkClassName} href="#logs">
+                        open local logs
+                    </a>
+                    .
+                </p>
+                <p className="text-13 text-muted-foreground">
+                    Resting is primary, hover is lighter, and pressed is darker. Gray rests as secondary text and turns
+                    foreground when hovered or pressed. Dark rests as foreground, lightens on hover, and returns to
+                    foreground when pressed. No underline in any state.
+                </p>
             </Specimen>
         </div>
     );
@@ -310,74 +437,183 @@ function ButtonGroupGallery() {
     );
 }
 
-function FieldButtonGallery() {
-    const [variant, setVariant] = useState<FieldVariant>("default");
-    const [size, setSize] = useState<FieldSize>("default");
+const inputSizeSamples = [
+    { height: "40px", size: "lg" },
+    { height: "36px", size: "default" },
+    { height: "32px", size: "sm" },
+    { height: "28px", size: "xs" },
+] as const;
+
+function InputGallery() {
+    const [value, setValue] = useState("morty");
     return (
         <div className="grid gap-6">
-            <Specimen layout="stack" title="Try it">
-                <ChoiceRow label="Variant" onChange={setVariant} options={fieldVariants} value={variant} />
-                <ChoiceRow label="Size" onChange={setSize} options={fieldSizes} value={size} />
-                <FieldButton aria-label={size === "icon" ? "Add" : undefined} size={size} variant={variant}>
-                    {size === "icon" ? <Plus aria-hidden="true" className="size-4" /> : "Approve"}
-                </FieldButton>
-            </Specimen>
-            <Specimen layout="stack" title="All variants">
-                {fieldVariants.map((item) => (
-                    <div className="flex flex-wrap items-center gap-3" key={item}>
-                        <span className="w-24 text-12 text-muted-foreground">{item}</span>
-                        {fieldSizes.map((itemSize) => (
-                            <FieldButton
-                                aria-label={itemSize === "icon" ? item : undefined}
-                                key={itemSize}
-                                size={itemSize}
-                                variant={item}
-                            >
-                                {itemSize === "icon" ? <Plus aria-hidden="true" className="size-4" /> : itemSize}
-                            </FieldButton>
-                        ))}
+            <Specimen layout="stack" title="Sizes">
+                {inputSizeSamples.map((sample) => (
+                    <div className="flex items-center gap-3" key={sample.size}>
+                        <span className="w-28 shrink-0 text-12 text-muted-foreground">
+                            {sample.size} · {sample.height}
+                        </span>
+                        <Input
+                            aria-label={`${sample.size} field`}
+                            className="max-w-sm"
+                            placeholder="Name this session"
+                            size={sample.size}
+                        />
                     </div>
                 ))}
+            </Specimen>
+            <Specimen layout="stack" title="States">
+                <div className="grid max-w-sm gap-1.5">
+                    <label className="text-12 text-muted-foreground" htmlFor="playground-session-name">
+                        Session name
+                    </label>
+                    <Input
+                        id="playground-session-name"
+                        onChange={(event) => setValue(event.currentTarget.value)}
+                        value={value}
+                    />
+                </div>
+                <Input aria-label="Placeholder" className="max-w-sm" placeholder="Name this session" />
+                <Input aria-label="Disabled field" className="max-w-sm" disabled value="Unavailable" />
+            </Specimen>
+            <Specimen layout="stack" title="Types">
+                <Input aria-label="Search" className="max-w-sm" placeholder="Search sessions…" type="search" />
+                <Input aria-label="Port" className="max-w-sm" min={1} max={65535} placeholder="8080" type="number" />
+                <Input
+                    aria-label="Password"
+                    autoComplete="current-password"
+                    className="max-w-sm"
+                    placeholder="Password"
+                    type="password"
+                />
             </Specimen>
         </div>
     );
 }
 
-function InputGallery() {
-    const [value, setValue] = useState("morty");
+const composerShellClassName =
+    "w-full rounded-[20px] border border-border bg-background px-3 py-2 transition-[border-color,box-shadow] has-[:focus]:border-[var(--color-ring)] has-[:focus]:shadow-[var(--focus-ring-shadow)]";
+const promptTextareaClassName =
+    "min-h-0 [field-sizing:content] cursor-text rounded-[12px] bg-background p-3 text-[12px] leading-5 text-morty-text-2 lg:text-[12px]";
+const formFieldShellClassName =
+    "rounded-md border border-border bg-background pt-2 pr-1.5 pb-1.5 pl-3 has-[:focus]:border-ring has-[:focus]:shadow-[var(--focus-ring-shadow)]";
+const formTextareaClassName =
+    "min-h-16 resize-y bg-transparent p-0 text-[13px] leading-5 placeholder:text-[13px] lg:text-[13px]";
+const multilineDraft = [
+    "Ask the agent to tighten the button padding.",
+    "Keep the label on the same row.",
+    "Leave the disabled state faded.",
+].join("\n");
+const setupPrompt =
+    "Fetch setup.md and complete the Morty setup for me. You may install missing prerequisites and pair this machine.";
+
+function TextareaRow({ children, label }: { readonly children: ReactNode; readonly label: string }) {
     return (
-        <Specimen layout="stack" title="States">
-            <div className="grid max-w-sm gap-1.5">
-                <label className="text-12 text-muted-foreground" htmlFor="playground-session-name">
-                    Session name
-                </label>
-                <Input
-                    id="playground-session-name"
-                    onChange={(event) => setValue(event.currentTarget.value)}
-                    value={value}
-                />
-            </div>
-            <Input aria-label="Placeholder" className="max-w-sm" placeholder="Name this session" />
-            <Input aria-label="Disabled field" className="max-w-sm" disabled value="Unavailable" />
-        </Specimen>
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-3">
+            <span className="w-28 shrink-0 text-12 text-muted-foreground sm:pt-2">{label}</span>
+            <div className="min-w-0 w-full max-w-lg">{children}</div>
+        </div>
     );
 }
 
 function TextareaGallery() {
-    const [value, setValue] = useState("Ask the agent to tighten the button padding.");
+    const [composer, setComposer] = useState("Ask the agent to tighten the button padding.");
+    const [notes, setNotes] = useState("The session closed before the files were written.");
     return (
-        <Specimen layout="stack" title="Inside a composer surface">
-            <div className="w-full max-w-lg rounded-[20px] border border-border bg-background px-3 py-2 transition-[border-color,box-shadow] has-[:focus]:border-[var(--color-ring)] has-[:focus]:shadow-[var(--focus-ring-shadow)]">
-                <Textarea
-                    aria-label="Message"
-                    onChange={(event) => setValue(event.currentTarget.value)}
-                    value={value}
-                />
-            </div>
-            <div className="w-full max-w-lg rounded-[20px] border border-border bg-background px-3 py-2">
-                <Textarea aria-label="Disabled message" disabled placeholder="Connect an agent to type" />
-            </div>
-        </Specimen>
+        <div className="grid gap-6">
+            <Specimen layout="stack" title="Composer">
+                <TextareaRow label="Filled">
+                    <div className={composerShellClassName}>
+                        <Textarea
+                            aria-label="Message"
+                            onChange={(event) => setComposer(event.currentTarget.value)}
+                            value={composer}
+                        />
+                    </div>
+                </TextareaRow>
+                <TextareaRow label="Placeholder">
+                    <div className={composerShellClassName}>
+                        <Textarea aria-label="Empty message" placeholder="Ask Morty to change this screen" />
+                    </div>
+                </TextareaRow>
+                <TextareaRow label="Multiline">
+                    <div className={composerShellClassName}>
+                        <Textarea
+                            aria-label="Multiline message"
+                            className="[field-sizing:content]"
+                            readOnly
+                            value={multilineDraft}
+                        />
+                    </div>
+                </TextareaRow>
+                <TextareaRow label="Disabled">
+                    <div className={composerShellClassName}>
+                        <Textarea aria-label="Disabled message" disabled placeholder="Connect an agent to type" />
+                    </div>
+                </TextareaRow>
+            </Specimen>
+            <Specimen layout="stack" title="Read-only prompt">
+                <TextareaRow label="Prompt">
+                    <div className="overflow-hidden rounded-[12px] bg-muted">
+                        <Textarea
+                            aria-label="Agent setup prompt"
+                            className={promptTextareaClassName}
+                            onFocus={(event) => event.currentTarget.select()}
+                            readOnly
+                            rows={1}
+                            value={setupPrompt}
+                        />
+                    </div>
+                </TextareaRow>
+            </Specimen>
+            <Specimen layout="stack" title="Form field">
+                <TextareaRow label="Placeholder">
+                    <div className="grid gap-1.5">
+                        <label className="text-12 font-medium text-foreground" htmlFor="playground-bug-description">
+                            What went wrong?
+                        </label>
+                        <div className={formFieldShellClassName}>
+                            <Textarea
+                                className={formTextareaClassName}
+                                id="playground-bug-description"
+                                placeholder="Describe what you expected and what happened"
+                            />
+                        </div>
+                    </div>
+                </TextareaRow>
+                <TextareaRow label="Filled">
+                    <div className="grid gap-1.5">
+                        <label className="text-12 font-medium text-foreground" htmlFor="playground-notes">
+                            Notes
+                        </label>
+                        <div className={formFieldShellClassName}>
+                            <Textarea
+                                className={formTextareaClassName}
+                                id="playground-notes"
+                                onChange={(event) => setNotes(event.currentTarget.value)}
+                                value={notes}
+                            />
+                        </div>
+                    </div>
+                </TextareaRow>
+                <TextareaRow label="Disabled">
+                    <div className="grid gap-1.5">
+                        <label className="text-12 font-medium text-foreground" htmlFor="playground-notes-disabled">
+                            Notes
+                        </label>
+                        <div className={formFieldShellClassName}>
+                            <Textarea
+                                className={formTextareaClassName}
+                                disabled
+                                id="playground-notes-disabled"
+                                value="Sending is unavailable until the computer is online."
+                            />
+                        </div>
+                    </div>
+                </TextareaRow>
+            </Specimen>
+        </div>
     );
 }
 
@@ -448,42 +684,6 @@ function MenuSelectGallery() {
                     </SelectGroup>
                 </SelectContent>
             </Select>
-        </Specimen>
-    );
-}
-
-function LinkButtonGallery() {
-    const [followed, setFollowed] = useState(false);
-    return (
-        <Specimen title="In a sentence">
-            <p className="text-14 text-foreground">
-                Keep your computer online, or{" "}
-                <LinkButton onClick={() => setFollowed(true)}>open the pairing steps</LinkButton>.
-            </p>
-            <p className="text-13 text-muted-foreground" role="status">
-                {followed ? "Pairing steps opened in this preview." : "The link has not been used."}
-            </p>
-        </Specimen>
-    );
-}
-
-function TextLinkGallery() {
-    return (
-        <Specimen layout="stack" title="In prose">
-            <p className="text-14 text-foreground">
-                Ask the owner in{" "}
-                <a className={textLinkClassName} href="mailto:wuhuajia@paraflow.com">
-                    wuhuajia@paraflow.com
-                </a>{" "}
-                before changing the timeout, then check{" "}
-                <a className={textLinkClassName} href="https://moxt.ai/chat-replay">
-                    the chat replay
-                </a>
-                .
-            </p>
-            <p className="text-13 text-muted-foreground">
-                Resting is primary, hover is lighter, and pressed is darker. No underline in any state.
-            </p>
         </Specimen>
     );
 }
@@ -1229,7 +1429,6 @@ const galleries = {
     alert: AlertGallery,
     "attempt-failure": AttemptFailureGallery,
     "auto-select-input": AutoSelectInputGallery,
-    button: FieldButtonGallery,
     "button-group": ButtonGroupGallery,
     card: CardGallery,
     "cloud-button": CloudButtonGallery,
@@ -1240,7 +1439,6 @@ const galleries = {
     "execution-details-dialog": ExecutionDetailsDialogGallery,
     "harness-mark": HarnessMarkGallery,
     input: InputGallery,
-    "link-button": LinkButtonGallery,
     "menu-select": MenuSelectGallery,
     message: MessageGallery,
     "native-session-directory-placeholder": NativeSessionDirectoryPlaceholderGallery,
@@ -1251,7 +1449,6 @@ const galleries = {
     "session-agent-tabs": SessionAgentTabsGallery,
     "session-interactions": SessionInteractionsGallery,
     spinner: SpinnerGallery,
-    "text-link": TextLinkGallery,
     textarea: TextareaGallery,
     toast: ToastGallery,
     "tool-call": ToolCallGallery,

@@ -19,7 +19,6 @@
         "@streamdown/mermaid": "catalog:",
         "@tanstack/react-router": "catalog:",
         "anser": "2.3.5",
-        "class-variance-authority": "catalog:",
         "clsx": "catalog:",
         "dompurify": "catalog:",
         "katex": "catalog:",
