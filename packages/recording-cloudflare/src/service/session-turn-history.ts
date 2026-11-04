@@ -354,7 +354,11 @@ class ProjectionFold {
             if (input.kind === "unreadable_text") {
                 this.#foldUnreadableText(input);
             } else if (input.event.type === "lifecycle-metadata") {
-                this.#foldLifecycle(input.event, input.event.payload);
+                if (input.event.mobiusMetadata?.restated === true) {
+                    this.#foldRestatedOutcome(input.event, input.event.payload);
+                } else {
+                    this.#foldLifecycle(input.event, input.event.payload);
+                }
             } else {
                 this.#foldAcp(input.event, input.event.payload);
             }
@@ -628,6 +632,22 @@ class ProjectionFold {
             ...this.#state,
             activeCommands: remaining.length === 0 ? null : { ...active, commandIds: remaining },
         };
+    }
+
+    /**
+     * A restated outcome repeats one the Runtime recorded earlier, such as after a restart, and keeps its first time.
+     * One the Runtime marks as its recorded outcome settles a Turn whose outcome this Recording missed, for example
+     * with output the previous process never sent, but never starts a Turn; an outcome already recorded stays, since
+     * an attempt settles once. Any other restatement records nothing.
+     */
+    #foldRestatedOutcome(event: SessionLiveEvent, payload: LifecycleMetadata): void {
+        const outcome =
+            payload.kind === "prompt.completed" ||
+            payload.kind === "prompt.failed" ||
+            payload.kind === "prompt.failed-before-start";
+        if (outcome && event.mobiusMetadata?.recordedOutcome === true && this.#turn(payload.commandId) !== null) {
+            this.#foldLifecycle(event, payload);
+        }
     }
 
     #foldLifecycle(event: SessionLiveEvent, payload: LifecycleMetadata): void {

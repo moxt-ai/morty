@@ -175,7 +175,8 @@ export function buildSessionLayer(options: SessionLayerOptions) {
     );
     // Outcomes retained across a restart are published once. The sink keeps them until the Relay connects,
     // and a later reconnect does not replay events it already sent. An outcome the previous process recorded is
-    // restated, so Recording and status notifications do not take it for a new one.
+    // restated as the outcome it recorded, so status notifications do not take it for a new one and Recording settles
+    // from it only a Turn whose outcome it missed.
     for (const recovered of operations.recover()) {
         switch (recovered.kind) {
             case "recorded":

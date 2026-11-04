@@ -405,6 +405,35 @@ describe("Recording Turn history", () => {
         });
     });
 
+    it("Given an outcome lost with a restarted Runtime's unsent output, When the Runtime restates its recorded outcome, Then the Turn settles with its first time and nothing else changes", async () => {
+        await record([requested("lost-command", "Inspect"), started("lost-command")]);
+        await record([requested("acknowledged-command", "Check"), started("acknowledged-command")]);
+        await completedTurn("settled-command", "Report", "Done");
+        const settled = (await turnPage()).turns.find((turn) => turn.commandId === "settled-command")?.attempt;
+        const restated = (commandId: string, at: string, recordedOutcome: boolean) => ({
+            ...completed(commandId),
+            mobiusMetadata: recordedOutcome ? { recordedOutcome: true, restated: true } : { restated: true },
+            recordedAt: at,
+        });
+        const lostAt = "2026-10-15T00:00:30.000Z";
+        await record([
+            restated("lost-command", lostAt, true),
+            // An acknowledgement composed when no record remains is not the command's outcome.
+            restated("acknowledged-command", "2026-10-15T00:00:35.000Z", false),
+            restated("settled-command", "2026-10-15T00:00:40.000Z", true),
+            restated("unknown-command", "2026-10-15T00:00:50.000Z", true),
+        ]);
+
+        const page = await turnPage();
+        expect(page.turns.map((turn) => turn.commandId).sort()).toStrictEqual(
+            ["acknowledged-command", "lost-command", "settled-command"].sort(),
+        );
+        const attempt = (commandId: string) => page.turns.find((turn) => turn.commandId === commandId)?.attempt;
+        expect(attempt("lost-command")).toMatchObject({ completedAt: lostAt, kind: "succeeded" });
+        expect(attempt("acknowledged-command")?.kind).not.toBe("succeeded");
+        expect(attempt("settled-command")).toStrictEqual(settled);
+    });
+
     it("Given more than a thousand active commands, When execution is queried, Then named outcomes remain readable with a bounded active stack", async () => {
         await completedTurn("finished-command", "Finished prompt", "Finished answer");
         for (let offset = 0; offset < 1_001; offset += 100) {
