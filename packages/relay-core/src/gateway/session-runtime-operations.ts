@@ -23,10 +23,4 @@ export interface SessionRuntimeOperations {
         body: ReadableStream<Uint8Array>,
         signal: AbortSignal,
     ) => Promise<ContentAvailableEvent>;
-    readonly openProjectSessionEventHost: (
-        scope: ProjectScope,
-        runtimeId: string,
-        sessionId: string,
-        signal: AbortSignal,
-    ) => Promise<{ readonly socket: WebSocket; readonly close: () => Promise<void> }>;
 }

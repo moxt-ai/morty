@@ -87,14 +87,14 @@ function createRuntimeRelayDependencies(cx: {
             }
         },
         authorizeViewer: async (identity, signal) => {
-            // A view opened with App access, or recorded without its issuing credential, ends at its expiry.
-            if (identity.credentialId === null || identity.credentialIssuedAt === null) {
+            // A view recorded without its Session credential ends at its expiry.
+            if (identity.credential === null) {
                 return "granted";
             }
             return (await cx.gateways.projectCredentials.grantsSessionCredential(
                 identity.projectId,
-                identity.credentialId,
-                identity.credentialIssuedAt,
+                identity.credential.credentialId,
+                identity.credential.issuedAt,
                 [ProjectPermission.SessionRead],
                 signal,
             ))

@@ -347,7 +347,14 @@ export function createPlatformApplication(
                 context.req.raw.signal,
             );
             context.header("Cache-Control", "no-store");
-            return context.json({ ...target, kind: "expiring" });
+            // The public shape of this answer, not the internal access record: it names no AppCredential.
+            return context.json({
+                expiresAtEpochMilliseconds: target.expiresAtEpochMilliseconds,
+                issuedAtEpochMilliseconds: target.issuedAtEpochMilliseconds,
+                kind: "expiring",
+                projectId: target.projectId,
+                runtimeId: target.runtimeId,
+            });
         })
         .get("/:sessionId/native-events-preview", sessionAccessTargetMiddleware, async (context) => {
             const credential = (context.req.header("authorization") ?? "").match(/^Bearer ([^\s]+)$/u)?.[1];

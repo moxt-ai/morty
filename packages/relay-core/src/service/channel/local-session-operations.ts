@@ -169,9 +169,7 @@ export function createLocalSessionOperations(
                 runtimeId,
                 sessionFilter: sessionId,
                 expiresAt: credential.expiresAt,
-                credentialIssuedAt: credential.issuedAt,
-                credentialId: credential.credentialId,
-                eventFormat: "events",
+                credential: { credentialId: credential.credentialId, issuedAt: credential.issuedAt },
             }).response;
         },
         requestProjectScopeControl,
@@ -196,33 +194,6 @@ export function createLocalSessionOperations(
                 socket.close(1000, "Content upload ended");
                 throw cause;
             }
-        },
-        openProjectSessionEventHost: async (scope, requestedRuntime, sessionId, signal) => {
-            checkTarget(scope.projectId, requestedRuntime);
-            signal.throwIfAborted();
-            await cx.services.runtime.expireSilentDaemons();
-            checkTarget(scope.projectId, requestedRuntime);
-            const accepted = cx.gateways.peers.accept({
-                role: "viewer",
-                expiresAt: Number.MAX_SAFE_INTEGER,
-                credentialIssuedAt: null,
-                credentialId: null,
-                eventFormat: "envelope",
-                projectId,
-                runtimeId,
-                sessionFilter: sessionId,
-            });
-            const socket = accepted.response.webSocket;
-            if (socket === null) {
-                throw new PairingDirectoryError("runtime_unavailable", "The Runtime is unavailable");
-            }
-            await cx.services.runtime.attachHost(runtimeId, scope, accepted.socket, signal);
-            return {
-                socket,
-                close: async () => {
-                    socket.close(1000, "Session subscription ended");
-                },
-            };
         },
     };
 }

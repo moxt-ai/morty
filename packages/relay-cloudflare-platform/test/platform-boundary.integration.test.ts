@@ -1617,7 +1617,14 @@ describe.sequential("Platform Session-only boundary", () => {
                 ),
                 200,
             );
-            expect(liveTarget).toMatchObject({ kind: "expiring", projectId, runtimeId });
+            // The answer has a public shape; it names no AppCredential.
+            expect(liveTarget).toStrictEqual({
+                expiresAtEpochMilliseconds: expect.any(Number),
+                issuedAtEpochMilliseconds: expect.any(Number),
+                kind: "expiring",
+                projectId,
+                runtimeId,
+            });
         } finally {
             daemon.close(1000, "Test complete");
             host.close(1000, "Test complete");

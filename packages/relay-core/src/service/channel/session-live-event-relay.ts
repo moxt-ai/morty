@@ -65,11 +65,7 @@ export class SessionLiveEventRelay {
                 continue;
             }
             try {
-                viewer.socket.send(
-                    viewer.eventFormat === "events"
-                        ? JSON.stringify(events)
-                        : encodeSessionWireEnvelope({ ...envelope, events }),
-                );
+                viewer.socket.send(JSON.stringify(events));
             } catch {
                 viewer.socket.close(1013, "Session subscription backpressure");
             }

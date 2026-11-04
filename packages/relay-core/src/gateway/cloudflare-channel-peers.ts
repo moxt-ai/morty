@@ -24,11 +24,12 @@ const attachmentSchema = v.union([
     v.object({
         role: v.literal("viewer"),
         expiresAt: v.number(),
-        // Views a Relay opened before credential issue times were recorded end only when their credential expires.
+        // Views a Relay opened before it recorded their Session credential (issue time and issuing AppCredential) end
+        // only when that credential expires.
         credentialIssuedAt: v.optional(v.nullable(v.number()), null),
-        // Views a Relay opened before it recorded the issuing AppCredential are re-checked only at expiry.
         credentialId: v.optional(v.nullable(v.string()), null),
-        eventFormat: v.picklist(["events", "envelope"]),
+        // Every view receives events; the attachment keeps the format earlier Relay versions read.
+        eventFormat: v.literal("events"),
         projectId: v.string(),
         runtimeId: v.string(),
         sessionFilter: v.string(),
@@ -90,6 +91,19 @@ export class CloudflareChannelSocket implements RuntimeSocket {
                 projectId: attachment.projectId,
                 role: attachment.role,
                 runtimeId: attachment.runtimeId,
+            };
+        }
+        if (attachment.role === "viewer") {
+            return {
+                credential:
+                    attachment.credentialId === null || attachment.credentialIssuedAt === null
+                        ? null
+                        : { credentialId: attachment.credentialId, issuedAt: attachment.credentialIssuedAt },
+                expiresAt: attachment.expiresAt,
+                projectId: attachment.projectId,
+                role: attachment.role,
+                runtimeId: attachment.runtimeId,
+                sessionFilter: attachment.sessionFilter,
             };
         }
         if (attachment.role === "daemon" || attachment.role === "replaced-daemon") {
@@ -256,7 +270,6 @@ export class CloudflareChannelPeers implements RuntimePeers {
                           socket,
                           sessionId: identity.sessionFilter,
                           expiresAt: identity.expiresAt,
-                          eventFormat: identity.eventFormat,
                       },
                   ]
                 : [],
@@ -293,8 +306,17 @@ export class CloudflareChannelPeers implements RuntimePeers {
     };
 }
 
-/** Host attachments keep the flat `credentialId` that earlier Relay versions read. */
+/** Host and viewer attachments keep the flat credential fields that earlier Relay versions read. */
 function attachment(identity: RuntimeSocketIdentity): v.InferInput<typeof attachmentSchema> {
+    if (identity.role === "viewer") {
+        const { credential, ...view } = identity;
+        return {
+            ...view,
+            credentialId: credential?.credentialId ?? null,
+            credentialIssuedAt: credential?.issuedAt ?? null,
+            eventFormat: "events",
+        };
+    }
     if (identity.role !== "host") {
         return identity;
     }

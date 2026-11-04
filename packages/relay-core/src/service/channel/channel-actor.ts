@@ -149,7 +149,6 @@ export interface ChannelPeers {
         readonly socket: ChannelSocket;
         readonly sessionId: string;
         readonly expiresAt: number;
-        readonly eventFormat: "events" | "envelope";
     }[];
     readonly operations: () => readonly {
         readonly socket: ChannelSocket;

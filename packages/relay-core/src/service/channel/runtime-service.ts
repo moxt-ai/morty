@@ -35,11 +35,11 @@ export type RuntimeSocketIdentity =
     | {
           readonly role: "viewer";
           readonly expiresAt: number;
-          /** When the Session credential that opened this view was issued; null for a view opened with App access. */
-          readonly credentialIssuedAt: number | null;
-          /** The AppCredential that issued the Session credential; null for a view opened with App access. */
-          readonly credentialId: string | null;
-          readonly eventFormat: "events" | "envelope";
+          /**
+           * The Session credential that opened this view: the AppCredential that issued it and when. Null for a view a
+           * Relay opened before it recorded them, which ends only when its credential expires.
+           */
+          readonly credential: { readonly credentialId: string; readonly issuedAt: number } | null;
           readonly projectId: string;
           readonly runtimeId: string;
           readonly sessionFilter: string;
@@ -289,8 +289,8 @@ export class RuntimeService {
             if (
                 identity.role === "viewer" &&
                 identity.projectId === scope.projectId &&
-                identity.credentialIssuedAt !== null &&
-                identity.credentialIssuedAt <= revokedThrough
+                identity.credential !== null &&
+                identity.credential.issuedAt <= revokedThrough
             ) {
                 socket.close(1008, "Session access revoked");
             }
