@@ -263,16 +263,21 @@ export const linkedDevicesSeenEntry = (projectId: string): LocalStorageEntry<str
         schema: v.pipe(v.string(), v.isoTimestamp()),
     });
 
-/** The access this browser was told it joined with, so that explanation is not repeated for it. */
-export const accessJoinedAcknowledgedEntry = (projectId: string): LocalStorageEntry<string> =>
-    stringLocalStorageEntry({
-        key: scopedKey("morty:access-joined-acknowledged:v1:", projectId),
-        schema: v.pipe(v.string(), v.isoTimestamp()),
-    });
+/**
+ * How far this browser was told about the access that ends at `expiresAt`: that it joined and until when, or also
+ * that the access ends soon, which covers the first.
+ */
+export interface AccessAcknowledgement {
+    readonly expiresAt: string;
+    readonly through: "joined" | "ending";
+}
 
-/** The end of this browser's access the user was already told about, so the reminder for it is not repeated. */
-export const accessEndingAcknowledgedEntry = (projectId: string): LocalStorageEntry<string> =>
-    stringLocalStorageEntry({
-        key: scopedKey("morty:access-ending-acknowledged:v1:", projectId),
-        schema: v.pipe(v.string(), v.isoTimestamp()),
+/** What the user was already told about this browser's access, so it is not repeated for the same access. */
+export const accessAcknowledgedEntry = (projectId: string): LocalStorageEntry<AccessAcknowledgement> =>
+    jsonLocalStorageEntry({
+        key: scopedKey("morty:access-acknowledged:v1:", projectId),
+        schema: v.object({
+            expiresAt: v.pipe(v.string(), v.isoTimestamp()),
+            through: v.picklist(["joined", "ending"]),
+        }),
     });

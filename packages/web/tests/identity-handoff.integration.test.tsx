@@ -670,7 +670,7 @@ test("Given a browser that acknowledged a new device, When another device joins 
     expect(next.textContent).not.toContain("iPhone · Safari");
 });
 
-test("Given a browser whose access ends within the hour, When the page stays open, Then it is reminded once and the account menu states the term", {
+test("Given a browser whose access ends within the hour, When the page stays open, Then it is reminded once, not told it joined again, and the account menu states the term", {
     timeout: 60_000,
 }, async () => {
     // The Worker grants the device term from its own clock, so the page's clock starts at that same moment.
@@ -698,9 +698,11 @@ test("Given a browser whose access ends within the hour, When the page stays ope
     await app.user.click(getByRole(reminder, "button", { name: "Got it" }));
     expect(queryByRole(document.body, "status", { name: "Access ending soon" })).toBeNull();
 
+    // The reminder covers the joined notice this browser never dismissed.
     const reloaded = await app.reload();
     await accountMenu(reloaded);
     expect(queryByRole(document.body, "status", { name: "Access ending soon" })).toBeNull();
+    expect(queryByRole(document.body, "status", { name: "This browser's access" })).toBeNull();
 });
 
 test("Given a browser that just joined through a link, When its page opens, Then it is told once until when it can use the computer and where to manage devices", {
