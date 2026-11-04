@@ -15,7 +15,21 @@ export const workspaceEntrySchema = z
 export type WorkspaceEntry = z.infer<typeof workspaceEntrySchema>;
 
 export const sessionStatusSchema = z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("idle") }).readonly(),
+    z
+        .object({
+            kind: z.literal("idle"),
+            /**
+             * Present when the Session's most recent started command failed, while the Runtime retains its receipt, so
+             * a client that did not watch it can still show the Session failed until another command starts. It
+             * carries what the execution's `lastTurn` reports for that failure. Runtimes before it existed omit it.
+             */
+            failedTurn: z
+                .object({ code: IDENTIFIER, commandId: IDENTIFIER, message: z.string().min(1).max(500) })
+                .readonly()
+                .optional()
+                .catch(undefined),
+        })
+        .readonly(),
     z
         .object({
             commandId: IDENTIFIER,

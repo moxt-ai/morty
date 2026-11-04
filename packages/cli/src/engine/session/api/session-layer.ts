@@ -116,6 +116,7 @@ export function buildSessionLayer(options: SessionLayerOptions) {
         sessionIdentity: "native",
         onSessionStatusChanged: sink.publishStatus,
         onSessionClosed: sink.publishClosed,
+        lastTurn: operations.lastTurn,
         timer,
     });
     const eventProjection = new PromptLifecycle(

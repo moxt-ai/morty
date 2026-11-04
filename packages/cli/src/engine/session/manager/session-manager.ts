@@ -1,4 +1,4 @@
-import type { SessionInteractionSnapshot } from "@moxt-ai/mobius-sdk/protocol";
+import type { LastTurnOutcome, SessionInteractionSnapshot } from "@moxt-ai/mobius-sdk/protocol";
 import {
     SESSION_CLOSE_NOTICE_KIND,
     SESSION_CLOSED_ERROR_CODE,
@@ -66,6 +66,7 @@ export class SessionManager {
         changed: () => this.#processes.notifyChanged(),
     });
     readonly #executions: ActiveExecutions;
+    readonly #lastTurn: (sessionId: string) => LastTurnOutcome | undefined;
     readonly #agentSettingsObserver = new NullSessionObserver();
     readonly #nativeOperations = new Set<string>();
     readonly #sessionClosures = new Map<string, Promise<void>>();
@@ -85,6 +86,7 @@ export class SessionManager {
         sessionIdentity,
         onSessionStatusChanged,
         onSessionClosed = () => undefined,
+        lastTurn = () => undefined,
         timer,
     }: {
         readonly observer: SessionObserver;
@@ -94,14 +96,21 @@ export class SessionManager {
         readonly onSessionStatusChanged: (event: SessionStatusChangedEvent) => void;
         /** Called once each time a Session becomes closed, so every client learns of it. */
         readonly onSessionClosed?: (event: SessionCloseNoticeEvent) => void;
+        /** How the Session's most recent started command ended, as the execution receipts retain it. */
+        readonly lastTurn?: (sessionId: string) => LastTurnOutcome | undefined;
         readonly timer: Timer;
     }) {
         this.#observer = observer;
         this.#processes = processes;
         this.#store = store;
         this.#sessionIdentity = sessionIdentity;
+        this.#lastTurn = lastTurn;
         this.#executions = new ActiveExecutions((sessionId, status) =>
-            onSessionStatusChanged({ kind: "session.status.changed", sessionId, status }),
+            onSessionStatusChanged({
+                kind: "session.status.changed",
+                sessionId,
+                status: this.#reported(sessionId, status),
+            }),
         );
         this.#onSessionClosed = onSessionClosed;
         this.#timer = timer;
@@ -860,7 +869,22 @@ export class SessionManager {
             return stored instanceof FoundStoredSession ? [stored.session] : [];
         });
 
-    readonly sessionStatus = (sessionId: string): SessionStatus => this.#executions.status(sessionId);
+    readonly sessionStatus = (sessionId: string): SessionStatus =>
+        this.#reported(sessionId, this.#executions.status(sessionId));
+
+    /** An idle Session whose last started command failed says so, so a client that did not watch it still knows. */
+    readonly #reported = (sessionId: string, status: SessionStatus): SessionStatus => {
+        if (status.kind !== "idle") {
+            return status;
+        }
+        const lastTurn = this.#lastTurn(sessionId);
+        return lastTurn?.state === "failed"
+            ? {
+                  ...status,
+                  failedTurn: { code: lastTurn.code, commandId: lastTurn.commandId, message: lastTurn.message },
+              }
+            : status;
+    };
 
     readonly listSessions = (limit: number) =>
         this.#store
