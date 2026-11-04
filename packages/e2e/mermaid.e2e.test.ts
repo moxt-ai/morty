@@ -46,6 +46,46 @@ test("Given a paired Bot, When a Mermaid reply finishes, Then I see a Morty-them
     await page.screenshot({ path: testInfo.outputPath("mermaid-mobile.png"), fullPage: true });
 });
 
+test("Given a finished Mermaid diagram in a long reply, When I scroll the conversation with the wheel over it, Then the conversation scrolls and the diagram keeps its size", async ({
+    runtime,
+}) => {
+    const { page } = runtime;
+    await page.clock.install({ time: new Date("2026-10-10T12:00:00Z") });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await runtime.openPairedChat();
+    await page.getByRole("textbox", { name: "Message" }).fill("draw a sequence diagram");
+    await page.getByRole("button", { name: "Send message" }).click();
+    const response = page.getByRole("article", { name: "Agent response" }).filter({ hasText: "Request sequence." });
+    await runtime.continueReply("draw a sequence diagram", {
+        outcome: "complete",
+        output: [
+            {
+                kind: "text",
+                text: Array.from({ length: 30 }, (_, index) => `\n\nFollow-up note ${(index + 1).toString()}.`).join(
+                    "",
+                ),
+            },
+        ],
+    });
+    await expect(response).toContainText("Follow-up note 30.");
+    // The diagram renders once it nears the viewport; its source disclosure is always present.
+    await response.getByText("View diagram source", { exact: true }).scrollIntoViewIfNeeded();
+    const diagram = response.getByRole("img", { name: "Mermaid chart", exact: true });
+    await expect(diagram).toContainText("Send request");
+    const messages = page.getByRole("log", { name: "Messages" });
+    const before = await diagram.boundingBox();
+    const scrollBefore = await messages.evaluate((node) => node.scrollTop);
+    expect(before).not.toBeNull();
+
+    await page.mouse.move((before?.x ?? 0) + (before?.width ?? 0) / 2, (before?.y ?? 0) + (before?.height ?? 0) / 2);
+    await page.mouse.wheel(0, 300);
+
+    await expect.poll(() => messages.evaluate((node) => node.scrollTop)).toBeGreaterThan(scrollBefore + 200);
+    const after = await diagram.boundingBox();
+    expect(after?.width).toBe(before?.width);
+    expect(after?.height).toBe(before?.height);
+});
+
 test("Given a wide Mermaid diagram on a phone viewport, When I open it fullscreen, Then it opens legible and I can pan it", async ({
     runtime,
 }, testInfo) => {
