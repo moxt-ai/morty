@@ -291,3 +291,31 @@ test("Given a running reply, When the user reads the conversation, Then its work
         expect(getByRole(document.body, "button", { name: "Send message" })).toBeDefined();
     });
 });
+
+test("Given a message waited in the queue, When its turn starts, Then the working timer counts from the Runtime's start, not from when it was queued", {
+    timeout: 60_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected a real Runtime");
+    }
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
+    await app.waitForView(() => expect(document.body.textContent).toContain("Waiting for steering"));
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold after first delta");
+    await app.queryElementByTestId(
+        dataTestId.queuedMessage,
+        (element) => element.textContent?.includes("hold after first delta") === true,
+    );
+    // The follow-up waits in the queue for a few seconds before the first turn ends.
+    await new Promise((resolve) => setTimeout(resolve, 4_000));
+    await daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
+    await app.waitForView(() => {
+        expect(app.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull();
+        expect(getByRole(document.body, "status", { name: "Agent is working" }).textContent).toMatch(
+            /^Working for [0-2]s$/u,
+        );
+    });
+    await daemon.continueReply("hold after first delta", { outcome: "complete", output: [] });
+    await app.close();
+});

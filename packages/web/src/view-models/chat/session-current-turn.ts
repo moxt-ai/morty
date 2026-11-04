@@ -30,10 +30,22 @@ export type CurrentTurn = {
 export type CurrentTurnEvent =
     /** This pane submits a new turn, so the failure reported for an earlier one no longer describes the Session. */
     | { readonly kind: "new-turn-submitted" }
-    /** The service accepted this pane's submission of a new turn, whose work started at `startedAt`. */
+    /**
+     * The service accepted this pane's submission of a new turn, dated by `startedAt`, when this browser sent it,
+     * until the Runtime reports when the turn started.
+     */
     | { readonly kind: "accepted"; readonly commandId: string; readonly turnId: string; readonly startedAt: number }
-    /** The service reports the command running; it replaces any other current command. */
-    | { readonly kind: "running"; readonly commandId: string; readonly turnId: string; readonly startedAt: number }
+    /**
+     * The service reports the command running; it replaces any other current command. `startedAt` is when the Runtime
+     * started it, or null when the Runtime does not say: the turn then keeps its date, or is dated by `observedAt`.
+     */
+    | {
+          readonly kind: "running";
+          readonly commandId: string;
+          readonly turnId: string;
+          readonly startedAt: number | null;
+          readonly observedAt: number;
+      }
     /** The service reports the command's turn ended; `failure` explains a failed one. */
     | { readonly kind: "ended"; readonly commandId: string; readonly failure: TurnFailure | null }
     /** Nothing runs any more, as when the Session closed or a reconnect found no running turn. */
@@ -42,9 +54,7 @@ export type CurrentTurnEvent =
      * With nothing running, the service reports how its last started command ended, as when this pane opens or
      * reconnects after missing that turn's live outcome. `failure` explains a failed one.
      */
-    | { readonly kind: "last-turn-reported"; readonly commandId: string; readonly failure: TurnFailure | null }
-    /** This browser sent the command at `sentAt`, which is when its work started. */
-    | { readonly kind: "sent-at-known"; readonly commandId: string; readonly sentAt: number };
+    | { readonly kind: "last-turn-reported"; readonly commandId: string; readonly failure: TurnFailure | null };
 
 export const idleTurn: CurrentTurn = { kind: "idle", failure: null, lastEndedCommandId: null };
 
@@ -95,7 +105,7 @@ export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent
                 kind: "current",
                 commandId: decodeIdentifier(event.commandId),
                 turnId: decodeIdentifier(event.turnId),
-                startedAt: isCurrent(turn, event.commandId) ? turn.startedAt : event.startedAt,
+                startedAt: event.startedAt ?? (isCurrent(turn, event.commandId) ? turn.startedAt : event.observedAt),
                 lastEndedCommandId: turn.lastEndedCommandId,
             };
         case "ended":
@@ -112,8 +122,6 @@ export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent
             return turn.kind === "current" && turn.commandId !== event.commandId
                 ? { ...turn, lastEndedCommandId: event.commandId }
                 : endedTurn(event.commandId, event.failure, event.commandId);
-        case "sent-at-known":
-            return isCurrent(turn, event.commandId) ? { ...turn, startedAt: event.sentAt } : turn;
     }
 }
 

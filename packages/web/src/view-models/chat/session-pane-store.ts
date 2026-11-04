@@ -20,7 +20,6 @@ import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { rememberAgentSettingChoice } from "../../services/chat/last-agent-settings.ts";
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import { recordBrowserDiagnostic } from "../../services/diagnostics/browser-diagnostics.ts";
-import { centralIndexedDB, sessionLastSentMessageEntry } from "../../services/indexed-db/central-indexed-db.ts";
 import { centralSessionStorage, sessionDraftEntry } from "../../services/session-storage/central-session-storage.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError, isRetryableRuntimeConnectionFailure, isSessionClosedFailure } from "../format-error.ts";
@@ -106,7 +105,6 @@ import {
     stopRequested,
 } from "./session-task-controls.ts";
 import { type SessionTitlesStore, sessionTitle } from "./session-titles-store.ts";
-import { createSessionTurnLedger } from "./session-turn-ledger.ts";
 import { createSessionWelcomeStore } from "./session-welcome-store.ts";
 
 /**
@@ -173,14 +171,14 @@ export interface SessionPaneStore {
     readonly reopen: (signal: AbortSignal) => Promise<void>;
     readonly loadOlderMessages: (signal: AbortSignal) => Promise<void>;
     readonly setDraft: (draft: string) => void;
-    readonly send: (signal: AbortSignal) => Promise<void>;
+    readonly send: () => Promise<void>;
     readonly removeUnknownDelivery: () => void;
     /** Retries on the Session's delivery: the attempt may outlive this pane. */
     readonly retryUnknownDelivery: () => Promise<void>;
-    readonly retryFailedMessage: (signal: AbortSignal) => Promise<void>;
+    readonly retryFailedMessage: () => Promise<void>;
     readonly editFailedMessage: () => void;
     readonly discardFailedMessage: () => void;
-    readonly queueDraft: (signal: AbortSignal) => Promise<void>;
+    readonly queueDraft: () => Promise<void>;
     readonly steerQueued: (commandId: string, signal: AbortSignal) => Promise<void>;
     readonly deleteQueued: (commandId: string, signal: AbortSignal) => Promise<void>;
     /** Takes a queued message out of the queue and back into the composer, ahead of any draft, for editing. */
@@ -460,7 +458,6 @@ export function createSessionPaneModel(options: {
                   startedAt: fallbackStartedAt,
               })
             : idleTurn;
-    const turns = createSessionTurnLedger();
     let client: MobiusClient | null = null;
     let recoveryRequested = false;
     let countdownInterrupt: AbortController | null = null;
@@ -534,7 +531,6 @@ export function createSessionPaneModel(options: {
             }
             return await connected.turns.submit(sessionId, request, signal);
         });
-    const lastSentMessageEntry = sessionLastSentMessageEntry(sessionId);
     // The projection is the only source of the timeline; every change to it updates all three fields together.
     const projectedTimeline = (state: SessionProjection) => ({
         hasOlderHistory: sessionProjectionPagination(state) !== null,
@@ -709,7 +705,8 @@ export function createSessionPaneModel(options: {
         };
         /**
          * Submits `commandId` through `connected`. A new turn becomes current as the service's acceptance arrives, dated
-         * by when this browser sent it, or else `startedAt`; until then the turn is its delivery's.
+         * by `startedAt`, when this browser sent it, until the Runtime reports its start; until then the turn is its
+         * delivery's.
          */
         const submitCommand =
             (
@@ -726,7 +723,7 @@ export function createSessionPaneModel(options: {
                         kind: "accepted",
                         commandId,
                         turnId: accepted.turnId,
-                        startedAt: turns.startedAt(commandId, startedAt),
+                        startedAt,
                     });
                 }
                 return accepted;
@@ -748,7 +745,6 @@ export function createSessionPaneModel(options: {
             const change = observeSessionExecution(
                 { projection, turn: previous.turn, queued: previous.queued },
                 observation,
-                (commandId) => turns.startedAt(commandId, Date.now()),
             );
             const { execution } = change;
             set({
@@ -796,7 +792,7 @@ export function createSessionPaneModel(options: {
                 deliveryCommandId ?? undefined,
             );
             signal.throwIfAborted();
-            observeExecution({ kind: "snapshot", snapshot, turnAtRead, deliveryCommandId });
+            observeExecution({ kind: "snapshot", snapshot, turnAtRead, deliveryCommandId, readAt: Date.now() });
             delivery
                 .getState()
                 .releaseMessages(
@@ -930,15 +926,14 @@ export function createSessionPaneModel(options: {
          * delivery holds. Delivery owns that snapshot and the attempt through preparation, sending, and recovery, so
          * the attempt outlives this pane; completion never writes to the next draft.
          */
-        const submit = async (message: SubmittedMessage, signal: AbortSignal): Promise<void> => {
+        const submit = async (message: SubmittedMessage): Promise<void> => {
             const currentDelivery = delivery.getState().state;
             if (!canSubmit(message.target, operationFacts())) {
                 return;
             }
             const { commandId, target } = message;
             welcome.getState().dismiss();
-            const sent = turns.recordSent(commandId, Date.now());
-            void centralIndexedDB.set(lastSentMessageEntry, sent, signal);
+            const sentAt = Date.now();
             const connected = client;
             const sending = delivery.getState().send(message, {
                 prepare: async ({ attachments, content }, attemptSignal) => {
@@ -968,7 +963,7 @@ export function createSessionPaneModel(options: {
                         attemptSignal,
                     );
                 },
-                submit: submitCommand(connected, commandId, target.disposition, sent.sentAt),
+                submit: submitCommand(connected, commandId, target.disposition, sentAt),
             });
             // Only a message taken from the composer leaves it; a failed or first message never was in it.
             if (currentDelivery.kind === "idle") {
@@ -1034,15 +1029,6 @@ export function createSessionPaneModel(options: {
                 }
             },
             connect: async (signal) => {
-                const readStoredLastSentMessage = (): void => {
-                    const revision = turns.lastSentRevision();
-                    void centralIndexedDB.get(lastSentMessageEntry, signal).then((stored) => {
-                        if (stored === null || !turns.adoptStoredSent(stored, revision)) {
-                            return;
-                        }
-                        updateTurn({ kind: "sent-at-known", commandId: stored.commandId, sentAt: stored.sentAt });
-                    });
-                };
                 let consecutiveFailures = 0;
                 // Only the first connection reuses the access that opened the Session. Every reconnection asks Chat
                 // again, so access that ended meanwhile, including a revoked Session credential, ends the page's access.
@@ -1089,7 +1075,11 @@ export function createSessionPaneModel(options: {
                                 await readExecution(connected, get().turn, signal);
                                 return;
                             case "turn-started":
-                                observeExecution({ kind: "turn-started", commandId: fact.commandId });
+                                observeExecution({
+                                    kind: "turn-started",
+                                    commandId: fact.commandId,
+                                    startedAt: Date.parse(event.recordedAt),
+                                });
                                 return;
                             case "turn-completed":
                                 observeExecution({
@@ -1217,7 +1207,7 @@ export function createSessionPaneModel(options: {
                         // The first message the Session holds is submitted by the first pane that connects.
                         const awaiting = awaitingMessage(delivery.getState().state);
                         if (awaiting !== null) {
-                            await submit(awaiting, paneSignal);
+                            await submit(awaiting);
                             signal.throwIfAborted();
                         }
                         await subscription.completed;
@@ -1227,7 +1217,6 @@ export function createSessionPaneModel(options: {
                     signal.throwIfAborted();
                     throw sessionUpdatesEndedError();
                 };
-                readStoredLastSentMessage();
                 for (;;) {
                     if (closure !== null) {
                         const closed = closure;
@@ -1425,7 +1414,7 @@ export function createSessionPaneModel(options: {
                 }
                 set(draft === "" ? { draft, filesRestoreNotice: false } : { draft });
             },
-            send: async (signal) => {
+            send: async () => {
                 const { attachments, state: attachmentState } = composerAttachments.getState();
                 const draft = get().draft;
                 if (
@@ -1434,15 +1423,12 @@ export function createSessionPaneModel(options: {
                 ) {
                     return;
                 }
-                await submit(
-                    {
-                        commandId: crypto.randomUUID(),
-                        content: draft,
-                        attachments: { kind: "local", values: attachments },
-                        target: { disposition: "reject", targetCommandId: "" },
-                    },
-                    signal,
-                );
+                await submit({
+                    commandId: crypto.randomUUID(),
+                    content: draft,
+                    attachments: { kind: "local", values: attachments },
+                    target: { disposition: "reject", targetCommandId: "" },
+                });
             },
             removeUnknownDelivery: () => {
                 delivery.getState().discardUnknown();
@@ -1464,7 +1450,7 @@ export function createSessionPaneModel(options: {
                 await delivery.getState().retry(retrying);
                 delivery.getState().releaseMessages(sessionUserCommandIds(get().messages));
             },
-            retryFailedMessage: async (signal) => {
+            retryFailedMessage: async () => {
                 const state = delivery.getState().state;
                 const message =
                     state.kind === "preparation-failed"
@@ -1477,7 +1463,7 @@ export function createSessionPaneModel(options: {
                 if (message === null || !canRetryFailedMessage(message.target, operationFacts())) {
                     return;
                 }
-                await submit(message, signal);
+                await submit(message);
             },
             editFailedMessage: () => {
                 if (composerAttachments.getState().state.kind === "reading") {
@@ -1499,7 +1485,7 @@ export function createSessionPaneModel(options: {
             discardFailedMessage: () => {
                 delivery.getState().takeFailedMessage();
             },
-            queueDraft: async (signal) => {
+            queueDraft: async () => {
                 const current = get();
                 const { attachments, state: attachmentState } = composerAttachments.getState();
                 const running = acceptedTurn(current.turn);
@@ -1510,15 +1496,12 @@ export function createSessionPaneModel(options: {
                 ) {
                     return;
                 }
-                await submit(
-                    {
-                        commandId: crypto.randomUUID(),
-                        content: current.draft,
-                        attachments: { kind: "local", values: attachments },
-                        target: { disposition: "queue", targetCommandId: running.commandId },
-                    },
-                    signal,
-                );
+                await submit({
+                    commandId: crypto.randomUUID(),
+                    content: current.draft,
+                    attachments: { kind: "local", values: attachments },
+                    target: { disposition: "queue", targetCommandId: running.commandId },
+                });
             },
             steerQueued: async (commandId, signal) => {
                 const steered = await messageQueue

@@ -442,25 +442,16 @@ importers:
 
   third-party/mobius/packages/cli:
     dependencies:
+      undici:
+        specifier: 8.12.2
+        version: 8.12.2
+    devDependencies:
       '@agentclientprotocol/sdk':
         specifier: 1.4.0
         version: 1.4.0(zod@4.6.7)
       '@anthropic-ai/claude-agent-sdk':
         specifier: 0.3.257
         version: 0.3.257(@anthropic-ai/sdk@0.122.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.1(supports-color@10.2.2)(zod@4.6.7))(zod@4.6.7)
-      commander:
-        specifier: 15.0.0
-        version: 15.0.0
-      semver:
-        specifier: ^7.8.5
-        version: 7.8.5
-      undici:
-        specifier: 8.12.2
-        version: 8.12.2
-      zod:
-        specifier: ^4.6.7
-        version: 4.6.7
-    devDependencies:
       '@anthropic-ai/sdk':
         specifier: 0.122.0
         version: 0.122.0(zod@4.6.7)
@@ -479,6 +470,9 @@ importers:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
+      commander:
+        specifier: 15.0.0
+        version: 15.0.0
       drizzle-kit:
         specifier: 1.0.0-rc.4
         version: 1.0.0-rc.4
@@ -488,12 +482,18 @@ importers:
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
       valibot:
         specifier: 1.5.0
         version: 1.5.0(typescript@7.0.2)
       ws:
         specifier: ^8.21.3
         version: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
 
   third-party/mobius/packages/mobius-sdk:
     dependencies:

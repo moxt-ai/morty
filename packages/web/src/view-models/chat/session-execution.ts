@@ -43,8 +43,11 @@ export type SessionExecutionObservation =
           readonly snapshot: SessionExecutionSnapshot;
           readonly turnAtRead: CurrentTurn;
           readonly deliveryCommandId: string | null;
+          /** When the read returned, which dates a running turn whose Runtime does not report its start. */
+          readonly readAt: number;
       }
-    | { readonly kind: "turn-started"; readonly commandId: string }
+    /** The Runtime started the command at `startedAt`. */
+    | { readonly kind: "turn-started"; readonly commandId: string; readonly startedAt: number }
     | { readonly kind: "turn-ended"; readonly commandId: string; readonly outcome: TurnOutcome }
     /** The Runtime closed the Session, which runs and queues nothing and asks nothing of the user. */
     | { readonly kind: "closed" };
@@ -73,9 +76,8 @@ function runningTurnId(turn: CurrentTurn, commandId: string): string {
 function observeSnapshot(
     execution: SessionExecution,
     observation: Extract<SessionExecutionObservation, { readonly kind: "snapshot" }>,
-    startedAt: (commandId: string) => number,
 ): SessionExecutionChange {
-    const { snapshot, turnAtRead, deliveryCommandId } = observation;
+    const { snapshot, turnAtRead, deliveryCommandId, readAt } = observation;
     const running = snapshot.turn;
     let turn = execution.turn;
     if (running !== null) {
@@ -83,7 +85,9 @@ function observeSnapshot(
             kind: "running",
             commandId: running.commandId,
             turnId: runningTurnId(turn, running.commandId),
-            startedAt: startedAt(running.commandId),
+            // Older Runtimes do not report when the turn started.
+            startedAt: running.startedAt === undefined ? null : Date.parse(running.startedAt),
+            observedAt: readAt,
         });
     } else {
         if (turnAtRead.kind === "current") {
@@ -126,20 +130,16 @@ function observeSnapshot(
     };
 }
 
-/**
- * Moves the pane's whole execution state by one observed fact. `startedAt` dates a command's work: when this browser
- * sent it, or now.
- */
+/** Moves the pane's whole execution state by one observed fact. */
 export function observeSessionExecution(
     execution: SessionExecution,
     observation: SessionExecutionObservation,
-    startedAt: (commandId: string) => number,
 ): SessionExecutionChange {
     switch (observation.kind) {
         case "snapshot":
-            return observeSnapshot(execution, observation, startedAt);
+            return observeSnapshot(execution, observation);
         case "turn-started": {
-            const { commandId } = observation;
+            const { commandId, startedAt } = observation;
             const owner = sessionProjectionExecutionOwner(execution.projection, commandId);
             return {
                 execution: {
@@ -153,7 +153,8 @@ export function observeSessionExecution(
                                   kind: "running",
                                   commandId,
                                   turnId: runningTurnId(execution.turn, commandId),
-                                  startedAt: startedAt(commandId),
+                                  startedAt,
+                                  observedAt: startedAt,
                               }),
                 },
                 delivered: [commandId],
