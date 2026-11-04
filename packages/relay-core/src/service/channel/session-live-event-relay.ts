@@ -102,15 +102,29 @@ export class SessionLiveEventRelay {
                 }
             }
         }
-        // Both consumers observe live events, including when no browsers are watching. A restated outcome answers a
-        // retried request and records nothing new, so neither receives it.
-        const recorded = envelope.events.filter((event) => event.mobiusMetadata?.restated !== true);
-        if (recorded.length === 0) {
-            return;
-        }
+        // Both consumers observe live events, including when no browsers are watching. A restated outcome is not a new
+        // fact, so it is never notified again. Recording alone knows whether it holds the outcome a restatement
+        // repeats, and may have missed it, so it receives the restatements that repeat an outcome the Runtime recorded.
         const scope = { projectId: this.#projectId, runtimeId: this.#runtimeId };
-        const facts = recorded.length === envelope.events.length ? envelope : { ...envelope, events: recorded };
-        this.#notifications?.publish(scope, facts);
-        this.#recording.publish(scope, facts);
+        const select = (
+            keep: (event: SessionWireEnvelope["events"][number]) => boolean,
+        ): SessionWireEnvelope | null => {
+            const events = envelope.events.filter(keep);
+            return events.length === 0
+                ? null
+                : events.length === envelope.events.length
+                  ? envelope
+                  : { ...envelope, events };
+        };
+        const notified = select((event) => event.mobiusMetadata?.restated !== true);
+        if (notified !== null) {
+            this.#notifications?.publish(scope, notified);
+        }
+        const recorded = select(
+            (event) => event.mobiusMetadata?.restated !== true || event.mobiusMetadata.recordedOutcome === true,
+        );
+        if (recorded !== null) {
+            this.#recording.publish(scope, recorded);
+        }
     };
 }

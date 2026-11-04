@@ -491,7 +491,7 @@ describe("App Session status webhook delivery", () => {
         ]);
     });
 
-    it("Given a command finished while the next Turn runs, When the Runtime restates its outcome for a retried request, Then neither the webhook nor Recording receives it again", async () => {
+    it("Given a command finished while the next Turn runs, When the Runtime restates its outcome, Then the webhook is not sent again and Recording receives only a restatement of the recorded outcome", async () => {
         const { projectId } = await provisionProject("restated-outcome");
         const recording = new KeptRecording();
         const finished = { commandId: "finished-command", kind: "prompt.completed", stopReason: "stop" };
@@ -509,8 +509,11 @@ describe("App Session status webhook delivery", () => {
                 ]);
                 await flushNotifications();
                 await send([
+                    // A restatement of the outcome the Runtime recorded, which Recording may have missed.
+                    { ...event(3, finished), mobiusMetadata: { recordedOutcome: true, restated: true } },
+                    // An acknowledgement the Runtime composed when no record remained.
                     {
-                        ...event(3, finished),
+                        ...event(4, finished),
                         mobiusMetadata: { restated: true },
                         recordedAt: "2026-10-15T00:05:00.000Z",
                     },
@@ -533,6 +536,7 @@ describe("App Session status webhook delivery", () => {
         expect(recording.eventIds).toStrictEqual([
             "session-status-delivery-event-1",
             "session-status-delivery-event-2",
+            "session-status-delivery-event-3",
         ]);
     });
 
