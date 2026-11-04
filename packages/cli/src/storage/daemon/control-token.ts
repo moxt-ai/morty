@@ -1,7 +1,10 @@
 import { randomBytes } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { InstallationDirectory } from "../../engine/storage/installation/installation-files.ts";
+import {
+    createInstallationFile,
+    type InstallationDirectory,
+} from "../../engine/storage/installation/installation-files.ts";
 import { isNodeError } from "../../engine/util/node-error.ts";
 
 function controlTokenPath(stateDirectory: InstallationDirectory): string {
@@ -20,7 +23,7 @@ export async function readOrCreateControlToken(stateDirectory: InstallationDirec
     }
     const token = randomBytes(32).toString("base64url");
     try {
-        await writeFile(path, `${token}\n`, { flag: "wx", mode: 0o600 });
+        await createInstallationFile(path, `${token}\n`);
         return token;
     } catch (cause) {
         if (!isNodeError(cause, "EEXIST")) {

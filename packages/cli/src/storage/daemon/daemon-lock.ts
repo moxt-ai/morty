@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { readFile, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import type { InstallationDirectory } from "../../engine/storage/installation/installation-files.ts";
+import {
+    createInstallationFile,
+    type InstallationDirectory,
+} from "../../engine/storage/installation/installation-files.ts";
 import { isNodeError } from "../../engine/util/node-error.ts";
 
 /**
@@ -32,7 +35,8 @@ export async function acquireDaemonLock(
     const path = join(stateDirectory, filename);
     for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
-            await writeFile(path, `${process.pid.toString()}\n`, { flag: "wx", mode: 0o600 });
+            // A contender never reads an empty lock and mistakes its live owner for a dead one.
+            await createInstallationFile(path, `${process.pid.toString()}\n`);
             return async () => await removeLockFile(path);
         } catch (cause) {
             if (!isNodeError(cause, "EEXIST")) {
@@ -63,7 +67,7 @@ export async function daemonLockExists(
 ): Promise<boolean> {
     try {
         const pid = Number((await readFile(join(stateDirectory, filename), "utf8")).trim());
-        // The exclusive file can be observed before its owner finishes writing the PID.
+        // An earlier release can expose the exclusive file before it finishes writing the PID.
         if (!Number.isSafeInteger(pid) || pid <= 1) {
             return true;
         }
