@@ -14,6 +14,8 @@ import { userMessageUpdates } from "./user-message.ts";
 
 const REQUEST_TIMEOUT = 30_000;
 const POLL_INTERVAL = 500;
+const UNANSWERED_READ_LIMIT = 3;
+type TurnPage = z.infer<typeof threadTurnsPageSchema>["data"];
 const queueResponseSchema = z.object({
     queuedSubmission: z.object({ id: z.string().min(1), clientUserMessageId: z.string().min(1) }),
 });
@@ -84,16 +86,37 @@ export class CodexBorrowedAcpAgent implements CodexSessionAgent {
                 AbortSignal.any([signal, AbortSignal.timeout(REQUEST_TIMEOUT)]),
             ),
         );
-        await this.#refresh(signal, true);
+        await this.#apply(await this.#read(signal, true), true);
         this.#watch = this.#follow();
     };
 
     readonly #follow = async (): Promise<void> => {
         const signal = this.#closed.signal;
+        let unansweredReads = 0;
         try {
             for (;;) {
                 await waitForNextPoll(systemTimer, signal);
-                await this.#refresh(signal, false);
+                let pages: TurnPage[];
+                try {
+                    pages = await this.#read(signal, false);
+                } catch (cause) {
+                    // A read that outlived its deadline applied nothing and says nothing about the
+                    // thread, as when the computer sleeps, so the next poll reads again. Several
+                    // unanswered reads in a row mean the app-server stopped answering, which ends following.
+                    unansweredReads += 1;
+                    if (
+                        !(cause instanceof DOMException && cause.name === "TimeoutError") ||
+                        unansweredReads === UNANSWERED_READ_LIMIT
+                    ) {
+                        throw cause;
+                    }
+                    console.warn("Codex thread history read timed out; following continues", {
+                        threadId: this.#threadId,
+                    });
+                    continue;
+                }
+                unansweredReads = 0;
+                await this.#apply(pages, false);
             }
         } catch (cause) {
             if (!signal.aborted) {
@@ -108,11 +131,11 @@ export class CodexBorrowedAcpAgent implements CodexSessionAgent {
         }
     };
 
-    readonly #refresh = async (signal: AbortSignal, baseline: boolean): Promise<void> => {
+    readonly #read = async (signal: AbortSignal, baseline: boolean): Promise<TurnPage[]> => {
         // Newest pages bound each idle scan. Follow additional pages while an old queued prompt is
         // outstanding so another client's turns cannot hide its result beyond the first page.
         let cursor: string | null = null;
-        const pages: Array<z.infer<typeof threadTurnsPageSchema>["data"]> = [];
+        const pages: TurnPage[] = [];
         const cursors = new Set<string>();
         do {
             const page = threadTurnsPageSchema.parse(
@@ -137,7 +160,11 @@ export class CodexBorrowedAcpAgent implements CodexSessionAgent {
                 cursors.add(cursor);
             }
         } while (cursor !== null && (baseline || this.#pending !== null));
-        for (const turns of pages.reverse()) {
+        return pages;
+    };
+
+    readonly #apply = async (pages: readonly TurnPage[], baseline: boolean): Promise<void> => {
+        for (const turns of [...pages].reverse()) {
             for (const turn of [...turns].reverse()) {
                 let matches = false;
                 for (const raw of turn.items) {
