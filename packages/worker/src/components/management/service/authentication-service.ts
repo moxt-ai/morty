@@ -23,7 +23,10 @@ type SessionResult =
           readonly kind: "authenticated";
           readonly session: Session;
           readonly credentialKind: Credential["kind"];
-          /** When this access ends: browser access ends with the link it came through; other access does not expire. */
+          /**
+           * When this access ends: a browser's at its device's term, the latest among the links the device opened;
+           * other access does not expire.
+           */
           readonly accessExpiresAt: number | null;
       }
     | { readonly kind: "unauthenticated" }

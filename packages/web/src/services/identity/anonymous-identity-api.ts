@@ -322,7 +322,7 @@ export class AnonymousIdentityApi {
             }),
         );
 
-    /** When this access ends: the term of the link a browser came through, or null for access without one. */
+    /** When this access ends: the browser's device term, the latest among the links it opened; null without one. */
     readonly accessExpiresAt = async (token: string, signal: AbortSignal): Promise<string | null> =>
         v.parse(
             accessTermSchema,

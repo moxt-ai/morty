@@ -69,7 +69,8 @@ export function createAuthenticationRoutes() {
             const result = await context.env.services.authentication.session(token, request.signal);
             switch (result.kind) {
                 case "authenticated":
-                    // A browser's access ends at the term of the link it came through; other credentials have none.
+                    // A browser's access ends at its device's term, the latest among the links the device opened; other
+                    // credentials have none.
                     return json(
                         {
                             ...result.session,
