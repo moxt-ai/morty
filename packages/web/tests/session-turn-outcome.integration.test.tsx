@@ -1,6 +1,14 @@
-import { getByLabelText, getByRole, queryAllByRole, queryAllByText, queryByRole } from "@testing-library/dom";
+import {
+    fireEvent,
+    getByLabelText,
+    getByRole,
+    queryAllByRole,
+    queryAllByText,
+    queryByRole,
+} from "@testing-library/dom";
 import { act } from "@testing-library/react";
-import { expect, onTestFinished, test } from "vitest";
+import { flushSync } from "react-dom";
+import { expect, onTestFinished, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
@@ -231,4 +239,84 @@ test("Given my last turn completed while I was away after an earlier failure, Wh
         expect(queryAllByText(document.body, recoveredFailure, { exact: true })).toHaveLength(1);
         expect(queryAllByRole(document.body, "alert")).toHaveLength(1);
     });
+});
+
+test("Given a stopped turn whose messages span two history pages, When I reopen the Session and load the older page, Then the turn still ends with its notice", {
+    timeout: 90_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true });
+    const daemon = app.daemon;
+    if (daemon === null) {
+        throw new Error("Expected the controlled Agent");
+    }
+    const stoppedNotices = () =>
+        app.elementsByTestId(dataTestId.agentReplyStatus).filter((element) => element.textContent === "Turn stopped.");
+    const reply = (turn: string) =>
+        Array.from({ length: 20 }, (_, index) => ({ kind: "message" as const, text: `${turn} part ${index}.` }));
+    const firstPrompt = "hold after first delta";
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), firstPrompt);
+    await app.waitForView(() => expect(document.body.textContent).toContain("Partial reply"));
+    await daemon.continueReply(firstPrompt, { outcome: "hold", output: reply("Turn one") });
+    await app.waitForView(() => expect(document.body.textContent).toContain("Turn one part 19."));
+    act(() => fireEvent.click(getByRole(document.body, "button", { name: "Stop agent output" })));
+    await app.waitForView(() => expect(stoppedNotices()).toHaveLength(1));
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    const secondPrompt = "hold reasoning only";
+    await sendPrompt(
+        app,
+        await app.queryElementByTestId(
+            dataTestId.messageComposer,
+            (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+        ),
+        secondPrompt,
+    );
+    await daemon.continueReply(secondPrompt, { outcome: "complete", output: reply("Turn two") });
+    await app.waitForView(() => expect(document.body.textContent).toContain("Turn two part 19."));
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+
+    // The reopened Session's newest page holds the first turn's last messages but not its user message.
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    await app.user.click(
+        await app.waitForView(() => {
+            const entry = app
+                .elementsByTestId(dataTestId.managedConversation)
+                .find((element) => element.textContent?.includes(firstPrompt) === true);
+            if (entry === undefined) {
+                throw new Error(`The conversation is unavailable: ${document.body.textContent}`);
+            }
+            return entry;
+        }),
+    );
+    await app.waitForView(() => {
+        expect(document.body.textContent).toContain("Turn one part 19.");
+        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+            secondPrompt,
+        ]);
+    });
+
+    vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+    onTestFinished(() => {
+        vi.useRealTimers();
+    });
+    const messages = getByRole(document.body, "log", { name: "Messages" });
+    messages.scrollTop = 0;
+    flushSync(() => fireEvent.scroll(messages));
+    vi.useRealTimers();
+    await app.waitForView(() => {
+        expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+            firstPrompt,
+            secondPrompt,
+        ]);
+        const [notice] = stoppedNotices();
+        const last = queryAllByText(messages, "Turn one part 19.", { exact: false }).at(-1);
+        const next = app.elementsByTestId(dataTestId.userMessage).at(1);
+        if (notice === undefined || last === undefined || next === undefined) {
+            throw new Error(`The stopped turn's ending is missing: ${messages.textContent}`);
+        }
+        // The ending follows the turn's last message, before the next turn.
+        expect(last.compareDocumentPosition(notice)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+        expect(notice.compareDocumentPosition(next)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+        expect(stoppedNotices()).toHaveLength(1);
+    });
+    await app.close();
 });

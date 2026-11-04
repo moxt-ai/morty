@@ -24,7 +24,10 @@ export const COMPACTION_CHARACTER_LIMIT = 16 * 1024;
  * A prompt's ending that a history page restates from the Runtime's record. History holds the Agent's events only, so
  * the ending is placed after its turn's events; it has no live position.
  */
-type RestatedOutcomeEvent = Omit<Extract<SessionLiveEvent, { readonly type: "lifecycle-metadata" }>, "position">;
+type RestatedOutcomeEvent = Omit<
+    Extract<SessionLiveEvent, { readonly type: "lifecycle-metadata" }>,
+    "position" | "payload"
+> & { readonly payload: PromptMessageOutcome["payload"] };
 
 export type SessionPresentationEvent = SessionEvent | SessionLiveEvent | RestatedOutcomeEvent;
 
@@ -498,6 +501,8 @@ type ReducedSessionEntry =
     | { readonly kind: "turn-started"; readonly commandId: string }
     | { readonly kind: "execution-idle" }
     | { readonly kind: "queued-command"; readonly commandId: string }
+    /** A turn's ending the Runtime restated with its user message; rendered where the turn ends. */
+    | { readonly kind: "turn-outcome"; readonly commandId: string; readonly event: RestatedOutcomeEvent }
     | {
           readonly kind: "execution-owner";
           readonly commandId: string;
@@ -507,6 +512,23 @@ type ReducedSessionEntry =
 
 export interface SessionMessageReduction {
     readonly entries: readonly ReducedSessionEntry[];
+}
+
+type TurnEndingPayload = Extract<
+    Extract<SessionPresentationEvent, { readonly type: "lifecycle-metadata" }>["payload"],
+    { readonly kind: "prompt.completed" | "prompt.failed" | "prompt.failed-before-start" }
+>;
+
+function turnEnding(event: SessionPresentationEvent, lifecycle: TurnEndingPayload): SessionMessage {
+    return {
+        role: "assistant",
+        commandId: lifecycle.commandId,
+        firstEvent: event,
+        presentation:
+            lifecycle.kind === "prompt.completed"
+                ? { kind: "completed", completion: promptCompletion(lifecycle) }
+                : { kind: "failure", code: lifecycle.code, message: lifecycle.message },
+    };
 }
 
 function consumeSessionEvent(
@@ -524,18 +546,7 @@ function consumeSessionEvent(
             lifecycle.kind === "prompt.failed" ||
             lifecycle.kind === "prompt.failed-before-start"
         ) {
-            return {
-                kind: "turn-ended",
-                message: {
-                    role: "assistant",
-                    commandId: lifecycle.commandId,
-                    firstEvent: event,
-                    presentation:
-                        lifecycle.kind === "prompt.completed"
-                            ? { kind: "completed", completion: promptCompletion(lifecycle) }
-                            : { kind: "failure", code: lifecycle.code, message: lifecycle.message },
-                },
-            };
+            return { kind: "turn-ended", message: turnEnding(event, lifecycle) };
         }
         if (lifecycle.kind === "prompt.requested") {
             return {
@@ -735,16 +746,14 @@ function restatedOutcomeEvent(outcome: PromptMessageOutcome, page: SessionPresen
 
 /**
  * Reduces a page of events. A history page omits lifecycle events, so the outcomes it names restate them: a user
- * message whose prompt is known starts that command's turn, as its start would live, and the turn's ending follows its
- * events, before the next user message. Lifecycle events are the record: an outcome restates only a command that no
- * event here, nor any in `known`, names. A turn still open where the page ends ends there only on the newest page
- * (`endsOpenTurn`); on an older page, its events may continue on the next one.
+ * message whose prompt is known starts that command's turn, as its start would live, and records the turn's ending
+ * beside it; the messages place that ending where the turn ends (`placeTurnOutcomes`). Lifecycle events are the
+ * record: an outcome restates only a command that no event here, nor any in `known`, names.
  */
 function reduceSessionEvents(
     events: readonly SessionPresentationEvent[],
     leadingEvent: "known" | "possibly-before-page",
     outcomes: readonly PromptMessageOutcome[] = [],
-    endsOpenTurn = true,
     known: ReadonlySet<string> = new Set(),
 ): SessionMessageReduction {
     const named = new Set([...known, ...sessionEventCommandIds(events)]);
@@ -756,36 +765,82 @@ function reduceSessionEvents(
         ),
     );
     let entries: readonly ReducedSessionEntry[] = [];
-    let open: { readonly outcome: PromptMessageOutcome; readonly page: SessionPresentationEvent } | null = null;
-    const end = () => {
-        if (open !== null) {
-            const restated = restatedOutcomeEvent(open.outcome, open.page);
-            entries = applySessionEvent(entries, restated, consumeSessionEvent(entries, restated, leadingEvent));
-            open = null;
-        }
-    };
     for (const event of events) {
         const result = consumeSessionEvent(entries, event, leadingEvent);
-        if (result.kind === "constructed" && result.message.role === "user" && event.type === "acp") {
-            end();
-            const messageId = event.payload.sessionUpdate === "user_message_chunk" ? event.payload.messageId : null;
-            const outcome = messageId == null ? undefined : byMessage.get(messageId);
-            if (outcome !== undefined) {
-                const { commandId } = outcome.payload;
-                entries = [
+        const messageId =
+            result.kind === "constructed" &&
+            result.message.role === "user" &&
+            event.type === "acp" &&
+            event.payload.sessionUpdate === "user_message_chunk"
+                ? event.payload.messageId
+                : null;
+        const outcome = messageId == null ? undefined : byMessage.get(messageId);
+        if (outcome === undefined) {
+            entries = applySessionEvent(entries, event, result);
+            continue;
+        }
+        const { commandId } = outcome.payload;
+        entries = [
+            ...applySessionEvent(
+                [
                     ...entries,
                     { kind: "execution-owner", commandId, executionCommandId: commandId, execution: "starts" },
                     { kind: "turn-started", commandId },
-                ];
-                open = { outcome, page: event };
-            }
-        }
-        entries = applySessionEvent(entries, event, result);
-    }
-    if (endsOpenTurn) {
-        end();
+                ],
+                event,
+                result,
+            ),
+            { kind: "turn-outcome", commandId, event: restatedOutcomeEvent(outcome, event) },
+        ];
     }
     return { entries };
+}
+
+/**
+ * Places each restated ending where its turn ends: after the turn's events, before the next user message or another
+ * command's execution, or after the last loaded entry. The place follows from the loaded entries alone, however many
+ * pages they arrived in. A turn whose ending a loaded lifecycle event reports keeps that one.
+ */
+function placeTurnOutcomes(entries: readonly ReducedSessionEntry[]): readonly ReducedSessionEntry[] {
+    const reported = new Set(
+        entries.flatMap((entry) =>
+            entry.kind === "message" &&
+            entry.message.firstEvent.type === "lifecycle-metadata" &&
+            entry.message.commandId !== null
+                ? [entry.message.commandId]
+                : [],
+        ),
+    );
+    const placed: ReducedSessionEntry[] = [];
+    let open: Extract<ReducedSessionEntry, { readonly kind: "turn-outcome" }> | null = null;
+    const end = () => {
+        if (open !== null) {
+            placed.push({
+                kind: "message",
+                message: turnEnding(open.event, open.event.payload),
+                provenance: "known",
+                unresolvedEvents: [],
+            });
+            open = null;
+        }
+    };
+    for (const entry of entries) {
+        if (entry.kind === "turn-outcome") {
+            end();
+            open = reported.has(entry.commandId) ? null : entry;
+            continue;
+        }
+        const startsAnotherTurn =
+            (entry.kind === "message" && entry.message.role === "user" && entry.message.firstEvent.type === "acp") ||
+            (entry.kind === "execution-owner" && entry.executionCommandId !== open?.commandId) ||
+            (entry.kind === "turn-started" && entry.commandId !== open?.commandId);
+        if (startsAnotherTurn) {
+            end();
+        }
+        placed.push(entry);
+    }
+    end();
+    return placed;
 }
 
 export function createSessionMessageReduction(history: {
@@ -835,7 +890,6 @@ export function prependSessionMessageEvents(
         mergeSessionEventSequences(history.events, unresolvedEvents),
         history.nextCursor === null ? "known" : "possibly-before-page",
         history.promptOutcomes,
-        false,
         reductionCommandIds(reduction),
     );
     // Entries with retained events were replayed into the older reduction, where
@@ -898,8 +952,8 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
             }
         }
     };
-    for (const entry of reduction.entries) {
-        if (entry.kind === "queued-command") {
+    for (const entry of placeTurnOutcomes(reduction.entries)) {
+        if (entry.kind === "queued-command" || entry.kind === "turn-outcome") {
             continue;
         }
         if (entry.kind === "execution-owner") {
