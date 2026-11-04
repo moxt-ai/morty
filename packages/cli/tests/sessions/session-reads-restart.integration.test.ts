@@ -5,11 +5,7 @@ import { describe, expect, it } from "vitest";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
 import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts";
-import {
-    MemorySessionStore,
-    MissingStoredSession,
-    SqliteSessionStore,
-} from "../../src/engine/session/record/session-store.ts";
+import { MemorySessionStore, SqliteSessionStore } from "../../src/engine/session/record/session-store.ts";
 import { AcpSessionTable } from "../../src/engine/storage/session/acp-session-table.ts";
 import { openAcpSessionDatabase } from "../../src/engine/storage/sqlite/local-databases.ts";
 import { systemTimer } from "../../src/engine/util/timer.ts";
@@ -153,7 +149,7 @@ describe("Session settings reads after a daemon restart", () => {
         }
     });
 
-    it("Given a native chat session was retired, When it is looked up before a reload, Then the lookup reports it missing and a reload restores its configured settings", async () => {
+    it("Given a native chat session whose process the daemon retired, When it is looked up after a restart, Then it is still known with its title and a prepare restores its configured settings", async () => {
         const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-session-config-read-retired-"));
         const databasePath = join(temporaryDirectory, "sessions.sqlite");
         // Native chat session ids are the Agent's own UUIDs for codex/claude/pi;
@@ -200,31 +196,14 @@ describe("Session settings reads after a daemon restart", () => {
                 valueType: "select",
             });
         } finally {
+            // Closing the daemon retires the Session's process; the Session itself outlives it.
             await first.close();
         }
-        // Retiring an imported native chat session deletes its row: the Agent
-        // owns the conversation, so a client that still wants it must reload
-        // (re-import) first — the same contract session.restore exposes.
-        expect(store.read(sessionId)).toBeInstanceOf(MissingStoredSession);
-        expect(createManager(store, "native").findSessions([sessionId])).toHaveLength(0);
 
-        // After the client reloads the conversation, the settings read finds
-        // the session again and reports the Agent's configured model.
         const restarted = createManager(store, "native");
         try {
-            const reloaded = await restarted.openNativeSession(
-                {
-                    additionalDirectories: [],
-                    agent,
-                    cwd: process.cwd(),
-                    sessionId,
-                    signal: AbortSignal.timeout(10_000),
-                },
-                { kind: "import", nativeSessionId: sessionId, title: "Imported native session" },
-            );
-            expect(reloaded.sessionId).toBe(sessionId);
             const [found] = restarted.findSessions([sessionId]);
-            expect(found?.sessionId).toBe(sessionId);
+            expect(found).toMatchObject({ sessionId, title: "Imported native session", prompted: true });
             const prepared = await restarted.prepareSession({
                 additionalDirectories: [],
                 agent,

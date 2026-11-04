@@ -142,22 +142,13 @@ export class SessionManager {
         };
     }
 
+    /**
+     * Retires a Session's process. The stored Session outlives it, whatever ended the process: only an operation
+     * that ends the Session itself removes its title, settings and native identity.
+     */
     async #retireSessionProcess(sessionId: string, runtime: AgentSession, close: () => Promise<void>): Promise<void> {
-        const retained = this.#executionProcesses.detach(sessionId, runtime);
-        try {
-            await this.#processes.retire(runtime, close);
-        } finally {
-            if (retained && this.#sessionIdentity === "native") {
-                const stored = this.#store.read(sessionId);
-                if (
-                    stored instanceof FoundStoredSession &&
-                    stored.session.nativeSessionId === sessionId &&
-                    isNativeChatSessionId(stored.session.agentId, sessionId)
-                ) {
-                    this.#store.remove(sessionId);
-                }
-            }
-        }
+        this.#executionProcesses.detach(sessionId, runtime);
+        await this.#processes.retire(runtime, close);
     }
 
     /**
