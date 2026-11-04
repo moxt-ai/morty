@@ -3,6 +3,7 @@ import {
     type AcpSessionUpdate,
     type ContentBlock,
     type PromptCompletion,
+    type PromptMessageOutcome,
     promptCompletion,
     type SessionEvent,
     type SessionLiveEvent,
@@ -19,7 +20,13 @@ const BOT_INSTRUCTIONS_URI = "morty://bot/instructions";
 
 export const COMPACTION_CHARACTER_LIMIT = 16 * 1024;
 
-export type SessionPresentationEvent = SessionEvent | SessionLiveEvent;
+/**
+ * A prompt's ending that a history page restates from the Runtime's record. History holds the Agent's events only, so
+ * the ending is placed after its turn's events; it has no live position.
+ */
+type RestatedOutcomeEvent = Omit<Extract<SessionLiveEvent, { readonly type: "lifecycle-metadata" }>, "position">;
+
+export type SessionPresentationEvent = SessionEvent | SessionLiveEvent | RestatedOutcomeEvent;
 
 export type SessionText =
     | {
@@ -713,13 +720,70 @@ function applySessionEvent(
     }
 }
 
+/** The restatement of `outcome`, in the Session generation of the history page that named it. */
+function restatedOutcomeEvent(outcome: PromptMessageOutcome, page: SessionPresentationEvent): RestatedOutcomeEvent {
+    return {
+        eventId: `restated-outcome:${outcome.payload.commandId}`,
+        mobiusMetadata: { restated: true },
+        payload: outcome.payload,
+        recordedAt: outcome.recordedAt,
+        sessionGenerationId: page.sessionGenerationId,
+        sessionId: page.sessionId,
+        type: "lifecycle-metadata",
+    };
+}
+
+/**
+ * Reduces a page of events. A history page omits lifecycle events, so the outcomes it names restate them: a user
+ * message whose prompt is known starts that command's turn, as its start would live, and the turn's ending follows its
+ * events, before the next user message. Lifecycle events are the record: an outcome restates only a command that no
+ * event here, nor any in `known`, names. A turn still open where the page ends ends there only on the newest page
+ * (`endsOpenTurn`); on an older page, its events may continue on the next one.
+ */
 function reduceSessionEvents(
     events: readonly SessionPresentationEvent[],
     leadingEvent: "known" | "possibly-before-page",
+    outcomes: readonly PromptMessageOutcome[] = [],
+    endsOpenTurn = true,
+    known: ReadonlySet<string> = new Set(),
 ): SessionMessageReduction {
+    const named = new Set([...known, ...sessionEventCommandIds(events)]);
+    const byMessage = new Map(
+        outcomes.flatMap((outcome) =>
+            outcome.payload.messageId === undefined || named.has(outcome.payload.commandId)
+                ? []
+                : [[outcome.payload.messageId, outcome] as const],
+        ),
+    );
     let entries: readonly ReducedSessionEntry[] = [];
+    let open: { readonly outcome: PromptMessageOutcome; readonly page: SessionPresentationEvent } | null = null;
+    const end = () => {
+        if (open !== null) {
+            const restated = restatedOutcomeEvent(open.outcome, open.page);
+            entries = applySessionEvent(entries, restated, consumeSessionEvent(entries, restated, leadingEvent));
+            open = null;
+        }
+    };
     for (const event of events) {
-        entries = applySessionEvent(entries, event, consumeSessionEvent(entries, event, leadingEvent));
+        const result = consumeSessionEvent(entries, event, leadingEvent);
+        if (result.kind === "constructed" && result.message.role === "user" && event.type === "acp") {
+            end();
+            const messageId = event.payload.sessionUpdate === "user_message_chunk" ? event.payload.messageId : null;
+            const outcome = messageId == null ? undefined : byMessage.get(messageId);
+            if (outcome !== undefined) {
+                const { commandId } = outcome.payload;
+                entries = [
+                    ...entries,
+                    { kind: "execution-owner", commandId, executionCommandId: commandId, execution: "starts" },
+                    { kind: "turn-started", commandId },
+                ];
+                open = { outcome, page: event };
+            }
+        }
+        entries = applySessionEvent(entries, event, result);
+    }
+    if (endsOpenTurn) {
+        end();
     }
     return { entries };
 }
@@ -727,8 +791,13 @@ function reduceSessionEvents(
 export function createSessionMessageReduction(history: {
     readonly events: readonly SessionPresentationEvent[];
     readonly nextCursor: string | null;
+    readonly promptOutcomes?: readonly PromptMessageOutcome[];
 }): SessionMessageReduction {
-    return reduceSessionEvents(history.events, history.nextCursor === null ? "known" : "possibly-before-page");
+    return reduceSessionEvents(
+        history.events,
+        history.nextCursor === null ? "known" : "possibly-before-page",
+        history.promptOutcomes,
+    );
 }
 
 function mergeSessionEventSequences(
@@ -753,15 +822,22 @@ export function appendSessionMessageEvent(
 
 export function prependSessionMessageEvents(
     reduction: SessionMessageReduction,
-    history: { readonly events: readonly SessionPresentationEvent[]; readonly nextCursor: string | null },
+    history: {
+        readonly events: readonly SessionPresentationEvent[];
+        readonly nextCursor: string | null;
+        readonly promptOutcomes?: readonly PromptMessageOutcome[];
+    },
 ): SessionMessageReduction {
     const unresolvedEvents = reduction.entries.flatMap((entry) =>
         entry.kind === "message" ? entry.unresolvedEvents : [],
     );
-    const older = createSessionMessageReduction({
-        events: mergeSessionEventSequences(history.events, unresolvedEvents),
-        nextCursor: history.nextCursor,
-    });
+    const older = reduceSessionEvents(
+        mergeSessionEventSequences(history.events, unresolvedEvents),
+        history.nextCursor === null ? "known" : "possibly-before-page",
+        history.promptOutcomes,
+        false,
+        reductionCommandIds(reduction),
+    );
     // Entries with retained events were replayed into the older reduction, where
     // their ids merge under one entity with the start events this page lacked;
     // they are superseded and dropped here. "known" entries have nothing to
@@ -772,6 +848,22 @@ export function prependSessionMessageEvents(
             ...reduction.entries.filter((entry) => entry.kind !== "message" || entry.provenance === "known"),
         ],
     };
+}
+
+/** The commands a reduction already accounts for. */
+function reductionCommandIds(reduction: SessionMessageReduction): ReadonlySet<string> {
+    return new Set(
+        reduction.entries.flatMap((entry) => {
+            switch (entry.kind) {
+                case "message":
+                    return entry.message.commandId === null ? [] : [entry.message.commandId];
+                case "execution-idle":
+                    return [];
+                default:
+                    return [entry.commandId];
+            }
+        }),
+    );
 }
 
 export function sessionReductionExecutionOwner(reduction: SessionMessageReduction, commandId: string): string | null {

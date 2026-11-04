@@ -105,3 +105,36 @@ test("Given a conversation still answering in the background, When I start anoth
 
     await app.waitForView(() => expect(entryStatus(app, heldPrompt)).toBe("Unread response"));
 });
+
+test("Given an earlier turn failed and a later one completed, When I return to the conversation, Then the earlier turn still shows its failure", {
+    timeout: 30_000,
+}, async () => {
+    const failedPrompt = "fail this turn explicitly";
+    const app = await createTestApp({ connectAgent: true });
+    await app.queryElementByTestId(
+        dataTestId.botConnectionStatus,
+        (element) => element.getAttribute("data-connection-status") === "connected",
+    );
+    await sendPrompt(app, await readyComposer(app), failedPrompt);
+    await app.waitForView(() =>
+        expect(document.body.textContent).toContain("The controlled Agent rejected this turn."),
+    );
+    await sendPrompt(app, await readyComposer(app), "Follow up after the failure");
+    await app.waitForView(() =>
+        expect(document.body.textContent).toContain("Codex turn 2: Follow up after the failure"),
+    );
+
+    // Leaving and returning reloads the conversation from its history.
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    await app.waitForView(() => expect(document.body.textContent).not.toContain("Codex turn 2"));
+    const entry = directoryEntry(app, failedPrompt);
+    if (entry === undefined) {
+        throw new Error("Expected the conversation in the directory");
+    }
+    await app.user.click(entry);
+    await app.waitForView(() => {
+        expect(document.body.textContent).toContain("Codex turn 2: Follow up after the failure");
+        expect(document.body.textContent).toContain("The controlled Agent rejected this turn.");
+    });
+    await app.close();
+});

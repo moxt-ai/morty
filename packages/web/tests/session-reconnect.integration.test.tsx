@@ -339,20 +339,20 @@ test("Given a failed Agent turn, When its Runtime reconnects and the conversatio
         expect(composer.disabled).toBe(false);
         expect(reconnectStatusText(app)).toBeNull();
     });
-    // Execution receipts remain available to the daemon, but lifecycle failures
-    // are not replayed into projected conversation history.
+    // The restarted Runtime's history restates how the turn ended from its execution receipt: once, with the summary
+    // the receipt keeps across a restart in place of the Agent's own error text.
     await app.waitForView(() => {
         expect(
             queryAllByText(document.body, "The local Agent could not complete the request", { exact: true }),
-        ).toHaveLength(0);
+        ).toHaveLength(1);
         expect(
             queryAllByText(document.body, "Internal error: The controlled Agent rejected this turn.", { exact: true }),
-        ).toHaveLength(1);
+        ).toHaveLength(0);
         expect(queryAllByRole(document.body, "alert")).toHaveLength(1);
     });
     const reloaded = await app.reload();
     await reloaded.queryElementByTestId(dataTestId.messageComposer);
-    // History holds no failure, but the Runtime still reports how the last turn ended: once, with its retained message.
+    // A reload restates the same ending, once.
     await reloaded.waitForView(() => {
         expect(
             queryAllByText(document.body, "Internal error: The controlled Agent rejected this turn.", { exact: true }),

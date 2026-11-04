@@ -11,7 +11,7 @@ import {
     SESSION_CLOSED_ERROR_CODE,
     type SessionConfigOption,
 } from "@moxt-ai/mobius-sdk";
-import type { SessionEvent, SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
+import type { PromptMessageOutcome, SessionEvent, SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
@@ -358,6 +358,7 @@ async function readSessionHistory(
     loadedRange: { readonly generation: string; readonly firstEventId: string | null } | null = null,
 ): Promise<SessionEventHistory> {
     let events: readonly SessionEvent[] = newerEvents;
+    let promptOutcomes: readonly PromptMessageOutcome[] = [];
     let nextCursor = initialCursor;
     // Loading the newest page can itself restore native history and replace the
     // generation announced by a preceding live event. That page owns the baseline;
@@ -385,8 +386,12 @@ async function readSessionHistory(
         }
         sessionGenerationId = page.sessionGenerationId;
         events = mergeSessionEvents(page.events, events);
+        // Older Runtimes report no outcomes.
+        promptOutcomes = [...(page.promptOutcomes ?? []), ...promptOutcomes];
         nextCursor = page.nextCursor;
-        renderableMessages = sessionReductionMessages(createSessionMessageReduction({ events, nextCursor }));
+        renderableMessages = sessionReductionMessages(
+            createSessionMessageReduction({ events, nextCursor, promptOutcomes }),
+        );
     } while (
         nextCursor !== null &&
         (renderableMessages.length < HISTORY_MESSAGE_TARGET ||
@@ -398,7 +403,7 @@ async function readSessionHistory(
     if (sessionGenerationId === null || throughPosition === null) {
         throw new Error("The Runtime returned no Session history generation.");
     }
-    return { events, nextCursor, sessionGenerationId, throughPosition };
+    return { events, nextCursor, sessionGenerationId, throughPosition, promptOutcomes };
 }
 
 function mergeSessionEvents(

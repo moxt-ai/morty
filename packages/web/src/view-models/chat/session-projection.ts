@@ -1,4 +1,4 @@
-import type { SessionEvent, SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
+import type { PromptMessageOutcome, SessionEvent, SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
 import type { SessionPresentationEvent } from "./session-presentation.ts";
 import {
     appendSessionMessageEvent,
@@ -15,6 +15,8 @@ export interface SessionEventHistory {
     readonly events: readonly SessionEvent[];
     readonly nextCursor: string | null;
     readonly sessionGenerationId: string;
+    /** How the prompts whose user messages these events hold ended, as the Runtime recorded it. */
+    readonly promptOutcomes: readonly PromptMessageOutcome[];
 }
 
 interface PendingEvents {
@@ -125,7 +127,11 @@ function adoptGeneration(
         kind: "established",
         pagination: { nextCursor: history.nextCursor },
         pending: null,
-        reduction: createSessionMessageReduction({ events, nextCursor: history.nextCursor }),
+        reduction: createSessionMessageReduction({
+            events,
+            nextCursor: history.nextCursor,
+            promptOutcomes: history.promptOutcomes,
+        }),
         revision: state.revision + 1,
     };
 }

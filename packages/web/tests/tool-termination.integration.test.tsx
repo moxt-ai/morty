@@ -190,7 +190,7 @@ for (const [reason, notice] of [
     ["max_turn_requests", "The agent reached its request limit for this turn."],
     ["refusal", "The agent declined this request."],
 ] as const) {
-    test(`Given a turn ends with ${reason}, When I view it and reload, Then the reason is live-only and its tools stay settled`, {
+    test(`Given a turn ends with ${reason}, When I view it and reload, Then the reason stays and its tools stay settled`, {
         timeout: 30_000,
     }, async () => {
         const app = await start(`stop with ${reason}`);
@@ -198,7 +198,7 @@ for (const [reason, notice] of [
         expect((await app.queryElementByTestId(dataTestId.agentReplyStatus)).textContent).toBe(notice);
         const reloaded = await app.reload();
         await assertSettled(reloaded);
-        expect(reloaded.optionalElementByTestId(dataTestId.agentReplyStatus)).toBeNull();
+        expect((await reloaded.queryElementByTestId(dataTestId.agentReplyStatus)).textContent).toBe(notice);
     });
 }
 

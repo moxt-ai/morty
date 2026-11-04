@@ -119,9 +119,14 @@ test("Given a rejected submission after an earlier failure, When another viewer'
     // Only the Chat bridge dropped: the pane's own Session stream may already show the failure.
     expect(getByRole(form, "button", { name: "Send message" })).toHaveProperty("disabled", true);
     await act(async () => clock.advanceBy(1_000));
+    const appRoot = form.closest<HTMLElement>("[data-test-app-root]");
+    if (appRoot === null) {
+        throw new Error("Expected this viewer's root");
+    }
     await app.waitForView(() => {
         expect(getByRole(document.body, "button", { name: "Retry message" })).toHaveProperty("disabled", false);
-        expect(queryAllByText(document.body, recoveredFailure, { exact: true })).toHaveLength(1);
+        // Each failed turn keeps its own failure: the earlier one and the one recovered on reconnect.
+        expect(queryAllByText(appRoot, recoveredFailure, { exact: true })).toHaveLength(2);
         expect(entryStatus(app, "Established session")).toBe("Session failed");
     });
 });
@@ -144,7 +149,7 @@ function entryStatus(app: TestApp, title: string): string | null {
     );
 }
 
-test("Given a turn that fails while I am in another Session, When I return, Then I see its failure, the sidebar agrees, and my next message clears it", {
+test("Given a turn that fails while I am in another Session, When I return, Then I see its failure, the sidebar agrees, and my next message clears the Session's failure", {
     timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
@@ -189,12 +194,13 @@ test("Given a turn that fails while I am in another Session, When I return, Then
     await app.waitForView(() => {
         expect(app.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain("Keep chatting");
         expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
-        expect(queryAllByText(document.body, recoveredFailure, { exact: true })).toHaveLength(0);
+        // The failed turn keeps its failure in the conversation; the Session itself is no longer failed.
+        expect(queryAllByText(document.body, recoveredFailure, { exact: true })).toHaveLength(1);
         expect(entryStatus(app, "Established session")).toBeNull();
     });
 });
 
-test("Given my last turn completed while I was away after an earlier failure, When I return, Then no stale failure is shown", {
+test("Given my last turn completed while I was away after an earlier failure, When I return, Then the earlier turn keeps its failure and the Session is not shown failed", {
     timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
@@ -221,7 +227,8 @@ test("Given my last turn completed while I was away after an earlier failure, Wh
         expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain("Finish while away");
         expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
         expect(entryStatus(app, "Established session")).toBeNull();
-        expect(queryAllByText(document.body, recoveredFailure, { exact: true })).toHaveLength(0);
-        expect(queryAllByRole(document.body, "alert")).toHaveLength(0);
+        // Only the failed turn's own card reports a failure.
+        expect(queryAllByText(document.body, recoveredFailure, { exact: true })).toHaveLength(1);
+        expect(queryAllByRole(document.body, "alert")).toHaveLength(1);
     });
 });
