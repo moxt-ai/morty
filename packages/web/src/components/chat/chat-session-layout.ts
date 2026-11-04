@@ -11,10 +11,12 @@ export const chatSessionInteractionColumnClassName =
     "mx-auto w-full min-w-0 px-3 sm:w-[min(920px,calc(100%-24px))] sm:px-0";
 
 /**
- * `--composer-notice-tuck` sinks the message tail under the frosted composer
- * notice while one is up; the variable stays 0 otherwise.
+ * Without a floating composer notice the log reaches 16px under the composer
+ * stack; while one is up, `--composer-overlay-block` replaces that overhang
+ * with the notice's own height, so the log's visible bottom edge stops at the
+ * notice's top edge and no scroll position passes under its frost.
  */
-export const chatSessionMessageScrollClassName = `min-h-0 flex-1 overflow-y-auto pt-6 pb-[72px] -mb-4 [&>:last-child]:mb-[var(--composer-notice-tuck,0px)] ${mortyThinScrollbarClassName} sm:pt-10`;
+export const chatSessionMessageScrollClassName = `min-h-0 flex-1 overflow-y-auto pt-6 pb-[72px] mb-[var(--composer-overlay-block,-1rem)] ${mortyThinScrollbarClassName} sm:pt-10`;
 
 export const chatSessionMessageColumnClassName = `${chatSessionColumnClassName} font-inter text-foreground`;
 

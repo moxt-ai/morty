@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { expect, test } from "./infra/test.ts";
 
-test("Given a session pinned to its latest reply, When an unreadable attachment raises the composer notice, Then the reply tail tucks behind the notice", async ({
+test("Given a session pinned to its latest reply, When an unreadable attachment raises the composer notice, Then the reply tail stays fully above the notice", async ({
     runtime,
 }, testInfo) => {
     const { page } = runtime;
@@ -20,17 +20,60 @@ test("Given a session pinned to its latest reply, When an unreadable attachment 
     const empty = testInfo.outputPath("empty.txt");
     writeFileSync(empty, "");
     await page.locator("input[aria-label='Choose attachments']").setInputFiles(empty);
-    const notice = page.getByRole("alert").filter({ hasText: "Files must be between 1 byte and 32 MB." });
-    await expect(notice).toBeVisible();
+    const notice = page.locator('[data-notice-placement="overlay"]');
+    await expect(
+        notice.getByRole("alert").filter({ hasText: "Files must be between 1 byte and 32 MB." }),
+    ).toBeVisible();
     await page.screenshot({ animations: "disabled", path: testInfo.outputPath("notice-frost.png") });
 
-    // The notice is frosted glass over the log: the latest reply keeps its tail
-    // inside the notice box so the blur has message content behind it.
+    // The notice no longer overlaps the log at all: the log's visible box stops
+    // at the notice's top edge, so no scroll position — not just the pinned
+    // bottom — passes under its frost, and the latest reply keeps its whole
+    // tail, text and copy action, above the notice.
     const noticeBox = await notice.boundingBox();
     const articleBox = await article.boundingBox();
-    if (noticeBox === null || articleBox === null) {
-        throw new Error("Expected the notice and the latest reply to have layout boxes");
+    const logBox = await page.getByRole("log").boundingBox();
+    if (noticeBox === null || articleBox === null || logBox === null) {
+        throw new Error("Expected the notice, the latest reply and the log to have layout boxes");
     }
-    expect(articleBox.y + articleBox.height).toBeGreaterThan(noticeBox.y);
-    expect(articleBox.y).toBeLessThan(noticeBox.y + noticeBox.height);
+    expect(logBox.y + logBox.height).toBeLessThanOrEqual(noticeBox.y + 1);
+    expect(articleBox.y + articleBox.height).toBeLessThanOrEqual(noticeBox.y);
+    await expect(article.getByRole("button", { name: "Copy response" })).toBeInViewport();
+});
+
+test.describe("Given an interactive card ending the log", () => {
+    // A short pane makes the first-session tip the tail of an overflowing log —
+    // the state where the reply-tail frost sink would pull a card under the notice.
+    test.use({ contextOptions: { viewport: { width: 1280, height: 320 } } });
+
+    test("When an unreadable attachment raises the composer notice, Then the card keeps its actions fully above the notice", async ({
+        runtime,
+    }, testInfo) => {
+        const { page } = runtime;
+        const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+        await page.goto(connected.url);
+        const tip = page.getByRole("region", { name: "Continue your work here" });
+        await expect(tip).toBeVisible();
+
+        // A zero-byte file fails the attachment size check and raises the notice.
+        const empty = testInfo.outputPath("empty.txt");
+        writeFileSync(empty, "");
+        await page.locator("input[aria-label='Choose attachments']").setInputFiles(empty);
+        const notice = page.locator('[data-notice-placement="overlay"]');
+        await expect(
+            notice.getByRole("alert").filter({ hasText: "Files must be between 1 byte and 32 MB." }),
+        ).toBeVisible();
+        await page.screenshot({ animations: "disabled", path: testInfo.outputPath("notice-card-tail.png") });
+
+        // The tip is a card with actions, not reply chrome: it never sinks into
+        // the frost. The log reserves the notice's overlap below the card, so
+        // its bottom edge stays clear of the notice and its action is reachable.
+        const tipBox = await tip.boundingBox();
+        const noticeBox = await notice.boundingBox();
+        if (tipBox === null || noticeBox === null) {
+            throw new Error("Expected the tip and the notice to have layout boxes");
+        }
+        expect(tipBox.y + tipBox.height).toBeLessThanOrEqual(noticeBox.y);
+        await expect(tip.getByRole("button", { name: "Ask for a progress update" })).toBeInViewport();
+    });
 });
