@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { type FileHandle, mkdir, open, readdir, rename, unlink, writeFile } from "node:fs/promises";
+import { type FileHandle, link, mkdir, open, readdir, rename, rm, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { isNodeError } from "../../util/node-error.ts";
@@ -78,9 +78,18 @@ export async function writeInstallationFile(path: string, text: string, signal: 
     }
 }
 
-/** Creates a file with owner-only permissions. Fails with `EEXIST` when it already exists. */
+/**
+ * Publishes a complete file with owner-only permissions. Fails with `EEXIST` when it already exists.
+ * A concurrent reader sees either no file or the whole text, never an empty or partial one.
+ */
 export async function createInstallationFile(path: string, text: string): Promise<void> {
-    await writeFile(path, text, { flag: "wx", mode: 0o600 });
+    const temporaryPath = join(dirname(path), `.${randomUUID()}.tmp`);
+    try {
+        await writeFile(temporaryPath, text, { flag: "wx", mode: 0o600 });
+        await link(temporaryPath, path);
+    } finally {
+        await rm(temporaryPath, { force: true });
+    }
 }
 
 export async function listInstallationFiles(directory: string): Promise<readonly string[]> {
