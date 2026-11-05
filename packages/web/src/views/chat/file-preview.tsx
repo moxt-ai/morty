@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { HighlightedCode, languageForPath } from "../../components/chat/highlighted-code.tsx";
 import { HtmlPreview } from "../../components/chat/html-preview.tsx";
 import { ImageCanvas } from "../../components/images/image-canvas.tsx";
+import { ScrollArea } from "../../components/ui/scroll-area.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { FilePreviewLayout, FilePreviewState } from "../../view-models/chat/file-preview-store.ts";
 import { describePageFailure } from "../../view-models/format-error.ts";
@@ -26,12 +27,14 @@ function CodeLineNumbers({ code }: { readonly code: string }) {
 
 function PreviewSource({ name, text }: { readonly name: string; readonly text: string }) {
     return (
-        <section
+        <ScrollArea
             aria-label="File contents"
-            className="h-full min-h-0 w-full overflow-auto bg-white [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin] keyboard-focus:focus-visible:outline-2 keyboard-focus:focus-visible:outline-offset-[-2px] keyboard-focus:focus-visible:outline-ring [&_pre]:!max-h-none"
+            role="region"
+            className="h-full min-h-0 w-full bg-white keyboard-focus:focus-visible:outline-2 keyboard-focus:focus-visible:outline-offset-[-2px] keyboard-focus:focus-visible:outline-ring [&_pre]:!max-h-none"
             data-testid={dataTestId.filePreviewContent}
-            // biome-ignore lint/a11y/noNoninteractiveTabindex: the scroll region must be keyboard reachable
+            orientation="both"
             tabIndex={0}
+            viewportClassName="h-full"
         >
             <div className="flex min-w-0 items-start">
                 <CodeLineNumbers code={text} />
@@ -39,7 +42,7 @@ function PreviewSource({ name, text }: { readonly name: string; readonly text: s
                     <HighlightedCode bare code={text} language={languageForPath(name)} />
                 </div>
             </div>
-        </section>
+        </ScrollArea>
     );
 }
 
@@ -197,16 +200,21 @@ export function FilePreview({
                     <RotateCw aria-hidden="true" className="size-4" /> Reload
                 </button>
             </div>
-            <div
-                className={cn(
-                    "flex min-h-0 flex-1",
-                    state.kind === "text" || state.kind === "html" || state.kind === "image"
-                        ? "items-stretch justify-stretch overflow-hidden bg-white"
-                        : "items-center justify-center overflow-auto bg-surface-subtle p-5",
-                )}
-            >
-                <PreviewContent onHtmlAttach={onHtmlAttach} state={state} />
-            </div>
+            {state.kind === "text" || state.kind === "html" || state.kind === "image" ? (
+                <div className="flex min-h-0 flex-1 items-stretch justify-stretch overflow-hidden bg-white">
+                    <PreviewContent onHtmlAttach={onHtmlAttach} state={state} />
+                </div>
+            ) : (
+                <ScrollArea
+                    className="min-h-0 flex-1 bg-surface-subtle"
+                    orientation="both"
+                    viewportClassName="h-full p-5"
+                >
+                    <div className="flex min-h-full items-center justify-center">
+                        <PreviewContent onHtmlAttach={onHtmlAttach} state={state} />
+                    </div>
+                </ScrollArea>
+            )}
         </dialog>
     );
 }

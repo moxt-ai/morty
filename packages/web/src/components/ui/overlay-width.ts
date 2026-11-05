@@ -48,7 +48,7 @@ export const overlayWidthLadder: readonly {
     {
         token: "dialogMedium",
         label: "Dialog · medium",
-        usage: 'Reserved for denser forms (set `size="medium"` on Dialog)',
+        usage: 'Continue on another device (`variant="identitySharing"`), denser default forms',
     },
     {
         token: "dialogLarge",
