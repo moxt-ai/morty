@@ -92,7 +92,7 @@ def main():
                 command += ['--secrets-file', str(secret_file)]
             run(command, env)
         checks = []
-        for url, content in [(expected['platform_origin'] + '/mobius/api/health', 'mobius-relay-platform'), (expected['morty_origin'] + '/', 'Morty'), (expected['morty_origin'] + '/setup.mjs', None)]:
+        for url, content in [(expected['platform_origin'] + '/mobius/api/dashboard/health', 'mobius-relay-platform'), (expected['morty_origin'] + '/', 'Morty'), (expected['morty_origin'] + '/setup.mjs', None)]:
             with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'Mobius-Deployment/1.0'}), timeout=40) as response:
                 body = response.read()
                 if response.status != 200 or content and content not in body.decode():
