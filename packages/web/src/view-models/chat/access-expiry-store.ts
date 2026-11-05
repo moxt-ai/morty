@@ -33,9 +33,22 @@ function accessNotice(expiresAt: string, now: number, acknowledged: AccessAcknow
 }
 
 type AccessExpiryState =
+    /** The term has not been read yet. */
     | { readonly kind: "unknown" }
+    /** The term could not be read. The next visible visit tries again. */
+    | { readonly kind: "unavailable" }
     /** `expiresAt` is null for access that does not end on its own, which has no notice. */
     | { readonly kind: "known"; readonly expiresAt: string | null; readonly notice: AccessNotice };
+
+/** The card this browser should show, or null when access has nothing new to say. */
+export function visibleAccessNotice(
+    state: AccessExpiryState,
+): { readonly expiresAt: string; readonly notice: "joined" | "ending" } | null {
+    if (state.kind !== "known" || state.expiresAt === null || state.notice === "none") {
+        return null;
+    }
+    return { expiresAt: state.expiresAt, notice: state.notice };
+}
 
 export interface AccessExpiryStore {
     readonly state: AccessExpiryState;
@@ -66,11 +79,21 @@ export function createAccessExpiryStore(options: {
                 },
             });
         const follow = async (signal: AbortSignal): Promise<void> => {
+            if (get().state.kind === "unavailable") {
+                if (signal.aborted) {
+                    return;
+                }
+                set({ state: { kind: "unknown" } });
+            }
             let expiresAt: string | null;
             try {
                 expiresAt = await options.accessExpiresAt(signal);
             } catch {
                 // Access that ended is handled by the request that found it; the next visit reads again.
+                // A term already on screen stays. Only a first read that failed leaves the card empty.
+                if (!signal.aborted && get().state.kind === "unknown") {
+                    set({ state: { kind: "unavailable" } });
+                }
                 return;
             }
             if (signal.aborted) {

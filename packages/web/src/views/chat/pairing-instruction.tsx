@@ -20,14 +20,34 @@ function mortyAddress(): string {
     return `${window.location.origin}/`;
 }
 
+type PairingActionPresentation = "setup-card" | "dialog";
+
+function pairingPrimaryActionProps(presentation: PairingActionPresentation): {
+    readonly className: string;
+    readonly size: "default" | "lg";
+} {
+    if (presentation === "dialog") {
+        return { className: "w-full", size: "default" };
+    }
+    return { className: setupPrimaryButtonClassName, size: setupPrimaryButtonSize };
+}
+
 /** A phone or tablet cannot run setup, so it sends Morty's address to the computer through the share sheet. */
-function ShareSetupLink({ sendLink }: { readonly sendLink: SendLinkStoreApi }) {
+function ShareSetupLink({
+    hintClassName,
+    primaryAction,
+    sendLink,
+}: {
+    readonly hintClassName: string;
+    readonly primaryAction: ReturnType<typeof pairingPrimaryActionProps>;
+    readonly sendLink: SendLinkStoreApi;
+}) {
     const { send, state } = useExternalStore(sendLink);
     return (
         <>
             <Button
                 aria-busy={state.kind === "sending"}
-                className={setupPrimaryButtonClassName}
+                className={primaryAction.className}
                 disabled={state.kind === "sending"}
                 onClick={() =>
                     send({
@@ -36,45 +56,57 @@ function ShareSetupLink({ sendLink }: { readonly sendLink: SendLinkStoreApi }) {
                         url: mortyAddress(),
                     })
                 }
-                size={setupPrimaryButtonSize}
+                size={primaryAction.size}
             >
                 <Send aria-hidden="true" className="size-4" />
                 <span>Send to my computer</span>
             </Button>
             {state.kind === "failed" ? (
-                <p className={handoffHintClassName} role="status">
+                <p className={hintClassName} role="status">
                     Could not open sharing. Copy this page's address from your browser instead.
                 </p>
             ) : (
-                <p className={handoffHintClassName}>{handoffHint}</p>
+                <p className={hintClassName}>{handoffHint}</p>
             )}
         </>
     );
 }
 
 export function PairingInstruction({
+    actionPresentation = "setup-card",
     handoff = copyPrompt,
     onCopied,
     onLinkSent = () => {},
 }: {
+    /** Setup cards use full-width rounded actions; dialogs use standard cloud buttons. */
+    readonly actionPresentation?: PairingActionPresentation;
     /** How this device moves setup to the agent's computer; copying the prompt unless the caller knows better. */
     readonly handoff?: SetupHandoffModel;
     readonly onCopied?: () => void;
     readonly onLinkSent?: () => void;
 }) {
     const setupInstruction = agentSetupPrompt();
+    const primaryAction = pairingPrimaryActionProps(actionPresentation);
+    const hintClassName =
+        actionPresentation === "dialog"
+            ? "mt-3 min-h-10 text-center text-13 leading-5 text-muted-foreground"
+            : handoffHintClassName;
     return (
         <div>
             {handoff.kind === "share" ? (
-                <ShareSetupLink sendLink={handoff.sendLink} />
+                <ShareSetupLink
+                    hintClassName={hintClassName}
+                    primaryAction={primaryAction}
+                    sendLink={handoff.sendLink}
+                />
             ) : handoff.kind === "copy-link" ? (
                 <>
                     <CopyToClipboardButton
-                        className={setupPrimaryButtonClassName}
+                        className={primaryAction.className}
                         failureToast={unavailableLink}
                         label="Copy link"
                         onCopied={onLinkSent}
-                        size={setupPrimaryButtonSize}
+                        size={primaryAction.size}
                         successToast={{
                             description: "Open it on the computer where your agent runs.",
                             title: "Link copied",
@@ -84,18 +116,18 @@ export function PairingInstruction({
                         <Link aria-hidden="true" className="size-4" />
                         <span>Copy link</span>
                     </CopyToClipboardButton>
-                    <p className={handoffHintClassName}>{handoffHint}</p>
+                    <p className={hintClassName}>{handoffHint}</p>
                 </>
             ) : (
                 <CopyToClipboardButton
-                    className={setupPrimaryButtonClassName}
+                    className={primaryAction.className}
                     failureToast={{
                         description: "Expand setup details to copy the prompt manually.",
                         title: "Could not copy",
                     }}
                     label="Copy setup prompt"
                     {...(onCopied === undefined ? {} : { onCopied })}
-                    size={setupPrimaryButtonSize}
+                    size={primaryAction.size}
                     successToast={{
                         description: "Paste into your agent, then open the link it returns.",
                         title: "Copied",

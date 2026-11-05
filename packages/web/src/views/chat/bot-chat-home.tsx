@@ -468,7 +468,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                         store.getState().dismissNotice();
                     }}
                 >
-                    <PairingInstruction />
+                    <PairingInstruction actionPresentation="dialog" />
                 </Dialog>
             )}
         </main>

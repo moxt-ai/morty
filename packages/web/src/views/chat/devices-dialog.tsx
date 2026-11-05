@@ -1,13 +1,20 @@
-import { Laptop } from "lucide-react";
+import { ChevronDown, Laptop } from "lucide-react";
+import { Tooltip } from "radix-ui";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
 import type { StoreApi } from "zustand/vanilla";
 import { DeviceSummary } from "../../components/chat/device-list.tsx";
-import { topNoticeActionClassName } from "../../components/chat/top-notice.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
-import { Dialog } from "../../components/ui/dialog.tsx";
+import {
+    Dialog,
+    dialogBodyStackClassName,
+    dialogPinnedFooterActionsClassName,
+    dialogSectionTitleClassName,
+} from "../../components/ui/dialog.tsx";
 import { ExternalLink } from "../../components/ui/external-link.tsx";
-import { textLinkClassName } from "../../components/ui/text-link.ts";
+import { LinkButton } from "../../components/ui/link-button.tsx";
+import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.tsx";
+import { mutedTextLinkClassName, textLinkClassName } from "../../components/ui/text-link.ts";
 import { cn } from "../../lib/utils.ts";
 import type { LinkedDevice } from "../../services/identity/anonymous-identity-api.ts";
 import type { AccessExpiryStore } from "../../view-models/chat/access-expiry-store.ts";
@@ -18,12 +25,9 @@ import { mortyRepository } from "../morty-repository.ts";
 
 const dataPolicy = `${mortyRepository}#what-morty-does-with-your-data`;
 
-const deviceGroupCardClassName =
-    "overflow-hidden rounded-[20px] border border-white bg-card px-3.5 py-1 shadow-module sm:px-3";
-const deviceGroupRowClassName = "py-3";
-const deviceGroupDividerClassName = "border-t border-border/60";
-const sectionHeadingClassName = "mb-2 px-0.5 text-12 font-medium leading-4 text-morty-text-3";
-const dialogBodyClassName = "space-y-5 px-3 pb-4 sm:px-5 sm:pb-5";
+const deviceGroupCardClassName = "overflow-hidden rounded-[20px] border border-white bg-card px-4 shadow-module";
+const deviceGroupRowClassName = "py-3.5";
+const deviceGroupDividerClassName = "border-t border-border/40 -mx-4 px-4";
 
 type OpenState = Extract<DeviceAccessStore["state"], { readonly kind: "open" }>;
 
@@ -35,51 +39,27 @@ function targets(disconnection: OpenState["disconnection"], target: DisconnectTa
     );
 }
 
-/** The confirmation a disconnection asks for in place, with what it reaches; one at a time. */
-function Confirmation({
-    disconnection,
-    question,
-    onCancel,
-    onConfirm,
-}: {
-    readonly disconnection: OpenState["disconnection"];
-    readonly question: string;
-    readonly onCancel: () => void;
-    readonly onConfirm: () => void;
-}) {
+function disconnectConfirmFooter(
+    disconnection: OpenState["disconnection"],
+    cancel: () => void,
+    confirm: () => void,
+): ReactNode {
     const disconnecting = disconnection.kind === "disconnecting";
     return (
-        <div className="mt-3 rounded-[16px] border border-border/80 bg-morty-fill-opacity-1 px-3.5 py-3 text-13 leading-5">
-            <p className="text-foreground">{question}</p>
-            {disconnection.kind === "failed" && (
-                <p className="mt-2 text-destructive" role="alert">
-                    We couldn't confirm it was disconnected. Try again.
-                </p>
-            )}
-            <div className="mt-3 flex justify-end gap-2">
-                <Button
-                    className={topNoticeActionClassName}
-                    disabled={disconnecting}
-                    onClick={onCancel}
-                    size="sm"
-                    variant="ghost"
-                >
-                    Cancel
-                </Button>
-                <Button
-                    className={topNoticeActionClassName}
-                    // The confirmation takes focus where it appears, so the keyboard answers it next.
-                    ref={(node) => {
-                        node?.focus();
-                    }}
-                    disabled={disconnecting}
-                    onClick={onConfirm}
-                    size="sm"
-                    variant="primary"
-                >
-                    {disconnecting ? "Disconnecting…" : disconnection.kind === "failed" ? "Try again" : "Disconnect"}
-                </Button>
-            </div>
+        <div className={dialogPinnedFooterActionsClassName}>
+            <Button disabled={disconnecting} onClick={cancel} variant="ghost">
+                Cancel
+            </Button>
+            <Button
+                ref={(node) => {
+                    node?.focus();
+                }}
+                disabled={disconnecting}
+                onClick={confirm}
+                variant="primary"
+            >
+                {disconnecting ? "Disconnecting…" : disconnection.kind === "failed" ? "Try again" : "Disconnect"}
+            </Button>
         </div>
     );
 }
@@ -122,7 +102,7 @@ function OtherDevicesBody({
         return (
             <div className={cn(deviceGroupRowClassName, "flex items-center justify-between gap-3")} role="alert">
                 <span className="text-13 text-morty-text-3">We couldn't load your devices.</span>
-                <Button className={topNoticeActionClassName} onClick={refresh} size="sm" variant="ghost">
+                <Button onClick={refresh} variant="ghost">
                     Try again
                 </Button>
             </div>
@@ -132,11 +112,11 @@ function OtherDevicesBody({
         return <p className={cn(deviceGroupRowClassName, "text-13 text-morty-text-3")}>No other device has access.</p>;
     }
     return (
-        <ul className="divide-y divide-border/60">
+        <ul className="divide-y divide-border/40">
             {list.devices
                 ?.toSorted((left, right) => Date.parse(right.joinedAt) - Date.parse(left.joinedAt))
                 .map((device) => (
-                    <li className={deviceGroupRowClassName} key={device.id}>
+                    <li className={cn(deviceGroupRowClassName, "-mx-4 px-4")} key={device.id}>
                         {row(device)}
                     </li>
                 ))}
@@ -168,37 +148,51 @@ export function DevicesDialog({
         return null;
     }
     const others: DisconnectTarget = { kind: "others" };
+    const confirmingDevice =
+        state.disconnection.kind !== "idle" && state.disconnection.target.kind === "device"
+            ? state.disconnection.target
+            : null;
     const row = (device: LinkedDevice) => {
         const description = describeLinkedDevice(device);
         const target: DisconnectTarget = { kind: "device", id: device.id, name: description.name };
         return (
-            <>
-                <DeviceSummary
-                    action={
-                        targets(state.disconnection, target) ? undefined : (
-                            <Button
-                                aria-label={`Disconnect ${description.name}`}
-                                className={topNoticeActionClassName}
-                                disabled={state.disconnection.kind === "disconnecting"}
-                                onClick={() => request(target)}
-                                size="sm"
-                                variant="ghost"
-                            >
-                                Disconnect
-                            </Button>
-                        )
-                    }
-                    device={description}
-                />
-                {targets(state.disconnection, target) && (
-                    <Confirmation
-                        disconnection={state.disconnection}
-                        onCancel={cancel}
-                        onConfirm={() => void confirm(signal())}
-                        question={`Disconnect ${description.name}? It loses access right away. Your open windows reconnect in a few seconds.`}
-                    />
-                )}
-            </>
+            <DeviceSummary
+                action={
+                    <Tooltip.Provider delayDuration={150}>
+                        <Tooltip.Root>
+                            <Tooltip.Trigger asChild>
+                                <Button
+                                    aria-label={`Disconnect ${description.name}`}
+                                    className="size-8 -my-1.5 -mr-2 text-morty-text-3"
+                                    disabled={state.disconnection.kind === "disconnecting"}
+                                    onClick={() => request(target)}
+                                    size="icon"
+                                    variant="ghost"
+                                >
+                                    <svg
+                                        aria-hidden="true"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path d="m7 11l-2 2a4.243 4.243 0 0 0 6 6l2-2m4-4l2-2a4.243 4.243 0 0 0-6-6l-2 2m5 12v2m3-5h2M8 5V3M5 8H3" />
+                                    </svg>
+                                </Button>
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal>
+                                <MortyTooltipContent side="top" sideOffset={6}>
+                                    Disconnect
+                                    <Tooltip.Arrow className="fill-foreground" />
+                                </MortyTooltipContent>
+                            </Tooltip.Portal>
+                        </Tooltip.Root>
+                    </Tooltip.Provider>
+                }
+                device={description}
+            />
         );
     };
     return (
@@ -208,7 +202,7 @@ export function DevicesDialog({
             onClose={close}
             title="Devices with access"
         >
-            <div className={dialogBodyClassName}>
+            <div className={dialogBodyStackClassName}>
                 {state.disconnected !== null && (
                     <p
                         className="rounded-[16px] border border-primary/20 bg-primary/5 px-3.5 py-3 text-13 leading-5 text-foreground"
@@ -223,8 +217,8 @@ export function DevicesDialog({
                 )}
 
                 <ul aria-label="Devices with access" className="space-y-5">
-                    <li>
-                        <h3 className={sectionHeadingClassName}>Always here</h3>
+                    <li className="space-y-1.5">
+                        <h3 className={dialogSectionTitleClassName}>Always here</h3>
                         <div className={deviceGroupCardClassName}>
                             <div className={deviceGroupRowClassName}>
                                 {accessExpiry === null ? (
@@ -244,89 +238,84 @@ export function DevicesDialog({
                             </div>
                         </div>
                     </li>
-                    <li>
-                        <h3 className={sectionHeadingClassName}>Shared from links</h3>
+                    <li className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-3">
+                            <h3 className={dialogSectionTitleClassName}>Shared from links</h3>
+                            <LinkButton
+                                className={cn("shrink-0", mutedTextLinkClassName)}
+                                disabled={state.disconnection.kind === "disconnecting"}
+                                onClick={() => request(others)}
+                            >
+                                Disconnect all
+                            </LinkButton>
+                        </div>
+                        {confirmingDevice !== null ? (
+                            <Dialog
+                                busy={state.disconnection.kind === "disconnecting"}
+                                description="It loses access right away. Your open windows reconnect in a few seconds."
+                                footer={disconnectConfirmFooter(
+                                    state.disconnection,
+                                    cancel,
+                                    () => void confirm(signal()),
+                                )}
+                                onClose={cancel}
+                                title={`Disconnect ${confirmingDevice.name}?`}
+                            >
+                                {state.disconnection.kind === "failed" ? (
+                                    <p className="text-destructive" role="alert">
+                                        We couldn't confirm it was disconnected. Try again.
+                                    </p>
+                                ) : null}
+                            </Dialog>
+                        ) : null}
+                        {targets(state.disconnection, others) ? (
+                            <Dialog
+                                busy={state.disconnection.kind === "disconnecting"}
+                                description="They lose access right away, and links you shared that no one opened stop working. This browser and your computer keep access."
+                                footer={disconnectConfirmFooter(
+                                    state.disconnection,
+                                    cancel,
+                                    () => void confirm(signal()),
+                                )}
+                                onClose={cancel}
+                                title="Disconnect every other device?"
+                            >
+                                {state.disconnection.kind === "failed" ? (
+                                    <p className="text-destructive" role="alert">
+                                        We couldn't confirm it was disconnected. Try again.
+                                    </p>
+                                ) : null}
+                            </Dialog>
+                        ) : null}
                         <div className={deviceGroupCardClassName}>
                             <OtherDevicesBody list={list} refresh={refresh} row={row} />
                         </div>
                     </li>
                 </ul>
 
-                <div className="border-t border-border/60 pt-4">
-                    {targets(state.disconnection, others) ? (
-                        <Confirmation
-                            disconnection={state.disconnection}
-                            onCancel={cancel}
-                            onConfirm={() => void confirm(signal())}
-                            question="Disconnect every other device? They lose access right away, and links you shared that no one opened stop working. This browser and your computer keep access."
+                <details className="disclosure-details group text-13 leading-5 text-morty-text-3">
+                    <summary className="flex h-6 cursor-pointer list-none items-center gap-1.5 rounded-lg outline-none hover:text-morty-text-2 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                        How access works
+                        <ChevronDown
+                            aria-hidden="true"
+                            className="size-3.5 transition-[rotate] duration-300 ease-out group-open:rotate-180 motion-reduce:transition-none"
                         />
-                    ) : (
-                        <Button
-                            className={cn(topNoticeActionClassName, "w-full sm:w-auto")}
-                            disabled={state.disconnection.kind === "disconnecting"}
-                            onClick={() => request(others)}
-                            variant="outline"
-                        >
-                            Disconnect other devices
-                        </Button>
-                    )}
-                </div>
-
-                <details className="group rounded-[16px] border border-border/60 bg-morty-fill-opacity-1 px-3.5 py-3 text-13 leading-5 text-morty-text-3">
-                    <summary className="cursor-pointer list-none font-medium text-foreground marker:content-none [&::-webkit-details-marker]:hidden">
-                        <span className="inline-flex items-center gap-1.5">
-                            How access works
-                            <span
-                                aria-hidden="true"
-                                className="text-morty-text-3 transition-transform group-open:rotate-180"
-                            >
-                                ▾
-                            </span>
-                        </span>
                     </summary>
-                    <ul className="mt-3 space-y-2 border-t border-border/60 pt-3 pl-0">
-                        <li className="flex gap-2">
-                            <span aria-hidden="true" className="text-copy-secondary">
-                                ·
-                            </span>
-                            <span>Links work once, within 10 minutes.</span>
-                        </li>
-                        <li className="flex gap-2">
-                            <span aria-hidden="true" className="text-copy-secondary">
-                                ·
-                            </span>
-                            <span>You choose how long a device keeps access, from 1 hour to 30 days.</span>
-                        </li>
-                        <li className="flex gap-2">
-                            <span aria-hidden="true" className="text-copy-secondary">
-                                ·
-                            </span>
-                            <span>Disconnect any device here. Your computer always keeps access.</span>
-                        </li>
-                        <li className="flex gap-2">
-                            <span aria-hidden="true" className="text-copy-secondary">
-                                ·
-                            </span>
-                            <span>Morty records the approximate city a device joined from, never its IP address.</span>
-                        </li>
-                        <li className="flex gap-2">
-                            <span aria-hidden="true" className="text-copy-secondary">
-                                ·
-                            </span>
-                            <span>Your conversation history stays on your computer.</span>
-                        </li>
-                        <li className="flex gap-2">
-                            <span aria-hidden="true" className="text-copy-secondary">
-                                ·
-                            </span>
-                            <span>
+                    <div className="mt-2 rounded-[16px] border border-border/60 bg-[#f2f3f5] px-3.5 py-3">
+                        <ul className="list-disc space-y-1 pl-4 text-morty-text-2 marker:text-morty-text-4">
+                            <li>Links work once, within 10 minutes.</li>
+                            <li>You choose how long a device keeps access, from 1 hour to 30 days.</li>
+                            <li>Disconnect any device here. Your computer always keeps access.</li>
+                            <li>Morty records the approximate city a device joined from, never its IP address.</li>
+                            <li>Your conversation history stays on your computer.</li>
+                            <li>
                                 Messages pass through Morty's relay and are not end-to-end encrypted.{" "}
                                 <ExternalLink className={textLinkClassName} href={dataPolicy}>
                                     How Morty handles data
                                 </ExternalLink>
-                            </span>
-                        </li>
-                    </ul>
+                            </li>
+                        </ul>
+                    </div>
                 </details>
             </div>
         </Dialog>

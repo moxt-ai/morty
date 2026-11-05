@@ -4,11 +4,24 @@ import { cn } from "../../lib/utils.ts";
 import { Button } from "../ui/cloud-button.tsx";
 
 /** Copies a sharing link and owns the dialog-local confirmation and fallback state. */
-export function CopyLinkButton({ className, url }: { readonly className?: string; readonly url: string }) {
+export function CopyLinkButton({
+    className,
+    url,
+    urlClassName,
+}: {
+    readonly className?: string;
+    readonly url: string;
+    readonly urlClassName?: string;
+}) {
     const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
     return (
         <div className={cn("space-y-3 text-left", className)}>
-            <p className="break-all rounded-lg bg-white px-4 py-3 font-mono text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+            <p
+                className={cn(
+                    "break-all rounded-lg bg-white px-4 py-3 font-mono text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]",
+                    urlClassName,
+                )}
+            >
                 {url}
             </p>
             <Button

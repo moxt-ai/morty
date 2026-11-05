@@ -1,9 +1,6 @@
 /** Message column horizontal rhythm: 20px on mobile, 24px from `sm:` up. */
 const chatSessionContentInsetClassName = "px-5 sm:px-6";
 
-/** Morty thin scrollbar styling used on overflow scroll regions. */
-export const mortyThinScrollbarClassName = "[scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]";
-
 export const chatSessionColumnClassName = `mx-auto w-full min-w-0 max-w-[920px] ${chatSessionContentInsetClassName}`;
 
 /** Interaction cards keep the composer column's gutters: 12px on phones, flush to it from `sm:` up. */
@@ -16,7 +13,7 @@ export const chatSessionInteractionColumnClassName =
  * with the notice's own height, so the log's visible bottom edge stops at the
  * notice's top edge and no scroll position passes under its frost.
  */
-export const chatSessionMessageScrollClassName = `min-h-0 flex-1 overflow-y-auto pt-6 pb-[72px] mb-[var(--composer-overlay-block,-1rem)] ${mortyThinScrollbarClassName} sm:pt-10`;
+export const chatSessionMessageScrollClassName = `min-h-0 flex-1 pt-6 pb-[72px] mb-[var(--composer-overlay-block,-1rem)] sm:pt-10`;
 
 export const chatSessionMessageColumnClassName = `${chatSessionColumnClassName} font-inter text-foreground`;
 
