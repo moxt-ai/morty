@@ -296,7 +296,9 @@ export function BotChatComposer({
                             ref={fileInput}
                             type="file"
                         />
-                        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">{children}</div>
+                        <ScrollArea className="min-w-0" orientation="horizontal" viewportClassName="w-full">
+                            <div className="flex w-max min-w-full items-center gap-1">{children}</div>
+                        </ScrollArea>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
                         <Button

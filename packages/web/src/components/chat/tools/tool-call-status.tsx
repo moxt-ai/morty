@@ -24,7 +24,7 @@ export const agentThinkStepChevronClassName =
     "invisible size-3.5 shrink-0 -rotate-90 transition-[rotate,transform,visibility] group-hover/process:visible group-focus-visible/process:visible motion-reduce:transition-none";
 
 export const agentThinkStepExpandedPanelClassName =
-    "grid max-h-[280px] min-w-0 gap-2 overflow-y-auto overscroll-contain border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere] [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]";
+    "grid max-h-[280px] min-w-0 gap-2 border-l border-[#d9dde1] py-2 pl-5 [overflow-wrap:anywhere]";
 
 /** Scrollport for a collapsed step. Fades only the edge that still clips content. */
 export function AgentThinkStepExpandedPanel({ children }: { readonly children: ReactNode }) {

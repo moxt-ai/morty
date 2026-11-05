@@ -42,6 +42,7 @@ import { TurnWorkDisclosure, type TurnWorkSummary } from "../../components/chat/
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { OwnerQueueNotice, WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
+import { ScrollArea } from "../../components/ui/scroll-area.tsx";
 import { DesktopChatLayout } from "../../components/utils/desktop-chat-layout.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
@@ -683,9 +684,14 @@ export function MobiusSessionPaneLoading({ footer }: { readonly footer?: ReactNo
                             <SessionTitleSkeleton />
                             <WorkingDirectorySkeleton />
                         </header>
-                        <div aria-label="Messages" className={chatSessionMessageScrollClassName} role="log">
+                        <ScrollArea
+                            aria-label="Messages"
+                            className={chatSessionMessageScrollClassName}
+                            role="log"
+                            viewportClassName="h-full max-h-[inherit]"
+                        >
                             <SessionMessageListSkeleton />
-                        </div>
+                        </ScrollArea>
                         {footer}
                     </section>
                     {desktop ? null : (
@@ -1287,7 +1293,7 @@ function MobiusSessionPaneBody({
                                 // stacks above the composer as well does a floor keep its first row reachable;
                                 // otherwise the card yields all the way so the composer stays whole.
                                 frameClassName={`${chatSessionInteractionColumnClassName} ${stackNoticeVisible ? "mb-2 min-h-24" : "mt-4 mb-2 sm:mt-5"} flex shrink flex-col`}
-                                className="max-h-[min(50vh,360px)] min-h-0 flex-1 overflow-y-auto [scrollbar-color:#d4d7db_transparent] [scrollbar-width:thin]"
+                                className="max-h-[min(50vh,360px)] min-h-0 flex-1"
                             >
                                 <SessionInteractionCards
                                     answerDrafts={interactions.answerDrafts}

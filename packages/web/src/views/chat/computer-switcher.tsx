@@ -13,6 +13,7 @@ import {
     overlayTriggerOffsetPx,
     preventOverlayOpenAutoFocus,
 } from "../../components/ui/overlay-surface.ts";
+import { ScrollArea } from "../../components/ui/scroll-area.tsx";
 import { textLinkClassName } from "../../components/ui/text-link.ts";
 import { dataTestId } from "../../data-testid.ts";
 import type { BotConnectionStatus } from "../../view-models/chat/bot-chat-home-store.ts";
@@ -329,7 +330,7 @@ export function ComputerSwitcher({
                                 onOpenAutoFocus: preventOverlayOpenAutoFocus,
                             } satisfies OverlayContentOpenAutoFocus)}
                             className={cn(
-                                "z-[180] flex max-h-[min(70dvh,520px)] w-[min(calc(100vw-1.5rem),300px)] animate-cloud-enter flex-col overflow-hidden p-1.5 text-sm text-foreground outline-none motion-reduce:animate-none",
+                                "z-[180] flex max-h-[min(70dvh,520px)] min-w-[280px] w-[min(calc(100vw-1.5rem),280px)] animate-cloud-enter flex-col overflow-hidden p-1.5 text-sm text-foreground outline-none motion-reduce:animate-none",
                                 overlaySurfacePanelClassName,
                                 overlaySurfaceRadiusClassName,
                             )}
@@ -357,23 +358,29 @@ export function ComputerSwitcher({
                                     </span>
                                 ) : null}
                             </DropdownMenu.Label>
-                            <DropdownMenu.RadioGroup
-                                aria-label="Computers"
-                                className="flex min-h-0 flex-col overflow-y-auto"
-                                value={activeKey}
-                            >
-                                {choices.length === 0 ? (
-                                    <PendingCurrentComputer
-                                        className="px-3 py-2"
-                                        loading={listLoading}
-                                        name={computerName}
-                                    />
-                                ) : (
-                                    choices.map((choice) => (
-                                        <ComputerMenuChoice activeKey={activeKey} choice={choice} key={choice.key} />
-                                    ))
-                                )}
-                            </DropdownMenu.RadioGroup>
+                            <ScrollArea className="min-h-0" viewportClassName="max-h-[inherit]">
+                                <DropdownMenu.RadioGroup
+                                    aria-label="Computers"
+                                    className="flex min-h-0 flex-col"
+                                    value={activeKey}
+                                >
+                                    {choices.length === 0 ? (
+                                        <PendingCurrentComputer
+                                            className="px-3 py-2"
+                                            loading={listLoading}
+                                            name={computerName}
+                                        />
+                                    ) : (
+                                        choices.map((choice) => (
+                                            <ComputerMenuChoice
+                                                activeKey={activeKey}
+                                                choice={choice}
+                                                key={choice.key}
+                                            />
+                                        ))
+                                    )}
+                                </DropdownMenu.RadioGroup>
+                            </ScrollArea>
                             <DropdownMenu.Separator className={cn("-mx-1.5 my-1.5", overlayMenuSeparatorClassName)} />
                             <DropdownMenu.Item asChild>
                                 <a

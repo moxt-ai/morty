@@ -3,6 +3,7 @@ import { type ReactNode, useMemo } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
 import { PreviewImage } from "../images/image-gallery.tsx";
+import { ScrollArea } from "../ui/scroll-area.tsx";
 import { textLinkClassName } from "../ui/text-link.ts";
 import type { MarkdownImageReader } from "./agent-markdown.tsx";
 import { isDisplayableImageType } from "./displayable-image-type.ts";
@@ -156,9 +157,13 @@ function renderContent(
                     src={state.source}
                 />
             ) : content.encoding === "text" && state.kind === "text" ? (
-                <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-muted p-3 text-xs">
-                    {state.text}
-                </pre>
+                <ScrollArea
+                    className="max-h-96 rounded-lg bg-muted"
+                    orientation="both"
+                    viewportClassName="max-h-[inherit] p-3"
+                >
+                    <pre className="whitespace-pre-wrap text-xs">{state.text}</pre>
+                </ScrollArea>
             ) : state.kind === "media" ? (
                 <a className={cn("break-all text-sm", textLinkClassName)} download href={state.source}>
                     Download resource

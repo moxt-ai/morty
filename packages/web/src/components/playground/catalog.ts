@@ -105,7 +105,8 @@ export const PLAYGROUND_ENTRIES = [
         group: "Overlays",
         id: "dialog",
         source: "components/ui/dialog.tsx",
-        summary: "Modal dialog in default, setup, surface, size tiers (standard–wide), and busy forms.",
+        summary:
+            "Modal dialog: default header, confirm, form, and a scrollable body; setup/surface shells and product variants.",
         title: "Dialog",
     },
     {

@@ -45,7 +45,7 @@ export function SetupPromptDetails({ prompt }: { readonly prompt: string }) {
             </p>
             <details
                 aria-label="Setup details"
-                className="pairing-setup-details group w-full text-xs leading-5 text-morty-text-3"
+                className="disclosure-details group w-full text-xs leading-5 text-morty-text-3"
             >
                 <summary className="mt-5 flex h-6 cursor-pointer list-none items-center justify-center gap-1.5 rounded-lg outline-none hover:text-morty-text-2 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
                     Review what setup does

@@ -1,6 +1,7 @@
 import type { AnyRouter } from "@tanstack/react-router";
 import { lazy, type ReactNode, Suspense } from "react";
 import { createApplicationRouter } from "../../index.ts";
+import { isComponentLibraryPath } from "../../navigation/component-library-path.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
 import type { MortyApplication } from "../../view-models/morty-application.ts";
 import { App } from "../application/app.tsx";
@@ -11,10 +12,6 @@ const PlaygroundApplication = lazy(() =>
         default: module.PlaygroundApplication,
     })),
 );
-
-function isComponentLibraryPath(pathname: string): boolean {
-    return pathname === "/playground" || pathname.startsWith("/playground/");
-}
 
 export function createSignedInRouter(application: MortyApplication) {
     const authorize = (signal: AbortSignal) => application.anonymousSession.getState().authorize(signal);
