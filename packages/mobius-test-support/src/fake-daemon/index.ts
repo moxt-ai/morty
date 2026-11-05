@@ -41,7 +41,10 @@ export function createFakeDaemon(options: FakeAgentHarnessOptions) {
                     process.execPath,
                     (options) =>
                         new ControlledEndpointConnection(
-                            agent.createEndpoint(controlledSessionUpdates(options.client)),
+                            agent.createEndpoint(
+                                controlledSessionUpdates(options.client),
+                                async (stage) => await options.onPromptDelegation?.(stage),
+                            ),
                             options.client,
                         ),
                     {},

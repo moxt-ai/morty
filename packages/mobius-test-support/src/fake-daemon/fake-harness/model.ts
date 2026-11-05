@@ -1,7 +1,10 @@
 import type { ToolCallContent } from "@agentclientprotocol/sdk";
+import type { PromptDelegationStage } from "../../../../cli/src/engine/acp/agent/in-process-endpoint.ts";
 
 export type HarnessOutput =
     | { readonly kind: "message"; readonly text: string }
+    /** Reports the prompt as handed to another client that owns the native session, as Codex does for the Codex app. */
+    | { readonly kind: "delegation"; readonly stage: PromptDelegationStage }
     | { readonly kind: "text"; readonly text: string }
     | { readonly kind: "file"; readonly name: string }
     | { readonly kind: "session-title"; readonly title: string }

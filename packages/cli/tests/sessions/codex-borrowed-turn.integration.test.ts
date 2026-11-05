@@ -46,7 +46,12 @@ it("Given another Codex client owns the thread, When its turn for this prompt is
             }
         },
     } as unknown as CodexAppServerClient;
-    const agent = new CodexBorrowedAcpAgent(client, "thread", async () => {});
+    const agent = new CodexBorrowedAcpAgent(
+        client,
+        "thread",
+        async () => {},
+        async () => {},
+    );
     await agent.initialize(AbortSignal.timeout(60_000));
 
     let settled = false;
@@ -117,11 +122,16 @@ it("Given a queued prompt in a borrowed Codex thread, When one history read time
     vi.setSystemTime(new Date("2026-11-04T00:00:00.000Z"));
     const { owner, client } = answeringOwner();
     const answers: string[] = [];
-    const agent = new CodexBorrowedAcpAgent(client, "thread", async (update) => {
-        if (update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
-            answers.push(update.content.text);
-        }
-    });
+    const agent = new CodexBorrowedAcpAgent(
+        client,
+        "thread",
+        async (update) => {
+            if (update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
+                answers.push(update.content.text);
+            }
+        },
+        async () => {},
+    );
     await agent.initialize(AbortSignal.timeout(60_000));
 
     owner.stallNextRead = true;
@@ -143,11 +153,16 @@ it("Given a queued prompt in a borrowed Codex thread, When delivering the owner'
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-11-04T00:00:00.000Z"));
     const { owner, client } = answeringOwner();
-    const agent = new CodexBorrowedAcpAgent(client, "thread", async (update) => {
-        if (update.sessionUpdate === "agent_message_chunk") {
-            throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
-        }
-    });
+    const agent = new CodexBorrowedAcpAgent(
+        client,
+        "thread",
+        async (update) => {
+            if (update.sessionUpdate === "agent_message_chunk") {
+                throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+            }
+        },
+        async () => {},
+    );
     await agent.initialize(AbortSignal.timeout(60_000));
 
     const prompt = agent.prompt([{ type: "text", text: "Plan it" }], AbortSignal.timeout(60_000), [

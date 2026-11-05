@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { methods } from "@agentclientprotocol/sdk";
 import { decodeAcpSessionUpdate, type SessionEventPayload } from "@moxt-ai/mobius-sdk/protocol";
+import { z } from "zod";
 import { revalidateExecutable, stopProcessTree } from "../../../util/process/executable.ts";
 import { runCleanup } from "../../../util/run-cleanup.ts";
 import { AcpExecutionError } from "../../acp-error.ts";
@@ -21,7 +22,7 @@ import { createdNativeSessionId, normalizeOpenedSession, sessionWorkspace } from
 import { findNativeSession } from "../native-session-lookup.ts";
 import { openPreviewEventCache, type PreviewEventCache } from "../preview-event-cache.ts";
 import { AgentQueryProcesses } from "../query-processes.ts";
-import { AcpSessionConnector } from "../session-events.ts";
+import { AcpSessionConnector, type AdapterSessionConnection } from "../session-events.ts";
 import { fitCodexToolEvent, prepareCodexToolUpdate } from "./tool-event.ts";
 
 /**
@@ -29,11 +30,17 @@ import { fitCodexToolEvent, prepareCodexToolUpdate } from "./tool-event.ts";
  * short-lived and never resumes the source thread, so it needs no writer lock; ACP
  * `session/load` remains the fallback for resuming the conversation.
  */
+// The in-process harness says whether its connection runs the thread's turns or only queues input for their owner.
+const sessionTurnOwnershipSchema = z.object({
+    _meta: z.object({ codex: z.object({ runsTurns: z.boolean() }).optional() }).optional(),
+});
+
 export class CodexAdapter implements Adapter {
     #agent: AcpAgentDefinition;
     readonly #queryProcesses: AgentQueryProcesses;
     readonly #connector: AcpSessionConnector;
     readonly #executionConnections: AcpExecutionConnections;
+    readonly #queueingConnections = new WeakSet<AdapterSessionConnection>();
     readonly #dependencies: AdapterDependencies;
     readonly #contentExternalizer: Pick<AcpContentExternalizer, "update">;
     #previewCache: PreviewEventCache | null = null;
@@ -119,6 +126,7 @@ export class CodexAdapter implements Adapter {
                 "ACP agent exited while resuming a session",
                 signal,
             );
+            this.#recordTurnOwnership(connection, response);
             return normalizeOpenedSession(execution, nativeSessionId, response, signal);
         });
     readonly openSessionWithReplay: Adapter["openSessionWithReplay"] = (params) =>
@@ -136,14 +144,27 @@ export class CodexAdapter implements Adapter {
                 signal,
             );
             await connection.race(connection.events.drained(), "ACP agent exited while loading a session", signal);
+            this.#recordTurnOwnership(connection, response);
             return normalizeOpenedSession(execution, nativeSessionId, response, signal);
         });
     readonly cancel: Adapter["cancel"] = async (params) => {
+        const connection = this.#executionConnections.connection(params);
+        if (connection !== undefined && this.#queueingConnections.has(connection)) {
+            // Another Codex client owns this thread and the processes of its turns. This connection only queues
+            // input and follows the owner, so ending it would stop nothing but the following.
+            return await this.#executionConnections.cancel(params);
+        }
         // turn/interrupt leaves unified-exec commands alive, including tools whose
         // startup notification can arrive after the interrupted turn completes.
         // The session's owned process tree is the authoritative stop boundary.
         await this.#executionConnections.closeSession(params);
         return "closed";
+    };
+    /** A connection keeps the turn ownership its harness chose while opening the thread. */
+    readonly #recordTurnOwnership = (connection: AdapterSessionConnection, response: unknown): void => {
+        if (sessionTurnOwnershipSchema.parse(response)._meta?.codex?.runsTurns === false) {
+            this.#queueingConnections.add(connection);
+        }
     };
     readonly closeSession: Adapter["closeSession"] = (...args) => this.#executionConnections.closeSession(...args);
     readonly releaseSession: Adapter["releaseSession"] = (params) => this.#executionConnections.releaseSession(params);

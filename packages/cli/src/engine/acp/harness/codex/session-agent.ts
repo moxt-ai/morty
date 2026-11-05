@@ -5,6 +5,8 @@ import type { CodexAppServerServerRequest } from "./app-server-client.ts";
 /** Session behavior selected after opening; transport ownership stays with the ACP endpoint. */
 export interface CodexSessionAgent {
     readonly steeringSupported: boolean;
+    /** False when another Codex client owns the thread and this connection only queues input for it. */
+    readonly runsTurns: boolean;
     readonly prompt: (
         input: readonly unknown[],
         signal: AbortSignal,

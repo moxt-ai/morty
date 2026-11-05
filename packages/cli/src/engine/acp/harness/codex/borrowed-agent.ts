@@ -3,7 +3,11 @@ import type { ContentBlock, PromptResponse } from "@agentclientprotocol/sdk";
 import { z } from "zod";
 import { systemTimer, type Timer } from "../../../util/timer.ts";
 import { AcpExecutionError } from "../../acp-error.ts";
-import { type AcpEndpointTermination, acpEndpointTerminationError } from "../../agent/in-process-endpoint.ts";
+import {
+    type AcpEndpointTermination,
+    acpEndpointTerminationError,
+    type PromptDelegationStage,
+} from "../../agent/in-process-endpoint.ts";
 import type { CodexAppServerClient, CodexAppServerServerRequest } from "./app-server-client.ts";
 import { CODEX_HISTORY_TURN_PAGE_LIMIT, threadTurnsPageSchema } from "./app-server-protocol.ts";
 import { decodeThreadItem, reasoningText, toolCallUpdate } from "./items.ts";
@@ -54,14 +58,18 @@ interface PendingPrompt {
     readonly completion: PromiseWithResolvers<PromptResponse>;
     readonly settled: PromiseWithResolvers<void>;
     input: { readonly kind: "awaiting" } | { readonly kind: "identified"; readonly messageId: string };
+    /** Delegation reports in the order the owner took the prompt: queued, then started. */
+    delegation: Promise<void>;
 }
 
 /** A locked thread remains owned by Codex. This connection only reads it and appends queued input. */
 export class CodexBorrowedAcpAgent implements CodexSessionAgent {
     readonly steeringSupported = false;
+    readonly runsTurns = false;
     readonly #client: CodexAppServerClient;
     readonly #threadId: string;
     readonly #emit: (update: CodexSessionUpdate) => Promise<void>;
+    readonly #onDelegation: (stage: PromptDelegationStage) => Promise<void>;
     readonly #closed = new AbortController();
     readonly #seen = new Map<string, string>();
     #pending: PendingPrompt | null = null;
@@ -71,11 +79,22 @@ export class CodexBorrowedAcpAgent implements CodexSessionAgent {
         | { readonly kind: "failed"; readonly error: AcpExecutionError }
         | { readonly kind: "closed" } = { kind: "following" };
 
-    constructor(client: CodexAppServerClient, threadId: string, emit: (update: CodexSessionUpdate) => Promise<void>) {
+    constructor(
+        client: CodexAppServerClient,
+        threadId: string,
+        emit: (update: CodexSessionUpdate) => Promise<void>,
+        onDelegation: (stage: PromptDelegationStage) => Promise<void>,
+    ) {
         this.#client = client;
         this.#threadId = threadId;
         this.#emit = emit;
+        this.#onDelegation = onDelegation;
     }
+
+    readonly #reportDelegation = async (pending: PendingPrompt, stage: PromptDelegationStage): Promise<void> => {
+        pending.delegation = pending.delegation.then(async () => await this.#onDelegation(stage));
+        await pending.delegation;
+    };
 
     readonly initialize = async (signal: AbortSignal): Promise<void> => {
         // Probe the real queue port before advertising a usable compatibility connection.
@@ -178,7 +197,12 @@ export class CodexBorrowedAcpAgent implements CodexSessionAgent {
                             typeof raw === "object" && raw !== null ? Reflect.get(raw, "clientId") : undefined;
                         matches ||= clientId === this.#pending?.clientId;
                         if (this.#pending !== null && clientId === this.#pending.clientId) {
+                            const started = this.#pending.input.kind === "awaiting";
                             this.#pending.input = { kind: "identified", messageId: item.id };
+                            if (started) {
+                                // The owner took the queued input into a turn of its own.
+                                await this.#reportDelegation(this.#pending, "started");
+                            }
                         }
                         // Native user items, including this client's queued input, own their identities.
                         const text = item.content
@@ -276,6 +300,7 @@ export class CodexBorrowedAcpAgent implements CodexSessionAgent {
             completion: Promise.withResolvers<PromptResponse>(),
             settled: Promise.withResolvers<void>(),
             input: { kind: "awaiting" },
+            delegation: Promise.resolve(),
         };
         this.#pending = pending;
         void pending.completion.promise.catch(() => {});
@@ -301,6 +326,7 @@ export class CodexBorrowedAcpAgent implements CodexSessionAgent {
                     "invalid_native_session_response",
                 );
             }
+            await this.#reportDelegation(pending, "queued");
             const result = await pending.completion.promise;
             outcome = result.stopReason === "cancelled" ? "cancelled" : "completed";
             return pending.input.kind === "identified"
@@ -327,7 +353,8 @@ export class CodexBorrowedAcpAgent implements CodexSessionAgent {
         }
     };
 
-    readonly #removeQueuedInput = async (clientId: string): Promise<void> => {
+    /** Withdraws this client's submission while the owner has not taken it; false once the owner has. */
+    readonly #removeQueuedInput = async (clientId: string): Promise<boolean> => {
         const signal = AbortSignal.timeout(REQUEST_TIMEOUT);
         let cursor: string | null = null;
         const cursors = new Set<string>();
@@ -346,7 +373,7 @@ export class CodexBorrowedAcpAgent implements CodexSessionAgent {
                         { threadId: this.#threadId, queuedSubmissionId: queued.id },
                         signal,
                     );
-                    return;
+                    return true;
                 }
             }
             cursor = page.nextCursor ?? null;
@@ -357,6 +384,7 @@ export class CodexBorrowedAcpAgent implements CodexSessionAgent {
                 cursors.add(cursor);
             }
         } while (cursor !== null);
+        return false;
     };
 
     readonly nativeTurnId = (): null => null;
@@ -386,9 +414,16 @@ export class CodexBorrowedAcpAgent implements CodexSessionAgent {
         );
     };
 
+    /**
+     * Withdraws the prompt while it waits in the owner's queue. Once the owner runs it, only the owner can stop it,
+     * so the prompt keeps running and following reports how the owner ends it.
+     */
     readonly cancel = async (): Promise<void> => {
         const pending = this.#pending;
-        if (pending !== null) {
+        if (pending === null || pending.input.kind === "identified") {
+            return;
+        }
+        if (await this.#removeQueuedInput(pending.clientId)) {
             pending.completion.resolve({ stopReason: "cancelled" });
             await pending.settled.promise;
         }
@@ -397,7 +432,12 @@ export class CodexBorrowedAcpAgent implements CodexSessionAgent {
     readonly close = async (): Promise<void> => {
         this.#lifecycle = { kind: "closed" };
         this.#closed.abort();
-        await this.cancel();
+        const pending = this.#pending;
+        if (pending !== null) {
+            // A closed connection stops following; the prompt's cleanup withdraws input the owner has not taken.
+            pending.completion.resolve({ stopReason: "cancelled" });
+            await pending.settled.promise;
+        }
         await this.#watch;
     };
 }

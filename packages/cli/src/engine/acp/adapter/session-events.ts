@@ -9,7 +9,7 @@ import {
 import { truncate } from "../../util/value-utils.ts";
 import { AcpExecutionError } from "../acp-error.ts";
 import type { AcpAgentDefinition } from "../agent/agent-definition.ts";
-import type { BackgroundActivity } from "../agent/in-process-endpoint.ts";
+import type { BackgroundActivity, PromptDelegationStage } from "../agent/in-process-endpoint.ts";
 import type { AgentConnection } from "../connection/agent-connection.ts";
 import { AgentUpdateStream } from "../connection/agent-update-stream.ts";
 import type { AcpClientHandler } from "../connection/create-client.ts";
@@ -51,12 +51,14 @@ interface SessionConnectionScope {
 
 export interface AdapterSessionConnectionOptions extends SessionConnectionScope {
     readonly onBackgroundActivity?: (activity: BackgroundActivity) => void;
+    readonly onPromptDelegation?: (stage: PromptDelegationStage) => Promise<void>;
     readonly interactions: Pick<AcpClientHandler, "onPermission" | "onElicitation" | "onElicitationComplete">;
 }
 
 export interface AdapterSessionSubscriber {
     readonly onSessionEvent: (nativeSessionId: string, event: AdapterSessionEvent) => Promise<void>;
     readonly onBackgroundActivity?: (activity: BackgroundActivity) => void;
+    readonly onPromptDelegation?: (stage: PromptDelegationStage) => Promise<void>;
     readonly interactions: AdapterSessionConnectionOptions["interactions"];
 }
 
@@ -227,6 +229,11 @@ export class AdapterSessionConnection {
                 }
                 this.#backgroundActivity = activity;
                 this.#onBackgroundActivity(activity);
+            },
+            onPromptDelegation: async (stage) => {
+                if (!this.#lifetime.signal.aborted) {
+                    await options.onPromptDelegation?.(stage);
+                }
             },
         });
     }

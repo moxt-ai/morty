@@ -1,5 +1,5 @@
 import type { AgentApp } from "@agentclientprotocol/sdk";
-import type { AgentModelEffort } from "@moxt-ai/mobius-sdk/protocol";
+import type { AgentModelEffort, LifecycleMetadata } from "@moxt-ai/mobius-sdk/protocol";
 import { AcpExecutionError } from "../acp-error.ts";
 import type { IdentifiedSessionNotification } from "../connection/session-notification.ts";
 
@@ -49,11 +49,16 @@ export interface InProcessAcpEndpoint {
 /** Native background work: tasks still running, or finished tasks whose results the Agent has not handled. */
 export type BackgroundActivity = "none" | "running" | "awaiting-results";
 
+/** How far the native session's owner, another client of the Agent, has taken the prompt this endpoint handed it. */
+export type PromptDelegationStage = Extract<LifecycleMetadata, { readonly kind: "prompt.delegated" }>["stage"];
+
 /** The verified local inputs an endpoint is allowed to launch from. */
 export interface InProcessAcpEndpointOptions {
     /** The vendor executable, already resolved and revalidated by discovery. */
     /** Local lifecycle evidence only; never inferred from persisted or remote ACP metadata. */
     readonly onBackgroundActivity?: (activity: BackgroundActivity) => void;
+    /** Local evidence that the running prompt was handed to the native session's owner instead of run here. */
+    readonly onPromptDelegation?: (stage: PromptDelegationStage) => Promise<void>;
     readonly command: string;
     readonly cwd: string;
     readonly environment: Readonly<Record<string, string>>;

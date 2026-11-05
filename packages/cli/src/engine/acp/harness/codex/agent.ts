@@ -83,12 +83,14 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
     readonly #settings: CodexSettings;
     readonly #onSessionUpdate: (notification: CodexSessionNotification) => Promise<void>;
     readonly #onBackgroundActivity: InProcessAcpEndpointOptions["onBackgroundActivity"];
+    readonly #onPromptDelegation: InProcessAcpEndpointOptions["onPromptDelegation"];
     #nativeSessionId = "";
     #sessionAgent: CodexSessionAgent;
 
     constructor(options: CodexEndpointOptions) {
         this.#onSessionUpdate = options.onSessionUpdate;
         this.#onBackgroundActivity = options.onBackgroundActivity;
+        this.#onPromptDelegation = options.onPromptDelegation;
         this.#appServer = new CodexAppServerClient({
             command: options.command,
             cwd: options.cwd,
@@ -177,7 +179,7 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
                 await this.#replaySavedHistory(context.signal);
                 this.#advertiseCompactCommand();
                 return {
-                    _meta: { steering: { supported: this.#sessionAgent.steeringSupported } },
+                    _meta: this.#sessionMeta(),
                     configOptions: this.#settings.configOptions(),
                 };
             })
@@ -205,7 +207,7 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
                 await this.#resume(context.params.sessionId, context.params.cwd, context.signal);
                 this.#advertiseCompactCommand();
                 return {
-                    _meta: { steering: { supported: this.#sessionAgent.steeringSupported } },
+                    _meta: this.#sessionMeta(),
                     configOptions: this.#settings.configOptions(),
                 };
             })
@@ -332,7 +334,9 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
                         AbortSignal.any([signal, AbortSignal.timeout(APPROVAL_TIMEOUT_MILLISECONDS)]),
                     ),
                 );
-            const queued = new CodexBorrowedAcpAgent(this.#appServer, threadId, this.#emit);
+            const queued = new CodexBorrowedAcpAgent(this.#appServer, threadId, this.#emit, async (stage) => {
+                await this.#onPromptDelegation?.(stage);
+            });
             await queued.initialize(signal);
             this.#nativeSessionId = threadId;
             this.#settings.selectRestoredThread({
@@ -348,6 +352,12 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
         this.#settings.selectRestoredThread(resumed);
         await this.#settings.probeCollaborationMode(this.#nativeSessionId, signal);
     };
+
+    /** What the session response tells Mobius about the session behavior selected while opening it. */
+    readonly #sessionMeta = () => ({
+        steering: { supported: this.#sessionAgent.steeringSupported },
+        codex: { runsTurns: this.#sessionAgent.runsTurns },
+    });
 
     // ACP load requires chronological replay. Resume only restores execution;
     // native pages supply history without a single full-transcript response.

@@ -10,6 +10,7 @@ export class CodexAgentConnection extends EndpointAgentConnection {
             environment: options.environment,
             onSessionUpdate: options.client.onUpdate,
             onBackgroundActivity: (activity) => options.onBackgroundActivity?.(activity),
+            onPromptDelegation: async (stage) => await options.onPromptDelegation?.(stage),
         });
         super(endpoint, options.client);
     }

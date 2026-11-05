@@ -122,6 +122,8 @@ export class AgentSession implements AgentSessionRestore {
 
     readonly hasBackgroundActivity = (): boolean => this.#backgroundActivity !== "none";
     #backgroundActivity: BackgroundActivity = "none";
+    /** The command whose prompt the Agent is running, which only the Agent can report as delegated. */
+    #delegableCommandId: string | null = null;
     #modelEffort: AgentModelEffort | null = null;
     readonly #scope: AdapterSessionScope;
     readonly #subscriber: AdapterSessionSubscriber;
@@ -214,6 +216,16 @@ export class AgentSession implements AgentSessionRestore {
                 if (previous !== "none" && activity === "none") {
                     // Background work may have appended to native history on this process's behalf.
                     void this.#recordNativeHistoryRevision();
+                }
+            },
+            onPromptDelegation: async (stage) => {
+                // Only the prompt this Session is running can be delegated; a late report has no command to name.
+                const commandId = this.#delegableCommandId;
+                if (commandId !== null) {
+                    await this.recordLifecycleEvent({
+                        payload: { commandId, kind: "prompt.delegated", stage },
+                        type: "lifecycle-metadata",
+                    });
                 }
             },
             interactions: {
@@ -772,10 +784,16 @@ export class AgentSession implements AgentSessionRestore {
                 type: "lifecycle-metadata",
             });
         }
+        this.#delegableCommandId = lifecycle === undefined ? null : options.commandId;
         try {
-            const result = await this.#writeNativeHistory(
-                async () => await this.#adapter.prompt({ ...this.#target(), content: options, signal: options.signal }),
-            );
+            const result = await this.#writeNativeHistory(async () => {
+                try {
+                    return await this.#adapter.prompt({ ...this.#target(), content: options, signal: options.signal });
+                } finally {
+                    // The prompt's terminal event follows; nothing may be recorded for it after that.
+                    this.#delegableCommandId = null;
+                }
+            });
             this.writeStoredSession(new Date().toISOString());
             if (lifecycle !== undefined) {
                 const messageId = result._meta?.messageId;

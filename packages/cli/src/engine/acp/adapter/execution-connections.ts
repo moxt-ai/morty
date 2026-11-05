@@ -76,6 +76,7 @@ export class AcpExecutionConnections {
                 ...(params.onBackgroundActivity === undefined
                     ? {}
                     : { onBackgroundActivity: params.onBackgroundActivity }),
+                ...(params.onPromptDelegation === undefined ? {} : { onPromptDelegation: params.onPromptDelegation }),
                 interactions: params.interactions,
             },
             this.#externalizer,
@@ -161,6 +162,10 @@ export class AcpExecutionConnections {
         }
         return session;
     };
+
+    /** The open writer's connection for this native session, if any. */
+    readonly connection = (target: AdapterSessionTarget): AdapterSessionConnection | undefined =>
+        this.#find(target)?.connection;
 
     readonly cancel: Adapter["cancel"] = async ({ signal, ...target }) => {
         const bounded = AbortSignal.any([signal, AbortSignal.timeout(30_000)]);

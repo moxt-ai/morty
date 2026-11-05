@@ -395,6 +395,14 @@ export const lifecycleMetadataSchema = z.discriminatedUnion("kind", [
     z
         .object({ ...lifecycleBase, attemptId: identifier, epoch: identifier, kind: z.literal("prompt.started") })
         .readonly(),
+    // The Runtime did not run this prompt itself: it handed it to the native session's owner, another client of the
+    // Agent such as the Codex app, which runs queued input on its own terms. `queued`: the owner holds the prompt and
+    // may keep holding it; Codex pauses its queue after an interrupted turn until its user continues. `started`: the
+    // owner began running it, so only the owner can stop it and cancelling it here leaves it running. Runtimes before
+    // this event never delegate.
+    z
+        .object({ ...lifecycleBase, kind: z.literal("prompt.delegated"), stage: z.enum(["queued", "started"]) })
+        .readonly(),
     promptCompletedSchema,
     z
         .object({
@@ -420,6 +428,7 @@ export const isPromptTerminal = (payload: LifecycleMetadata): payload is PromptT
             return true;
         case "prompt.requested":
         case "prompt.started":
+        case "prompt.delegated":
         case "session.queue.changed":
         case "session.permission.requested":
         case "session.permission.resolved":

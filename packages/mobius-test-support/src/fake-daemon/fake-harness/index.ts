@@ -1,5 +1,6 @@
 import * as acp from "@agentclientprotocol/sdk";
 import type { SessionCapabilities } from "@moxt-ai/mobius-sdk/protocol";
+import type { PromptDelegationStage } from "../../../../cli/src/engine/acp/agent/in-process-endpoint.ts";
 import type { FakeAgentHarnessOptions, HarnessOutput, HarnessReplyPlan } from "./model.ts";
 
 export type FakeHarnessEndpointTermination = { readonly kind: "closed" };
@@ -50,6 +51,7 @@ interface ActiveReply {
     readonly sessionId: string;
     readonly turnNumber: number;
     readonly send: (notification: acp.SessionNotification) => Promise<void>;
+    readonly delegate: (stage: PromptDelegationStage) => Promise<void>;
     readonly completion: PromiseWithResolvers<acp.PromptResponse>;
     readonly signal: AbortSignal;
     outputSequence: number;
@@ -132,6 +134,7 @@ class ControlledAgentState {
         sessionId: string,
         contents: readonly acp.ContentBlock[],
         send: (notification: acp.SessionNotification) => Promise<void>,
+        delegate: (stage: PromptDelegationStage) => Promise<void>,
         signal: AbortSignal,
     ): Promise<acp.PromptResponse> => {
         const turnNumber = this.turnCount(sessionId) + 1;
@@ -154,6 +157,7 @@ class ControlledAgentState {
             outputSequence: 0,
             prompt,
             send,
+            delegate,
             sessionId,
             signal,
             turnNumber,
@@ -242,6 +246,10 @@ class ControlledAgentState {
     }
 
     async #publish(active: ActiveReply, output: HarnessOutput): Promise<void> {
+        if (output.kind === "delegation") {
+            await active.delegate(output.stage);
+            return;
+        }
         active.outputSequence += 1;
         const id = `${active.sessionId}-${active.turnNumber.toString()}-${active.outputSequence.toString()}`;
         if (output.kind === "text" || output.kind === "message") {
@@ -459,6 +467,7 @@ class ControlledAgentEndpoint implements FakeHarnessEndpoint {
         state: ControlledAgentState,
         agentName: string,
         onSessionUpdate: (notification: acp.SessionNotification) => Promise<void>,
+        onPromptDelegation: (stage: PromptDelegationStage) => Promise<void>,
     ) {
         this.#state = state;
         this.#app = acp
@@ -540,6 +549,7 @@ class ControlledAgentEndpoint implements FakeHarnessEndpoint {
                     context.params.sessionId,
                     context.params.prompt,
                     onSessionUpdate,
+                    onPromptDelegation,
                     context.signal,
                 );
             })
@@ -596,7 +606,9 @@ export function createFakeHarness(options: FakeAgentHarnessOptions) {
         agents: agents.map((agent) => ({
             createEndpoint: (
                 onSessionUpdate: (notification: acp.SessionNotification) => Promise<void>,
-            ): FakeHarnessEndpoint => new ControlledAgentEndpoint(state, agent.name, onSessionUpdate),
+                onPromptDelegation: (stage: PromptDelegationStage) => Promise<void>,
+            ): FakeHarnessEndpoint =>
+                new ControlledAgentEndpoint(state, agent.name, onSessionUpdate, onPromptDelegation),
             id: agent.id,
             name: agent.name,
         })),
