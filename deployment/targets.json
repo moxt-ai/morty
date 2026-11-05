@@ -1,0 +1,60 @@
+{
+    "account_id": "b903018a1c3d9d9a4bd68a11eb03e764",
+    "workers_subdomain": "mobius-b90",
+    "morty_revision": "4fc059777001c582beb1cf20552ce6c34600e76d",
+    "mobius_revision": "42588ccb52cf62c6bd55cf49f33096fa709041bc",
+    "environments": {
+        "staging": {
+            "d1_id": "f2ef7e43-3f17-4f70-9c8e-558c4303506d",
+            "d1_name": "morty-platform-staging-control-plane-wnam",
+            "platform": "morty-platform-staging",
+            "recording": "morty-recording-staging",
+            "morty": "morty-staging",
+            "platform_origin": "https://morty-platform-staging.mobius-b90.workers.dev",
+            "morty_origin": "https://morty-staging.mobius-b90.workers.dev",
+            "buckets": {
+                "platform_apac": "morty-platform-staging-apac-objects",
+                "platform_wnam": "morty-platform-staging-wnam-objects",
+                "attachments": "morty-staging-apac-attachments",
+                "web_assets": "morty-staging-web-assets"
+            },
+            "asset_origin": "https://pub-69fe5fd050ce401c90eaabafe1330425.r2.dev",
+            "test_app_id": "app_5700341c240e4bf4568e337b6ccae7aa0a12"
+        },
+        "production": {
+            "d1_id": "41b0bb37-d19f-4376-a694-b32e08de9fc8",
+            "d1_name": "morty-platform-production-control-plane-wnam",
+            "platform": "morty-platform-production",
+            "recording": "morty-recording-production",
+            "morty": "morty-production",
+            "platform_origin": "https://morty-platform-production.mobius-b90.workers.dev",
+            "morty_origin": "https://morty-production.mobius-b90.workers.dev",
+            "buckets": {
+                "platform_apac": "morty-platform-production-apac-objects",
+                "platform_wnam": "morty-platform-production-wnam-objects",
+                "attachments": "morty-production-apac-attachments",
+                "web_assets": "morty-production-web-assets"
+            },
+            "asset_origin": "https://pub-ed54db2a5fd9427db8039e6a160a2832.r2.dev",
+            "test_app_id": "app_f9cfb6044bcfa63cfd739786fd078f330cb9"
+        }
+    },
+    "morty_sdk_revision": "8899229a18245619ff3460aef478eec1aa747c6a",
+    "auth": {
+        "staging": {
+            "publishableKey": "pk_test_cGlja2VkLWNoaWNrZW4tNjU5My5jbGVyay5hY2NvdW50cy5kZXYk",
+            "issuer": "https://picked-chicken-6593.clerk.accounts.dev",
+            "worker": "morty-platform-staging",
+            "origin": "https://morty-platform-staging.mobius-b90.workers.dev",
+            "proxyUrl": ""
+        },
+        "production": {
+            "publishableKey": "pk_live_Y2xlcmsubW9ydHktcGxhdGZvcm0tcHJvZHVjdGlvbi5tb2JpdXMtYjkwLndvcmtlcnMuZGV2JA",
+            "issuer": "https://morty-platform-production.mobius-b90.workers.dev/__clerk",
+            "worker": "morty-platform-production",
+            "origin": "https://morty-platform-production.mobius-b90.workers.dev",
+            "proxyUrl": "https://morty-platform-production.mobius-b90.workers.dev/__clerk",
+            "frontendUrl": "https://clerk.morty-platform-production.mobius-b90.workers.dev"
+        }
+    }
+}

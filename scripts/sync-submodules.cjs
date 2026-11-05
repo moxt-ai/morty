@@ -16,7 +16,7 @@ const runGit = (args) => {
 
 try {
     runGit(["submodule", "sync", "--recursive"]);
-    runGit(["submodule", "update", "--init", "--remote", "--checkout", "--recursive"]);
+    runGit(["submodule", "update", "--init", "--checkout", "--recursive"]);
 } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`Failed to sync submodules: ${message}`);

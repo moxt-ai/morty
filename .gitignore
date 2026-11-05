@@ -18,3 +18,5 @@ playwright-report/
 __screenshots__/
 
 .vitest-attachments/
+
+.deployment-output/

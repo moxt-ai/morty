@@ -1,0 +1,129 @@
+name: Mobius Cloud
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Independent target environment
+        type: choice
+        default: staging
+        options: [staging, production]
+      operation:
+        description: Build only, deploy, or restore a successful archived release
+        type: choice
+        default: build
+        options: [build, deploy, restore]
+      artifact_run_id:
+        description: Successful Mobius Cloud run to restore
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: mobius-cloud-${{ inputs.environment || 'staging' }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'release' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  release:
+    if: github.repository == 'moxt-ai/mobius-morty'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (inputs.operation == 'deploy' || inputs.operation == 'restore' || (github.event_name == 'push' && vars.AUTO_DEPLOY_STAGING == 'true'))) && format('mobius-{0}', inputs.environment || 'staging') || 'build-only' }}
+    env:
+      TARGET_ENVIRONMENT: ${{ inputs.environment || 'staging' }}
+      OPERATION: ${{ inputs.operation || 'build' }}
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+      - name: Enable pinned pnpm
+        run: corepack enable
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/share/pnpm/store
+          key: mobius-cloud-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'third-party/mobius/pnpm-lock.yaml', 'third-party/platform/pnpm-lock.yaml') }}
+      - name: Install pinned SDK sources
+        if: env.OPERATION != 'restore'
+        run: pnpm --dir third-party/mobius install --frozen-lockfile
+      - name: Build the pinned Runtime and Agent harnesses
+        if: env.OPERATION != 'restore'
+        run: pnpm --dir third-party/mobius --filter @moxt-ai/mobius build
+      - name: Install pinned Platform sources
+        if: env.OPERATION != 'restore'
+        run: pnpm --dir third-party/platform install --frozen-lockfile
+      - name: Install Morty dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check Morty formatting and architecture
+        if: env.OPERATION != 'restore'
+        run: pnpm lint
+      - name: Check Morty types
+        if: env.OPERATION != 'restore'
+        run: pnpm typecheck
+      - name: Build the portable release
+        if: env.OPERATION != 'restore'
+        run: python3 deployment/build.py "$TARGET_ENVIRONMENT"
+      - name: Archive compiled code, assets, migrations and checksums
+        if: env.OPERATION != 'restore'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-${{ env.TARGET_ENVIRONMENT }}
+          path: .deployment-output/${{ env.TARGET_ENVIRONMENT }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
+      - name: Verify the requested archive run
+        if: env.OPERATION == 'restore'
+        id: archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCHIVE_RUN_ID: ${{ inputs.artifact_run_id }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          run_id = os.environ['ARCHIVE_RUN_ID']
+          if not re.fullmatch(r'[0-9]+', run_id):
+              raise SystemExit('A numeric successful archive run is required')
+          run = json.loads(subprocess.check_output(['gh', 'api', f'repos/moxt-ai/mobius-morty/actions/runs/{run_id}']))
+          if run['conclusion'] != 'success' or run['head_branch'] != 'main' or run['head_repository']['full_name'] != 'moxt-ai/mobius-morty' or run['path'] != '.github/workflows/mobius-cloud.yml' or run['event'] not in ['push', 'workflow_dispatch']:
+              raise SystemExit('Archive run is not an authorized successful release')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('revision=' + run['head_sha'] + '\n')
+          PY
+      - name: Download the exact archived release
+        if: env.OPERATION == 'restore'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-${{ env.TARGET_ENVIRONMENT }}
+          path: .deployment-output/${{ env.TARGET_ENVIRONMENT }}
+          run-id: ${{ inputs.artifact_run_id }}
+          github-token: ${{ github.token }}
+      - name: Publish to the independent account and verify health
+        if: >-
+          github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
+          (env.OPERATION == 'deploy' || env.OPERATION == 'restore' ||
+          (github.event_name == 'push' && vars.AUTO_DEPLOY_STAGING == 'true'))
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PLATFORM_SECRETS_JSON: ${{ secrets.PLATFORM_SECRETS_JSON }}
+          MORTY_SECRETS_JSON: ${{ secrets.MORTY_SECRETS_JSON }}
+          EXPECTED_REVISION: ${{ steps.archive.outputs.revision || github.sha }}
+        run: python3 deployment/deploy.py "$TARGET_ENVIRONMENT" --release ".deployment-output/$TARGET_ENVIRONMENT"
+      - name: Archive deployment evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: deployment-evidence-${{ env.TARGET_ENVIRONMENT }}
+          path: deployment-evidence.json
+          if-no-files-found: ignore
+          retention-days: 90

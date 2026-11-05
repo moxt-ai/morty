@@ -1,4 +1,6 @@
 [submodule "third-party/mobius"]
 	path = third-party/mobius
-	url = https://github.com/moxt-ai/mobius.git
-	branch = main
+	url = https://github.com/moxt-ai/mobius-morty.git
+[submodule "third-party/platform"]
+	path = third-party/platform
+	url = https://github.com/moxt-ai/mobius-morty.git
