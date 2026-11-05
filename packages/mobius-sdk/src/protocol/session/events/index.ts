@@ -239,10 +239,27 @@ const contentChunkFields = {
     content: contentBlockSchema,
     messageId: shortString.nullable().optional(),
 };
+/**
+ * A question an Agent message asks while the Agent keeps working, with the answers it suggests (none for a free-text
+ * question). The message text already states it; the user answers with an ordinary message.
+ */
+const agentQuestionSchema = z
+    .object({
+        options: z.array(shortString).max(MAX_COLLECTION_SIZE).readonly(),
+        question: boundedString,
+    })
+    .readonly();
+export type AgentQuestion = z.infer<typeof agentQuestionSchema>;
 
 export const acpSessionUpdateSchema = z.discriminatedUnion("sessionUpdate", [
     z.object({ ...contentChunkFields, sessionUpdate: z.literal("user_message_chunk") }).readonly(),
-    z.object({ ...contentChunkFields, sessionUpdate: z.literal("agent_message_chunk") }).readonly(),
+    z
+        .object({
+            ...contentChunkFields,
+            questions: z.array(agentQuestionSchema).min(1).max(MAX_COLLECTION_SIZE).readonly().optional(),
+            sessionUpdate: z.literal("agent_message_chunk"),
+        })
+        .readonly(),
     z
         .object({
             ...contentChunkFields,

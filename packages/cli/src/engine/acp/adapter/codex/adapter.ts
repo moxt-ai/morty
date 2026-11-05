@@ -22,7 +22,7 @@ import { createdNativeSessionId, normalizeOpenedSession, sessionWorkspace } from
 import { findNativeSession } from "../native-session-lookup.ts";
 import { openPreviewEventCache, type PreviewEventCache } from "../preview-event-cache.ts";
 import { AgentQueryProcesses } from "../query-processes.ts";
-import { AcpSessionConnector, type AdapterSessionConnection } from "../session-events.ts";
+import { AcpSessionConnector, type AdapterSessionConnection, withMobiusFields } from "../session-events.ts";
 import { fitCodexToolEvent, prepareCodexToolUpdate } from "./tool-event.ts";
 
 /**
@@ -254,7 +254,9 @@ export class CodexAdapter implements Adapter {
                         for (const event of externalized.events) {
                             events.push({
                                 type: "acp",
-                                payload: decodeAcpSessionUpdate(JSON.stringify(fitCodexToolEvent(event))),
+                                payload: decodeAcpSessionUpdate(
+                                    JSON.stringify(fitCodexToolEvent(withMobiusFields(update, event))),
+                                ),
                             });
                         }
                     },

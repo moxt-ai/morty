@@ -7,8 +7,8 @@ import type {
     ToolCallUpdate,
     ToolKind,
 } from "@agentclientprotocol/sdk";
+import type { AgentQuestion } from "@moxt-ai/mobius-sdk/protocol";
 import { z } from "zod";
-
 import { type ThreadItem, threadItemSchema } from "./app-server-protocol.ts";
 
 const TOOL_OUTPUT_CHARACTER_LIMIT = 32_768;
@@ -270,6 +270,13 @@ export function toolCallUpdate(
 export function decodeThreadItem(value: unknown): ThreadItem | null {
     const decoded = threadItemSchema.safeParse(value);
     return decoded.success ? decoded.data : null;
+}
+
+/** The questions an agent message asks while Codex keeps working, with the answers each suggests. */
+export function messageQuestions(item: ThreadItem): readonly AgentQuestion[] {
+    return item.type === "agentMessage"
+        ? (item.questions ?? []).map((question) => ({ options: question.options ?? [], question: question.title }))
+        : [];
 }
 
 /** Returns the bounded reasoning Codex exposes for a completed reasoning item. */

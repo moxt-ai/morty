@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import type { AgentConnection, ContentBlock, PermissionOption, PromptResponse } from "@agentclientprotocol/sdk";
 import { methods } from "@agentclientprotocol/sdk";
+import type { AgentQuestion } from "@moxt-ai/mobius-sdk/protocol";
 import { AcpExecutionError } from "../../acp-error.ts";
 import {
     type AcpEndpointTermination,
@@ -23,7 +24,7 @@ import {
     turnSteerResponseSchema,
     type UserInputQuestion,
 } from "./app-server-protocol.ts";
-import { decodeThreadItem, reasoningText, toolCallUpdate } from "./items.ts";
+import { decodeThreadItem, messageQuestions, reasoningText, toolCallUpdate } from "./items.ts";
 import type { CodexSessionAgent } from "./session-agent.ts";
 import type { CodexMessageUpdate, CodexSessionUpdate } from "./session-update.ts";
 import { promptResultWithMessageId } from "./session-update.ts";
@@ -174,12 +175,17 @@ interface ActiveTurn {
     input: { readonly kind: "awaiting" } | { readonly kind: "identified"; readonly messageId: string };
 }
 
-export function agentMessageUpdate(messageId: string, text: string): CodexMessageUpdate {
+export function agentMessageUpdate(
+    messageId: string,
+    text: string,
+    questions: readonly AgentQuestion[] = [],
+): CodexMessageUpdate {
     // Commentary and final answers are public assistant messages; reasoning has separate events.
     return {
         content: { text, type: "text" },
         messageId,
         sessionUpdate: "agent_message_chunk",
+        ...(questions.length === 0 ? {} : { _meta: { "mobius.questions": questions } }),
     };
 }
 
@@ -577,7 +583,7 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
                 return;
             }
             await this.#enqueue(async () => {
-                await this.#context.emit(agentMessageUpdate(item.id, item.text));
+                await this.#context.emit(agentMessageUpdate(item.id, item.text, messageQuestions(item)));
             });
             return;
         }

@@ -259,6 +259,9 @@ class ControlledAgentState {
                     content: { text: output.text, type: "text" },
                     messageId: output.kind === "message" ? id : `assistant-${active.turnNumber.toString()}`,
                     sessionUpdate: "agent_message_chunk",
+                    ...(output.kind === "message" && output.questions !== undefined
+                        ? { _meta: { "mobius.questions": output.questions } }
+                        : {}),
                 },
             };
             this.#record(notification);

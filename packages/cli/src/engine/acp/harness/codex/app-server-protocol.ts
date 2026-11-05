@@ -99,6 +99,19 @@ const imageGenerationItemSchema = z.object({
         .nullish(),
 });
 
+// Questions a message asks while Codex keeps working (`request_user_input_async`). The message text already states
+// them, so questions Mobius cannot read leave the text alone instead of dropping the message.
+const agentMessageQuestionsSchema = z
+    .array(
+        z.object({
+            options: z.array(boundedText(2_048)).max(100).nullish(),
+            title: boundedText(32_768).min(1),
+        }),
+    )
+    .max(100)
+    .nullish()
+    .catch(null);
+
 // `ThreadItem` is an open union: a newer Codex can add a variant at any time. Decode the shape Mobius
 // reads and skip anything else rather than failing the whole stream.
 export const threadItemSchema = z.discriminatedUnion("type", [
@@ -109,6 +122,7 @@ export const threadItemSchema = z.discriminatedUnion("type", [
         text: boundedText(1_000_000),
         type: z.literal("agentMessage"),
         phase: messagePhaseSchema.nullish(),
+        questions: agentMessageQuestionsSchema,
     }),
     z.object({
         content: z.array(z.unknown()).max(10_000),

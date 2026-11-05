@@ -10,7 +10,8 @@ import {
 } from "../../agent/in-process-endpoint.ts";
 import type { CodexAppServerClient, CodexAppServerServerRequest } from "./app-server-client.ts";
 import { CODEX_HISTORY_TURN_PAGE_LIMIT, threadTurnsPageSchema } from "./app-server-protocol.ts";
-import { decodeThreadItem, reasoningText, toolCallUpdate } from "./items.ts";
+import { decodeThreadItem, messageQuestions, reasoningText, toolCallUpdate } from "./items.ts";
+import { agentMessageUpdate } from "./owned-agent.ts";
 import type { CodexSessionAgent } from "./session-agent.ts";
 import type { CodexSessionUpdate } from "./session-update.ts";
 import { promptResultWithMessageId } from "./session-update.ts";
@@ -246,12 +247,19 @@ export class CodexBorrowedAcpAgent implements CodexSessionAgent {
                         const text =
                             previous !== undefined && value.startsWith(previous) ? value.slice(previous.length) : value;
                         if (text.length > 0) {
-                            await this.#emit({
-                                sessionUpdate:
-                                    item.type === "reasoning" ? "agent_thought_chunk" : "agent_message_chunk",
-                                messageId: item.id,
-                                content: { type: "text", text },
-                            });
+                            await this.#emit(
+                                item.type === "reasoning"
+                                    ? {
+                                          sessionUpdate: "agent_thought_chunk",
+                                          messageId: item.id,
+                                          content: { type: "text", text },
+                                      }
+                                    : agentMessageUpdate(
+                                          item.id,
+                                          text,
+                                          previous === undefined ? messageQuestions(item) : [],
+                                      ),
+                            );
                         }
                     } else {
                         const update = toolCallUpdate(item, "snapshot");

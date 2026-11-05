@@ -177,6 +177,7 @@ export {
 
 export type {
     AcpSessionUpdate,
+    AgentQuestion,
     ContentBlock,
     ExternalAudioContentBlock,
     ExternalImageContentBlock,

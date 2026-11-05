@@ -24,6 +24,8 @@ export class CodexFixture implements AsyncDisposable {
             readonly approvalPolicy?: "never" | "on-request";
             readonly autoCompactTokenLimit?: number;
             readonly configuredModel?: string;
+            /** Experimental Codex tools the configured model's catalog entry enables, such as `send_user_message_async`. */
+            readonly modelTools?: readonly string[];
         } = {},
     ): Promise<CodexFixture> {
         // Codex is an in-process Agent: there is no ACP adapter to resolve, only the real binary
@@ -33,12 +35,40 @@ export class CodexFixture implements AsyncDisposable {
         const codexHome = join(directory, "codex");
         const missing = join(directory, "missing-agent");
         await mkdir(codexHome, { recursive: true });
+        const modelCatalog = join(directory, "model-catalog.json");
+        if (options.modelTools !== undefined) {
+            if (options.configuredModel === undefined) {
+                throw new Error("Model tools need a configured model");
+            }
+            // The smallest catalog entry Codex accepts; the tools it lists are what the model is offered.
+            await writeFile(
+                modelCatalog,
+                JSON.stringify({
+                    models: [
+                        {
+                            base_instructions: "You are a test model.",
+                            display_name: options.configuredModel,
+                            experimental_supported_tools: options.modelTools,
+                            priority: 1,
+                            shell_type: "unified_exec",
+                            slug: options.configuredModel,
+                            support_verbosity: false,
+                            supported_in_api: true,
+                            supported_reasoning_levels: [{ description: "Low", effort: "low" }],
+                            truncation_policy: { limit: 10_000, mode: "tokens" },
+                            visibility: "list",
+                        },
+                    ],
+                }),
+            );
+        }
         await writeFile(
             join(codexHome, "config.toml"),
             [
                 ...(options.configuredModel === undefined
                     ? []
                     : [`model = ${JSON.stringify(options.configuredModel)}`]),
+                ...(options.modelTools === undefined ? [] : [`model_catalog_json = ${JSON.stringify(modelCatalog)}`]),
                 ...(options.autoCompactTokenLimit === undefined
                     ? []
                     : [`model_auto_compact_token_limit = ${options.autoCompactTokenLimit.toString()}`]),

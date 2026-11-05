@@ -1,4 +1,5 @@
 import { setImmediate as yieldToRuntime } from "node:timers/promises";
+import type { SessionUpdate } from "@agentclientprotocol/sdk";
 import {
     type AcpSessionUpdate,
     decodeAcpSessionUpdate,
@@ -84,6 +85,29 @@ type ExecutionState =
       }
     | { readonly kind: "closed" };
 
+/**
+ * Moves the Mobius fields a harness carries in ACP `_meta` onto the event update the protocol defines them on. Every
+ * reader that turns a harness update into a Session event applies it.
+ */
+export function withMobiusFields(update: SessionUpdate, eventUpdate: unknown): unknown {
+    if (typeof eventUpdate !== "object" || eventUpdate === null) {
+        return eventUpdate;
+    }
+    switch (update.sessionUpdate) {
+        case "tool_call":
+        case "tool_call_update": {
+            const backgroundTask = update._meta?.["mobius.backgroundTask"];
+            return backgroundTask === undefined ? eventUpdate : { ...eventUpdate, backgroundTask };
+        }
+        case "agent_message_chunk": {
+            const questions = update._meta?.["mobius.questions"];
+            return questions === undefined ? eventUpdate : { ...eventUpdate, questions };
+        }
+        default:
+            return eventUpdate;
+    }
+}
+
 /** ACP subscription lifetime, ordered delivery and harness normalization belong to the adapter. */
 export class AdapterSessionConnection {
     readonly #connection: AgentConnection;
@@ -124,18 +148,8 @@ export class AdapterSessionConnection {
             signal.throwIfAborted();
             const update = externalized.agent;
             for (const eventUpdate of externalized.events) {
-                const backgroundTask = update._meta?.["mobius.backgroundTask"];
                 const payload = decodeAcpSessionUpdate(
-                    JSON.stringify(
-                        normalizeEvent(
-                            (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update") &&
-                                backgroundTask !== undefined &&
-                                typeof eventUpdate === "object" &&
-                                eventUpdate !== null
-                                ? { ...eventUpdate, backgroundTask }
-                                : eventUpdate,
-                        ),
-                    ),
+                    JSON.stringify(normalizeEvent(withMobiusFields(update, eventUpdate))),
                 );
                 let event: AdapterSessionEvent;
                 switch (update.sessionUpdate) {

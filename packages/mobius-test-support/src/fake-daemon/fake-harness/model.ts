@@ -1,8 +1,14 @@
 import type { ToolCallContent } from "@agentclientprotocol/sdk";
+import type { AgentQuestion } from "@moxt-ai/mobius-sdk/protocol";
 import type { PromptDelegationStage } from "../../../../cli/src/engine/acp/agent/in-process-endpoint.ts";
 
 export type HarnessOutput =
-    | { readonly kind: "message"; readonly text: string }
+    | {
+          readonly kind: "message";
+          readonly text: string;
+          /** Questions the message asks while the Agent keeps working, as Codex sends them. */
+          readonly questions?: readonly AgentQuestion[];
+      }
     /** Reports the prompt as handed to another client that owns the native session, as Codex does for the Codex app. */
     | { readonly kind: "delegation"; readonly stage: PromptDelegationStage }
     | { readonly kind: "text"; readonly text: string }
