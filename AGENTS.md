@@ -12,7 +12,7 @@ These rules apply to the entire repository. You must read [CONTRIBUTING.md](./do
 
 ## Repository setup
 
-- Before beginning any repository work, run `pnpm sync:submodules` so every submodule is initialized and updated from its configured tracking branch.
+- Before beginning repository work, run `pnpm sync:submodules` to initialize each submodule at its committed revision. Do not advance a source pin during setup. Morty, its SDK, and the Platform may intentionally use different released revisions.
 
 ## Trust Boundary
 
@@ -25,7 +25,7 @@ The local execution boundary is the only authority allowed to approve local side
 
 ## Deployment topology
 
-- Staging Chat (`morty.paradev.biz`) is configured to call the production Platform relay (`mobius.moxt.ai`). For cross-service staging incidents, inspect `mobius-platform-production`, not the staging Platform Worker.
+- This repository deploys only to the Mobius Cloudflare account. Deployment configuration selects independent staging or production Workers and their matching Platform. Production traffic and DNS cutover are separate operator actions. Original Moxt and Paraflow resources are outside this deployment scope.
 
 ## State Modeling
 
