@@ -1122,7 +1122,7 @@ function WorkingIndicatorGallery() {
     const [startedAt] = useState(() => Date.now() - 75_000);
     return (
         <Specimen title="Elapsed">
-            <WorkingIndicator startedAt={startedAt} />
+            <WorkingIndicator owner={null} startedAt={startedAt} />
         </Specimen>
     );
 }

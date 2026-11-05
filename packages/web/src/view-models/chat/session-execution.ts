@@ -1,6 +1,10 @@
 import type { MobiusClient } from "@moxt-ai/mobius-sdk";
 import { acceptedTurn, type CurrentTurn, type TurnFailure, transitionCurrentTurn } from "./session-current-turn.ts";
-import { type SessionInteractionRecovery, sessionInteractionRecovery } from "./session-lifecycle.ts";
+import {
+    type DelegationStage,
+    type SessionInteractionRecovery,
+    sessionInteractionRecovery,
+} from "./session-lifecycle.ts";
 import {
     observeSessionProjectionExecution,
     type SessionProjection,
@@ -49,6 +53,13 @@ export type SessionExecutionObservation =
     /** The Runtime started the command at `startedAt`. */
     | { readonly kind: "turn-started"; readonly commandId: string; readonly startedAt: number }
     | { readonly kind: "turn-ended"; readonly commandId: string; readonly outcome: TurnOutcome }
+    /** The Runtime handed the command to the native session's owner, which reached `stage` with it at `at`. */
+    | {
+          readonly kind: "turn-delegated";
+          readonly commandId: string;
+          readonly stage: DelegationStage;
+          readonly at: number;
+      }
     /** The Runtime closed the Session, which runs and queues nothing and asks nothing of the user. */
     | { readonly kind: "closed" };
 
@@ -162,6 +173,16 @@ export function observeSessionExecution(
                 interactions: keptInteractions,
             };
         }
+        case "turn-delegated":
+            return {
+                execution: {
+                    ...execution,
+                    turn: transitionCurrentTurn(execution.turn, { ...observation, kind: "delegated" }),
+                },
+                delivered: [observation.commandId],
+                leftQueue: [],
+                interactions: keptInteractions,
+            };
         case "turn-ended": {
             const { commandId, outcome } = observation;
             return {

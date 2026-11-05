@@ -49,8 +49,10 @@ import {
     type CurrentTurnEvent,
     idleTurn,
     openedTurn,
+    ownerRunsTurn,
     sessionActivity,
     transitionCurrentTurn,
+    workingIndicator,
 } from "./session-current-turn.ts";
 import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import { sessionDeliveryPresentation } from "./session-delivery-presentation.ts";
@@ -309,8 +311,9 @@ export function sessionPanePresentation(
         composerInputDisabled,
         settingsDisabled: !canChangeSettings(facts),
         settingsNotice: controlRunning ? "New settings may not affect this response." : null,
-        settingsStopDisabled: !connectionAvailable || model.connection.kind !== "ready" || stopping,
-        stopDisabled: !connectionAvailable || model.connection.kind !== "ready",
+        settingsStopDisabled:
+            !connectionAvailable || model.connection.kind !== "ready" || stopping || ownerRunsTurn(model.turn),
+        stopDisabled: !connectionAvailable || model.connection.kind !== "ready" || ownerRunsTurn(model.turn),
         canSuggestProgress:
             canSendNow(facts) &&
             model.draft.length === 0 &&
@@ -352,9 +355,7 @@ export function sessionPanePresentation(
                     : controlRunning
                       ? "running"
                       : "idle",
-        // The working timer counts from when the running turn's work started.
-        workingIndicator:
-            facts.waitingForInput || model.turn.kind !== "current" ? null : { startedAt: model.turn.startedAt },
+        workingIndicator: workingIndicator(model.turn, facts.waitingForInput),
         shouldQueueOnSubmit,
         retryFailedDisabled: pendingMessage === null || !canRetryFailedMessage(pendingMessage.target, facts),
         retryUnknownDeliveryDisabled:
@@ -1121,6 +1122,9 @@ export function createSessionPaneModel(options: {
                                     commandId: fact.commandId,
                                     startedAt: Date.parse(event.recordedAt),
                                 });
+                                return;
+                            case "turn-delegated":
+                                observeExecution({ ...fact, at: Date.parse(event.recordedAt) });
                                 return;
                             case "turn-completed":
                                 observeExecution({

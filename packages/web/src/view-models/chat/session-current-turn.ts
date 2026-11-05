@@ -1,6 +1,7 @@
 import { decodeIdentifier } from "@moxt-ai/mobius-sdk/protocol";
 import type { SessionActivityState } from "./session-activity-machine.ts";
 import type { DeliveryState } from "./session-delivery-store.ts";
+import type { DelegationStage } from "./session-lifecycle.ts";
 
 // The turn the Session pane treats as current: the command the service reported running or accepted from this pane,
 // its turn id and when its work started, or how the last reported turn ended. It records only what the service
@@ -24,6 +25,11 @@ export type CurrentTurn = {
           readonly commandId: string;
           readonly turnId: string;
           readonly startedAt: number;
+          /**
+           * How far the native session's owner has taken the command when the Runtime handed it there instead of
+           * running it, or null when the Runtime reported no handoff.
+           */
+          readonly delegation: DelegationStage | null;
       }
 );
 
@@ -46,6 +52,8 @@ export type CurrentTurnEvent =
           readonly startedAt: number | null;
           readonly observedAt: number;
       }
+    /** The Runtime handed the command to the native session's owner, which reached `stage` with it at `at`. */
+    | { readonly kind: "delegated"; readonly commandId: string; readonly stage: DelegationStage; readonly at: number }
     /** The service reports the command's turn ended; `failure` explains a failed one. */
     | { readonly kind: "ended"; readonly commandId: string; readonly failure: TurnFailure | null }
     /** Nothing runs any more, as when the Session closed or a reconnect found no running turn. */
@@ -69,6 +77,7 @@ export function openedTurn(running: {
         commandId: decodeIdentifier(running.commandId),
         turnId: decodeIdentifier(running.turnId),
         startedAt: running.startedAt,
+        delegation: null,
         lastEndedCommandId: null,
     };
 }
@@ -98,6 +107,7 @@ export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent
                       commandId: event.commandId,
                       turnId: decodeIdentifier(event.turnId),
                       startedAt: event.startedAt,
+                      delegation: null,
                       lastEndedCommandId: turn.lastEndedCommandId,
                   };
         case "running":
@@ -105,9 +115,23 @@ export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent
                 kind: "current",
                 commandId: decodeIdentifier(event.commandId),
                 turnId: decodeIdentifier(event.turnId),
-                startedAt: event.startedAt ?? (isCurrent(turn, event.commandId) ? turn.startedAt : event.observedAt),
+                // A command the native session's owner runs started when the owner took it.
+                startedAt:
+                    isCurrent(turn, event.commandId) && turn.delegation === "started"
+                        ? turn.startedAt
+                        : (event.startedAt ?? (isCurrent(turn, event.commandId) ? turn.startedAt : event.observedAt)),
+                delegation: isCurrent(turn, event.commandId) ? turn.delegation : null,
                 lastEndedCommandId: turn.lastEndedCommandId,
             };
+        case "delegated":
+            // The owner never gives a started command back to its queue, whatever order the reports arrive in. Its
+            // work started when the owner took it, not when the Runtime handed it over.
+            if (!isCurrent(turn, event.commandId) || turn.delegation === "started") {
+                return turn;
+            }
+            return event.stage === "started"
+                ? { ...turn, delegation: "started", startedAt: event.at }
+                : { ...turn, delegation: "queued" };
         case "ended":
             return isCurrent(turn, event.commandId) ? endedTurn(event.commandId, event.failure, event.commandId) : turn;
         case "nothing-running":
@@ -123,6 +147,28 @@ export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent
                 ? { ...turn, lastEndedCommandId: event.commandId }
                 : endedTurn(event.commandId, event.failure, event.commandId);
     }
+}
+
+/** Whether only the native session's owner can stop the current turn, because it took the command into its own turn. */
+export function ownerRunsTurn(turn: CurrentTurn): boolean {
+    return turn.kind === "current" && turn.delegation === "started";
+}
+
+/**
+ * What the pane says about the current turn: waiting in the native session owner's queue, or working since its work
+ * started, there or here. Nothing while the turn waits for the user's input.
+ */
+export type WorkingIndicator =
+    | { readonly kind: "queued-in-owner" }
+    | { readonly kind: "working"; readonly startedAt: number; readonly inOwner: boolean };
+
+export function workingIndicator(turn: CurrentTurn, waitingForInput: boolean): WorkingIndicator | null {
+    if (waitingForInput || turn.kind !== "current") {
+        return null;
+    }
+    return turn.delegation === "queued"
+        ? { kind: "queued-in-owner" }
+        : { kind: "working", startedAt: turn.startedAt, inOwner: turn.delegation === "started" };
 }
 
 /** The command the service accepted as the running turn, with that turn's id. */
