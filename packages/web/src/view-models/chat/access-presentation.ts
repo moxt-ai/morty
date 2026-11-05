@@ -1,5 +1,19 @@
 import type { LinkedDevice } from "../../services/identity/anonymous-identity-api.ts";
 
+export type DeviceDetailField = {
+    readonly label: string;
+    readonly value: string;
+};
+
+type DeviceDetailRow =
+    | { readonly kind: "fields"; readonly fields: readonly DeviceDetailField[] }
+    | { readonly kind: "text"; readonly text: string };
+
+export type DeviceDescription = {
+    readonly name: string;
+    readonly details: readonly DeviceDetailRow[];
+};
+
 const momentFormat = new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
@@ -12,46 +26,69 @@ export function formatMoment(time: string): string {
     return momentFormat.format(new Date(time));
 }
 
-function addedBy(device: LinkedDevice): string | null {
+/** Same instants as {@link formatMoment}, in fixed numeric form for compact device rows. */
+export function formatMomentNumeric(time: string): string {
+    const date = new Date(time);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hour = String(date.getHours()).padStart(2, "0");
+    const minute = String(date.getMinutes()).padStart(2, "0");
+    return `${year.toString()}-${month}-${day} ${hour}:${minute}`;
+}
+
+function addedByLabel(device: LinkedDevice): string | null {
     switch (device.addedBy?.kind) {
         case "computer":
-            return "Added from your computer";
+            return "Your computer";
         case "recovery":
-            return "Added with recovery access";
+            return "Recovery";
         case "device":
-            return `Added from ${device.addedBy.label ?? "another browser"}`;
+            return device.addedBy.label ?? "Another browser";
         case undefined:
             return null;
     }
 }
 
-const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
-
 /** Where a device joined from, as approximate as Cloudflare's location of its connection. */
-function joinedNear(location: LinkedDevice["location"]): string | null {
-    const country = location?.country == null ? null : (regionNames.of(location.country) ?? location.country);
+function joinedLocation(location: LinkedDevice["location"]): string | null {
     const city = location?.city ?? null;
+    const country = location?.country ?? null;
     if (city !== null && country !== null) {
-        return `Near ${city}, ${country}`;
+        return `${city}, ${country}`;
     }
     if (city !== null || country !== null) {
-        return `Near ${city ?? country}`;
+        return city ?? country;
     }
     return null;
 }
+
+export type LinkedDeviceDescriptionContext = "dialog" | "notice";
 
 /**
  * How a device that holds access through a link reads in lists: its name, then when and roughly where it joined, then
  * who added it and until when it keeps access.
  */
-export function describeLinkedDevice(device: LinkedDevice): {
-    readonly name: string;
-    readonly details: readonly string[];
-} {
-    const joined = [`Joined ${formatMoment(device.joinedAt)}`, joinedNear(device.location)];
-    const term = [addedBy(device), `Until ${formatMoment(device.accessExpiresAt)}`];
+export function describeLinkedDevice(
+    device: LinkedDevice,
+    context: LinkedDeviceDescriptionContext = "dialog",
+): DeviceDescription {
+    const fields: DeviceDetailField[] = [{ label: "Joined", value: formatMomentNumeric(device.joinedAt) }];
+    const location = joinedLocation(device.location);
+    if (location !== null) {
+        fields.push({ label: "Location", value: location });
+    }
+
+    if (context === "dialog") {
+        const from = addedByLabel(device);
+        if (from !== null) {
+            fields.push({ label: "From", value: from });
+        }
+        fields.push({ label: "Until", value: formatMomentNumeric(device.accessExpiresAt) });
+    }
+
     return {
         name: device.label ?? "Unknown browser",
-        details: [joined, term].map((parts) => parts.filter((part) => part !== null).join(" · ")),
+        details: [{ kind: "fields", fields }],
     };
 }

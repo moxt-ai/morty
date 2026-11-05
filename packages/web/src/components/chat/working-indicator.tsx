@@ -13,7 +13,11 @@ function elapsedSecondsSince(startedAt: number): number {
     return Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
 }
 
-export function WorkingIndicator({ startedAt }: { readonly startedAt: number }) {
+/**
+ * The running turn's work and how long it has run. `owner` names the client that owns the native session when the
+ * turn runs there, which alone can stop it.
+ */
+export function WorkingIndicator({ owner, startedAt }: { readonly owner: string | null; readonly startedAt: number }) {
     const [elapsedSeconds, setElapsedSeconds] = useState(() => elapsedSecondsSince(startedAt));
 
     useEffect(() => {
@@ -32,7 +36,18 @@ export function WorkingIndicator({ startedAt }: { readonly startedAt: number }) 
         >
             <span className="animate-loading-text-shimmer bg-[linear-gradient(90deg,#8a8f98_0%,#8a8f98_35%,#fafafb_50%,#8a8f98_65%,#8a8f98_100%)] bg-[length:200%_100%] bg-clip-text text-transparent motion-reduce:animate-none motion-reduce:bg-none motion-reduce:text-muted-foreground">
                 Working for {workingDuration(elapsedSeconds)}
+                {owner === null ? null : ` in ${owner}`}
             </span>
+            {owner === null ? null : <span>Only {owner} can stop it.</span>}
+        </span>
+    );
+}
+
+/** A message the native session's owner holds in its queue, which only that owner can resume. */
+export function OwnerQueueNotice({ owner }: { readonly owner: string }) {
+    return (
+        <span className="text-xs text-muted-foreground" data-testid={dataTestId.workingIndicator} role="status">
+            Queued in {owner}. If {owner} paused its queue, choose Continue there.
         </span>
     );
 }

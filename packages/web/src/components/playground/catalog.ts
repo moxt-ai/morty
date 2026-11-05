@@ -105,14 +105,14 @@ export const PLAYGROUND_ENTRIES = [
         group: "Overlays",
         id: "dialog",
         source: "components/ui/dialog.tsx",
-        summary: "Modal dialog in default, setup, surface, wide, and busy forms.",
+        summary: "Modal dialog in default, setup, surface, size tiers (standard–wide), and busy forms.",
         title: "Dialog",
     },
     {
         group: "Overlays",
         id: "execution-details-dialog",
         source: "components/chat/execution-details-dialog.tsx",
-        summary: "Session execution summary. Desktop width is 480px; mobile is a bottom sheet.",
+        summary: "Session execution summary. Desktop width matches dialogStandard; mobile is a bottom sheet.",
         title: "Execution details dialog",
     },
     {

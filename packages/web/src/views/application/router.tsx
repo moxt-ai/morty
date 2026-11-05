@@ -22,35 +22,26 @@ function RootRoute() {
     return <Outlet />;
 }
 
-type RouteFailureDetails =
-    | { readonly kind: "message"; readonly message: string }
-    | { readonly kind: "message-with-url"; readonly message: string; readonly url: string };
-
-function getRouteFailureDetails(error: Error): RouteFailureDetails {
+function routeFailureMessage(error: Error): string {
     const message = error.message.trim() || "The application could not be loaded.";
     const separatorIndex = message.lastIndexOf(": ");
     if (separatorIndex < 0) {
-        return { kind: "message", message };
+        return message;
     }
     const candidate = message.slice(separatorIndex + 2);
     try {
         const url = new URL(candidate);
-        if (url.protocol !== "http:" && url.protocol !== "https:") {
-            return { kind: "message", message };
+        if (url.protocol === "http:" || url.protocol === "https:") {
+            return message.slice(0, separatorIndex);
         }
     } catch {
-        return { kind: "message", message };
+        return message;
     }
-    return {
-        kind: "message-with-url",
-        message: message.slice(0, separatorIndex),
-        url: candidate,
-    };
+    return message;
 }
 
 function RouteFailureContent({ error, onRetry }: { readonly error: Error; readonly onRetry: () => void }) {
-    const details = getRouteFailureDetails(error);
-    const copy = describePageFailure(details.message, "Something went wrong");
+    const copy = describePageFailure(routeFailureMessage(error), "Something went wrong");
     return (
         <SetupCardShell
             cardClassName="pb-10"
@@ -64,13 +55,6 @@ function RouteFailureContent({ error, onRetry }: { readonly error: Error; readon
                 </SetupCardTitle>
                 <SetupCardDescription className="[overflow-wrap:anywhere]">{copy.content}</SetupCardDescription>
             </div>
-            {details.kind === "message-with-url" && (
-                <div className="mt-4 w-full min-w-0 overflow-hidden rounded-[16px] bg-muted/50">
-                    <code className="block select-text px-4 py-3 text-center text-xs leading-5 text-morty-text-2 [overflow-wrap:anywhere]">
-                        {details.url}
-                    </code>
-                </div>
-            )}
             <SetupCardSection className="mt-4">
                 <Button className={setupPrimaryButtonClassName} onClick={onRetry} size={setupPrimaryButtonSize}>
                     Try again

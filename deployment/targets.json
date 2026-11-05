@@ -1,8 +1,8 @@
 {
     "account_id": "b903018a1c3d9d9a4bd68a11eb03e764",
     "workers_subdomain": "mobius-b90",
-    "morty_revision": "4fc059777001c582beb1cf20552ce6c34600e76d",
-    "mobius_revision": "42588ccb52cf62c6bd55cf49f33096fa709041bc",
+    "morty_revision": "227299dd3fa7c4ed7ea9b80fb0a9aa6b24ad1eb8",
+    "mobius_revision": "fe26494ae0a44697b453a0866de7e1f74b42d12a",
     "environments": {
         "staging": {
             "d1_id": "f2ef7e43-3f17-4f70-9c8e-558c4303506d",
@@ -39,7 +39,7 @@
             "test_app_id": "app_f9cfb6044bcfa63cfd739786fd078f330cb9"
         }
     },
-    "morty_sdk_revision": "8899229a18245619ff3460aef478eec1aa747c6a",
+    "morty_sdk_revision": "c5d0d15aef7b55cf1a35f40bddfc698bf389956a",
     "auth": {
         "staging": {
             "publishableKey": "pk_test_cGlja2VkLWNoaWNrZW4tNjU5My5jbGVyay5hY2NvdW50cy5kZXYk",

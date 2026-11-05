@@ -208,6 +208,26 @@ test("Given a turn that fails while I am in another Session, When I return, Then
     });
 });
 
+test("Given a Session whose last turn failed, When I reload the page, Then the sidebar still shows the Session failed", {
+    timeout: dedicatedEnvironmentTimeout,
+}, async () => {
+    const environment = await createChatWorkerEnvironment(true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true });
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Established session");
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull());
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "fail this turn explicitly");
+    await app.waitForView(() =>
+        expect(queryAllByText(document.body, recoveredFailure, { exact: true })).toHaveLength(1),
+    );
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    await app.waitForView(() => expect(entryStatus(app, "Established session")).toBe("Session failed"));
+
+    // The failure is the Runtime's to report, not only the memory of the page that watched it.
+    const reloaded = await app.reload();
+    await reloaded.waitForView(() => expect(entryStatus(reloaded, "Established session")).toBe("Session failed"));
+});
+
 test("Given my last turn completed while I was away after an earlier failure, When I return, Then the earlier turn keeps its failure and the Session is not shown failed", {
     timeout: dedicatedEnvironmentTimeout,
 }, async () => {

@@ -10,6 +10,8 @@ import type { SessionInteraction } from "./session-pane-types.ts";
 // a lifecycle protocol change is absorbed here instead of across pane workflows.
 
 type LifecycleMetadata = Extract<SessionLiveEvent, { readonly type: "lifecycle-metadata" }>["payload"];
+/** How far the native session's owner has taken a command the Runtime handed it: holding it, or running it. */
+export type DelegationStage = Extract<LifecycleMetadata, { readonly kind: "prompt.delegated" }>["stage"];
 type LifecycleEvent<Kind extends LifecycleMetadata["kind"]> = Extract<
     LifecycleMetadata,
     { readonly kind: Kind; readonly event: unknown }
@@ -31,6 +33,8 @@ export type SessionLifecycleFact =
       }
     | { readonly kind: "queue-changed" }
     | { readonly kind: "turn-started"; readonly commandId: string }
+    /** The Runtime handed the command to the native session's owner, such as the Codex app, which runs it or not. */
+    | { readonly kind: "turn-delegated"; readonly commandId: string; readonly stage: DelegationStage }
     | { readonly kind: "turn-completed"; readonly commandId: string; readonly steered: boolean }
     | { readonly kind: "turn-failed"; readonly commandId: string; readonly code: string; readonly message: string }
     /** The event changes nothing the pane tracks outside the message projection. */
@@ -60,6 +64,8 @@ export function sessionLifecycleFact(payload: LifecycleMetadata): SessionLifecyc
             return { kind: "none" };
         case "prompt.started":
             return { kind: "turn-started", commandId: payload.commandId };
+        case "prompt.delegated":
+            return { kind: "turn-delegated", commandId: payload.commandId, stage: payload.stage };
         case "prompt.completed":
             return {
                 kind: "turn-completed",

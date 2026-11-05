@@ -705,6 +705,51 @@ test("Given a browser that acknowledged a new device, When another device joins 
     expect(next.textContent).not.toContain("iPhone · Safari");
 });
 
+test("Given a new device and this browser's access in the sidebar, When the user swipes the notices, Then the other notice is shown and swiping back returns", {
+    timeout: 60_000,
+}, async () => {
+    const joined = await createTestApp({ connectAgent: true, page: { kind: "share" } });
+    await joined.waitForView(() => expect(new URL(window.location.href).searchParams.get("identity")).not.toBeNull());
+    const code = new URL(await joined.createTransferUrl()).hash.slice("#code=".length);
+    const redeemed = await joined.transport.fetch(
+        new Request(`${joined.origin}/morty/api/identity/transfers/redeem`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code, device: "iPhone · Safari" }),
+        }),
+    );
+    expect(redeemed.status).toBe(200);
+    centralLocalStorage.write(linkedDevicesSeenEntry(joined.identity.projectId), new Date(0).toISOString());
+    const app = await joined.reload();
+    const carousel = await app.waitForView(() => {
+        const region = getByRole(document.body, "region", { name: "Access notices" });
+        expect(getByRole(region, "status", { name: "New device connected" }).textContent).toContain("iPhone · Safari");
+        expect(queryByRole(region, "status", { name: "This browser's access" })).toBeNull();
+        return region;
+    });
+    await app.user.hover(carousel);
+    await app.user.pointer([
+        { keys: "[TouchA>]", target: carousel, coords: { x: 220, y: 40 } },
+        { pointerName: "TouchA", target: carousel, coords: { x: 40, y: 40 } },
+        { keys: "[/TouchA]", target: carousel, coords: { x: 40, y: 40 } },
+    ]);
+    await app.waitForView(() => {
+        expect(getByRole(carousel, "status", { name: "This browser's access" })).toBeInstanceOf(HTMLElement);
+        expect(queryByRole(carousel, "status", { name: "New device connected" })).toBeNull();
+    });
+    await app.user.pointer([
+        { keys: "[MouseLeft>]", target: carousel, coords: { x: 40, y: 40 } },
+        { coords: { x: 220, y: 40 }, target: carousel },
+        { keys: "[/MouseLeft]", target: carousel, coords: { x: 220, y: 40 } },
+    ]);
+    await app.waitForView(() => {
+        expect(getByRole(carousel, "status", { name: "New device connected" }).textContent).toContain(
+            "iPhone · Safari",
+        );
+        expect(queryByRole(carousel, "status", { name: "This browser's access" })).toBeNull();
+    });
+});
+
 test("Given a browser whose access ends within the hour, When the page stays open, Then it is reminded once, not told it joined again, and the account menu states the term", {
     timeout: 60_000,
 }, async () => {

@@ -1,70 +1,100 @@
-import { memo, type MouseEvent as ReactMouseEvent, useRef, useState } from "react";
-import { Streamdown } from "streamdown";
-import { MermaidFullscreen, type MermaidFullscreenDiagram } from "./mermaid-fullscreen.tsx";
-import { mermaidConfig } from "./mermaid-options.ts";
-import { mermaidPlugin } from "./mermaid-plugin.ts";
+import { Maximize2 } from "lucide-react";
+import { memo, useEffect, useState } from "react";
+import { MermaidFullscreen } from "./mermaid-fullscreen.tsx";
+import { type RenderedDiagram, renderMermaid } from "./mermaid-renderer.ts";
 
-const plugins = { mermaid: mermaidPlugin };
-const controls = { mermaid: { copy: false, fullscreen: true, panZoom: true, download: false } };
-const translations = { viewFullscreen: "View diagram fullscreen" };
-const options = {
-    config: mermaidConfig,
-    errorComponent: () => (
-        <p className="p-3 text-sm text-muted-foreground" role="status">
-            Diagram could not be displayed. Its source is still available.
-        </p>
-    ),
-};
+type Rendering = { readonly code: string } & (
+    | { readonly kind: "ready"; readonly diagram: RenderedDiagram }
+    | { readonly kind: "failed" }
+);
 
-function measureDiagram(svg: SVGSVGElement): MermaidFullscreenDiagram | null {
-    const viewBox = (svg.getAttribute("viewBox") ?? "").trim().split(/[\s,]+/u);
-    const width = Number(viewBox[2]);
-    const height = Number(viewBox[3]);
-    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-        return null;
-    }
-    return { height, markup: svg.outerHTML, width };
-}
+// Start rendering slightly before a diagram scrolls into view, so it is drawn by the time it is read.
+const RENDER_AHEAD = "300px";
 
+/**
+ * A diagram in the conversation is a figure to read, like an image: it fits the column, and the
+ * wheel, a drag or a swipe over it keeps scrolling the conversation. Zoom and pan live in the
+ * fullscreen viewer, where there is no surrounding page to scroll.
+ */
 export default memo(function MermaidDiagram({ code }: { readonly code: string }) {
-    const container = useRef<HTMLDivElement | null>(null);
-    const [fullscreen, setFullscreen] = useState<MermaidFullscreenDiagram | null>(null);
-    // A nested renderer reuses Streamdown's supported diagram controls without registering
-    // our custom fence renderer recursively. The engine only loads for complete diagrams.
-    const longestFence = Math.max(0, ...Array.from(code.matchAll(/`+/gu), (match) => match[0].length));
-    const fence = "`".repeat(Math.max(3, longestFence + 1));
-    const openFullscreen = (event: ReactMouseEvent<HTMLDivElement>) => {
-        // Streamdown sizes its fullscreen diagram inside the viewport and then fits the
-        // same diagram again, so a wide diagram opens unreadably small on a phone. Take
-        // over this one control, and leave Streamdown's overlay for a diagram that has
-        // not rendered (its loading and failure states).
-        if (!(event.target instanceof Element)) {
+    const [figure, setFigure] = useState<HTMLElement | null>(null);
+    const [rendering, setRendering] = useState<Rendering | null>(null);
+    const [fullscreen, setFullscreen] = useState<RenderedDiagram | null>(null);
+    const current = rendering?.code === code ? rendering : null;
+    useEffect(() => {
+        if (figure === null) {
             return;
         }
-        const trigger = event.target.closest("button");
-        const svg = container.current?.querySelector('[role="img"] > svg');
-        if (trigger?.getAttribute("aria-label") !== translations.viewFullscreen || !(svg instanceof SVGSVGElement)) {
-            return;
-        }
-        const diagram = measureDiagram(svg);
-        if (diagram === null) {
-            return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        setFullscreen(diagram);
-    };
+        let active = true;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (!entries.some((entry) => entry.isIntersecting)) {
+                    return;
+                }
+                observer.disconnect();
+                renderMermaid(code).then(
+                    (diagram) => {
+                        if (active) {
+                            setRendering({ code, kind: "ready", diagram });
+                        }
+                    },
+                    () => {
+                        if (active) {
+                            setRendering({ code, kind: "failed" });
+                        }
+                    },
+                );
+            },
+            { rootMargin: RENDER_AHEAD },
+        );
+        observer.observe(figure);
+        return () => {
+            active = false;
+            observer.disconnect();
+        };
+    }, [code, figure]);
     return (
-        <div className="agent-mermaid relative min-w-0" onClickCapture={openFullscreen} ref={container}>
-            <Streamdown
-                controls={controls}
-                mermaid={options}
-                mode="static"
-                plugins={plugins}
-                translations={translations}
+        <div className="min-w-0">
+            <figure
+                className="relative my-4 flex w-full flex-col gap-2 rounded-md border border-border/60 bg-surface-subtle p-3"
+                ref={setFigure}
             >
-                {`${fence}mermaid\n${code}\n${fence}`}
-            </Streamdown>
+                <div className="flex h-8 items-center text-xs text-muted-foreground">
+                    <span className="ml-1 font-mono lowercase">mermaid</span>
+                </div>
+                {current?.kind === "ready" && (
+                    <button
+                        aria-label="View diagram fullscreen"
+                        className="absolute top-3 right-3 cursor-pointer p-1 text-muted-foreground transition-colors hover:text-foreground"
+                        onClick={() => {
+                            setFullscreen(current.diagram);
+                        }}
+                        title="View diagram fullscreen"
+                        type="button"
+                    >
+                        <Maximize2 aria-hidden="true" size={14} />
+                    </button>
+                )}
+                {current === null && (
+                    <p className="p-3 text-sm text-muted-foreground" role="status">
+                        Loading diagram…
+                    </p>
+                )}
+                {current?.kind === "failed" && (
+                    <p className="p-3 text-sm text-muted-foreground" role="status">
+                        Diagram could not be displayed. Its source is still available.
+                    </p>
+                )}
+                {current?.kind === "ready" && (
+                    <div
+                        aria-label="Mermaid chart"
+                        className="flex justify-center bg-surface-subtle p-4 [&>svg]:h-auto [&>svg]:max-h-[min(70vh,40rem)] [&>svg]:w-auto [&>svg]:max-w-full"
+                        // biome-ignore lint/security/noDangerouslySetInnerHtml: the Mermaid renderer sanitizes this markup with DOMPurify before it reaches the page.
+                        dangerouslySetInnerHTML={{ __html: current.diagram.markup }}
+                        role="img"
+                    />
+                )}
+            </figure>
             <details className="my-2 text-sm">
                 <summary className="cursor-pointer text-muted-foreground">View diagram source</summary>
                 <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words p-3">{code}</pre>

@@ -26,7 +26,7 @@ import { ButtonGroup } from "../ui/button-group.tsx";
 import { Card } from "../ui/card.tsx";
 import { Button } from "../ui/cloud-button.tsx";
 import { CopyToClipboardButton } from "../ui/copy-to-clipboard-button.tsx";
-import { Dialog } from "../ui/dialog.tsx";
+import { Dialog, dialogVariantCatalog } from "../ui/dialog.tsx";
 import { Input } from "../ui/input.tsx";
 import { LinkButton } from "../ui/link-button.tsx";
 import { MortyAlert } from "../ui/morty-alert.tsx";
@@ -37,6 +37,8 @@ import {
     executionDetailsDialogWidthPx,
     overlaySurfaceRadiusClassName,
     overlayTriggerOffsetPx,
+    overlayWidthLadder,
+    overlayWidthPx,
 } from "../ui/overlay-surface.ts";
 import { Popover } from "../ui/popover.tsx";
 import {
@@ -115,7 +117,7 @@ const toolStates = [
 
 type CloudVariant = (typeof cloudVariants)[number];
 type CloudSize = (typeof cloudSizes)[number];
-type DialogAppearance = "default" | "setup" | "surface" | "wide" | "busy";
+type DialogGalleryOpen = "default" | "setup" | "surface" | "busy" | "medium" | "large" | "wide";
 
 function ChoiceRow<T extends string>({
     label,
@@ -890,48 +892,116 @@ function ExecutionDetailsDialogGallery() {
     );
 }
 
+function dialogGalleryDialogProps(open: DialogGalleryOpen): {
+    readonly appearance: "default" | "setup" | "surface";
+    readonly busy?: boolean;
+    readonly size?: "medium" | "large" | "wide";
+} {
+    switch (open) {
+        case "setup":
+            return { appearance: "setup" };
+        case "surface":
+            return { appearance: "surface" };
+        case "busy":
+            return { appearance: "default", busy: true };
+        case "medium":
+            return { appearance: "default", size: "medium" };
+        case "large":
+            return { appearance: "default", size: "large" };
+        case "wide":
+            return { appearance: "default", size: "wide" };
+        default:
+            return { appearance: "default" };
+    }
+}
+
 function DialogGallery() {
-    const [open, setOpen] = useState<DialogAppearance | null>(null);
-    const appearance = open === "wide" || open === "busy" || open === null ? "default" : open;
+    const [open, setOpen] = useState<DialogGalleryOpen | null>(null);
+    const dialogProps = open === null ? null : dialogGalleryDialogProps(open);
     return (
-        <Specimen title="Open one">
-            <Button onClick={() => setOpen("default")} variant="outline">
-                Default
-            </Button>
-            <Button onClick={() => setOpen("setup")} variant="outline">
-                Setup
-            </Button>
-            <Button onClick={() => setOpen("surface")} variant="outline">
-                Surface
-            </Button>
-            <Button onClick={() => setOpen("wide")} variant="outline">
-                Wide
-            </Button>
-            <Button onClick={() => setOpen("busy")} variant="outline">
-                Busy
-            </Button>
-            {open !== null && (
-                <Dialog
-                    appearance={appearance}
-                    busy={open === "busy"}
-                    description="This preview uses the real dialog. Close it to return to the library."
-                    onClose={() => setOpen(null)}
-                    title={open === "busy" ? "Saving session" : "Continue on this device"}
-                    wide={open === "wide"}
-                >
-                    <p>
-                        {open === "busy"
-                            ? "Close stays disabled until the work finishes. Use the button below to finish it."
-                            : "Approve requests and send instructions while the agent runs on your computer."}
-                    </p>
-                    {open === "busy" && (
-                        <div className="mt-4 flex justify-end">
-                            <Button onClick={() => setOpen(null)}>Finish</Button>
+        <>
+            <Specimen title="Overlay width ladder (desktop max / fixed width)">
+                <p className="mb-4 max-w-xl text-13 leading-5 text-muted-foreground">
+                    Change values in <code className="text-12">components/ui/overlay-width.ts</code>. Mobile bottom
+                    sheets stay full width; fullscreen and drawer surfaces are not listed here.
+                </p>
+                <dl className="grid max-w-2xl gap-3 text-13 leading-5">
+                    {overlayWidthLadder.map(({ token, label, usage }) => (
+                        <div
+                            key={token}
+                            className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-4 gap-y-0.5 border-b border-border pb-3 last:border-0"
+                        >
+                            <dt className="font-mono font-semibold tabular-nums">{overlayWidthPx[token]}px</dt>
+                            <dd className="font-medium">{label}</dd>
+                            <dd className="col-span-2 text-muted-foreground">{usage}</dd>
                         </div>
-                    )}
-                </Dialog>
-            )}
-        </Specimen>
+                    ))}
+                </dl>
+            </Specimen>
+            <Specimen title="Product dialog variants (`dialog-variant.ts`)">
+                <p className="mb-4 max-w-xl text-13 leading-5 text-muted-foreground">
+                    Each shipped dialog passes <code className="text-12">variant</code> so width and shell come from{" "}
+                    <code className="text-12">dialogVariantLayout</code>. Override with explicit{" "}
+                    <code className="text-12">size</code> only when needed.
+                </p>
+                <dl className="grid max-w-2xl gap-3 text-13 leading-5">
+                    {[...dialogVariantCatalog]
+                        .sort((left, right) => left.widthPx - right.widthPx)
+                        .map(({ variant, title, widthPx }) => (
+                            <div
+                                key={variant}
+                                className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-4 gap-y-0.5 border-b border-border pb-3 last:border-0"
+                            >
+                                <dt className="font-mono font-semibold tabular-nums">{widthPx}px</dt>
+                                <dd className="font-medium">{title}</dd>
+                                <dd className="col-span-2 font-mono text-12 text-muted-foreground">{variant}</dd>
+                            </div>
+                        ))}
+                </dl>
+            </Specimen>
+            <Specimen title="Open one">
+                <Button onClick={() => setOpen("default")} variant="outline">
+                    Default
+                </Button>
+                <Button onClick={() => setOpen("setup")} variant="outline">
+                    Setup
+                </Button>
+                <Button onClick={() => setOpen("surface")} variant="outline">
+                    Surface
+                </Button>
+                <Button onClick={() => setOpen("medium")} variant="outline">
+                    Medium
+                </Button>
+                <Button onClick={() => setOpen("large")} variant="outline">
+                    Large
+                </Button>
+                <Button onClick={() => setOpen("wide")} variant="outline">
+                    Wide
+                </Button>
+                <Button onClick={() => setOpen("busy")} variant="outline">
+                    Busy
+                </Button>
+                {dialogProps !== null && open !== null && (
+                    <Dialog
+                        {...dialogProps}
+                        description="This preview uses the real dialog. Close it to return to the library."
+                        onClose={() => setOpen(null)}
+                        title={open === "busy" ? "Saving session" : "Continue on this device"}
+                    >
+                        <p>
+                            {open === "busy"
+                                ? "Close stays disabled until the work finishes. Use the button below to finish it."
+                                : "Approve requests and send instructions while the agent runs on your computer."}
+                        </p>
+                        {open === "busy" && (
+                            <div className="mt-4 flex justify-end">
+                                <Button onClick={() => setOpen(null)}>Finish</Button>
+                            </div>
+                        )}
+                    </Dialog>
+                )}
+            </Specimen>
+        </>
     );
 }
 
@@ -1052,7 +1122,7 @@ function WorkingIndicatorGallery() {
     const [startedAt] = useState(() => Date.now() - 75_000);
     return (
         <Specimen title="Elapsed">
-            <WorkingIndicator startedAt={startedAt} />
+            <WorkingIndicator owner={null} startedAt={startedAt} />
         </Specimen>
     );
 }

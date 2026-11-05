@@ -28,6 +28,9 @@ const composerMaxHeightPx = 256;
 const composerChromeHeightPx = 64;
 const composerTextareaMaxHeightPx = composerMaxHeightPx - composerChromeHeightPx;
 const composerScrollEdgeThresholdPx = 1;
+/** Send and stop share one primary control; only the glyph changes. */
+const composerActionButtonClassName =
+    "size-8! rounded-full bg-foreground text-background hover:bg-foreground/85 active:bg-foreground/75";
 
 function attachmentName(attachment: ComposerAttachment): string {
     return attachment.name;
@@ -307,7 +310,7 @@ export function BotChatComposer({
                                         ? submitLabel
                                         : "Stop agent output"
                             }
-                            className={`size-8! rounded-full text-background ${submitAction || outputState === "sending" ? "bg-foreground hover:bg-foreground/85" : "bg-destructive hover:bg-destructive/90"}`}
+                            className={composerActionButtonClassName}
                             data-testid={dataTestId.sendMessage}
                             disabled={
                                 outputState === "sending" ||

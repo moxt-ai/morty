@@ -47,7 +47,7 @@ function safeExternalUrl(value: string): string {
     return "";
 }
 
-/** Same surface language as `MortyAlert`: a 20px shell with a hairline border, 13px text, and a muted 14px icon. */
+/** Same surface language as `MortyAlert`: a 16px shell with a hairline border, 13px text, and a muted 14px icon. */
 const interactionCardClassName =
     "min-w-0 w-full rounded-[20px] border-[0.5px] border-border bg-surface-elevated px-4 py-4 text-13 [overflow-wrap:anywhere]";
 const interactionIconClassName = "mt-[3px] size-4 shrink-0 text-muted-foreground";

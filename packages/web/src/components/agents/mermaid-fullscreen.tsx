@@ -2,6 +2,7 @@ import { RotateCcw, X, ZoomIn, ZoomOut } from "lucide-react";
 import { Dialog as Primitive } from "radix-ui";
 import { type ReactNode, type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { useElementSize } from "../utils/use-element-size.ts";
+import type { RenderedDiagram } from "./mermaid-renderer.ts";
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 3;
@@ -13,12 +14,6 @@ const ZOOM_STEP = 0.1;
  */
 const MIN_LEGIBLE_SCALE = 0.75;
 
-export type MermaidFullscreenDiagram = {
-    readonly height: number;
-    readonly markup: string;
-    readonly width: number;
-};
-
 type View =
     | { readonly kind: "fit" }
     | { readonly kind: "manual"; readonly offsetX: number; readonly offsetY: number; readonly scale: number };
@@ -29,10 +24,7 @@ function clamp(value: number, minimum: number, maximum: number): number {
     return Math.min(Math.max(value, minimum), maximum);
 }
 
-function fitScale(
-    viewport: { readonly height: number; readonly width: number },
-    diagram: MermaidFullscreenDiagram,
-): number {
+function fitScale(viewport: { readonly height: number; readonly width: number }, diagram: RenderedDiagram): number {
     if (viewport.width <= 0 || viewport.height <= 0 || diagram.width <= 0 || diagram.height <= 0) {
         return 1;
     }
@@ -71,7 +63,7 @@ export function MermaidFullscreen({
     diagram,
     onClose,
 }: {
-    readonly diagram: MermaidFullscreenDiagram;
+    readonly diagram: RenderedDiagram;
     readonly onClose: () => void;
 }) {
     const { element: viewport, observe, size } = useElementSize<HTMLDivElement>();

@@ -13,16 +13,29 @@ export type ConversationListStatus =
     | { readonly kind: "failed"; readonly commandId: string | null; readonly message: string }
     | { readonly kind: "unread" };
 
+/** What an idle status says about the Session's last turn, from the Chat Worker's listing or the Runtime's stream. */
+type IdleStatus = {
+    readonly failedTurn?: { readonly commandId: string; readonly message: string } | undefined;
+};
+
 /**
- * What a Session shows once the Runtime reports it idle. A failed turn stays marked until the next turn starts, and a
- * reply that finished while another Session was selected is unread.
+ * What a Session shows once the Runtime reports it idle. A reply that finished while another Session was selected is
+ * unread. A failed turn stays marked until the next turn starts: the Runtime reports it, so every page shows it, and a
+ * Runtime that does not report it leaves the failure the open pane saw.
  */
-function settleIdle(current: ConversationListStatus | undefined, selected: boolean): ConversationListStatus {
-    if (current?.kind === "failed") {
-        return current;
-    }
+function settleIdle(
+    current: ConversationListStatus | undefined,
+    selected: boolean,
+    status: IdleStatus,
+): ConversationListStatus {
     if (!selected && (current?.kind === "working" || current?.kind === "unread")) {
         return { kind: "unread" };
+    }
+    if (status.failedTurn !== undefined) {
+        return { kind: "failed", commandId: status.failedTurn.commandId, message: status.failedTurn.message };
+    }
+    if (current?.kind === "failed") {
+        return current;
     }
     return { kind: "idle" };
 }
@@ -111,8 +124,11 @@ export function createConversationStatusStore(
             changedAt.set(sessionId, changes);
             set((state) => ({ statuses: new Map(state.statuses).set(sessionId, status) }));
         };
-        const markCompleted = (sessionId: string): void => {
-            replaceStatus(sessionId, settleIdle(get().statuses.get(sessionId), sessionId === selectedSessionId()));
+        const markCompleted = (sessionId: string, status: IdleStatus): void => {
+            replaceStatus(
+                sessionId,
+                settleIdle(get().statuses.get(sessionId), sessionId === selectedSessionId(), status),
+            );
         };
 
         const replaceDirectory = (sessions: readonly ManagedChatSession[], snapshotStartedAt: number): void => {
@@ -125,7 +141,7 @@ export function createConversationStatusStore(
                     return [
                         session.id,
                         session.status.kind === "idle"
-                            ? settleIdle(current, session.id === selectedSessionId())
+                            ? settleIdle(current, session.id === selectedSessionId(), session.status)
                             : session.status,
                     ];
                 });
@@ -146,7 +162,7 @@ export function createConversationStatusStore(
                     continue;
                 }
                 if (status.kind === "idle") {
-                    markCompleted(sessionId);
+                    markCompleted(sessionId, status);
                 } else {
                     replaceStatus(sessionId, status);
                 }
@@ -205,7 +221,7 @@ export function createConversationStatusStore(
                                     if (event.kind === "session.close.notice") {
                                         onSessionClosed(event.sessionId, event.reason);
                                     } else if (event.status.kind === "idle") {
-                                        markCompleted(event.sessionId);
+                                        markCompleted(event.sessionId, event.status);
                                     } else {
                                         replaceStatus(event.sessionId, event.status);
                                     }

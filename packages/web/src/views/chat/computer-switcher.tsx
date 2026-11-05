@@ -140,7 +140,8 @@ function ComputerMenuChoice({ activeKey, choice }: { readonly activeKey: string;
     );
 }
 
-export const mobileDrawerCardClassName = "flex flex-col overflow-hidden rounded-lg bg-morty-fill-white text-foreground";
+export const mobileDrawerCardClassName =
+    "flex min-h-min shrink-0 flex-col overflow-hidden rounded-lg bg-morty-fill-white text-foreground";
 
 export const mobileDrawerOptionDividerClassName = "[&>*+*]:border-t-[0.5px] [&>*+*]:border-black/[0.06]";
 

@@ -7,7 +7,7 @@ import { buttonIconEdges } from "./button-icon-edges.ts";
 
 const variants = {
     primary: "border-transparent bg-foreground text-background hover:bg-foreground/85 active:bg-foreground/75",
-    outline: "border-border bg-background text-foreground hover:bg-accent active:bg-morty-fill-opacity-4",
+    outline: "border-border bg-transparent text-foreground hover:bg-accent active:bg-morty-fill-opacity-4",
     ghost: "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground active:bg-morty-fill-opacity-4 active:text-foreground",
     secondary:
         "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80 active:bg-morty-fill-opacity-4",

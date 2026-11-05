@@ -38,7 +38,7 @@ import { SessionWelcome } from "../../components/chat/session-welcome.tsx";
 import { isFileEditToolCall } from "../../components/chat/tools/tool-renderer-registry.tsx";
 import { TurnWorkDisclosure, type TurnWorkSummary } from "../../components/chat/turn-work-disclosure.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
-import { WorkingIndicator } from "../../components/chat/working-indicator.tsx";
+import { OwnerQueueNotice, WorkingIndicator } from "../../components/chat/working-indicator.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { DesktopChatLayout } from "../../components/utils/desktop-chat-layout.tsx";
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
@@ -1165,7 +1165,18 @@ function MobiusSessionPaneBody({
                                             // mt-1 keeps 4px of air under the previous bubble's reserved
                                             // copy-button strip, matching the consecutive-message rhythm.
                                             <div className="mt-1">
-                                                <WorkingIndicator startedAt={presentation.workingIndicator.startedAt} />
+                                                {presentation.workingIndicator.kind === "queued-in-owner" ? (
+                                                    <OwnerQueueNotice owner={executionContext.agent} />
+                                                ) : (
+                                                    <WorkingIndicator
+                                                        owner={
+                                                            presentation.workingIndicator.inOwner
+                                                                ? executionContext.agent
+                                                                : null
+                                                        }
+                                                        startedAt={presentation.workingIndicator.startedAt}
+                                                    />
+                                                )}
                                             </div>
                                         )}
                                     {authenticationRecovery !== null && presentation.authenticationFailure !== null && (

@@ -16,7 +16,6 @@ import { HarnessMark } from "../../components/chat/harness-mark.tsx";
 import { MessageDeliveryStatus } from "../../components/chat/message-delivery-status.tsx";
 import { MobileSessionTitlePortal } from "../../components/chat/mobile-session-title-portal.tsx";
 import { SessionLoadFailure } from "../../components/chat/session-load-failure.tsx";
-import { TopNoticeStack } from "../../components/chat/top-notice.tsx";
 import { UserPromptMessage } from "../../components/chat/user-prompt-message.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
@@ -47,13 +46,11 @@ import { activeHarnessMark, pendingExecutionContext } from "../../view-models/ch
 import { pendingConversationPresentation } from "../../view-models/chat/pending-conversation-presentation.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
-import { AccessNotice } from "./access-term.tsx";
 import { OnlineComputerAlternative } from "./computer-switcher.tsx";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DevicesDialog } from "./devices-dialog.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
 import { MobiusSessionPane, MobiusSessionPaneLoading, SessionMessageListSkeleton } from "./mobius-session-pane.tsx";
-import { NewDeviceNotice } from "./new-device-notice.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 
 /** The centered pre-session failure block: card, grouped action buttons and the report entry. */
@@ -284,23 +281,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                     {workspace.accessNotice}
                 </div>
             )}
-            {/* Notices about this browser's access stand above the conversation and move it down, never covering it. */}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                <TopNoticeStack>
-                    {workspace.linkedDevices !== null && (
-                        <NewDeviceNotice
-                            store={workspace.linkedDevices}
-                            onReviewDevices={workspace.deviceAccess?.getState().open ?? null}
-                        />
-                    )}
-                    {workspace.accessExpiry !== null && (
-                        <AccessNotice
-                            computerName={model.runtimeConfiguration?.runtime?.machineName ?? ""}
-                            onOpenDevices={workspace.deviceAccess?.getState().open ?? null}
-                            store={workspace.accessExpiry}
-                        />
-                    )}
-                </TopNoticeStack>
                 <section aria-label="Conversation" className={chatSessionPaneSectionClassName}>
                     {model.selection.kind === "ready" ? (
                         <div
@@ -479,7 +460,7 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
             </div>
             {pairingNotice && model.pairing.kind === "unpaired" && (
                 <Dialog
-                    appearance="setup"
+                    variant="connectAgentPairing"
                     title="Connect agent"
                     description="Morty is ready. Paste this instruction into your local agent to connect it."
                     onClose={() => {
