@@ -1,6 +1,7 @@
 import { externalContentPath } from "@moxt-ai/mobius-sdk";
 import {
     type AcpSessionUpdate,
+    type AgentQuestion,
     type ContentBlock,
     type PromptCompletion,
     type PromptMessageOutcome,
@@ -69,7 +70,13 @@ export type SessionMessage =
           readonly firstEvent: SessionPresentationEvent;
           readonly commandId: string | null;
           readonly presentation:
-              | { readonly kind: "message"; readonly content: SessionContentBlock; readonly messageId: string | null }
+              | {
+                    readonly kind: "message";
+                    readonly content: SessionContentBlock;
+                    readonly messageId: string | null;
+                    /** Questions the message asks while the Agent keeps working; the user answers with a message. */
+                    readonly questions: readonly AgentQuestion[];
+                }
               | { readonly kind: "thought"; readonly content: SessionContentBlock; readonly messageId: string | null }
               | { readonly kind: "tool"; readonly entry: SessionToolPresentation }
               | {
@@ -390,6 +397,7 @@ function messageFromAcpUpdate(event: SessionPresentationEvent, update: AcpSessio
                     content: sessionContent(update.content),
                     kind: "message",
                     messageId: update.messageId ?? null,
+                    questions: update.questions ?? [],
                 },
                 role: "assistant",
             };
@@ -458,10 +466,17 @@ function mergeAdjacentText(previous: SessionMessage | undefined, incoming: Sessi
     ) {
         return null;
     }
+    // A message's questions arrive with one of its chunks; later chunks keep them.
+    const presentation =
+        incoming.presentation.kind === "message" &&
+        previous.presentation.kind === "message" &&
+        incoming.presentation.questions.length === 0
+            ? { ...incoming.presentation, questions: previous.presentation.questions }
+            : incoming.presentation;
     return {
         ...previous,
         presentation: {
-            ...incoming.presentation,
+            ...presentation,
             content: {
                 ...incoming.presentation.content,
                 text: appendSessionText(

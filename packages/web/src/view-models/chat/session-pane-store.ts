@@ -21,6 +21,7 @@ import { rememberAgentSettingChoice } from "../../services/chat/last-agent-setti
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import { recordBrowserDiagnostic } from "../../services/diagnostics/browser-diagnostics.ts";
 import {
+    agentQuestionChoicesEntry,
     centralSessionStorage,
     elicitationAnswerDraftsEntry,
     sessionDraftEntry,
@@ -28,6 +29,7 @@ import {
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError, isRetryableRuntimeConnectionFailure, isSessionClosedFailure } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
+import { type AgentQuestionChoices, agentQuestionAnswer, openAgentQuestions } from "./agent-question-answer.ts";
 import type { ComposerAttachmentStore } from "./composer-attachment-store.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
 import type { SelectedMobiusSession } from "./open-session.ts";
@@ -197,6 +199,19 @@ export interface SessionPaneStore {
     readonly loadOlderMessages: (signal: AbortSignal) => Promise<void>;
     readonly setDraft: (draft: string) => void;
     readonly send: () => Promise<void>;
+    /**
+     * The suggested answers picked for the questions Agent messages ask, by message. They belong to the Session, as
+     * its composer draft does, and stay until the user picks answers to later questions.
+     */
+    readonly answerChoices: ReadonlyMap<string, AgentQuestionChoices>;
+    /** Picks a suggested answer to a question the user can still answer. */
+    readonly chooseAnswer: (messageId: string, questionIndex: number, answer: string) => void;
+    /**
+     * Answers the questions a message asks with the picked answers, as a message of its own sent the way the
+     * composer sends: now, or queued behind the running turn. The composer's draft stays as it is.
+     */
+    readonly sendAnswer: (messageId: string) => Promise<void>;
+    readonly queueAnswer: (messageId: string) => Promise<void>;
     readonly removeUnknownDelivery: () => void;
     /** Retries on the Session's delivery: the attempt may outlive this pane. */
     readonly retryUnknownDelivery: () => Promise<void>;
@@ -220,6 +235,12 @@ export interface SessionPaneStore {
     readonly cancelTitleEdit: () => void;
     readonly stop: (signal: AbortSignal) => Promise<void>;
 }
+
+/**
+ * Where a submitted message comes from: the composer's draft, an answer to a question an Agent message asks, or a
+ * message delivery already holds (the Session's first message, or a failed one sent again).
+ */
+type SubmissionSource = "composer" | "answer" | "held";
 
 /** The pane's state with its connection loop, which only the pane's own `start` runs. */
 interface SessionPaneState extends SessionPaneStore {
@@ -363,6 +384,8 @@ export function sessionPanePresentation(
         submitDisabled:
             !composerHasMessage(model.draft, attachments.attachments.length, attachments.state.kind === "reading") ||
             !(shouldQueueOnSubmit ? canQueue(facts) : canSendNow(facts)),
+        // An answer to an Agent's question goes out as the composer's message would, whatever the draft holds.
+        answerDisabled: !(shouldQueueOnSubmit ? canQueue(facts) : canSendNow(facts)),
         ...deliveries,
     } as const;
 }
@@ -609,6 +632,7 @@ export function createSessionPaneModel(options: {
         directoryId: session.result.ready.directoryId,
     };
     const draftEntry = sessionDraftEntry(sessionId);
+    const answerChoicesEntry = agentQuestionChoicesEntry(sessionId);
 
     const respondToPermission = async (response: PermissionInteractionResponse, signal: AbortSignal): Promise<void> => {
         if (client === null || store.getState().connection.kind !== "ready") {
@@ -964,12 +988,12 @@ export function createSessionPaneModel(options: {
             });
         };
         /**
-         * Submits a message: the composer's draft, a failed message again, or the first message the Session's
-         * delivery holds. Delivery owns that snapshot and the attempt through preparation, sending, and recovery, so
-         * the attempt outlives this pane; completion never writes to the next draft.
+         * Submits a message: the composer's draft, an answer to an Agent's question, a failed message again, or the
+         * first message the Session's delivery holds. Delivery owns that snapshot and the attempt through
+         * preparation, sending, and recovery, so the attempt outlives this pane; completion never writes to the next
+         * draft.
          */
-        const submit = async (message: SubmittedMessage): Promise<void> => {
-            const currentDelivery = delivery.getState().state;
+        const submit = async (message: SubmittedMessage, source: SubmissionSource): Promise<void> => {
             if (!canSubmit(message.target, operationFacts())) {
                 return;
             }
@@ -1007,8 +1031,8 @@ export function createSessionPaneModel(options: {
                 },
                 submit: submitCommand(connected, commandId, target.disposition, sentAt),
             });
-            // Only a message taken from the composer leaves it; a failed or first message never was in it.
-            if (currentDelivery.kind === "idle") {
+            // Only a message taken from the composer leaves it.
+            if (source === "composer") {
                 centralSessionStorage.remove(draftEntry);
                 composerAttachments.getState().clear();
                 set({ draft: "", filesRestoreNotice: false });
@@ -1021,12 +1045,57 @@ export function createSessionPaneModel(options: {
             await sending;
             delivery.getState().releaseMessages(sessionUserCommandIds(get().messages));
         };
+        /** The message that answers a still open question message with the answers picked for it, if they are complete. */
+        const pickedAnswer = (messageId: string): string | null => {
+            const questions = openAgentQuestions(get().messages).get(messageId);
+            return questions === undefined
+                ? null
+                : agentQuestionAnswer(questions, get().answerChoices.get(messageId) ?? {});
+        };
+        const sendNewTurn = async (
+            content: string,
+            attachments: readonly ComposerAttachment[],
+            source: SubmissionSource,
+        ): Promise<void> => {
+            if (!canSendNow(operationFacts())) {
+                return;
+            }
+            await submit(
+                {
+                    commandId: crypto.randomUUID(),
+                    content,
+                    attachments: { kind: "local", values: attachments },
+                    target: { disposition: "reject", targetCommandId: "" },
+                },
+                source,
+            );
+        };
+        const queueBehindRunningTurn = async (
+            content: string,
+            attachments: readonly ComposerAttachment[],
+            source: SubmissionSource,
+        ): Promise<void> => {
+            const running = acceptedTurn(get().turn);
+            if (running === null || !canQueue(operationFacts())) {
+                return;
+            }
+            await submit(
+                {
+                    commandId: crypto.randomUUID(),
+                    content,
+                    attachments: { kind: "local", values: attachments },
+                    target: { disposition: "queue", targetCommandId: running.commandId },
+                },
+                source,
+            );
+        };
         return {
             connection: { kind: "first-loading" },
             titleDraft: null,
             ...projectedTimeline(projection),
             olderHistory: { kind: "idle" },
             draft: centralSessionStorage.read(draftEntry) ?? "",
+            answerChoices: new Map(Object.entries(centralSessionStorage.read(answerChoicesEntry) ?? {})),
             filesRestoreNotice: false,
             followRevision: 0,
             operation: { kind: "idle" },
@@ -1252,7 +1321,7 @@ export function createSessionPaneModel(options: {
                         // The first message the Session holds is submitted by the first pane that connects.
                         const awaiting = awaitingMessage(delivery.getState().state);
                         if (awaiting !== null) {
-                            await submit(awaiting);
+                            await submit(awaiting, "held");
                             signal.throwIfAborted();
                         }
                         // So is a rename a pane that stopped before connecting left pending.
@@ -1464,18 +1533,33 @@ export function createSessionPaneModel(options: {
             send: async () => {
                 const { attachments, state: attachmentState } = composerAttachments.getState();
                 const draft = get().draft;
-                if (
-                    !composerHasMessage(draft, attachments.length, attachmentState.kind === "reading") ||
-                    !canSendNow(operationFacts())
-                ) {
+                if (!composerHasMessage(draft, attachments.length, attachmentState.kind === "reading")) {
                     return;
                 }
-                await submit({
-                    commandId: crypto.randomUUID(),
-                    content: draft,
-                    attachments: { kind: "local", values: attachments },
-                    target: { disposition: "reject", targetCommandId: "" },
-                });
+                await sendNewTurn(draft, attachments, "composer");
+            },
+            chooseAnswer: (messageId, questionIndex, answer) => {
+                const open = openAgentQuestions(get().messages);
+                if (!open.has(messageId)) {
+                    return;
+                }
+                // Answers picked for questions that can no longer be answered are dropped with this write.
+                const choices = new Map([...get().answerChoices].filter(([id]) => open.has(id)));
+                choices.set(messageId, { ...choices.get(messageId), [questionIndex.toString()]: answer });
+                centralSessionStorage.write(answerChoicesEntry, Object.fromEntries(choices));
+                set({ answerChoices: choices });
+            },
+            sendAnswer: async (messageId) => {
+                const answer = pickedAnswer(messageId);
+                if (answer !== null) {
+                    await sendNewTurn(answer, [], "answer");
+                }
+            },
+            queueAnswer: async (messageId) => {
+                const answer = pickedAnswer(messageId);
+                if (answer !== null) {
+                    await queueBehindRunningTurn(answer, [], "answer");
+                }
             },
             removeUnknownDelivery: () => {
                 delivery.getState().discardUnknown();
@@ -1510,7 +1594,7 @@ export function createSessionPaneModel(options: {
                 if (message === null || !canRetryFailedMessage(message.target, operationFacts())) {
                     return;
                 }
-                await submit(message);
+                await submit(message, "held");
             },
             editFailedMessage: () => {
                 if (composerAttachments.getState().state.kind === "reading") {
@@ -1533,22 +1617,12 @@ export function createSessionPaneModel(options: {
                 delivery.getState().takeFailedMessage();
             },
             queueDraft: async () => {
-                const current = get();
                 const { attachments, state: attachmentState } = composerAttachments.getState();
-                const running = acceptedTurn(current.turn);
-                if (
-                    running === null ||
-                    !composerHasMessage(current.draft, attachments.length, attachmentState.kind === "reading") ||
-                    !canQueue(operationFacts())
-                ) {
+                const draft = get().draft;
+                if (!composerHasMessage(draft, attachments.length, attachmentState.kind === "reading")) {
                     return;
                 }
-                await submit({
-                    commandId: crypto.randomUUID(),
-                    content: current.draft,
-                    attachments: { kind: "local", values: attachments },
-                    target: { disposition: "queue", targetCommandId: running.commandId },
-                });
+                await queueBehindRunningTurn(draft, attachments, "composer");
             },
             steerQueued: async (commandId, signal) => {
                 const steered = await messageQueue

@@ -181,6 +181,38 @@ export const elicitationAnswerDraftsEntry = (sessionId: string): SessionStorageE
         },
     });
 
+const agentQuestionChoicesSchema = v.pipe(
+    v.record(
+        v.pipe(v.string(), v.minLength(1), v.maxLength(2_048)),
+        v.pipe(
+            v.record(v.pipe(v.string(), v.regex(/^\d{1,4}$/u)), v.pipe(v.string(), v.maxLength(2_048))),
+            v.readonly(),
+        ),
+    ),
+    v.readonly(),
+);
+
+export type AgentQuestionChoicesByMessage = v.InferOutput<typeof agentQuestionChoicesSchema>;
+
+/**
+ * The suggested answers picked for the questions Agent messages ask in a Session, by message and then by question
+ * position; returning to the Session or reloading keeps them until they are sent.
+ */
+export const agentQuestionChoicesEntry = (sessionId: string): SessionStorageEntry<AgentQuestionChoicesByMessage> =>
+    customSessionStorageEntry({
+        key: scopedKey("morty:agent-question-choices:v1:", sessionId),
+        schema: agentQuestionChoicesSchema,
+        encode: (value) => JSON.stringify(v.parse(agentQuestionChoicesSchema, value)),
+        decode: (raw) => {
+            try {
+                const parsed = v.safeParse(agentQuestionChoicesSchema, JSON.parse(raw));
+                return parsed.success ? parsed.output : null;
+            } catch {
+                return null;
+            }
+        },
+    });
+
 const unsentFirstMessageSchema = v.pipe(
     v.object({
         commandId: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
