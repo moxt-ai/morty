@@ -1,8 +1,10 @@
 import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
+import type { AgentQuestion } from "@moxt-ai/mobius-sdk/protocol";
 import { Check, CircleAlert, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
 import { dataTestId } from "@/data-testid";
+import { AgentQuestions } from "../../components/chat/agent-questions.tsx";
 import { AgentThinking, type AgentThinkingEntry } from "../../components/chat/agent-thinking.tsx";
 import { AuthenticationNotice } from "../../components/chat/authentication-notice.tsx";
 import { AutoFocusInput } from "../../components/chat/auto-focus-input.tsx";
@@ -44,6 +46,11 @@ import { DesktopChatLayout } from "../../components/utils/desktop-chat-layout.ts
 import { FollowLatestScrollArea } from "../../components/utils/follow-latest-scroll-area.tsx";
 import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { cn } from "../../lib/utils.ts";
+import {
+    type AgentQuestionChoices,
+    agentQuestionAnswer,
+    openAgentQuestions,
+} from "../../view-models/chat/agent-question-answer.ts";
 import { agentReplyCopyText, agentReplyMessageGroups } from "../../view-models/chat/agent-reply-copy.ts";
 import { authenticationGuidance } from "../../view-models/chat/authentication-guidance.ts";
 import type { ChatWorkspace } from "../../view-models/chat/chat-workspace.ts";
@@ -76,6 +83,9 @@ type SessionRenderItem =
           readonly id: string;
           readonly messageId: string | null;
           readonly text: string;
+          readonly questions: readonly AgentQuestion[];
+          /** No user message followed the questions yet. */
+          readonly answerable: boolean;
       }
     | {
           readonly kind: "event";
@@ -87,13 +97,21 @@ type SessionRenderItem =
           readonly kind: "thinking";
       };
 
-function assistantText(message: SessionMessage): { readonly messageId: string | null; readonly text: string } | null {
+function assistantText(message: SessionMessage): {
+    readonly messageId: string | null;
+    readonly questions: readonly AgentQuestion[];
+    readonly text: string;
+} | null {
     if (
         message.role === "assistant" &&
         message.presentation.kind === "message" &&
         message.presentation.content.type === "text"
     ) {
-        return { messageId: message.presentation.messageId, text: sessionTextValue(message.presentation.content.text) };
+        return {
+            messageId: message.presentation.messageId,
+            questions: message.presentation.questions,
+            text: sessionTextValue(message.presentation.content.text),
+        };
     }
     return null;
 }
@@ -119,7 +137,13 @@ function thinkingEntry(message: SessionMessage): AgentThinkingEntry | null {
 
 function sessionRenderItems(messages: readonly SessionMessage[]): readonly SessionRenderItem[] {
     type RenderItemBuilder =
-        | { kind: "assistant-text"; id: string; messageId: string | null; text: string[] }
+        | {
+              kind: "assistant-text";
+              id: string;
+              messageId: string | null;
+              questions: readonly AgentQuestion[];
+              text: string[];
+          }
         | { readonly kind: "event"; readonly message: SessionMessage }
         | { entries: AgentThinkingEntry[]; readonly id: string; readonly kind: "thinking" };
     const items: RenderItemBuilder[] = [];
@@ -129,11 +153,15 @@ function sessionRenderItems(messages: readonly SessionMessage[]): readonly Sessi
         const previous = items.at(-1);
         if (text !== null && previous?.kind === "assistant-text" && previous.messageId === text.messageId) {
             previous.text.push(text.text);
+            if (previous.questions.length === 0) {
+                previous.questions = text.questions;
+            }
         } else if (text !== null) {
             items.push({
                 kind: "assistant-text",
                 id: message.firstEvent.eventId,
                 messageId: text.messageId,
+                questions: text.questions,
                 text: [text.text],
             });
         } else if (thinking !== null && previous?.kind === "thinking") {
@@ -144,8 +172,16 @@ function sessionRenderItems(messages: readonly SessionMessage[]): readonly Sessi
             items.push({ kind: "event", message });
         }
     }
+    const open = openAgentQuestions(messages);
     return items.map(
-        (item): SessionRenderItem => (item.kind === "assistant-text" ? { ...item, text: item.text.join("") } : item),
+        (item): SessionRenderItem =>
+            item.kind === "assistant-text"
+                ? {
+                      ...item,
+                      answerable: item.messageId !== null && open.has(item.messageId),
+                      text: item.text.join(""),
+                  }
+                : item,
     );
 }
 
@@ -355,8 +391,11 @@ function replyItemMarginClassName(spacing: ReplyItemSpacing, first: boolean, las
 
 function SessionRenderItemContent({
     active,
+    answerChoices,
     item,
     machineName,
+    onAnswer,
+    onChooseAnswer,
     onRetryUnknownDelivery,
     onRemoveUnknownDelivery,
     openLocalFile,
@@ -364,17 +403,36 @@ function SessionRenderItemContent({
     presentation,
 }: {
     readonly active: boolean;
+    readonly answerChoices: ReadonlyMap<string, AgentQuestionChoices>;
     readonly item: SessionRenderItem;
     readonly machineName: string;
+    readonly onAnswer: (messageId: string) => void;
+    readonly onChooseAnswer: (messageId: string, questionIndex: number, answer: string) => void;
     readonly onRemoveUnknownDelivery: () => void;
     readonly onRetryUnknownDelivery: () => void;
     readonly openLocalFile: (path: string) => void;
     readonly pane: SessionPaneModel;
     readonly presentation: Pick<
         ReturnType<typeof sessionPanePresentation>,
-        "deliveryUnknownUserMessageId" | "retryUnknownDeliveryDisabled"
+        "answerDisabled" | "deliveryUnknownUserMessageId" | "retryUnknownDeliveryDisabled"
     >;
 }) {
+    if (item.kind === "assistant-text" && item.messageId !== null && item.questions.length > 0) {
+        // The message text only restates the questions for readers that cannot show them.
+        const messageId = item.messageId;
+        const choices = answerChoices.get(messageId) ?? {};
+        return (
+            <AgentQuestions
+                answerable={item.answerable}
+                choices={choices}
+                disabled={presentation.answerDisabled}
+                onAnswer={() => onAnswer(messageId)}
+                onChoose={(questionIndex, answer) => onChooseAnswer(messageId, questionIndex, answer)}
+                questions={item.questions}
+                ready={agentQuestionAnswer(item.questions, choices) !== null}
+            />
+        );
+    }
     if (item.kind === "assistant-text") {
         return (
             <MobiusAssistantText
@@ -783,6 +841,13 @@ function MobiusSessionPaneBody({
         interactionModel,
         executionContext.available,
     );
+    // An answer to an Agent's question goes out as the composer's message would: now, or queued behind the turn.
+    const answer = (messageId: string): void =>
+        runAndFollow(async () => {
+            await (presentation.shouldQueueOnSubmit
+                ? pane.store.getState().queueAnswer(messageId)
+                : pane.store.getState().sendAnswer(messageId));
+        });
     // The composer notice floats over the log only while nothing stands between
     // the log and the composer. With a queue or interaction card present it joins
     // the flow instead, so it can never cover their actions or be lifted past the
@@ -965,8 +1030,11 @@ function MobiusSessionPaneBody({
                                                     >
                                                         <SessionRenderItemContent
                                                             active={active}
+                                                            answerChoices={model.answerChoices}
                                                             item={item}
                                                             machineName={executionContext.machine}
+                                                            onAnswer={answer}
+                                                            onChooseAnswer={pane.store.getState().chooseAnswer}
                                                             onRemoveUnknownDelivery={
                                                                 pane.store.getState().removeUnknownDelivery
                                                             }
@@ -992,8 +1060,11 @@ function MobiusSessionPaneBody({
                                                     <div className={spacingClassName} key={sessionRenderItemId(item)}>
                                                         <SessionRenderItemContent
                                                             active={active}
+                                                            answerChoices={model.answerChoices}
                                                             item={item}
                                                             machineName={executionContext.machine}
+                                                            onAnswer={answer}
+                                                            onChooseAnswer={pane.store.getState().chooseAnswer}
                                                             onRemoveUnknownDelivery={
                                                                 pane.store.getState().removeUnknownDelivery
                                                             }
