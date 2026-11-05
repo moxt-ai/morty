@@ -40,7 +40,7 @@ def overlay(file, environment):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('environment', choices=['staging', 'production'])
+    parser.add_argument('environment', choices=['production'])
     args = parser.parse_args()
     targets = read(ROOT / 'deployment/targets.json')
     assert targets['account_id'] == ACCOUNT

@@ -32,7 +32,7 @@ def run(command, env):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('environment', choices=['staging', 'production'])
+    parser.add_argument('environment', choices=['production'])
     parser.add_argument('--release', type=Path, required=True)
     args = parser.parse_args()
     release = args.release.resolve()
