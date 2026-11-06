@@ -13,7 +13,7 @@ export const chatSessionInteractionColumnClassName =
  * with the notice's own height, so the log's visible bottom edge stops at the
  * notice's top edge and no scroll position passes under its frost.
  */
-export const chatSessionMessageScrollClassName = `min-h-0 flex-1 pt-6 pb-[72px] mb-[var(--composer-overlay-block,-1rem)] sm:pt-10`;
+export const chatSessionMessageScrollClassName = `min-h-0 flex-1 overflow-y-auto pt-6 pb-[72px] mb-[var(--composer-overlay-block,-1rem)] sm:pt-10`;
 
 export const chatSessionMessageColumnClassName = `${chatSessionColumnClassName} font-inter text-foreground`;
 
