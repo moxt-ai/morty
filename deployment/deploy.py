@@ -32,7 +32,7 @@ def run(command, env):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('environment', choices=['production'])
+    parser.add_argument('environment', choices=['production', 'benchmark'])
     parser.add_argument('--release', type=Path, required=True)
     parser.add_argument('--verify-release-only', action='store_true', help='Verify artifact provenance and configuration without cloud access or deployment')
     args = parser.parse_args()

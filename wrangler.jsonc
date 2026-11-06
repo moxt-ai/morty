@@ -38,35 +38,6 @@
         { "tag": "v4", "new_sqlite_classes": ["ChatWebSocketDurableObject"] }
     ],
     "env": {
-        "staging": {
-            "name": "morty-staging",
-            "ratelimits": [
-                {
-                    "name": "ANONYMOUS_CREATION_LIMITER",
-                    "namespace_id": "103002",
-                    "simple": { "limit": 10, "period": 60 }
-                }
-            ],
-            "placement": { "mode": "off" },
-            "secrets": { "required": ["MOBIUS_APP_SECRET"] },
-            "routes": [
-                {
-                    "pattern": "morty.paradev.biz",
-                    "custom_domain": true
-                }
-            ],
-            "workers_dev": false,
-            "r2_buckets": [{ "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-staging-apac-attachments" }],
-            "durable_objects": {
-                "bindings": [
-                    { "name": "CHAT_WEBSOCKETS", "class_name": "ChatWebSocketDurableObject" },
-                    {
-                        "name": "CHAT_PROJECTS",
-                        "class_name": "ProjectDurableObject"
-                    }
-                ]
-            }
-        },
         "production": {
             "name": "morty-production",
             "ratelimits": [
@@ -97,5 +68,5 @@
             "r2_buckets": [{ "binding": "CHAT_ATTACHMENTS_APAC", "bucket_name": "morty-production-apac-attachments" }]
         }
     },
-    "account_id": "95af7a3d67be8c49b1619544e3ce53c0"
+    "account_id": "b903018a1c3d9d9a4bd68a11eb03e764"
 }

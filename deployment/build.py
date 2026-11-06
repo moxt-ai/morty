@@ -30,7 +30,7 @@ def run(command, cwd=ROOT, env=None):
 
 def overlay(file, environment):
     result = read(file)
-    result.update(result.pop('env')[environment])
+    result.update(result.pop('env')['production' if environment == 'benchmark' else environment])
     for field in ('$schema', 'routes', 'account_id'):
         result.pop(field, None)
     result.update(account_id=ACCOUNT, workers_dev=True, preview_urls=False)
@@ -40,7 +40,7 @@ def overlay(file, environment):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('environment', choices=['production'])
+    parser.add_argument('environment', choices=['production', 'benchmark'])
     args = parser.parse_args()
     targets = read(ROOT / 'deployment/targets.json')
     assert targets['account_id'] == ACCOUNT
@@ -64,7 +64,7 @@ def main():
         if vite.count(anchor) != 1:
             raise ValueError('Vite configuration changed; review the deployment integration')
     vite = vite.replace('cloudflare()', 'cloudflare({ configPath: ' + json.dumps(str(generated / 'morty.json')) + ' })')
-    vite = vite.replace('process.env["CLOUDFLARE_ENV"]', json.dumps(environment))
+    vite = vite.replace('process.env["CLOUDFLARE_ENV"]', json.dumps('production'))
     vite = vite.replace('./packages/web/src', str(ROOT / 'packages/web/src'))
     for original in ['https://morty.paradev.biz', 'https://morty.build']:
         vite = vite.replace(original, spec['morty_origin'])
