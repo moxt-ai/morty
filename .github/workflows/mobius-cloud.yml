@@ -34,7 +34,7 @@ jobs:
     if: github.repository == 'moxt-ai/mobius-morty'
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    environment: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.PRODUCTION_CUTOVER_COMPLETE == 'true' && (inputs.operation == 'deploy' || inputs.operation == 'restore' || (github.event_name == 'push' && vars.AUTO_DEPLOY_PRODUCTION == 'true'))) && format('mobius-{0}', inputs.environment || 'production') || 'build-only' }}
+    environment: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (inputs.operation == 'deploy' || inputs.operation == 'restore' || (github.event_name == 'push' && vars.AUTO_DEPLOY_PRODUCTION == 'true'))) && format('mobius-{0}', inputs.environment || 'production') || 'build-only' }}
     env:
       TARGET_ENVIRONMENT: ${{ inputs.environment || 'production' }}
       OPERATION: ${{ inputs.operation || 'build' }}
@@ -116,14 +116,12 @@ jobs:
       - name: Publish to the independent account and verify health
         if: >-
           github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
-          vars.PRODUCTION_CUTOVER_COMPLETE == 'true' &&
           (env.OPERATION == 'deploy' || env.OPERATION == 'restore' ||
           (github.event_name == 'push' && vars.AUTO_DEPLOY_PRODUCTION == 'true'))
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           PLATFORM_SECRETS_JSON: ${{ secrets.PLATFORM_SECRETS_JSON }}
           MORTY_SECRETS_JSON: ${{ secrets.MORTY_SECRETS_JSON }}
-          PRODUCTION_CUTOVER_COMPLETE: ${{ vars.PRODUCTION_CUTOVER_COMPLETE }}
           EXPECTED_REVISION: ${{ steps.archive.outputs.revision || github.sha }}
         run: python3 deployment/deploy.py "$TARGET_ENVIRONMENT" --release ".deployment-output/$TARGET_ENVIRONMENT"
       - name: Archive deployment evidence

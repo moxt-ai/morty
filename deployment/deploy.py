@@ -36,8 +36,6 @@ def main():
     parser.add_argument('--release', type=Path, required=True)
     parser.add_argument('--verify-release-only', action='store_true', help='Verify artifact provenance and configuration without cloud access or deployment')
     args = parser.parse_args()
-    if not args.verify_release_only and os.environ.get('PRODUCTION_CUTOVER_COMPLETE') != 'true':
-        raise ValueError('Production deployment is held until migration takeover is accepted')
     release = args.release.resolve()
     manifest = read(release / 'release.json')
     expected = read(ROOT / 'deployment/targets.json')['environments'][args.environment]
@@ -56,9 +54,9 @@ def main():
         if config['account_id'] != ACCOUNT or config['name'] != expected[component] or config.get('routes'):
             raise ValueError('Deployment escaped the independent target')
     platform, morty = read(configs['platform']), read(configs['morty'])
-    control_migration = {'tag': 'morty-production-migration-control-20261105', 'new_sqlite_classes': ['MigrationControl']}
-    if control_migration not in platform.get('migrations', []) or {'name': 'MIGRATION_CONTROL', 'class_name': 'MigrationControl'} not in platform.get('durable_objects', {}).get('bindings', []):
-        raise ValueError('Release must preserve the migration control namespace; rebuild older archives before restoring')
+    retirement = {'tag': 'morty-retire-migration-control-20261106', 'deleted_classes': ['MigrationControl']}
+    if retirement not in platform.get('migrations', []) or any(binding['name'] == 'MIGRATION_CONTROL' for binding in platform.get('durable_objects', {}).get('bindings', [])):
+        raise ValueError('Release must retire migration control; rebuild older archives before restoring')
     assert platform['d1_databases'][0]['database_id'] == expected['d1_id']
     assert {x['bucket_name'] for x in platform['r2_buckets']} == {expected['buckets']['platform_apac'], expected['buckets']['platform_wnam']}
     assert platform['services'] == [{'binding': 'RECORDING', 'service': expected['recording']}]

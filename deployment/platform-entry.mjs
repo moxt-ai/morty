@@ -1,11 +1,6 @@
-import { DurableObject } from "cloudflare:workers";
 import platform from "../third-party/platform/packages/relay-cloudflare-platform/src/worker.ts";
 
 export * from "../third-party/platform/packages/relay-cloudflare-platform/src/worker.ts";
-
-// Keep the migration namespace and its receipts across ordinary releases and
-// rollback. Normal business requests never invoke this retained class.
-export class MigrationControl extends DurableObject {}
 
 export default {
     async fetch(request, env, ctx) {
