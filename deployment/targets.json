@@ -4,23 +4,6 @@
     "morty_revision": "3864a4ed722c85979ef90413433d4273a8f9b806",
     "mobius_revision": "fe26494ae0a44697b453a0866de7e1f74b42d12a",
     "environments": {
-        "staging": {
-            "d1_id": "f2ef7e43-3f17-4f70-9c8e-558c4303506d",
-            "d1_name": "morty-platform-staging-control-plane-wnam",
-            "platform": "morty-platform-staging",
-            "recording": "morty-recording-staging",
-            "morty": "morty-staging",
-            "platform_origin": "https://morty-platform-staging.mobius-b90.workers.dev",
-            "morty_origin": "https://morty-staging.mobius-b90.workers.dev",
-            "buckets": {
-                "platform_apac": "morty-platform-staging-apac-objects",
-                "platform_wnam": "morty-platform-staging-wnam-objects",
-                "attachments": "morty-staging-apac-attachments",
-                "web_assets": "morty-staging-web-assets"
-            },
-            "asset_origin": "https://pub-69fe5fd050ce401c90eaabafe1330425.r2.dev",
-            "test_app_id": "app_5700341c240e4bf4568e337b6ccae7aa0a12"
-        },
         "production": {
             "d1_id": "41b0bb37-d19f-4376-a694-b32e08de9fc8",
             "d1_name": "morty-platform-production-control-plane-wnam",
@@ -43,22 +26,45 @@
                 "https://morty-production.mobius-b90.workers.dev",
                 "https://morty-platform-production.mobius-b90.workers.dev"
             ]
+        },
+        "benchmark": {
+            "d1_id": "5cf46913-9cb3-4072-b936-ba212ff4348b",
+            "d1_name": "morty-platform-benchmark-control-plane-wnam",
+            "platform": "morty-platform-benchmark",
+            "recording": "morty-recording-benchmark",
+            "morty": "morty-benchmark",
+            "platform_origin": "https://morty-platform-benchmark.mobius-b90.workers.dev",
+            "morty_origin": "https://morty-cf-benchmark.morty.build",
+            "buckets": {
+                "platform_apac": "morty-platform-benchmark-apac-objects",
+                "platform_wnam": "morty-platform-benchmark-wnam-objects",
+                "attachments": "morty-benchmark-apac-attachments",
+                "web_assets": "morty-cf-benchmark-web-assets"
+            },
+            "asset_origin": "https://assets-cf-benchmark.morty.build",
+            "app_id": "app_MMRXY14ms-WFOn2gfJmMrfAk",
+            "allowed_origins": [
+                "https://morty-cf-benchmark.morty.build",
+                "https://morty-platform-benchmark.mobius-b90.workers.dev",
+                "https://morty-benchmark.mobius-b90.workers.dev"
+            ]
         }
     },
     "morty_sdk_revision": "fe26494ae0a44697b453a0866de7e1f74b42d12a",
     "auth": {
-        "staging": {
-            "publishableKey": "pk_test_cGlja2VkLWNoaWNrZW4tNjU5My5jbGVyay5hY2NvdW50cy5kZXYk",
-            "issuer": "https://picked-chicken-6593.clerk.accounts.dev",
-            "worker": "morty-platform-staging",
-            "origin": "https://morty-platform-staging.mobius-b90.workers.dev",
-            "proxyUrl": ""
-        },
         "production": {
             "publishableKey": "pk_live_Y2xlcmsubW9ydHktcGxhdGZvcm0tcHJvZHVjdGlvbi5tb2JpdXMtYjkwLndvcmtlcnMuZGV2JA",
             "issuer": "https://morty-platform-production.mobius-b90.workers.dev/__clerk",
             "worker": "morty-platform-production",
             "origin": "https://morty-platform-production.mobius-b90.workers.dev",
+            "proxyUrl": "https://morty-platform-production.mobius-b90.workers.dev/__clerk",
+            "frontendUrl": "https://clerk.morty-platform-production.mobius-b90.workers.dev"
+        },
+        "benchmark": {
+            "publishableKey": "pk_live_Y2xlcmsubW9ydHktcGxhdGZvcm0tcHJvZHVjdGlvbi5tb2JpdXMtYjkwLndvcmtlcnMuZGV2JA",
+            "issuer": "https://morty-platform-production.mobius-b90.workers.dev/__clerk",
+            "worker": "morty-platform-benchmark",
+            "origin": "https://morty-platform-benchmark.mobius-b90.workers.dev",
             "proxyUrl": "https://morty-platform-production.mobius-b90.workers.dev/__clerk",
             "frontendUrl": "https://clerk.morty-platform-production.mobius-b90.workers.dev"
         }

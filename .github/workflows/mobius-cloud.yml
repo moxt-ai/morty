@@ -10,7 +10,7 @@ on:
         description: Independent target environment
         type: choice
         default: production
-        options: [production]
+        options: [production, benchmark]
       operation:
         description: Build only, deploy, or restore a successful archived release
         type: choice
