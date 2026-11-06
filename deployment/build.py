@@ -81,6 +81,8 @@ def main():
     recording.update(name=spec['recording'], workers_dev=False)
     platform = overlay(PLATFORM / 'packages/relay-cloudflare-platform/wrangler.jsonc', environment)
     platform.update(name=spec['platform'], main=str(ROOT / 'deployment/platform-entry.mjs'))
+    platform['migrations'].append({'tag': 'morty-production-migration-control-20261105', 'new_sqlite_classes': ['MigrationControl']})
+    platform['durable_objects']['bindings'].append({'name': 'MIGRATION_CONTROL', 'class_name': 'MigrationControl'})
     platform['compatibility_flags'] = list(dict.fromkeys(platform.get('compatibility_flags', []) + ['global_fetch_strictly_public']))
     platform['d1_databases'] = [{'binding': 'PLATFORM_DIRECTORY_DATABASE', 'database_name': spec['d1_name'], 'database_id': spec['d1_id'], 'migrations_dir': str(PLATFORM / 'packages/relay-cloudflare-platform/migrations/d1')}]
     platform['r2_buckets'] = [{'binding': 'R2_BUCKET_APAC', 'bucket_name': spec['buckets']['platform_apac']}, {'binding': 'R2_BUCKET_WNAM', 'bucket_name': spec['buckets']['platform_wnam']}]

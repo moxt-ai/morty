@@ -56,6 +56,9 @@ def main():
         if config['account_id'] != ACCOUNT or config['name'] != expected[component] or config.get('routes'):
             raise ValueError('Deployment escaped the independent target')
     platform, morty = read(configs['platform']), read(configs['morty'])
+    control_migration = {'tag': 'morty-production-migration-control-20261105', 'new_sqlite_classes': ['MigrationControl']}
+    if control_migration not in platform.get('migrations', []) or {'name': 'MIGRATION_CONTROL', 'class_name': 'MigrationControl'} not in platform.get('durable_objects', {}).get('bindings', []):
+        raise ValueError('Release must preserve the migration control namespace; rebuild older archives before restoring')
     assert platform['d1_databases'][0]['database_id'] == expected['d1_id']
     assert {x['bucket_name'] for x in platform['r2_buckets']} == {expected['buckets']['platform_apac'], expected['buckets']['platform_wnam']}
     assert platform['services'] == [{'binding': 'RECORDING', 'service': expected['recording']}]
@@ -66,6 +69,13 @@ def main():
     if args.verify_release_only:
         print(json.dumps({'releaseVerified': True, 'appId': expected['app_id'], 'origin': expected['morty_origin'], 'deploymentAttempted': False}))
         return
+    # Check lifecycle history before uploading assets, applying D1 migrations,
+    # or activating any component. Wrangler otherwise replays all migrations
+    # when an archive omits the tag already provisioned on the service.
+    for component, config in [('platform', platform), ('morty', morty)]:
+        current = cloud('/workers/services/' + expected[component])['default_environment']['script'].get('migration_tag')
+        if current and current not in {item['tag'] for item in config.get('migrations', [])}:
+            raise ValueError('Release omits an existing Durable Object migration: ' + component)
     # Validate the migrated identity and its deploy-time secret before any R2,
     # D1 migration, or Worker write. A successful health page is not sufficient.
     secrets_by_component = {component: json.loads(os.environ[component.upper() + '_SECRETS_JSON']) for component in ['platform', 'morty']}
