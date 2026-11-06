@@ -27,16 +27,22 @@
             "platform": "morty-platform-production",
             "recording": "morty-recording-production",
             "morty": "morty-production",
-            "platform_origin": "https://morty-platform-production.mobius-b90.workers.dev",
-            "morty_origin": "https://morty-production.mobius-b90.workers.dev",
+            "platform_origin": "https://relay.mobius.host",
+            "morty_origin": "https://morty.build",
             "buckets": {
                 "platform_apac": "morty-platform-production-apac-objects",
                 "platform_wnam": "morty-platform-production-wnam-objects",
                 "attachments": "morty-production-apac-attachments",
                 "web_assets": "morty-production-web-assets"
             },
-            "asset_origin": "https://pub-ed54db2a5fd9427db8039e6a160a2832.r2.dev",
-            "test_app_id": "app_f9cfb6044bcfa63cfd739786fd078f330cb9"
+            "asset_origin": "https://assets.morty.build",
+            "app_id": "app_NtHgrttun_lpHHvLxCfZKPan",
+            "allowed_origins": [
+                "https://morty.build",
+                "https://relay.mobius.host",
+                "https://morty-production.mobius-b90.workers.dev",
+                "https://morty-platform-production.mobius-b90.workers.dev"
+            ]
         }
     },
     "morty_sdk_revision": "fe26494ae0a44697b453a0866de7e1f74b42d12a",
