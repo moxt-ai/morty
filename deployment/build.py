@@ -57,7 +57,7 @@ def main():
     morty.update(name=spec['morty'])
     morty['compatibility_flags'] = list(dict.fromkeys(morty.get('compatibility_flags', []) + ['global_fetch_strictly_public']))
     morty['r2_buckets'] = [{'binding': 'CHAT_ATTACHMENTS_APAC', 'bucket_name': spec['buckets']['attachments']}]
-    morty['vars'] = {'APP_ORIGIN': spec['morty_origin'], 'MOBIUS_BASE_URL': spec['platform_origin'], 'MOBIUS_APP_ID': spec['test_app_id']}
+    morty['vars'] = {'APP_ORIGIN': spec['morty_origin'], 'MOBIUS_BASE_URL': spec['platform_origin'], 'MOBIUS_APP_ID': spec['app_id']}
     write(generated / 'morty.json', morty)
     vite = (ROOT / 'vite.config.ts').read_text()
     for anchor in ['cloudflare()', 'process.env["CLOUDFLARE_ENV"]', './packages/web/src']:
@@ -85,7 +85,7 @@ def main():
     platform['d1_databases'] = [{'binding': 'PLATFORM_DIRECTORY_DATABASE', 'database_name': spec['d1_name'], 'database_id': spec['d1_id'], 'migrations_dir': str(PLATFORM / 'packages/relay-cloudflare-platform/migrations/d1')}]
     platform['r2_buckets'] = [{'binding': 'R2_BUCKET_APAC', 'bucket_name': spec['buckets']['platform_apac']}, {'binding': 'R2_BUCKET_WNAM', 'bucket_name': spec['buckets']['platform_wnam']}]
     platform['services'] = [{'binding': 'RECORDING', 'service': spec['recording']}]
-    platform['vars'] = {'RECORDING_PROVIDER_ID': spec['recording'], 'MOBIUS_PLATFORM_ALLOWED_ORIGINS': json.dumps([spec['platform_origin'], spec['morty_origin']]), 'MOBIUS_PLATFORM_OIDC_PROVIDERS': json.dumps([{'providerId': 'clerk', 'issuer': auth['issuer'], 'audience': 'mobius-platform', 'jwksUrl': (auth['proxyUrl'] or auth['issuer']) + '/.well-known/jwks.json', 'allowedAlgorithms': ['RS256'], 'safeMetadataClaims': ['email', 'name']}]), 'MOBIUS_PLATFORM_OPERATOR_SUBJECTS': '[]'}
+    platform['vars'] = {'RECORDING_PROVIDER_ID': spec['recording'], 'MOBIUS_PLATFORM_ALLOWED_ORIGINS': json.dumps(spec['allowed_origins']), 'MOBIUS_PLATFORM_OIDC_PROVIDERS': json.dumps([{'providerId': 'clerk', 'issuer': auth['issuer'], 'audience': 'mobius-platform', 'jwksUrl': (auth['proxyUrl'] or auth['issuer']) + '/.well-known/jwks.json', 'allowedAlgorithms': ['RS256'], 'safeMetadataClaims': ['email', 'name']}]), 'MOBIUS_PLATFORM_OPERATOR_SUBJECTS': '[]'}
     if auth['proxyUrl']:
         platform['vars']['CLERK_PROXY_URL'] = auth['proxyUrl']
     platform['assets'] = {'directory': str(release / 'platform-assets'), 'not_found_handling': 'single-page-application', 'run_worker_first': ['/mobius/api/*', '/__clerk', '/__clerk/*']}

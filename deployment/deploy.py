@@ -17,8 +17,8 @@ def read(file):
     return json.loads(file.read_text())
 
 
-def cloud(path):
-    request = urllib.request.Request('https://api.cloudflare.com/client/v4/accounts/' + ACCOUNT + path, headers={'Authorization': 'Bearer ' + os.environ['CLOUDFLARE_API_TOKEN']})
+def cloud(path, query=None):
+    request = urllib.request.Request('https://api.cloudflare.com/client/v4/accounts/' + ACCOUNT + path, data=None if query is None else json.dumps(query).encode(), headers={'Authorization': 'Bearer ' + os.environ['CLOUDFLARE_API_TOKEN'], 'Content-Type': 'application/json'})
     with urllib.request.urlopen(request, timeout=40) as response:
         value = json.load(response)
     if not value.get('success'):
@@ -34,7 +34,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('environment', choices=['production'])
     parser.add_argument('--release', type=Path, required=True)
+    parser.add_argument('--verify-release-only', action='store_true', help='Verify artifact provenance and configuration without cloud access or deployment')
     args = parser.parse_args()
+    if not args.verify_release_only and os.environ.get('PRODUCTION_CUTOVER_COMPLETE') != 'true':
+        raise ValueError('Production deployment is held until migration takeover is accepted')
     release = args.release.resolve()
     manifest = read(release / 'release.json')
     expected = read(ROOT / 'deployment/targets.json')['environments'][args.environment]
@@ -56,8 +59,25 @@ def main():
     assert platform['d1_databases'][0]['database_id'] == expected['d1_id']
     assert {x['bucket_name'] for x in platform['r2_buckets']} == {expected['buckets']['platform_apac'], expected['buckets']['platform_wnam']}
     assert platform['services'] == [{'binding': 'RECORDING', 'service': expected['recording']}]
-    assert morty['vars']['MOBIUS_BASE_URL'] == expected['platform_origin'] and morty['vars']['MOBIUS_APP_ID'] == expected['test_app_id']
+    assert morty['vars']['MOBIUS_BASE_URL'] == expected['platform_origin'] and morty['vars']['MOBIUS_APP_ID'] == expected['app_id']
     assert morty['r2_buckets'] == [{'binding': 'CHAT_ATTACHMENTS_APAC', 'bucket_name': expected['buckets']['attachments']}]
+    assert morty['vars']['APP_ORIGIN'] == expected['morty_origin']
+    assert json.loads(platform['vars']['MOBIUS_PLATFORM_ALLOWED_ORIGINS']) == expected['allowed_origins']
+    if args.verify_release_only:
+        print(json.dumps({'releaseVerified': True, 'appId': expected['app_id'], 'origin': expected['morty_origin'], 'deploymentAttempted': False}))
+        return
+    # Validate the migrated identity and its deploy-time secret before any R2,
+    # D1 migration, or Worker write. A successful health page is not sufficient.
+    secrets_by_component = {component: json.loads(os.environ[component.upper() + '_SECRETS_JSON']) for component in ['platform', 'morty']}
+    app_secret = secrets_by_component['morty'].get('MOBIUS_APP_SECRET')
+    if not isinstance(app_secret, str) or not app_secret:
+        raise ValueError('Missing production application credential')
+    credentials = cloud('/d1/database/' + expected['d1_id'] + '/query', {'sql': "SELECT c.secret_digest FROM platform_app_credentials c JOIN platform_apps a ON a.app_id = c.app_id WHERE a.app_id = ? AND a.lifecycle = 'active' AND c.revoked_at IS NULL", 'params': [expected['app_id']]})
+    if not all(item.get('success') and item.get('meta', {}).get('rows_written', 0) == 0 for item in credentials):
+        raise ValueError('Production credential verification failed')
+    digest = hashlib.sha256(app_secret.encode()).hexdigest()
+    if not any(row['secret_digest'] == digest for item in credentials for row in item['results']):
+        raise ValueError('Deployment secret does not match the migrated application')
     env = dict(os.environ, WRANGLER_SEND_METRICS='false')
     for key in ['CLOUDFLARE_ENV', 'CF_ACCOUNT_ID', 'CF_API_TOKEN']:
         env.pop(key, None)
@@ -83,7 +103,7 @@ def main():
         for component in ['recording', 'platform', 'morty']:
             command = WRANGLER + ['deploy', '--config', str(configs[component]), '--message', 'mobius-morty ' + manifest['revision']]
             if component != 'recording':
-                secrets = json.loads(os.environ[component.upper() + '_SECRETS_JSON'])
+                secrets = secrets_by_component[component]
                 if not secrets or not all(isinstance(k, str) and isinstance(v, str) and v for k, v in secrets.items()):
                     raise ValueError('Missing deployment secret')
                 secret_file = temporary / (component + '.secrets.json')
