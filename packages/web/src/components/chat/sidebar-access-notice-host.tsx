@@ -1,5 +1,4 @@
 import { type ReactNode, useRef } from "react";
-import { SidebarAccessNoticeCarousel } from "./sidebar-access-notice-carousel.tsx";
 
 function mergeAttachHandlers(
     ...handlers: readonly ((node: HTMLElement | null) => (() => void) | undefined)[]
@@ -19,7 +18,7 @@ function mergeAttachHandlers(
     };
 }
 
-/** Hosts sidebar access notices, keeps store attach lifetimes, and carousels multiple cards. */
+/** Hosts sidebar access notices and keeps their store attach lifetimes. */
 export function SidebarAccessNoticeHost({
     attachAccess,
     attachLinkedDevices,
@@ -43,7 +42,7 @@ export function SidebarAccessNoticeHost({
                 cleanupRef.current = node === null ? undefined : attach(node);
             }}
         >
-            <SidebarAccessNoticeCarousel>{children}</SidebarAccessNoticeCarousel>
+            {children}
         </div>
     );
 }

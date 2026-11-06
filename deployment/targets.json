@@ -1,7 +1,7 @@
 {
     "account_id": "b903018a1c3d9d9a4bd68a11eb03e764",
     "workers_subdomain": "mobius-b90",
-    "morty_revision": "a268abffbb646ee2c466caaf0da901ca6858f94a",
+    "morty_revision": "3864a4ed722c85979ef90413433d4273a8f9b806",
     "mobius_revision": "fe26494ae0a44697b453a0866de7e1f74b42d12a",
     "environments": {
         "staging": {

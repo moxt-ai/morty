@@ -1,4 +1,6 @@
 import { ArrowUpRight, X } from "lucide-react";
+import { Button } from "@/components/ui/cloud-button";
+import { MortyAlert } from "@/components/ui/morty-alert";
 
 export function SessionWelcome({
     canSuggestProgress,
@@ -10,35 +12,41 @@ export function SessionWelcome({
     readonly onSuggestProgress: () => void;
 }) {
     return (
-        <section
-            aria-label="Continue your work here"
-            className="relative mt-0 rounded-xl border border-primary/15 bg-primary/5 p-4 pr-11"
-        >
-            <h2 className="text-sm font-medium text-foreground">Your original session is open.</h2>
-            <p className="mt-1 text-sm leading-5 text-muted-foreground">
-                Check its progress, send your next instruction, or respond to requests here.
-            </p>
-            {canSuggestProgress && (
-                <div className="mt-3">
-                    <button
-                        className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-primary/20 bg-card px-3 text-xs font-medium text-foreground outline-none hover:bg-primary/5 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring"
-                        onClick={onSuggestProgress}
-                        type="button"
-                    >
-                        Ask for a progress update
-                        <ArrowUpRight aria-hidden="true" className="size-3.5" />
-                    </button>
-                    <p className="mt-1.5 text-xs text-muted-foreground">Adds a draft for you to review and send.</p>
-                </div>
-            )}
-            <button
+        <section aria-label="Continue your work here" className="relative">
+            <MortyAlert
+                className="pr-10"
+                description={
+                    <>
+                        Check its progress, send your next instruction, or respond to requests here.
+                        {canSuggestProgress && (
+                            <div className="mt-3">
+                                <Button
+                                    className="gap-1.5 min-h-11 md:min-h-9"
+                                    onClick={onSuggestProgress}
+                                    size="sm"
+                                    variant="outline"
+                                >
+                                    Ask for a progress update
+                                    <ArrowUpRight aria-hidden="true" className="size-3.5" />
+                                </Button>
+                                <p className="mt-1.5">Adds a draft for you to review and send.</p>
+                            </div>
+                        )}
+                    </>
+                }
+                tone="info"
+            >
+                Your original session is open.
+            </MortyAlert>
+            <Button
                 aria-label="Dismiss getting started tip"
-                className="absolute top-1 right-1 inline-flex size-10 items-center justify-center rounded-lg text-muted-foreground outline-none hover:bg-primary/5 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring"
+                className="absolute top-1.5 right-1.5 text-muted-foreground"
                 onClick={onDismiss}
-                type="button"
+                size="icon"
+                variant="ghost"
             >
                 <X aria-hidden="true" className="size-4" />
-            </button>
+            </Button>
         </section>
     );
 }

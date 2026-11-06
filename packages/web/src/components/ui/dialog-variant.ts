@@ -20,10 +20,10 @@ export type DialogVariantLayout = {
     readonly appearance: DialogAppearance;
     readonly mobileSheet: boolean;
     readonly size: DialogSize;
-    /** Overrides default-appearance header bottom margin (`mb-5`). */
+    /** Overrides default-appearance header bottom padding (`pb-5`). */
     readonly headerMarginBottomClassName?: "mb-3" | "mb-4";
     /** Overrides default-appearance description top margin (`mt-1.5`). */
-    readonly descriptionMarginTopClassName?: "mt-0";
+    readonly descriptionMarginTopClassName?: "mt-0" | "mt-1";
 };
 
 /**
@@ -45,8 +45,6 @@ export const dialogVariantLayout: Record<DialogVariant, DialogVariantLayout> = {
         appearance: "default",
         mobileSheet: false,
         size: "medium",
-        headerMarginBottomClassName: "mb-3",
-        descriptionMarginTopClassName: "mt-0",
     },
     networkLatency: {
         appearance: "default",
@@ -59,12 +57,12 @@ export const dialogVariantLayout: Record<DialogVariant, DialogVariantLayout> = {
         size: "standard",
     },
     devicesAccess: {
-        appearance: "surface",
+        appearance: "default",
         mobileSheet: false,
         size: "standard",
     },
     connectAgentPairing: {
-        appearance: "setup",
+        appearance: "default",
         mobileSheet: false,
         size: "standard",
     },

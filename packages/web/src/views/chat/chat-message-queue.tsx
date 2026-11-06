@@ -1,5 +1,6 @@
 import { Clock4, CornerUpLeft, LoaderCircle, MessageSquare, Pencil, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
+import { ScrollArea } from "../../components/ui/scroll-area.tsx";
 import { dataTestId } from "../../data-testid.ts";
 import type { sessionDeliveryPresentation } from "../../view-models/chat/session-delivery-presentation.ts";
 import type { ChatQueuedMessage } from "../../view-models/chat/session-message-queue-store.ts";
@@ -64,99 +65,102 @@ export function ChatMessageQueue({
                     </div>
                 </div>
                 <div className="overflow-hidden rounded-t-md bg-morty-fill-white">
-                    <ol className="mb-0 flex max-h-[152px] w-full min-w-0 list-none flex-col gap-0 overflow-y-auto px-3 pt-1 pb-6 [scrollbar-color:transparent_transparent] [scrollbar-width:thin] hover:[scrollbar-color:var(--morty-fill-opacity-4)_transparent]">
-                        {messages.map((message) => {
-                            const pending = message.kind !== "queued";
-                            const editable =
-                                message.prompt !== "" ||
-                                (message.attachments.kind === "restorable" && message.attachments.values.length > 0);
-                            return (
+                    <ScrollArea className="max-h-[152px]" viewportClassName="max-h-[inherit]">
+                        <ol className="mb-0 flex w-full min-w-0 list-none flex-col gap-0 px-3 pt-1 pb-6">
+                            {messages.map((message) => {
+                                const pending = message.kind !== "queued";
+                                const editable =
+                                    message.prompt !== "" ||
+                                    (message.attachments.kind === "restorable" &&
+                                        message.attachments.values.length > 0);
+                                return (
+                                    <li
+                                        className="-mx-2 flex items-start gap-2 rounded-sm py-1.5 pr-2.5 pl-2 text-morty-text-2 transition-colors hover:bg-morty-fill-opacity-2"
+                                        data-testid={dataTestId.queuedMessage}
+                                        key={message.commandId}
+                                    >
+                                        <div className="flex h-[22px] shrink-0 items-center">
+                                            {pending ? (
+                                                <LoaderCircle
+                                                    aria-hidden="true"
+                                                    className="size-3.5 shrink-0 animate-spin text-morty-text-3 motion-reduce:animate-none"
+                                                />
+                                            ) : (
+                                                <Clock4
+                                                    aria-hidden="true"
+                                                    className="size-3.5 shrink-0 text-morty-text-4"
+                                                />
+                                            )}
+                                        </div>
+                                        <span
+                                            className="min-w-0 flex-1 truncate text-13 leading-[22px] text-foreground"
+                                            title={message.summary}
+                                        >
+                                            {message.summary}
+                                        </span>
+                                        <div className="flex h-6 shrink-0 items-center gap-0.5">
+                                            <QueueAction
+                                                disabled={pending || !editable}
+                                                label={
+                                                    editable
+                                                        ? `Edit queued message: ${message.summary}`
+                                                        : "This message's files cannot be restored here. Delete it and send it again."
+                                                }
+                                                onClick={() => onEdit(message.commandId)}
+                                            >
+                                                <Pencil aria-hidden="true" className="size-3.5" />
+                                            </QueueAction>
+                                            <QueueAction
+                                                disabled={pending || !steeringSupported}
+                                                label={`Steer queued message: ${message.summary}`}
+                                                onClick={() => onSteer(message.commandId)}
+                                            >
+                                                {message.kind === "steering" ? (
+                                                    <LoaderCircle
+                                                        aria-hidden="true"
+                                                        className="size-3.5 animate-spin motion-reduce:animate-none"
+                                                    />
+                                                ) : (
+                                                    <CornerUpLeft aria-hidden="true" className="size-3.5" />
+                                                )}
+                                            </QueueAction>
+                                            <QueueAction
+                                                disabled={pending}
+                                                label={`Delete queued message: ${message.summary}`}
+                                                onClick={() => onDelete(message.commandId)}
+                                            >
+                                                {message.kind === "deleting" ? (
+                                                    <LoaderCircle
+                                                        aria-hidden="true"
+                                                        className="size-3.5 animate-spin motion-reduce:animate-none"
+                                                    />
+                                                ) : (
+                                                    <Trash2 aria-hidden="true" className="size-3.5" />
+                                                )}
+                                            </QueueAction>
+                                        </div>
+                                    </li>
+                                );
+                            })}
+                            {pendingMessages.map((message) => (
                                 <li
-                                    className="-mx-2 flex items-start gap-2 rounded-sm py-1.5 pr-2.5 pl-2 text-morty-text-2 transition-colors hover:bg-morty-fill-opacity-2"
-                                    data-testid={dataTestId.queuedMessage}
                                     key={message.commandId}
+                                    className="-mx-2 flex items-start gap-2 rounded-sm py-1.5 pr-2.5 pl-2 text-morty-text-2"
                                 >
-                                    <div className="flex h-[22px] shrink-0 items-center">
-                                        {pending ? (
-                                            <LoaderCircle
-                                                aria-hidden="true"
-                                                className="size-3.5 shrink-0 animate-spin text-morty-text-3 motion-reduce:animate-none"
-                                            />
-                                        ) : (
-                                            <Clock4
-                                                aria-hidden="true"
-                                                className="size-3.5 shrink-0 text-morty-text-4"
-                                            />
-                                        )}
-                                    </div>
+                                    <LoaderCircle
+                                        aria-label={message.status}
+                                        className="mt-1 size-3.5 shrink-0 animate-spin text-morty-text-3 motion-reduce:animate-none"
+                                    />
                                     <span
                                         className="min-w-0 flex-1 truncate text-13 leading-[22px] text-foreground"
                                         title={message.summary}
                                     >
                                         {message.summary}
                                     </span>
-                                    <div className="flex h-6 shrink-0 items-center gap-0.5">
-                                        <QueueAction
-                                            disabled={pending || !editable}
-                                            label={
-                                                editable
-                                                    ? `Edit queued message: ${message.summary}`
-                                                    : "This message's files cannot be restored here. Delete it and send it again."
-                                            }
-                                            onClick={() => onEdit(message.commandId)}
-                                        >
-                                            <Pencil aria-hidden="true" className="size-3.5" />
-                                        </QueueAction>
-                                        <QueueAction
-                                            disabled={pending || !steeringSupported}
-                                            label={`Steer queued message: ${message.summary}`}
-                                            onClick={() => onSteer(message.commandId)}
-                                        >
-                                            {message.kind === "steering" ? (
-                                                <LoaderCircle
-                                                    aria-hidden="true"
-                                                    className="size-3.5 animate-spin motion-reduce:animate-none"
-                                                />
-                                            ) : (
-                                                <CornerUpLeft aria-hidden="true" className="size-3.5" />
-                                            )}
-                                        </QueueAction>
-                                        <QueueAction
-                                            disabled={pending}
-                                            label={`Delete queued message: ${message.summary}`}
-                                            onClick={() => onDelete(message.commandId)}
-                                        >
-                                            {message.kind === "deleting" ? (
-                                                <LoaderCircle
-                                                    aria-hidden="true"
-                                                    className="size-3.5 animate-spin motion-reduce:animate-none"
-                                                />
-                                            ) : (
-                                                <Trash2 aria-hidden="true" className="size-3.5" />
-                                            )}
-                                        </QueueAction>
-                                    </div>
                                 </li>
-                            );
-                        })}
-                        {pendingMessages.map((message) => (
-                            <li
-                                key={message.commandId}
-                                className="-mx-2 flex items-start gap-2 rounded-sm py-1.5 pr-2.5 pl-2 text-morty-text-2"
-                            >
-                                <LoaderCircle
-                                    aria-label={message.status}
-                                    className="mt-1 size-3.5 shrink-0 animate-spin text-morty-text-3 motion-reduce:animate-none"
-                                />
-                                <span
-                                    className="min-w-0 flex-1 truncate text-13 leading-[22px] text-foreground"
-                                    title={message.summary}
-                                >
-                                    {message.summary}
-                                </span>
-                            </li>
-                        ))}
-                    </ol>
+                            ))}
+                        </ol>
+                    </ScrollArea>
                 </div>
             </div>
         </section>

@@ -1,10 +1,22 @@
 import type { SessionElicitationField } from "@moxt-ai/mobius-sdk";
-import { ChevronRight, CircleAlert, FileText, Inbox, MessageSquare, PackageOpen, Plus, Unplug } from "lucide-react";
+import {
+    ChevronRight,
+    CircleAlert,
+    FileText,
+    Inbox,
+    Laptop,
+    Link,
+    MessageSquare,
+    PackageOpen,
+    Plus,
+    Unplug,
+} from "lucide-react";
 import { Tooltip } from "radix-ui";
 import { type ComponentType, type ReactNode, useState } from "react";
 import type { ElicitationFieldValue } from "@/services/chat/elicitation-form";
 import { AttemptFailure } from "../chat/attempt-failure.tsx";
 import { ConnectionNotice } from "../chat/connection-notice.tsx";
+import { DeviceSummary } from "../chat/device-list.tsx";
 import type { ConnectionFeedback, ExecutionContext } from "../chat/execution-context.ts";
 import { ExecutionDetailsDialog } from "../chat/execution-details-dialog.tsx";
 import { HarnessMark } from "../chat/harness-mark.tsx";
@@ -21,12 +33,21 @@ import { ToolCallDisclosure } from "../chat/tools/tool-call-status.tsx";
 import type { ToolCallState } from "../chat/tools/tool-renderer.ts";
 import { UserMessageShell } from "../chat/user-message-shell.tsx";
 import { WorkingIndicator } from "../chat/working-indicator.tsx";
+import { SetupPromptDetails } from "../setup/setup-prompt-guidance.tsx";
 import { AutoSelectInput } from "../ui/auto-select-input.tsx";
 import { ButtonGroup } from "../ui/button-group.tsx";
 import { Card } from "../ui/card.tsx";
 import { Button } from "../ui/cloud-button.tsx";
 import { CopyToClipboardButton } from "../ui/copy-to-clipboard-button.tsx";
-import { Dialog, dialogVariantCatalog } from "../ui/dialog.tsx";
+import {
+    Dialog,
+    type DialogVariant,
+    dialogBodyStackClassName,
+    dialogPinnedFooterActionsClassName,
+    dialogSectionTitleClassName,
+    dialogSurfaceBodyClassName,
+    dialogVariantCatalog,
+} from "../ui/dialog.tsx";
 import { Input } from "../ui/input.tsx";
 import { LinkButton } from "../ui/link-button.tsx";
 import { MortyAlert } from "../ui/morty-alert.tsx";
@@ -117,7 +138,304 @@ const toolStates = [
 
 type CloudVariant = (typeof cloudVariants)[number];
 type CloudSize = (typeof cloudSizes)[number];
-type DialogGalleryOpen = "default" | "setup" | "surface" | "busy" | "medium" | "large" | "wide";
+type DialogGalleryOpen =
+    | "reference"
+    | "confirm"
+    | "form"
+    | "scroll"
+    | "default"
+    | "setup"
+    | "surface"
+    | "busy"
+    | "medium"
+    | "large"
+    | "wide";
+
+const dialogGalleryVariantDescription: Readonly<Partial<Record<DialogVariant, ReactNode>>> = {
+    bugReport:
+        "Send a description, optional images and recent technical and network diagnostics to the Morty team. Session text, other files and credentials are not collected automatically.",
+    connectAgentPairing: "Morty is ready. Paste this instruction into your local agent to connect it.",
+    devicesAccess: "Who can use your computer from Morty, and for how long.",
+    endAccess: (
+        <>
+            <span className="block">
+                This browser loses access to your computer. Your computer and your other devices keep theirs, and links
+                you already shared still work until they expire.
+            </span>
+            <span className="mt-3 block font-medium text-foreground">Your local agent and tasks keep running.</span>
+        </>
+    ),
+    identitySharing: "Scan the code or open the link on the device you want to use.",
+    networkLatency: "Round-trip latency for this browser and its connected Runtime.",
+    openSession: "Import a native agent session into Morty Chat.",
+    workingDirectory: "Pick the folder the agent should use as its working directory.",
+};
+
+function DialogGalleryReferenceBody() {
+    return (
+        <div className={dialogBodyStackClassName}>
+            <MortyAlert tone="warning">
+                Anyone who opens this link can view and control every session on this computer.
+            </MortyAlert>
+            <div className="grid gap-2">
+                <p className={dialogSectionTitleClassName}>Device access</p>
+                <p className="text-13 leading-5 text-muted-foreground">
+                    Dialog-level warnings use <code className="text-12">MortyAlert</code>; neutral instructions stay in{" "}
+                    <code className="text-12">description</code>.
+                </p>
+            </div>
+        </div>
+    );
+}
+
+function DialogGalleryReferenceFooter({ onClose }: { readonly onClose: () => void }) {
+    return (
+        <div className={dialogPinnedFooterActionsClassName}>
+            <Button onClick={onClose} variant="ghost">
+                Cancel
+            </Button>
+            <Button variant="primary">Continue</Button>
+        </div>
+    );
+}
+
+const dialogGalleryDeviceGroupCardClassName =
+    "overflow-hidden rounded-[20px] border border-white bg-card px-4 shadow-module";
+
+/** Playground-only: device groups. The group disconnect sits on the shared-links heading. */
+const dialogGalleryDevicesAccessBodyClassName = "space-y-5 px-0";
+
+function DialogGalleryDevicesAccessBody() {
+    return (
+        <div className={dialogGalleryDevicesAccessBodyClassName}>
+            <ul aria-label="Devices with access" className="space-y-5">
+                <li className="space-y-1.5">
+                    <h3 className={dialogSectionTitleClassName}>Always here</h3>
+                    <div className={dialogGalleryDeviceGroupCardClassName}>
+                        <div className="py-3">
+                            <DeviceSummary
+                                device={{
+                                    name: "This browser",
+                                    details: [{ kind: "fields", fields: [{ label: "Until", value: "Nov 12, 2026" }] }],
+                                }}
+                            />
+                        </div>
+                        <div className="border-t border-border/40 -mx-4 px-4 py-3">
+                            <DeviceSummary
+                                device={{
+                                    name: "Your computer",
+                                    details: [{ kind: "text", text: "Always keeps access · can disconnect all" }],
+                                }}
+                                icon={Laptop}
+                            />
+                        </div>
+                    </div>
+                </li>
+                <li className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-3">
+                        <h3 className={dialogSectionTitleClassName}>Shared from links</h3>
+                        <LinkButton className={`shrink-0 ${mutedTextLinkClassName}`}>Disconnect all</LinkButton>
+                    </div>
+                    <div className={dialogGalleryDeviceGroupCardClassName}>
+                        <p className="py-3 text-13 text-morty-text-3">No other device has access.</p>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    );
+}
+
+const dialogGallerySetupPrompt = "Run setup on the computer where your agent lives, then return here with the link.";
+
+/** Static pairing layout for the library; production uses the view wired to live handoff state. */
+function DialogGalleryPairingBody({ actionPresentation }: { readonly actionPresentation: "setup-card" | "dialog" }) {
+    const isDialog = actionPresentation === "dialog";
+    const hintClassName = isDialog
+        ? "mt-3 min-h-10 text-center text-13 leading-5 text-muted-foreground"
+        : "mt-3 min-h-10 text-center text-sm leading-5 text-morty-text-2";
+    return (
+        <div>
+            <CopyToClipboardButton
+                className={isDialog ? "w-full" : "w-full rounded-xl"}
+                failureToast={{
+                    description: "Copy this page's address from your browser instead.",
+                    title: "Could not copy",
+                }}
+                label="Copy link"
+                size={isDialog ? "default" : "lg"}
+                value="https://morty.example/"
+            >
+                <Link aria-hidden="true" className="size-4" />
+                <span>Copy link</span>
+            </CopyToClipboardButton>
+            <p className={hintClassName}>Setup runs on your computer. Open Morty there to copy the prompt.</p>
+            <SetupPromptDetails prompt={dialogGallerySetupPrompt} />
+        </div>
+    );
+}
+
+function DialogGalleryConfirmFooter({ onClose }: { readonly onClose: () => void }) {
+    return (
+        <div className={dialogPinnedFooterActionsClassName}>
+            <Button onClick={onClose} variant="ghost">
+                Cancel
+            </Button>
+            <Button onClick={onClose} variant="destructive">
+                Delete
+            </Button>
+        </div>
+    );
+}
+
+const dialogGalleryFormId = "dialog-gallery-session-form";
+
+function DialogGalleryFormFooter({ onClose }: { readonly onClose: () => void }) {
+    return (
+        <div className={dialogPinnedFooterActionsClassName}>
+            <Button onClick={onClose} type="button" variant="ghost">
+                Cancel
+            </Button>
+            <Button form={dialogGalleryFormId} type="submit" variant="primary">
+                Save
+            </Button>
+        </div>
+    );
+}
+
+function DialogGalleryFormBody({ onClose }: { readonly onClose: () => void }) {
+    return (
+        <form
+            className={dialogBodyStackClassName}
+            id={dialogGalleryFormId}
+            onSubmit={(event) => {
+                event.preventDefault();
+                onClose();
+            }}
+        >
+            <label className="grid gap-2 pb-1" htmlFor="dialog-gallery-session-name">
+                <span className={dialogSectionTitleClassName}>Name</span>
+                <Input id="dialog-gallery-session-name" name="name" placeholder="Session name" required />
+            </label>
+            <label className="grid gap-2 pb-1" htmlFor="dialog-gallery-session-note">
+                <span className={dialogSectionTitleClassName}>Note</span>
+                <Input id="dialog-gallery-session-note" name="note" placeholder="Optional" />
+            </label>
+        </form>
+    );
+}
+
+const dialogGalleryScrollItems = [
+    "Renamed the session",
+    "Changed the working directory",
+    "Switched the agent to Codex",
+    "Updated the model",
+    "Paused after a permission request",
+    "Attached three screenshots",
+    "Shared a continue link",
+    "Opened the session on another browser",
+    "Measured network latency",
+    "Disconnected a shared device",
+    "Imported a native session",
+    "Sent a bug report",
+] as const;
+
+function DialogGalleryScrollFooter({ onClose }: { readonly onClose: () => void }) {
+    return (
+        <div className={dialogPinnedFooterActionsClassName}>
+            <Button onClick={onClose} variant="ghost">
+                Cancel
+            </Button>
+            <Button onClick={onClose} variant="primary">
+                Done
+            </Button>
+        </div>
+    );
+}
+
+function DialogGalleryScrollBody() {
+    return (
+        <ul className="divide-y divide-border rounded-lg border border-border">
+            {dialogGalleryScrollItems.map((item) => (
+                <li key={item} className="px-4 py-3">
+                    {item}
+                </li>
+            ))}
+        </ul>
+    );
+}
+
+function DialogGalleryPlaceholderBody() {
+    return (
+        <div className={dialogBodyStackClassName}>
+            <p className="text-13 leading-5 text-muted-foreground">Body content for this product variant.</p>
+        </div>
+    );
+}
+
+function DialogGalleryPlaceholderFooter({ onClose }: { readonly onClose: () => void }) {
+    return (
+        <div className={dialogPinnedFooterActionsClassName}>
+            <Button onClick={onClose} variant="ghost">
+                Close
+            </Button>
+        </div>
+    );
+}
+
+function dialogGalleryBodyForVariant(variant: DialogVariant): ReactNode {
+    switch (variant) {
+        case "identitySharing":
+            return <DialogGalleryReferenceBody />;
+        case "devicesAccess":
+            return <DialogGalleryDevicesAccessBody />;
+        case "connectAgentPairing":
+            return <DialogGalleryPairingBody actionPresentation="dialog" />;
+        default:
+            return <DialogGalleryPlaceholderBody />;
+    }
+}
+
+function dialogGalleryShellFooter(open: DialogGalleryOpen, onClose: () => void): ReactNode {
+    switch (open) {
+        case "scroll":
+            return <DialogGalleryScrollFooter onClose={onClose} />;
+        case "form":
+            return <DialogGalleryFormFooter onClose={onClose} />;
+        case "confirm":
+            return <DialogGalleryConfirmFooter onClose={onClose} />;
+        case "reference":
+            return <DialogGalleryReferenceFooter onClose={onClose} />;
+        case "busy":
+            return (
+                <div className={dialogPinnedFooterActionsClassName}>
+                    <Button onClick={onClose} variant="primary">
+                        Finish
+                    </Button>
+                </div>
+            );
+        case "default":
+        case "medium":
+        case "large":
+        case "wide":
+            return <DialogGalleryPlaceholderFooter onClose={onClose} />;
+        case "setup":
+        case "surface":
+            return undefined;
+    }
+}
+
+function dialogGalleryFooterForVariant(variant: DialogVariant, onClose: () => void): ReactNode {
+    switch (variant) {
+        case "identitySharing":
+            return <DialogGalleryReferenceFooter onClose={onClose} />;
+        case "devicesAccess":
+        case "connectAgentPairing":
+        case "openSession":
+            return undefined;
+        default:
+            return <DialogGalleryPlaceholderFooter onClose={onClose} />;
+    }
+}
 
 function ChoiceRow<T extends string>({
     label,
@@ -892,12 +1210,19 @@ function ExecutionDetailsDialogGallery() {
     );
 }
 
-function dialogGalleryDialogProps(open: DialogGalleryOpen): {
-    readonly appearance: "default" | "setup" | "surface";
+function dialogGalleryShellProps(open: DialogGalleryOpen): {
+    readonly appearance?: "default" | "setup" | "surface";
     readonly busy?: boolean;
     readonly size?: "medium" | "large" | "wide";
+    readonly variant?: DialogVariant;
 } {
     switch (open) {
+        case "reference":
+            return { variant: "identitySharing" };
+        case "confirm":
+        case "form":
+        case "scroll":
+            return { appearance: "default" };
         case "setup":
             return { appearance: "setup" };
         case "surface":
@@ -915,11 +1240,101 @@ function dialogGalleryDialogProps(open: DialogGalleryOpen): {
     }
 }
 
+function dialogGalleryTitle(open: DialogGalleryOpen): string {
+    switch (open) {
+        case "reference":
+            return "Continue on another device";
+        case "confirm":
+            return "Delete this session?";
+        case "form":
+            return "Rename session";
+        case "scroll":
+            return "Review activity";
+        case "busy":
+            return "Saving session";
+        case "setup":
+            return "Connect agent";
+        case "surface":
+            return "Devices with access";
+        default:
+            return "Network latency";
+    }
+}
+
+function dialogGalleryDescription(open: DialogGalleryOpen): ReactNode {
+    switch (open) {
+        case "reference":
+            return dialogGalleryVariantDescription.identitySharing ?? null;
+        case "confirm":
+            return "This removes the session from this browser. The agent on your computer keeps running.";
+        case "form":
+            return "The new name is shown in the sidebar.";
+        case "scroll":
+            return "Scroll the list. The title and the actions stay outside the scroll region.";
+        case "busy":
+            return "Close stays disabled until the work finishes.";
+        case "setup":
+            return dialogGalleryVariantDescription.connectAgentPairing ?? null;
+        case "surface":
+            return dialogGalleryVariantDescription.devicesAccess ?? null;
+        default:
+            return dialogGalleryVariantDescription.networkLatency ?? null;
+    }
+}
+
 function DialogGallery() {
     const [open, setOpen] = useState<DialogGalleryOpen | null>(null);
-    const dialogProps = open === null ? null : dialogGalleryDialogProps(open);
+    const [previewVariant, setPreviewVariant] = useState<DialogVariant | null>(null);
+    const shellProps = open === null ? null : dialogGalleryShellProps(open);
+    const previewCatalogEntry =
+        previewVariant === null
+            ? null
+            : (dialogVariantCatalog.find((entry) => entry.variant === previewVariant) ?? null);
     return (
-        <>
+        <div className="grid gap-6">
+            <Specimen title="Reference layout (default appearance)">
+                <p className="mb-4 max-w-xl text-13 leading-5 text-muted-foreground">
+                    Default appearance: title and close share one row; neutral copy in{" "}
+                    <code className="text-12">description</code>; risks use <code className="text-12">MortyAlert</code>{" "}
+                    inside <code className="text-12">dialogBodyStackClassName</code>. The scroll region does not include
+                    the header or footer: title, description, and close stay above it, and actions passed as{" "}
+                    <code className="text-12">footer</code> stay below it. Surface appearance (e.g. Devices) uses a{" "}
+                    <code className="text-12">p-2</code> panel shell, close at the top-right, and{" "}
+                    <code className="text-12">dialogSurfaceBodyClassName</code> for inner spacing.
+                </p>
+                <Button onClick={() => setOpen("reference")} variant="primary">
+                    Open reference dialog
+                </Button>
+            </Specimen>
+            <Specimen title="Confirm dialog">
+                <p className="mb-4 max-w-xl text-13 leading-5 text-muted-foreground">
+                    The question is the title. The consequence stays in <code className="text-12">description</code>.
+                    Cancel and the confirming action use the same footer spacing as the form dialog.
+                </p>
+                <Button onClick={() => setOpen("confirm")} variant="primary">
+                    Open confirm dialog
+                </Button>
+            </Specimen>
+            <Specimen title="Form dialog">
+                <p className="mb-4 max-w-xl text-13 leading-5 text-muted-foreground">
+                    Fields sit in <code className="text-12">dialogBodyStackClassName</code>. Cancel and submit use{" "}
+                    <code className="text-12">dialogPinnedFooterActionsClassName</code> as{" "}
+                    <code className="text-12">footer</code>, outside the scroll region.
+                </p>
+                <Button onClick={() => setOpen("form")} variant="primary">
+                    Open form dialog
+                </Button>
+            </Specimen>
+            <Specimen title="Scrollable dialog">
+                <p className="mb-4 max-w-xl text-13 leading-5 text-muted-foreground">
+                    The dialog scroll region does not include the header or footer. Title, description, and close stay
+                    above the list. Cancel and Done are the <code className="text-12">footer</code>, so they stay below
+                    it.
+                </p>
+                <Button onClick={() => setOpen("scroll")} variant="primary">
+                    Open scrollable dialog
+                </Button>
+            </Specimen>
             <Specimen title="Overlay width ladder (desktop max / fixed width)">
                 <p className="mb-4 max-w-xl text-13 leading-5 text-muted-foreground">
                     Change values in <code className="text-12">components/ui/overlay-width.ts</code>. Mobile bottom
@@ -950,16 +1365,23 @@ function DialogGallery() {
                         .map(({ variant, title, widthPx }) => (
                             <div
                                 key={variant}
-                                className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-4 gap-y-0.5 border-b border-border pb-3 last:border-0"
+                                className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-0.5 border-b border-border pb-3 last:border-0"
                             >
                                 <dt className="font-mono font-semibold tabular-nums">{widthPx}px</dt>
                                 <dd className="font-medium">{title}</dd>
-                                <dd className="col-span-2 font-mono text-12 text-muted-foreground">{variant}</dd>
+                                <dd className="row-span-2 justify-self-end sm:row-span-1">
+                                    <Button onClick={() => setPreviewVariant(variant)} size="sm" variant="outline">
+                                        Open
+                                    </Button>
+                                </dd>
+                                <dd className="col-span-2 font-mono text-12 text-muted-foreground sm:col-span-1">
+                                    {variant}
+                                </dd>
                             </div>
                         ))}
                 </dl>
             </Specimen>
-            <Specimen title="Open one">
+            <Specimen title="Shell previews">
                 <Button onClick={() => setOpen("default")} variant="outline">
                     Default
                 </Button>
@@ -981,27 +1403,55 @@ function DialogGallery() {
                 <Button onClick={() => setOpen("busy")} variant="outline">
                     Busy
                 </Button>
-                {dialogProps !== null && open !== null && (
+                {shellProps !== null && open !== null && (
                     <Dialog
-                        {...dialogProps}
-                        description="This preview uses the real dialog. Close it to return to the library."
+                        {...shellProps}
+                        description={dialogGalleryDescription(open)}
+                        footer={dialogGalleryShellFooter(open, () => setOpen(null))}
                         onClose={() => setOpen(null)}
-                        title={open === "busy" ? "Saving session" : "Continue on this device"}
+                        title={dialogGalleryTitle(open)}
                     >
-                        <p>
-                            {open === "busy"
-                                ? "Close stays disabled until the work finishes. Use the button below to finish it."
-                                : "Approve requests and send instructions while the agent runs on your computer."}
-                        </p>
-                        {open === "busy" && (
-                            <div className="mt-4 flex justify-end">
-                                <Button onClick={() => setOpen(null)}>Finish</Button>
+                        {open === "reference" ? (
+                            <DialogGalleryReferenceBody />
+                        ) : open === "confirm" ? null : open === "form" ? (
+                            <DialogGalleryFormBody onClose={() => setOpen(null)} />
+                        ) : open === "scroll" ? (
+                            <DialogGalleryScrollBody />
+                        ) : open === "surface" ? (
+                            <div className={dialogSurfaceBodyClassName}>
+                                <p className="text-13 leading-5 text-morty-text-3">
+                                    Surface dialogs keep a <code className="text-12">p-2</code> outer shell; body
+                                    content uses <code className="text-12">dialogSurfaceBodyClassName</code> (e.g. Open
+                                    Session).
+                                </p>
                             </div>
+                        ) : open === "setup" ? (
+                            <DialogGalleryPairingBody actionPresentation="setup-card" />
+                        ) : open === "busy" ? (
+                            <p className="text-13 leading-5 text-muted-foreground">
+                                Use the button below to finish the work and re-enable close.
+                            </p>
+                        ) : (
+                            <DialogGalleryPlaceholderBody />
                         )}
                     </Dialog>
                 )}
+                {previewCatalogEntry !== null && previewVariant !== null && (
+                    <Dialog
+                        variant={previewVariant}
+                        description={
+                            dialogGalleryVariantDescription[previewVariant] ??
+                            "Product copy for this dialog lives on the call site."
+                        }
+                        footer={dialogGalleryFooterForVariant(previewVariant, () => setPreviewVariant(null))}
+                        onClose={() => setPreviewVariant(null)}
+                        title={previewCatalogEntry.title}
+                    >
+                        {dialogGalleryBodyForVariant(previewVariant)}
+                    </Dialog>
+                )}
             </Specimen>
-        </>
+        </div>
     );
 }
 

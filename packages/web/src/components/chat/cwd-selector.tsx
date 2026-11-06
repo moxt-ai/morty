@@ -148,7 +148,7 @@ export function CwdSelector({
                     >
                         <Tooltip.Provider delayDuration={150}>
                             <ScrollEdgeFade
-                                className="max-h-80 overflow-y-auto"
+                                className="max-h-80"
                                 edgeStroke={{ className: "border-white/80", placement: "inside" }}
                                 revealSurface
                             >
@@ -276,7 +276,7 @@ export function CwdSelector({
                                             revealSurface
                                             edgeStroke={{ className: "border-surface-subtle/50", placement: "inside" }}
                                             frameClassName={directoryNavigationDisabled ? "opacity-50" : ""}
-                                            className="max-h-64 overflow-y-auto p-2"
+                                            className="max-h-64 p-2"
                                         >
                                             {directory.parentDirectoryId.length > 0 && (
                                                 <li>

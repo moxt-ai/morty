@@ -6,6 +6,7 @@ import { ButtonGroup } from "@/components/ui/button-group";
 import { Button } from "@/components/ui/cloud-button";
 import { MortyAlert } from "@/components/ui/morty-alert";
 import { Select as OptionSelect } from "@/components/ui/option-select";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { textLinkClassName } from "@/components/ui/text-link";
 import { useWrappedButtonRadius } from "@/components/utils/use-wrapped-button-radius";
 import { cn } from "@/lib/utils";
@@ -52,8 +53,7 @@ const interactionCardClassName =
     "min-w-0 w-full rounded-[20px] border-[0.5px] border-border bg-surface-elevated px-4 py-4 text-13 [overflow-wrap:anywhere]";
 const interactionIconClassName = "mt-[3px] size-4 shrink-0 text-muted-foreground";
 const interactionTitleClassName = "text-15 font-semibold text-foreground";
-const interactionMonoClassName =
-    "mt-3 max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-mono text-12 leading-5";
+const interactionMonoClassName = "whitespace-pre-wrap font-mono text-12 leading-5";
 /** Mirrors `Input`'s border, fill, radius, and focus ring so native inputs, selects, and textareas all match it. */
 const nativeFieldClassName =
     "w-full min-w-0 rounded-md border border-border bg-background px-3 text-[13px] outline-none focus:border-ring focus:outline-none! focus:shadow-[var(--focus-ring-shadow)] disabled:cursor-not-allowed disabled:opacity-50";
@@ -346,13 +346,27 @@ function PermissionPreviewContent({ input, preview }: { readonly input: string; 
             return <AgentRichContent contents={preview.changes} />;
         case "command":
             return (
-                <pre className={interactionMonoClassName}>
-                    <span className="text-muted-foreground">{preview.cwd} $ </span>
-                    {preview.command}
-                </pre>
+                <ScrollArea
+                    className="mt-3 max-h-56 rounded-md bg-muted"
+                    orientation="both"
+                    viewportClassName="max-h-[inherit] p-3"
+                >
+                    <pre className={interactionMonoClassName}>
+                        <span className="text-muted-foreground">{preview.cwd} $ </span>
+                        {preview.command}
+                    </pre>
+                </ScrollArea>
             );
         case "input":
-            return <pre className={interactionMonoClassName}>{input}</pre>;
+            return (
+                <ScrollArea
+                    className="mt-3 max-h-56 rounded-md bg-muted"
+                    orientation="both"
+                    viewportClassName="max-h-[inherit] p-3"
+                >
+                    <pre className={interactionMonoClassName}>{input}</pre>
+                </ScrollArea>
+            );
         case "none":
             return (
                 <p className="mt-3 rounded-md bg-muted p-3 text-12 leading-5 text-muted-foreground">
@@ -456,9 +470,13 @@ function PermissionCard({
                                         </section>
                                     )}
                                     {preview.kind !== "input" && (
-                                        <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md bg-muted p-3 font-mono">
-                                            {presentation.input}
-                                        </pre>
+                                        <ScrollArea
+                                            className="max-h-56 rounded-md bg-muted"
+                                            orientation="both"
+                                            viewportClassName="max-h-[inherit] p-3"
+                                        >
+                                            <pre className="whitespace-pre-wrap font-mono">{presentation.input}</pre>
+                                        </ScrollArea>
                                     )}
                                 </div>
                             )}

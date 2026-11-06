@@ -18,6 +18,7 @@ import { CompactionDisclosure } from "../../components/chat/compaction-disclosur
 import { MessageBubble } from "../../components/chat/message-bubble.tsx";
 import { UserMessageShell } from "../../components/chat/user-message-shell.tsx";
 import { ImageGallery, PreviewImage } from "../../components/images/image-gallery.tsx";
+import { ScrollArea } from "../../components/ui/scroll-area.tsx";
 import { textLinkClassName } from "../../components/ui/text-link.ts";
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
@@ -134,9 +135,13 @@ function MessageContentBlock({
         }
         case "resource":
             return "text" in content.resource ? (
-                <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-muted p-3 text-xs">
-                    {content.resource.text}
-                </pre>
+                <ScrollArea
+                    className="max-h-96 rounded-lg bg-muted"
+                    orientation="both"
+                    viewportClassName="max-h-[inherit] p-3"
+                >
+                    <pre className="whitespace-pre-wrap text-xs">{content.resource.text}</pre>
+                </ScrollArea>
             ) : (
                 <p className="break-all text-sm text-muted-foreground">Binary resource: {content.resource.uri}</p>
             );

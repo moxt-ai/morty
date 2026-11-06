@@ -296,11 +296,11 @@
 }
 
 /* Height travels to auto, and the close stays visible until that transition ends. */
-.pairing-setup-details {
+.disclosure-details {
     interpolate-size: allow-keywords;
 }
 
-.pairing-setup-details::details-content {
+.disclosure-details::details-content {
     height: 0;
     overflow: clip;
     opacity: 0;
@@ -310,13 +310,13 @@
         content-visibility 300ms ease-out allow-discrete;
 }
 
-.pairing-setup-details[open]::details-content {
+.disclosure-details[open]::details-content {
     height: auto;
     opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .pairing-setup-details::details-content {
+    .disclosure-details::details-content {
         transition: none;
     }
 }

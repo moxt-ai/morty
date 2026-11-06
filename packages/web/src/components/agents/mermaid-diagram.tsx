@@ -1,5 +1,6 @@
 import { Maximize2 } from "lucide-react";
 import { memo, useEffect, useState } from "react";
+import { ScrollArea } from "../ui/scroll-area.tsx";
 import { MermaidFullscreen } from "./mermaid-fullscreen.tsx";
 import { type RenderedDiagram, renderMermaid } from "./mermaid-renderer.ts";
 
@@ -97,7 +98,9 @@ export default memo(function MermaidDiagram({ code }: { readonly code: string })
             </figure>
             <details className="my-2 text-sm">
                 <summary className="cursor-pointer text-muted-foreground">View diagram source</summary>
-                <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words p-3">{code}</pre>
+                <ScrollArea className="max-h-80" orientation="both" viewportClassName="max-h-[inherit] p-3">
+                    <pre className="whitespace-pre-wrap break-words">{code}</pre>
+                </ScrollArea>
             </details>
             {fullscreen !== null && (
                 <MermaidFullscreen

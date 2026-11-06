@@ -32,20 +32,15 @@ function DeviceDetailFields({
     readonly layout: "default" | "notice";
 }) {
     return (
-        <table
-            className={cn(
-                deviceDetailTableClassName,
-                layout === "notice" ? "table-fixed" : "table-auto",
-                indentDetails && "ml-6",
-            )}
-        >
+        <table className={cn(deviceDetailTableClassName, "table-fixed", indentDetails && "ml-6.5")}>
             <tbody>
                 {fields.map((field) => (
                     <tr key={`${field.label}:${field.value}`}>
                         <th
                             className={cn(
                                 deviceDetailLabelClassName,
-                                layout === "notice" ? "w-[4.25rem]" : "whitespace-nowrap",
+                                "whitespace-nowrap",
+                                layout === "notice" ? "w-[4.25rem]" : "w-[3.625rem]",
                             )}
                             scope="row"
                         >
@@ -76,7 +71,7 @@ export function DeviceSummary({
     const details = device.details.map((detail, index) =>
         detail.kind === "text" ? (
             <p
-                className={cn("text-xs text-muted-foreground", indentDetails && "pl-6")}
+                className={cn("mt-1 text-xs text-muted-foreground", indentDetails && "pl-6.5")}
                 key={`text:${index.toString()}`}
             >
                 {detail.text}
@@ -93,54 +88,29 @@ export function DeviceSummary({
 
     if (layout === "notice") {
         return (
-            <div className="flex items-start gap-2.5">
-                <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
+            <div>
+                <div className="flex items-center gap-2.5">
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5">
                         <Icon aria-hidden="true" className={noticeIconColumnClassName} />
                         <p className={cn("min-w-0 flex-1 text-12 font-semibold leading-4", noticeDeviceInkClassName)}>
                             {device.name}
                         </p>
                     </div>
-                    {details}
+                    {action}
                 </div>
-                {action}
+                {details}
             </div>
         );
     }
 
     return (
-        <div className="flex items-start gap-2.5">
-            <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2.5">
-                    <Icon aria-hidden="true" className="size-3.5 shrink-0 text-copy-secondary" />
-                    <p className="min-w-0 flex-1 text-sm font-medium leading-5 text-foreground">{device.name}</p>
-                </div>
-                {details}
+        <div>
+            <div className="flex items-center gap-2.5">
+                <Icon aria-hidden="true" className="size-4 shrink-0 text-copy-secondary" />
+                <p className="min-w-0 flex-1 text-sm font-medium leading-5 text-foreground">{device.name}</p>
+                {action}
             </div>
-            {action}
+            {details}
         </div>
-    );
-}
-
-/** Devices that hold access to the computer, one summary each. */
-export function DeviceList({
-    className,
-    devices,
-    layout = "default",
-    label,
-}: {
-    readonly className?: string;
-    readonly devices: readonly DeviceDescription[];
-    readonly layout?: "default" | "notice";
-    readonly label: string;
-}) {
-    return (
-        <ul aria-label={label} className={cn("space-y-2", className)}>
-            {devices.map((device, index) => (
-                <li key={`${index.toString()}:${device.name}`}>
-                    <DeviceSummary device={device} layout={layout} />
-                </li>
-            ))}
-        </ul>
     );
 }

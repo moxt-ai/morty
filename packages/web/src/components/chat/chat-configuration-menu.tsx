@@ -15,7 +15,6 @@ import { Popover } from "../ui/popover.tsx";
 import { ScrollEdgeFade } from "../utils/scroll-edge-fade.tsx";
 import { useConfigurationViewport } from "./chat-configuration-viewport.ts";
 import { mobileHeaderIconButtonClassName } from "./chat-header-control.ts";
-import { mortyThinScrollbarClassName } from "./chat-session-layout.ts";
 import { HarnessMark } from "./harness-mark.tsx";
 import { mobileSheetSurfaceClassName } from "./mobile-sheet.ts";
 import { MobileSheetTitle } from "./mobile-sheet-title.tsx";
@@ -257,10 +256,9 @@ function SettingPicker({
             <ScrollEdgeFade
                 aria-label={control.label}
                 className={cn(
-                    "min-h-0 flex-auto overflow-y-auto overscroll-contain px-2",
+                    "min-h-0 flex-auto px-2",
                     nested ? "pb-2" : "pb-[max(1rem,env(safe-area-inset-bottom))]",
                     nested && !control.searchable && "pt-2",
-                    mortyThinScrollbarClassName,
                 )}
                 fadeFromClassName="from-background"
                 fadeToClassName="to-background/0"
@@ -772,10 +770,7 @@ export function ChatConfigurationMenu({
                     fadeFromClassName="from-background"
                     fadeToClassName="to-background/0"
                     frameClassName="flex min-h-0 flex-auto flex-col"
-                    className={cn(
-                        "flex min-h-0 flex-auto flex-col gap-2 overflow-y-auto overscroll-contain px-2 pb-0",
-                        mortyThinScrollbarClassName,
-                    )}
+                    className={cn("flex min-h-0 flex-auto flex-col gap-2 px-2 pb-0")}
                 >
                     {settingsLoading && (
                         <span className="sr-only" data-testid={dataTestId.agentSettingsLoading} role="status">

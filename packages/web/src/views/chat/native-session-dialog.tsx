@@ -2,7 +2,6 @@ import { ChevronLeft, CircleAlert, Inbox, MessageSquare, PackageOpen, Unplug } f
 import type { ReactNode } from "react";
 import type { StoreApi } from "zustand/vanilla";
 import { mobileHeaderIconButtonClassName } from "../../components/chat/chat-header-control.ts";
-import { mortyThinScrollbarClassName } from "../../components/chat/chat-session-layout.ts";
 import { mobileSheetSessionRowClassName } from "../../components/chat/mobile-sheet.ts";
 import { MobileSheetTitle } from "../../components/chat/mobile-sheet-title.tsx";
 import { NativeSessionDirectoryPlaceholder } from "../../components/chat/native-session-directory-placeholder.tsx";
@@ -330,8 +329,7 @@ export function NativeSessionDialog({
                                                 frameClassName="flex min-h-0 flex-1 flex-col"
                                                 className={cn(
                                                     // The 40px rows are already the touch target; extra vertical gaps only make the list longer.
-                                                    "min-h-0 flex-1 space-y-0 overflow-y-auto overscroll-contain pr-1 pb-1",
-                                                    mortyThinScrollbarClassName,
+                                                    "min-h-0 flex-1 space-y-0 pr-1 pb-1",
                                                 )}
                                             >
                                                 {model.directory.entries.map((entry) => (
@@ -379,10 +377,7 @@ export function NativeSessionDialog({
                                                 placement: "outside",
                                             }}
                                             frameClassName="hidden min-h-0 flex-1 sm:flex sm:flex-col"
-                                            className={cn(
-                                                "min-h-0 flex-1 space-y-0 overflow-y-auto pr-3 pb-2",
-                                                mortyThinScrollbarClassName,
-                                            )}
+                                            className={cn("min-h-0 flex-1 space-y-0 pr-3 pb-2")}
                                         >
                                             {model.directory.entries.map((entry) => (
                                                 <button
@@ -495,13 +490,12 @@ export function NativeSessionDialog({
                                             edgeStroke={{ className: "border-card", placement: "outside" }}
                                             frameClassName="flex min-h-0 flex-1 flex-col"
                                             className={cn(
-                                                "min-h-0 flex-1 overflow-y-auto font-inter",
+                                                "min-h-0 flex-1 font-inter",
                                                 model.preview.kind === "ready"
                                                     ? "px-4 pt-4 pb-4 sm:px-6 sm:pt-4 sm:pb-5"
                                                     : model.preview.kind === "empty"
                                                       ? undefined
                                                       : "p-4 sm:px-6 sm:py-5",
-                                                mortyThinScrollbarClassName,
                                                 model.preview.kind === "empty" && "flex min-h-0 flex-1 flex-col",
                                             )}
                                         >

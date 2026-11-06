@@ -4,6 +4,7 @@ import { dataTestId } from "../../data-testid.ts";
 import { CopyToClipboardButton } from "../ui/copy-to-clipboard-button.tsx";
 import { LinkButton } from "../ui/link-button.tsx";
 import { MortyAlert, type MortyAlertTone } from "../ui/morty-alert.tsx";
+import { ScrollArea } from "../ui/scroll-area.tsx";
 import type { ConnectionFeedback } from "./execution-context.ts";
 
 type VisibleFeedback = Exclude<ConnectionFeedback, { readonly kind: "hidden" }>;
@@ -67,9 +68,15 @@ function RestartCommand({ command }: { readonly command: string }) {
         <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 font-normal">
             <span>After a restart, run</span>
             <span className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1">
-                <code className="max-w-full shrink-0 overflow-x-auto whitespace-nowrap rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] leading-4 text-foreground">
-                    {command}
-                </code>
+                <ScrollArea
+                    className="max-w-full shrink rounded-md bg-muted"
+                    orientation="horizontal"
+                    viewportClassName="max-w-full"
+                >
+                    <code className="whitespace-nowrap px-1.5 py-0.5 font-mono text-[11px] leading-4 text-foreground">
+                        {command}
+                    </code>
+                </ScrollArea>
                 <CopyToClipboardButton
                     className="w-7 px-0"
                     copiedContent={<Check aria-hidden="true" className="size-3.5" />}

@@ -3,6 +3,7 @@ import { Dialog } from "radix-ui";
 import { cn } from "@/lib/utils";
 import { dataTestId } from "../../data-testid.ts";
 import { executionDetailsDialogDesktopWidthClassName, overlaySurfaceRadiusClassName } from "../ui/overlay-surface.ts";
+import { ScrollArea } from "../ui/scroll-area.tsx";
 import { mobileHeaderIconButtonBelowSmClassName } from "./chat-header-control.ts";
 import type { ExecutionContext } from "./execution-context.ts";
 import { HarnessMark } from "./harness-mark.tsx";
@@ -88,7 +89,7 @@ export function ExecutionDetailsDialog({
                 <Dialog.Overlay className="fixed inset-0 z-[190] bg-black/25" />
                 <Dialog.Content
                     className={cn(
-                        "fixed inset-x-0 bottom-0 z-[191] flex max-h-[85dvh] flex-col overflow-hidden rounded-t-[28px] pt-0 pb-[max(24px,env(safe-area-inset-bottom))] shadow-xl outline-none sm:inset-auto sm:left-1/2 sm:top-1/2 sm:block sm:max-w-[calc(100vw-24px)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:overflow-y-auto sm:border sm:border-border sm:bg-card sm:px-6 sm:pt-6 sm:pb-6",
+                        "fixed inset-x-0 bottom-0 z-[191] flex max-h-[85dvh] flex-col overflow-hidden rounded-t-[28px] pt-0 pb-[max(24px,env(safe-area-inset-bottom))] shadow-xl outline-none sm:inset-auto sm:left-1/2 sm:top-1/2 sm:flex sm:max-h-[calc(100dvh-2rem)] sm:max-w-[calc(100vw-24px)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:border sm:border-border sm:bg-card sm:px-6 sm:pt-6 sm:pb-6",
                         // Same phone-sheet surface as the other chat sheets: opaque card with a 1px white edge.
                         mobileSheetSurfaceClassName,
                         executionDetailsDialogDesktopWidthClassName,
@@ -122,9 +123,9 @@ export function ExecutionDetailsDialog({
                         </Dialog.Close>
                     </header>
                     {/* 24px matches the text baseline of the other sheets' rows, which inset 16px inside their 8px list gutter. */}
-                    <div className="min-h-0 flex-1 overflow-y-auto px-6 sm:contents">
+                    <ScrollArea className="min-h-0 flex-1" viewportClassName="h-full max-h-[inherit] px-6 sm:px-0">
                         <ExecutionDetails context={context} />
-                    </div>
+                    </ScrollArea>
                 </Dialog.Content>
             </Dialog.Portal>
         </Dialog.Root>

@@ -74,7 +74,7 @@ export function SidebarUserMenu({
                         onOpenAutoFocus: preventOverlayOpenAutoFocus,
                     } satisfies OverlayContentOpenAutoFocus)}
                     className={cn(
-                        "z-[110] min-w-52 animate-cloud-enter p-1.5 text-sm text-foreground outline-none motion-reduce:animate-none",
+                        "z-[110] min-w-[280px] animate-cloud-enter p-1.5 text-sm text-foreground outline-none motion-reduce:animate-none",
                         overlaySurfacePanelClassName,
                         overlaySurfaceRadiusClassName,
                     )}
@@ -97,6 +97,9 @@ export function SidebarUserMenu({
                             Devices
                         </DropdownMenu.Item>
                     )}
+                    {header !== undefined ? (
+                        <DropdownMenu.Separator className={cn("-mx-1.5 my-1.5", overlayMenuSeparatorClassName)} />
+                    ) : null}
                     <DropdownMenu.Item
                         className="flex h-9 cursor-pointer items-center gap-2 rounded-full px-3 outline-none data-[highlighted]:bg-accent"
                         onSelect={onMeasureNetwork}

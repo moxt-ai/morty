@@ -1,4 +1,5 @@
 import {
+    ArrowLeftRight,
     Check,
     Laptop,
     List,
@@ -19,7 +20,6 @@ import { createPortal } from "react-dom";
 import { useStore } from "zustand";
 import { MortyLogoMark } from "../../components/brand/morty-logo.tsx";
 import { mobileHeaderIconButtonClassName } from "../../components/chat/chat-header-control.ts";
-import { mortyThinScrollbarClassName } from "../../components/chat/chat-session-layout.ts";
 import { ComputerOfflineIcon } from "../../components/chat/computer-offline-icon.tsx";
 import {
     mobileSheetHeaderClassName,
@@ -36,6 +36,7 @@ import { Dialog } from "../../components/ui/dialog.tsx";
 import { MortyAlert } from "../../components/ui/morty-alert.tsx";
 import { MortyTooltipContent } from "../../components/ui/morty-tooltip-content.tsx";
 import { type OverlayContentOpenAutoFocus, preventOverlayOpenAutoFocus } from "../../components/ui/overlay-surface.ts";
+import { ScrollArea } from "../../components/ui/scroll-area.tsx";
 import { DesktopChatLayout } from "../../components/utils/desktop-chat-layout.tsx";
 import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { dataTestId } from "../../data-testid.ts";
@@ -59,7 +60,7 @@ import { nativeSessionAgentTabs } from "../../view-models/chat/native-session-ag
 import { projectLocationLabel } from "../../view-models/chat/project-location-label.ts";
 import { noSessionDelivery } from "../../view-models/chat/session-delivery-store.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
-import { AccessNotice, AccessTerm } from "./access-term.tsx";
+import { AccessTerm } from "./access-term.tsx";
 import {
     ComputerSwitcher,
     mobileDrawerCardClassName,
@@ -69,6 +70,76 @@ import {
 import { IdentitySharing } from "./identity-sharing.tsx";
 import { NativeSessionDialog } from "./native-session-dialog.tsx";
 import { NewDeviceNotice } from "./new-device-notice.tsx";
+
+/** Hop label in the network latency list. The icon is a round trip between the two names. */
+function NetworkHopLabel({ from, to }: { readonly from: string; readonly to: string }) {
+    return (
+        <span className="inline-flex items-center">
+            {from}
+            <ArrowLeftRight aria-hidden="true" className="mx-1.5 size-3.5 shrink-0 text-morty-text-4" />
+            <span className="sr-only"> ↔ </span>
+            {to}
+        </span>
+    );
+}
+
+const networkLatencyCardShellClassName = "relative pb-1 pt-3";
+/** Shadow sits outside the clipped surface so the module glow is not cut off by the dialog scroller. */
+const networkLatencyCardShadowClassName =
+    "pointer-events-none absolute inset-x-0 top-3 bottom-1 rounded-[16px] shadow-module";
+const networkLatencyCardSurfaceClassName = "relative overflow-hidden rounded-[16px] border border-white bg-card px-4";
+const networkLatencyRowClassName = "flex items-center justify-between gap-4 py-3.5";
+const networkLatencyDividerClassName = "border-t border-border/40 -mx-4 px-4";
+
+function NetworkLatencyCard({ children }: { readonly children: ReactNode }) {
+    return (
+        <div className={networkLatencyCardShellClassName}>
+            <div aria-hidden="true" className={networkLatencyCardShadowClassName} />
+            <div className={networkLatencyCardSurfaceClassName}>{children}</div>
+        </div>
+    );
+}
+
+function NetworkLatencyIntro({ projectId }: { readonly projectId: string | null }) {
+    return (
+        <div className="text-14 leading-5 text-muted-foreground">
+            <p>Round-trip latency for this browser and its connected Runtime.</p>
+            <p className="mt-1">Mobius location: {projectLocationLabel(projectId ?? "")}</p>
+        </div>
+    );
+}
+const networkLatencySkeletonBarClassName = "h-3.5 rounded-full bg-morty-fill-opacity-3";
+const networkLatencySkeletonRows = [
+    { label: "w-36", value: "w-12" },
+    { label: "w-40", value: "w-12" },
+    { label: "w-32", value: "w-12" },
+    { label: "w-36", value: "w-14" },
+] as const;
+
+/** Same four-row footprint as the latency list, so the dialog does not jump when the numbers arrive. */
+function NetworkLatencySkeleton() {
+    return (
+        <div aria-label="Measuring network latency" role="status">
+            <NetworkLatencyCard>
+                <div aria-hidden="true" className="animate-pulse motion-reduce:animate-none">
+                    {networkLatencySkeletonRows.map((row, index) => (
+                        <div
+                            key={`${row.label}-${row.value}`}
+                            className={cn(networkLatencyRowClassName, index > 0 && networkLatencyDividerClassName)}
+                        >
+                            <div className="flex h-5 items-center">
+                                <div className={cn(networkLatencySkeletonBarClassName, row.label)} />
+                            </div>
+                            <div className="flex h-5 items-center">
+                                <div className={cn(networkLatencySkeletonBarClassName, row.value)} />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </NetworkLatencyCard>
+        </div>
+    );
+}
 
 /** Releases pointer-click focus so the action's tooltip and focus ring do not linger. */
 function blurAfterPointerClick(event: MouseEvent<HTMLButtonElement>): void {
@@ -453,19 +524,19 @@ export function ConversationSidebar({
                 attachAccess={workspace.accessExpiry?.getState().onAttach ?? null}
                 attachLinkedDevices={workspace.linkedDevices?.getState().onAttach ?? null}
             >
-                {workspace.linkedDevices !== null && (
-                    <NewDeviceNotice
-                        onReviewDevices={deviceAccess?.getState().open ?? null}
-                        store={workspace.linkedDevices}
-                    />
-                )}
-                {workspace.accessExpiry !== null && (
-                    <AccessNotice
-                        computerName={computerName}
-                        onOpenDevices={deviceAccess?.getState().open ?? null}
-                        store={workspace.accessExpiry}
-                    />
-                )}
+                <NewDeviceNotice
+                    access={
+                        workspace.accessExpiry === null
+                            ? null
+                            : {
+                                  computerName,
+                                  onOpenDevices: deviceAccess?.getState().open ?? null,
+                                  store: workspace.accessExpiry,
+                              }
+                    }
+                    onReviewDevices={deviceAccess?.getState().open ?? null}
+                    store={workspace.linkedDevices}
+                />
             </SidebarAccessNoticeHost>
         ) : null;
     return (
@@ -720,10 +791,7 @@ export function ConversationSidebar({
                                                             fadeToClassName="to-sidebar/0"
                                                             topFadeClassName="top-6 h-6"
                                                             frameClassName="col-span-2 -ml-3 -mr-3 box-border flex min-h-0 min-w-0 w-[calc(100%+24px)] max-w-none flex-1 flex-col max-sm:row-start-2 sm:-ml-2.5 sm:-mr-2.5 sm:w-[calc(100%+20px)]"
-                                                            className={cn(
-                                                                "min-h-0 flex-1 space-y-0 overflow-y-auto px-3 sm:px-2.5",
-                                                                mortyThinScrollbarClassName,
-                                                            )}
+                                                            className="min-h-0 flex-1 space-y-0 px-3 sm:px-2.5"
                                                         >
                                                             <ManagedSessionDirectoryList {...sessionListProps} />
                                                         </ScrollEdgeFade>
@@ -732,139 +800,146 @@ export function ConversationSidebar({
                                             )}
                                             {desktop ? accessNotices : null}
                                             <Tooltip.Provider delayDuration={150} disableHoverableContent>
-                                                <div className="col-span-2 flex w-full min-w-0 flex-col gap-0 overflow-y-auto pt-1 max-sm:min-h-0 max-sm:flex-1 sm:mt-auto sm:shrink-0 sm:flex-row sm:items-center sm:justify-between sm:gap-1 sm:overflow-visible sm:pt-3">
-                                                    {!desktop && workspace.computers !== null ? (
-                                                        <div className={mobileDrawerCardClassName}>
-                                                            <ComputerSwitcher
-                                                                context={executionContext}
-                                                                layout="list"
-                                                                model={workspace.computers}
-                                                                name={computerName}
-                                                                onChooseCurrent={dialogs.getState().closeMobileNav}
-                                                                status={connectionStatus}
-                                                            />
-                                                        </div>
-                                                    ) : null}
-                                                    {!desktop && (
-                                                        <nav
-                                                            aria-label="Account actions"
-                                                            className={cn(
-                                                                mobileDrawerCardClassName,
-                                                                mobileDrawerOptionDividerClassName,
-                                                                "sm:hidden",
-                                                                workspace.computers !== null && "mt-4",
-                                                            )}
-                                                        >
-                                                            <SidebarSessionOption
-                                                                icon={Share2}
-                                                                label="Continue on another device"
-                                                                variant="card"
-                                                                onClick={dialogs.getState().openSharing}
-                                                            />
-                                                            <BugReportButton
-                                                                appearance="card"
-                                                                daemonSource={sessionDiagnostics}
-                                                                dialog={workspace.bugReportDialog}
-                                                            />
-                                                        </nav>
-                                                    )}
-                                                    {!desktop && access.state.kind !== "ended" ? (
-                                                        <nav
-                                                            aria-label="Connection actions"
-                                                            className={cn(
-                                                                mobileDrawerCardClassName,
-                                                                mobileDrawerOptionDividerClassName,
-                                                                "mt-4 sm:hidden",
-                                                            )}
-                                                        >
-                                                            {workspace.accessExpiry !== null && (
-                                                                <AccessTerm
-                                                                    layout="card"
-                                                                    store={workspace.accessExpiry}
+                                                <ScrollArea
+                                                    className="col-span-2 min-h-0 w-full min-w-0 max-sm:flex-1 sm:shrink-0"
+                                                    viewportClassName="h-full max-h-[inherit]"
+                                                >
+                                                    <div className="flex w-full min-w-0 flex-col gap-0 pt-1 sm:mt-auto sm:flex-row sm:items-center sm:justify-between sm:gap-1 sm:pt-3">
+                                                        {!desktop && workspace.computers !== null ? (
+                                                            <div className={mobileDrawerCardClassName}>
+                                                                <ComputerSwitcher
+                                                                    context={executionContext}
+                                                                    layout="list"
+                                                                    model={workspace.computers}
+                                                                    name={computerName}
+                                                                    onChooseCurrent={dialogs.getState().closeMobileNav}
+                                                                    status={connectionStatus}
                                                                 />
-                                                            )}
-                                                            {deviceAccess !== null && (
+                                                            </div>
+                                                        ) : null}
+                                                        {!desktop && (
+                                                            <nav
+                                                                aria-label="Account actions"
+                                                                className={cn(
+                                                                    mobileDrawerCardClassName,
+                                                                    mobileDrawerOptionDividerClassName,
+                                                                    "sm:hidden",
+                                                                    workspace.computers !== null && "mt-4",
+                                                                )}
+                                                            >
+                                                                <SidebarSessionOption
+                                                                    icon={Share2}
+                                                                    label="Continue on another device"
+                                                                    variant="card"
+                                                                    onClick={dialogs.getState().openSharing}
+                                                                />
+                                                                <BugReportButton
+                                                                    appearance="card"
+                                                                    daemonSource={sessionDiagnostics}
+                                                                    dialog={workspace.bugReportDialog}
+                                                                />
+                                                            </nav>
+                                                        )}
+                                                        {!desktop && access.state.kind !== "ended" ? (
+                                                            <nav
+                                                                aria-label="Connection actions"
+                                                                className={cn(
+                                                                    mobileDrawerCardClassName,
+                                                                    mobileDrawerOptionDividerClassName,
+                                                                    "mt-4 sm:hidden",
+                                                                )}
+                                                            >
+                                                                {workspace.accessExpiry !== null && (
+                                                                    <AccessTerm
+                                                                        layout="card"
+                                                                        store={workspace.accessExpiry}
+                                                                    />
+                                                                )}
+                                                                {deviceAccess !== null && (
+                                                                    <SidebarSessionOption
+                                                                        disabled={access.state.kind === "loading"}
+                                                                        icon={MonitorSmartphone}
+                                                                        label="Devices"
+                                                                        variant="card"
+                                                                        onClick={deviceAccess.getState().open}
+                                                                    />
+                                                                )}
                                                                 <SidebarSessionOption
                                                                     disabled={access.state.kind === "loading"}
-                                                                    icon={MonitorSmartphone}
-                                                                    label="Devices"
+                                                                    icon={Wifi}
+                                                                    label="Network latency"
                                                                     variant="card"
-                                                                    onClick={deviceAccess.getState().open}
+                                                                    onClick={measureNetwork}
                                                                 />
-                                                            )}
-                                                            <SidebarSessionOption
+                                                                <SidebarSessionOption
+                                                                    disabled={
+                                                                        access.state.kind === "loading" ||
+                                                                        access.state.kind === "ending"
+                                                                    }
+                                                                    icon={LogOut}
+                                                                    label="End current access"
+                                                                    variant="card"
+                                                                    onClick={() => {
+                                                                        void access.requestEnd(
+                                                                            workspace.operationsSignal(),
+                                                                        );
+                                                                    }}
+                                                                />
+                                                            </nav>
+                                                        ) : null}
+                                                        {desktop && access.state.kind !== "ended" ? (
+                                                            <SidebarUserMenu
+                                                                header={
+                                                                    workspace.accessExpiry === null ? undefined : (
+                                                                        <AccessTerm
+                                                                            layout="menu"
+                                                                            store={workspace.accessExpiry}
+                                                                        />
+                                                                    )
+                                                                }
                                                                 disabled={access.state.kind === "loading"}
-                                                                icon={Wifi}
-                                                                label="Network latency"
-                                                                variant="card"
-                                                                onClick={measureNetwork}
-                                                            />
-                                                            <SidebarSessionOption
-                                                                disabled={
+                                                                endAccessDisabled={
                                                                     access.state.kind === "loading" ||
                                                                     access.state.kind === "ending"
                                                                 }
-                                                                icon={LogOut}
-                                                                label="End current access"
-                                                                variant="card"
-                                                                onClick={() => {
+                                                                onOpenDevices={deviceAccess?.getState().open ?? null}
+                                                                onEndAccess={() => {
                                                                     void access.requestEnd(
                                                                         workspace.operationsSignal(),
                                                                     );
                                                                 }}
+                                                                onMeasureNetwork={measureNetwork}
                                                             />
-                                                        </nav>
-                                                    ) : null}
-                                                    {desktop && access.state.kind !== "ended" ? (
-                                                        <SidebarUserMenu
-                                                            header={
-                                                                workspace.accessExpiry === null ? undefined : (
-                                                                    <AccessTerm
-                                                                        layout="menu"
-                                                                        store={workspace.accessExpiry}
-                                                                    />
-                                                                )
-                                                            }
-                                                            disabled={access.state.kind === "loading"}
-                                                            endAccessDisabled={
-                                                                access.state.kind === "loading" ||
-                                                                access.state.kind === "ending"
-                                                            }
-                                                            onOpenDevices={deviceAccess?.getState().open ?? null}
-                                                            onEndAccess={() => {
-                                                                void access.requestEnd(workspace.operationsSignal());
-                                                            }}
-                                                            onMeasureNetwork={measureNetwork}
-                                                        />
-                                                    ) : null}
-                                                    {desktop ? (
-                                                        <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                                                            <SidebarActionTooltip
-                                                                label="Continue on another device"
-                                                                side="top"
-                                                            >
-                                                                <Button
-                                                                    aria-label="Continue on another device"
-                                                                    className="size-8! min-h-8! shrink-0 justify-center rounded-lg px-0"
-                                                                    data-testid={dataTestId.shareIdentity}
-                                                                    onClick={(event) => {
-                                                                        blurAfterPointerClick(event);
-                                                                        dialogs.getState().openSharing();
-                                                                    }}
-                                                                    size="icon"
-                                                                    variant="ghost"
+                                                        ) : null}
+                                                        {desktop ? (
+                                                            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                                                                <SidebarActionTooltip
+                                                                    label="Continue on another device"
+                                                                    side="top"
                                                                 >
-                                                                    <Share2 aria-hidden="true" className="size-4" />
-                                                                </Button>
-                                                            </SidebarActionTooltip>
-                                                            <BugReportButton
-                                                                appearance="icon"
-                                                                daemonSource={sessionDiagnostics}
-                                                                dialog={workspace.bugReportDialog}
-                                                            />
-                                                        </div>
-                                                    ) : null}
-                                                </div>
+                                                                    <Button
+                                                                        aria-label="Continue on another device"
+                                                                        className="size-8! min-h-8! shrink-0 justify-center rounded-lg px-0"
+                                                                        data-testid={dataTestId.shareIdentity}
+                                                                        onClick={(event) => {
+                                                                            blurAfterPointerClick(event);
+                                                                            dialogs.getState().openSharing();
+                                                                        }}
+                                                                        size="icon"
+                                                                        variant="ghost"
+                                                                    >
+                                                                        <Share2 aria-hidden="true" className="size-4" />
+                                                                    </Button>
+                                                                </SidebarActionTooltip>
+                                                                <BugReportButton
+                                                                    appearance="icon"
+                                                                    daemonSource={sessionDiagnostics}
+                                                                    dialog={workspace.bugReportDialog}
+                                                                />
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                </ScrollArea>
                                             </Tooltip.Provider>
                                         </div>
                                         {dialogStore !== null && (
@@ -894,18 +969,6 @@ export function ConversationSidebar({
                                             <Dialog
                                                 variant="networkLatency"
                                                 title="Network latency"
-                                                description={
-                                                    <>
-                                                        <span className="block">
-                                                            Round-trip latency for this browser and its connected
-                                                            Runtime.
-                                                        </span>
-                                                        <span className="mt-1 block">
-                                                            Mobius location:{" "}
-                                                            {projectLocationLabel(workspace.projectId ?? "")}
-                                                        </span>
-                                                    </>
-                                                }
                                                 headerAction={
                                                     <Button
                                                         aria-label="Refresh network latency"
@@ -923,71 +986,89 @@ export function ConversationSidebar({
                                                 }
                                                 onClose={diagnostic.close}
                                             >
-                                                {diagnostic.state.kind === "measuring" ? (
-                                                    <div
-                                                        aria-label="Measuring network latency"
-                                                        className="flex items-center gap-2 text-muted-foreground"
-                                                        role="status"
-                                                    >
-                                                        <LoaderCircle
-                                                            aria-hidden="true"
-                                                            className="size-4 animate-spin"
-                                                        />
-                                                        Measuring network latency…
-                                                    </div>
-                                                ) : diagnostic.state.kind === "failed" ? (
-                                                    <div className="space-y-4">
-                                                        <p className="text-destructive" role="alert">
-                                                            {diagnostic.state.message}
-                                                        </p>
-                                                        <Button onClick={measureNetwork} variant="outline">
-                                                            Try again
-                                                        </Button>
-                                                    </div>
-                                                ) : (
-                                                    <dl className="divide-y divide-border rounded-lg border border-border">
-                                                        <div className="flex items-center justify-between gap-4 px-4 py-3">
-                                                            <dt>Browser ↔ Morty</dt>
-                                                            <dd
-                                                                aria-label="Browser to Morty latency"
-                                                                className="font-mono font-medium"
-                                                                role="status"
-                                                            >
-                                                                {diagnostic.state.browserMortyLatencyMs} ms
-                                                            </dd>
+                                                <div className="flex flex-col gap-0">
+                                                    <NetworkLatencyIntro projectId={workspace.projectId} />
+                                                    {diagnostic.state.kind === "measuring" ? (
+                                                        <NetworkLatencySkeleton />
+                                                    ) : diagnostic.state.kind === "failed" ? (
+                                                        <div className="space-y-4">
+                                                            <p className="text-destructive" role="alert">
+                                                                {diagnostic.state.message}
+                                                            </p>
+                                                            <Button onClick={measureNetwork} variant="outline">
+                                                                Try again
+                                                            </Button>
                                                         </div>
-                                                        <div className="flex items-center justify-between gap-4 px-4 py-3">
-                                                            <dt>Browser ↔ Mobius</dt>
-                                                            <dd
-                                                                aria-label="Browser to Mobius latency"
-                                                                className="font-mono font-medium"
-                                                                role="status"
-                                                            >
-                                                                {diagnostic.state.browserMobiusLatencyMs} ms
-                                                            </dd>
-                                                        </div>
-                                                        <div className="flex items-center justify-between gap-4 px-4 py-3">
-                                                            <dt>Morty ↔ Mobius</dt>
-                                                            <dd
-                                                                aria-label="Morty to Mobius latency"
-                                                                className="font-mono font-medium"
-                                                                role="status"
-                                                            >
-                                                                {diagnostic.state.mortyMobiusLatencyMs} ms
-                                                            </dd>
-                                                        </div>
-                                                        <div className="flex items-center justify-between gap-4 px-4 py-3">
-                                                            <dt>Mobius ↔ Daemon</dt>
-                                                            <dd
-                                                                aria-label="Mobius to daemon latency"
-                                                                className="font-mono font-medium"
-                                                                role="status"
-                                                            >
-                                                                {diagnostic.state.mobiusDaemonLatencyMs} ms
-                                                            </dd>
-                                                        </div>
-                                                    </dl>
-                                                )}
+                                                    ) : (
+                                                        <NetworkLatencyCard>
+                                                            <dl>
+                                                                <div className={networkLatencyRowClassName}>
+                                                                    <dt>
+                                                                        <NetworkHopLabel from="Browser" to="Morty" />
+                                                                    </dt>
+                                                                    <dd
+                                                                        aria-label="Browser to Morty latency"
+                                                                        className="font-mono font-medium"
+                                                                        role="status"
+                                                                    >
+                                                                        {diagnostic.state.browserMortyLatencyMs} ms
+                                                                    </dd>
+                                                                </div>
+                                                                <div
+                                                                    className={cn(
+                                                                        networkLatencyRowClassName,
+                                                                        networkLatencyDividerClassName,
+                                                                    )}
+                                                                >
+                                                                    <dt>
+                                                                        <NetworkHopLabel from="Browser" to="Mobius" />
+                                                                    </dt>
+                                                                    <dd
+                                                                        aria-label="Browser to Mobius latency"
+                                                                        className="font-mono font-medium"
+                                                                        role="status"
+                                                                    >
+                                                                        {diagnostic.state.browserMobiusLatencyMs} ms
+                                                                    </dd>
+                                                                </div>
+                                                                <div
+                                                                    className={cn(
+                                                                        networkLatencyRowClassName,
+                                                                        networkLatencyDividerClassName,
+                                                                    )}
+                                                                >
+                                                                    <dt>
+                                                                        <NetworkHopLabel from="Morty" to="Mobius" />
+                                                                    </dt>
+                                                                    <dd
+                                                                        aria-label="Morty to Mobius latency"
+                                                                        className="font-mono font-medium"
+                                                                        role="status"
+                                                                    >
+                                                                        {diagnostic.state.mortyMobiusLatencyMs} ms
+                                                                    </dd>
+                                                                </div>
+                                                                <div
+                                                                    className={cn(
+                                                                        networkLatencyRowClassName,
+                                                                        networkLatencyDividerClassName,
+                                                                    )}
+                                                                >
+                                                                    <dt>
+                                                                        <NetworkHopLabel from="Mobius" to="Daemon" />
+                                                                    </dt>
+                                                                    <dd
+                                                                        aria-label="Mobius to daemon latency"
+                                                                        className="font-mono font-medium"
+                                                                        role="status"
+                                                                    >
+                                                                        {diagnostic.state.mobiusDaemonLatencyMs} ms
+                                                                    </dd>
+                                                                </div>
+                                                            </dl>
+                                                        </NetworkLatencyCard>
+                                                    )}
+                                                </div>
                                             </Dialog>
                                         )}
                                         {(access.state.kind === "loading" ||
@@ -1136,10 +1217,7 @@ export function ConversationSidebar({
                                                           fadeToClassName="to-card/0"
                                                           topFadeClassName="top-[30px] h-6"
                                                           frameClassName="flex min-h-0 flex-1 flex-col"
-                                                          className={cn(
-                                                              "min-h-0 flex-1 space-y-0 overflow-y-auto overscroll-contain px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]",
-                                                              mortyThinScrollbarClassName,
-                                                          )}
+                                                          className="min-h-0 flex-1 space-y-0 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
                                                       >
                                                           <ManagedSessionDirectoryList
                                                               {...sessionListProps}

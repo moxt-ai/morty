@@ -1,9 +1,17 @@
 import { ScrollArea as Primitive } from "radix-ui";
-import type { ComponentProps } from "react";
+import type { ComponentProps, UIEventHandler } from "react";
 
 import { cn } from "@/lib/utils";
 
+/**
+ * Product scrollports use this instead of a platform scrollbar.
+ * The bar is as tall as the scrollport. `overflow-hidden` on the root clips it
+ * to the container's border radius without shortening the bar.
+ */
 type ScrollAreaProps = ComponentProps<typeof Primitive.Root> & {
+    /** `vertical` unless the region also scrolls sideways. */
+    readonly orientation?: "vertical" | "horizontal" | "both";
+    readonly onViewportScroll?: UIEventHandler<HTMLDivElement>;
     readonly viewportClassName?: string;
     readonly viewportRef?: ComponentProps<typeof Primitive.Viewport>["ref"];
     readonly viewportStyle?: ComponentProps<typeof Primitive.Viewport>["style"];
@@ -12,22 +20,32 @@ type ScrollAreaProps = ComponentProps<typeof Primitive.Root> & {
 export function ScrollArea({
     children,
     className,
+    onViewportScroll,
+    orientation = "vertical",
+    type = "auto",
     viewportClassName,
     viewportRef,
     viewportStyle,
     ...props
 }: ScrollAreaProps) {
     return (
-        <Primitive.Root className={cn("relative overflow-hidden", className)} data-slot="scroll-area" {...props}>
+        <Primitive.Root
+            className={cn("relative rounded-[inherit]", className, "overflow-hidden")}
+            data-slot="scroll-area"
+            type={type}
+            {...props}
+        >
             <Primitive.Viewport
                 className={cn("w-full rounded-[inherit]", viewportClassName)}
                 data-slot="scroll-area-viewport"
+                onScroll={onViewportScroll}
                 ref={viewportRef}
                 style={viewportStyle}
             >
                 {children}
             </Primitive.Viewport>
-            <ScrollBar />
+            {orientation !== "horizontal" ? <ScrollBar /> : null}
+            {orientation !== "vertical" ? <ScrollBar orientation="horizontal" /> : null}
             <Primitive.Corner className="bg-transparent" />
         </Primitive.Root>
     );
@@ -37,7 +55,7 @@ function ScrollBar({ className, orientation = "vertical", ...props }: ComponentP
     return (
         <Primitive.Scrollbar
             className={cn(
-                "flex touch-none select-none p-px transition-colors duration-150 motion-reduce:transition-none",
+                "group/scroll-area-scrollbar flex touch-none select-none p-px transition-colors duration-150 motion-reduce:transition-none",
                 orientation === "vertical" ? "h-full w-2" : "h-2 w-full flex-col",
                 className,
             )}
@@ -46,7 +64,7 @@ function ScrollBar({ className, orientation = "vertical", ...props }: ComponentP
             {...props}
         >
             <Primitive.Thumb
-                className="relative flex-1 rounded-full bg-[#d4d7db] hover:bg-morty-text-4"
+                className="relative flex-1 rounded-full bg-[#d4d7db] opacity-0 transition-opacity duration-150 motion-reduce:transition-none group-hover/scroll-area-scrollbar:opacity-100 group-active/scroll-area-scrollbar:opacity-100 active:opacity-100 hover:bg-morty-text-4"
                 data-slot="scroll-area-thumb"
             />
         </Primitive.Scrollbar>

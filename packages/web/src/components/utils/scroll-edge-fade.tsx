@@ -9,6 +9,7 @@ import {
     useState,
 } from "react";
 import { cn } from "@/lib/utils";
+import { ScrollArea } from "../ui/scroll-area.tsx";
 
 const EDGE_THRESHOLD_PX = 4;
 
@@ -178,29 +179,26 @@ export function ScrollEdgeFade(props: ScrollEdgeFadeProps) {
     };
     const revealSurface = props.revealSurface === true;
     const maskImage = revealSurface ? viewportEdgeMask(edges) : undefined;
-    const surface = {
-        ref: assignScrollElement,
-        id,
-        "aria-label": ariaLabel,
-        className,
-        onKeyDown,
-        onScroll: () => {
-            syncEdges();
-        },
-        role,
-        style: maskImage === undefined ? undefined : surfaceMaskStyle(maskImage),
-        tabIndex,
-    };
+    const list = scrollElement === "ol" ? <ol>{children}</ol> : scrollElement === "ul" ? <ul>{children}</ul> : children;
 
     return (
         <div className={cn("relative min-h-0", frameClassName)}>
-            {scrollElement === "ol" ? (
-                <ol {...surface}>{children}</ol>
-            ) : scrollElement === "ul" ? (
-                <ul {...surface}>{children}</ul>
-            ) : (
-                <div {...surface}>{children}</div>
-            )}
+            <ScrollArea
+                aria-label={ariaLabel}
+                className={cn("min-h-0", className)}
+                id={id}
+                onKeyDown={onKeyDown}
+                onViewportScroll={() => {
+                    syncEdges();
+                }}
+                role={role}
+                tabIndex={tabIndex}
+                viewportClassName="h-full max-h-[inherit]"
+                viewportRef={assignScrollElement}
+                viewportStyle={maskImage === undefined ? undefined : surfaceMaskStyle(maskImage)}
+            >
+                {list}
+            </ScrollArea>
             {props.revealSurface === true ? null : (
                 <>
                     <EdgeFade

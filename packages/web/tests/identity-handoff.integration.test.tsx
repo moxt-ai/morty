@@ -639,7 +639,8 @@ test("Given other browsers joined this computer, When the user disconnects one f
     );
     expect(getByRole(devices, "list", { name: "Devices with access" }).textContent).toContain("This browser");
     await app.user.click(disconnectPhone);
-    await app.user.click(getByRole(devices, "button", { name: "Disconnect" }));
+    const disconnectPhoneConfirm = getByRole(document.body, "dialog", { name: "Disconnect iPhone · Safari?" });
+    await app.user.click(getByRole(disconnectPhoneConfirm, "button", { name: "Disconnect" }));
     await app.waitForView(() =>
         expect(getByRole(devices, "status").textContent).toContain("iPhone · Safari can no longer use your computer."),
     );
@@ -652,8 +653,9 @@ test("Given other browsers joined this computer, When the user disconnects one f
 
     const laptop = await join("macOS · Chrome");
     await app.waitForView(() => getByRole(devices, "button", { name: "Disconnect macOS · Chrome" }));
-    await app.user.click(getByRole(devices, "button", { name: "Disconnect other devices" }));
-    await app.user.click(getByRole(devices, "button", { name: "Disconnect" }));
+    await app.user.click(getByRole(devices, "button", { name: "Disconnect all" }));
+    const disconnectAll = getByRole(document.body, "dialog", { name: "Disconnect every other device?" });
+    await app.user.click(getByRole(disconnectAll, "button", { name: "Disconnect" }));
     await app.waitForView(() =>
         expect(getByRole(devices, "status").textContent).toContain("Other devices can no longer use your computer"),
     );
@@ -748,6 +750,36 @@ test("Given a new device and this browser's access in the sidebar, When the user
         );
         expect(queryByRole(carousel, "status", { name: "This browser's access" })).toBeNull();
     });
+});
+
+test("Given this browser already dismissed its access notice, When a new device joins, Then the sidebar shows that card without a blank carousel page", {
+    timeout: 60_000,
+}, async () => {
+    const joined = await createTestApp({ connectAgent: true, page: { kind: "share" } });
+    await joined.waitForView(() => expect(new URL(window.location.href).searchParams.get("identity")).not.toBeNull());
+    const app = await joined.reload();
+    const access = await app.waitForView(() => getByRole(document.body, "status", { name: "This browser's access" }));
+    await app.user.click(getByRole(access, "button", { name: "Got it" }));
+    expect(queryByRole(document.body, "status", { name: "This browser's access" })).toBeNull();
+
+    centralLocalStorage.write(linkedDevicesSeenEntry(joined.identity.projectId), new Date(0).toISOString());
+    const code = new URL(await app.createTransferUrl()).hash.slice("#code=".length);
+    const redeemed = await app.transport.fetch(
+        new Request(`${app.origin}/morty/api/identity/transfers/redeem`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code, device: "iPhone · Safari" }),
+        }),
+    );
+    expect(redeemed.status).toBe(200);
+    const reloaded = await app.reload();
+    const device = await reloaded.waitForView(() =>
+        getByRole(document.body, "status", { name: "New device connected" }),
+    );
+    expect(device.textContent).toContain("iPhone · Safari");
+    expect(queryByRole(document.body, "region", { name: "Access notices" })).toBeNull();
+    expect(queryByRole(document.body, "button", { name: "Notice 2 of 2" })).toBeNull();
+    expect(queryByRole(document.body, "status", { name: "This browser's access" })).toBeNull();
 });
 
 test("Given a browser whose access ends within the hour, When the page stays open, Then it is reminded once, not told it joined again, and the account menu states the term", {

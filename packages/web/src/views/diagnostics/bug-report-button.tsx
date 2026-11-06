@@ -4,6 +4,7 @@ import { AttachCancelBoundary, HiddenFileInput } from "../../components/diagnost
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { Dialog } from "../../components/ui/dialog.tsx";
 import { ObjectUrlImage } from "../../components/ui/object-url-image.tsx";
+import { ScrollArea } from "../../components/ui/scroll-area.tsx";
 import type { DaemonDiagnosticsSource } from "../../services/diagnostics/browser-diagnostics.ts";
 import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-store.ts";
 import {
@@ -228,9 +229,13 @@ function BugReportDialog({
                                 Captured when this report was opened. Custom model names use anonymous labels within
                                 this report.
                             </p>
-                            <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all">
-                                {technicalDetails}
-                            </pre>
+                            <ScrollArea
+                                className="mt-2 max-h-48"
+                                orientation="both"
+                                viewportClassName="max-h-[inherit]"
+                            >
+                                <pre className="whitespace-pre-wrap break-all">{technicalDetails}</pre>
+                            </ScrollArea>
                         </details>
                         <p className="text-xs text-muted-foreground">
                             Network and daemon diagnostics are collected automatically and may take up to 10 seconds.
