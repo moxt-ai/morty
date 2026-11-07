@@ -1,15 +1,15 @@
 {
-    "name": "@moxt-ai/morty-worker",
+    "name": "@morty-build/worker",
     "version": "0.0.1",
     "license": "Apache-2.0",
     "private": true,
     "type": "module",
     "scripts": {
         "db:generate:project-do": "drizzle-kit generate --config ../../drizzle/drizzle.project-do.config.ts",
-        "mobius:codegen": "node ../../third-party/mobius/scripts/generate-sql-modules.ts",
-        "pretest": "pnpm mobius:codegen",
-        "pretypecheck": "pnpm mobius:codegen",
-        "pretypecheck:tests": "pnpm mobius:codegen",
+        "db:codegen": "node ../../scripts/generate-sql-modules.ts",
+        "pretest": "pnpm db:codegen",
+        "pretypecheck": "pnpm db:codegen",
+        "pretypecheck:tests": "pnpm db:codegen",
         "typecheck": "tsc --project tsconfig.json",
         "typecheck:tests": "tsc --project tests/tsconfig.json",
         "test": "vitest run --config vitest.config.ts --passWithNoTests",
@@ -18,13 +18,13 @@
         "test:watch": "vitest --config vitest.config.ts"
     },
     "devDependencies": {
-        "@moxt-ai/mobius-test": "link:../../third-party/mobius/packages/test-support",
+        "@morty-build/platform-test-support": "workspace:*",
         "drizzle-kit": "catalog:",
         "esbuild": "catalog:",
         "miniflare": "catalog:"
     },
     "dependencies": {
-        "@moxt-ai/mobius-sdk": "workspace:*",
+        "@morty-build/client": "workspace:*",
         "drizzle-orm": "catalog:",
         "hono": "catalog:",
         "pino": "catalog:",

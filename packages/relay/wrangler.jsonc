@@ -1,0 +1,99 @@
+{
+    "$schema": "../../node_modules/wrangler/config-schema.json",
+    "name": "morty-relay-local",
+    "main": "src/worker.ts",
+    "compatibility_date": "2026-09-03",
+    "compatibility_flags": ["enable_request_signal"],
+    "durable_objects": {
+        "bindings": [
+            {
+                "name": "RUNTIME_RELAY",
+                "class_name": "RuntimeRelay"
+            },
+            {
+                "name": "PROJECT_RELAY",
+                "class_name": "ProjectDO"
+            }
+        ]
+    },
+    "migrations": [
+        {
+            "tag": "platform-initial",
+            "new_sqlite_classes": ["RuntimeRelay", "PlatformSessionRelay", "BotConnectionActor"]
+        },
+        {
+            "tag": "platform-project-relay",
+            "new_sqlite_classes": ["ProjectRelay"]
+        },
+        {
+            "tag": "platform-remove-bot-connections",
+            "deleted_classes": ["BotConnectionActor"]
+        },
+        {
+            "tag": "platform-non-cloud-retention-session-relay",
+            "new_sqlite_classes": ["NonCloudRetentionSessionRelayDO"]
+        },
+        {
+            "tag": "platform-remove-non-cloud-retention-session-relay",
+            "deleted_classes": ["NonCloudRetentionSessionRelayDO"]
+        },
+        {
+            "tag": "platform-recreate-non-cloud-retention-session-relay",
+            "new_sqlite_classes": ["NonCloudRetentionSessionRelayDO"]
+        },
+        {
+            "tag": "platform-remove-legacy-session-relays",
+            "deleted_classes": ["PlatformSessionRelay", "NonCloudRetentionSessionRelayDO"]
+        },
+        {
+            "tag": "platform-rename-project-do",
+            "renamed_classes": [
+                {
+                    "from": "ProjectRelay",
+                    "to": "ProjectDO"
+                }
+            ]
+        },
+        {
+            "tag": "platform-websocket-transport",
+            "new_sqlite_classes": ["WebSocketTransport"]
+        },
+        {
+            "tag": "platform-runtime-browser-transport",
+            "deleted_classes": ["WebSocketTransport"]
+        }
+    ],
+    "d1_databases": [
+        {
+            "binding": "PLATFORM_DIRECTORY_DATABASE",
+            "migrations_dir": "migrations/d1"
+        }
+    ],
+    "r2_buckets": [
+        {
+            "binding": "R2_BUCKET_APAC",
+            "bucket_name": "morty-relay-local-apac-objects"
+        },
+        {
+            "binding": "R2_BUCKET_WNAM",
+            "bucket_name": "morty-relay-local-wnam-objects"
+        }
+    ],
+    "services": [
+        {
+            "binding": "RECORDING",
+            "service": "morty-recording-local"
+        }
+    ],
+    "vars": {
+        "RECORDING_PROVIDER_ID": "recording-local",
+        "MOBIUS_PLATFORM_ALLOWED_ORIGINS": "[\"*\"]"
+    },
+    "observability": {
+        "enabled": true,
+        "logs": {
+            "invocation_logs": false
+        }
+    },
+    "account_id": "b903018a1c3d9d9a4bd68a11eb03e764"
+}

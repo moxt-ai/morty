@@ -14,6 +14,7 @@ type ScrollAreaProps = ComponentProps<typeof Primitive.Root> & {
     readonly onViewportScroll?: UIEventHandler<HTMLDivElement>;
     readonly viewportClassName?: string;
     readonly viewportRef?: ComponentProps<typeof Primitive.Viewport>["ref"];
+    readonly viewportLabel?: string | undefined;
     readonly viewportStyle?: ComponentProps<typeof Primitive.Viewport>["style"];
 };
 
@@ -26,6 +27,7 @@ export function ScrollArea({
     viewportClassName,
     viewportRef,
     viewportStyle,
+    viewportLabel,
     ...props
 }: ScrollAreaProps) {
     return (
@@ -38,6 +40,8 @@ export function ScrollArea({
             <Primitive.Viewport
                 className={cn("w-full rounded-[inherit]", viewportClassName)}
                 data-slot="scroll-area-viewport"
+                role={viewportLabel === undefined ? undefined : "region"}
+                aria-label={viewportLabel}
                 onScroll={onViewportScroll}
                 ref={viewportRef}
                 style={viewportStyle}

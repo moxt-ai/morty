@@ -25,7 +25,7 @@ test("Given a new visitor, When the setup page opens, Then it explains what Mort
     expect(document.body.textContent).toContain(
         "Check in and reply from any browser. Your agent keeps running on your computer.",
     );
-    const repository = "https://github.com/moxt-ai/morty";
+    const repository = "https://github.com/moxt-ai/mobius-morty";
     expect(getByRole(document.body, "button", { name: /^GitHub/ }).tagName).toBe("BUTTON");
     for (const [name, href] of [
         ["How Morty handles data", `${repository}#what-morty-does-with-your-data`],
@@ -52,7 +52,7 @@ test("Given a new visitor reviewing setup, When they expand its details, Then th
 
     const steps = getAllByRole(getByRole(document.body, "list", { name: "What setup does" }), "listitem");
     expect(steps.map((step) => step.textContent)).toEqual([
-        "Installs the Mobius CLI (@moxt-ai/mobius) from npm. It updates itself after 30 idle minutes.",
+        "Installs the Mobius CLI (@morty-build/cli) from npm. It updates itself after 30 idle minutes.",
         "Runs a background connection until restart or mobius quit.",
         "Keeps this computer's Morty identity in your user data folder.",
         "Asks before replacing a missing connection, which ends earlier shared access.",

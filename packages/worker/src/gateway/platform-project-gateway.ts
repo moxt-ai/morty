@@ -5,14 +5,14 @@ import {
     MobiusError,
     MobiusPlatformAppClient,
     MobiusTimeoutError,
-} from "@moxt-ai/mobius-sdk/platform";
+} from "@morty-build/client/platform";
 import {
     decodeRuntimeDiagnosticsResult,
     type SessionConfigOption,
     type SessionConfigurationSelection,
     type SessionReadyEvent,
-} from "@moxt-ai/mobius-sdk/protocol";
-import { MobiusClient, MobiusRuntimePairingRequest } from "@moxt-ai/mobius-sdk/server";
+} from "@morty-build/client/protocol";
+import { MobiusClient, MobiusRuntimePairingRequest } from "@morty-build/client/server";
 import * as v from "valibot";
 import {
     PlatformProjectError,

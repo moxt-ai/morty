@@ -1,4 +1,4 @@
-import type { SessionElicitationField } from "@moxt-ai/mobius-sdk";
+import type { SessionElicitationField } from "@morty-build/client";
 import {
     ChevronRight,
     CircleAlert,
@@ -1735,7 +1735,7 @@ const pendingPermission: PermissionInteraction = {
             { path: "packages/web/src/styles.css" },
         ],
         rawInput: {
-            command: "pnpm --filter @moxt-ai/morty-web test -- --run tests/session-interactions.integration.test.tsx",
+            command: "pnpm --filter @morty-build/web test -- --run tests/session-interactions.integration.test.tsx",
             description: "Run the session interaction integration tests",
         },
     },

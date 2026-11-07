@@ -1,4 +1,4 @@
-import { isDirectoryIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@moxt-ai/mobius-sdk/protocol";
+import { isDirectoryIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@morty-build/client/protocol";
 import {
     centralLocalStorage,
     lastCwdEntry,

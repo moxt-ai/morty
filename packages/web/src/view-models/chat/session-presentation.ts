@@ -1,4 +1,4 @@
-import { externalContentPath } from "@moxt-ai/mobius-sdk";
+import { externalContentPath } from "@morty-build/client";
 import {
     type AcpSessionUpdate,
     type AgentQuestion,
@@ -8,7 +8,7 @@ import {
     promptCompletion,
     type SessionEvent,
     type SessionLiveEvent,
-} from "@moxt-ai/mobius-sdk/protocol";
+} from "@morty-build/client/protocol";
 import type { AgentDisplayContent } from "../../components/agents/display-content.ts";
 import {
     REASONING_CHARACTER_LIMIT,

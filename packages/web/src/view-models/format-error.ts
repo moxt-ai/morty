@@ -1,4 +1,4 @@
-import { MobiusError, SESSION_CLOSED_ERROR_CODE } from "@moxt-ai/mobius-sdk";
+import { MobiusError, SESSION_CLOSED_ERROR_CODE } from "@morty-build/client";
 import { isChatBridgeError } from "../services/api/websocket-api-transport.ts";
 import { isRuntimeConnectionFailure } from "../services/management/management-api.ts";
 

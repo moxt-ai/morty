@@ -1,4 +1,4 @@
-import { CONTENT_CHUNK_MAX_BYTES, encodeContentChunkFrame } from "@moxt-ai/mobius-sdk/protocol";
+import { CONTENT_CHUNK_MAX_BYTES, encodeContentChunkFrame } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
 import { type Clock, systemClock } from "../time/clock.ts";
@@ -29,7 +29,7 @@ const watchReadyFrame = v.strictObject({
 const notificationFrame = v.strictObject({ kind: v.literal("notification"), subscriptionId: v.string() });
 const eventFrame = v.strictObject({ kind: v.literal("event"), subscriptionId: v.string(), data: v.string() });
 const subscriptionEndFrame = v.strictObject({ kind: v.literal("subscription.end"), subscriptionId: v.string() });
-const mobiusHealthSchema = v.strictObject({ service: v.literal("mobius-relay-platform"), status: v.literal("ok") });
+const mobiusHealthSchema = v.strictObject({ service: v.literal("morty-relay"), status: v.literal("ok") });
 const serverFrame = v.variant("kind", [
     responseFrame,
     errorFrame,
@@ -441,7 +441,7 @@ export class WebSocketApiTransport {
             endpoint.search !== "" ||
             endpoint.hash !== ""
         ) {
-            throw new Error("The Mobius diagnostic endpoint is invalid.");
+            throw new Error("The Morty relay diagnostic endpoint is invalid.");
         }
         endpoint.pathname = "/mobius/api/dashboard/health";
         endpoint.searchParams.set("diagnostic", crypto.randomUUID());
@@ -451,7 +451,7 @@ export class WebSocketApiTransport {
         signal.throwIfAborted();
         if (!response.ok) {
             await response.body?.cancel();
-            throw new Error("Mobius did not respond to the network diagnostic.");
+            throw new Error("The Morty relay did not respond to the network diagnostic.");
         }
         v.parse(mobiusHealthSchema, await response.json());
         return Math.max(0, Math.round(performance.now() - startedAt));

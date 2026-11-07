@@ -6,21 +6,23 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
-import { decodeIdentifier } from "@moxt-ai/mobius-sdk/protocol";
+import { decodeIdentifier } from "@morty-build/client/protocol";
+import { claimMortyState } from "@morty-build/local-state";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
 import QRCode from "qrcode";
-import { validateLocalPath } from "../../../third-party/mobius/packages/cli/src/engine/util/filesystem/private-path.ts";
+import { validateLocalPath } from "../../../packages/cli/src/engine/util/filesystem/private-path.ts";
 import {
     executableLaunch,
     findExecutableOnPath,
     runBoundedProcess,
     stopProcessTree,
-} from "../../../third-party/mobius/packages/cli/src/engine/util/process/executable.ts";
+} from "../../../packages/cli/src/engine/util/process/executable.ts";
+import runtimeRelease from "../../cli/package.json" with { type: "json" };
 import { resolveStateDirectory } from "./platform/index.ts";
 
 export interface SetupRuntime {
-    /** Runs a Mobius command; `input`, when given, is written to its standard input, which is then closed. */
+    /** Runs a Morty command; `input`, when given, is written to its standard input, which is then closed. */
     readonly run: (
         directory: string,
         args: readonly string[],
@@ -191,7 +193,7 @@ class RuntimeStartError extends Error {
     readonly termination: RuntimeTermination;
     readonly logPath: string;
     readonly nextStep =
-        "Inspect the Runtime log, then run mobius start --connection <connectionId> for the managed connection and rerun setup. Check mobius --version when diagnosing compatibility; setup does not stop an existing daemon.";
+        "Inspect the Runtime log, then run morty start --connection <connectionId> for the managed connection and rerun setup. Check morty --version when diagnosing compatibility; setup does not stop an existing daemon.";
 
     constructor(termination: RuntimeTermination, logPath: string, cause?: unknown) {
         let reason: string;
@@ -222,7 +224,7 @@ class RuntimeStartError extends Error {
 class RuntimePreflightError extends Error {
     readonly code = "RUNTIME_PREFLIGHT_FAILED";
     readonly nextStep =
-        "Install Node.js 22.19.0 or newer and npm, reinstall the latest @moxt-ai/mobius using that Node.js, then verify mobius --version in the same terminal and rerun setup.";
+        "Install Node.js 22.19+ or 24.20+ and npm, reinstall the latest @morty-build/cli using that Node.js, then verify morty --version in the same terminal and rerun setup.";
 
     constructor(message: string, cause?: unknown) {
         super(message, { cause });
@@ -239,19 +241,19 @@ class RuntimePreflightError extends Error {
     });
 }
 
-/** `mobius` exits with EX_CONFIG (78) when MOBIUS_STATE_DIRECTORY names another root's installation data. */
-const MOBIUS_EXIT_STATE_ROOT_INVALID = 78;
+/** `morty` exits with EX_CONFIG (78) when MORTY_STATE_DIRECTORY names another root's installation data. */
+const MORTY_EXIT_STATE_ROOT_INVALID = 78;
 
-/** Mobius refused this shell's state root; setup must not continue against a state it cannot see. */
-class MobiusStateRootError extends Error {
-    readonly code = "MOBIUS_STATE_ROOT_INVALID";
+/** Morty refused this shell's state root; setup must not continue against a state it cannot see. */
+class MortyStateRootError extends Error {
+    readonly code = "MORTY_STATE_ROOT_INVALID";
     readonly logPath: string;
     readonly nextStep =
-        "This shell's MOBIUS_STATE_DIRECTORY names Mobius installation data that an earlier Mobius Runtime passed to this agent, not a state root. Rerun setup with MOBIUS_STATE_DIRECTORY set to the state root that the Runtime log names.";
+        "This shell's MORTY_STATE_DIRECTORY names Morty installation data that an earlier Morty Runtime passed to this agent, not a state root. Rerun setup with MORTY_STATE_DIRECTORY set to the state root that the Runtime log names.";
 
     constructor(logPath: string) {
-        super(`Mobius refused this shell's state root. See ${logPath}.`);
-        this.name = "MobiusStateRootError";
+        super(`Morty refused this shell's state root. See ${logPath}.`);
+        this.name = "MortyStateRootError";
         this.logPath = logPath;
     }
 
@@ -304,7 +306,7 @@ class AgentBindingError extends Error {
     readonly diagnostic = () => ({ harness: this.harness, nextStep: this.nextStep });
 }
 
-/** Why the local Agent inventory says the chosen harness cannot run, as `mobius agents` reports it. */
+/** Why the local Agent inventory says the chosen harness cannot run, as `morty agents` reports it. */
 interface HarnessDiagnosis {
     readonly status: string;
     readonly label: string;
@@ -319,7 +321,7 @@ function harnessNextStep(harness: string, diagnosis: HarnessDiagnosis | null): s
         case "authentication_required":
             return `Ask the user to sign in to ${diagnosis.label} on this computer by running \`${diagnosis.recoveryCommand || harness}\` in a terminal; you cannot sign in for them. When they confirm, ${rerun}`;
         case "missing_agent":
-            return `Mobius cannot find ${diagnosis.label} on this computer. Make sure \`${harness}\` runs in a new terminal, then ${rerun} Do not switch to another harness.`;
+            return `Morty cannot find ${diagnosis.label} on this computer. Make sure \`${harness}\` runs in a new terminal, then ${rerun} Do not switch to another harness.`;
         case "missing_adapter":
             return diagnosis.recoveryCommand.length > 0
                 ? `Install the ${diagnosis.label} adapter by running \`${diagnosis.recoveryCommand}\`, then ${rerun}`
@@ -327,8 +329,8 @@ function harnessNextStep(harness: string, diagnosis: HarnessDiagnosis | null): s
         case "unsupported_version":
             return `Update ${diagnosis.label} to ${diagnosis.minimumSupportedVersion || "its latest release"} or newer, then ${rerun}`;
         case "ready":
-            // Mobius refreshes a running Runtime's Agents when setup starts it.
-            return `${diagnosis.label} is ready, but this computer's running Morty Runtime has not picked it up yet. Rerun setup once. If it fails the same way again, ask the user before running \`mobius quit\`, because it stops every Morty session on this computer; when they agree, run it and ${rerun}`;
+            // Morty refreshes a running Runtime's Agents when setup starts it.
+            return `${diagnosis.label} is ready, but this computer's running Morty Runtime has not picked it up yet. Rerun setup once. If it fails the same way again, ask the user before running \`morty stop\`, because it stops every Morty session on this computer; when they agree, run it and ${rerun}`;
         default:
             return `Confirm \`${harness}\` starts and answers a prompt in a new terminal and fix what stops it, then ${rerun} If it answers and setup fails the same way again, report error.code to the user.`;
     }
@@ -477,9 +479,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     /** Creates the state directory with private permissions, refusing one that is a link to somewhere else. */
     async function prepareStateDirectory(requested: string) {
         const directory = resolve(requested);
-        await mkdir(directory, { mode: 0o700, recursive: true });
-        signal.throwIfAborted();
+        await mkdir(directory, { recursive: true, mode: 0o700 });
+        await safeLocalPath(directory, true, false);
+        await claimMortyState(directory, signal);
         await safeLocalPath(directory, true, true);
+        signal.throwIfAborted();
         return directory;
     }
 
@@ -866,7 +870,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         };
     }
 
-    async function runMobius(
+    async function runMorty(
         context: Context,
         args: readonly string[],
         cwd: string,
@@ -886,7 +890,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         let child: ChildProcess | undefined;
         try {
             await safeLocalPath(logPath, false, true);
-            const localCli = process.env["MORTY_LOCAL_MOBIUS_CLI"];
+            const localCli = process.env["MORTY_LOCAL_CLI"];
             let launch: ReturnType<typeof executableLaunch>;
             if (localCli !== undefined) {
                 if (!isAbsolute(localCli)) {
@@ -901,7 +905,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 launch = executableLaunch(executable.path, [
                     "--yes",
                     "--prefer-online",
-                    "@moxt-ai/mobius@latest",
+                    `@morty-build/cli@${runtimeRelease.version}`,
                     ...args,
                 ]);
             }
@@ -909,9 +913,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 cwd,
                 stdio: [input === undefined ? "ignore" : "pipe", log.fd, log.fd],
                 windowsHide: true,
+                env: { ...process.env, MORTY_STATE_DIRECTORY: context.directory },
             });
             if (input !== undefined) {
-                // A Mobius that exits before reading reports its own failure; the closed pipe adds nothing.
+                // A Morty that exits before reading reports its own failure; the closed pipe adds nothing.
                 child.stdin?.on("error", () => {});
                 child.stdin?.end(input);
             }
@@ -926,8 +931,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             if (typeof code !== "number") {
                 fail("INVALID_RUNTIME_EXIT");
             }
-            if (code === MOBIUS_EXIT_STATE_ROOT_INVALID) {
-                throw new MobiusStateRootError(logPath);
+            if (code === MORTY_EXIT_STATE_ROOT_INVALID) {
+                throw new MortyStateRootError(logPath);
             }
             if (code !== 0) {
                 throw new RuntimeStartError({ kind: "exit", exitCode: code }, logPath);
@@ -944,7 +949,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 }
             }
             operation.throwIfAborted();
-            if (errorCode(cause) === "RUNTIME_NOT_INSTALLED" || cause instanceof MobiusStateRootError) {
+            if (errorCode(cause) === "RUNTIME_NOT_INSTALLED" || cause instanceof MortyStateRootError) {
                 throw cause;
             }
             const code = errorCode(cause);
@@ -965,10 +970,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function listManagedConnections(context: Context, cwd: string): Promise<readonly ManagedConnection[]> {
-        const outputPath = join(tmpdir(), `mobius-pair-list-${crypto.randomUUID()}.json`);
+        const outputPath = join(tmpdir(), `morty-pair-list-${crypto.randomUUID()}.json`);
         await writePrivateFile(outputPath, "");
         try {
-            await runMobius(context, ["pair", "list", `--output-json=${outputPath}`], cwd);
+            await runMorty(context, ["pair", "list", `--output-json=${outputPath}`], cwd);
             const value: unknown = JSON.parse(await readFile(outputPath, "utf8"));
             if (!Array.isArray(value)) {
                 fail("INVALID_PAIR_LIST");
@@ -1070,7 +1075,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 approved: confirmedProjectId === projectId,
                 platform: process.platform,
                 nodeVersion: process.versions.node,
-                runtimeStateSource: process.env["MOBIUS_STATE_DIRECTORY"]?.trim() ? "environment" : "default",
+                runtimeStateSource: process.env["MORTY_STATE_DIRECTORY"]?.trim() ? "environment" : "default",
             });
             if (confirmedProjectId !== projectId) {
                 throw new ProjectReplacementRequiredError(projectId, reason);
@@ -1175,7 +1180,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             }
             try {
                 const command = runtimeCommand(runtime, cwd);
-                const started = await runMobius(context, command.args, cwd, signal, command.input);
+                const started = await runMorty(context, command.args, cwd, signal, command.input);
                 emit({ status: "runtime_started", ...started });
                 return await saveConfiguration(context, { workspace: cwd });
             } catch (cause) {
@@ -1254,14 +1259,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     /**
-     * Asks this computer's Mobius why it does not offer the harness. The published catalog omits unusable Agents, but
+     * Asks this computer's Morty why it does not offer the harness. The published catalog omits unusable Agents, but
      * the local inventory keeps their status and recovery command. Without an answer, setup still fails as unavailable.
      */
     async function diagnoseHarness(context: Context, harness: string, cwd: string): Promise<HarnessDiagnosis | null> {
-        const outputPath = join(tmpdir(), `mobius-agents-${crypto.randomUUID()}.json`);
+        const outputPath = join(tmpdir(), `morty-agents-${crypto.randomUUID()}.json`);
         try {
             await writePrivateFile(outputPath, "");
-            await runMobius(
+            await runMorty(
                 context,
                 ["agents", `--output-json=${outputPath}`],
                 cwd,
@@ -1555,17 +1560,25 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function preflightRuntime(context: Context, cwd: string) {
-        progress("preflight", "Checking Node.js, npx and the latest Runtime before creating an identity.");
+        progress("preflight", "Installing and verifying the selected Morty release before creating an identity.");
         const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
-        if (major < 22 || (major === 22 && minor < 19)) {
+        if (!((major === 22 && minor >= 19) || (major === 24 && minor >= 20))) {
             throw new RuntimePreflightError(
-                `Node.js 22.19.0 or newer is required; found ${process.versions.node} at ${process.execPath}.`,
+                `Node.js 22.19+ or 24.20+ is required; found ${process.versions.node} at ${process.execPath}.`,
             );
         }
         try {
             // This uses the same executable resolution as start/pair, including the Node
             // selected by its launcher. A package's engines field is not proof it starts.
-            await runMobius(context, ["--version"], cwd, AbortSignal.any([signal, deadline(120_000)]));
+            if (host.runtime === undefined && process.env["MORTY_LOCAL_CLI"] === undefined) {
+                await runMorty(
+                    context,
+                    ["install", "--version", runtimeRelease.version],
+                    cwd,
+                    AbortSignal.any([signal, deadline(180_000)]),
+                );
+            }
+            await runMorty(context, ["--version"], cwd, AbortSignal.any([signal, deadline(120_000)]));
             if (host.runtime === undefined) {
                 const npm = await findExecutableOnPath("npm", process.env);
                 if (npm === null) {
@@ -1584,7 +1597,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         } catch (cause) {
             signal.throwIfAborted();
             // The installation is fine; the shell names the wrong state root.
-            if (cause instanceof MobiusStateRootError) {
+            if (cause instanceof MortyStateRootError) {
                 throw cause;
             }
             throw new RuntimePreflightError(
@@ -1643,7 +1656,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                           ? "TIMEOUT"
                           : "SETUP_FAILED",
                 cause: serializeErrorCause(cause),
-                ...(cause instanceof MobiusStateRootError
+                ...(cause instanceof MortyStateRootError
                     ? { runtime: cause.diagnostic(replacementAccess) }
                     : cause instanceof RuntimeStartError || cause instanceof RuntimePreflightError
                       ? { runtime: cause.diagnostic() }

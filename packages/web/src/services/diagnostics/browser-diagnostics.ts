@@ -1,4 +1,4 @@
-import type { RuntimeDiagnosticsResult } from "@moxt-ai/mobius-sdk/protocol";
+import type { RuntimeDiagnosticsResult } from "@morty-build/client/protocol";
 import type { ChatDiagnostics } from "./model-catalog.ts";
 import type { ServerNetworkOperations } from "./network-diagnostics.ts";
 

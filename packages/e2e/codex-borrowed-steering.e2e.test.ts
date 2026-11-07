@@ -1,10 +1,10 @@
 import { join } from "node:path";
-import { MobiusRuntimeEngine } from "@moxt-ai/mobius/engine";
+import { MobiusRuntimeEngine } from "@morty-build/cli/engine";
 import { expect, test } from "@playwright/test";
-import { CodexAppServerClient } from "../../third-party/mobius/packages/cli/src/engine/acp/harness/codex/app-server-client.ts";
-import { stopProcessTree } from "../../third-party/mobius/packages/cli/src/engine/util/process/executable.ts";
-import { CodexFixture } from "../../third-party/mobius/packages/cli/tests/support/agents/codex.ts";
-import { FakeOpenAiProvider } from "../../third-party/mobius/packages/cli/tests/support/llm/openai.ts";
+import { CodexAppServerClient } from "../../packages/cli/src/engine/acp/harness/codex/app-server-client.ts";
+import { stopProcessTree } from "../../packages/cli/src/engine/util/process/executable.ts";
+import { CodexFixture } from "../../packages/cli/tests/support/agents/codex.ts";
+import { FakeOpenAiProvider } from "../../packages/cli/tests/support/llm/openai.ts";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../web/src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../web/src/services/identity/identity-scope-url.ts";

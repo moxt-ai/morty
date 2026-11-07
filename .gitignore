@@ -20,3 +20,10 @@ __screenshots__/
 .vitest-attachments/
 
 .deployment-output/
+
+.release/
+
+__pycache__/
+
+# Generated verbatim from immutable SQL migrations.
+packages/**/generated/*-migrations.ts

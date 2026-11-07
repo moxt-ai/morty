@@ -1,5 +1,5 @@
 {
-    "name": "@moxt-ai/morty-web",
+    "name": "@morty-build/web",
     "version": "0.0.1",
     "license": "Apache-2.0",
     "private": true,
@@ -12,7 +12,7 @@
         "test:watch": "vitest --config vitest.config.ts"
     },
     "dependencies": {
-        "@moxt-ai/mobius-sdk": "workspace:*",
+        "@morty-build/client": "workspace:*",
         "@radix-ui/react-select": "catalog:",
         "@sentry/react": "catalog:",
         "@streamdown/math": "catalog:",

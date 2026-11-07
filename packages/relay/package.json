@@ -1,0 +1,33 @@
+{
+    "name": "@morty-build/relay",
+    "version": "0.0.1",
+    "license": "Apache-2.0",
+    "type": "module",
+    "exports": {
+        ".": "./src/platform-worker.ts"
+    },
+    "scripts": {
+        "prebuild": "pnpm --dir ../.. db:codegen",
+        "build": "wrangler deploy --dry-run --config wrangler.jsonc --outdir dist",
+        "dev": "wrangler dev --config wrangler.jsonc",
+        "pretest:integration": "pnpm --dir ../.. db:codegen",
+        "pretypecheck": "pnpm --dir ../.. db:codegen",
+        "test:integration": "vitest run --config vitest.config.ts --max-workers=1 --no-isolate",
+        "typecheck": "tsc --project tsconfig.json && tsc --project tsconfig.vitest.json && tsc --project test/tsconfig.json"
+    },
+    "dependencies": {
+        "@morty-build/relay-core": "workspace:*",
+        "drizzle-orm": "^0.45.2",
+        "hono": "^4.13.14",
+        "valibot": "1.5.0"
+    },
+    "devDependencies": {
+        "@cloudflare/vitest-plugin": "^1.4.9",
+        "@cloudflare/workers-types": "^5.20261028.1",
+        "@morty-build/client": "workspace:*",
+        "esbuild": "0.28.2",
+        "vitest": "^4.1.12",
+        "wrangler": "^4.154.0"
+    },
+    "private": true
+}

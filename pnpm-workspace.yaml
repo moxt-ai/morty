@@ -1,42 +1,34 @@
 engineStrict: true
 minimumReleaseAge: 1440
-
 overrides:
-  'source-map-js@>=1.0.0 <1.2.2': 1.2.2
-  'zod@>=4.0.0 <4.6.6': 4.6.7
-  # The current Vite plugin pins an older Miniflare; retain its API and apply
-  # patched leaf releases while its next version is inside the release-age gate.
-  'undici@>=7.0.0 <7.30.1': 7.30.1
-  'sharp@>=0.35.0 <0.35.5': 0.35.5
-  'brace-expansion@>=5.0.0 <5.0.12': 5.0.12
-  'seroval@>=1.0.0 <1.6.11': 1.6.11
-  # Enforce security floors for Claude SDK/MCP transitive dependencies.
-  'body-parser@>=2.0.0 <2.4.0': 2.4.0
-  'fast-uri@>=3.0.0 <3.1.9': 3.1.9
-  'qs@>=6.7.0 <=6.16.0': 6.16.2
-  '@agentclientprotocol/sdk': 1.4.0
-  # Drizzle's archived loader only uses the transformer (GHSA-67mh-4wv8-2f99).
-  '@esbuild-kit/core-utils@3.3.2>esbuild': 0.25.12
-  # Math/Markdown plugins still request 0.16; keep their renderer and CSS on the
-  # official security release until upstream ranges advance (GHSA-238p-pmpm-9mq7).
-  'katex@<0.18.2': 0.18.2
-
+  source-map-js@>=1.0.0 <1.2.2: 1.2.2
+  zod@>=4.0.0 <4.6.6: 4.6.7
+  undici@>=7.0.0 <7.30.1: 7.30.1
+  sharp@>=0.35.0 <0.35.5: 0.35.5
+  brace-expansion@>=5.0.0 <5.0.12: 5.0.12
+  seroval@>=1.0.0 <1.6.11: 1.6.11
+  body-parser@>=2.0.0 <2.4.0: 2.4.0
+  fast-uri@>=3.0.0 <3.1.9: 3.1.9
+  qs@>=6.7.0 <=6.16.0: 6.16.2
+  "@agentclientprotocol/sdk": 1.4.0
+  "@esbuild-kit/core-utils@3.3.2>esbuild": 0.25.12
+  katex@<0.18.2: 0.18.2
 catalog:
-  '@biomejs/biome': 2.5.12
-  '@cloudflare/vite-plugin': 1.65.0
-  '@playwright/test': 1.64.1
-  '@radix-ui/react-select': 2.3.7
-  '@sentry/react': ^10.73.0
-  '@sentry/vite-plugin': ^5.4.0
-  '@tailwindcss/vite': ^4.3.3
-  '@tanstack/react-router': 1.170.46
-  '@types/node': ^24.13.3
-  '@types/pngjs': ^6.0.5
-  '@types/qrcode': ^1.5.6
-  '@types/react': 19.2.18
-  '@types/react-dom': 19.2.7
-  '@vitejs/plugin-react': ^6.1.1
-  '@vitest/coverage-istanbul': 4.1.12
+  "@biomejs/biome": 2.5.12
+  "@cloudflare/vite-plugin": 1.65.0
+  "@playwright/test": 1.64.1
+  "@radix-ui/react-select": 2.3.7
+  "@sentry/react": ^10.73.0
+  "@sentry/vite-plugin": ^5.4.0
+  "@tailwindcss/vite": ^4.3.3
+  "@tanstack/react-router": 1.170.46
+  "@types/node": ^24.13.3
+  "@types/pngjs": ^6.0.5
+  "@types/qrcode": ^1.5.6
+  "@types/react": 19.2.18
+  "@types/react-dom": 19.2.7
+  "@vitejs/plugin-react": ^6.1.1
+  "@vitest/coverage-istanbul": 4.1.12
   clsx: ^2.1.1
   dependency-cruiser: 18.2.0
   drizzle-kit: 0.31.8
@@ -71,31 +63,20 @@ catalog:
   vitest: ^4.1.12
   wrangler: 4.154.0
   zustand: 5.0.15
-  '@streamdown/mermaid': 1.0.3
-  '@streamdown/math': 1.0.2
+  "@streamdown/mermaid": 1.0.3
+  "@streamdown/math": 1.0.2
   dompurify: 3.4.17
-
-# dependency-cruiser's parser uses the TypeScript 6 JavaScript compiler API.
-# Application compilation continues to use TypeScript 7.
 packageExtensions:
   dependency-cruiser@18.2.0:
     dependencies:
       typescript: 6.0.3
-
+  drizzle-kit@0.31:
+    dependencies:
+      drizzle-orm: 0.45.2
 packages:
-  - packages/e2e
-  - packages/setup
-  - packages/web
-  - packages/worker
-  - third-party/mobius/packages/mobius-sdk
-  - third-party/mobius/packages/cli
-  - third-party/mobius/packages/mobius-test-support
-  - third-party/mobius/packages/test-support
-  - third-party/mobius/packages/relay-core
-  - third-party/mobius/packages/relay-cloudflare-platform
-
+  - packages/*
 allowBuilds:
-  '@sentry/cli': true
+  "@sentry/cli": true
   bufferutil: false
   better-sqlite3: true
   esbuild: true

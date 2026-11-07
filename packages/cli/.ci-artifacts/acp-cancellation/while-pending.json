@@ -1,0 +1,9 @@
+{
+    "cancellation": "while-pending",
+    "outcome": {
+        "code": 0,
+        "signal": null
+    },
+    "stdout": "Morty relay diagnostic {\"timestamp\":\"2026-11-07T02:26:35.986Z\",\"channelId\":\"cancellation-test\",\"event\":\"relay_connection_opened\",\"connectionEpoch\":\"1\",\"relayOrigin\":\"ws://127.0.0.1:60242\",\"proxyRoute\":\"direct\"}\nMorty Runtime connected to the relay.\n\nMorty Runtime is ready for Agent requests.\nexternal-agent-initializing\ncancelled-request-settled\nMorty relay diagnostic {\"timestamp\":\"2026-11-07T02:26:36.011Z\",\"channelId\":\"cancellation-test\",\"event\":\"relay_connection_opened\",\"connectionEpoch\":\"1\",\"relayOrigin\":\"ws://127.0.0.1:60242\",\"proxyRoute\":\"direct\"}\nMorty Runtime connected to the relay.\n\nMorty Runtime is ready for Agent requests.\nsubsequent-settings-succeeded\n",
+    "stderr": "Morty relay diagnostic {\"timestamp\":\"2026-11-07T02:26:35.997Z\",\"channelId\":\"cancellation-test\",\"event\":\"relay_connection_closed\",\"closeCode\":\"1000\",\"closeReason\":\"Daemon stopped\",\"connectionEpoch\":\"1\",\"relayOrigin\":\"ws://127.0.0.1:60242\",\"source\":\"daemon_stop\",\"proxyRoute\":\"direct\"}\nMorty relay diagnostic {\"timestamp\":\"2026-11-07T02:26:36.020Z\",\"channelId\":\"cancellation-test\",\"event\":\"relay_connection_closed\",\"closeCode\":\"1000\",\"closeReason\":\"Daemon stopped\",\"connectionEpoch\":\"1\",\"relayOrigin\":\"ws://127.0.0.1:60242\",\"source\":\"daemon_stop\",\"proxyRoute\":\"direct\"}\n"
+}

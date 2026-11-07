@@ -7,7 +7,7 @@ import {
     SESSION_CLOSE_NOTICE_KIND,
     type SessionCloseNoticeEvent,
     type SessionStatusChangedEvent,
-} from "@moxt-ai/mobius-sdk/protocol";
+} from "@morty-build/client/protocol";
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import { PlatformProjectError } from "../../management/entity/platform-project.ts";
 import type { IdentityStorage } from "../../management/storage/identity-storage.ts";

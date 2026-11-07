@@ -15,13 +15,14 @@ const sentry = v.parse(
     }),
     process.env,
 );
-const cloudflareEnvironment = v.parse(v.optional(v.picklist(["staging", "production"])), process.env["CLOUDFLARE_ENV"]);
+const workerConfig = process.env["MORTY_WORKER_CONFIG"];
 const assetOrigins =
-    cloudflareEnvironment === "staging"
-        ? { application: "https://morty.paradev.biz", generated: "https://assets.morty.paradev.biz" }
-        : cloudflareEnvironment === "production"
-          ? { application: "https://morty.build", generated: "https://assets.morty.build" }
-          : undefined;
+    process.env["MORTY_ASSET_ORIGIN"] === undefined
+        ? undefined
+        : {
+              application: v.parse(v.pipe(v.string(), v.url()), process.env["MORTY_APP_ORIGIN"]),
+              generated: v.parse(v.pipe(v.string(), v.url()), process.env["MORTY_ASSET_ORIGIN"]),
+          };
 
 export default defineConfig({
     ...(assetOrigins === undefined
@@ -36,7 +37,7 @@ export default defineConfig({
     plugins: [
         react(),
         tailwindcss(),
-        cloudflare(),
+        cloudflare(workerConfig === undefined ? {} : { configPath: workerConfig }),
         ...(sentry.SENTRY_AUTH_TOKEN
             ? sentryVitePlugin({
                   org: v.parse(v.string(), sentry.SENTRY_ORG),

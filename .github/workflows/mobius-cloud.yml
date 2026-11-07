@@ -1,4 +1,4 @@
-name: Mobius Cloud
+name: Morty Cloud
 
 on:
   push:
@@ -17,7 +17,7 @@ on:
         default: build
         options: [build, deploy, restore]
       artifact_run_id:
-        description: Successful Mobius Cloud run to restore
+        description: Successful Morty Cloud run to restore
         type: string
         required: false
 
@@ -42,7 +42,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          submodules: recursive
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -52,18 +51,12 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.local/share/pnpm/store
-          key: mobius-cloud-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'third-party/mobius/pnpm-lock.yaml', 'third-party/platform/pnpm-lock.yaml') }}
-      - name: Install pinned SDK sources
-        if: env.OPERATION != 'restore'
-        run: pnpm --dir third-party/mobius install --frozen-lockfile
-      - name: Build the pinned Runtime and Agent harnesses
-        if: env.OPERATION != 'restore'
-        run: pnpm --dir third-party/mobius --filter @moxt-ai/mobius build
-      - name: Install pinned Platform sources
-        if: env.OPERATION != 'restore'
-        run: pnpm --dir third-party/platform install --frozen-lockfile
+          key: mobius-cloud-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
       - name: Install Morty dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build the Runtime and Agent harnesses
+        if: env.OPERATION != 'restore'
+        run: pnpm build:cli
       - name: Check Morty formatting and architecture
         if: env.OPERATION != 'restore'
         run: pnpm lint
@@ -120,8 +113,7 @@ jobs:
           (github.event_name == 'push' && vars.AUTO_DEPLOY_PRODUCTION == 'true'))
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          PLATFORM_SECRETS_JSON: ${{ secrets.PLATFORM_SECRETS_JSON }}
-          MORTY_SECRETS_JSON: ${{ secrets.MORTY_SECRETS_JSON }}
+          MORTY_SERVICE_SECRET: ${{ secrets.MORTY_SERVICE_SECRET }}
           EXPECTED_REVISION: ${{ steps.archive.outputs.revision || github.sha }}
         run: python3 deployment/deploy.py "$TARGET_ENVIRONMENT" --release ".deployment-output/$TARGET_ENVIRONMENT"
       - name: Archive deployment evidence

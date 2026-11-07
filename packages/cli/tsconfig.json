@@ -1,0 +1,11 @@
+{
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "resolveJsonModule": true,
+        "noEmit": true,
+        "skipLibCheck": true,
+        "types": ["node"]
+    },
+    "include": ["src/**/*.ts"],
+    "exclude": ["src/engine/acp/harness/claude/upstream", "src/engine/acp/harness/pi/upstream"]
+}

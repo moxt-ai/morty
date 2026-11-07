@@ -1,5 +1,5 @@
-import type { SessionElicitationRequestedEvent, SessionPermissionRequestedEvent } from "@moxt-ai/mobius-sdk";
-import type { ElicitationResponseRequest } from "@moxt-ai/mobius-sdk/channel";
+import type { SessionElicitationRequestedEvent, SessionPermissionRequestedEvent } from "@morty-build/client";
+import type { ElicitationResponseRequest } from "@morty-build/client/channel";
 
 type PermissionInteractionDetails = Pick<
     SessionPermissionRequestedEvent,

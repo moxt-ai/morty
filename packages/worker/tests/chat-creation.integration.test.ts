@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { MobiusClient, MobiusPageRequest } from "@moxt-ai/mobius-sdk";
+import { MobiusClient, MobiusPageRequest } from "@morty-build/client";
 import * as v from "valibot";
 import { afterEach, test as baseTest, beforeEach, expect, vi } from "vitest";
 import type { ControlledAgent } from "../../../tests/support/fake-daemon/runtime.ts";

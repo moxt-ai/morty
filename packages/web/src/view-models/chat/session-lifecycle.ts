@@ -2,8 +2,8 @@ import type {
     MobiusClient,
     SessionElicitationRequestedEvent,
     SessionPermissionRequestedEvent,
-} from "@moxt-ai/mobius-sdk";
-import { promptCompletion, type SessionInteractionSnapshot, type SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
+} from "@morty-build/client";
+import { promptCompletion, type SessionInteractionSnapshot, type SessionLiveEvent } from "@morty-build/client/protocol";
 import type { SessionInteraction } from "./session-pane-types.ts";
 
 // The Session pane reads Mobius lifecycle metadata only through this module, so

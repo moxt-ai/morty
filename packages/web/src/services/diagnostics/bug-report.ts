@@ -1,4 +1,4 @@
-import type { RuntimeDiagnosticsResult } from "@moxt-ai/mobius-sdk/protocol";
+import type { RuntimeDiagnosticsResult } from "@morty-build/client/protocol";
 import { captureFeedback, getClient } from "@sentry/react";
 import type { browserDiagnosticsSnapshot } from "./browser-diagnostics.ts";
 import type { ChatDiagnostics } from "./model-catalog.ts";

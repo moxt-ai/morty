@@ -12,10 +12,10 @@
             "!!**/dist",
             "!!**/coverage",
             "!!**/.wrangler",
-            "!!third-party",
             "!!worker-configuration.d.ts",
             "!!**/test-results",
-            "!!**/playwright-report"
+            "!!**/playwright-report",
+            "!!**/worker-configuration.d.ts"
         ]
     },
     "linter": {
@@ -60,7 +60,8 @@
                 "!!packages/web/tests/**",
                 "!!**/*.test.ts",
                 "!!**/*.test.tsx",
-                "!!**/tests/**"
+                "!!**/tests/**",
+                "!!packages/admin/**"
             ],
             "linter": {
                 "rules": {
@@ -108,7 +109,36 @@
                     }
                 }
             }
+        },
+        {
+            "includes": [
+                "packages/cli/src/engine/acp/harness/claude/upstream/src/**/*.ts",
+                "packages/cli/src/engine/acp/harness/pi/upstream/**/*.ts"
+            ],
+            "linter": {
+                "rules": {
+                    "suspicious": {
+                        "noExplicitAny": "off"
+                    }
+                }
+            }
         }
     ],
-    "plugins": ["./config/lint/no-type-assertions.grit"]
+    "plugins": [
+        {
+            "path": "./config/lint/no-type-assertions.grit",
+            "includes": [
+                "packages/web/**",
+                "packages/worker/**",
+                "packages/setup/**",
+                "packages/e2e/**",
+                "packages/local-state/**",
+                "packages/cli/src/installation/**",
+                "packages/cli/src/cli/**",
+                "packages/cli/src/daemon/**",
+                "packages/cli/src/storage/**",
+                "scripts/**"
+            ]
+        }
+    ]
 }

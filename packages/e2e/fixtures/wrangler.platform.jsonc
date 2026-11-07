@@ -1,5 +1,5 @@
 {
-    "$schema": "../../../third-party/mobius/node_modules/wrangler/config-schema.json",
+    "$schema": "../../../node_modules/wrangler/config-schema.json",
     "name": "mobius-platform-local-e2e",
     "main": "local-platform-worker.ts",
     "compatibility_date": "2026-09-03",
@@ -24,7 +24,7 @@
             "binding": "PLATFORM_DIRECTORY_DATABASE",
             "database_name": "mobius-platform-e2e-directory",
             "database_id": "00000000-0000-0000-0000-000000000102",
-            "migrations_dir": "../../../third-party/mobius/packages/relay-cloudflare-platform/migrations/d1"
+            "migrations_dir": "../../../packages/relay/migrations/d1"
         }
     ],
     "r2_buckets": [
@@ -33,9 +33,6 @@
     ],
     "vars": {
         "MOBIUS_PLATFORM_ALLOWED_ORIGINS": "[\"*\"]",
-        "MOBIUS_PLATFORM_OIDC_PROVIDERS": "[]",
-        "MOBIUS_PLATFORM_OPERATOR_SUBJECTS": "[]",
-        "MOBIUS_SESSION_WEBHOOK_SECRET_ENCRYPTION_KEY": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
         "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
         "SESSION_ARCHIVE_BYTES_PER_SESSION": "268435456"
     }

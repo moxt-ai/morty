@@ -27,7 +27,7 @@ export default defineConfig({
                     ? {}
                     : {
                           banner: [
-                              `// Morty setup, built from https://github.com/moxt-ai/morty/tree/${revision}/packages/setup`,
+                              `// Morty setup, built from https://github.com/moxt-ai/mobius-morty/tree/${revision}/packages/setup`,
                               `// Rebuild this file there with: MORTY_SETUP_REVISION=${revision} pnpm build:setup`,
                           ].join("\n"),
                       }),

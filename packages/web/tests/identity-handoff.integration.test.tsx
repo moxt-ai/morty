@@ -309,15 +309,15 @@ test("Given connected shared Morty access, When the user refreshes Network laten
 
     const dialog = getByRole(document.body, "dialog", { name: "Network latency" });
     await app.waitForView(() => {
-        expect(dialog.textContent).toContain("Mobius location: Western North America");
+        expect(dialog.textContent).toContain("Relay location: Western North America");
         expect(dialog.textContent).toContain("Browser ↔ Morty");
-        expect(dialog.textContent).toContain("Browser ↔ Mobius");
-        expect(dialog.textContent).toContain("Morty ↔ Mobius");
-        expect(dialog.textContent).toContain("Mobius ↔ Daemon");
+        expect(dialog.textContent).toContain("Browser ↔ Relay");
+        expect(dialog.textContent).toContain("Morty ↔ Relay");
+        expect(dialog.textContent).toContain("Relay ↔ Daemon");
         expect(getByRole(dialog, "status", { name: "Browser to Morty latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Browser to Mobius latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Morty to Mobius latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Mobius to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Browser to relay latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Morty to relay latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Relay to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
     });
 
     await app.user.click(getByRole(dialog, "button", { name: "Refresh network latency" }));
@@ -325,9 +325,9 @@ test("Given connected shared Morty access, When the user refreshes Network laten
     expect(getByRole(dialog, "status", { name: "Measuring network latency" })).toBeInstanceOf(HTMLElement);
     await app.waitForView(() => {
         expect(getByRole(dialog, "status", { name: "Browser to Morty latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Browser to Mobius latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Morty to Mobius latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Mobius to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Browser to relay latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Morty to relay latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Relay to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
     });
 });
 

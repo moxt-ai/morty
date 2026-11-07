@@ -1,0 +1,102 @@
+import type { ProjectLocationHint } from "@morty-build/client/protocol";
+import {
+    AuditActorKind,
+    type HttpError,
+    type ProjectAccessContext,
+    type ProjectPermission,
+} from "@morty-build/relay-core/contracts";
+
+export class PlatformAuditActorKind extends AuditActorKind {
+    static readonly Application = new PlatformAuditActorKind("application");
+}
+
+export class PlatformControlPlaneError extends Error implements HttpError {
+    readonly code: string;
+    readonly status: number;
+
+    constructor(code: string, message: string, status: number, options: ErrorOptions = {}) {
+        super(message, options);
+        this.code = code;
+        this.name = "PlatformControlPlaneError";
+        this.status = status;
+    }
+
+    readonly toHttpJson: HttpError["toHttpJson"] = () => ({
+        body: { error: { code: this.code, message: this.message } },
+        status: this.status,
+    });
+}
+
+export class PlatformAuthenticationConfiguration {
+    readonly allowedOrigins: ReadonlySet<string>;
+    constructor(allowedOrigins: ReadonlySet<string> = new Set()) {
+        if ([...allowedOrigins].some((origin) => origin !== "*" && !validOrigin(origin))) {
+            throw new PlatformControlPlaneError(
+                "platform_configuration_invalid",
+                "A Platform browser origin is invalid",
+                500,
+            );
+        }
+        this.allowedOrigins = new Set(allowedOrigins);
+    }
+}
+
+export class PlatformAppCredentialAccess {
+    readonly appId: string;
+    readonly project: ProjectAccessContext;
+
+    constructor(appId: string, project: ProjectAccessContext) {
+        this.appId = appId;
+        this.project = project;
+    }
+}
+
+export interface PlatformApplicationIdentity {
+    readonly kind: "application";
+    readonly tenantId: string;
+    readonly appId: string;
+    readonly credentialId: string;
+    readonly permissions: ReadonlySet<ProjectPermission>;
+    readonly scope: "all-projects" | "selected-projects";
+}
+
+export type PlatformPrincipal = PlatformApplicationIdentity;
+
+export interface PlatformProjectPlacement {
+    readonly locationHint: ProjectLocationHint;
+}
+
+export interface PlatformProjectPlacementRegistry {
+    readonly resolveLocationHint: (locationHint: string) => PlatformProjectPlacement | null;
+    readonly supports: (placement: PlatformProjectPlacement) => boolean;
+}
+
+export function hasControlCharacters(value: string): boolean {
+    for (const character of value) {
+        const codePoint = character.codePointAt(0) ?? 0;
+        if (codePoint <= 31 || codePoint === 127) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function validOrigin(value: string): boolean {
+    if (value.length === 0 || value.length > 2_048 || value === "*") {
+        return false;
+    }
+    try {
+        const parsed = new URL(value);
+        return (
+            (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+            parsed.origin === value &&
+            parsed.username.length === 0 &&
+            parsed.password.length === 0 &&
+            parsed.pathname === "/" &&
+            parsed.search.length === 0 &&
+            parsed.hash.length === 0
+        );
+    } catch {
+        return false;
+    }
+}

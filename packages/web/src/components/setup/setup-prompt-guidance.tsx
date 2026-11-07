@@ -60,7 +60,7 @@ export function SetupPromptDetails({ prompt }: { readonly prompt: string }) {
                         className="list-disc space-y-1 py-2 pr-3 pl-7 text-morty-text-3 marker:text-morty-text-4 [&_code]:whitespace-nowrap"
                     >
                         <li>
-                            Installs the Mobius CLI (<code>@moxt-ai/mobius</code>) from npm. It updates itself after 30
+                            Installs the Mobius CLI (<code>@morty-build/cli</code>) from npm. It updates itself after 30
                             idle minutes.
                         </li>
                         <li>

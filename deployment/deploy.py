@@ -1,4 +1,4 @@
-"""Deploy an intact release only to its pinned Mobius resources, without DNS changes."""
+"""Deploy an intact release only to its pinned Morty resources, without DNS changes."""
 import argparse
 import hashlib
 import json
@@ -39,7 +39,7 @@ def main():
     release = args.release.resolve()
     manifest = read(release / 'release.json')
     expected = read(ROOT / 'deployment/targets.json')['environments'][args.environment]
-    if manifest['format'] != 'mobius-cloud-release-v1' or manifest['account_id'] != ACCOUNT or manifest['environment'] != args.environment or manifest['target'] != expected or manifest['revision'] != os.environ['EXPECTED_REVISION']:
+    if manifest['format'] != 'morty-cloud-release-v2' or manifest['account_id'] != ACCOUNT or manifest['environment'] != args.environment or manifest['target'] != expected or manifest['revision'] != os.environ['EXPECTED_REVISION']:
         raise ValueError('Release provenance or destination mismatch')
     actual_files = {p.relative_to(release).as_posix() for p in release.rglob('*') if p.is_file() and p.name != 'release.json'}
     if actual_files != set(manifest['files']):
@@ -67,6 +67,16 @@ def main():
     if args.verify_release_only:
         print(json.dumps({'releaseVerified': True, 'appId': expected['app_id'], 'origin': expected['morty_origin'], 'deploymentAttempted': False}))
         return
+    # Production setup may name a release only after that exact package is available.
+    if args.environment == 'production':
+        version = manifest['cliVersion']
+        import re
+        if not isinstance(version, str) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
+            raise ValueError('Invalid CLI release version')
+        with urllib.request.urlopen('https://registry.npmjs.org/@morty-build%2fcli/' + version, timeout=30) as response:
+            package = json.load(response)
+        if package.get('name') != '@morty-build/cli' or package.get('version') != version or package.get('bin', {}).get('morty') != 'dist/cli.js':
+            raise ValueError('The exact Morty CLI release is unavailable')
     # Check lifecycle history before uploading assets, applying D1 migrations,
     # or activating any component. Wrangler otherwise replays all migrations
     # when an archive omits the tag already provisioned on the service.
@@ -76,7 +86,7 @@ def main():
             raise ValueError('Release omits an existing Durable Object migration: ' + component)
     # Validate the migrated identity and its deploy-time secret before any R2,
     # D1 migration, or Worker write. A successful health page is not sufficient.
-    secrets_by_component = {component: json.loads(os.environ[component.upper() + '_SECRETS_JSON']) for component in ['platform', 'morty']}
+    secrets_by_component = {'platform': {}, 'morty': {'MOBIUS_APP_SECRET': os.environ['MORTY_SERVICE_SECRET']}}
     app_secret = secrets_by_component['morty'].get('MOBIUS_APP_SECRET')
     if not isinstance(app_secret, str) or not app_secret:
         raise ValueError('Missing production application credential')
@@ -91,7 +101,7 @@ def main():
         env.pop(key, None)
     previous = {component: cloud('/workers/scripts/' + expected[component] + '/deployments')['deployments'][0] for component in configs}
     types = {'.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf'}
-    with tempfile.TemporaryDirectory(prefix='mobius-deploy-') as temporary:
+    with tempfile.TemporaryDirectory(prefix='morty-deploy-') as temporary:
         temporary = Path(temporary)
         groups = {extension: [] for extension in types}
         for file in sorted((release / 'client/assets').rglob('*')):
@@ -110,7 +120,7 @@ def main():
         run(WRANGLER + ['d1', 'migrations', 'apply', expected['d1_name'], '--remote', '--config', str(configs['platform'])], env)
         for component in ['recording', 'platform', 'morty']:
             command = WRANGLER + ['deploy', '--config', str(configs[component]), '--message', 'mobius-morty ' + manifest['revision']]
-            if component != 'recording':
+            if secrets_by_component.get(component):
                 secrets = secrets_by_component[component]
                 if not secrets or not all(isinstance(k, str) and isinstance(v, str) and v for k, v in secrets.items()):
                     raise ValueError('Missing deployment secret')
@@ -120,15 +130,15 @@ def main():
                 command += ['--secrets-file', str(secret_file)]
             run(command, env)
         checks = []
-        for url, content in [(expected['platform_origin'] + '/mobius/api/dashboard/health', 'mobius-relay-platform'), (expected['morty_origin'] + '/', 'Morty'), (expected['morty_origin'] + '/setup.mjs', None)]:
-            with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'Mobius-Deployment/1.0'}), timeout=40) as response:
+        for url, content in [(expected['platform_origin'] + '/mobius/api/dashboard/health', 'morty-relay'), (expected['morty_origin'] + '/', 'Morty'), (expected['morty_origin'] + '/setup.mjs', None)]:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'Morty-Deployment/1.0'}), timeout=40) as response:
                 body = response.read()
                 if response.status != 200 or content and content not in body.decode():
                     raise ValueError('Post-deployment health verification failed')
                 checks.append({'url': url, 'status': response.status, 'sha256': hashlib.sha256(body).hexdigest()})
         for extension in ['.js', '.css', '.woff2']:
             entry = groups[extension][0]
-            with urllib.request.urlopen(urllib.request.Request(expected['asset_origin'] + '/' + entry['key'], headers={'Origin': expected['morty_origin'], 'User-Agent': 'Mobius-Deployment/1.0'}), timeout=40) as response:
+            with urllib.request.urlopen(urllib.request.Request(expected['asset_origin'] + '/' + entry['key'], headers={'Origin': expected['morty_origin'], 'User-Agent': 'Morty-Deployment/1.0'}), timeout=40) as response:
                 if hashlib.sha256(response.read()).hexdigest() != hashlib.sha256(Path(entry['file']).read_bytes()).hexdigest() or response.headers.get('Access-Control-Allow-Origin') != expected['morty_origin'] or 'immutable' not in response.headers.get('Cache-Control', ''):
                     raise ValueError('Asset content, CORS, or cache verification failed')
         deployed = {}

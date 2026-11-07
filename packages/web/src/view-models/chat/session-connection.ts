@@ -1,4 +1,4 @@
-import { type MobiusClient, MobiusError } from "@moxt-ai/mobius-sdk";
+import { type MobiusClient, MobiusError } from "@morty-build/client";
 
 // The Session pane owns live-stream recovery; SDK retries are disabled so
 // connection attempts and reconciliation share one bounded retry policy.

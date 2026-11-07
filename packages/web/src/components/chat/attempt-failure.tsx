@@ -1,4 +1,4 @@
-import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
+import { isIdentifier } from "@morty-build/client/protocol";
 
 export function AttemptFailure({
     approval,

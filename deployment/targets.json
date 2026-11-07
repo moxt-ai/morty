@@ -1,8 +1,6 @@
 {
     "account_id": "b903018a1c3d9d9a4bd68a11eb03e764",
     "workers_subdomain": "mobius-b90",
-    "morty_revision": "3864a4ed722c85979ef90413433d4273a8f9b806",
-    "mobius_revision": "fe26494ae0a44697b453a0866de7e1f74b42d12a",
     "environments": {
         "production": {
             "d1_id": "41b0bb37-d19f-4376-a694-b32e08de9fc8",
@@ -48,25 +46,6 @@
                 "https://morty-platform-benchmark.mobius-b90.workers.dev",
                 "https://morty-benchmark.mobius-b90.workers.dev"
             ]
-        }
-    },
-    "morty_sdk_revision": "fe26494ae0a44697b453a0866de7e1f74b42d12a",
-    "auth": {
-        "production": {
-            "publishableKey": "pk_live_Y2xlcmsubW9ydHktcGxhdGZvcm0tcHJvZHVjdGlvbi5tb2JpdXMtYjkwLndvcmtlcnMuZGV2JA",
-            "issuer": "https://morty-platform-production.mobius-b90.workers.dev/__clerk",
-            "worker": "morty-platform-production",
-            "origin": "https://morty-platform-production.mobius-b90.workers.dev",
-            "proxyUrl": "https://morty-platform-production.mobius-b90.workers.dev/__clerk",
-            "frontendUrl": "https://clerk.morty-platform-production.mobius-b90.workers.dev"
-        },
-        "benchmark": {
-            "publishableKey": "pk_live_Y2xlcmsubW9ydHktcGxhdGZvcm0tcHJvZHVjdGlvbi5tb2JpdXMtYjkwLndvcmtlcnMuZGV2JA",
-            "issuer": "https://morty-platform-production.mobius-b90.workers.dev/__clerk",
-            "worker": "morty-platform-benchmark",
-            "origin": "https://morty-platform-benchmark.mobius-b90.workers.dev",
-            "proxyUrl": "https://morty-platform-production.mobius-b90.workers.dev/__clerk",
-            "frontendUrl": "https://clerk.morty-platform-production.mobius-b90.workers.dev"
         }
     }
 }

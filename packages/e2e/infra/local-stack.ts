@@ -2,11 +2,11 @@ import { mkdir } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { jsonRequest, object, text } from "./chat-api.ts";
+import { provisionLocalService } from "../../../scripts/provision-local-service.ts";
 import type { E2EHarness } from "./harness.ts";
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const mobiusRepository = join(repository, "third-party", "mobius");
+const mobiusRepository = repository;
 const fixtureDirectory = fileURLToPath(new URL("../fixtures", import.meta.url));
 const platformConfiguration = join(fixtureDirectory, "wrangler.platform.jsonc");
 const chatConfiguration = join(fixtureDirectory, "wrangler.chat.jsonc");
@@ -114,29 +114,9 @@ export class LocalStack {
                 "mobius-platform health",
             );
         });
-        return await this.harness.stage("provision-platform-application", async () => {
-            const authentication = { provider: "e2e", token: "morty-local-e2e", signal: this.harness.signal };
-            const inventory = await jsonRequest(
-                this.platformOrigin,
-                "/mobius/api/dashboard/v1/platform/tenants",
-                authentication,
-            );
-            const tenant = object(Array.isArray(inventory["tenants"]) ? inventory["tenants"][0] : undefined, "tenant");
-            const application = await jsonRequest(this.platformOrigin, "/mobius/api/dashboard/v1/apps", {
-                ...authentication,
-                body: {
-                    displayName: "Morty live E2E",
-                    tenantId: text(tenant["tenantId"], "tenantId"),
-                },
-            });
-            return {
-                appId: text(application["appId"], "appId"),
-                appSecret: text(
-                    object(application["defaultCredential"], "defaultCredential")["credential"],
-                    "credential",
-                ),
-            };
-        });
+        return await this.harness.stage("provision-morty-service", () =>
+            provisionLocalService(platformConfiguration, this.directories.platform, this.harness.signal),
+        );
     }
 
     async startChat(application: { readonly appId: string; readonly appSecret: string }) {

@@ -6,12 +6,12 @@ import {
     type ControlledSessionUpdate,
     controlledSessionUpdates,
     fakeDaemonCapabilities,
-} from "@moxt-ai/mobius-test-support/fake-daemon";
-import { AcpAgentDefinition } from "../../../third-party/mobius/packages/cli/src/engine/acp/agent/agent-definition.ts";
+} from "@morty-build/runtime-test-support/fake-daemon";
+import { AcpAgentDefinition } from "../../../packages/cli/src/engine/acp/agent/agent-definition.ts";
 import type {
     AcpEndpointTermination,
     InProcessAcpEndpoint,
-} from "../../../third-party/mobius/packages/cli/src/engine/acp/agent/in-process-endpoint.ts";
+} from "../../../packages/cli/src/engine/acp/agent/in-process-endpoint.ts";
 
 /** Like Claude Code, a new session starts with the model its working directory's `.claude/settings.json` names. */
 async function projectModel(cwd: string): Promise<string | undefined> {

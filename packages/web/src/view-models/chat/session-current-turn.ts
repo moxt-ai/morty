@@ -1,4 +1,4 @@
-import { decodeIdentifier } from "@moxt-ai/mobius-sdk/protocol";
+import { decodeIdentifier } from "@morty-build/client/protocol";
 import type { SessionActivityState } from "./session-activity-machine.ts";
 import type { DeliveryState } from "./session-delivery-store.ts";
 import type { DelegationStage } from "./session-lifecycle.ts";

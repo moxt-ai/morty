@@ -22,6 +22,7 @@ type ScrollEdgeFadeBase = {
     /** Layout classes for the non-scrolling frame that holds the fades. */
     readonly frameClassName?: string;
     readonly className?: string;
+    readonly viewportLabel?: string;
     readonly id?: string;
     readonly "aria-label"?: string;
     readonly onKeyDown?: KeyboardEventHandler<HTMLElement>;
@@ -194,6 +195,7 @@ export function ScrollEdgeFade(props: ScrollEdgeFadeProps) {
                 role={role}
                 tabIndex={tabIndex}
                 viewportClassName="h-full max-h-[inherit]"
+                viewportLabel={props.viewportLabel}
                 viewportRef={assignScrollElement}
                 viewportStyle={maskImage === undefined ? undefined : surfaceMaskStyle(maskImage)}
             >

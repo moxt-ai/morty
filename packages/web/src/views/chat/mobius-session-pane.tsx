@@ -1,5 +1,5 @@
-import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
-import type { AgentQuestion } from "@moxt-ai/mobius-sdk/protocol";
+import type { SessionConfigOption } from "@morty-build/client";
+import type { AgentQuestion } from "@morty-build/client/protocol";
 import { Check, CircleAlert, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";
@@ -1294,6 +1294,7 @@ function MobiusSessionPaneBody({
                                 // otherwise the card yields all the way so the composer stays whole.
                                 frameClassName={`${chatSessionInteractionColumnClassName} ${stackNoticeVisible ? "mb-2 min-h-24" : "mt-4 mb-2 sm:mt-5"} flex shrink flex-col`}
                                 className="max-h-[min(50vh,360px)] min-h-0 flex-1"
+                                viewportLabel="Pending Agent requests"
                             >
                                 <SessionInteractionCards
                                     answerDrafts={interactions.answerDrafts}

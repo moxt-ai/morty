@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { HarnessReplyPlan } from "@moxt-ai/mobius-test-support/fake-daemon";
+import type { HarnessReplyPlan } from "@morty-build/runtime-test-support/fake-daemon";
 import {
     type ControlledAgentBehavior,
     connectControlledAgentRuntime,

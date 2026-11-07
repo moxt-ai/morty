@@ -1,4 +1,4 @@
-import { MobiusError } from "@moxt-ai/mobius-sdk";
+import { MobiusError } from "@morty-build/client";
 import { createStore } from "zustand/vanilla";
 import { isDisplayableImageType } from "../../components/agents/displayable-image-type.ts";
 import {

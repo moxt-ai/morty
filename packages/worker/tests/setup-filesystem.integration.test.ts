@@ -7,15 +7,17 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import * as v from "valibot";
 import { beforeAll, expect, test } from "vitest";
+import { processPlatformSupportFor } from "../../../packages/cli/src/engine/util/process/platform/index.ts";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
-import { processPlatformSupportFor } from "../../../third-party/mobius/packages/cli/src/engine/util/process/platform/index.ts";
+import runtimeRelease from "../../cli/package.json" with { type: "json" };
 import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
+import { claimMortyState } from "../../local-state/src/ownership.ts";
 import worker from "../src/application.ts";
 import { prepareIdentityFixture } from "./support/identity-fixture.ts";
 
 // Exercise the package-runner boundary, including the production argument prefix.
 async function writeNpxFixture(bin: string, body: string): Promise<void> {
-    const script = `#!${process.execPath}\nif (JSON.stringify(process.argv.slice(2, 5)) !== JSON.stringify(['--yes', '--prefer-online', '@moxt-ai/mobius@latest'])) process.exit(64);\nprocess.argv.splice(2, 3);\n${body}`;
+    const script = `#!${process.execPath}\nif (JSON.stringify(process.argv.slice(2, 5)) !== JSON.stringify(['--yes', '--prefer-online', '@morty-build/cli@${runtimeRelease.version}'])) process.exit(64);\nprocess.argv.splice(2, 3);\n${body}`;
     if (process.platform === "win32") {
         const directory = join(bin, "node_modules", "npm", "bin");
         await mkdir(directory, { recursive: true });
@@ -104,7 +106,7 @@ test.each([
                                   )
                               ).json(),
                           );
-                await mkdir(state, { mode: 0o700 });
+                await claimMortyState(state, AbortSignal.timeout(10000));
                 await writeFile(
                     join(state, "config.json"),
                     JSON.stringify({
@@ -126,7 +128,7 @@ test.each([
             const saved = replacementState === "fresh" ? null : await readFile(join(state, "config.json"), "utf8");
             // Mobius 0.0.315 and later refuse another root's installation data with EX_CONFIG.
             const refusal =
-                "MOBIUS_STATE_DIRECTORY is Mobius installation data, not a state root. Use the state root that owns it: MOBIUS_STATE_DIRECTORY=/owning-root";
+                "MORTY_STATE_DIRECTORY is Mobius installation data, not a state root. Use the state root that owns it: MORTY_STATE_DIRECTORY=/owning-root";
             if (launcher === "npx") {
                 await writeNpxFixture(
                     bin,
@@ -158,7 +160,7 @@ test.each([
                         PATH: bin,
                         MOBIUS_STATE_DIRECTORY: join(directory, "inherited-installation-data"),
                         MORTY_STATE_DIRECTORY: state,
-                        MORTY_LOCAL_MOBIUS_CLI: launcher === "local" ? localCli : undefined,
+                        MORTY_LOCAL_CLI: launcher === "local" ? localCli : undefined,
                     },
                     stdio: ["ignore", "pipe", "pipe"],
                     signal: AbortSignal.timeout(SETUP_PROCESS_TIMEOUT_MS),
@@ -173,9 +175,9 @@ test.each([
             });
             const [code] = await once(child, "close");
             expect(code, output).toBe(1);
-            expect(output).toContain('"code":"MOBIUS_STATE_ROOT_INVALID"');
+            expect(output).toContain('"code":"MORTY_STATE_ROOT_INVALID"');
             expect(output).toContain(
-                "Rerun setup with MOBIUS_STATE_DIRECTORY set to the state root that the Runtime log names",
+                "Rerun setup with MORTY_STATE_DIRECTORY set to the state root that the Runtime log names",
             );
             expect(output).not.toContain("RUNTIME_PREFLIGHT_FAILED");
             expect(output).not.toContain('"status":"identity_ready"');
@@ -210,7 +212,7 @@ test.each(["missing", "unlaunchable", "npm-missing", "npm-unlaunchable"] as cons
                     entry,
                     failure === "unlaunchable"
                         ? "await using = ;"
-                        : `import ${JSON.stringify(new URL("../../../third-party/mobius/packages/cli/src/cli/entrypoint.ts", import.meta.url).href)};`,
+                        : `import ${JSON.stringify(new URL("../../../packages/cli/src/cli/entrypoint.ts", import.meta.url).href)};`,
                 );
                 if (failure === "npm-unlaunchable") {
                     await writeFile(
@@ -280,7 +282,7 @@ test("Given a local workspace and a private state directory, When setup creates 
     await mkdir(bin);
     await writeNpxFixture(
         bin,
-        `await import(${JSON.stringify(new URL("../../../third-party/mobius/packages/cli/src/cli/entrypoint.ts", import.meta.url).href)});`,
+        `if (process.argv[2] === "install") process.argv.splice(3, 2, "--archive", ${JSON.stringify(fileURLToPath(new URL(`../../../.release/morty-build-cli-${runtimeRelease.version}.tgz`, import.meta.url)))}); await import(${JSON.stringify(new URL("../../../packages/cli/src/cli/entrypoint.ts", import.meta.url).href)});`,
     );
     const runner = join(directory, "setup.mjs");
     await writeFile(
@@ -417,15 +419,15 @@ test.runIf(process.platform !== "win32")(
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-home-"));
         const state =
             process.platform === "darwin"
-                ? join(directory, "Library", "Application Support", "Morty")
-                : join(directory, ".local", "state", "morty");
+                ? join(directory, "Library", "Application Support", "Morty", "v1")
+                : join(directory, ".local", "state", "morty", "v1");
         const workspace = join(directory, "workspace");
         await mkdir(workspace);
         const bin = join(directory, "bin");
         await mkdir(bin);
         await writeNpxFixture(
             bin,
-            `await import(${JSON.stringify(new URL("../../../third-party/mobius/packages/cli/src/cli/entrypoint.ts", import.meta.url).href)});`,
+            `if (process.argv[2] === "install") process.argv.splice(3, 2, "--archive", ${JSON.stringify(fileURLToPath(new URL(`../../../.release/morty-build-cli-${runtimeRelease.version}.tgz`, import.meta.url)))}); await import(${JSON.stringify(new URL("../../../packages/cli/src/cli/entrypoint.ts", import.meta.url).href)});`,
         );
         const fixture = await createIdentityFixture();
         const environment = Object.fromEntries(
@@ -505,7 +507,7 @@ for (const [failure, scenario] of starterFailures) {
             const directory = await mkdtemp(join(tmpdir(), "morty-setup-start-"));
             const state = join(directory, "state");
             const bin = join(directory, "bin");
-            await Promise.all([mkdir(state, { recursive: true }), mkdir(bin)]);
+            await Promise.all([claimMortyState(state, AbortSignal.timeout(10000)), mkdir(bin)]);
             const fixture = await createIdentityFixture();
             try {
                 const identity = await fixture.createAnonymousUser();
@@ -555,7 +557,7 @@ for (const [failure, scenario] of starterFailures) {
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 const output = process.argv.find(arg => arg.startsWith('--output-json='));
-if (process.argv[2] === '--version') { process.exit(0); }
+if (process.argv[2] === '--version' || process.argv[2] === 'install') { process.exit(0); }
 if (process.argv[2] === 'start' && ${JSON.stringify(failure === "cancel-download")}) {
     ${
         failure === "cancel-download"
@@ -681,7 +683,7 @@ process.exitCode = await runSetup(process.argv.slice(2), {
                     termination:
                         failure === "signal" ? { kind: "signal", signal: "SIGTERM" } : { kind: "exit", exitCode: 42 },
                     logPath: expect.stringMatching(/runtime-.*\.log$/u),
-                    nextStep: expect.stringContaining("mobius"),
+                    nextStep: expect.stringContaining("morty"),
                 });
                 expect(await readFile(diagnostic.logPath, "utf8")).toContain(failure === "signal" ? "SIGTERM" : "42");
             } finally {
@@ -1197,7 +1199,7 @@ test("Given a Machine bound by setup, When the user runs setup again, Then setup
 test("Given two shared links and redeemed access, When the local owner revokes all access, Then previous links and credentials fail while local setup and another machine remain usable", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-revoke-access-"));
     const configurationDirectory = join(directory, "state");
-    await mkdir(configurationDirectory, { recursive: true, mode: 0o700 });
+    await claimMortyState(configurationDirectory, AbortSignal.timeout(10000));
     const fixture = await createIdentityFixture();
     const signal = AbortSignal.timeout(30000);
     try {
@@ -1291,7 +1293,7 @@ test("Given two shared links and redeemed access, When the local owner revokes a
 test("Given setup replaced the Project but stopped before ending the previous identity, When the user revokes all access, Then nothing opens the previous Project and the current identity stays usable", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-replaced-identity-"));
     const configurationDirectory = join(directory, "state");
-    await mkdir(configurationDirectory, { recursive: true, mode: 0o700 });
+    await claimMortyState(configurationDirectory, AbortSignal.timeout(10000));
     const fixture = await createIdentityFixture();
     const signal = AbortSignal.timeout(30000);
     try {

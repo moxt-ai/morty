@@ -1,0 +1,33 @@
+import { FILE_FAILED_KIND, FILE_READ_KIND } from "@morty-build/client/protocol";
+import { WebSocket } from "undici";
+import { streamLocalFile } from "../../../../session/content/session-files.ts";
+import type { RuntimeCommand } from "../../definition.ts";
+import { send, sendContentChunk } from "../../transport.ts";
+
+export const fileReadCommand: RuntimeCommand = {
+    kind: FILE_READ_KIND,
+    handle: ({ externalContent, sessions, signal, socket }, message): void => {
+        if (message.kind !== FILE_READ_KIND) {
+            throw new Error("Command kind mismatch");
+        }
+        void streamLocalFile(
+            message,
+            (response) => send(socket, response),
+            (requestId, sequence, bytes) => sendContentChunk(socket, requestId, sequence, bytes),
+            signal,
+            sessions.findSessions([message.sessionId])[0]?.cwd ?? null,
+            externalContent,
+        ).catch((error: unknown) => {
+            if (socket.readyState !== WebSocket.OPEN || signal.aborted) {
+                return;
+            }
+            send(socket, {
+                code: "file_unavailable",
+                kind: FILE_FAILED_KIND,
+                message: error instanceof Error ? error.message : "The local file is unavailable",
+                requestId: message.requestId,
+                sessionId: message.sessionId,
+            });
+        });
+    },
+};

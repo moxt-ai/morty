@@ -1,4 +1,4 @@
-import { type Identifier, isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
+import { type Identifier, isIdentifier } from "@morty-build/client/protocol";
 import * as v from "valibot";
 
 /**

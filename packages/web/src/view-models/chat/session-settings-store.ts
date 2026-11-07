@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from "@moxt-ai/mobius-sdk";
+import type { SessionConfigOption } from "@morty-build/client";
 import { createStore } from "zustand/vanilla";
 import { recordBrowserError } from "../../services/diagnostics/browser-diagnostics.ts";
 

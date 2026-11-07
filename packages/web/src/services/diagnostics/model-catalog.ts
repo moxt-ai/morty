@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from "@moxt-ai/mobius-sdk/protocol";
+import type { SessionConfigOption } from "@morty-build/client/protocol";
 
 /** Evidence from the response that supplied the menu; never a new discovery made while reporting. */
 export interface AgentModelCatalog {

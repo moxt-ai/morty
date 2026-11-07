@@ -1,4 +1,4 @@
-import type { NativeSessionEntry, NativeSessionResult, SessionReadyEvent } from "@moxt-ai/mobius-sdk/channel";
+import type { NativeSessionEntry, NativeSessionResult, SessionReadyEvent } from "@morty-build/client/channel";
 import type { ChatAccess, ConversationActiveTurn } from "../../services/chat/bot-chat-api.ts";
 
 export interface OpenMobiusSession {

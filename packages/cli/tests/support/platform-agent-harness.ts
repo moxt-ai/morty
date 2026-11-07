@@ -1,0 +1,175 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { mobiusApiPath } from "@morty-build/client/protocol";
+import { MobiusClient, StaticMobiusCredentialProvider } from "@morty-build/client/server";
+import * as v from "valibot";
+import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
+import { type RunRuntimeOptions, runRuntime } from "../../src/engine/runtime/run.ts";
+import {
+    defaultFakeAgentHarness,
+    type FakeAgentHarnessDefinition,
+    fakeAgentHarness,
+    fakeAgentHarnessCapabilities,
+} from "./agent-harness.ts";
+import { createControlledRuntimeConfig as createRuntimeConfig } from "./controlled-runtime-config.ts";
+
+type TestServerApp = { readonly request: (request: Request) => Response | Promise<Response> };
+
+const runtimePairingSchema = v.object({
+    pairingId: v.string(),
+    projectId: v.string(),
+    runtimeId: v.string(),
+    channelId: v.string(),
+    pairingCode: v.string(),
+});
+
+function fakeAgentHarnessCatalog(definitions: readonly FakeAgentHarnessDefinition[]) {
+    return definitions.map((agent) => ({
+        agentPath: `/controlled-harness/${agent.id}`,
+        agentVersion: "controlled-harness",
+        capabilities: fakeAgentHarnessCapabilities(agent),
+        id: agent.id,
+        label: agent.label,
+    }));
+}
+
+/** Runs the production daemon with only its external Agent harness controlled. */
+export async function createFakeAgentHarnessRuntime(options: {
+    readonly credential: string;
+    readonly harnesses?: readonly FakeAgentHarnessDefinition[];
+    readonly nativeSessionIds?: ReadonlySet<string>;
+    readonly origin: string;
+    readonly relayOrigin?: string;
+    readonly runtimeOptions?: RunRuntimeOptions;
+    readonly projectId: string;
+    readonly server: TestServerApp;
+    readonly signal: AbortSignal;
+}) {
+    const cancellation = new AbortController();
+    const signal = AbortSignal.any([options.signal, cancellation.signal]);
+    const directory = await mkdtemp(join(tmpdir(), "mobius-agent-harness-"));
+    const workspace = join(directory, "workspace");
+    const harnessState = join(directory, "harness");
+    let runtime: Promise<void> | undefined;
+    try {
+        await Promise.all([mkdir(workspace), mkdir(harnessState)]);
+        await Promise.all(
+            [...(options.nativeSessionIds ?? [])].map(async (sessionId) =>
+                writeFile(
+                    join(harnessState, `${encodeURIComponent(sessionId)}.json`),
+                    JSON.stringify({
+                        additionalDirectories: [],
+                        cwd: workspace,
+                        fastMode: false,
+                        history: [],
+                        mode: "code",
+                        model: "test-small",
+                        reasoningEffort: "medium",
+                        title: `Native ${sessionId}`,
+                        turnCount: 1,
+                    }),
+                ),
+            ),
+        );
+        const harnesses = options.harnesses ?? [defaultFakeAgentHarness];
+        const pairing = v.parse(
+            runtimePairingSchema,
+            await (
+                await options.server.request(
+                    new Request(`${options.origin}/mobius/api/v1/projects/${options.projectId}/runtime-pairings`, {
+                        body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
+                        headers: {
+                            authorization: `Bearer ${options.credential}`,
+                            "content-type": "application/json",
+                        },
+                        method: "POST",
+                        signal,
+                    }),
+                )
+            ).json(),
+        );
+        const claim = v.parse(
+            v.object({ runtimeCredential: v.string() }),
+            await (
+                await options.server.request(
+                    new Request(`${options.origin}/mobius/api/v1/runtime-pairings/${pairing.pairingId}/redeem`, {
+                        body: JSON.stringify({
+                            agents: fakeAgentHarnessCatalog(harnesses),
+                            machineName: "Controlled Agent harness",
+                            pairingCode: pairing.pairingCode,
+                            workspaceName: "Controlled workspace",
+                        }),
+                        headers: { "content-type": "application/json" },
+                        method: "POST",
+                        signal,
+                    }),
+                )
+            ).json(),
+        );
+        const relayUrl = new URL(mobiusApiPath("/v1/runtimes/connect"), options.relayOrigin ?? options.origin);
+        relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
+        relayUrl.searchParams.set("token", claim.runtimeCredential);
+        const localContext = new RuntimeLocalContext(directory, process.env);
+        const config = createRuntimeConfig(
+            { channelId: pairing.channelId, defaultWorkspace: workspace, relayUrl },
+            harnesses.map((definition) => fakeAgentHarness(definition, harnessState)),
+            localContext,
+        );
+        const online = Promise.withResolvers<void>();
+        runtime = runRuntime(config, signal, undefined, {
+            ...options.runtimeOptions,
+            onConnectionStatus: (status) => {
+                options.runtimeOptions?.onConnectionStatus?.(status);
+                if (status === "online") {
+                    online.resolve();
+                }
+            },
+        });
+        void runtime.catch((error: unknown) => {
+            if (!signal.aborted) {
+                console.error("Controlled Agent harness daemon failed", error);
+            }
+        });
+        const failure = runtime.then<never>(() => {
+            throw new Error("The production daemon stopped unexpectedly");
+        });
+        void failure.catch(() => undefined);
+        const startup = AbortSignal.any([signal, AbortSignal.timeout(30_000)]);
+        startup.throwIfAborted();
+        const aborted = Promise.withResolvers<never>();
+        const abort = (): void => aborted.reject(startup.reason);
+        startup.addEventListener("abort", abort, { once: true });
+        try {
+            await Promise.race([online.promise, failure, aborted.promise]);
+        } finally {
+            startup.removeEventListener("abort", abort);
+        }
+        const client = new MobiusClient({
+            endpoint: options.origin,
+            projectId: pairing.projectId,
+            credentialProvider: new StaticMobiusCredentialProvider(options.credential),
+            transport: { fetch: async (request: Request) => await options.server.request(request) },
+        });
+        let disposed = false;
+        return {
+            client,
+            failure,
+            runtimeId: pairing.runtimeId,
+            [Symbol.asyncDispose]: async () => {
+                if (disposed) {
+                    return;
+                }
+                disposed = true;
+                cancellation.abort(new Error("Controlled Agent harness Runtime stopped"));
+                await runtime?.catch(() => undefined);
+                await rm(directory, { recursive: true, force: true });
+            },
+        };
+    } catch (cause) {
+        cancellation.abort(cause);
+        await runtime?.catch(() => undefined);
+        await rm(directory, { recursive: true, force: true });
+        throw cause;
+    }
+}

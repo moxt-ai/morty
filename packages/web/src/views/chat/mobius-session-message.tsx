@@ -1,4 +1,4 @@
-import type { ContentBlock } from "@moxt-ai/mobius-sdk/protocol";
+import type { ContentBlock } from "@morty-build/client/protocol";
 import { CircleAlert, X } from "lucide-react";
 import {
     AgentMarkdown,

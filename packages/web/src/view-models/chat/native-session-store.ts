@@ -1,4 +1,4 @@
-import type { NativeSessionEntry, NativeSessionResult } from "@moxt-ai/mobius-sdk/channel";
+import type { NativeSessionEntry, NativeSessionResult } from "@morty-build/client/channel";
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ChatRuntime, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import { formatError } from "../format-error.ts";

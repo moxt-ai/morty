@@ -7,11 +7,8 @@ export default defineConfig({
     // Let Node strip dependency types without rewriting native class-field semantics.
     build: {
         external: [
-            "**/third-party/mobius/**",
-            `${realpathSync(fileURLToPath(new URL("../../third-party/mobius", import.meta.url))).replaceAll(
-                "\\",
-                "/",
-            )}/**`,
+            "**/packages/cli/**",
+            `${realpathSync(fileURLToPath(new URL("../cli", import.meta.url))).replaceAll("\\", "/")}/**`,
         ],
     },
     testDir: ".",
@@ -24,7 +21,7 @@ export default defineConfig({
     // and Platform Workers ("Network connection lost") while a journey sets up its Runtime. A journey that passes on
     // its second attempt is reported as flaky, not hidden, and one that fails twice still fails the run.
     retries: process.env["CI"] === "true" ? 1 : 0,
-    timeout: Number(process.env["MOBIUS_E2E_TIMEOUT_MS"] ?? 600000),
+    timeout: Number(process.env["MORTY_E2E_TIMEOUT_MS"] ?? 600000),
     expect: { timeout: 30000 },
     // An action whose target never becomes actionable fails as an assertion does, instead of holding the shard until
     // the journey's timeout.

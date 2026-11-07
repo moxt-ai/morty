@@ -1,4 +1,4 @@
-import { type Identifier, isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
+import { type Identifier, isIdentifier } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import type { ApiTransport } from "../api/api-transport.ts";
 import { anonymousCredentialsEntry } from "../local-storage/central-local-storage.ts";

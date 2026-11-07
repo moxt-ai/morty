@@ -1,4 +1,4 @@
-import type { SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
+import type { SessionLiveEvent } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import type { AgentDisplayContent } from "../../components/agents/display-content.ts";
 import type { ElicitationFieldValue } from "../../services/chat/elicitation-form.ts";

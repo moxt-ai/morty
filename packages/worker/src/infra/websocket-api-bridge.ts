@@ -1,4 +1,4 @@
-import { decodeContentChunkFrame } from "@moxt-ai/mobius-sdk/protocol";
+import { decodeContentChunkFrame } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import { toHttpError } from "./http-error.ts";
 import { RequestError } from "./request-error.ts";
