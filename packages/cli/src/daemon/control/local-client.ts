@@ -9,14 +9,8 @@ const MAXIMUM_MESSAGE_BYTES = 64 * 1024;
 
 const managerPlatform = platformSupportFor(process.platform);
 
-export function controlSocketPath(
-    stateDirectory: InstallationDirectory,
-    endpoint: "manager" | "worker" = "manager",
-): string {
-    const installationHash = createHash("sha256")
-        .update(endpoint === "manager" ? stateDirectory : `${stateDirectory}:worker`)
-        .digest("hex")
-        .slice(0, 32);
+export function controlSocketPath(stateDirectory: InstallationDirectory): string {
+    const installationHash = createHash("sha256").update(stateDirectory).digest("hex").slice(0, 32);
     return managerPlatform.controlSocketPath(installationHash);
 }
 
@@ -69,14 +63,13 @@ export async function readSocketMessage(socket: Socket, signal: AbortSignal): Pr
 
 export async function sendLocalRequest(
     stateDirectory: InstallationDirectory,
-    endpoint: "manager" | "worker",
     command: Readonly<Record<string, unknown>>,
     signal: AbortSignal,
 ): Promise<unknown> {
     const token = await readOrCreateControlToken(stateDirectory);
     const deadline = AbortSignal.any([signal, AbortSignal.timeout(CONTROL_TIMEOUT_MILLISECONDS)]);
     deadline.throwIfAborted();
-    const path = controlSocketPath(stateDirectory, endpoint);
+    const path = controlSocketPath(stateDirectory);
     await managerPlatform.validateControlPeer(path, deadline);
     const socket = createConnection(path);
     try {

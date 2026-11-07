@@ -1,49 +1,22 @@
 import { randomUUID } from "node:crypto";
-import { readFile, rename, unlink } from "node:fs/promises";
+import { access, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { setTimeout as delay } from "node:timers/promises";
 import {
-    createInstallationFile,
     type InstallationDirectory,
+    writeInstallationFile,
 } from "../../engine/storage/installation/installation-files.ts";
 import { isNodeError } from "../../engine/util/node-error.ts";
 
 const SQLITE_BUSY = 5;
-// How long contenders that start together keep retrying while none of them has become the daemon yet.
-const OWNERSHIP_CONTENTION_MILLISECONDS = 2_000;
+type LockName = "manager.lock" | "installation.lock";
 
-/**
- * Frees the lock name in one step. On Windows a file that is being unlinked stays
- * in place until the deleting handle closes, and opening or recreating it fails
- * with EPERM meanwhile; renaming it away first means no reader or acquirer of the
- * lock name ever sees that state. A failure leaves the file in place, where its
- * dead owner's PID marks it as stale.
- */
-async function removeLockFile(path: string): Promise<void> {
-    const released = `${path}.${randomUUID()}.released`;
-    try {
-        await rename(path, released);
-    } catch {
-        return;
-    }
-    await unlink(released).catch(() => undefined);
-}
-
-/**
- * The lock that makes one process the daemon among releases that take it: SQLite's exclusive lock on `<lock>.sqlite`,
- * which the operating system holds for the process and frees when it exits, however it exits. Its holder's PID is
- * recorded, so the next holder knows which lock file a crashed holder left, even after that PID was reused.
- */
-function holdDaemonOwnership(
-    path: string,
-): { readonly previousOwner: number | null; readonly release: () => void } | null {
+/** The operating system releases the SQLite write transaction when its owning process exits. */
+function holdDaemonOwnership(path: string): (() => void) | null {
     const database = new DatabaseSync(path);
     try {
-        database.exec("BEGIN EXCLUSIVE");
-        // Only the winner keeps its locks: the exclusive locking mode retains the lock after the transaction commits,
-        // until the connection closes. Set before winning, it would also keep a loser's read lock and block the winner.
-        database.exec("PRAGMA locking_mode = EXCLUSIVE");
+        database.exec("BEGIN IMMEDIATE");
+        return () => database.close();
     } catch (cause) {
         database.close();
         if (cause instanceof Error && "errcode" in cause && cause.errcode === SQLITE_BUSY) {
@@ -51,142 +24,54 @@ function holdDaemonOwnership(
         }
         throw cause;
     }
-    try {
-        database.exec(
-            "CREATE TABLE IF NOT EXISTS daemon_owner (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), pid INTEGER NOT NULL)",
-        );
-        const previous = database.prepare("SELECT pid FROM daemon_owner").get();
-        database.prepare("INSERT OR REPLACE INTO daemon_owner (singleton, pid) VALUES (1, ?)").run(process.pid);
-        database.exec("COMMIT");
-        return {
-            previousOwner: typeof previous?.["pid"] === "number" ? previous["pid"] : null,
-            release: () => database.close(),
-        };
-    } catch (cause) {
-        database.close();
-        throw cause;
-    }
 }
 
-/**
- * Takes the lock file that earlier releases take and read. Only the ownership holder calls this, so contenders never
- * take each other's lock file: one a crashed holder left is replaced, and one a live process of an earlier release holds
- * is kept. Returns the release function, or null when that process holds it.
- */
-async function takeLockFile(path: string, previousOwner: number | null): Promise<(() => Promise<void>) | null> {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-            // A contender never reads an empty lock and mistakes its live owner for a dead one.
-            await createInstallationFile(path, `${process.pid.toString()}\n`);
-            return async () => await removeLockFile(path);
-        } catch (cause) {
-            if (!isNodeError(cause, "EEXIST")) {
-                throw cause;
-            }
-            const encoded = await readFile(path, "utf8").catch(() => "");
-            const pid = Number(encoded.trim());
-            // The previous ownership holder no longer holds the lock, so its lock file is stale whatever its PID names
-            // now. Any other PID was written by an earlier release, whose daemon holds the lock while it is alive.
-            if (Number.isSafeInteger(pid) && pid > 1 && pid !== previousOwner) {
-                try {
-                    process.kill(pid, 0);
-                    return null;
-                } catch (probeCause) {
-                    if (!isNodeError(probeCause, "ESRCH")) {
-                        return null;
-                    }
-                }
-            }
-            await removeLockFile(path);
-        }
-    }
-    return null;
-}
-
-/**
- * Takes the ownership lock, or gives up once another process is the daemon. Contenders that start together briefly
- * hold the lock file's database for each other, so while no daemon holds the lock file yet they retry for a moment
- * and one of them wins. A contender that finds a daemon gives up at once, so it never waits long enough to take over
- * when that daemon stops: a stop then leaves no daemon behind, rather than one the stopping client did not start.
- */
-async function contendForDaemonOwnership(
-    stateDirectory: InstallationDirectory,
-    filename: "manager.lock" | "worker.lock" | "installation.lock",
-): Promise<ReturnType<typeof holdDaemonOwnership>> {
-    const path = join(stateDirectory, filename);
-    const deadline = Date.now() + OWNERSHIP_CONTENTION_MILLISECONDS;
-    for (;;) {
-        const ownership = holdDaemonOwnership(`${path}.sqlite`);
-        if (ownership !== null) {
-            return ownership;
-        }
-        if ((await daemonLockExists(stateDirectory, filename)) || Date.now() >= deadline) {
-            return null;
-        }
-        // Jitter keeps contenders that collided from colliding again in step.
-        await delay(20 + Math.random() * 30);
-    }
-}
-
-/** Makes this process the only daemon. Returns the release function, or null when another daemon holds the lock. */
+/** SQLite owns exclusion. The PID file is diagnostic output and cannot authorize or prevent acquisition. */
 export async function acquireDaemonLock(
     stateDirectory: InstallationDirectory,
-    filename: "manager.lock" | "worker.lock" | "installation.lock" = "manager.lock",
+    filename: LockName = "manager.lock",
 ): Promise<(() => Promise<void>) | null> {
     const path = join(stateDirectory, filename);
-    const ownership = await contendForDaemonOwnership(stateDirectory, filename);
-    if (ownership === null) {
+    const release = holdDaemonOwnership(`${path}.sqlite`);
+    if (release === null) {
         return null;
     }
-    let releaseLockFile: (() => Promise<void>) | null = null;
     try {
-        releaseLockFile = await takeLockFile(path, ownership.previousOwner);
-    } finally {
-        if (releaseLockFile === null) {
-            ownership.release();
-        }
+        await writeInstallationFile(path, `${process.pid.toString()}\n`, AbortSignal.timeout(10_000));
+    } catch (cause) {
+        release();
+        throw cause;
     }
-    if (releaseLockFile === null) {
-        return null;
-    }
-    const release = releaseLockFile;
     return async () => {
-        await release();
-        ownership.release();
+        try {
+            // Detach the diagnostic filename before deleting it so concurrent Windows readers cannot delay reuse.
+            const detached = `${path}.${randomUUID()}.released`;
+            await rename(path, detached);
+            await unlink(detached);
+        } finally {
+            release();
+        }
     };
 }
 
-/** Keep the released lock filename; a dead owner does not keep the daemon alive. */
+/** Probe the same lock that acquisition holds; a PID can be stale or reused by an unrelated process. */
 export async function daemonLockExists(
     stateDirectory: InstallationDirectory,
-    filename: "manager.lock" | "worker.lock" | "installation.lock" = "manager.lock",
+    filename: LockName = "manager.lock",
 ): Promise<boolean> {
+    const path = join(stateDirectory, `${filename}.sqlite`);
     try {
-        const pid = Number((await readFile(join(stateDirectory, filename), "utf8")).trim());
-        // An earlier release can expose the exclusive file before it finishes writing the PID.
-        if (!Number.isSafeInteger(pid) || pid <= 1) {
-            return true;
-        }
-        try {
-            process.kill(pid, 0);
-        } catch (cause) {
-            if (isNodeError(cause, "ESRCH")) {
-                return false;
-            }
-            if (!isNodeError(cause, "EPERM")) {
-                throw cause;
-            }
-        }
-        return true;
+        await access(path);
     } catch (cause) {
         if (isNodeError(cause, "ENOENT")) {
             return false;
         }
-        // Released versions unlink their lock in place. On Windows the file cannot
-        // be opened until that deletion completes, so it still exists.
-        if (isNodeError(cause, "EPERM")) {
-            return true;
-        }
         throw cause;
     }
+    const release = holdDaemonOwnership(path);
+    if (release === null) {
+        return true;
+    }
+    release();
+    return false;
 }

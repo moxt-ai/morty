@@ -44,9 +44,9 @@ test("Given a daemon, When a bug report is read through the Runtime, Then it car
                             nodeVersion: process.versions.node,
                         }),
                     );
-                    // Independently retained 0.0.388 reader: added evidence must fit the released envelope,
+                    // Diagnostics must fit the bounded envelope,
                     // including its strict top-level shape and original bounds.
-                    const releasedReport = z
+                    const boundedReport = z
                         .strictObject({
                             kind: z.literal("runtime.diagnostics.result"),
                             requestId: z
@@ -60,7 +60,7 @@ test("Given a daemon, When a bug report is read through the Runtime, Then it car
                         })
                         .refine((value) => JSON.stringify(value).length <= 65_536)
                         .parse(JSON.parse(message));
-                    expect(releasedReport.entries).toEqual(exported.entries);
+                    expect(boundedReport.entries).toEqual(exported.entries);
                     expect(JSON.stringify(exported)).not.toContain(peer.workspace);
                     break;
                 }

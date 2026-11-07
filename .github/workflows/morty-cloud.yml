@@ -25,7 +25,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  security:
+    uses: ./.github/workflows/security.yml
+
   release:
+    needs: security
     if: github.repository == 'moxt-ai/mobius-morty'
     runs-on: ubuntu-latest
     timeout-minutes: 40

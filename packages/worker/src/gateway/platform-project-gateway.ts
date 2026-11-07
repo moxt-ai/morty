@@ -362,12 +362,7 @@ export class PlatformProjectGateway {
                     { directoryId: selection.workspaceRef },
                     signal,
                 );
-                // A Runtime that predates directory-scoped discovery ignores the directory and names none: its
-                // settings are its default directory's, as before. One that names a directory must name this one.
-                if (
-                    settings.agentId !== selection.agentRef ||
-                    (settings.directoryId !== undefined && settings.directoryId !== selection.workspaceRef)
-                ) {
+                if (settings.agentId !== selection.agentRef || settings.directoryId !== selection.workspaceRef) {
                     throw new PlatformProjectError(
                         "PLATFORM_INVALID_RESPONSE",
                         "Morty returned settings for an unexpected Agent or directory.",

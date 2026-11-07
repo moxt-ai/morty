@@ -1,0 +1,19 @@
+# Reviewed historical false positives: public publishable keys, test fixtures, and non-secret storage/image keys.
+# Fingerprints apply only to these immutable commits and lines, never to future changes.
+6ad69ea767e8fef125af32feea587795e6f1275c:deployment/targets.json:generic-api-key:64
+714c43b500834ed3e3c9fe668d23f4cf842f8fcc:deployment/targets.json:generic-api-key:64
+e998e56cd3a0c3fabcccb616acbff20165da6fb5:deployment/targets.json:generic-api-key:45
+e998e56cd3a0c3fabcccb616acbff20165da6fb5:deployment/targets.json:generic-api-key:52
+ec73e9c2122655adafd810dfd94549f0f4b1ecd4:packages/web/src/services/local-storage/central-local-storage.ts:generic-api-key:192
+6a6f83cd07b104c6b0b7514d43f447f077c150f8:packages/test-support/tests/relay-observability.integration.test.ts:generic-api-key:46
+b486f3c7d7c5da8e6e734ebb05fb7341ae7f0658:packages/cli/tests/pressure/concurrent-sessions.mjs:generic-api-key:198
+3ffb91637a380439e3965bea0151d1a983951618:packages/e2e/fixtures/wrangler.platform.jsonc:generic-api-key:35
+578356634676b149a3cd6a700035a5eef6590aa9:packages/test-support/src/cloudflare.ts:generic-api-key:41
+578356634676b149a3cd6a700035a5eef6590aa9:packages/relay-cloudflare-platform/vitest.config.ts:generic-api-key:65
+e4ec07fb10061c86fb0c100454072f55cc8fb92e:packages/web/test/native-history-v2.integration.test.tsx:generic-api-key:88
+dbe7ae368d663db2e473fc918bd13532af4e04c5:packages/e2e/infra/local-stack.ts:generic-api-key:144
+c066e4f850a7a354d939225e1e959d159a9592c9:packages/relay-cloudflare-standalone/vitest.config.ts:generic-api-key:18
+a9ad4230988d003ef187ef9268ece00ce03506de:scripts/local-dev.cjs:generic-api-key:493
+986d187826caa601242b3e8850e54994caf3171d:tests/agent-daemon/providers/cursor.ts:jwt:18
+efb951aecaae823702bbfce2ae3bf7d58fab22b7:packages/e2e/infra/test-runtime.ts:generic-api-key:29
+19567653a3bb8d664dab115cae8c094d660079ea:scripts/e2e/new-conversation.mjs:generic-api-key:22

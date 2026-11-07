@@ -25,23 +25,29 @@ async function stateDirectory() {
     return directory;
 }
 
-/** A process that tries to become the daemon at `startAt` and keeps whatever it took until it is killed. */
-function contender(
-    directory: string,
-    startAt: number,
-): { readonly child: ChildProcess; readonly outcome: Promise<string> } {
+/** Contenders wait at a process boundary so concurrency does not depend on sleeps or wall-clock timing. */
+function contender(directory: string): {
+    readonly child: ChildProcess;
+    readonly ready: Promise<void>;
+    readonly start: () => void;
+    readonly outcome: Promise<string>;
+} {
     const child = spawn(
         process.execPath,
         [
             "--input-type=module",
             "--eval",
-            `const { acquireDaemonLock } = await import(${JSON.stringify(lockModule)});
-            while (Date.now() < ${startAt}) {}
-            const release = await acquireDaemonLock(${JSON.stringify(directory)});
-            process.stdout.write(release === null ? "lost\\n" : "won\\n");
-            setInterval(() => {}, 60_000);`,
+            `
+        import { once } from "node:events";
+        const { acquireDaemonLock } = await import(${JSON.stringify(lockModule)});
+        process.stdout.write("ready\\n");
+        await once(process.stdin, "data");
+        const release = await acquireDaemonLock(${JSON.stringify(directory)});
+        process.stdout.write(release === null ? "lost\\n" : "won\\n");
+        process.stdin.resume();
+    `,
         ],
-        { stdio: ["ignore", "pipe", "inherit"] },
+        { stdio: ["pipe", "pipe", "inherit"] },
     );
     cleanups.push(async () => {
         if (child.exitCode === null && child.signalCode === null) {
@@ -49,8 +55,18 @@ function contender(
             await once(child, "exit");
         }
     });
-    const lines = createInterface({ input: child.stdout ?? process.stdin });
-    return { child, outcome: once(lines, "line").then(([line]) => String(line)) };
+    const lines = createInterface({ input: child.stdout ?? process.stdin })[Symbol.asyncIterator]();
+    const ready = lines.next().then(({ value }) => {
+        expect(value).toBe("ready");
+    });
+    return {
+        child,
+        ready,
+        start: () => {
+            child.stdin?.write("start\n");
+        },
+        outcome: ready.then(async () => String((await lines.next()).value)),
+    };
 }
 
 async function deadProcessId(): Promise<number> {
@@ -66,8 +82,11 @@ test("Given a lock a crashed daemon left, When several daemons start at once, Th
     const directory = await stateDirectory();
     await writeFile(join(directory, "manager.lock"), `${(await deadProcessId()).toString()}\n`);
 
-    const startAt = Date.now() + 1_000;
-    const contenders = Array.from({ length: 6 }, () => contender(directory, startAt));
+    const contenders = Array.from({ length: 6 }, () => contender(directory));
+    await Promise.all(contenders.map(({ ready }) => ready));
+    for (const candidate of contenders) {
+        candidate.start();
+    }
     const outcomes = await Promise.all(contenders.map(({ outcome }) => outcome));
 
     expect(outcomes.filter((outcome) => outcome === "won")).toHaveLength(1);
@@ -75,12 +94,8 @@ test("Given a lock a crashed daemon left, When several daemons start at once, Th
     expect(await readFile(join(directory, "manager.lock"), "utf8")).toBe(`${String(winner)}\n`);
 });
 
-test("Given a daemon that crashed and whose PID now names a live process, When the next daemon starts, Then it replaces the lock its predecessor left", async () => {
+test("Given an unowned PID file names another live process, When the current daemon starts, Then the PID file cannot claim ownership", async () => {
     const directory = await stateDirectory();
-    // This process held the lock and crashed: its lock file stays behind while its PID names a live process.
-    const crashed = await acquireDaemonLock(directory);
-    expect(crashed).not.toBeNull();
-    await crashed?.();
     await writeFile(join(directory, "manager.lock"), `${process.pid.toString()}\n`);
 
     const release = await acquireDaemonLock(directory);
@@ -94,12 +109,10 @@ test("Given a running daemon, When another daemon starts and the running one the
     const running = await acquireDaemonLock(directory);
     expect(running).not.toBeNull();
 
-    const startAt = Date.now() + 1_000;
-    const newcomer = contender(directory, startAt);
-    // The running daemon stops while the newcomer would still be waiting for the lock.
-    await new Promise((resolve) => setTimeout(resolve, startAt + 300 - Date.now()));
-    await running?.();
-
+    const newcomer = contender(directory);
+    await newcomer.ready;
+    newcomer.start();
     expect(await newcomer.outcome).toBe("lost");
+    await running?.();
     expect(await daemonLockExists(directory)).toBe(false);
 });

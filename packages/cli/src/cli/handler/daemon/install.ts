@@ -48,7 +48,7 @@ async function install(options: InstallOptions, context: CliContext): Promise<vo
         switched = true;
         await recordInstallationState({ kind: "switched", previous, candidate }, signal);
         if (running !== null) {
-            const started = await ensureDaemon(control.stateDirectory, candidate.version, signal);
+            const started = await ensureDaemon(control.stateDirectory, signal);
             if (started !== candidate.version) {
                 throw new Error("A competing startup selected another Morty version");
             }
@@ -63,13 +63,13 @@ async function install(options: InstallOptions, context: CliContext): Promise<vo
                 if (previous !== null) {
                     await selectRelease(previous, recovery);
                     if (running !== null) {
-                        await ensureDaemon(control.stateDirectory, previous.version, recovery);
+                        await ensureDaemon(control.stateDirectory, recovery);
                     }
                 } else {
                     await rm(join(executableDirectory(), "current.json"), { force: true });
                 }
             } else if (running !== null && previous !== null) {
-                await ensureDaemon(control.stateDirectory, previous.version, recovery);
+                await ensureDaemon(control.stateDirectory, recovery);
             }
             await recordInstallationState({ kind: "failed", recovered: true, installed: previous }, recovery);
         } catch (recoveryError) {

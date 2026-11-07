@@ -214,11 +214,10 @@ async function derivedToken(
         .replace(/=+$/u, "")}`;
 }
 
-/**
- * Earlier releases could give a user several Machines, so the Machine bound to a Runtime is served before one that
- * never got a Runtime, and the oldest such Machine wins. Setup binds only this Machine and a binding is permanent, so
- * once it has a Runtime it remains the one served.
- */
-function servedBot<Bot extends { readonly runtimeId: string | null }>(bots: readonly Bot[]): Bot | undefined {
-    return bots.find((bot) => bot.runtimeId !== null) ?? bots[0];
+/** A Project identity owns exactly one Machine; ambiguous stored state must not select another target. */
+function servedBot<Bot>(bots: readonly Bot[]): Bot | undefined {
+    if (bots.length > 1) {
+        throw new ManagementError("BOT_STATE_INVALID", "Machine state is invalid. Set up a fresh Morty identity.", 409);
+    }
+    return bots[0];
 }

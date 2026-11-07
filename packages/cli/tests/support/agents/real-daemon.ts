@@ -258,12 +258,12 @@ export async function withRealDaemon(
                     if (mode === "crash") {
                         const control = await openMortyControlInstallation(signal, cliEnvironment);
                         const status = lifecycleResponse.parse(
-                            await sendLocalRequest(control.stateDirectory, "manager", { kind: "status" }, signal),
+                            await sendLocalRequest(control.stateDirectory, { kind: "status" }, signal),
                         );
-                        if (status.kind !== "status" || status.worker === null) {
-                            throw new Error("The managed worker is unavailable for SIGKILL");
+                        if (status.kind !== "status") {
+                            throw new Error("The managed daemon is unavailable for SIGKILL");
                         }
-                        process.kill(status.worker.pid, "SIGKILL");
+                        process.kill(status.daemon.pid, "SIGKILL");
                     } else {
                         await cli(["quit"]);
                     }

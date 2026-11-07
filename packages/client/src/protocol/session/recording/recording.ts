@@ -45,7 +45,7 @@ const sessionRecordingHistorySchema = z
     })
     .readonly();
 
-/** Legacy lifecycle observations from recorded events; never authoritative execution state. */
+/** Historical lifecycle observations from recorded events; never authoritative execution state. */
 export const sessionRecordingStatusSchema = z.enum(["running", "idle", "failed"]);
 
 // Recording cursors are opaque append-order tokens. The ordinal locates a recorded batch and the

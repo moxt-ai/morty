@@ -16,7 +16,7 @@ export function registerStartCommand(program: Command, context: CliContext): voi
         .addOption(valueOption("--connection <connection-id>", "saved Runtime connection identifier"))
         .action(async (options: StartOptions) => {
             const control = await openMortyControlInstallation(context.shutdownSignal, process.env);
-            await ensureDaemon(control.stateDirectory, context.version, context.shutdownSignal);
+            await ensureDaemon(control.stateDirectory, context.shutdownSignal);
             const installation = await openMortyCliInstallation(context.shutdownSignal, process.env);
             if (options.connection !== undefined) {
                 await installation.setConnectionActivation(options.connection, "active", context.shutdownSignal);
