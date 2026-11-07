@@ -47,7 +47,7 @@ pnpm local-dev --help
 ```
 
 Use [the local-stack skill](../.agents/skills/chat-local-full-dev/SKILL.md) for isolated
-Chat and Platform startup and cleanup. Runtime, protocol, client, and server
+Morty Web and relay startup and cleanup. Runtime, protocol, client, and server
 sources belong to the same Morty workspace. Normal Morty builds must not require
 the original Mobius distribution; use an isolated released copy only when
 verifying coexistence with Moxt.
@@ -61,7 +61,8 @@ Production and benchmark builds load content-addressed JavaScript and CSS from
 separate append-only R2 buckets. Deployments upload new assets before activating
 Workers so an open page can still load its original chunks. Never delete these
 objects during ordinary deployment. Provision resources using the independent
-Morty targets and give each environment only its own deployment authority.
+Morty targets. Production and benchmark use separate resources and service
+credentials while sharing the approved Morty account-level deployment authority.
 
 ### Setup download
 
