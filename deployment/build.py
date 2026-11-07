@@ -28,7 +28,7 @@ def run(command, cwd=ROOT, env=None):
 
 def overlay(file, environment):
     result = read(file)
-    result.update(result.pop('env', {}).get('production' if environment == 'benchmark' else environment, {}))
+    result.update(result.pop('env', {}).get(environment, {}))
     for field in ('$schema', 'routes', 'account_id'):
         result.pop(field, None)
     result.update(account_id=ACCOUNT, workers_dev=True, preview_urls=False)
@@ -38,7 +38,7 @@ def overlay(file, environment):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('environment', choices=['production', 'benchmark'])
+    parser.add_argument('environment', choices=['production'])
     args = parser.parse_args()
     targets = read(ROOT / 'deployment/targets.json')
     assert targets['account_id'] == ACCOUNT

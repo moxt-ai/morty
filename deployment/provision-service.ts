@@ -10,10 +10,10 @@ const account = "b903018a1c3d9d9a4bd68a11eb03e764";
 const targetSchema = v.object({ d1_id: v.string(), app_id: v.string() });
 const targetsSchema = v.object({
     account_id: v.literal(account),
-    environments: v.object({ production: targetSchema, benchmark: targetSchema }),
+    environments: v.object({ production: targetSchema }),
 });
 const targets = v.parse(targetsSchema, JSON.parse(await readFile(new URL("targets.json", import.meta.url), "utf8")));
-const environment = v.parse(v.picklist(["production", "benchmark"]), process.argv[2]);
+const environment = v.parse(v.literal("production"), process.argv[2]);
 const operation = v.parse(v.picklist(["prepare", "retire"]), process.argv[3]);
 const target = targets.environments[environment];
 const secret = v.parse(

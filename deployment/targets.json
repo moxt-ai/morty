@@ -24,28 +24,6 @@
                 "https://morty-production.mobius-b90.workers.dev",
                 "https://morty-platform-production.mobius-b90.workers.dev"
             ]
-        },
-        "benchmark": {
-            "d1_id": "5cf46913-9cb3-4072-b936-ba212ff4348b",
-            "d1_name": "morty-platform-benchmark-control-plane-wnam",
-            "platform": "morty-platform-benchmark",
-            "recording": "morty-recording-benchmark",
-            "morty": "morty-benchmark",
-            "platform_origin": "https://morty-platform-benchmark.mobius-b90.workers.dev",
-            "morty_origin": "https://morty-cf-benchmark.morty.build",
-            "buckets": {
-                "platform_apac": "morty-platform-benchmark-apac-objects",
-                "platform_wnam": "morty-platform-benchmark-wnam-objects",
-                "attachments": "morty-benchmark-apac-attachments",
-                "web_assets": "morty-cf-benchmark-web-assets"
-            },
-            "asset_origin": "https://assets-cf-benchmark.morty.build",
-            "app_id": "app_MMRXY14ms-WFOn2gfJmMrfAk",
-            "allowed_origins": [
-                "https://morty-cf-benchmark.morty.build",
-                "https://morty-platform-benchmark.mobius-b90.workers.dev",
-                "https://morty-benchmark.mobius-b90.workers.dev"
-            ]
         }
     }
 }

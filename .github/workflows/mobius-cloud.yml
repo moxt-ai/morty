@@ -6,11 +6,6 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
-      environment:
-        description: Independent target environment
-        type: choice
-        default: production
-        options: [production, benchmark]
       operation:
         description: Build only, deploy, or restore a successful archived release
         type: choice
@@ -26,7 +21,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: mobius-cloud-${{ inputs.environment || 'production' }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'release' }}
+  group: morty-cloud-production-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'release' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -34,9 +29,9 @@ jobs:
     if: github.repository == 'moxt-ai/mobius-morty'
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    environment: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (inputs.operation == 'deploy' || inputs.operation == 'restore' || inputs.operation == 'provision-service' || (github.event_name == 'push' && vars.AUTO_DEPLOY_PRODUCTION == 'true'))) && format('mobius-{0}', inputs.environment || 'production') || 'build-only' }}
+    environment: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (inputs.operation == 'deploy' || inputs.operation == 'restore' || inputs.operation == 'provision-service' || (github.event_name == 'push' && vars.AUTO_DEPLOY_PRODUCTION == 'true'))) && 'mobius-production' || 'build-only' }}
     env:
-      TARGET_ENVIRONMENT: ${{ inputs.environment || 'production' }}
+      TARGET_ENVIRONMENT: production
       OPERATION: ${{ inputs.operation || 'build' }}
       WRANGLER_SEND_METRICS: 'false'
     steps:
