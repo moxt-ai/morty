@@ -11,7 +11,7 @@ import {
     type SessionPromptCommand,
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { ControlledAcpAgentSpecification } from "../support/agents/controlled-acp.ts";
 import { type RealDaemonPeer, withControlledDaemon } from "../support/agents/real-daemon.ts";
 import { writeControlledAcpExecutable } from "../support/controlled-acp-executable.ts";
@@ -68,6 +68,8 @@ async function observe(peer: RealDaemonPeer, commandIds: readonly string[]) {
 }
 
 test("Given an executed command, When its receipt is evicted and the daemon restarts, Then retries and delayed cancellations preserve its executed identity", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-07T00:00:00.000Z"));
     const directory = await mkdtemp(join(tmpdir(), "morty-execution-identity-"));
     try {
         const executableDirectory = await writeControlledAcpExecutable(directory);
@@ -76,11 +78,12 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
             { MORTY_FAKE_ACP_STATE_DIRECTORY: join(directory, "agent"), PATH: executableDirectory },
             async (peer) => {
                 const original: SessionPromptCommand = {
+                    historyPolicy: "eager",
                     additionalDirectoryIds: [],
                     agentId: "controlled-acp",
                     attachments: [],
                     bindingId: peer.bindingId,
-                    commandId: randomUUID(),
+                    commandId: "a-original-execution",
                     directoryId: "default",
                     disposition: SessionPromptDisposition.Reject,
                     kind: "session.prompt",
@@ -96,7 +99,7 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
 
                 // A fresh prompt's Agent turn number exposes any accidental re-execution.
                 send(original);
-                const control = { ...original, commandId: randomUUID(), prompt: "Before eviction" };
+                const control = { ...original, commandId: "b-control", prompt: "Before eviction" };
                 send(control);
                 const beforeEviction = await observe(peer, [control.commandId]);
                 expect(beforeEviction.output).toContain("Controlled ACP turn 2: Before eviction");
@@ -104,7 +107,10 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
                 // The retry is answered from the receipt: its outcome is restated, not recorded again.
                 expect(beforeEviction.restatedCommandIds).toEqual([original.commandId]);
 
-                const rejected = Array.from({ length: 1_026 }, () => randomUUID());
+                const rejected = Array.from(
+                    { length: 1_026 },
+                    (_, index) => `z-rejected-${String(index).padStart(4, "0")}`,
+                );
                 for (const commandId of rejected) {
                     send({ ...original, commandId, agentId: "missing-agent" });
                 }
@@ -122,7 +128,12 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
                         }),
                     );
                     const cancelled = await observe(peer, [original.commandId]);
-                    expect(cancelled.outcomes.get(original.commandId)).toEqual({ kind: "completed" });
+                    expect(cancelled.outcomes.get(original.commandId)).toEqual({
+                        kind: "failed",
+                        code: "command_result_expired",
+                    });
+                    expect(cancelled.completedCommandIds).not.toContain(original.commandId);
+                    expect(cancelled.restatedCommandIds).not.toContain(original.commandId);
                     expect(cancelled.unstartedCommandIds).not.toContain(original.commandId);
                     peer.send(
                         JSON.stringify({
@@ -164,5 +175,6 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
         );
     } finally {
         await rm(directory, { recursive: true, force: true });
+        vi.useRealTimers();
     }
 }, 90_000);

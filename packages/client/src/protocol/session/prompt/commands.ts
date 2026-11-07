@@ -44,7 +44,7 @@ export interface SessionPromptCommand {
     readonly directoryId: string;
     readonly disposition: string;
     readonly attachments: readonly PromptAttachment[];
-    readonly historyPolicy?: SessionHistoryPolicy;
+    readonly historyPolicy: SessionHistoryPolicy;
     readonly kind: typeof SESSION_PROMPT_KIND;
     readonly prompt: string;
     readonly sessionConfigurations?: readonly SessionConfigurationSelection[];
@@ -105,7 +105,7 @@ export const decodePromptAttachmentsValue = (value: unknown): readonly PromptAtt
 
 function readPromptDisposition(value: Readonly<Record<string, unknown>>): string {
     const field = value["disposition"];
-    if (field === undefined || field === SessionPromptDisposition.Reject) {
+    if (field === SessionPromptDisposition.Reject) {
         return SessionPromptDisposition.Reject;
     }
     if (field === SessionPromptDisposition.Queue) {
@@ -133,8 +133,7 @@ export function decodeSessionPromptCommand(encoded: string): SessionPromptComman
     }
 
     const disposition = readPromptDisposition(value);
-    const rawTargetCommandId = value["targetCommandId"];
-    const targetCommandId = rawTargetCommandId === undefined ? "" : readText(value, "targetCommandId", 128);
+    const targetCommandId = readText(value, "targetCommandId", 128);
     if (
         (disposition === SessionPromptDisposition.Reject && targetCommandId.length > 0) ||
         (disposition !== SessionPromptDisposition.Reject && !isIdentifier(targetCommandId))
@@ -157,11 +156,7 @@ export function decodeSessionPromptCommand(encoded: string): SessionPromptComman
         directoryId: readDirectoryIdentifier(value, "directoryId"),
         disposition,
         attachments,
-        ...(value["historyPolicy"] === undefined
-            ? {}
-            : {
-                  historyPolicy: readHistoryPolicy(value),
-              }),
+        historyPolicy: readHistoryPolicy(value),
         kind: SESSION_PROMPT_KIND,
         prompt,
         ...(hasSessionConfigurations ? { sessionConfigurations } : {}),

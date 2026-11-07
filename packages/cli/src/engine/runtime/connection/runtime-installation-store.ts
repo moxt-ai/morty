@@ -149,21 +149,11 @@ function decodeInstallationPointer(value: unknown): InstallationPointer {
     return { installationId: validateInstallationId(storedInstallationId) };
 }
 
-// Previous disk versions carried extra fields. Retain only fields this reader owns;
-// current versions still require the exact schema below.
-function retainedFields(
-    value: Readonly<Record<string, unknown>>,
-    keys: readonly string[],
-): Readonly<Record<string, unknown>> {
-    return Object.fromEntries(keys.filter((key) => Object.hasOwn(value, key)).map((key) => [key, value[key]]));
-}
-
-function decodeChannelIndex(input: unknown): ChannelIndex {
-    if (!isRecord(input)) {
+function decodeChannelIndex(value: unknown): ChannelIndex {
+    if (!isRecord(value)) {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
-    const value = input["version"] === 1 ? retainedFields(input, CHANNEL_INDEX_KEYS) : input;
-    if (!hasExactKeys(value, CHANNEL_INDEX_KEYS) || (value["version"] !== 1 && value["version"] !== 2)) {
+    if (!hasExactKeys(value, CHANNEL_INDEX_KEYS) || value["version"] !== 2) {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     const channelId = value["channelId"];
@@ -180,11 +170,7 @@ function decodeChannelIndex(input: unknown): ChannelIndex {
 }
 
 function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): VerifiedRuntimeConnection {
-    if (
-        !hasExactKeys(value, VERIFIED_CONNECTION_KEYS) ||
-        (value["version"] !== 5 && value["version"] !== 6) ||
-        value["kind"] !== "verified"
-    ) {
+    if (!hasExactKeys(value, VERIFIED_CONNECTION_KEYS) || value["version"] !== 6 || value["kind"] !== "verified") {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     const activation = value["activation"];
@@ -229,7 +215,7 @@ function decodeConnection(value: unknown): VerifiedRuntimeConnection {
     if (!isRecord(value)) {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
-    return decodeVerifiedConnection(value["version"] === 5 ? retainedFields(value, VERIFIED_CONNECTION_KEYS) : value);
+    return decodeVerifiedConnection(value);
 }
 
 async function readJsonFile(path: string, signal: AbortSignal, missingCode: string): Promise<unknown> {

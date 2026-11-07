@@ -244,12 +244,10 @@ const sessionRecordingTurnSchema = z
         answerLength: z.number().int().nonnegative().safe(),
         attempt: sessionRecordingTurnAttemptSchema,
         commandId: identifierStringSchema,
-        // Optional for independently deployed Recordings and clients that predate compaction status.
         compactions: z
             .array(sessionRecordingCompactionSchema)
             .max(SESSION_RECORDING_TURN_COMPACTION_MAX_ELEMENTS)
-            .readonly()
-            .optional(),
+            .readonly(),
         createdAt: isoTimestamp,
         generationId: identifierStringSchema,
         itemCount: z.number().int().nonnegative().safe(),

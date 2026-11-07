@@ -120,6 +120,7 @@ test("Given Codex publishes complete model settings and defaults to Full access,
             });
             peer.send(
                 encodeSessionPromptCommand({
+                    historyPolicy: "eager",
                     kind: "session.prompt",
                     commandId: randomUUID(),
                     sessionId: peer.sessionId,

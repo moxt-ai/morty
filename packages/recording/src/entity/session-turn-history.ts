@@ -40,14 +40,10 @@ const sessionRecordingInteraction = decodedProtocolValue(decodeSessionRecordingI
 export const storedTurnSchema = z
     .object({
         answerLength: count,
-        activity: executionActivitySchema.nullable().default(null),
+        activity: executionActivitySchema.nullable(),
         attempt: sessionRecordingTurnAttempt,
         commandId: z.string().min(1),
-        compactions: z
-            .array(sessionRecordingCompaction)
-            .max(SESSION_RECORDING_TURN_COMPACTION_MAX_ELEMENTS)
-            .readonly()
-            .default([]),
+        compactions: z.array(sessionRecordingCompaction).max(SESSION_RECORDING_TURN_COMPACTION_MAX_ELEMENTS).readonly(),
         createdAt: z.iso.datetime({ offset: true }),
         generationId: z.string().min(1),
         itemCount: count,
@@ -60,10 +56,8 @@ export const storedTurnSchema = z
         // tool work close it, and reasoning from another message starts a new item.
         openThought: z.object({ itemId: z.string(), messageId: z.string().nullable() }).readonly().nullable(),
         order: z.number().int().positive().safe(),
-        // Null when no other command was running when the prompt was requested. A Turn folded before
-        // this was recorded has no such key at all, and it is read as the anchor it is: a prompt that
-        // was not placed between another command's work.
-        preceding: sessionRecordingTurnPreceding.nullish().transform((value) => value ?? null),
+        // Null when no other command was running when the prompt was requested.
+        preceding: sessionRecordingTurnPreceding.nullable(),
         prompt: sessionRecordingTurnPrompt.nullable(),
     })
     .readonly();
@@ -111,19 +105,16 @@ export const storedProjectionStateSchema = z
             .object({ commandIds: z.array(z.string().min(1)).readonly(), generationId: z.string().min(1) })
             .readonly()
             .nullable(),
-        activityVersion: z.literal(1).optional(),
-        toolProgressVersion: z.literal(1).optional(),
-        // Missing on a projection that let a replayed terminal event overwrite a settled attempt.
-        settlementVersion: z.literal(1).optional(),
-        // Missing on a projection that has not folded compaction lifecycle events yet.
-        compactionVersion: z.literal(1).optional(),
+        activityVersion: z.literal(1),
+        toolProgressVersion: z.literal(1),
+        settlementVersion: z.literal(1),
+        compactionVersion: z.literal(1),
         // Generation of the last folded event; a different generation clears the active commands.
         generationId: z.string().min(1).nullable(),
         // Generations that a later one replaced. A batch from one of them arrives late and is not a restart.
         retiredGenerationIds: z.array(z.string().min(1)).readonly(),
         title: z.string().nullable(),
-        // Version 1 did not deduplicate event identities and must be rebuilt before further folding.
-        version: z.union([z.literal(1), z.literal(2)]).default(1),
+        version: z.literal(2),
     })
     .readonly();
 export type StoredProjectionState = z.infer<typeof storedProjectionStateSchema>;

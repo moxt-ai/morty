@@ -50,7 +50,7 @@ export type RecoveredOutcome =
 
 /**
  * An outcome a receipt already holds, restated for clients that missed it. It keeps the time it was recorded, which
- * receivers that predate the restated marker take as when the command ended; undefined when no receipt holds it.
+ * identifies when the command ended; undefined when no receipt holds it.
  */
 export interface RestatedOutcome {
     readonly event: SessionEventPayload;
@@ -61,7 +61,8 @@ export interface RestatedOutcome {
 export type CancellationBeforeAdmission =
     | { readonly kind: "recorded"; readonly outcome: SessionEventPayload }
     | { readonly kind: "restated"; readonly outcome: RestatedOutcome }
-    | { readonly kind: "unavailable" };
+    | { readonly kind: "unavailable" }
+    | { readonly kind: "expired" };
 
 type ExecutionState =
     | { readonly kind: "pending" }
@@ -451,18 +452,8 @@ export class ExecutionReceipts {
                 return outcome === undefined ? { kind: "unavailable" } : { kind: "restated", outcome };
             }
             case "expired":
-                // Preserve the legacy cancellation acknowledgement without replacing an executed
-                // identity with a before-admission reservation after its detailed receipt expired.
-                return {
-                    kind: "restated",
-                    outcome: {
-                        event: {
-                            type: "lifecycle-metadata",
-                            payload: { kind: "prompt.completed", commandId, stopReason: "cancelled" },
-                        },
-                        recordedAt: undefined,
-                    },
-                };
+                // Execution is known, but its outcome is unavailable; never invent a cancellation result.
+                return { kind: "expired" };
             case "cancelled":
                 return {
                     kind: "restated",

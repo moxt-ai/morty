@@ -190,3 +190,24 @@ it("isolates native query replies from live fanout across hibernation and daemon
         }
     }
 });
+
+it("Given a host connection without credential kind, When it reaches the service boundary, Then it is rejected instead of inferred as a channel credential", async () => {
+    const runtimeId = `kind-${crypto.randomUUID()}`;
+    const projectId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
+    await registerRuntimeFixture(projectId, runtimeId);
+    const response = await env.RUNTIME_RELAY.getByName(runtimeId).fetch(
+        `https://runtime.internal/projects/${projectId}/host`,
+        {
+            headers: {
+                Upgrade: "websocket",
+                "x-morty-channel-id": "kind-channel",
+                "x-morty-runtime-id": runtimeId,
+                "x-morty-host-credential-id": "retired-host",
+            },
+        },
+    );
+    response.webSocket?.accept();
+    response.webSocket?.close();
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: { code: "unauthorized" } });
+});

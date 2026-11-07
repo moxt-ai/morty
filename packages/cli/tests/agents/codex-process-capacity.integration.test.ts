@@ -24,6 +24,7 @@ async function promptRealSession(peer: RealDaemonPeer, sessionId: string, text: 
     const commandId = randomUUID();
     peer.send(
         encodeSessionPromptCommand({
+            historyPolicy: "eager",
             kind: "session.prompt",
             commandId,
             sessionId,

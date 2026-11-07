@@ -362,7 +362,7 @@ export class PairingDirectoryService implements PairingOperations {
         const codeHash = await hashPairingCredential(normalizePairingCode(pairingCode));
         const storage = await this.identityStorage({ kind: "pairing-code", codeHash }, signal);
         const pairing = await storage.readPairingCode(codeHash, signal);
-        if (pairing === null || (expectedPairingId.length > 0 && pairing.pairing_id !== expectedPairingId)) {
+        if (pairing === null || pairing.pairing_id !== expectedPairingId) {
             throw new PairingDirectoryError("invalid_pairing_code", "The pairing code is invalid or expired");
         }
         const appId = await this.#cx.gateways.projectApplications.resolveApplicationId(pairing.project_id, signal);
@@ -391,14 +391,6 @@ export class PairingDirectoryService implements PairingOperations {
         }
         return { appId, channelId: pairing.channel_id, daemonToken, runtimeId: pairing.runtime_id };
     };
-
-    readonly claimPairing: PairingOperations["claimPairing"] = async (
-        pairingCode,
-        machineName,
-        workspaceName,
-        agents,
-        signal,
-    ) => await this.redeemPairing("", pairingCode, machineName, workspaceName, agents, signal);
 
     readonly redeemRuntimePairing: PairingOperations["redeemRuntimePairing"] = async (
         pairingId,

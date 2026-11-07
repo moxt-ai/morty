@@ -98,6 +98,7 @@ async function readDelivery(peer: RealDaemonPeer, commandId: string) {
 
 const promptCommand = (peer: RealDaemonPeer, commandId: string, prompt: string, targetCommandId = "") =>
     encodeSessionPromptCommand({
+        historyPolicy: "eager",
         additionalDirectoryIds: [],
         agentId: "controlled-acp",
         attachments: [],
@@ -190,6 +191,7 @@ for (const admission of ["before-admission", "queued"] as const) {
                         targetCommandId = "",
                     ) =>
                         encodeSessionPromptCommand({
+                            historyPolicy: "eager",
                             additionalDirectoryIds: [],
                             agentId: "controlled-acp",
                             attachments: [],
@@ -306,6 +308,7 @@ test("Given cancellation committed before its receipt, When the Runtime recovers
             async (peer) => {
                 const prompt = (commandId: string, content: string, targetCommandId = "") =>
                     encodeSessionPromptCommand({
+                        historyPolicy: "eager",
                         additionalDirectoryIds: [],
                         agentId: "controlled-acp",
                         attachments: [],

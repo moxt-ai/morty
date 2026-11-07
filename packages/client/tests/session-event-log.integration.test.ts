@@ -53,6 +53,7 @@ describe("Session Event Log V2 SDK", () => {
                 response.setHeader("content-type", "application/json");
                 response.end(
                     JSON.stringify({
+                        promptOutcomes: [],
                         sessionGenerationId: "session-generation-1",
                         events: [sourceEvent],
                         nextCursor: null,
@@ -84,6 +85,7 @@ describe("Session Event Log V2 SDK", () => {
 
         try {
             expect(await client.events.list("source-session", new MortyPageRequest(500, ""), signal)).toEqual({
+                promptOutcomes: [],
                 sessionGenerationId: "session-generation-1",
                 events: [sourceEvent],
                 nextCursor: null,

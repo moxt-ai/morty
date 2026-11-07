@@ -85,4 +85,20 @@ describe("Session execution read contracts", () => {
             decodeNativeSessionResult(JSON.stringify({ ...execution, command: { state: "failed", code: "boom" } })),
         ).toMatchObject({ command: { state: "failed", code: "boom" } });
     });
+    it("Given a running turn without its start time, When a client restores execution, Then the retired snapshot is rejected", () => {
+        expect(() =>
+            decodeNativeSessionResult(
+                JSON.stringify({
+                    ...execution,
+                    turn: {
+                        commandId: "command-1",
+                        epoch: "epoch-1",
+                        interaction: null,
+                        sequence: 0,
+                        state: "running",
+                    },
+                }),
+            ),
+        ).toThrow();
+    });
 });

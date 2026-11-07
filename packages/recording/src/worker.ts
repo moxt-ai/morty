@@ -430,9 +430,8 @@ async function turnHistoryResponse<T>(
 ): Promise<Response> {
     let result = read();
     if (result.kind === "building") {
-        // A read folds the step its alarm would fold next. After a deployment that changes how Turns are
-        // folded, every projection has to be rebuilt; a Recording that fits in that step is answered now
-        // instead of asking its reader to come back for the alarm's result.
+        // A read folds the next missing step. A Recording that fits in one step can answer now;
+        // longer backfills continue through the alarm.
         history.backfill(new Date());
         result = read();
         if (result.kind === "ready" || result.kind === "not_found") {

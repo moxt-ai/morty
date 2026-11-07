@@ -2,7 +2,7 @@ import type { SessionLiveEvent } from "../events/index.ts";
 import type { SessionRecordingStatus } from "./recording.ts";
 
 /**
- * The last lifecycle observation in these events, for legacy summary and webhook consumers.
+ * The last lifecycle observation in these events, for summary and webhook consumers.
  * Missing events and other commands make this unsuitable as a current Session execution status.
  */
 export function lastRecordedLifecycleStatus(events: readonly SessionLiveEvent[]): SessionRecordingStatus | null {

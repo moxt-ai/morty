@@ -59,6 +59,7 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                     ): Promise<void> => {
                         peer.send(
                             encodeSessionPromptCommand({
+                                historyPolicy: "eager",
                                 ...identity,
                                 kind: "session.prompt",
                                 sessionId: peer.sessionId,

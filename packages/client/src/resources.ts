@@ -1,5 +1,6 @@
 import {
     decodeIdentifier,
+    decodeSessionCapabilities,
     decodeTurn,
     type Identifier,
     isIdentifier,
@@ -11,43 +12,6 @@ import {
 } from "@morty-build/client/protocol";
 
 import { MortyProtocolError, MortyValidationError } from "./errors.ts";
-
-// The capabilities this SDK build understands. A newer service may advertise
-// additional capabilities; unknown fields are ignored and missing fields default
-// to unsupported, so the SDK never rejects a service for evolving the protocol.
-const KNOWN_SESSION_CAPABILITY_FIELDS: readonly (keyof SessionCapabilities)[] = [
-    "additionalDirectories",
-    "audioPrompt",
-    "closeSession",
-    "deleteSession",
-    "embeddedContextPrompt",
-    "imagePrompt",
-    "listSessions",
-    "loadSession",
-    "promptQueueing",
-    "renameSession",
-    "resumeSession",
-    "steering",
-    "unstableForkSession",
-];
-
-function unsupportedSessionCapabilities(): SessionCapabilities {
-    return Object.freeze({
-        additionalDirectories: false,
-        audioPrompt: false,
-        closeSession: false,
-        deleteSession: false,
-        embeddedContextPrompt: false,
-        imagePrompt: false,
-        listSessions: false,
-        loadSession: false,
-        promptQueueing: false,
-        renameSession: false,
-        resumeSession: false,
-        steering: false,
-        unstableForkSession: false,
-    });
-}
 
 function invalidResponse(message: string): MortyProtocolError {
     return new MortyProtocolError(message);
@@ -312,29 +276,16 @@ export class MortyAgentDescriptor {
     }
 }
 
-// Decodes capabilities without depending on zod's strip/default semantics: the
-// shape is validated explicitly into a fresh object, unknown fields are ignored,
-// and missing known fields default to unsupported. This keeps an older SDK
-// compatible with a newer service that advertises capabilities it does not know.
 export function decodeMortyAgentCapabilities(value: unknown): SessionCapabilities {
-    const capabilities = record(value, "Agent capabilities");
-    const decoded: Record<keyof SessionCapabilities, boolean> = { ...unsupportedSessionCapabilities() };
-    for (const field of KNOWN_SESSION_CAPABILITY_FIELDS) {
-        if (!Object.hasOwn(capabilities, field)) {
-            continue;
-        }
-        const advertised = capabilities[field];
-        if (advertised !== undefined && typeof advertised !== "boolean") {
-            throw invalidResponse("The service returned invalid Agent capabilities");
-        }
-        decoded[field] = advertised === true;
+    try {
+        return decodeSessionCapabilities(value);
+    } catch (cause) {
+        throw new MortyProtocolError("The service returned invalid Agent capabilities", { cause });
     }
-    return Object.freeze(decoded);
 }
 
 function decodeAgentDescriptor(value: unknown): MortyAgentDescriptor {
     const agent = record(value, "Agent descriptor");
-    // Fields a newer service adds are ignored, so an older SDK can still list the Agent.
     if (
         !Object.hasOwn(agent, "agentPath") ||
         !Object.hasOwn(agent, "agentVersion") ||

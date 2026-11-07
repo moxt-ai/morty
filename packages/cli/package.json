@@ -1,6 +1,6 @@
 {
     "name": "@morty-build/cli",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Morty CLI for installing, pairing, and operating the Morty background service.",
     "type": "module",
     "bin": {

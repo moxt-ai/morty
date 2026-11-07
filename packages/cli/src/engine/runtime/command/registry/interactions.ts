@@ -15,14 +15,14 @@ import { reportOperationFailure, send } from "../transport.ts";
 
 export const sessionCancelCommand: RuntimeCommand = {
     kind: SESSION_CANCEL_KIND,
-    handle: ({ eventProjection, operations, sessions, sessionTurns, signal }, message): void => {
+    handle: ({ eventProjection, operations, sessions, sessionTurns, signal, socket }, message): void => {
         if (message.kind !== SESSION_CANCEL_KIND) {
             throw new Error("Command kind mismatch");
         }
         const turn = sessionTurns.get(message.commandId, message.sessionId);
         if (turn === undefined) {
             void settleAbandonedTurn(eventProjection, operations, message).catch((error: unknown) => {
-                console.error("Could not settle abandoned turn", error);
+                reportOperationFailure(socket, message.commandId, message.sessionId, error);
             });
             return;
         }
@@ -55,7 +55,7 @@ export const sessionCancelBeforeStartCommand: RuntimeCommand = {
         if (turn === undefined) {
             const cancelled = operations.recordCancellationBeforeAdmission(message.commandId, message.sessionId);
             const outcome =
-                cancelled.kind === "unavailable"
+                cancelled.kind === "unavailable" || cancelled.kind === "expired"
                     ? undefined
                     : cancelled.kind === "restated"
                       ? cancelled.outcome.event

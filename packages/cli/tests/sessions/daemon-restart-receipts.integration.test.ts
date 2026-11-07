@@ -36,6 +36,7 @@ test("Given running and queued prompts, When the daemon restarts, Then it report
                 const running = randomUUID();
                 const queued = randomUUID();
                 const original = encodeSessionPromptCommand({
+                    historyPolicy: "eager",
                     ...identity,
                     commandId: running,
                     disposition: SessionPromptDisposition.Reject,
@@ -55,6 +56,7 @@ test("Given running and queued prompts, When the daemon restarts, Then it report
                 }
                 const followup = (target: string) =>
                     encodeSessionPromptCommand({
+                        historyPolicy: "eager",
                         ...identity,
                         commandId: queued,
                         disposition: SessionPromptDisposition.Queue,
@@ -86,6 +88,7 @@ test("Given running and queued prompts, When the daemon restarts, Then it report
                 const continuation = randomUUID();
                 peer.send(
                     encodeSessionPromptCommand({
+                        historyPolicy: "eager",
                         ...identity,
                         commandId: continuation,
                         disposition: SessionPromptDisposition.Reject,

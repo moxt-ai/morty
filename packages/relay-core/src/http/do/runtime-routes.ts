@@ -8,13 +8,11 @@ function unauthorized(message: string): Response {
     return Response.json({ error: { code: "unauthorized", message } }, { status: 401 });
 }
 
-/** A Worker that predates credential kinds forwards only stored Channel host credentials. */
 function hostCredential(credentialId: string | null, kind: string | null): HostCredential | null {
     if (credentialId === null) {
         return null;
     }
     switch (kind) {
-        case null:
         case "channel":
             return { kind: "channel", credentialId };
         case "project":

@@ -557,7 +557,6 @@ export {
     decodeSessionStatusWebhookBody,
     encodeSessionStatusWebhookBody,
 } from "./session/recording/webhooks.ts";
-
 export type {
     SessionCapabilities,
     SessionCommand,
@@ -565,6 +564,7 @@ export type {
     SessionStatus,
     WorkspaceEntry,
 } from "./session/shared/index.ts";
+export { decodeSessionCapabilities } from "./session/shared/index.ts";
 
 export type {
     Turn,

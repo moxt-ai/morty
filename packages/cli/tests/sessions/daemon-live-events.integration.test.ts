@@ -340,6 +340,7 @@ async function uploadTextAttachment(fixture: Fixture, text: string): Promise<Pro
 
 function prompt(fixture: Fixture, text: string): SessionPromptCommand {
     return {
+        historyPolicy: "eager",
         additionalDirectoryIds: [],
         agentId: fixture.agent.id,
         bindingId: fixture.config.bindingId,

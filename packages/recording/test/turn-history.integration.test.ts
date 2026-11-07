@@ -10,6 +10,7 @@ import {
 } from "@morty-build/client/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { backfillEventsPerStep } from "../src/service/session-turn-history.ts";
+import { SessionTurnHistoryStorage } from "../src/storage/session-turn-history-storage.ts";
 import { createRecordingWorker } from "../src/worker.ts";
 
 const worker = createRecordingWorker();
@@ -57,6 +58,7 @@ const thought = (text: string) =>
 const permissionRequest = (commandId: string, interactionId: string) =>
     lifecycle({
         event: {
+            details: { cwd: "/workspace", locations: [] },
             commandId,
             interactionId,
             kind: "session.permission.requested",
@@ -206,9 +208,7 @@ describe("Recording Turn history", () => {
         });
         const stub = env.SESSION_RECORDING.getByName(JSON.stringify([projectId, runtimeId, sessionId]));
         await runInDurableObject(stub, (_instance, state) => {
-            state.storage.sql.exec(
-                "UPDATE recording_projection SET state_json = json_remove(state_json, '$.compactionVersion')",
-            );
+            new SessionTurnHistoryStorage(state.storage).resetProjection();
         });
         // Existing Recordings recover compactions from their authoritative raw events.
         expect(await turnPage()).toEqual(projected);
@@ -281,10 +281,7 @@ describe("Recording Turn history", () => {
 
         const stub = env.SESSION_RECORDING.getByName(JSON.stringify([projectId, runtimeId, sessionId]));
         await runInDurableObject(stub, (_instance, state) => {
-            // A deployed projection predates duplicate suppression and may already contain repeated text.
-            state.storage.sql.exec("UPDATE recording_projection SET state_json = json_remove(state_json, '$.version')");
-            state.storage.sql.exec("UPDATE recorded_turn_items SET text = text || 'Hello'");
-            state.storage.sql.exec("UPDATE recorded_turns SET turn_json = json_set(turn_json, '$.answerLength', 15)");
+            new SessionTurnHistoryStorage(state.storage).resetProjection();
         });
         // The read rebuilds through the same bounded backfill step as an existing Recording.
         expect(await turnPage()).toEqual(projected);
@@ -519,6 +516,7 @@ describe("Recording Turn history", () => {
 
     it("Given a pending permission and a restarted local Agent, When a client reads Turns, Then the interrupted attempt is indeterminate and its request is no longer pending", async () => {
         const permission = {
+            details: { cwd: "/workspace", locations: [] },
             commandId: "command-1",
             interactionId: "interaction-1",
             kind: "session.permission.requested",
@@ -695,34 +693,42 @@ describe("Recording Turn history", () => {
         expect(both.status).toBe(400);
     });
 
-    it("Given a Turn folded before the steering anchor was recorded, When a client reads Turns, Then it is read as a prompt no other command was running for", async () => {
-        await completedTurn("command-1", "Prompt 1", "Reply 1");
-        const stub = env.SESSION_RECORDING.getByName(JSON.stringify([projectId, runtimeId, sessionId]));
-        // A Turn folded before the anchor existed carries no such key at all. Reading it must not
-        // fail the page it is on: an unplaced prompt is what that Turn is.
-        await runInDurableObject(stub, (_instance, state) => {
-            state.storage.sql.exec(`UPDATE recorded_turns SET turn_json = json_remove(turn_json, '$.preceding')`);
-        });
+    it.each(["preceding", "activity", "compactions"])(
+        "Given a retained Turn without %s, When current storage reads it, Then it rejects the retired format and preserves the original row",
+        async (field) => {
+            await completedTurn("command-1", "Prompt 1", "Reply 1");
+            const stub = env.SESSION_RECORDING.getByName(JSON.stringify([projectId, runtimeId, sessionId]));
+            await runInDurableObject(stub, (_instance, state) => {
+                state.storage.sql.exec("UPDATE recorded_turns SET turn_json = json_remove(turn_json, ?)", `$.${field}`);
+                const before = state.storage.sql.exec("SELECT turn_json FROM recorded_turns").toArray();
+                expect(() => new SessionTurnHistoryStorage(state.storage).turn("command-1")).toThrow();
+                expect(state.storage.sql.exec("SELECT turn_json FROM recorded_turns").toArray()).toEqual(before);
+            });
+        },
+    );
 
-        const page = await turnPage();
-        expect(page.turns).toHaveLength(1);
-        expect(page.turns[0]?.preceding).toBeNull();
-    });
-
-    it("Given a projection folded before the current Turn history version, When a client reads Turns, Then the read rebuilds it from the Recording and answers", async () => {
-        await completedTurn("command-1", "Prompt 1", "Reply 1");
-        await completedTurn("command-2", "Prompt 2", "Reply 2");
-        const projected = await turnPage();
-        const stub = env.SESSION_RECORDING.getByName(JSON.stringify([projectId, runtimeId, sessionId]));
-        await runInDurableObject(stub, (_instance, state) => {
-            // A deployment that folds Turns differently treats every projection written before it as outdated.
-            state.storage.sql.exec(
-                "UPDATE recording_projection SET state_json = json_remove(state_json, '$.activityVersion')",
-            );
-        });
-
-        expect(await turnPage()).toEqual(projected);
-    });
+    it.each(["version", "activityVersion", "toolProgressVersion", "settlementVersion", "compactionVersion"])(
+        "Given a retained projection without %s, When a client reads Turns, Then current Morty rejects it and preserves the projection and raw events",
+        async (field) => {
+            await completedTurn("command-1", "Prompt 1", "Reply 1");
+            const stub = env.SESSION_RECORDING.getByName(JSON.stringify([projectId, runtimeId, sessionId]));
+            const raw = await (await worker.fetch(new Request(sessionPath("events")), env)).json();
+            const before = await runInDurableObject(stub, (_instance, state) => {
+                state.storage.sql.exec(
+                    "UPDATE recording_projection SET state_json = json_remove(state_json, ?)",
+                    `$.${field}`,
+                );
+                return state.storage.sql.exec("SELECT state_json FROM recording_projection").toArray();
+            });
+            expect((await worker.fetch(new Request(sessionPath("turns")), env)).status).toBe(503);
+            expect(await (await worker.fetch(new Request(sessionPath("events")), env)).json()).toEqual(raw);
+            expect(
+                await runInDurableObject(stub, (_instance, state) =>
+                    state.storage.sql.exec("SELECT state_json FROM recording_projection").toArray(),
+                ),
+            ).toEqual(before);
+        },
+    );
 
     it("Given a Recording longer than one backfill step and written before its Turn history existed, When a client reads Turns, Then a retryable error is returned until backfill catches up", async () => {
         await record([requested("command-1", "Prompt 1"), started("command-1")]);

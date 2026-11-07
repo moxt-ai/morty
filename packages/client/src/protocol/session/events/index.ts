@@ -607,9 +607,8 @@ const sessionEventLogPageSchema = z
     .object({
         events: z.array(sessionEventSchema).max(MAX_EVENT_COUNT).readonly(),
         nextCursor: z.string().min(1).max(512).nullable(),
-        // The settled prompts, among those the Runtime still retains, whose user message is on this page. Absent from
-        // older Runtimes and from pages that are not a Session's own history.
-        promptOutcomes: z.array(promptMessageOutcomeSchema).max(MAX_EVENT_COUNT).readonly().optional(),
+        // Retained settled prompts whose user message is on this page; empty outside Session history.
+        promptOutcomes: z.array(promptMessageOutcomeSchema).max(MAX_EVENT_COUNT).readonly(),
         sessionGenerationId: identifier,
         tailCursor: z.string().max(512),
         // The generation-scoped live position covered by this snapshot, including

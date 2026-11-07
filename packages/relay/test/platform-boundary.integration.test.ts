@@ -762,6 +762,7 @@ describe.sequential("Platform Session-only boundary", () => {
             });
             host.send(
                 encodeSessionPromptCommand({
+                    historyPolicy: "eager",
                     additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: "workspace",
@@ -955,6 +956,7 @@ describe.sequential("Platform Session-only boundary", () => {
             const historyPage = JSON.stringify({
                 events: {
                     events: {
+                        promptOutcomes: [],
                         sessionGenerationId: "session-generation-1",
                         events: [futureEvent, historicalEvent],
                         nextCursor: null,
@@ -971,6 +973,7 @@ describe.sequential("Platform Session-only boundary", () => {
             });
             daemon.send(historyPage);
             expect(await responseJson(await historyResponse, 200)).toEqual({
+                promptOutcomes: [],
                 sessionGenerationId: "session-generation-1",
                 events: [futureEvent, historicalEvent],
                 nextCursor: null,
@@ -998,6 +1001,7 @@ describe.sequential("Platform Session-only boundary", () => {
             const previewHistoryPage = encodeSessionPreviewHistoryPageLoaded({
                 events: {
                     events: {
+                        promptOutcomes: [],
                         sessionGenerationId: "native-session-generation-1",
                         events: [rawEvent],
                         nextCursor: null,
@@ -1015,6 +1019,7 @@ describe.sequential("Platform Session-only boundary", () => {
             daemon.send(previewHistoryPage);
             expect(await responseJson(await previewHistoryResponse, 200)).toEqual({
                 events: {
+                    promptOutcomes: [],
                     sessionGenerationId: "native-session-generation-1",
                     events: [historicalEvent],
                     nextCursor: null,
@@ -2396,6 +2401,7 @@ describe.sequential("Platform Turn submission", () => {
                 tailCursor: "tail-event",
                 throughPosition: "3",
                 truncated: true,
+                promptOutcomes: [],
                 version: 2 as const,
             };
             runtime.daemon.send(
@@ -2479,6 +2485,7 @@ describe.sequential("Platform Turn submission", () => {
                             directoryId: "root",
                             directoryLabel: "/workspace",
                             prompted: true,
+                            status: { kind: "idle" },
                             sessionId: runtime.sessionId,
                             title: "",
                             updatedAt: "2026-11-01T00:00:00.000Z",
@@ -2619,6 +2626,7 @@ describe.sequential("Platform Turn submission", () => {
                 encodeSessionPromptCommand(
                     decodeSessionPromptCommand(
                         JSON.stringify({
+                            historyPolicy: "eager",
                             additionalDirectoryIds: [],
                             agentId: "codex",
                             attachments: [],
@@ -3552,7 +3560,7 @@ describe.sequential("Platform Turn submission", () => {
         }
     });
 
-    it("Given an Agent advertisement carrying fields and capability values the Relay cannot interpret, When it pairs, Then pairing succeeds and the unreadable capabilities stay withheld", async () => {
+    it("Given an Agent advertisement carrying fields and capability values the Relay cannot interpret, When it pairs, Then pairing rejects the invalid capabilities", async () => {
         const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const environment = bindings();
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
@@ -3591,17 +3599,13 @@ describe.sequential("Platform Turn submission", () => {
         }
         const malformed = {
             ...advertised,
-            // A newer daemon may add descriptor fields this Relay does not know.
-            futureAgentField: { format: 2 },
             capabilities: {
                 ...advertised.capabilities,
-                // Non-boolean advertisement values used to reject the whole
-                // pairing; they now stay withheld instead.
                 renameSession: "yes",
                 steering: null,
             },
         };
-        const claimed = await responseJson(
+        const rejected = await responseJson(
             await worker.fetch(
                 new Request(
                     `${relayOrigin}${MORTY_API_PREFIX}/v1/runtime-pairings/${text(pairing, "pairingId")}/redeem`,
@@ -3618,28 +3622,9 @@ describe.sequential("Platform Turn submission", () => {
                 ),
                 environment,
             ),
-            200,
+            400,
         );
-        expect(
-            await responseJson(
-                await worker.fetch(
-                    new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/projects/${projectId}/runtimes/${text(claimed, "runtimeId")}/agents`,
-                        { headers: credentialHeaders(appCredential) },
-                    ),
-                    environment,
-                ),
-                200,
-            ),
-        ).toMatchObject({
-            agents: [
-                {
-                    capabilities: { renameSession: false, steering: false },
-                    id: "codex",
-                },
-            ],
-            runtimeId: text(claimed, "runtimeId"),
-        });
+        expect(rejected).toMatchObject({ error: { code: "invalid_agents" } });
     });
 
     it("Given a daemon that heartbeats and then falls silent, When Chat submits Turns, Then they reach it while it heartbeats and are refused as runtime_offline once the silence outlasts the heartbeat deadline", async () => {

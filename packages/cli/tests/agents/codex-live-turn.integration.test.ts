@@ -132,6 +132,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
             const commandId = randomUUID();
             const queuedCommandId = randomUUID();
             const originalPrompt = encodeSessionPromptCommand({
+                historyPolicy: "eager",
                 additionalDirectoryIds: [],
                 agentId: "codex",
                 bindingId: config.bindingId,
@@ -260,6 +261,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                         await providerEntered.promise;
                         socket.send(
                             encodeSessionPromptCommand({
+                                historyPolicy: "eager",
                                 additionalDirectoryIds: [],
                                 agentId: "codex",
                                 bindingId: config.bindingId,

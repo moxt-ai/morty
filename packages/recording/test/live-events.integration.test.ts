@@ -522,22 +522,15 @@ describe("Recording incremental reads", () => {
         expect(
             (await worker.fetch(write("runtime-live", { kind: "session.event.v2", events: [first] }), env)).status,
         ).toBe(201);
-        // A batch recorded by an earlier deployment kept a repeated frame inside one stored row.
-        await runInDurableObject(
-            env.SESSION_RECORDING.getByName(JSON.stringify([projectId, "runtime-live", "live-session"])),
-            (_instance, state) => {
-                state.storage.sql.exec(
-                    "INSERT INTO recorded_session_events_v2 (envelope_json, first_position, last_position, recorded_at, session_generation_id) VALUES (?, 2, 2, 0, ?)",
-                    JSON.stringify({ kind: "session.event.v2", events: [second, second] }),
-                    event.sessionGenerationId,
-                );
-            },
-        );
+        expect(
+            (await worker.fetch(write("runtime-live", { kind: "session.event.v2", events: [second, second] }), env))
+                .status,
+        ).toBe(201);
         const page = decodeSessionRecordingHistoryPage(
             await (await worker.fetch(read("?after=v2:1:1&limit=10"), env)).text(),
         );
         expect(page.events.map((candidate) => candidate.eventId)).toEqual(["event-2", "event-2"]);
-        expect(page.nextCursor).toBe("v2:2:2");
+        expect(page.nextCursor).toBe(page.tailCursor);
 
         const next = await worker.fetch(read(`?after=${page.nextCursor}&limit=10`), env);
         expect(decodeSessionRecordingHistoryPage(await next.text()).events).toEqual([]);
@@ -551,17 +544,9 @@ describe("Recording incremental reads", () => {
         expect(
             (await worker.fetch(write("runtime-live", { kind: "session.event.v2", events: [first] }), env)).status,
         ).toBe(201);
-        // A batch recorded by an earlier deployment repeated a frame with an unread event between the copies.
-        await runInDurableObject(
-            env.SESSION_RECORDING.getByName(JSON.stringify([projectId, "runtime-live", "live-session"])),
-            (_instance, state) => {
-                state.storage.sql.exec(
-                    "INSERT INTO recorded_session_events_v2 (envelope_json, first_position, last_position, recorded_at, session_generation_id) VALUES (?, 2, 4, 0, ?)",
-                    JSON.stringify({ kind: "session.event.v2", events: [a, b, a, c] }),
-                    event.sessionGenerationId,
-                );
-            },
-        );
+        expect(
+            (await worker.fetch(write("runtime-live", { kind: "session.event.v2", events: [a, b, a, c] }), env)).status,
+        ).toBe(201);
 
         for (const limit of [1, 2, 3, 10]) {
             const received: string[] = [];
@@ -580,43 +565,22 @@ describe("Recording incremental reads", () => {
         }
     });
 
-    it("Given batches recorded before their bounds were stored, When a caller follows page cursors through them, Then every event arrives once in order", async () => {
-        const [first, ...later] = numberedEvents(6, 1);
+    it("Given a retained batch without its position bounds, When a caller reads its history, Then current Morty rejects it without converting or deleting the batch", async () => {
         expect(
-            (await worker.fetch(write("runtime-live", { kind: "session.event.v2", events: [first] }), env)).status,
+            (await worker.fetch(write("runtime-live", { kind: "session.event.v2", events: numberedEvents(2, 1) }), env))
+                .status,
         ).toBe(201);
-        // Rows written before the position and generation columns existed carry only their envelope.
-        await runInDurableObject(
-            env.SESSION_RECORDING.getByName(JSON.stringify([projectId, "runtime-live", "live-session"])),
-            (_instance, state) => {
-                for (const events of [later.slice(0, 3), later.slice(3)]) {
-                    state.storage.sql.exec(
-                        "INSERT INTO recorded_session_events_v2 (envelope_json, recorded_at) VALUES (?, 0)",
-                        JSON.stringify({ kind: "session.event.v2", events }),
-                    );
-                }
-            },
-        );
-
-        for (const limit of [1, 2, 10]) {
-            const received: string[] = [];
-            let cursor = "v2:1:1";
-            let tailCursor = "";
-            for (let attempt = 0; attempt < 10; attempt += 1) {
-                const page = decodeSessionRecordingHistoryPage(
-                    await (await worker.fetch(read(`?after=${cursor}&limit=${limit}`), env)).text(),
-                );
-                received.push(...page.events.map((candidate) => candidate.eventId));
-                tailCursor = page.tailCursor;
-                if (page.nextCursor === null) {
-                    break;
-                }
-                cursor = page.nextCursor;
-            }
-            expect(received, `limit ${limit}`).toEqual(later.map((candidate) => candidate.eventId));
-            const caughtUp = await worker.fetch(read(`?after=${tailCursor}&limit=${limit}`), env);
-            expect(decodeSessionRecordingHistoryPage(await caughtUp.text()).events).toEqual([]);
-        }
+        const stub = env.SESSION_RECORDING.getByName(JSON.stringify([projectId, "runtime-live", "live-session"]));
+        const before = await runInDurableObject(stub, (_instance, state) => {
+            state.storage.sql.exec("UPDATE recorded_session_events_v2 SET first_position = NULL, last_position = NULL");
+            return state.storage.sql.exec("SELECT * FROM recorded_session_events_v2").toArray();
+        });
+        expect((await worker.fetch(read("?limit=10"), env)).status).toBe(500);
+        expect(
+            await runInDurableObject(stub, (_instance, state) =>
+                state.storage.sql.exec("SELECT * FROM recorded_session_events_v2").toArray(),
+            ),
+        ).toEqual(before);
     });
 
     it("Given one generation that later restarts, When a caller pages from the start, Then only a page carrying the new generation asks it to reset", async () => {

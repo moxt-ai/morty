@@ -46,8 +46,8 @@ const activeTurnSnapshotSchema = z
             .discriminatedUnion("kind", [sessionPermissionRequestedEventSchema, sessionElicitationRequestedEventSchema])
             .nullable(),
         sequence: z.number().int().nonnegative(),
-        // When the turn started, as the Runtime recorded it. Absent from older Runtimes.
-        startedAt: z.iso.datetime({ offset: true }).optional(),
+        // When the Runtime recorded the start of this running turn.
+        startedAt: z.iso.datetime({ offset: true }),
         state: z.literal("running"),
     })
     .readonly();
@@ -74,7 +74,7 @@ export type CommandDelivery = z.infer<typeof commandDeliverySchema>;
  * How the Session's most recent started command ended, from the Runtime's execution receipts.
  * A client that missed the live outcome, after leaving, reloading or reconnecting, shows it from
  * this. While the Runtime retains the live receipt, a failure carries its bounded client-facing
- * lifecycle message. After a Runtime restart (or on older Runtimes), it carries the sanitized
+ * lifecycle message. After a Runtime restart, it carries the sanitized
  * durable summary: Agent error text may quote user input and is not persisted in receipts.
  */
 const lastTurnOutcomeSchema = z.discriminatedUnion("state", [

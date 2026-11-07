@@ -256,6 +256,7 @@ function promptCommand(
     targetCommandId = "",
 ): SessionPromptCommand {
     return {
+        historyPolicy: "eager",
         additionalDirectoryIds: [],
         agentId: fixture.agent.id,
         bindingId: fixture.config.bindingId,

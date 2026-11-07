@@ -671,13 +671,13 @@ function CloudButtonGallery() {
             </Specimen>
             <Specimen layout="stack" title="Text link">
                 <p className="text-14 text-foreground">
-                    Ask the owner in{" "}
-                    <a className={textLinkClassName} href="mailto:wuhuajia@paraflow.com">
-                        wuhuajia@paraflow.com
+                    Read the{" "}
+                    <a className={textLinkClassName} href="https://morty.build/setup.md">
+                        Morty setup prompt
                     </a>{" "}
-                    before changing the timeout, then check{" "}
-                    <a className={textLinkClassName} href="https://moxt.ai/chat-replay">
-                        the chat replay
+                    before pairing a computer, then open{" "}
+                    <a className={textLinkClassName} href="https://morty.build">
+                        Morty
                     </a>
                     .
                 </p>
@@ -1754,8 +1754,9 @@ const confirmedPermission: PermissionInteraction = {
     state: { kind: "resolved", optionId: "allow-once", outcome: "selected" },
 };
 
-const permissionWithoutDetails: PermissionInteraction = {
-    interactionId: "preview-permission-without-details",
+const permissionWithoutLocations: PermissionInteraction = {
+    details: { cwd: "/workspace", locations: [] },
+    interactionId: "preview-permission-without-locations",
     options: previewPermissionOptions,
     sessionId: previewSessionId,
     state: { kind: "pending" },
@@ -1882,8 +1883,8 @@ function SessionInteractionsGallery() {
         {
             elicitations: [],
             error: "",
-            permissions: [permissionWithoutDetails],
-            title: "Permission: the agent sent no tool details",
+            permissions: [permissionWithoutLocations],
+            title: "Permission: context without tool input",
         },
         { elicitations: [pendingElicitation], error: "", permissions: [], title: "Information request: form" },
         {

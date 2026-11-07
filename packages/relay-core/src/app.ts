@@ -2,7 +2,6 @@ import { MORTY_API_PREFIX, parseMortyApiPrefix } from "@morty-build/client/proto
 import { Hono } from "hono";
 import { createChannelRoutes } from "./http/channel/channel-routes.ts";
 import { rethrowHonoError } from "./http/middleware/error-middleware.ts";
-import { createPairingClaimRoutes } from "./http/pairing/pairing-routes.ts";
 import { createProjectRuntimePairingRoutes } from "./http/pairing/project-runtime-pairing-routes.ts";
 import { createProjectRuntimeRoutes } from "./http/pairing/project-runtime-routes.ts";
 import type { RelayHttpEnvironment } from "./http/relay-http-environment.ts";
@@ -12,7 +11,6 @@ export function createMortyApplication(apiPrefix: string = MORTY_API_PREFIX) {
         .basePath(parseMortyApiPrefix(apiPrefix))
         .onError(rethrowHonoError)
         .notFound(notFoundResponse)
-        .route("/pairings", createPairingClaimRoutes())
         .route("/v1", createProjectRuntimePairingRoutes())
         .route("/v1", createProjectRuntimeRoutes())
         .route("/channels", createChannelRoutes());

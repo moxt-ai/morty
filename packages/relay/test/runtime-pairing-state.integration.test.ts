@@ -6,7 +6,6 @@ import {
     channelAccessGrant,
     channelHostCredential,
     runtimeDaemonCredential,
-    runtimePairingAuditEvent,
 } from "@morty-build/relay-core/schema/project-do";
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
@@ -145,6 +144,14 @@ async function project(_name = "Runtime pairing") {
     };
 }
 
+it("Given a current pairing reservation, When an obsolete claim endpoint is called, Then it returns not found and leaves the reservation available for redemption", async () => {
+    const app = await project();
+    const pairing = await app.pair("retired-claim");
+    expect(await responseJson(await app.claim(pairing, "claim"), 404)).toMatchObject({ error: { code: "not_found" } });
+    expect(await responseJson(await app.status(pairing), 200)).toMatchObject({ status: "pending" });
+    expect((await app.claim(pairing)).status).toBe(200);
+});
+
 it("Given pending reservations at capacity, When their deadline passes without expiry maintenance, Then status reads and new reservations succeed", async () => {
     const app = await project();
     const pairings = await Promise.all(
@@ -226,7 +233,7 @@ it("Given a claim whose audit cannot commit, When the caller retries after recov
     expect(await responseJson(await app.claim(pairing), 200)).toMatchObject(claimed);
 });
 
-it.each(["claim", "redeem"] as const)(
+it.each(["redeem"] as const)(
     "Given a committed %s response is lost, When the caller retries after a relay restart, Then the original credential is recovered without changing the registration",
     async (endpoint) => {
         const app = await project();
@@ -236,14 +243,13 @@ it.each(["claim", "redeem"] as const)(
         await app.restart();
         vi.setSystemTime(new Date(Date.now() + 20_000));
         const response = await responseJson(await app.claim(pairing, endpoint, "Retry machine"), 200);
-        // Independently retain both released CLI response contracts, including
-        // their exact keys and credential syntax.
+        // A retry returns the exact current redemption contract.
         const identity = { appId: v.string(), channelId: v.string(), runtimeId: v.string() };
         const credential = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9_-]{32,256}$/));
-        const runtimeCredential =
-            endpoint === "claim"
-                ? v.parse(v.strictObject({ ...identity, daemonToken: credential }), response).daemonToken
-                : v.parse(v.strictObject({ ...identity, runtimeCredential: credential }), response).runtimeCredential;
+        const runtimeCredential = v.parse(
+            v.strictObject({ ...identity, runtimeCredential: credential }),
+            response,
+        ).runtimeCredential;
         expect(response).toMatchObject({
             appId: app.appId,
             channelId: pairing.channelId,
@@ -450,192 +456,37 @@ async function insertLegacyPairing(
         .run();
 }
 
-it("Given pre-cutover pairing records, When Morty upgrades and restarts, Then project identities and audit history remain while old credentials and pairing replays are rejected", async () => {
-    const app = await project();
-    const now = Date.now();
-    const pending = await app.pair("legacy-pending");
-    const expired = { ...(await app.pair("legacy-expired")), expiresAt: new Date(now - 1).toISOString() };
-    const overdue = { ...(await app.pair("legacy-overdue")), expiresAt: new Date(now - 1).toISOString() };
-    const paired = { ...(await app.pair("legacy-paired")), expiresAt: new Date(now + 30_000).toISOString() };
-    const revoked = await app.pair("legacy-revoked");
-    const cancelled = await app.pair("legacy-cancelled");
-    const daemonToken = `${app.projectId}_${"D".repeat(43)}`;
-    const hostToken = "H".repeat(43);
-    const rows: readonly LegacyPairing[] = [
-        {
-            pairing: pending,
-            key: "legacy-pending",
-            status: "pending",
-            daemonToken: null,
-            claimedAt: null,
-            revokedAt: null,
-        },
-        {
-            pairing: expired,
-            key: "legacy-expired",
-            status: "expired",
-            daemonToken: null,
-            claimedAt: null,
-            revokedAt: null,
-        },
-        {
-            pairing: overdue,
-            key: "legacy-overdue",
-            status: "pending",
-            daemonToken: null,
-            claimedAt: null,
-            revokedAt: null,
-        },
-        {
-            pairing: paired,
-            key: "legacy-paired",
-            status: "paired",
-            daemonToken,
-            claimedAt: now - 2_000,
-            revokedAt: null,
-        },
-        {
-            pairing: revoked,
-            key: "legacy-revoked",
-            status: "revoked",
-            daemonToken: null,
-            claimedAt: now - 2_000,
-            revokedAt: now - 1_000,
-        },
-        {
-            pairing: cancelled,
-            key: "legacy-cancelled",
-            status: "revoked",
-            daemonToken: null,
-            claimedAt: null,
-            revokedAt: now - 1_000,
-        },
-    ];
-    await app.storage(async (storage) => {
-        const database = await legacyDatabase(storage);
-        for (const [index, row] of rows.entries()) {
-            await insertLegacyPairing(database, row, app.credentialId, index + 1);
-        }
-        database.orm
-            .insert(channelHostCredential)
-            .values({
-                credentialId: "legacy-owner",
-                channelId: paired.channelId,
-                tokenHash: await hashSecret(hostToken),
-                authority: "owner",
-                createdAt: now - 2_000,
-                lastUsedAt: now - 2_000,
-            })
-            .run();
-        database.orm
-            .insert(runtimePairingAuditEvent)
-            .values({
-                auditId: "legacy-expiry-audit",
-                projectId: app.projectId,
-                pairingId: expired.pairingId,
-                runtimeId: expired.runtimeId,
-                actorKind: "system",
-                actorId: "relay",
-                action: "runtime_pairing.expired",
-                detailsJson: "{}",
-                recordedAt: now - 1,
-            })
-            .run();
-    });
-    await app.restart();
-    expect(await responseJson(await app.status(pending), 200)).toEqual({
-        status: "pending",
-        expiresAt: pending.expiresAt,
-    });
-    for (const pairing of [expired, overdue]) {
-        expect(await responseJson(await app.status(pairing), 200)).toEqual({ status: "expired" });
-        expect((await app.claim(pairing)).status).toBe(400);
-    }
-    expect(await responseJson(await app.status(paired), 200)).toMatchObject({
-        status: "paired",
-        runtimeId: paired.runtimeId,
-        channelId: paired.channelId,
-        machineName: "Legacy machine",
-        agents: [],
-    });
-    for (const pairing of [revoked, cancelled]) {
-        expect(await responseJson(await app.status(pairing), 200)).toEqual({
-            status: "revoked",
-            revokedAt: new Date(now - 1_000).toISOString(),
+it.each(["pending", "paired", "expired", "revoked"] as const)(
+    "Given retained %s pairing records, When current Morty initializes storage, Then it rejects the retired format without converting or deleting records",
+    async (status) => {
+        const app = await project();
+        const pairing = await app.pair("retired-state");
+        await app.storage(async (storage) => {
+            const database = await legacyDatabase(storage);
+            await insertLegacyPairing(
+                database,
+                {
+                    pairing,
+                    key: "retired-state",
+                    status,
+                    daemonToken: status === "paired" ? "D".repeat(43) : null,
+                    claimedAt: status === "paired" ? Date.now() : null,
+                    revokedAt: status === "revoked" ? Date.now() : null,
+                },
+                app.credentialId,
+                1,
+            );
+            const before = database.orm.select().from(pairingChannel).all();
+            for (let retry = 0; retry < 2; retry += 1) {
+                expect(() => initializeProjectDurableObjectSchema(database)).toThrowError(
+                    expect.objectContaining({ code: "retired_pairing_state" }),
+                );
+                expect(database.orm.select().from(pairingChannel).all()).toEqual(before);
+                expect(database.query("SELECT runtime_id FROM runtimes")).toEqual([]);
+            }
         });
-        expect((await app.revoke(pairing)).status).toBe(204);
-        expect((await app.claim(pairing)).status).toBe(400);
-    }
-    for (const row of rows) {
-        expect((await app.create(row.key)).status).toBe(400);
-    }
-    expect((await app.publish(paired, daemonToken)).status).toBe(401);
-    expect((await app.claim(paired)).status).toBe(400);
-    vi.setSystemTime(new Date(paired.expiresAt));
-    expect(await responseJson(await app.status(paired), 200)).toMatchObject({ status: "paired" });
-    expect((await app.publish(paired, daemonToken)).status).toBe(401);
-    expect((await app.readChannel(paired, hostToken)).status).toBe(401);
-    expect((await app.createGrant(paired, hostToken)).status).toBe(401);
-    expect((await app.revoke(paired)).status).toBe(204);
-    const audit = await app.storage((storage) =>
-        storage.sql
-            .exec(
-                "SELECT action, recorded_at FROM runtime_pairing_audit_events WHERE audit_id = ?",
-                "legacy-expiry-audit",
-            )
-            .one(),
-    );
-    expect(audit).toEqual({ action: "runtime_pairing.expired", recorded_at: now - 1 });
-    await app.restart();
-    expect((await app.claim(pending)).status).toBe(400);
-});
-
-it("Given legacy records and an interrupted data copy, When migration retries, Then original project records survive and retired credentials remain rejected", async () => {
-    const app = await project();
-    const pairing = await app.pair("migration-retry");
-    const daemonToken = `${app.projectId}_${"M".repeat(43)}`;
-    await app.storage(async (storage) => {
-        const database = await legacyDatabase(storage);
-        await insertLegacyPairing(
-            database,
-            {
-                pairing,
-                key: "migration-retry",
-                status: "paired",
-                daemonToken,
-                claimedAt: Date.now(),
-                revokedAt: null,
-            },
-            app.credentialId,
-            1,
-        );
-        const addition = projectDurableObjectMigrations.find(
-            (migration) => migration.name === "0004_add_runtime_pairing_records.sql",
-        );
-        if (addition === undefined) {
-            throw new Error("Expected the additive Runtime migration");
-        }
-        database.run(addition.sql);
-        database.run("INSERT INTO project_schema_migrations (name, applied_at) VALUES (?, ?)", [
-            addition.name,
-            Date.now(),
-        ]);
-        database.run(`CREATE TRIGGER interrupt_runtime_copy BEFORE INSERT ON runtime_registrations
-            BEGIN SELECT RAISE(ABORT, 'Controlled migration failure'); END`);
-        expect(() => initializeProjectDurableObjectSchema(database)).toThrow("Controlled migration failure");
-        expect(database.query("SELECT runtime_id FROM pairing_channels")).toEqual([{ runtime_id: pairing.runtimeId }]);
-        expect(database.query("SELECT runtime_id FROM runtimes")).toEqual([]);
-        database.run("DROP TRIGGER interrupt_runtime_copy");
-        initializeProjectDurableObjectSchema(database);
-    });
-    await app.restart();
-    expect(await responseJson(await app.status(pairing), 200)).toMatchObject({
-        status: "paired",
-        runtimeId: pairing.runtimeId,
-    });
-    expect((await app.create("migration-retry")).status).toBe(400);
-    expect((await app.publish(pairing, daemonToken)).status).toBe(401);
-});
+    },
+);
 
 it("Given one available Runtime place, When distinct requests compete, Then exactly one reserves it and retries keep the same identity", async () => {
     const app = await project();

@@ -29,7 +29,7 @@ jobs:
     if: github.repository == 'moxt-ai/mobius-morty'
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    environment: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (inputs.operation == 'deploy' || inputs.operation == 'restore' || inputs.operation == 'provision-service' || (github.event_name == 'push' && vars.AUTO_DEPLOY_PRODUCTION == 'true'))) && 'mobius-production' || 'build-only' }}
+    environment: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (inputs.operation == 'deploy' || inputs.operation == 'restore' || inputs.operation == 'provision-service' || (github.event_name == 'push' && vars.AUTO_DEPLOY_PRODUCTION == 'true'))) && 'morty-production' || 'build-only' }}
     env:
       TARGET_ENVIRONMENT: production
       OPERATION: ${{ inputs.operation || 'build' }}

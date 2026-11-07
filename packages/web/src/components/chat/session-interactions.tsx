@@ -311,7 +311,7 @@ function executeCommand(permission: PermissionInteraction): string | undefined {
     if (permission.toolKind !== "execute") {
         return undefined;
     }
-    const rawInput: unknown = permission.details?.rawInput;
+    const rawInput: unknown = permission.details.rawInput;
     if (typeof rawInput !== "object" || rawInput === null || !("command" in rawInput)) {
         return undefined;
     }

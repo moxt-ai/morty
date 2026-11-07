@@ -7,7 +7,6 @@ import {
     type SessionLiveEvent,
 } from "@morty-build/client/protocol";
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
 
 const eventWithoutProvenance = {
     eventId: "event-generation-1-0000000000000001",
@@ -53,7 +52,7 @@ describe("Session Event V2 contracts", () => {
         expect(decodeSessionLiveEvent({ ...history, position })).toEqual({ ...history, position });
     });
 
-    it("Given a large legacy inline image, When its recorded event crosses the protocol boundary, Then it is accepted", () => {
+    it("Given a large Agent inline image, When its recorded event crosses the protocol boundary, Then it is accepted", () => {
         const event = {
             ...sharedEvent,
             payload: {
@@ -216,13 +215,7 @@ describe("Session Event V2 contracts", () => {
         expect(() => decodeSessionLiveEvent(sharedEvent)).toThrow();
     });
 
-    describe("agent message questions across independently upgraded peers", () => {
-        // The agent message contract released through SDK 0.0.175, retained as those Runtimes and browsers decode it.
-        const releasedAgentMessageChunk = z.object({
-            content: z.object({ text: z.string(), type: z.literal("text") }),
-            messageId: z.string().nullable().optional(),
-            sessionUpdate: z.literal("agent_message_chunk"),
-        });
+    describe("agent message questions", () => {
         const asking = {
             ...sharedEvent,
             payload: {
@@ -231,20 +224,6 @@ describe("Session Event V2 contracts", () => {
                 questions: [{ options: ["Yes", "Not now"], question: "Update the page?" }],
             },
         };
-
-        it("Given a new Runtime's message that asks questions, When a released reader decodes it, Then the text and identity remain and the questions are ignored", () => {
-            const recorded = JSON.parse(encodeSessionEvent(asking));
-            expect(releasedAgentMessageChunk.parse(recorded.payload)).toEqual({
-                content: asking.payload.content,
-                messageId: "message-1",
-                sessionUpdate: "agent_message_chunk",
-            });
-        });
-
-        it("Given a released Runtime's message, When the new reader decodes it, Then it stays an ordinary message without questions", () => {
-            expect(decodeSessionEvent(sharedEvent)).toEqual(sharedEvent);
-            expect(decodeSessionEvent(sharedEvent).payload).not.toHaveProperty("questions");
-        });
 
         it("Given a message that asks questions, When it crosses the recorded and live boundaries, Then the questions survive", () => {
             expect(decodeSessionEvent(JSON.parse(encodeSessionEvent(asking)))).toEqual(asking);

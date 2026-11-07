@@ -38,6 +38,7 @@ test("Given a real Codex model that asks the user a question while it keeps work
         const commandId = randomUUID();
         peer.send(
             encodeSessionPromptCommand({
+                historyPolicy: "eager",
                 kind: "session.prompt",
                 commandId,
                 sessionId: peer.sessionId,

@@ -8,7 +8,7 @@ export const platformApp = sqliteTable(
         tenantId: text("tenant_id").notNull(),
         displayName: text("display_name").notNull(),
         lifecycle: text("lifecycle", { enum: ["active", "deleted"] }).notNull(),
-        // Retain the SQL name so existing Workers and stored data remain compatible.
+        // The SQL column name is part of the immutable production schema.
         initialCredentialId: text("default_credential_id"),
         createdAt: integer("created_at").notNull(),
         updatedAt: integer("updated_at").notNull(),

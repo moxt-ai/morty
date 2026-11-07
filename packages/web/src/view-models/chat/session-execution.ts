@@ -96,16 +96,14 @@ function observeSnapshot(
             kind: "running",
             commandId: running.commandId,
             turnId: runningTurnId(turn, running.commandId),
-            // Older Runtimes do not report when the turn started.
-            startedAt: running.startedAt === undefined ? null : Date.parse(running.startedAt),
+            startedAt: Date.parse(running.startedAt),
             observedAt: readAt,
         });
     } else {
         if (turnAtRead.kind === "current") {
             turn = transitionCurrentTurn(turn, { kind: "nothing-running" });
         }
-        // The Runtime's record of the last turn shows an outcome this pane missed. Older Runtimes and Relays omit it,
-        // which leaves the turn as before.
+        // A retained outcome describes the last settled command; a running or untouched Session has none.
         const lastTurn = snapshot.lastTurn;
         if (lastTurn !== undefined) {
             turn = transitionCurrentTurn(turn, {

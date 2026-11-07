@@ -1080,25 +1080,6 @@ export class SessionTurnHistory {
         this.#history = history;
     }
 
-    #projection(): StoredProjection | null {
-        const projection = this.#history.projection();
-        if (
-            projection !== null &&
-            (projection.state.version === 1 ||
-                projection.state.compactionVersion !== 1 ||
-                projection.state.activityVersion !== 1 ||
-                projection.state.toolProgressVersion !== 1 ||
-                projection.state.settlementVersion !== 1)
-        ) {
-            // Older projections may contain repeated text, omit compactions and activity, or carry an attempt's
-            // replayed outcome instead of its first one. Rebuild
-            // only derived tables from the unchanged raw Recording, using the bounded backfill.
-            this.#history.resetProjection();
-            return null;
-        }
-        return projection;
-    }
-
     /**
      * Folds a batch that was just appended, inside the transaction that records it. Returns false when
      * the batch is left for backfill: earlier batches are unfolded, an earlier fold failed, or this
@@ -1107,7 +1088,7 @@ export class SessionTurnHistory {
     readonly project = (ordinal: number, events: readonly SessionWireEvent[], receivedAt = Date.now()): boolean => {
         try {
             return this.#history.transaction(() => {
-                const projection = this.#projection() ?? emptyProjection;
+                const projection = this.#history.projection() ?? emptyProjection;
                 // Ordinals only grow, so a projection folded through the previous ordinal has nothing between.
                 const unfolded =
                     projection.foldedThroughOrdinal !== ordinal - 1 &&
@@ -1133,7 +1114,7 @@ export class SessionTurnHistory {
     readonly backfill = (now: Date, eventBudget = backfillEventsPerStep): BackfillOutcome => {
         try {
             return this.#history.transaction((): BackfillOutcome => {
-                const projection = this.#projection() ?? emptyProjection;
+                const projection = this.#history.projection() ?? emptyProjection;
                 const fold = new ProjectionFold(this.#history, projection);
                 let foldedThrough = projection.foldedThroughOrdinal;
                 let folded = 0;
@@ -1168,7 +1149,7 @@ export class SessionTurnHistory {
 
     readonly assessInactivity = (now: Date): boolean =>
         this.#history.transaction(() => {
-            const projection = this.#projection();
+            const projection = this.#history.projection();
             if (
                 projection === null ||
                 projection.failure !== null ||
@@ -1424,7 +1405,7 @@ export class SessionTurnHistory {
         }
         let projection: StoredProjection | null = null;
         try {
-            projection = this.#projection();
+            projection = this.#history.projection();
         } catch (cause) {
             // An undecodable state is left to backfill, which records the failure that reads then report.
             console.error("Recording Turn history projection could not be read", cause);

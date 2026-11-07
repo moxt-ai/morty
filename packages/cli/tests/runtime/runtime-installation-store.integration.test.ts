@@ -50,79 +50,52 @@ describe("Runtime installation storage", () => {
         }
     });
 
-    it("Given version-5 connection and version-1 index records, When Engine updates activation, Then they stay readable and the connection is rewritten in the current format", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "morty-retained-pairing-"));
-        const signal = new AbortController().signal;
-        try {
-            const installation = await RuntimeInstallationStore.open(join(directory, "data"), signal);
-            const connectionId = `mcn_${"a".repeat(32)}`;
-            const channelId = "retained_channel";
-            await mkdir(join(installation.stateDirectory, "connections"), { recursive: true });
-            await mkdir(join(installation.stateDirectory, "channels"), { recursive: true });
-            await writeFile(
-                installation.connectionPath(connectionId),
-                JSON.stringify({
-                    activation: "active",
-                    applicationId: "com.earlier.host",
-                    appId: "platform_retained",
-                    channelId,
-                    connectionId,
+    it.each(["connection", "index"])(
+        "Given a retired %s format, When the Runtime restores or reuses it, Then it rejects it without rewriting saved state",
+        async (retired) => {
+            const directory = await mkdtemp(join(tmpdir(), "morty-retired-pairing-"));
+            const signal = new AbortController().signal;
+            try {
+                const installation = await RuntimeInstallationStore.open(join(directory, "data"), signal);
+                const input = {
+                    appId: "app_current",
+                    channelId: "channel_current",
                     defaultWorkspace: join(directory, "workspace"),
-                    installationId: installation.installationId,
-                    kind: "verified",
-                    pairingId: "retained_pairing",
-                    relayOrigin: "https://relay.example.com/",
+                    pairingId: "pairing_current",
+                    relayOrigin: new URL("https://relay.example.com/"),
                     runtimeCredential: "a".repeat(43),
-                    runtimeId: "retained_runtime",
-                    version: 5,
-                }),
-                { mode: 0o600 },
-            );
-            const channelHash = createHash("sha256").update(channelId).digest("hex");
-            await writeFile(
-                join(installation.stateDirectory, "channels", `mci_${channelHash}.json`),
-                JSON.stringify({
+                    runtimeId: "runtime_current",
+                };
+                const current = await installation.saveConnection(input, signal);
+                const channelHash = createHash("sha256").update(input.channelId).digest("hex");
+                const path =
+                    retired === "connection"
+                        ? installation.connectionPath(current.connectionId)
+                        : join(installation.stateDirectory, "channels", `mci_${channelHash}.json`);
+                const before = JSON.stringify({
+                    ...JSON.parse(await readFile(path, "utf8")),
+                    version: retired === "connection" ? 5 : 1,
                     applicationId: "com.earlier.host",
-                    channelId,
-                    connectionId,
-                    installationId: installation.installationId,
-                    version: 1,
-                }),
-                { mode: 0o600 },
-            );
-
-            const connection = await installation.readConnection(connectionId, signal);
-            expect(connection).toMatchObject({
-                appId: "platform_retained",
-                installationId: installation.installationId,
-            });
-            expect(connection).not.toHaveProperty("applicationId");
-            await expect(
-                installation.saveConnection(
-                    {
-                        appId: connection.appId,
-                        channelId,
-                        defaultWorkspace: connection.defaultWorkspace,
-                        pairingId: "duplicate_pairing",
-                        relayOrigin: connection.relayOrigin,
-                        runtimeCredential: connection.runtimeCredential,
-                        runtimeId: connection.runtimeId,
-                    },
-                    signal,
-                ),
-            ).rejects.toMatchObject({ code: "connection_conflict" });
-            await installation.setConnectionActivation(connectionId, "stopped", signal);
-            const rewritten: unknown = JSON.parse(await readFile(installation.connectionPath(connectionId), "utf8"));
-            expect(rewritten).toMatchObject({ activation: "stopped", appId: "platform_retained", version: 6 });
-            expect(rewritten).not.toHaveProperty("applicationId");
-            await expect(installation.readConnection(connectionId, signal)).resolves.toMatchObject({
-                activation: "stopped",
-                appId: "platform_retained",
-            });
-        } finally {
-            await rm(directory, { recursive: true, force: true });
-        }
-    });
+                });
+                await writeFile(path, before, { mode: 0o600 });
+                if (retired === "connection") {
+                    await expect(installation.readConnection(current.connectionId, signal)).rejects.toMatchObject({
+                        code: "invalid_connection",
+                    });
+                    await expect(
+                        installation.setConnectionActivation(current.connectionId, "stopped", signal),
+                    ).rejects.toMatchObject({ code: "invalid_connection" });
+                } else {
+                    await expect(installation.saveConnection(input, signal)).rejects.toMatchObject({
+                        code: "invalid_connection",
+                    });
+                }
+                expect(await readFile(path, "utf8")).toBe(before);
+            } finally {
+                await rm(directory, { recursive: true, force: true });
+            }
+        },
+    );
 
     it("Given an existing installation moved to a differently named directory, When a host opens it explicitly, Then old and new entrypoints retain the same identity and connections", async () => {
         const stateRoot = await mkdtemp(join(tmpdir(), "morty-engine-context-"));

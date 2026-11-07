@@ -50,7 +50,7 @@ const sessionMetadataSchema = z
         directoryLabel: z.string().min(1).max(MAX_WORKSPACE_PATH_LENGTH),
         prompted: z.boolean(),
         sessionId: IDENTIFIER,
-        status: sessionStatusSchema.default({ kind: "idle" }),
+        status: sessionStatusSchema,
         title: z.string().max(500),
         updatedAt: z.iso.datetime({ offset: true }),
     })
