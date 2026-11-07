@@ -6,8 +6,10 @@ import { join } from "node:path";
 import {
     decodeDaemonToServiceMessage,
     decodeNativeSessionResult,
+    encodeNativeSessionCancel,
     encodeNativeSessionCommand,
     encodeSessionCloseCommand,
+    encodeSessionListCommand,
     encodeSessionPrepareCommand,
     encodeSessionPromptCommand,
     encodeSessionRestoreCommand,
@@ -302,6 +304,82 @@ test.for(["import", "fork"] as const)(
     },
 );
 
+test.for(["complete", "cancel"] as const)(
+    "Given two browsers reading the same Agent, When their native requests overlap and the second is set to %s, Then each receives its own result without rejecting the concurrent reader",
+    async (outcome, { signal }) => {
+        const entered = Promise.withResolvers<void>();
+        const barrier = new EventEmitter();
+        let holdNext = false;
+        const peer = await runtimePeer(signal, async (agent, resolveSignal) => {
+            if (holdNext) {
+                holdNext = false;
+                const released = once(barrier, "continue", { signal: resolveSignal });
+                entered.resolve();
+                await released;
+            }
+            return agent;
+        });
+        const list = (browser: string, requestId: string) => {
+            peer.send(
+                encodeNativeSessionCommand({
+                    ...peer.base(browser),
+                    kind: NATIVE_SESSION_REQUEST_KIND,
+                    requestId,
+                    action: "list",
+                    cursor: null,
+                }),
+            );
+            return peer.next(requestId, ["native.session.result", "session.operation.failed"]);
+        };
+        try {
+            peer.send(
+                encodeSessionPrepareCommand({ ...peer.base("seed"), kind: "session.prepare", requestId: "seed" }),
+            );
+            await peer.next("seed", ["session.ready"]);
+            await peer.prompt("seed", "seed-history");
+            holdNext = true;
+            const first = list("first-browser", "first-list");
+            await entered.promise;
+            const second = list("second-browser", "second-list");
+            if (outcome === "cancel") {
+                peer.send(
+                    encodeNativeSessionCancel({
+                        kind: "native.session.cancel",
+                        requestId: "second-list",
+                        sessionId: "second-browser",
+                    }),
+                );
+            }
+            // The independent wire reply establishes that both requests reached the Runtime before release.
+            peer.send(encodeSessionListCommand({ kind: "session.list", requestId: "received", limit: 1 }));
+            await peer.next("received", ["session.listed"]);
+            barrier.emit("continue");
+            const original = decodeNativeSessionResult(await first);
+            if (original.action !== "list" || original.entries[0] === undefined) {
+                throw new Error("Expected the first browser's native history");
+            }
+            expect(decodeDaemonToServiceMessage(await second)).toMatchObject(
+                outcome === "cancel"
+                    ? { kind: "session.operation.failed", code: "native_session_cancelled", requestId: "second-list" }
+                    : {
+                          kind: "native.session.result",
+                          action: "list",
+                          requestId: "second-list",
+                          sessionId: "second-browser",
+                          entries: [{ nativeSessionId: original.entries[0].nativeSessionId }],
+                      },
+            );
+            expect(decodeNativeSessionResult(await list("second-browser", "fresh-list"))).toMatchObject({
+                action: "list",
+                entries: [{ nativeSessionId: original.entries[0].nativeSessionId }],
+            });
+        } finally {
+            barrier.emit("continue");
+            await peer.close();
+        }
+    },
+);
+
 async function runtimePeer(signal: AbortSignal, resolveAgent?: RuntimeConfig["resolveAgent"]) {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-26T00:00:00Z"));
@@ -490,6 +568,7 @@ await import(${JSON.stringify(agentPeer)});
         prompt: async (sessionId: string, commandId: string, agentId = "codex") => {
             send(
                 encodeSessionPromptCommand({
+                    historyPolicy: "eager",
                     ...base(sessionId, agentId),
                     kind: "session.prompt",
                     commandId,

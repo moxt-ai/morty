@@ -111,7 +111,7 @@ async function readRecording(
             projectId,
             credential,
             ProjectPermission.SessionRead,
-            context.req.header("user-agent") ?? "moxt-server",
+            context.req.header("user-agent") ?? "morty-server",
             context.req.raw.signal,
         );
         const authorizedAt = performance.now();

@@ -59,15 +59,13 @@ export type SessionElicitationField = z.infer<typeof elicitationFieldSchema>;
 export const sessionPermissionRequestedEventSchema = z
     .object({
         commandId: IDENTIFIER,
-        // Absent only for events from older runtimes and saved history.
         details: z
             .object({
                 cwd: z.string().min(1).max(4_096),
                 rawInput: boundedJsonSchema.optional(),
                 locations: z.array(toolCallLocationSchema).max(1_000).readonly(),
             })
-            .readonly()
-            .optional(),
+            .readonly(),
         interactionId: IDENTIFIER,
         kind: z.literal(SESSION_PERMISSION_REQUESTED_KIND),
         options: z.array(permissionOptionSchema).min(1).max(20).readonly(),

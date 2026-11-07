@@ -96,6 +96,7 @@ async function loadHistoryPage(
     return {
         events: {
             events: orderedEvents.map(({ event }) => event),
+            promptOutcomes: [],
             nextCursor,
             sessionGenerationId,
             tailCursor: orderedEvents.at(-1)?.event.eventId ?? "",

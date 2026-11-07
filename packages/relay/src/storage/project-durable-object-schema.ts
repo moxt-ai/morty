@@ -1,6 +1,6 @@
 import type { DoSqlDatabase } from "@morty-build/relay-core/database";
 import { projectDurableObjectMigrations } from "../generated/project-do-migrations.ts";
-import { migrateRuntimePairingRecords } from "./migrate-runtime-pairing-records.ts";
+import { rejectRetiredPairingRecords } from "./reject-retired-pairing-records.ts";
 
 export function initializeProjectDurableObjectSchema(database: DoSqlDatabase): void {
     database.run(`CREATE TABLE IF NOT EXISTS project_schema_migrations (
@@ -16,7 +16,7 @@ export function initializeProjectDurableObjectSchema(database: DoSqlDatabase): v
         }
         database.transaction(() => {
             if (migration.name === "0005_drop_pairing_channels.sql") {
-                migrateRuntimePairingRecords(database);
+                rejectRetiredPairingRecords(database);
             }
             database.run(migration.sql);
             database.run("INSERT INTO project_schema_migrations (name, applied_at) VALUES (?, ?)", [

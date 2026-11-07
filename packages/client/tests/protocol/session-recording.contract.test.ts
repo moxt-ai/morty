@@ -52,6 +52,7 @@ function turn(commandId: string, order: number, items: readonly unknown[]) {
         answerLength: 0,
         attempt: { kind: "none" },
         commandId,
+        compactions: [],
         createdAt: "2026-10-14T00:00:00.000Z",
         generationId: "session-generation-turns",
         itemCount: items.length,
@@ -105,4 +106,9 @@ describe("Session Recording Turn page contracts", () => {
 
         expect(decodeSessionRecordingTurnItemPage(encoded).items).toHaveLength(ITEM_COUNT);
     });
+});
+
+it("Given a recorded Turn without compaction state, When a client reads it, Then the retired format is rejected", () => {
+    const { compactions: _, ...retired } = turn("command-1", 1, []);
+    expect(decodeSessionRecordingTurnPage(turnPage([retired], "session-turns")).turns).toEqual([]);
 });

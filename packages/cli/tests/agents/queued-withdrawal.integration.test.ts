@@ -42,6 +42,7 @@ test.each(["pi", "claude", "codex"] as const)(
             const prompt = (commandId: string, text: string, disposition: "reject" | "queue") =>
                 peer.send(
                     encodeSessionPromptCommand({
+                        historyPolicy: "eager",
                         kind: "session.prompt",
                         commandId,
                         sessionId: peer.sessionId,

@@ -72,6 +72,7 @@ test("Given a Codex turn whose subagent thread reports on the same connection, W
             const commandId = randomUUID();
             peer.send(
                 encodeSessionPromptCommand({
+                    historyPolicy: "eager",
                     kind: "session.prompt",
                     commandId,
                     sessionId: peer.sessionId,

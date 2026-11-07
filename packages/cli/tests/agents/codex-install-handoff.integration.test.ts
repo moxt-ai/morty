@@ -102,6 +102,7 @@ test("Given setup runs in a real Codex exec conversation, When its native sessio
         const commandId = randomUUID();
         peer.send(
             encodeSessionPromptCommand({
+                historyPolicy: "eager",
                 kind: "session.prompt",
                 commandId,
                 sessionId,

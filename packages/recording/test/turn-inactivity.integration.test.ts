@@ -6,6 +6,7 @@ import {
     type SessionRecordingTurnPage,
 } from "@morty-build/client/protocol";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SessionTurnHistoryStorage } from "../src/storage/session-turn-history-storage.ts";
 import { createRecordingWorker } from "../src/worker.ts";
 
 // Failure boundaries: early expiry; an unwatched execution never expiring; another command or
@@ -59,6 +60,7 @@ const permission = (commandId: string, interactionId: string) =>
     event({
         kind: "session.permission.requested",
         event: {
+            details: { cwd: "/workspace", locations: [] },
             commandId,
             interactionId,
             kind: "session.permission.requested",
@@ -430,7 +432,7 @@ describe("Recording execution inactivity", () => {
         expect(decodeSessionRecordingExecution(executionWire).commands[0]?.attempt.kind).toBe("indeterminate");
     });
 
-    it("Given an older projection and skewed runtime timestamps, When history is rebuilt, Then server-observed progress still has a bounded deadline", async () => {
+    it("Given an invalidated projection and skewed runtime timestamps, When history is rebuilt, Then server-observed progress still has a bounded deadline", async () => {
         const request = requested("clock");
         const begin = { ...started("clock"), recordedAt: "2099-01-01T00:00:00.000Z" };
         await record([request, begin]);
@@ -438,9 +440,7 @@ describe("Recording execution inactivity", () => {
         await runDurableObjectAlarm(stub());
         expect((await execution("clock")).commands[0]?.attempt.kind).toBe("indeterminate");
         await runInDurableObject(stub(), (_instance, state) => {
-            state.storage.sql.exec(
-                "UPDATE recording_projection SET state_json = json_remove(state_json, '$.activityVersion')",
-            );
+            new SessionTurnHistoryStorage(state.storage).resetProjection();
         });
         // The read rebuilds the projection through the production bounded backfill step.
         expect((await worker.fetch(new Request(path("turns")), env)).status).toBe(200);
@@ -454,15 +454,13 @@ describe("Recording execution inactivity", () => {
         { answer: "its Turns", suffix: "turns", status: 200 },
         { answer: "a missing item", suffix: `turns/quiet/items/${encodeURIComponent("tool:missing")}`, status: 404 },
     ])(
-        "Given an assessed execution in an older projection, When a read rebuilds the projection and answers with $answer, Then an alarm assesses the execution again",
+        "Given an assessed execution in an invalidated projection, When a read rebuilds the projection and answers with $answer, Then an alarm assesses the execution again",
         async ({ suffix, status }) => {
             await record([requested("quiet"), started("quiet")]);
             vi.setSystemTime(start + hour + 1);
             expect(await runDurableObjectAlarm(stub())).toBe(true);
             await runInDurableObject(stub(), (_instance, state) => {
-                state.storage.sql.exec(
-                    "UPDATE recording_projection SET state_json = json_remove(state_json, '$.activityVersion')",
-                );
+                new SessionTurnHistoryStorage(state.storage).resetProjection();
             });
             expect((await worker.fetch(new Request(path(suffix)), env)).status).toBe(status);
             // A rebuild folds the execution from its events again, so only an alarm records its inactivity.
@@ -471,24 +469,22 @@ describe("Recording execution inactivity", () => {
         },
     );
 
-    it.each(["1960-01-01T00:00:00.000Z", "2099-01-01T00:00:00.000Z"])(
-        "Given legacy batches without receipt times and a runtime clock at %s, When their projection is rebuilt, Then history remains readable and the deadline is bounded",
-        async (recordedAt) => {
-            await record([requested("legacy"), { ...started("legacy"), recordedAt }]);
-            await runInDurableObject(stub(), (_instance, state) => {
-                // An uncached ordinal models a batch stored before server receipt times existed.
-                state.storage.sql.exec(
-                    "UPDATE recorded_session_events_v2 SET received_at = NULL, ordinal = ordinal + 1",
-                );
-                state.storage.sql.exec(
-                    "UPDATE recording_projection SET state_json = json_remove(state_json, '$.activityVersion')",
-                );
+    it.each(["received_at", "session_generation_id"])(
+        "Given retained batches without %s, When projection backfill reads them, Then current Morty rejects the retired metadata and preserves the events",
+        async (column) => {
+            await record([requested("retired"), started("retired")]);
+            const before = await runInDurableObject(stub(), (_instance, state) => {
+                // An uncached ordinal forces a real storage read of the retired batch.
+                state.storage.sql.exec(`UPDATE recorded_session_events_v2 SET ${column} = NULL, ordinal = ordinal + 1`);
+                new SessionTurnHistoryStorage(state.storage).resetProjection();
+                return state.storage.sql.exec("SELECT * FROM recorded_session_events_v2").toArray();
             });
-            expect((await worker.fetch(new Request(path("turns")), env)).status).toBe(200);
-            await runDurableObjectAlarm(stub());
-            vi.setSystemTime(start + 2 * hour);
-            await runDurableObjectAlarm(stub());
-            expect((await execution("legacy")).commands[0]?.attempt.kind).toBe("indeterminate");
+            expect((await worker.fetch(new Request(path("turns")), env)).status).toBe(503);
+            expect(
+                await runInDurableObject(stub(), (_instance, state) =>
+                    state.storage.sql.exec("SELECT * FROM recorded_session_events_v2").toArray(),
+                ),
+            ).toEqual(before);
         },
     );
 });

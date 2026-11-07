@@ -149,6 +149,7 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
         const submittedAt = Date.now();
         socket.send(
             encodeSessionPromptCommand({
+                historyPolicy: "eager",
                 additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
@@ -325,6 +326,7 @@ test("Given an Agent announced a tool call with its input, When it requests perm
         await messages.nextKind(SESSION_READY_KIND);
         socket.send(
             encodeSessionPromptCommand({
+                historyPolicy: "eager",
                 additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
@@ -434,6 +436,7 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
         await messages.nextKind(SESSION_READY_KIND);
         socket.send(
             encodeSessionPromptCommand({
+                historyPolicy: "eager",
                 additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
@@ -543,6 +546,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
         await messages.nextKind(SESSION_READY_KIND);
         socket.send(
             encodeSessionPromptCommand({
+                historyPolicy: "eager",
                 additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
@@ -742,6 +746,7 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
             await messages.nextKind(SESSION_READY_KIND);
             initial.socket.send(
                 encodeSessionPromptCommand({
+                    historyPolicy: "eager",
                     additionalDirectoryIds: [],
                     agentId: "codex",
                     bindingId: config.bindingId,
@@ -888,6 +893,7 @@ test("Given queued prompts from the running Agent identity and another one, When
         const sessionId = "queued_identity";
         socket.send(
             encodeSessionPromptCommand({
+                historyPolicy: "eager",
                 additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,
@@ -907,6 +913,7 @@ test("Given queued prompts from the running Agent identity and another one, When
         // A different Agent identity queues behind the running turn in the same Session.
         socket.send(
             encodeSessionPromptCommand({
+                historyPolicy: "eager",
                 additionalDirectoryIds: [],
                 agentId: "codex",
                 bindingId: config.bindingId,
@@ -931,6 +938,7 @@ test("Given queued prompts from the running Agent identity and another one, When
         };
         socket.send(
             encodeSessionPromptCommand({
+                historyPolicy: "eager",
                 additionalDirectoryIds: [],
                 agentId: "claude",
                 bindingId: config.bindingId,

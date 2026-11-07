@@ -130,6 +130,7 @@ function sendPrompt(peer: RealDaemonPeer, prompt: string): string {
     const commandId = randomUUID();
     peer.send(
         encodeSessionPromptCommand({
+            historyPolicy: "eager",
             additionalDirectoryIds: [],
             agentId: "codex",
             attachments: [],

@@ -56,6 +56,7 @@ test("Given an Agent rejects a turn, When the turn fails, Then the failure event
                 const prompt = `fail echoing the prompt ${promptText}`;
                 peer.send(
                     encodeSessionPromptCommand({
+                        historyPolicy: "eager",
                         ...identity,
                         commandId,
                         disposition: SessionPromptDisposition.Reject,

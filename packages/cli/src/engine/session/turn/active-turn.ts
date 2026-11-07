@@ -175,16 +175,17 @@ export class ActiveRuntimeTurn {
     };
 
     readonly snapshot = (): ActiveTurnSnapshot => {
-        if (!this.#started()) {
+        const startedAt = this.#startedAt();
+        if (startedAt === undefined) {
+            // Admission may not have started, or settlement may precede removal from the active index.
             return null;
         }
-        const startedAt = this.#startedAt();
         return {
             commandId: decodeIdentifier(this.command.commandId),
             epoch: this.epoch,
             interaction: this.#interaction,
             sequence: this.#sequence,
-            ...(startedAt === undefined ? {} : { startedAt }),
+            startedAt,
             state: "running",
         };
     };

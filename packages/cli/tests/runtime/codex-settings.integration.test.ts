@@ -14,6 +14,7 @@ test("Given an owned Codex session, When Codex changes collaboration mode during
     await withRealDaemon(new CodexAgentSpecification(), codex.environment, async (peer) => {
         peer.send(
             encodeSessionPromptCommand({
+                historyPolicy: "eager",
                 kind: "session.prompt",
                 commandId: randomUUID(),
                 sessionId: peer.sessionId,

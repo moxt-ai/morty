@@ -100,6 +100,7 @@ const identity = (peer: RealDaemonPeer) => ({
 async function prompt(peer: RealDaemonPeer, sessionId: string): Promise<void> {
     peer.send(
         encodeSessionPromptCommand({
+            historyPolicy: "eager",
             ...identity(peer),
             attachments: [],
             commandId: crypto.randomUUID(),

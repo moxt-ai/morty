@@ -1,4 +1,5 @@
 import {
+    decodeSessionCapabilities,
     isIdentifier,
     MAX_LOCAL_AGENT_DIRECTORY_ENTRIES,
     type SessionCapabilities,
@@ -14,25 +15,6 @@ export const MAX_RUNTIMES_PER_PROJECT = 64;
 const PAIRING_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const PAIRING_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){4}$/;
 const TOKEN_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
-// The capabilities this Relay build understands. A newer daemon may advertise
-// additional capabilities; unknown fields are ignored and missing fields default
-// to unsupported, so a Relay never rejects a daemon for evolving the protocol.
-const KNOWN_SESSION_CAPABILITY_FIELDS: readonly (keyof SessionCapabilities)[] = [
-    "additionalDirectories",
-    "audioPrompt",
-    "closeSession",
-    "deleteSession",
-    "embeddedContextPrompt",
-    "imagePrompt",
-    "listSessions",
-    "loadSession",
-    "promptQueueing",
-    "renameSession",
-    "resumeSession",
-    "steering",
-    "unstableForkSession",
-];
-
 export interface AgentDescriptor {
     readonly agentPath: string;
     readonly agentVersion: string;
@@ -369,49 +351,12 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function unsupportedSessionCapabilities(): SessionCapabilities {
-    return Object.freeze({
-        additionalDirectories: false,
-        audioPrompt: false,
-        closeSession: false,
-        deleteSession: false,
-        embeddedContextPrompt: false,
-        imagePrompt: false,
-        listSessions: false,
-        loadSession: false,
-        promptQueueing: false,
-        renameSession: false,
-        resumeSession: false,
-        steering: false,
-        unstableForkSession: false,
-    });
-}
-
-// Decodes capabilities without depending on zod's strip/default semantics: the
-// shape is validated explicitly into a fresh object, unknown fields are ignored,
-// and missing known fields default to unsupported. This keeps an older Relay
-// compatible with a newer daemon that advertises capabilities it does not know.
-// A capability value this Relay cannot interpret is advisory, not a pairing
-// failure: the agent stays listed with that capability withheld, and the
-// daemon decides whether a command may use it when it executes the command.
 function validateAgentCapabilities(value: unknown): SessionCapabilities {
-    if (!isRecord(value)) {
-        return unsupportedSessionCapabilities();
+    try {
+        return decodeSessionCapabilities(value);
+    } catch (cause) {
+        throw new PairingDirectoryError("invalid_agents", "The Agent capability catalog is invalid", { cause });
     }
-    const capabilities: Record<keyof SessionCapabilities, boolean> = {
-        ...unsupportedSessionCapabilities(),
-    };
-    for (const field of KNOWN_SESSION_CAPABILITY_FIELDS) {
-        if (!Object.hasOwn(value, field)) {
-            continue;
-        }
-        const advertised = value[field];
-        if (advertised !== undefined && typeof advertised !== "boolean") {
-            continue;
-        }
-        capabilities[field] = advertised === true;
-    }
-    return Object.freeze(capabilities);
 }
 
 export function validateAgents(value: unknown): readonly AgentDescriptor[] {
@@ -422,7 +367,6 @@ export function validateAgents(value: unknown): readonly AgentDescriptor[] {
     const agents: AgentDescriptor[] = [];
     const identifiers = new Set<string>();
     for (const candidate of value) {
-        // Fields a newer daemon adds are ignored, so an older Relay can still pair it.
         if (
             !isRecord(candidate) ||
             !Object.hasOwn(candidate, "agentPath") ||

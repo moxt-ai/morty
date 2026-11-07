@@ -23,6 +23,15 @@ import {
 } from "../schema/session-recording-do/index.ts";
 import { applyDurableObjectMigrations } from "./durable-object-migrations.ts";
 
+class RetiredRecordingStateError extends Error {
+    readonly code = "retired_recording_state";
+
+    constructor() {
+        super("Retained recording metadata is unsupported; the original events remain untouched");
+        this.name = "RetiredRecordingStateError";
+    }
+}
+
 export interface RecordedBatch {
     readonly events: readonly SessionWireEvent[];
     readonly generation: string;
@@ -170,13 +179,16 @@ export class SessionRecordingStorage {
         }
     };
 
-    /** Decodes one stored batch; rows written before the generation column existed carry it in their events. */
+    /** Decodes the current stored batch metadata without synthesizing missing provenance. */
     readonly #batch = (row: {
         readonly envelopeJson: string;
         readonly ordinal: number;
         readonly sessionGenerationId: string | null;
         readonly receivedAt: number | null;
     }): RecordedBatch => {
+        if (row.sessionGenerationId === null || row.receivedAt === null) {
+            throw new RetiredRecordingStateError();
+        }
         const cached = this.#decoded.get(row.ordinal);
         if (cached !== undefined) {
             this.#remember(cached.batch, cached.characters);
@@ -185,11 +197,9 @@ export class SessionRecordingStorage {
         const events = this.#decode(row);
         const batch = {
             events,
-            generation: row.sessionGenerationId ?? events[0]?.sessionGenerationId ?? "",
+            generation: row.sessionGenerationId,
             ordinal: row.ordinal,
-            receivedAt:
-                row.receivedAt ??
-                Math.max(0, Math.min(Date.now(), Date.parse(events.at(-1)?.recordedAt ?? new Date().toISOString()))),
+            receivedAt: row.receivedAt,
         };
         this.#remember(batch, row.envelopeJson.length);
         return batch;
@@ -252,11 +262,10 @@ export class SessionRecordingStorage {
         if (tail === undefined) {
             return "v2:0:0";
         }
-        if (tail.lastPosition !== null) {
-            return `v2:${tail.ordinal}:${tail.lastPosition}`;
+        if (tail.lastPosition === null) {
+            throw new RetiredRecordingStateError();
         }
-        const batch = this.#batchAt(tail.ordinal);
-        return batch === undefined ? "v2:0:0" : this.#cursor(batch, batch.events.length - 1);
+        return `v2:${tail.ordinal}:${tail.lastPosition}`;
     };
 
     readonly #cursor = (batch: RecordedBatch, index: number): string =>
@@ -518,9 +527,12 @@ export class SessionRecordingStorage {
         if (bounds === undefined) {
             return null;
         }
+        if (bounds.lastPosition === null || bounds.sessionGenerationId === null) {
+            throw new RetiredRecordingStateError();
+        }
         // A tail cursor, and most page cursors, name the last event of their batch: reading resumes at the
         // next batch without decoding this one. Its last event is also the last copy of its position.
-        if (bounds.lastPosition === Number(positionToken) && bounds.sessionGenerationId !== null) {
+        if (bounds.lastPosition === Number(positionToken)) {
             const end = Number.POSITIVE_INFINITY;
             return { batch: null, generation: bounds.sessionGenerationId, index: end, ordinal };
         }

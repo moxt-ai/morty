@@ -6,7 +6,7 @@ import type { LocalSqliteDatabase } from "../sqlite/local-sqlite-database.ts";
 const cancellationSchema = z.object({ commandId: z.string(), sessionId: z.string() }).readonly();
 export type PersistedCommandCancellation = z.infer<typeof cancellationSchema>;
 
-/** Owns the cancellation ledger's database; older Runtimes leave this additive store untouched. */
+/** Owns the cancellation ledger independently of detailed execution receipt retention. */
 export class CommandCancellationTable {
     readonly #database: LocalSqliteDatabase;
 

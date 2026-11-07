@@ -23,7 +23,6 @@ import type { RuntimeInstallationStore } from "./connection/runtime-installation
 const PAIRING_TIMEOUT_MILLISECONDS = 20_000;
 const PAIRING_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){4}$/;
 const TOKEN_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
-const CLAIM_RESPONSE_KEYS: readonly string[] = ["appId", "channelId", "daemonToken", "runtimeId"];
 const REDEEM_RESPONSE_KEYS: readonly string[] = ["appId", "channelId", "runtimeCredential", "runtimeId"];
 
 interface PairCommandOptions {
@@ -147,17 +146,13 @@ function readRelayError(value: unknown): PairingClientError {
     return new PairingClientError("pairing_failed", "The relay could not pair this machine");
 }
 
-function decodePairingResponse(
-    value: unknown,
-    credentialField: string,
-    expectedKeys: readonly string[],
-): ClaimPairingResponse {
-    if (!isRecord(value) || !hasExactKeys(value, expectedKeys)) {
+function decodePairingResponse(value: unknown): ClaimPairingResponse {
+    if (!isRecord(value) || !hasExactKeys(value, REDEEM_RESPONSE_KEYS)) {
         throw new PairingClientError("invalid_relay_response", "The relay returned an invalid pairing response");
     }
     const appId = value["appId"];
     const channelId = value["channelId"];
-    const runtimeCredential = value[credentialField];
+    const runtimeCredential = value["runtimeCredential"];
     const runtimeId = value["runtimeId"];
     if (
         typeof appId !== "string" ||
@@ -187,10 +182,10 @@ async function claimPairing(
         id: agent.id,
         label: agent.label,
     }));
-    const endpoint =
-        options.pairingId.length > 0
-            ? mortyApiUrl(options.relayOrigin, `/v1/runtime-pairings/${encodeURIComponent(options.pairingId)}/redeem`)
-            : mortyApiUrl(options.relayOrigin, "/pairings/claim");
+    const endpoint = mortyApiUrl(
+        options.relayOrigin,
+        `/v1/runtime-pairings/${encodeURIComponent(options.pairingId)}/redeem`,
+    );
     let response: Response;
     try {
         response = await fetch(endpoint, {
@@ -214,9 +209,7 @@ async function claimPairing(
     if (!response.ok) {
         throw readRelayError(value);
     }
-    return options.pairingId.length > 0
-        ? decodePairingResponse(value, "runtimeCredential", REDEEM_RESPONSE_KEYS)
-        : decodePairingResponse(value, "daemonToken", CLAIM_RESPONSE_KEYS);
+    return decodePairingResponse(value);
 }
 
 function buildSavedRuntimeConfig(
@@ -306,7 +299,7 @@ export async function pairRuntimeConnection(
         installation,
         {
             code: parsePairingCode(options.pairingCode),
-            pairingId: options.pairingId.length === 0 ? "" : validatePairingId(options.pairingId),
+            pairingId: validatePairingId(options.pairingId),
             relayOrigin: parseRelayOrigin(options.relayOrigin),
             workspace: options.defaultWorkspace,
         },

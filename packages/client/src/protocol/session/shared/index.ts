@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { DIRECTORY_IDENTIFIER } from "../../shared/directory.ts";
 import { identifierStringSchema as IDENTIFIER } from "../../shared/identifier.ts";
+import { decodeZodValue } from "../../shared/message-codec.ts";
 
 export { DIRECTORY_IDENTIFIER } from "../../shared/directory.ts";
 export const SHORT_TEXT = z.string().max(500);
@@ -21,13 +22,12 @@ export const sessionStatusSchema = z.discriminatedUnion("kind", [
             /**
              * Present when the Session's most recent started command failed, while the Runtime retains its receipt, so
              * a client that did not watch it can still show the Session failed until another command starts. It
-             * carries what the execution's `lastTurn` reports for that failure. Runtimes before it existed omit it.
+             * carries what the execution's `lastTurn` reports for that failure.
              */
             failedTurn: z
                 .object({ code: IDENTIFIER, commandId: IDENTIFIER, message: z.string().min(1).max(500) })
                 .readonly()
-                .optional()
-                .catch(undefined),
+                .optional(),
         })
         .readonly(),
     z
@@ -41,7 +41,7 @@ export const sessionStatusSchema = z.discriminatedUnion("kind", [
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 
 export const sessionCapabilitiesSchema = z
-    .object({
+    .strictObject({
         additionalDirectories: z.boolean(),
         audioPrompt: z.boolean(),
         closeSession: z.boolean(),
@@ -50,15 +50,18 @@ export const sessionCapabilitiesSchema = z
         imagePrompt: z.boolean(),
         listSessions: z.boolean(),
         loadSession: z.boolean(),
-        promptQueueing: z.boolean().default(false),
-        renameSession: z.boolean().default(false),
+        promptQueueing: z.boolean(),
+        renameSession: z.boolean(),
         resumeSession: z.boolean(),
-        steering: z.boolean().default(false),
-        unstableForkSession: z.boolean().default(false),
+        steering: z.boolean(),
+        unstableForkSession: z.boolean(),
     })
     .readonly();
 
 export type SessionCapabilities = z.infer<typeof sessionCapabilitiesSchema>;
+
+export const decodeSessionCapabilities = (value: unknown): SessionCapabilities =>
+    decodeZodValue(value, sessionCapabilitiesSchema);
 
 export const sessionCommandSchema = z
     .object({

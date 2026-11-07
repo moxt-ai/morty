@@ -28,6 +28,7 @@ const identity = (peer: RealDaemonPeer) => ({
 const submit = (peer: RealDaemonPeer, commandId: string, prompt: string): void =>
     peer.send(
         encodeSessionPromptCommand({
+            historyPolicy: "eager",
             ...identity(peer),
             attachments: [],
             commandId,
@@ -148,6 +149,7 @@ test("Given a running turn and a later queued command, When the clock moves back
                 vi.setSystemTime(new Date("2026-10-28T09:00:00Z"));
                 peer.send(
                     encodeSessionPromptCommand({
+                        historyPolicy: "eager",
                         ...identity(peer),
                         attachments: [],
                         commandId: queued,
@@ -318,6 +320,7 @@ test.each([
                     const steering = randomUUID();
                     peer.send(
                         encodeSessionPromptCommand({
+                            historyPolicy: "eager",
                             ...identity(peer),
                             attachments: [],
                             commandId: steering,

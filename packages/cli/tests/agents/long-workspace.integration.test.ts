@@ -48,6 +48,7 @@ test("Given a deeply nested multibyte workspace, When real Codex runs a tool thr
             async (peer) => {
                 peer.send(
                     encodeSessionPromptCommand({
+                        historyPolicy: "eager",
                         additionalDirectoryIds: [],
                         agentId: "codex",
                         bindingId: peer.bindingId,

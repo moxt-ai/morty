@@ -32,9 +32,14 @@ describe("Session prompt history policy", () => {
         });
     });
 
-    it("keeps older prompt commands on the eager policy default", () => {
-        expect(decodeSessionPromptCommand(JSON.stringify(prompt))).not.toHaveProperty("historyPolicy");
-    });
+    it.each(["historyPolicy", "targetCommandId", "disposition"])(
+        "Given a prompt missing %s, When it crosses the command boundary, Then the retired format is rejected",
+        (field) => {
+            const wire: Record<string, unknown> = { ...prompt, historyPolicy: SessionHistoryPolicy.Eager };
+            delete wire[field];
+            expect(() => decodeSessionPromptCommand(JSON.stringify(wire))).toThrow();
+        },
+    );
 
     it("rejects unknown history policies instead of silently replaying history", () => {
         expect(() => decodeSessionPromptCommand(JSON.stringify({ ...prompt, historyPolicy: "best-effort" }))).toThrow(

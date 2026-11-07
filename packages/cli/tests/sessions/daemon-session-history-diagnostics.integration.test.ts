@@ -77,6 +77,7 @@ if (process.argv.includes("--version")) {
                 }
                 peer.send(
                     encodeSessionPromptCommand({
+                        historyPolicy: "eager",
                         additionalDirectoryIds: [],
                         agentId: "controlled-acp",
                         bindingId: peer.bindingId,

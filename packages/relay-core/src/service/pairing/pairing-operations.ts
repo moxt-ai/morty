@@ -47,13 +47,6 @@ export interface PairingOperations {
         runtimeId: string,
         signal: AbortSignal,
     ) => Promise<VerifiedChannelAccess>;
-    readonly claimPairing: (
-        pairingCode: string,
-        machineName: string,
-        workspaceName: string,
-        agents: readonly AgentDescriptor[],
-        signal: AbortSignal,
-    ) => Promise<ClaimedPairing>;
     readonly createChannelAccessGrant: (
         channelId: string,
         token: string,

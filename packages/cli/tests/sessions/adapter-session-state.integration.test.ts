@@ -67,6 +67,7 @@ test("Given a resumed conversation with a configuration edit awaiting the Agent,
                 const commandId = crypto.randomUUID();
                 peer.send(
                     encodeSessionPromptCommand({
+                        historyPolicy: "eager",
                         ...identity,
                         kind: "session.prompt",
                         commandId,

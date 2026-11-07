@@ -80,7 +80,7 @@ const linkedDeviceSchema = v.pipe(
         id: v.string(),
         joinedAt: v.pipe(v.string(), v.isoTimestamp()),
         label: v.nullable(v.string()),
-        /** Roughly where it joined from, as Cloudflare located it; null for devices that joined before this was kept. */
+        /** Roughly where it joined from, as Cloudflare located it; null when location is unavailable. */
         location: v.nullable(
             v.object({
                 city: v.nullable(v.string()),
@@ -88,8 +88,7 @@ const linkedDeviceSchema = v.pipe(
             }),
         ),
         accessExpiresAt: v.pipe(v.string(), v.isoTimestamp()),
-        // A Worker that predates sharers, or a sharer it does not know, names none.
-        addedBy: v.fallback(v.nullable(deviceSharerSchema), null),
+        addedBy: v.nullable(deviceSharerSchema),
     }),
     v.readonly(),
 );

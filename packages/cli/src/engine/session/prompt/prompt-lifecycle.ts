@@ -10,6 +10,7 @@ import type {
 } from "@morty-build/client/protocol";
 import { isPromptTerminal, SESSION_CLOSED_ERROR_CODE } from "@morty-build/client/protocol";
 import type { SessionEventSink } from "../api/session-api.ts";
+import { SessionError } from "../api/session-error.ts";
 import type { ExecutionReceipts, RestatedOutcome } from "../turn/execution-receipts.ts";
 import { isTextPromptResourceMediaType } from "./prompt-artifacts.ts";
 
@@ -195,7 +196,7 @@ export class PromptLifecycle {
     /**
      * Publishes again an outcome a receipt already holds, for clients that missed it. The restatement is marked, so
      * status notifications do not take it for a new outcome, and it does not settle the receipt again. It keeps the
-     * time the outcome was recorded, which receivers that predate the marker report as when it ended; only an outcome
+     * time the outcome was recorded; only an outcome
      * a receipt recorded is marked as such, so Recording can settle a Turn it missed from it and never from an
      * acknowledgement composed now.
      */
@@ -303,6 +304,11 @@ export async function settleAbandonedTurn(
         case "restated":
             projection.restateOutcome(cancellation.sessionId, cancelled.outcome);
             return;
+        case "expired":
+            throw new SessionError(
+                "command_result_expired",
+                "The command executed but its result is no longer retained",
+            );
         case "unavailable":
             break;
     }

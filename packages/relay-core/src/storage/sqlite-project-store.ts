@@ -151,7 +151,7 @@ export class SqliteProjectStore implements ProjectStore {
             return true;
         }
         // Replays prove possession of the original code and must match the committed credential. Never rotate an
-        // older random credential, extend the pairing deadline, or resurrect a revoked Runtime.
+        // retired credential, extend the pairing deadline, or resurrect a revoked Runtime.
         const pairing = await this.#runtimes.readProjectPairing(value.pairingId, signal);
         if (
             pairing !== null &&

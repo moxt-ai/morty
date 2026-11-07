@@ -40,6 +40,7 @@ test("Given a real pi native Session, When the active prompt is cancelled with a
             const sendPrompt = (commandId: string, targetCommandId = ""): void =>
                 peer.send(
                     encodeSessionPromptCommand({
+                        historyPolicy: "eager",
                         kind: "session.prompt",
                         commandId,
                         sessionId: nativeId,
@@ -134,6 +135,7 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
         const commandId = randomUUID();
         peer.send(
             encodeSessionPromptCommand({
+                historyPolicy: "eager",
                 kind: "session.prompt",
                 commandId,
                 sessionId: sourceSessionId,
@@ -264,6 +266,7 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
         const sourceCommandId = randomUUID();
         peer.send(
             encodeSessionPromptCommand({
+                historyPolicy: "eager",
                 kind: "session.prompt",
                 commandId: sourceCommandId,
                 sessionId: sourceSessionId,
@@ -398,6 +401,7 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
         const forkedCommandId = randomUUID();
         peer.send(
             encodeSessionPromptCommand({
+                historyPolicy: "eager",
                 kind: "session.prompt",
                 commandId: forkedCommandId,
                 sessionId: forkedSessionId,

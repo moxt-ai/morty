@@ -113,7 +113,7 @@ export class SessionControl {
                     commandId: turn.commandId,
                     directoryId: binding.directoryId,
                     disposition: turn.disposition,
-                    ...(turn.historyPolicy === undefined ? {} : { historyPolicy: turn.historyPolicy }),
+                    historyPolicy: turn.historyPolicy ?? "eager",
                     kind: "session.prompt",
                     prompt: turn.content,
                     sessionConfigurations: turn.sessionConfigurations,

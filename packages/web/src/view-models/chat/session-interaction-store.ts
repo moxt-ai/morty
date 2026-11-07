@@ -283,16 +283,16 @@ export function sessionInteractionPresentation(model: SessionInteractionStore, m
 
 export function permissionPresentation(permission: PermissionInteraction) {
     return {
-        cwd: permission.details?.cwd ?? "Session working directory unavailable",
+        cwd: permission.details.cwd,
         input:
-            permission.details?.rawInput == null
+            permission.details.rawInput == null
                 ? "The agent did not provide the original tool input."
                 : JSON.stringify(permission.details.rawInput, null, 2),
         locations: [
             ...new Set(
-                permission.details?.locations.map((location) =>
+                permission.details.locations.map((location) =>
                     location.line == null ? location.path : `${location.path}:${location.line}`,
-                ) ?? [],
+                ),
             ),
         ],
         options: permission.options.map((option) => {

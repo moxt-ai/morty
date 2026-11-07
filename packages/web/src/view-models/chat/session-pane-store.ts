@@ -434,8 +434,7 @@ async function readSessionHistory(
         }
         sessionGenerationId = page.sessionGenerationId;
         events = mergeSessionEvents(page.events, events);
-        // Older Runtimes report no outcomes.
-        promptOutcomes = [...(page.promptOutcomes ?? []), ...promptOutcomes];
+        promptOutcomes = [...page.promptOutcomes, ...promptOutcomes];
         nextCursor = page.nextCursor;
         renderableMessages = sessionReductionMessages(
             createSessionMessageReduction({ events, nextCursor, promptOutcomes }),

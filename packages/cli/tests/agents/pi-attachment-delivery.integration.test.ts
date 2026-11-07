@@ -38,6 +38,7 @@ test("Given real Pi receives a file attachment, When the Agent reads its local l
         });
         peer.send(
             encodeSessionPromptCommand({
+                historyPolicy: "eager",
                 additionalDirectoryIds: [],
                 agentId: "pi",
                 bindingId: peer.bindingId,
