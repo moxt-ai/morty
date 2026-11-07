@@ -142,7 +142,7 @@ export function createInteractionAgent(onBackgroundPermissionReady?: (request: (
                                             title: "Draft",
                                             default: `${String.fromCodePoint(0x7b2c, 0x4e00, 0x884c)}\nSecond line`,
                                             maxLength: 10_000,
-                                            _meta: { "io.mobius/multiline": true },
+                                            _meta: { "io.morty/multiline": true },
                                         },
                                         nickname: { type: "string", title: "Optional nickname", minLength: 1 },
                                         code: { type: "string", title: "Optional code", pattern: "^[A-Z]+$" },

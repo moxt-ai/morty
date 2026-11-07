@@ -11,7 +11,7 @@ import { fakeAgent, RecordingObserver } from "./acp-feature-fixture.ts";
 
 /** Owns an isolated ACP process and its disposable native files. */
 export async function createControlledSession() {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-acp-controls-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-acp-controls-"));
     const observer = new RecordingObserver();
     const manager = new SessionManager({
         observer,
@@ -83,7 +83,7 @@ export async function completeAcpControls(session: Awaited<ReturnType<typeof cre
                 type: "embedded",
                 mimeType: "text/plain",
                 text: "supporting context",
-                uri: "mobius://upload/context.txt",
+                uri: "morty://upload/context.txt",
             },
         ],
     });

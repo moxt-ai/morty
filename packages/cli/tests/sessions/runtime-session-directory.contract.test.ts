@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MobiusClient, StaticMobiusCredentialProvider } from "@morty-build/client/server";
+import { MortyClient, StaticMortyCredentialProvider } from "@morty-build/client/server";
 import { expect, it } from "vitest";
 import { startTestPlatform } from "../support/platform.ts";
 
@@ -34,7 +34,7 @@ for (const client of ["SDK", "HTTP"] as const) {
             } else {
                 const response = await platform.app.request(
                     new Request(
-                        `${platform.baseUrl}/mobius/api/v1/projects/${project.projectId}/runtimes/${runtime.runtimeId}/sessions`,
+                        `${platform.baseUrl}/morty/api/v1/projects/${project.projectId}/runtimes/${runtime.runtimeId}/sessions`,
                         {
                             method: "POST",
                             headers: {
@@ -114,7 +114,7 @@ it("Given long ASCII and multibyte directory references, When the SDK browses th
 });
 
 it("Given a deeply nested multibyte project path, When the SDK browses it and runs a conversation, Then directory metadata and native history remain accessible", async () => {
-    const root = await mkdtemp(join(tmpdir(), "mobius-long-workspace-"));
+    const root = await mkdtemp(join(tmpdir(), "morty-long-workspace-"));
     try {
         const path = join(
             root,
@@ -189,7 +189,7 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
 });
 
 it("Given a Session with an additional directory, When the App prompts it and reads its execution without stating its binding, Then the Runtime runs the Turn in the Session's own directories", async () => {
-    const additional = await mkdtemp(join(tmpdir(), "mobius-additional-directory-"));
+    const additional = await mkdtemp(join(tmpdir(), "morty-additional-directory-"));
     try {
         const additionalDirectoryId = `path-${Buffer.from(await realpath(additional)).toString("base64url")}`;
         await using platform = await startTestPlatform();
@@ -217,10 +217,10 @@ it("Given a Session with an additional directory, When the App prompts it and re
             signal,
         );
         const access = await runtime.client.sessions.createAccess(runtime.runtimeId, sessionId, 900, signal);
-        const session = new MobiusClient({
+        const session = new MortyClient({
             endpoint: platform.baseUrl,
             projectId: project.projectId,
-            credentialProvider: new StaticMobiusCredentialProvider(access.credential),
+            credentialProvider: new StaticMortyCredentialProvider(access.credential),
             transport: { fetch: async (request: Request) => await platform.app.request(request) },
         });
 

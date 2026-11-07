@@ -36,55 +36,55 @@ import {
 } from "@morty-build/client/protocol";
 
 import {
-    MobiusApiError,
-    MobiusCancellationError,
-    MobiusConnectionError,
-    MobiusError,
-    MobiusProtocolError,
-    MobiusTimeoutError,
-    MobiusValidationError,
+    MortyApiError,
+    MortyCancellationError,
+    MortyConnectionError,
+    MortyError,
+    MortyProtocolError,
+    MortyTimeoutError,
+    MortyValidationError,
 } from "./errors.ts";
-import { MobiusPublicRequestExecutor } from "./public-request.ts";
+import { MortyPublicRequestExecutor } from "./public-request.ts";
 import {
-    type CreateMobiusSessionRequest,
-    decodeMobiusBrowserCredential,
-    decodeMobiusChannelAccessGrant,
-    decodeMobiusChannelDescriptor,
-    decodeMobiusLinkedChannelDeviceList,
-    decodeMobiusRedeemedChannelCredential,
-    decodeMobiusRuntimeList,
-    decodeMobiusRuntimePairing,
-    decodeMobiusRuntimePairingStatus,
-    decodeMobiusTurn,
+    type CreateMortySessionRequest,
+    decodeMortyBrowserCredential,
+    decodeMortyChannelAccessGrant,
+    decodeMortyChannelDescriptor,
+    decodeMortyLinkedChannelDeviceList,
+    decodeMortyRedeemedChannelCredential,
+    decodeMortyRuntimeList,
+    decodeMortyRuntimePairing,
+    decodeMortyRuntimePairingStatus,
+    decodeMortyTurn,
     decodeRuntimeDescriptor,
-    type MobiusBrowserCredential,
-    type MobiusBrowserCredentialRequest,
-    type MobiusChannelAccessGrant,
-    type MobiusChannelDescriptor,
-    type MobiusInteractionResponseRequest,
-    type MobiusLinkedChannelDevice,
-    type MobiusPageRequest,
-    MobiusPairedRuntimePairingStatus,
-    type MobiusRedeemedChannelCredential,
-    type MobiusRuntimeDescriptor,
-    type MobiusRuntimePairing,
-    MobiusRuntimePairingLifecycle,
-    type MobiusRuntimePairingRequest,
-    type MobiusRuntimePairingStatus,
-    type MobiusRuntimePairingWaitOptions,
-    MobiusSessionAccess,
-    MobiusSessionAccessRevocation,
-    type MobiusSessionBinding,
-    type MobiusTurn,
-    type MobiusTurnCancellation,
-    type SubmitMobiusTurnRequest,
+    type MortyBrowserCredential,
+    type MortyBrowserCredentialRequest,
+    type MortyChannelAccessGrant,
+    type MortyChannelDescriptor,
+    type MortyInteractionResponseRequest,
+    type MortyLinkedChannelDevice,
+    type MortyPageRequest,
+    MortyPairedRuntimePairingStatus,
+    type MortyRedeemedChannelCredential,
+    type MortyRuntimeDescriptor,
+    type MortyRuntimePairing,
+    MortyRuntimePairingLifecycle,
+    type MortyRuntimePairingRequest,
+    type MortyRuntimePairingStatus,
+    type MortyRuntimePairingWaitOptions,
+    MortySessionAccess,
+    MortySessionAccessRevocation,
+    type MortySessionBinding,
+    type MortyTurn,
+    type MortyTurnCancellation,
+    type SubmitMortyTurnRequest,
 } from "./resources.ts";
 
 import {
     HttpTransport,
-    isMobiusLiveEventTransport,
-    type MobiusHttpTransport,
-    type MobiusTransportSessionEvent,
+    isMortyLiveEventTransport,
+    type MortyHttpTransport,
+    type MortyTransportSessionEvent,
 } from "./transport/http-transport.ts";
 
 const DEFAULT_OPERATION_TIMEOUT_MILLISECONDS = 20_000;
@@ -117,11 +117,11 @@ function connectionCauseMessages(cause: unknown): readonly string[] {
     return messages;
 }
 
-export interface MobiusCredentialProvider {
+export interface MortyCredentialProvider {
     readonly credential: (signal: AbortSignal) => Promise<string>;
 }
 
-export interface DiscoverMobiusAgentSettingsRequest {
+export interface DiscoverMortyAgentSettingsRequest {
     /**
      * The directory a new Session would start in; omitted, the Runtime's default directory. The result's `directoryId`
      * names the directory actually inspected, and is absent when the Runtime predates directory-scoped discovery.
@@ -130,8 +130,8 @@ export interface DiscoverMobiusAgentSettingsRequest {
     readonly model?: string;
 }
 
-/** A Session setting change; the binding fields follow `MobiusSessionBinding`. */
-export type UpdateMobiusSessionConfigurationRequest = MobiusSessionBinding &
+/** A Session setting change; the binding fields follow `MortySessionBinding`. */
+export type UpdateMortySessionConfigurationRequest = MortySessionBinding &
     Pick<
         SessionConfigureCommand,
         "booleanValue" | "configId" | "expectedConfigurationRevision" | "value" | "valueType"
@@ -141,7 +141,7 @@ export type UpdateMobiusSessionConfigurationRequest = MobiusSessionBinding &
  * Writes the supplied binding fields to a query. A query cannot carry an empty list, so an empty
  * `additionalDirectoryIds` reads as empty only beside `agentId` or `directoryId`; alone it reads as omitted.
  */
-function setSessionBindingQuery(query: URLSearchParams, binding: MobiusSessionBinding): void {
+function setSessionBindingQuery(query: URLSearchParams, binding: MortySessionBinding): void {
     if (binding.agentId !== undefined) {
         query.set("agentId", binding.agentId);
     }
@@ -153,19 +153,19 @@ function setSessionBindingQuery(query: URLSearchParams, binding: MobiusSessionBi
     }
 }
 
-export interface ForkMobiusNativeSessionRequest {
+export interface ForkMortyNativeSessionRequest {
     readonly agentId: string;
     readonly nativeSessionId: string;
     readonly directoryId: string;
     readonly additionalDirectoryIds: readonly string[];
 }
 
-export type MobiusExternalContentBlock =
+export type MortyExternalContentBlock =
     | ExternalImageContentBlock
     | ExternalAudioContentBlock
     | ExternalResourceContentBlock;
 
-export function externalContentPath(content: MobiusExternalContentBlock): string {
+export function externalContentPath(content: MortyExternalContentBlock): string {
     let kind: "audio" | "image" | "resource";
     let key: string;
     switch (content.type) {
@@ -182,15 +182,15 @@ export function externalContentPath(content: MobiusExternalContentBlock): string
             key = content.resourceKey;
             break;
         default:
-            throw new MobiusValidationError("The external content reference is invalid");
+            throw new MortyValidationError("The external content reference is invalid");
     }
     if (!/^[a-f0-9]{64}$/u.test(key)) {
-        throw new MobiusValidationError("The external content key is invalid");
+        throw new MortyValidationError("The external content key is invalid");
     }
-    return `mobius-content:${kind}:${key}`;
+    return `morty-content:${kind}:${key}`;
 }
 
-export class StaticMobiusCredentialProvider implements MobiusCredentialProvider {
+export class StaticMortyCredentialProvider implements MortyCredentialProvider {
     readonly #token: string;
 
     constructor(token: string) {
@@ -211,36 +211,36 @@ function validateCredential(value: unknown): string {
         value.includes("\r") ||
         value.includes("\n")
     ) {
-        throw new MobiusValidationError("The Mobius credential is invalid");
+        throw new MortyValidationError("The Morty credential is invalid");
     }
     return value;
 }
 
-export interface MobiusResponseMetadata {
+export interface MortyResponseMetadata {
     readonly serverTiming: string | null;
     readonly status: number;
 }
 
-export interface MobiusEndpointOptions {
+export interface MortyEndpointOptions {
     readonly authenticationProviderId?: string;
-    readonly credentialProvider: MobiusCredentialProvider;
+    readonly credentialProvider: MortyCredentialProvider;
     readonly endpoint: string;
     /** Set to zero when the caller owns live-stream recovery. */
     readonly maxStreamReconnectAttempts?: number;
-    readonly observeResponse?: (metadata: MobiusResponseMetadata) => void;
+    readonly observeResponse?: (metadata: MortyResponseMetadata) => void;
     readonly operationTimeoutMilliseconds?: number;
     readonly streamConnectionTimeoutMilliseconds?: number;
     readonly streamLivenessTimeoutMilliseconds?: number;
-    readonly transport?: MobiusHttpTransport;
+    readonly transport?: MortyHttpTransport;
 }
 
-export interface MobiusClientOptions extends MobiusEndpointOptions {
+export interface MortyClientOptions extends MortyEndpointOptions {
     readonly projectId: string;
 }
 
 function validatePositiveInteger(value: number, name: string): number {
     if (!Number.isSafeInteger(value) || value < 1) {
-        throw new MobiusValidationError(`The ${name} is invalid`);
+        throw new MortyValidationError(`The ${name} is invalid`);
     }
     return value;
 }
@@ -250,7 +250,7 @@ function normalizeEndpoint(value: string): URL {
     try {
         endpoint = new URL(value);
     } catch (cause) {
-        throw new MobiusValidationError("The Mobius endpoint is invalid", {
+        throw new MortyValidationError("The Morty endpoint is invalid", {
             cause,
         });
     }
@@ -261,7 +261,7 @@ function normalizeEndpoint(value: string): URL {
         endpoint.search.length > 0 ||
         endpoint.hash.length > 0
     ) {
-        throw new MobiusValidationError("The Mobius endpoint is invalid");
+        throw new MortyValidationError("The Morty endpoint is invalid");
     }
     if (endpoint.pathname === "/") {
         endpoint.pathname = `${MORTY_API_PREFIX}/`;
@@ -271,28 +271,28 @@ function normalizeEndpoint(value: string): URL {
     return endpoint;
 }
 
-function decodeTurnCancellation(value: unknown, turnId: string): MobiusTurnCancellation {
+function decodeTurnCancellation(value: unknown, turnId: string): MortyTurnCancellation {
     if (
         typeof value !== "object" ||
         value === null ||
         Reflect.get(value, "turnId") !== turnId ||
         typeof Reflect.get(value, "stopReason") !== "string"
     ) {
-        throw new MobiusProtocolError("The service returned an invalid Turn cancellation");
+        throw new MortyProtocolError("The service returned an invalid Turn cancellation");
     }
     return { turnId, stopReason: Reflect.get(value, "stopReason") };
 }
 
 function projectPath(projectId: string, resourcePath: string): string {
     if (!isIdentifier(projectId)) {
-        throw new MobiusValidationError("The Mobius project identifier is invalid");
+        throw new MortyValidationError("The Morty project identifier is invalid");
     }
     return `v1/projects/${encodeURIComponent(projectId)}/${resourcePath}`;
 }
 
 function sessionPath(projectId: string, sessionId: string, resourcePath: string): string {
     if (!isIdentifier(sessionId)) {
-        throw new MobiusValidationError("The Mobius Session identifier is invalid");
+        throw new MortyValidationError("The Morty Session identifier is invalid");
     }
     return projectPath(projectId, `sessions/${encodeURIComponent(sessionId)}/${resourcePath}`);
 }
@@ -307,7 +307,7 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 
 function record(value: unknown): Readonly<Record<string, unknown>> {
     if (!isRecord(value)) {
-        throw new MobiusProtocolError("The service returned an invalid error response");
+        throw new MortyProtocolError("The service returned an invalid error response");
     }
     return value;
 }
@@ -316,7 +316,7 @@ async function responseValue(response: Response): Promise<unknown> {
     try {
         return await response.json();
     } catch (cause) {
-        throw new MobiusProtocolError("The service returned invalid JSON", {
+        throw new MortyProtocolError("The service returned invalid JSON", {
             cause,
         });
     }
@@ -328,9 +328,9 @@ async function throwApiError(response: Response): Promise<never> {
     const code = error["code"];
     const message = error["message"];
     if (typeof code !== "string" || typeof message !== "string") {
-        throw new MobiusProtocolError("The service returned an invalid error response");
+        throw new MortyProtocolError("The service returned an invalid error response");
     }
-    throw new MobiusApiError(code, message, response.status);
+    throw new MortyApiError(code, message, response.status);
 }
 
 class RequestDeadline {
@@ -362,15 +362,15 @@ class RequestDeadline {
 
     readonly translate = (cause: unknown): never => {
         if (this.#requestSignal.aborted) {
-            throw new MobiusCancellationError({ cause });
+            throw new MortyCancellationError({ cause });
         }
         if (this.#timedOut) {
-            throw new MobiusTimeoutError({ cause });
+            throw new MortyTimeoutError({ cause });
         }
-        if (cause instanceof MobiusError) {
+        if (cause instanceof MortyError) {
             throw cause;
         }
-        throw new MobiusConnectionError("The Mobius service could not be reached", {
+        throw new MortyConnectionError("The Morty service could not be reached", {
             cause,
         });
     };
@@ -381,17 +381,17 @@ class RequestDeadline {
 
     private readonly abortFromTimeout = (): void => {
         this.#timedOut = true;
-        this.#controller.abort(new Error("The Mobius operation timed out"));
+        this.#controller.abort(new Error("The Morty operation timed out"));
     };
 }
 
 class LiveEventConnection {
-    readonly events: ReadableStream<MobiusTransportSessionEvent>;
+    readonly events: ReadableStream<MortyTransportSessionEvent>;
     readonly #controller: AbortController;
     readonly #release: () => void;
     #closed = false;
 
-    constructor(events: ReadableStream<MobiusTransportSessionEvent>, controller: AbortController, release: () => void) {
+    constructor(events: ReadableStream<MortyTransportSessionEvent>, controller: AbortController, release: () => void) {
         this.events = events;
         this.#controller = controller;
         this.#release = release;
@@ -407,24 +407,24 @@ class LiveEventConnection {
     };
 }
 
-export class MobiusRequestExecutor {
+export class MortyRequestExecutor {
     readonly #authenticationProviderId: string;
-    readonly #credentialProvider: MobiusCredentialProvider;
+    readonly #credentialProvider: MortyCredentialProvider;
     readonly #endpoint: URL;
     readonly #operationTimeoutMilliseconds: number;
-    readonly #observeResponse: ((metadata: MobiusResponseMetadata) => void) | undefined;
+    readonly #observeResponse: ((metadata: MortyResponseMetadata) => void) | undefined;
     readonly #streamConnectionTimeoutMilliseconds: number;
     readonly #streamLivenessTimeoutMilliseconds: number;
-    readonly #transport: MobiusHttpTransport;
+    readonly #transport: MortyHttpTransport;
 
-    constructor(options: MobiusEndpointOptions) {
+    constructor(options: MortyEndpointOptions) {
         const authenticationProviderId = options.authenticationProviderId ?? "";
         if (
             authenticationProviderId.length > 128 ||
             authenticationProviderId.includes("\r") ||
             authenticationProviderId.includes("\n")
         ) {
-            throw new MobiusValidationError("The Mobius authentication provider identifier is invalid");
+            throw new MortyValidationError("The Morty authentication provider identifier is invalid");
         }
         this.#authenticationProviderId = authenticationProviderId;
         this.#credentialProvider = options.credentialProvider;
@@ -476,25 +476,25 @@ export class MobiusRequestExecutor {
             }
             const mediaType = response.headers.get("content-type") ?? "";
             const modifiedAt = response.headers.get("last-modified") ?? "";
-            const encodedName = response.headers.get("x-mobius-file-name") ?? "";
-            const encodedLength = response.headers.get("x-mobius-byte-length") ?? "";
+            const encodedName = response.headers.get("x-morty-file-name") ?? "";
+            const encodedLength = response.headers.get("x-morty-byte-length") ?? "";
             if (
                 mediaType.length === 0 ||
                 mediaType.length > 255 ||
                 modifiedAt.length === 0 ||
                 !/^\d+$/.test(encodedLength)
             ) {
-                throw new MobiusProtocolError("The service returned invalid file metadata");
+                throw new MortyProtocolError("The service returned invalid file metadata");
             }
             const byteLength = Number(encodedLength);
             if (!Number.isSafeInteger(byteLength) || byteLength < 1 || byteLength > maximumBytes) {
-                throw new MobiusProtocolError("The service returned an invalid file size");
+                throw new MortyProtocolError("The service returned an invalid file size");
             }
             let name: string;
             try {
                 name = decodeURIComponent(encodedName);
             } catch (cause) {
-                throw new MobiusProtocolError("The service returned an invalid file name", { cause });
+                throw new MortyProtocolError("The service returned an invalid file name", { cause });
             }
             return {
                 bytes: await readExactResponseBytes(response, byteLength, deadline.signal, false),
@@ -512,7 +512,7 @@ export class MobiusRequestExecutor {
     readonly post = async (path: string, body: unknown, signal: AbortSignal): Promise<unknown> => {
         const encoded = JSON.stringify(body);
         if (typeof encoded !== "string") {
-            throw new MobiusValidationError("The Mobius request body is invalid");
+            throw new MortyValidationError("The Morty request body is invalid");
         }
         return await this.request(path, "POST", encoded, true, signal);
     };
@@ -520,7 +520,7 @@ export class MobiusRequestExecutor {
     readonly put = async (path: string, body: unknown, signal: AbortSignal): Promise<unknown> => {
         const encoded = JSON.stringify(body);
         if (typeof encoded !== "string") {
-            throw new MobiusValidationError("The Mobius request body is invalid");
+            throw new MortyValidationError("The Morty request body is invalid");
         }
         return await this.request(path, "PUT", encoded, true, signal);
     };
@@ -536,9 +536,9 @@ export class MobiusRequestExecutor {
             const credential = validateCredential(await this.#credentialProvider.credential(deadline.signal));
             const headers = this.authenticationHeaders(credential, "application/json");
             headers.set("content-type", metadata.mediaType);
-            headers.set("x-mobius-byte-length", bytes.byteLength.toString());
-            headers.set("x-mobius-content-kind", metadata.contentKind);
-            headers.set("x-mobius-file-name", encodeURIComponent(metadata.name));
+            headers.set("x-morty-byte-length", bytes.byteLength.toString());
+            headers.set("x-morty-content-kind", metadata.contentKind);
+            headers.set("x-morty-file-name", encodeURIComponent(metadata.name));
             const body = bytes.slice().buffer;
             const response = await this.#transport.fetch(
                 new Request(requestUrl(this.#endpoint, path), {
@@ -571,8 +571,8 @@ export class MobiusRequestExecutor {
     };
 
     readonly openLiveEventStream = async (path: string, signal: AbortSignal): Promise<LiveEventConnection> => {
-        if (!isMobiusLiveEventTransport(this.#transport)) {
-            throw new MobiusValidationError("The configured transport does not support live Session events");
+        if (!isMortyLiveEventTransport(this.#transport)) {
+            throw new MortyValidationError("The configured transport does not support live Session events");
         }
         const controller = new AbortController();
         const abort = (): void => controller.abort(signal.reason);
@@ -598,12 +598,12 @@ export class MobiusRequestExecutor {
         } catch (cause) {
             release();
             if (signal.aborted) {
-                throw new MobiusCancellationError({ cause });
+                throw new MortyCancellationError({ cause });
             }
-            if (cause instanceof MobiusError) {
+            if (cause instanceof MortyError) {
                 throw cause;
             }
-            throw new MobiusConnectionError("The live Session event stream could not connect", { cause });
+            throw new MortyConnectionError("The live Session event stream could not connect", { cause });
         }
     };
 
@@ -663,7 +663,7 @@ export class MobiusRequestExecutor {
                 await throwApiError(response);
             }
             if (response.status !== 204) {
-                throw new MobiusProtocolError("The service returned an invalid empty response");
+                throw new MortyProtocolError("The service returned an invalid empty response");
             }
         } catch (cause) {
             return deadline.translate(cause);
@@ -675,7 +675,7 @@ export class MobiusRequestExecutor {
     private readonly authenticationHeaders = (credential: string, accept: string): Headers => {
         const headers = new Headers({ accept, authorization: `Bearer ${credential}` });
         if (this.#authenticationProviderId.length > 0) {
-            headers.set("x-mobius-oidc-provider", this.#authenticationProviderId);
+            headers.set("x-morty-oidc-provider", this.#authenticationProviderId);
         }
         return headers;
     };
@@ -692,11 +692,11 @@ export async function readExactResponseBytes(
         declaredLength !== null &&
         (!/^(0|[1-9][0-9]*)$/.test(declaredLength) || Number(declaredLength) !== expectedByteLength)
     ) {
-        throw new MobiusProtocolError("The service returned an invalid artifact length");
+        throw new MortyProtocolError("The service returned an invalid artifact length");
     }
     const reader = response.body?.getReader();
     if (reader === undefined) {
-        throw new MobiusProtocolError("The service returned no artifact content");
+        throw new MortyProtocolError("The service returned no artifact content");
     }
     const chunks: Uint8Array[] = [];
     let byteLength = 0;
@@ -711,7 +711,7 @@ export async function readExactResponseBytes(
             byteLength += chunk.value.byteLength;
             if (byteLength > expectedByteLength) {
                 await reader.cancel("Artifact response exceeded its metadata");
-                throw new MobiusProtocolError("The service returned an oversized artifact");
+                throw new MortyProtocolError("The service returned an oversized artifact");
             }
             chunks.push(chunk.value);
         }
@@ -719,7 +719,7 @@ export async function readExactResponseBytes(
         reader.releaseLock();
     }
     if (byteLength !== expectedByteLength) {
-        throw new MobiusProtocolError("The service returned an incomplete artifact");
+        throw new MortyProtocolError("The service returned an incomplete artifact");
     }
     const bytes = new Uint8Array(byteLength);
     let offset = 0;
@@ -731,33 +731,33 @@ export async function readExactResponseBytes(
         const digest = await crypto.subtle.digest("SHA-256", bytes);
         signal.throwIfAborted();
         const sha256 = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-        if (sha256 !== response.headers.get("x-mobius-sha256")) {
-            throw new MobiusProtocolError("The service returned artifact content with an invalid digest");
+        if (sha256 !== response.headers.get("x-morty-sha256")) {
+            throw new MortyProtocolError("The service returned artifact content with an invalid digest");
         }
     }
     return bytes;
 }
 
-export class MobiusCredentialResources {
-    readonly #executor: MobiusRequestExecutor;
+export class MortyCredentialResources {
+    readonly #executor: MortyRequestExecutor;
     readonly #projectId: string;
 
-    constructor(executor: MobiusRequestExecutor, projectId: string) {
+    constructor(executor: MortyRequestExecutor, projectId: string) {
         this.#executor = executor;
         this.#projectId = projectId;
     }
 
     readonly issue = async (
-        request: MobiusBrowserCredentialRequest,
+        request: MortyBrowserCredentialRequest,
         signal: AbortSignal,
-    ): Promise<MobiusBrowserCredential> =>
-        decodeMobiusBrowserCredential(
+    ): Promise<MortyBrowserCredential> =>
+        decodeMortyBrowserCredential(
             await this.#executor.post(projectPath(this.#projectId, "browser-credentials"), request, signal),
         );
 
     readonly revoke = async (credentialId: string, signal: AbortSignal): Promise<void> => {
         if (!isIdentifier(credentialId)) {
-            throw new MobiusValidationError("The browser credential identifier is invalid");
+            throw new MortyValidationError("The browser credential identifier is invalid");
         }
         await this.#executor.deleteEmpty(
             projectPath(this.#projectId, `browser-credentials/${encodeURIComponent(credentialId)}`),
@@ -766,18 +766,18 @@ export class MobiusCredentialResources {
     };
 }
 
-export class MobiusChannelResources {
-    readonly #executor: MobiusRequestExecutor;
+export class MortyChannelResources {
+    readonly #executor: MortyRequestExecutor;
 
-    constructor(executor: MobiusRequestExecutor) {
+    constructor(executor: MortyRequestExecutor) {
         this.#executor = executor;
     }
 
-    readonly createAccessGrant = async (channelId: string, signal: AbortSignal): Promise<MobiusChannelAccessGrant> => {
+    readonly createAccessGrant = async (channelId: string, signal: AbortSignal): Promise<MortyChannelAccessGrant> => {
         if (!isIdentifier(channelId)) {
-            throw new MobiusValidationError("The channel identifier is invalid");
+            throw new MortyValidationError("The channel identifier is invalid");
         }
-        return decodeMobiusChannelAccessGrant(
+        return decodeMortyChannelAccessGrant(
             await this.#executor.post(`channels/${encodeURIComponent(channelId)}/access-grants`, {}, signal),
         );
     };
@@ -785,20 +785,20 @@ export class MobiusChannelResources {
     readonly listLinkedDevices = async (
         channelId: string,
         signal: AbortSignal,
-    ): Promise<readonly MobiusLinkedChannelDevice[]> => {
+    ): Promise<readonly MortyLinkedChannelDevice[]> => {
         if (!isIdentifier(channelId)) {
-            throw new MobiusValidationError("The channel identifier is invalid");
+            throw new MortyValidationError("The channel identifier is invalid");
         }
-        return decodeMobiusLinkedChannelDeviceList(
+        return decodeMortyLinkedChannelDeviceList(
             await this.#executor.get(`channels/${encodeURIComponent(channelId)}/linked-devices`, signal),
         );
     };
 
-    readonly read = async (channelId: string, signal: AbortSignal): Promise<MobiusChannelDescriptor> => {
+    readonly read = async (channelId: string, signal: AbortSignal): Promise<MortyChannelDescriptor> => {
         if (!isIdentifier(channelId)) {
-            throw new MobiusValidationError("The channel identifier is invalid");
+            throw new MortyValidationError("The channel identifier is invalid");
         }
-        return decodeMobiusChannelDescriptor(
+        return decodeMortyChannelDescriptor(
             await this.#executor.get(`channels/${encodeURIComponent(channelId)}`, signal),
         );
     };
@@ -809,7 +809,7 @@ export class MobiusChannelResources {
         signal: AbortSignal,
     ): Promise<void> => {
         if (!isIdentifier(channelId) || !isIdentifier(credentialId)) {
-            throw new MobiusValidationError("The linked channel device identifier is invalid");
+            throw new MortyValidationError("The linked channel device identifier is invalid");
         }
         await this.#executor.deleteEmpty(
             `channels/${encodeURIComponent(channelId)}/linked-devices/${encodeURIComponent(credentialId)}`,
@@ -818,18 +818,18 @@ export class MobiusChannelResources {
     };
 }
 
-export interface MobiusChannelAccessClientOptions {
+export interface MortyChannelAccessClientOptions {
     readonly endpoint: string;
-    readonly observeResponse?: (metadata: MobiusResponseMetadata) => void;
+    readonly observeResponse?: (metadata: MortyResponseMetadata) => void;
     readonly operationTimeoutMilliseconds?: number;
-    readonly transport?: MobiusHttpTransport;
+    readonly transport?: MortyHttpTransport;
 }
 
-export class MobiusChannelAccessClient {
-    readonly #requests: MobiusPublicRequestExecutor;
+export class MortyChannelAccessClient {
+    readonly #requests: MortyPublicRequestExecutor;
 
-    constructor(options: MobiusChannelAccessClientOptions) {
-        this.#requests = new MobiusPublicRequestExecutor(options);
+    constructor(options: MortyChannelAccessClientOptions) {
+        this.#requests = new MortyPublicRequestExecutor(options);
     }
 
     readonly redeem = async (
@@ -837,11 +837,11 @@ export class MobiusChannelAccessClient {
         grantId: string,
         grantSecret: string,
         signal: AbortSignal,
-    ): Promise<MobiusRedeemedChannelCredential> => {
+    ): Promise<MortyRedeemedChannelCredential> => {
         if (!isIdentifier(channelId) || !isIdentifier(grantId) || !/^[a-zA-Z0-9_-]{32,256}$/.test(grantSecret)) {
-            throw new MobiusValidationError("The channel access grant is invalid");
+            throw new MortyValidationError("The channel access grant is invalid");
         }
-        const credential = decodeMobiusRedeemedChannelCredential(
+        const credential = decodeMortyRedeemedChannelCredential(
             await this.#requests.post(
                 `channels/${encodeURIComponent(channelId)}/access-grants/${encodeURIComponent(grantId)}/redeem`,
                 { grantSecret },
@@ -849,23 +849,23 @@ export class MobiusChannelAccessClient {
             ),
         );
         if (credential.channelId !== channelId) {
-            throw new MobiusProtocolError("The service returned a credential for another channel");
+            throw new MortyProtocolError("The service returned a credential for another channel");
         }
         return credential;
     };
 }
 
-export class MobiusRuntimeResources {
-    readonly #executor: MobiusRequestExecutor;
+export class MortyRuntimeResources {
+    readonly #executor: MortyRequestExecutor;
     readonly #projectId: string;
 
-    constructor(executor: MobiusRequestExecutor, projectId: string) {
+    constructor(executor: MortyRequestExecutor, projectId: string) {
         this.#executor = executor;
         this.#projectId = projectId;
     }
 
-    readonly list = async (signal: AbortSignal): Promise<readonly MobiusRuntimeDescriptor[]> =>
-        decodeMobiusRuntimeList(await this.#executor.get(projectPath(this.#projectId, "runtimes"), signal));
+    readonly list = async (signal: AbortSignal): Promise<readonly MortyRuntimeDescriptor[]> =>
+        decodeMortyRuntimeList(await this.#executor.get(projectPath(this.#projectId, "runtimes"), signal));
 
     readonly getAgents = async (runtimeId: string, signal: AbortSignal) =>
         decodeRuntimeDescriptor(
@@ -884,7 +884,7 @@ export class MobiusRuntimeResources {
      */
     readonly readDiagnostics = async (runtimeId: string, signal: AbortSignal): Promise<RuntimeDiagnosticsResult> => {
         if (!isIdentifier(runtimeId)) {
-            throw new MobiusValidationError("The Runtime identifier is invalid");
+            throw new MortyValidationError("The Runtime identifier is invalid");
         }
         return decodeRuntimeDiagnosticsResult(
             JSON.stringify(
@@ -931,7 +931,7 @@ export class MobiusRuntimeResources {
     readonly discoverAgentSettings = async (
         runtimeId: string,
         agentId: string,
-        request: DiscoverMobiusAgentSettingsRequest,
+        request: DiscoverMortyAgentSettingsRequest,
         signal: AbortSignal,
     ): Promise<AgentSettingsDiscoveredEvent> =>
         decodeAgentSettingsDiscoveredEvent(
@@ -977,7 +977,7 @@ export class MobiusRuntimeResources {
     readonly forkNativeSession = async (
         runtimeId: string,
         operationId: string,
-        request: ForkMobiusNativeSessionRequest,
+        request: ForkMortyNativeSessionRequest,
         signal: AbortSignal,
     ) => {
         const receipt = await this.#executor.post(
@@ -989,15 +989,15 @@ export class MobiusRuntimeResources {
             signal,
         );
         if (typeof receipt !== "object" || receipt === null || !("result" in receipt) || !("source" in receipt)) {
-            throw new MobiusProtocolError("The service returned an invalid Fork receipt");
+            throw new MortyProtocolError("The service returned an invalid Fork receipt");
         }
         const result = decodeNativeSessionResult(JSON.stringify(receipt.result));
         const source = decodeNativeSessionResult(JSON.stringify(receipt.source));
         if (result.action !== "fork" || result.ready.sessionId !== result.targetSessionId) {
-            throw new MobiusProtocolError("The service returned an invalid native Fork");
+            throw new MortyProtocolError("The service returned an invalid native Fork");
         }
         if (source.action !== "find" || source.entry.nativeSessionId !== request.nativeSessionId) {
-            throw new MobiusProtocolError("The service returned an invalid Fork source");
+            throw new MortyProtocolError("The service returned an invalid Fork source");
         }
         return { result, entry: source.entry };
     };
@@ -1015,10 +1015,10 @@ export class MobiusRuntimeResources {
 
     readonly listSessions = async (runtimeId: string, limit: number, signal: AbortSignal) => {
         if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
-            throw new MobiusValidationError("The Runtime Session list limit is invalid");
+            throw new MortyValidationError("The Runtime Session list limit is invalid");
         }
         const path = requestUrl(
-            new URL("https://mobius.invalid/"),
+            new URL("https://morty.invalid/"),
             projectPath(this.#projectId, `runtimes/${encodeURIComponent(runtimeId)}/sessions`),
         );
         path.searchParams.set("limit", limit.toString());
@@ -1045,14 +1045,14 @@ export class MobiusRuntimeResources {
             ),
         );
         if (result.action !== "find") {
-            throw new MobiusProtocolError("The service returned an invalid native Session lookup");
+            throw new MortyProtocolError("The service returned an invalid native Session lookup");
         }
         return result;
     };
 
     readonly revoke = async (runtimeId: string, signal: AbortSignal): Promise<void> => {
         if (!isIdentifier(runtimeId)) {
-            throw new MobiusValidationError("The Runtime identifier is invalid");
+            throw new MortyValidationError("The Runtime identifier is invalid");
         }
         await this.#executor.deleteEmpty(
             projectPath(this.#projectId, `runtimes/${encodeURIComponent(runtimeId)}`),
@@ -1061,28 +1061,25 @@ export class MobiusRuntimeResources {
     };
 }
 
-export class MobiusRuntimePairingResources {
-    readonly #executor: MobiusRequestExecutor;
+export class MortyRuntimePairingResources {
+    readonly #executor: MortyRequestExecutor;
     readonly #projectId: string;
 
-    constructor(executor: MobiusRequestExecutor, projectId: string) {
+    constructor(executor: MortyRequestExecutor, projectId: string) {
         this.#executor = executor;
         this.#projectId = projectId;
     }
 
-    readonly create = async (
-        request: MobiusRuntimePairingRequest,
-        signal: AbortSignal,
-    ): Promise<MobiusRuntimePairing> =>
-        decodeMobiusRuntimePairing(
+    readonly create = async (request: MortyRuntimePairingRequest, signal: AbortSignal): Promise<MortyRuntimePairing> =>
+        decodeMortyRuntimePairing(
             await this.#executor.post(projectPath(this.#projectId, "runtime-pairings"), request, signal),
         );
 
-    readonly read = async (pairingId: string, signal: AbortSignal): Promise<MobiusRuntimePairingStatus> => {
+    readonly read = async (pairingId: string, signal: AbortSignal): Promise<MortyRuntimePairingStatus> => {
         if (!isIdentifier(pairingId)) {
-            throw new MobiusValidationError("The Runtime pairing identifier is invalid");
+            throw new MortyValidationError("The Runtime pairing identifier is invalid");
         }
-        return decodeMobiusRuntimePairingStatus(
+        return decodeMortyRuntimePairingStatus(
             await this.#executor.get(
                 projectPath(this.#projectId, `runtime-pairings/${encodeURIComponent(pairingId)}`),
                 signal,
@@ -1092,27 +1089,27 @@ export class MobiusRuntimePairingResources {
 
     readonly waitUntilPaired = async (
         pairingId: string,
-        options: MobiusRuntimePairingWaitOptions,
+        options: MortyRuntimePairingWaitOptions,
         signal: AbortSignal,
-    ): Promise<MobiusPairedRuntimePairingStatus> => {
+    ): Promise<MortyPairedRuntimePairingStatus> => {
         const deadline = Date.now() + options.timeoutMilliseconds;
         while (true) {
             if (signal.aborted) {
-                throw new MobiusCancellationError({ cause: signal.reason });
+                throw new MortyCancellationError({ cause: signal.reason });
             }
             const status = await this.read(pairingId, signal);
-            if (status instanceof MobiusPairedRuntimePairingStatus) {
+            if (status instanceof MortyPairedRuntimePairingStatus) {
                 return status;
             }
-            if (status.status === MobiusRuntimePairingLifecycle.Expired) {
-                throw new MobiusApiError("runtime_pairing_expired", "The Runtime pairing expired", 410);
+            if (status.status === MortyRuntimePairingLifecycle.Expired) {
+                throw new MortyApiError("runtime_pairing_expired", "The Runtime pairing expired", 410);
             }
-            if (status.status === MobiusRuntimePairingLifecycle.Revoked) {
-                throw new MobiusApiError("runtime_pairing_revoked", "The Runtime pairing was revoked", 410);
+            if (status.status === MortyRuntimePairingLifecycle.Revoked) {
+                throw new MortyApiError("runtime_pairing_revoked", "The Runtime pairing was revoked", 410);
             }
             const remaining = deadline - Date.now();
             if (remaining <= 0) {
-                throw new MobiusTimeoutError();
+                throw new MortyTimeoutError();
             }
             await waitForPairingPoll(Math.min(options.pollIntervalMilliseconds, remaining), signal);
         }
@@ -1121,7 +1118,7 @@ export class MobiusRuntimePairingResources {
 
 function waitForPairingPoll(milliseconds: number, signal: AbortSignal): Promise<void> {
     if (signal.aborted) {
-        return Promise.reject(new MobiusCancellationError({ cause: signal.reason }));
+        return Promise.reject(new MortyCancellationError({ cause: signal.reason }));
     }
     return new Promise((resolve, reject) => {
         const timeout = globalThis.setTimeout(() => {
@@ -1130,22 +1127,22 @@ function waitForPairingPoll(milliseconds: number, signal: AbortSignal): Promise<
         }, milliseconds);
         const cancel = (): void => {
             globalThis.clearTimeout(timeout);
-            reject(new MobiusCancellationError({ cause: signal.reason }));
+            reject(new MortyCancellationError({ cause: signal.reason }));
         };
         signal.addEventListener("abort", cancel, { once: true });
     });
 }
 
-export class MobiusSessionResources {
-    readonly #executor: MobiusRequestExecutor;
+export class MortySessionResources {
+    readonly #executor: MortyRequestExecutor;
     readonly #projectId: string;
 
-    constructor(executor: MobiusRequestExecutor, projectId: string) {
+    constructor(executor: MortyRequestExecutor, projectId: string) {
         this.#executor = executor;
         this.#projectId = projectId;
     }
 
-    readonly create = async (request: CreateMobiusSessionRequest, signal: AbortSignal) =>
+    readonly create = async (request: CreateMortySessionRequest, signal: AbortSignal) =>
         decodeSessionReadyEvent(
             JSON.stringify(
                 await this.#executor.post(
@@ -1166,7 +1163,7 @@ export class MobiusSessionResources {
         expiresInSeconds: number,
         signal: AbortSignal,
     ) =>
-        new MobiusSessionAccess(
+        new MortySessionAccess(
             await this.#executor.post(
                 sessionPath(this.#projectId, sessionId, "access-credentials"),
                 { expiresInSeconds, runtimeId },
@@ -1179,7 +1176,7 @@ export class MobiusSessionResources {
      * Retrying is safe: a later revocation never undoes an earlier one.
      */
     readonly revokeAccess = async (signal: AbortSignal) =>
-        new MobiusSessionAccessRevocation(
+        new MortySessionAccessRevocation(
             await this.#executor.post(projectPath(this.#projectId, "session-access/revocations"), {}, signal),
         );
 
@@ -1239,10 +1236,10 @@ export class MobiusSessionResources {
             | readonly [
                   runtimeId: string,
                   sessionId: string,
-                  request: UpdateMobiusSessionConfigurationRequest,
+                  request: UpdateMortySessionConfigurationRequest,
                   signal: AbortSignal,
               ]
-            | readonly [sessionId: string, request: UpdateMobiusSessionConfigurationRequest, signal: AbortSignal]
+            | readonly [sessionId: string, request: UpdateMortySessionConfigurationRequest, signal: AbortSignal]
     ) => {
         const result =
             operation.length === 3
@@ -1316,10 +1313,10 @@ export class MobiusSessionResources {
         signal: AbortSignal,
     ): Promise<PromptAttachment> => {
         if (!/^[a-f0-9]{64}$/u.test(input.contentKey)) {
-            throw new MobiusValidationError("The content key is invalid");
+            throw new MortyValidationError("The content key is invalid");
         }
         if (input.bytes.byteLength < 1 || input.bytes.byteLength > CONTENT_WRITE_MAX_BYTES) {
-            throw new MobiusValidationError("The content size is invalid");
+            throw new MortyValidationError("The content size is invalid");
         }
         const query = new URLSearchParams({ uri: input.uri });
         return decodePromptAttachment(
@@ -1344,10 +1341,10 @@ export class MobiusSessionResources {
         readonly name: string;
     }> => {
         if (path.length === 0 || path.length > 4_096) {
-            throw new MobiusValidationError("The file path is invalid");
+            throw new MortyValidationError("The file path is invalid");
         }
         if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1 || maximumBytes > 128 * 1024 * 1024) {
-            throw new MobiusValidationError("The file size limit is invalid");
+            throw new MortyValidationError("The file size limit is invalid");
         }
         const query = new URLSearchParams({ maxBytes: maximumBytes.toString(), path });
         return await this.#executor.getFile(
@@ -1359,16 +1356,16 @@ export class MobiusSessionResources {
 
     readonly readExternalContent = async (
         sessionId: string,
-        content: MobiusExternalContentBlock,
+        content: MortyExternalContentBlock,
         signal: AbortSignal,
         maximumBytes = content.byteLength,
-    ): ReturnType<MobiusSessionResources["readFile"]> =>
+    ): ReturnType<MortySessionResources["readFile"]> =>
         await this.readFile(sessionId, externalContentPath(content), signal, maximumBytes);
 
     readonly previewRuntimeNativeEvents = async (
         runtimeId: string,
         sessionId: string,
-        identity: MobiusSessionBinding,
+        identity: MortySessionBinding,
         page: NativeEventPageRequest,
         signal: AbortSignal,
     ): Promise<NativeSessionEvents> => {
@@ -1389,12 +1386,12 @@ export class MobiusSessionResources {
 
     readonly previewSessionNativeEvents = async (
         sessionId: string,
-        identity: MobiusSessionBinding,
+        identity: MortySessionBinding,
         page: NativeEventPageRequest,
         signal: AbortSignal,
     ): Promise<NativeSessionEvents> => {
         const path = requestUrl(
-            new URL("https://mobius.invalid/"),
+            new URL("https://morty.invalid/"),
             sessionPath(this.#projectId, sessionId, "native-events-preview"),
         );
         setSessionBindingQuery(path.searchParams, identity);
@@ -1409,13 +1406,12 @@ export class MobiusSessionResources {
 
     /**
      * Reads the Session's execution. Naming a command also asks for that command's delivery;
-     * `command` stays absent when the Relay or Runtime cannot report it, so the caller keeps
-     * whatever it already knew about the submission. `lastTurn` reports how the last started
-     * command ended when none runs, and is likewise absent from older peers.
+     * `command` is present when the request names a command. `lastTurn` reports how the last
+     * started command ended when none runs. A missing Session has no interaction snapshot.
      */
     readonly readSessionExecution = async (
         sessionId: string,
-        identity: MobiusSessionBinding,
+        identity: MortySessionBinding,
         signal: AbortSignal,
         commandId?: string,
     ): Promise<
@@ -1425,7 +1421,7 @@ export class MobiusSessionResources {
         >
     > => {
         const path = requestUrl(
-            new URL("https://mobius.invalid/"),
+            new URL("https://morty.invalid/"),
             sessionPath(this.#projectId, sessionId, "active-turn"),
         );
         setSessionBindingQuery(path.searchParams, identity);
@@ -1436,7 +1432,7 @@ export class MobiusSessionResources {
             JSON.stringify(await this.#executor.get(`${path.pathname.slice(1)}${path.search}`, signal)),
         );
         if (result.action !== "active-turn" || result.targetSessionId !== sessionId) {
-            throw new MobiusProtocolError("The service returned an invalid active Turn");
+            throw new MortyProtocolError("The service returned an invalid active Turn");
         }
         return {
             turn: result.turn,
@@ -1444,14 +1440,14 @@ export class MobiusSessionResources {
             ...(result.command === undefined ? {} : { command: result.command }),
             ...(result.lastTurn === undefined ? {} : { lastTurn: result.lastTurn }),
             queuedCancellation: result.queuedCancellation,
-            ...(result.interactionState === undefined ? {} : { interactionState: result.interactionState }),
+            interactionState: result.interactionState,
         };
     };
 
     readonly readRuntimeSessionExecution = async (
         runtimeId: string,
         sessionId: string,
-        identity: MobiusSessionBinding,
+        identity: MortySessionBinding,
         signal: AbortSignal,
     ): Promise<Pick<Extract<NativeSessionResult, { readonly action: "active-turn" }>, "turn" | "queued">> => {
         const result = decodeNativeSessionResult(
@@ -1467,31 +1463,31 @@ export class MobiusSessionResources {
             ),
         );
         if (result.action !== "active-turn" || result.targetSessionId !== sessionId) {
-            throw new MobiusProtocolError("The service returned an invalid active Turn");
+            throw new MortyProtocolError("The service returned an invalid active Turn");
         }
         return { turn: result.turn, queued: result.queued };
     };
 }
 
-export class MobiusTurnResources {
-    readonly #executor: MobiusRequestExecutor;
+export class MortyTurnResources {
+    readonly #executor: MortyRequestExecutor;
     readonly #projectId: string;
 
-    constructor(executor: MobiusRequestExecutor, projectId: string) {
+    constructor(executor: MortyRequestExecutor, projectId: string) {
         this.#executor = executor;
         this.#projectId = projectId;
     }
 
     readonly submit = async (
         sessionId: string,
-        request: SubmitMobiusTurnRequest,
+        request: SubmitMortyTurnRequest,
         signal: AbortSignal,
-    ): Promise<MobiusTurn> => {
-        const turn = decodeMobiusTurn(
+    ): Promise<MortyTurn> => {
+        const turn = decodeMortyTurn(
             await this.#executor.post(sessionPath(this.#projectId, sessionId, "turns"), request, signal),
         );
         if (turn === null) {
-            throw new MobiusProtocolError("The service returned an invalid Turn");
+            throw new MortyProtocolError("The service returned an invalid Turn");
         }
         return turn;
     };
@@ -1499,7 +1495,7 @@ export class MobiusTurnResources {
     readonly submitToRuntime = async (
         runtimeId: string,
         sessionId: string,
-        request: SubmitMobiusTurnRequest,
+        request: SubmitMortyTurnRequest,
         signal: AbortSignal,
     ): Promise<{ readonly turnId: string }> => {
         const result = await this.#executor.post(
@@ -1516,16 +1512,16 @@ export class MobiusTurnResources {
             signal,
         );
         if (typeof result !== "object" || result === null || !("turnId" in result)) {
-            throw new MobiusProtocolError("The service returned an invalid Turn");
+            throw new MortyProtocolError("The service returned an invalid Turn");
         }
         const turnId = Reflect.get(result, "turnId");
         if (typeof turnId !== "string") {
-            throw new MobiusProtocolError("The service returned an invalid Turn");
+            throw new MortyProtocolError("The service returned an invalid Turn");
         }
         return { turnId };
     };
 
-    readonly cancel = async (sessionId: string, turnId: string, signal: AbortSignal): Promise<MobiusTurnCancellation> =>
+    readonly cancel = async (sessionId: string, turnId: string, signal: AbortSignal): Promise<MortyTurnCancellation> =>
         decodeTurnCancellation(
             await this.#executor.post(
                 sessionPath(this.#projectId, sessionId, `turns/${encodeURIComponent(turnId)}/cancel`),
@@ -1543,7 +1539,7 @@ export class MobiusTurnResources {
             signal,
         );
         if (typeof result !== "object" || result === null || Reflect.get(result, "turnId") !== turnId) {
-            throw new MobiusProtocolError("The service returned an invalid queued cancellation");
+            throw new MortyProtocolError("The service returned an invalid queued cancellation");
         }
     };
 
@@ -1558,17 +1554,17 @@ export class MobiusTurnResources {
             signal,
         );
         if (typeof result !== "object" || result === null || Reflect.get(result, "turnId") !== turnId) {
-            throw new MobiusProtocolError("The service returned an invalid steered Turn");
+            throw new MortyProtocolError("The service returned an invalid steered Turn");
         }
         return { turnId };
     };
 }
 
-export class MobiusInteractionResources {
-    readonly #executor: MobiusRequestExecutor;
+export class MortyInteractionResources {
+    readonly #executor: MortyRequestExecutor;
     readonly #projectId: string;
 
-    constructor(executor: MobiusRequestExecutor, projectId: string) {
+    constructor(executor: MortyRequestExecutor, projectId: string) {
         this.#executor = executor;
         this.#projectId = projectId;
     }
@@ -1578,7 +1574,7 @@ export class MobiusInteractionResources {
     readonly respond = async (
         sessionId: string,
         interactionId: string,
-        request: MobiusInteractionResponseRequest,
+        request: MortyInteractionResponseRequest,
         signal: AbortSignal,
     ): Promise<void> => {
         const result = await this.#executor.post(
@@ -1592,32 +1588,32 @@ export class MobiusInteractionResources {
             !("accepted" in result) ||
             Reflect.get(result, "accepted") !== true
         ) {
-            throw new MobiusProtocolError("The service returned an invalid Interaction response");
+            throw new MortyProtocolError("The service returned an invalid Interaction response");
         }
     };
 }
 
-export type MobiusSessionLiveEventConnection = { readonly kind: "initial" } | { readonly kind: "reconnected" };
+export type MortySessionLiveEventConnection = { readonly kind: "initial" } | { readonly kind: "reconnected" };
 
-export interface MobiusSessionEventObserver {
+export interface MortySessionEventObserver {
     readonly receive: (events: SessionLiveEventBatch) => Promise<boolean>;
-    readonly reconcile: (connection: MobiusSessionLiveEventConnection) => Promise<void>;
+    readonly reconcile: (connection: MortySessionLiveEventConnection) => Promise<void>;
 }
 
-export class MobiusLiveEventSubscription {
+export class MortyLiveEventSubscription {
     readonly #controller = new AbortController();
-    readonly #executor: MobiusRequestExecutor;
+    readonly #executor: MortyRequestExecutor;
     readonly #maximumReconnectAttempts: number;
-    readonly #observer: MobiusSessionEventObserver;
+    readonly #observer: MortySessionEventObserver;
     readonly #path: string;
     #closed = false;
     readonly connected: Promise<void>;
     readonly completed: Promise<void>;
 
     constructor(
-        executor: MobiusRequestExecutor,
+        executor: MortyRequestExecutor,
         path: string,
-        observer: MobiusSessionEventObserver,
+        observer: MortySessionEventObserver,
         signal: AbortSignal,
         maximumReconnectAttempts: number,
     ) {
@@ -1655,7 +1651,7 @@ export class MobiusLiveEventSubscription {
         rejectConnected: (cause: unknown) => void,
     ): Promise<void> => {
         let attempts = 0;
-        let connectionState: MobiusSessionLiveEventConnection = { kind: "initial" };
+        let connectionState: MortySessionLiveEventConnection = { kind: "initial" };
         while (!this.#closed) {
             let connection: LiveEventConnection | null = null;
             try {
@@ -1671,13 +1667,13 @@ export class MobiusLiveEventSubscription {
                     while (!this.#closed) {
                         const result = await reader.read();
                         if (result.done) {
-                            throw new MobiusConnectionError("The live session event stream disconnected");
+                            throw new MortyConnectionError("The live session event stream disconnected");
                         }
                         let value: unknown;
                         try {
                             value = JSON.parse(result.value.data);
                         } catch (cause) {
-                            throw new MobiusProtocolError("The live session event stream contains invalid JSON", {
+                            throw new MortyProtocolError("The live session event stream contains invalid JSON", {
                                 cause,
                             });
                         }
@@ -1695,17 +1691,17 @@ export class MobiusLiveEventSubscription {
             } catch (cause) {
                 if (this.#closed || this.#controller.signal.aborted) {
                     if (connectionState.kind === "initial") {
-                        rejectConnected(new MobiusCancellationError({ cause }));
+                        rejectConnected(new MortyCancellationError({ cause }));
                     }
                     return;
                 }
                 if (
-                    cause instanceof MobiusProtocolError ||
-                    (cause instanceof MobiusApiError && cause.status < 500) ||
-                    (cause instanceof MobiusError &&
-                        !(cause instanceof MobiusConnectionError) &&
-                        !(cause instanceof MobiusTimeoutError) &&
-                        !(cause instanceof MobiusApiError))
+                    cause instanceof MortyProtocolError ||
+                    (cause instanceof MortyApiError && cause.status < 500) ||
+                    (cause instanceof MortyError &&
+                        !(cause instanceof MortyConnectionError) &&
+                        !(cause instanceof MortyTimeoutError) &&
+                        !(cause instanceof MortyApiError))
                 ) {
                     if (connectionState.kind === "initial") {
                         rejectConnected(cause);
@@ -1718,7 +1714,7 @@ export class MobiusLiveEventSubscription {
                     const message = `The live session event stream could not recover${
                         details.length > 0 ? `. Cause: ${details.join(". Caused by: ")}` : ""
                     }`;
-                    const failure = new MobiusConnectionError(message, { cause });
+                    const failure = new MortyConnectionError(message, { cause });
                     if (connectionState.kind === "initial") {
                         rejectConnected(failure);
                     }
@@ -1740,20 +1736,20 @@ export class MobiusLiveEventSubscription {
             }, delayMilliseconds);
             const abort = (): void => {
                 globalThis.clearTimeout(timeoutId);
-                reject(new MobiusCancellationError());
+                reject(new MortyCancellationError());
             };
             this.#controller.signal.addEventListener("abort", abort, { once: true });
         });
     };
 }
 
-export class MobiusEventResources {
-    readonly #executor: MobiusRequestExecutor;
+export class MortyEventResources {
+    readonly #executor: MortyRequestExecutor;
     readonly #maximumReconnectAttempts: number;
     readonly #projectId: string;
-    readonly #liveSubscriptions = new Set<MobiusLiveEventSubscription>();
+    readonly #liveSubscriptions = new Set<MortyLiveEventSubscription>();
 
-    constructor(executor: MobiusRequestExecutor, projectId: string, maximumReconnectAttempts: number) {
+    constructor(executor: MortyRequestExecutor, projectId: string, maximumReconnectAttempts: number) {
         this.#executor = executor;
         this.#maximumReconnectAttempts = maximumReconnectAttempts;
         this.#projectId = projectId;
@@ -1761,10 +1757,10 @@ export class MobiusEventResources {
 
     readonly subscribeLive = async (
         sessionId: string,
-        observer: MobiusSessionEventObserver,
+        observer: MortySessionEventObserver,
         signal: AbortSignal,
-    ): Promise<MobiusLiveEventSubscription> => {
-        const subscription = new MobiusLiveEventSubscription(
+    ): Promise<MortyLiveEventSubscription> => {
+        const subscription = new MortyLiveEventSubscription(
             this.#executor,
             sessionPath(this.#projectId, sessionId, "events-v2"),
             observer,
@@ -1779,11 +1775,11 @@ export class MobiusEventResources {
 
     readonly list = async (
         sessionId: string,
-        page: MobiusPageRequest,
+        page: MortyPageRequest,
         signal: AbortSignal,
     ): Promise<SessionEventLogPage> => {
         const path = requestUrl(
-            new URL("https://mobius.invalid/"),
+            new URL("https://morty.invalid/"),
             sessionPath(this.#projectId, sessionId, "events-v2"),
         );
         path.searchParams.set("limit", page.limit.toString());
@@ -1803,30 +1799,30 @@ export class MobiusEventResources {
     };
 }
 
-export class MobiusClient {
-    readonly channels: MobiusChannelResources;
-    readonly credentials: MobiusCredentialResources;
-    readonly events: MobiusEventResources;
-    readonly interactions: MobiusInteractionResources;
-    readonly runtimePairings: MobiusRuntimePairingResources;
-    readonly runtimes: MobiusRuntimeResources;
-    readonly sessions: MobiusSessionResources;
-    readonly turns: MobiusTurnResources;
+export class MortyClient {
+    readonly channels: MortyChannelResources;
+    readonly credentials: MortyCredentialResources;
+    readonly events: MortyEventResources;
+    readonly interactions: MortyInteractionResources;
+    readonly runtimePairings: MortyRuntimePairingResources;
+    readonly runtimes: MortyRuntimeResources;
+    readonly sessions: MortySessionResources;
+    readonly turns: MortyTurnResources;
 
-    constructor(options: MobiusClientOptions) {
-        const executor = new MobiusRequestExecutor(options);
+    constructor(options: MortyClientOptions) {
+        const executor = new MortyRequestExecutor(options);
         const reconnectAttempts = options.maxStreamReconnectAttempts ?? DEFAULT_STREAM_RECONNECT_ATTEMPTS;
         if (!Number.isSafeInteger(reconnectAttempts) || reconnectAttempts < 0) {
-            throw new MobiusValidationError("The stream reconnect attempt limit is invalid");
+            throw new MortyValidationError("The stream reconnect attempt limit is invalid");
         }
-        this.channels = new MobiusChannelResources(executor);
-        this.credentials = new MobiusCredentialResources(executor, options.projectId);
-        this.events = new MobiusEventResources(executor, options.projectId, reconnectAttempts);
-        this.interactions = new MobiusInteractionResources(executor, options.projectId);
-        this.runtimePairings = new MobiusRuntimePairingResources(executor, options.projectId);
-        this.runtimes = new MobiusRuntimeResources(executor, options.projectId);
-        this.sessions = new MobiusSessionResources(executor, options.projectId);
-        this.turns = new MobiusTurnResources(executor, options.projectId);
+        this.channels = new MortyChannelResources(executor);
+        this.credentials = new MortyCredentialResources(executor, options.projectId);
+        this.events = new MortyEventResources(executor, options.projectId, reconnectAttempts);
+        this.interactions = new MortyInteractionResources(executor, options.projectId);
+        this.runtimePairings = new MortyRuntimePairingResources(executor, options.projectId);
+        this.runtimes = new MortyRuntimeResources(executor, options.projectId);
+        this.sessions = new MortySessionResources(executor, options.projectId);
+        this.turns = new MortyTurnResources(executor, options.projectId);
     }
 
     readonly close = (): void => {

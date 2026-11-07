@@ -109,7 +109,7 @@ function selectTool(
     readPath?: string,
     mcpImage = false,
 ): SelectedTool | undefined {
-    const callId = `call_mobius_${(completedToolCalls + 1).toString()}`;
+    const callId = `call_morty_${(completedToolCalls + 1).toString()}`;
     if ((readPath !== undefined || mcpImage) && tools.length > 0) {
         const exec = tools.find((tool) => tool.kind === "custom" && /(?:^|\.)exec$/u.test(tool.name));
         if (exec !== undefined) {
@@ -177,7 +177,7 @@ function selectTool(
             return {
                 ...read,
                 callId,
-                input: JSON.stringify({ [path]: scenario.command === "false" ? "./mobius-missing-file" : "." }),
+                input: JSON.stringify({ [path]: scenario.command === "false" ? "./morty-missing-file" : "." }),
             };
         }
     }
@@ -194,7 +194,7 @@ function selectRequestedTool(tools: readonly AvailableTool[], requested: Request
     return {
         ...tool,
         name: requested.name,
-        callId: `call_mobius_${requested.name}`,
+        callId: `call_morty_${requested.name}`,
         input: requested.input,
     };
 }
@@ -209,7 +209,7 @@ function responseHeaders(): Readonly<Record<string, string>> {
 
 function completedResponse(model: string, output: readonly JsonObject[]): JsonObject {
     return {
-        id: "resp_mobius",
+        id: "resp_morty",
         object: "response",
         created_at: 0,
         status: "completed",
@@ -261,7 +261,7 @@ function sendResponsesText(
         { phase: "final_answer", text: answer, chunks },
     ];
     const output = messages.map((message, index) => ({
-        id: `msg_mobius_${index}`,
+        id: `msg_morty_${index}`,
         type: "message",
         role: "assistant",
         status: "completed",
@@ -301,7 +301,7 @@ function sendResponsesText(
 function sendResponsesToolCall(response: ServerResponse, model: string, tool: SelectedTool): void {
     const type = tool.kind === "custom" ? "custom_tool_call" : "function_call";
     const item = {
-        id: "tool_mobius",
+        id: "tool_morty",
         type,
         call_id: tool.callId,
         name: tool.name,
@@ -346,7 +346,7 @@ function sendResponsesToolCall(response: ServerResponse, model: string, tool: Se
 function chatChunk(response: ServerResponse, model: string, choices: unknown, usage?: unknown): void {
     response.write(
         `data: ${JSON.stringify({
-            id: "chatcmpl-mobius",
+            id: "chatcmpl-morty",
             object: "chat.completion.chunk",
             created: 0,
             model,
@@ -409,7 +409,7 @@ function sendChatCompletion(
     response.writeHead(200, { "content-type": "application/json" });
     response.end(
         JSON.stringify({
-            id: "chatcmpl-mobius",
+            id: "chatcmpl-morty",
             object: "chat.completion",
             created: 0,
             model,
@@ -439,7 +439,7 @@ function sendChatCompletion(
 }
 
 export class FakeOpenAiProvider implements AsyncDisposable {
-    static readonly apiKey = "mobius-agent-daemon-fixture";
+    static readonly apiKey = "morty-agent-daemon-fixture";
 
     readonly apiKey = FakeOpenAiProvider.apiKey;
     readonly model: string;
@@ -516,7 +516,7 @@ export class FakeOpenAiProvider implements AsyncDisposable {
                 response.end(
                     JSON.stringify({
                         object: "list",
-                        data: [{ id: model, object: "model", created: 0, owned_by: "mobius" }],
+                        data: [{ id: model, object: "model", created: 0, owned_by: "morty" }],
                     }),
                 );
                 return;

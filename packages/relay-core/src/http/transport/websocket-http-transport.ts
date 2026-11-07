@@ -22,7 +22,7 @@ const FORBIDDEN_HEADERS = new Set([
     "host",
     "origin",
     "upgrade",
-    "x-mobius-project-id",
+    "x-morty-project-id",
 ]);
 
 type DispatchRequest = (request: Request) => Promise<Response>;
@@ -678,7 +678,7 @@ export function acceptWebSocketHttpTransport(
                 if (controller.signal.aborted || server.readyState !== WebSocket.OPEN) {
                     return;
                 }
-                logger.error({ err: cause, requestId }, "Mobius WebSocket transport request failed");
+                logger.error({ err: cause, requestId }, "Morty WebSocket transport request failed");
                 const httpError = toHttpError(cause);
                 server.send(
                     JSON.stringify({

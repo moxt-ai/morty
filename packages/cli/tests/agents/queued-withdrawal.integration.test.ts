@@ -137,7 +137,7 @@ test.each(["pi", "claude", "codex"] as const)(
                 await withRealDaemon(new ClaudeCodeAgentSpecification(), agent.environment, scenario);
             } else {
                 await using provider = await FakeOpenAiProvider.start(
-                    agentId === "pi" ? "gpt-4.1" : "mobius-test-model",
+                    agentId === "pi" ? "gpt-4.1" : "morty-test-model",
                     "QUEUE_WITHDRAWAL_REPLY",
                     { beforeFirstText },
                 );

@@ -1,5 +1,5 @@
-import { MobiusAppCredentialProvider, MobiusPlatformAppClient } from "@morty-build/client/platform";
-import { createTestMobiusPlatformBindings } from "@morty-build/platform-test-support/cloudflare";
+import { MortyAppCredentialProvider, MortyPlatformAppClient } from "@morty-build/client/platform";
+import { createTestMortyPlatformBindings } from "@morty-build/platform-test-support/cloudflare";
 import { seedMortyService } from "@morty-build/platform-test-support/service-fixture";
 import { type ControlledAgent, createControlledAgentRuntime } from "../../../../tests/support/fake-daemon/runtime.ts";
 import { mortyFiles, mortyReply } from "../../../../tests/support/fake-daemon/scenarios.ts";
@@ -7,7 +7,7 @@ import { mortyFiles, mortyReply } from "../../../../tests/support/fake-daemon/sc
 /** Starts the production Platform boundary with isolated local Cloudflare storage. */
 export async function startTestPlatform(
     options: { readonly allowedOrigins?: ReadonlySet<string> } = {},
-    createBindings: typeof createTestMobiusPlatformBindings = createTestMobiusPlatformBindings,
+    createBindings: typeof createTestMortyPlatformBindings = createTestMortyPlatformBindings,
 ) {
     const cancellation = new AbortController();
     const runtimes: AsyncDisposable[] = [];
@@ -16,9 +16,9 @@ export async function startTestPlatform(
         const app = { request: bindings.request };
         const application = await seedMortyService(bindings.env.PLATFORM_DIRECTORY_DATABASE);
         const credential = application.credential;
-        const service = new MobiusPlatformAppClient({
+        const service = new MortyPlatformAppClient({
             endpoint: bindings.origin,
-            credentialProvider: new MobiusAppCredentialProvider(credential),
+            credentialProvider: new MortyAppCredentialProvider(credential),
             transport: { fetch: bindings.request },
         });
         const close = async (): Promise<void> => {

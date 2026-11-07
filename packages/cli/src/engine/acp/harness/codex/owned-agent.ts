@@ -70,7 +70,7 @@ interface OwnedAgentContext {
     readonly close: () => Promise<void>;
 }
 
-/** The choices Mobius offers when the app-server asks it to approve a local side effect. */
+/** The choices Morty offers when the app-server asks it to approve a local side effect. */
 const APPROVAL_OPTIONS: readonly PermissionOption[] = Object.freeze([
     { kind: "allow_once", name: "Allow once", optionId: "accept" },
     { kind: "allow_always", name: "Allow for this session", optionId: "acceptForSession" },
@@ -185,7 +185,7 @@ export function agentMessageUpdate(
         content: { text, type: "text" },
         messageId,
         sessionUpdate: "agent_message_chunk",
-        ...(questions.length === 0 ? {} : { _meta: { "mobius.questions": questions } }),
+        ...(questions.length === 0 ? {} : { _meta: { "morty.questions": questions } }),
     };
 }
 
@@ -436,7 +436,7 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
                         await this.#context.emit({
                             sessionUpdate: "tool_call_update",
                             toolCallId: id,
-                            _meta: { "mobius.backgroundTask": { id, status: "running" } },
+                            _meta: { "morty.backgroundTask": { id, status: "running" } },
                         });
                     }
                 });
@@ -657,7 +657,7 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
                             ? {
                                   _meta: {
                                       ...update._meta,
-                                      "mobius.backgroundTask": {
+                                      "morty.backgroundTask": {
                                           id: item.id,
                                           status: update.status === "completed" ? "completed" : "failed",
                                       },
@@ -690,9 +690,9 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
             await this.#requestMcpElicitation(request);
             return;
         }
-        // Mobius did not opt into these capabilities. Answering an error keeps the conversation
+        // Morty did not opt into these capabilities. Answering an error keeps the conversation
         // honest instead of letting the app-server wait on a request nobody will handle.
-        this.#appServer.respondWithError(request.id, -32_601, `Mobius does not support ${request.method}`);
+        this.#appServer.respondWithError(request.id, -32_601, `Morty does not support ${request.method}`);
     };
 
     readonly #askPermission = async (
@@ -722,7 +722,7 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
                 ? commandApprovalParamsSchema.safeParse(request.params)
                 : fileChangeApprovalParamsSchema.safeParse(request.params);
         if (!decoded.success) {
-            this.#appServer.respondWithError(request.id, -32_602, "Mobius could not read the approval request");
+            this.#appServer.respondWithError(request.id, -32_602, "Morty could not read the approval request");
             return;
         }
         const params = decoded.data;
@@ -774,7 +774,7 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
         const decoded = mcpElicitationParamsSchema.safeParse(request.params);
         const connection = this.#context.connection();
         if (!decoded.success || connection === null) {
-            this.#appServer.respondWithError(request.id, -32_602, "Mobius could not read the elicitation request");
+            this.#appServer.respondWithError(request.id, -32_602, "Morty could not read the elicitation request");
             return;
         }
         const params: McpElicitationParams = decoded.data;

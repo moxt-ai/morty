@@ -219,7 +219,7 @@ export class SessionInteractions {
         const sessionId = Reflect.get(request, "sessionId");
         if (typeof sessionId !== "string") {
             throw new AcpExecutionError(
-                "Mobius only accepts session-scoped ACP elicitations",
+                "Morty only accepts session-scoped ACP elicitations",
                 {},
                 "unsupported_elicitation_scope",
             );

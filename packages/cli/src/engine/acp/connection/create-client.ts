@@ -24,7 +24,7 @@ export interface AcpClientHandler {
 }
 
 export const createAcpClient = (handler: AcpClientHandler): ClientApp =>
-    client({ name: "mobius" })
+    client({ name: "morty" })
         .onRequest(
             methods.client.session.requestPermission,
             async (context) => await handler.onPermission(context.params, context.signal),

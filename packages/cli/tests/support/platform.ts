@@ -1,5 +1,5 @@
-import { MobiusAppCredentialProvider, MobiusPlatformAppClient } from "@morty-build/client/platform";
-import { createTestMobiusPlatformBindings } from "@morty-build/platform-test-support/cloudflare";
+import { MortyAppCredentialProvider, MortyPlatformAppClient } from "@morty-build/client/platform";
+import { createTestMortyPlatformBindings } from "@morty-build/platform-test-support/cloudflare";
 import { seedMortyService } from "@morty-build/platform-test-support/service-fixture";
 import type { FakeAgentHarnessDefinition } from "./agent-harness.ts";
 import { createFakeAgentHarnessRuntime } from "./platform-agent-harness.ts";
@@ -8,14 +8,14 @@ import { createFakeAgentHarnessRuntime } from "./platform-agent-harness.ts";
 export async function startTestPlatform(options: { readonly allowedOrigins?: ReadonlySet<string> } = {}) {
     const cancellation = new AbortController();
     const runtimes: AsyncDisposable[] = [];
-    const bindings = await createTestMobiusPlatformBindings(options.allowedOrigins);
+    const bindings = await createTestMortyPlatformBindings(options.allowedOrigins);
     try {
         const app = { request: bindings.request };
         const application = await seedMortyService(bindings.env.PLATFORM_DIRECTORY_DATABASE);
         const credential = application.credential;
-        const service = new MobiusPlatformAppClient({
+        const service = new MortyPlatformAppClient({
             endpoint: bindings.origin,
-            credentialProvider: new MobiusAppCredentialProvider(credential),
+            credentialProvider: new MortyAppCredentialProvider(credential),
             transport: { fetch: bindings.request },
         });
         const close = async (): Promise<void> => {

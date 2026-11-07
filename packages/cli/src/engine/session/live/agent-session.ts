@@ -112,7 +112,7 @@ export class AgentSession implements AgentSessionRestore {
         return this.#restored;
     }
     get sessionId(): string {
-        return this.#mobiusSessionId;
+        return this.#mortySessionId;
     }
     get store(): SessionStore {
         return this.#store;
@@ -139,7 +139,7 @@ export class AgentSession implements AgentSessionRestore {
     readonly #getObserver: () => SessionObserver;
     readonly #agentCommand: () => string | undefined;
     readonly #interactions: SessionInteractions;
-    #mobiusSessionId: string;
+    #mortySessionId: string;
     readonly #metrics: OperationMetrics;
     readonly #store: SessionStore;
     #agentName = "";
@@ -162,7 +162,7 @@ export class AgentSession implements AgentSessionRestore {
         agent: AcpAgentDefinition,
         cwd: string,
         additionalDirectories: readonly string[],
-        mobiusSessionId: string,
+        mortySessionId: string,
         getObserver: () => SessionObserver,
         agentCommand: AgentCommand,
         store: SessionStore,
@@ -170,21 +170,21 @@ export class AgentSession implements AgentSessionRestore {
         adapter: Adapter,
         externalize: SessionPrepareOptions["externalizeSessionUpdate"],
     ) {
-        this.#agentCommand = () => agentCommand(this.#mobiusSessionId);
+        this.#agentCommand = () => agentCommand(this.#mortySessionId);
         this.#additionalDirectories = [...additionalDirectories];
         this.#adapter = adapter;
         this.#agentId = agent.id;
         this.#commands = [];
         this.#cwd = cwd;
         this.#environment = agent.environment;
-        this.#mobiusSessionId = mobiusSessionId;
+        this.#mortySessionId = mortySessionId;
         this.#metrics = metrics;
         this.#store = store;
         this.#getObserver = getObserver;
         this.#interactions = new SessionInteractions({
             cwd: () => this.#cwd,
-            getToolCall: (toolCallId) => this.#store.events.getToolCall(this.#mobiusSessionId, toolCallId),
-            sessionId: () => this.#mobiusSessionId,
+            getToolCall: (toolCallId) => this.#store.events.getToolCall(this.#mortySessionId, toolCallId),
+            sessionId: () => this.#mortySessionId,
             commandId: () => this.#agentCommand() ?? SESSION_CONTROL_COMMAND_ID,
             assertNativeSession: this.assertNativeSession,
             observer: getObserver,
@@ -196,7 +196,7 @@ export class AgentSession implements AgentSessionRestore {
             additionalDirectories: this.#additionalDirectories,
             ...(externalize === undefined
                 ? {}
-                : { externalizeUpdate: (update, signal) => externalize(this.#mobiusSessionId, update, signal) }),
+                : { externalizeUpdate: (update, signal) => externalize(this.#mortySessionId, update, signal) }),
         };
         this.#subscriber = {
             onSessionEvent: async (nativeSessionId, event) => {
@@ -319,7 +319,7 @@ export class AgentSession implements AgentSessionRestore {
     readonly writeStoredSession = (updatedAt: string): void => {
         this.#store.write(
             new StoredSession(
-                this.#mobiusSessionId,
+                this.#mortySessionId,
                 this.#agentId,
                 this.#nativeSessionId,
                 this.#cwd,
@@ -444,7 +444,7 @@ export class AgentSession implements AgentSessionRestore {
             return;
         }
         this.#sessionLoad = {
-            history: new HistoryReplayCapture(this.#store.events, this.#mobiusSessionId),
+            history: new HistoryReplayCapture(this.#store.events, this.#mortySessionId),
             kind: "execution-only",
         };
     };
@@ -468,9 +468,9 @@ export class AgentSession implements AgentSessionRestore {
     async #completedHistory(signal: AbortSignal): Promise<HistoryReplayCapture> {
         if (!this.#prompted && this.#nativeHistoryOwnership.kind === "fresh-session") {
             if (this.#sessionLoad.kind === "not-requested") {
-                this.#store.events.reset(this.#mobiusSessionId);
+                this.#store.events.reset(this.#mortySessionId);
                 this.#sessionLoad = {
-                    history: new HistoryReplayCapture(this.#store.events, this.#mobiusSessionId),
+                    history: new HistoryReplayCapture(this.#store.events, this.#mortySessionId),
                     kind: "loaded",
                     opened: {
                         nativeSessionId: this.nativeSessionId(),
@@ -496,8 +496,8 @@ export class AgentSession implements AgentSessionRestore {
         if (this.#sessionLoad.kind === "capturing") {
             return await waitForSharedOperation(this.#sessionLoad.completion, signal);
         }
-        this.#store.events.reset(this.#mobiusSessionId);
-        const history = new HistoryReplayCapture(this.#store.events, this.#mobiusSessionId);
+        this.#store.events.reset(this.#mortySessionId);
+        const history = new HistoryReplayCapture(this.#store.events, this.#mortySessionId);
         const completion = Promise.resolve().then(async (): Promise<LoadedSession> => {
             try {
                 const opened = await this.#writeNativeHistory(
@@ -625,7 +625,7 @@ export class AgentSession implements AgentSessionRestore {
         if (this.#prompted || this.#nativeSessionId !== sessionId) {
             throw new AcpExecutionError("The new native Session cannot be adopted", {}, "session_identity_mismatch");
         }
-        const previousSessionId = this.#mobiusSessionId;
+        const previousSessionId = this.#mortySessionId;
         this.#store.write(
             new StoredSession(
                 sessionId,
@@ -640,7 +640,7 @@ export class AgentSession implements AgentSessionRestore {
             ),
         );
         this.#store.remove(previousSessionId);
-        this.#mobiusSessionId = sessionId;
+        this.#mortySessionId = sessionId;
     };
 
     readonly #applyConfiguration = async (
@@ -700,7 +700,7 @@ export class AgentSession implements AgentSessionRestore {
 
     readonly #publishConfiguration = async (): Promise<void> => {
         // Use the existing v2 ACP event vocabulary so old observers can still decode the stream.
-        const event = this.#store.events.append(this.#mobiusSessionId, {
+        const event = this.#store.events.append(this.#mortySessionId, {
             type: "acp",
             payload: {
                 sessionUpdate: "config_option_update",
@@ -730,7 +730,7 @@ export class AgentSession implements AgentSessionRestore {
         if (!this.#capabilities.loadSession && this.#sessionLoad.kind === "not-requested") {
             this.#sessionLoad = {
                 kind: "loaded",
-                history: new HistoryReplayCapture(this.#store.events, this.#mobiusSessionId),
+                history: new HistoryReplayCapture(this.#store.events, this.#mortySessionId),
                 opened: {
                     nativeSessionId: this.nativeSessionId(),
                     capabilities: this.#capabilities,
@@ -927,7 +927,7 @@ export class AgentSession implements AgentSessionRestore {
     };
 
     readonly interactionSnapshot = (): SessionInteractionSnapshot => {
-        const { sessionGenerationId, throughPosition } = this.#store.events.livePosition(this.#mobiusSessionId);
+        const { sessionGenerationId, throughPosition } = this.#store.events.livePosition(this.#mortySessionId);
         return { sessionGenerationId, throughPosition, interactions: this.#interactions.snapshot() };
     };
 
@@ -995,7 +995,7 @@ export class AgentSession implements AgentSessionRestore {
                 await this.#getObserver().onCommands({
                     commands: this.#commands,
                     kind: SESSION_COMMANDS_UPDATED_KIND,
-                    sessionId: this.#mobiusSessionId,
+                    sessionId: this.#mortySessionId,
                 });
                 return;
             case "configuration":
@@ -1018,7 +1018,7 @@ export class AgentSession implements AgentSessionRestore {
                 }
                 await this.#getObserver().onInfo({
                     kind: SESSION_INFO_UPDATED_KIND,
-                    sessionId: this.#mobiusSessionId,
+                    sessionId: this.#mortySessionId,
                     title: this.#sessionTitle,
                     updatedAt: this.#sessionUpdatedAt,
                 });
@@ -1100,7 +1100,7 @@ export class AgentSession implements AgentSessionRestore {
             configurationRevision: configurationRevision(this.#configOptions),
             kind: SESSION_CONFIG_UPDATED_KIND,
             requestId: `agent-update-${crypto.randomUUID()}`,
-            sessionId: this.#mobiusSessionId,
+            sessionId: this.#mortySessionId,
         });
     };
 }

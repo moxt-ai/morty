@@ -25,7 +25,7 @@ afterEach(() => vi.useRealTimers());
 
 test("Given a resumed conversation with a configuration edit awaiting the Agent, When its first history load is rejected as busy, Then the edit still commits and survives restart", async () => {
     vi.useFakeTimers({ now: new Date("2026-10-29T00:00:00Z"), toFake: ["Date"] });
-    const directory = await mkdtemp(join(tmpdir(), "mobius-configuration-history-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-configuration-history-"));
     try {
         await withControlledDaemon(
             new UpdatingSettingsAgent("configuration"),

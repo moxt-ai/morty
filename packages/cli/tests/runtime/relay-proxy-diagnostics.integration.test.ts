@@ -29,7 +29,7 @@ afterEach(() => vi.useRealTimers());
 async function fixture(
     mode: "healthy" | "quiet-proxy" | "reject-http1" | "reject-http2" | "reset-pairing" | "ipv6" = "healthy",
 ) {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-relay-proxy-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-relay-proxy-"));
     const key = join(directory, "key.pem");
     const certificate = join(directory, "certificate.pem");
     execFileSync(
@@ -269,7 +269,7 @@ async function fixture(
         tunnelReady,
         report: async () => {
             const artifactDirectory =
-                process.env["MORTY_TEST_ARTIFACT_DIRECTORY"] ?? join(tmpdir(), "mobius-relay-proxy-evidence");
+                process.env["MORTY_TEST_ARTIFACT_DIRECTORY"] ?? join(tmpdir(), "morty-relay-proxy-evidence");
             await mkdir(artifactDirectory, { recursive: true, mode: 0o700 });
             const path = join(output, "report.json");
             await copyFile(path, join(artifactDirectory, `${directory.split(/[/\\]/u).pop() ?? "probe"}.json`));

@@ -170,7 +170,7 @@ interface RuntimeFixture {
 }
 
 async function startControlledRuntime(): Promise<RuntimeFixture> {
-    const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-admission-"));
+    const stateDirectory = await mkdtemp(join(tmpdir(), "morty-admission-"));
     const workspace = join(stateDirectory, "workspace");
     const nativeStateDirectory = join(stateDirectory, "native");
     await Promise.all([mkdir(workspace, { recursive: true }), mkdir(nativeStateDirectory, { recursive: true })]);

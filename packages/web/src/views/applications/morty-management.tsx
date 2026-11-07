@@ -7,7 +7,7 @@ import { BotChatHome } from "../chat/bot-chat-home.tsx";
  * the active identity outside React; this view subscribes to that surface and
  * flows the workspace into the chat views through props.
  */
-export function MobiusManagement({
+export function MortyManagement({
     application,
     view,
 }: {

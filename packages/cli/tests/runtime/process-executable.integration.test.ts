@@ -35,7 +35,7 @@ describe("bounded local executable processes", () => {
                 now: new Date("2026-09-04T00:00:00.000Z"),
                 toFake: ["Date", "clearTimeout", "setTimeout"],
             });
-            const directory = await mkdtemp(join(tmpdir(), "mobius-probe-timeout-"));
+            const directory = await mkdtemp(join(tmpdir(), "morty-probe-timeout-"));
             const executable = join(directory, "probe");
             const markerName = "started";
             const marker = join(directory, markerName);

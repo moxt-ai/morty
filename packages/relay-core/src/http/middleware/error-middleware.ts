@@ -13,7 +13,7 @@ export const errorMiddleware = createMiddleware(async (context, next) => {
     } catch (error) {
         logger.error(
             { ...requestLogContext(context.req.raw), err: error, event: "request_failed" },
-            "Mobius request failed",
+            "Morty request failed",
         );
         if (context.req.raw.signal.aborted) {
             throw error;

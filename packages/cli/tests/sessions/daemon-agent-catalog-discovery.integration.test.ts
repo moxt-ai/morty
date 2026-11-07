@@ -312,7 +312,7 @@ async function createCatalogRelay(): Promise<CatalogRelay> {
 test("Given the daemon started before an Agent was installed, When the Relay requests an Agent catalog discovery, Then the daemon re-discovers the inventory, republishes the catalog with the new Agent, and answers with it", {
     timeout: 120_000,
 }, async () => {
-    const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-agent-catalog-discovery-"));
+    const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-agent-catalog-discovery-"));
     const workspace = join(stateDirectory, "workspace");
     const binDirectory = join(stateDirectory, "bin");
     const laterLauncher = join(stateDirectory, "controlled-acp-later-v1");
@@ -394,7 +394,7 @@ test("Given the daemon started before an Agent was installed, When the Relay req
 test("Given a full catalog discovery is publishing, When the per-Agent resolver commits a concurrent upgrade and the full publication then fails, Then the rollback keeps the resolver's committed swap", {
     timeout: 120_000,
 }, async () => {
-    const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-agent-catalog-race-"));
+    const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-agent-catalog-race-"));
     const workspace = join(stateDirectory, "workspace");
     const binDirectory = join(stateDirectory, "bin");
     const firstLauncher = join(stateDirectory, "controlled-acp-v1");
@@ -506,7 +506,7 @@ test("Given a full catalog discovery is publishing, When the per-Agent resolver 
 test("Given a full catalog discovery has published, When a queued per-Agent resolver swap commits before the discovery answers, Then the reply still describes the snapshot the discovery published", {
     timeout: 120_000,
 }, async () => {
-    const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-agent-catalog-reply-"));
+    const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-agent-catalog-reply-"));
     const workspace = join(stateDirectory, "workspace");
     const binDirectory = join(stateDirectory, "bin");
     const firstLauncher = join(stateDirectory, "controlled-acp-v1");

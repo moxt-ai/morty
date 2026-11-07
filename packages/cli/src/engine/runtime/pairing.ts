@@ -1,6 +1,6 @@
 import { hostname } from "node:os";
 import { basename, resolve } from "node:path";
-import { isIdentifier, mobiusApiUrl } from "@morty-build/client/protocol";
+import { isIdentifier, mortyApiUrl } from "@morty-build/client/protocol";
 import { fetch, type Response } from "undici";
 import type { CatalogAgent } from "../agent/catalog.ts";
 import { discoverLocalAgentInventory, type LocalAgentInventory } from "../agent/discovery/discover-local-agents.ts";
@@ -40,7 +40,7 @@ interface ClaimPairingResponse {
     readonly runtimeId: string;
 }
 
-export interface MobiusRuntimePairingOptions {
+export interface MortyRuntimePairingOptions {
     readonly defaultWorkspace: string;
     readonly pairingCode: string;
     readonly pairingId: string;
@@ -189,8 +189,8 @@ async function claimPairing(
     }));
     const endpoint =
         options.pairingId.length > 0
-            ? mobiusApiUrl(options.relayOrigin, `/v1/runtime-pairings/${encodeURIComponent(options.pairingId)}/redeem`)
-            : mobiusApiUrl(options.relayOrigin, "/pairings/claim");
+            ? mortyApiUrl(options.relayOrigin, `/v1/runtime-pairings/${encodeURIComponent(options.pairingId)}/redeem`)
+            : mortyApiUrl(options.relayOrigin, "/pairings/claim");
     let response: Response;
     try {
         response = await fetch(endpoint, {
@@ -225,7 +225,7 @@ function buildSavedRuntimeConfig(
     inventory: LocalAgentInventory,
     localContext: RuntimeLocalContext,
 ): RuntimeConfig {
-    const relayUrl = mobiusApiUrl(connection.relayOrigin, "/v1/runtimes/connect");
+    const relayUrl = mortyApiUrl(connection.relayOrigin, "/v1/runtimes/connect");
     relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
     relayUrl.searchParams.set("token", connection.runtimeCredential);
 
@@ -298,7 +298,7 @@ async function pairRuntime(
 
 export async function pairRuntimeConnection(
     installation: RuntimeInstallationStore,
-    options: MobiusRuntimePairingOptions,
+    options: MortyRuntimePairingOptions,
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,
 ): Promise<VerifiedRuntimeConnection> {

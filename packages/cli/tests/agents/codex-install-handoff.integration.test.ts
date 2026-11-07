@@ -17,7 +17,7 @@ import { withRealDaemon } from "../support/agents/real-daemon.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 
 test("Given setup runs in a real Codex exec conversation, When its native session is found and imported, Then the user can continue chatting through the daemon", async () => {
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "CODEX_INSTALL_HANDOFF_REPLY");
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "CODEX_INSTALL_HANDOFF_REPLY");
     await using codex = await CodexFixture.create(provider, { configuredModel: provider.model });
     await withRealDaemon(new CodexAgentSpecification(), codex.environment, async (peer) => {
         const launch = executableLaunch(codex.executable, [

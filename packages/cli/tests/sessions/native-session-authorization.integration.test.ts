@@ -7,7 +7,7 @@ import { fixture } from "./native-session-fixture.ts";
 
 describe("native session authorization", () => {
     it.each(["Claude Code"] as const)(
-        "Given %s has saved conversations across projects, When they are listed and imported, Then pagination includes other directories and imports retain their original project and Mobius identity",
+        "Given %s has saved conversations across projects, When they are listed and imported, Then pagination includes other directories and imports retain their original project and Morty identity",
         async (label) => {
             const f = await fixture(label);
             try {

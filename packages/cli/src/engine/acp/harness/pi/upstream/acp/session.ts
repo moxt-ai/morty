@@ -637,7 +637,7 @@ export class PiAcpSession {
         } else if (retryFailure !== null && !this.cancelRequested) {
             this.pendingTurn?.reject(
                 // The message rides in `data.details` so clients that unwrap the
-                // JSON-RPC internal-error envelope (like Mobius) surface the real
+                // JSON-RPC internal-error envelope (like Morty) surface the real
                 // model error; `code` keeps the failure machine-readable.
                 RequestError.internalError({
                     code: "pi_retries_exhausted",

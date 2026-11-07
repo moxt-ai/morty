@@ -68,7 +68,7 @@ function isCompactCommand(prompt: readonly ContentBlock[]): boolean {
 
 /**
  * One in-process Codex ACP agent: an ACP `AgentApp` bound to one `codex app-server` child process.
- * Mobius connects its normal ACP client to this app in-process, so every ACP behavior the daemon
+ * Morty connects its normal ACP client to this app in-process, so every ACP behavior the daemon
  * relies on is produced here instead of by an adapter child process.
  *
  * Owns the transport and common ACP registration. Session operations are delegated to an owned
@@ -129,11 +129,11 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
                 });
             }
         });
-        this.#app = createAgentApp({ name: "mobius-codex" })
+        this.#app = createAgentApp({ name: "morty-codex" })
             .onConnect((connection) => {
                 this.#connection = connection;
             })
-            // Declare only what this Agent actually serves. Mobius gates every request on these bits,
+            // Declare only what this Agent actually serves. Morty gates every request on these bits,
             // so an optimistic bit here becomes an unsupported ACP call at the far end.
             .onRequest(methods.agent.initialize, async () => ({
                 _meta: { steering: { supported: true } },
@@ -147,7 +147,7 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
                 protocolVersion: PROTOCOL_VERSION,
             }))
             .onRequest(methods.agent.session.new, async (context) => {
-                // Sandbox and approval policy stay with Codex's own configuration. Mobius reports the
+                // Sandbox and approval policy stay with Codex's own configuration. Morty reports the
                 // session it was given instead of imposing policy the user did not ask for.
                 const created = threadStartResponseSchema.parse(
                     await this.#appServer.request(
@@ -160,7 +160,7 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
                 this.#settings.selectNewThread(created);
                 await this.#settings.probeCollaborationMode(this.#nativeSessionId, context.signal);
                 this.#advertiseCompactCommand();
-                // The settings Mobius discovers come from this response. Without them the Run
+                // The settings Morty discovers come from this response. Without them the Run
                 // settings panel has nothing to render and saved selections cannot be re-applied.
                 return { configOptions: this.#settings.configOptions(), sessionId: created.thread.id };
             })
@@ -168,7 +168,7 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
                 this.#settings.applySelection(context.params.configId, context.params.value);
                 return { configOptions: this.#settings.configOptions() };
             })
-            // Mobius routes a `category: "mode"` selection here rather than through
+            // Morty routes a `category: "mode"` selection here rather than through
             // set_config_option, so the mode needs its own entry point.
             .onRequest(methods.agent.session.setMode, async (context) => {
                 this.#settings.applySelection("mode", context.params.modeId);
@@ -263,7 +263,7 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
 
     readonly agentSettingsModelEffort = () => this.#settings.agentModelEffort();
 
-    /** The ACP agent app Mobius connects its own ACP client to, in-process. */
+    /** The ACP agent app Morty connects its own ACP client to, in-process. */
     readonly app = (): AgentApp => this.#app;
     readonly nativeTurnId = (): string | null => this.#sessionAgent.nativeTurnId();
 
@@ -353,7 +353,7 @@ export class CodexAcpAgent implements InProcessAcpEndpoint {
         await this.#settings.probeCollaborationMode(this.#nativeSessionId, signal);
     };
 
-    /** What the session response tells Mobius about the session behavior selected while opening it. */
+    /** What the session response tells Morty about the session behavior selected while opening it. */
     readonly #sessionMeta = () => ({
         steering: { supported: this.#sessionAgent.steeringSupported },
         codex: { runsTurns: this.#sessionAgent.runsTurns },

@@ -12,15 +12,15 @@ const CONNECTION_TIMEOUT_MILLISECONDS = 15_000;
 const MAX_RECONNECTION_DELAY_MILLISECONDS = 10_000;
 const MIN_RECONNECTION_DELAY_MILLISECONDS = 500;
 const TERMINAL_RELAY_CLOSE_CODES: ReadonlySet<number> = new Set([1002, 1003, 1007, 1008, 4003, 4008]);
-export type MobiusRelayUrlProvider = (signal: AbortSignal) => Promise<string>;
+export type MortyRelayUrlProvider = (signal: AbortSignal) => Promise<string>;
 
-export interface ConnectMobiusClientOptions {
+export interface ConnectMortyClientOptions {
     readonly protocols?: readonly string[];
-    readonly onProtocolError?: (error: MobiusClientError) => void;
+    readonly onProtocolError?: (error: MortyClientError) => void;
     readonly onReconnecting?: () => void;
     readonly onStatus?: (online: boolean) => void;
     readonly onUnavailable?: () => void;
-    readonly relayUrl: string | MobiusRelayUrlProvider;
+    readonly relayUrl: string | MortyRelayUrlProvider;
 }
 
 export interface PermissionResponseRequest {
@@ -37,19 +37,19 @@ export interface ElicitationResponseRequest {
     readonly sessionId: string;
 }
 
-export class MobiusClientError extends Error {
+export class MortyClientError extends Error {
     readonly code: string;
 
     constructor(code: string, message: string, options: ErrorOptions = {}) {
         super(message, options);
         this.code = code;
-        this.name = "MobiusClientError";
+        this.name = "MortyClientError";
     }
 }
 
 function readMessageText(event: MessageEvent<unknown>): string {
     if (typeof event.data !== "string") {
-        throw new MobiusClientError("invalid_protocol_message", "Relay sent a non-text WebSocket message");
+        throw new MortyClientError("invalid_protocol_message", "Relay sent a non-text WebSocket message");
     }
 
     return event.data;
@@ -67,7 +67,7 @@ function waitForOpen(socket: ReconnectingWebSocket): Promise<void> {
     return new Promise((resolve, reject) => {
         const timeout = window.setTimeout(() => {
             cleanup();
-            reject(new MobiusClientError("connection_timeout", "Timed out while connecting to the relay"));
+            reject(new MortyClientError("connection_timeout", "Timed out while connecting to the relay"));
         }, CONNECTION_TIMEOUT_MILLISECONDS);
 
         const cleanup = (): void => {
@@ -81,7 +81,7 @@ function waitForOpen(socket: ReconnectingWebSocket): Promise<void> {
                 return;
             }
             cleanup();
-            reject(new MobiusClientError("connection_rejected", "The relay rejected the WebSocket connection"));
+            reject(new MortyClientError("connection_rejected", "The relay rejected the WebSocket connection"));
         };
 
         const handleOpen = (): void => {
@@ -94,16 +94,16 @@ function waitForOpen(socket: ReconnectingWebSocket): Promise<void> {
     });
 }
 
-export class MobiusClient {
+export class MortyClient {
     readonly #connectionController: AbortController | null;
-    readonly #onProtocolError: (error: MobiusClientError) => void;
+    readonly #onProtocolError: (error: MortyClientError) => void;
     readonly #onStatus: (online: boolean) => void;
-    readonly #options: ConnectMobiusClientOptions;
+    readonly #options: ConnectMortyClientOptions;
     readonly #socket: ReconnectingWebSocket;
 
     constructor(
         socket: ReconnectingWebSocket,
-        options: ConnectMobiusClientOptions,
+        options: ConnectMortyClientOptions,
         connectionController: AbortController | null = null,
     ) {
         this.#connectionController = connectionController;
@@ -121,7 +121,7 @@ export class MobiusClient {
 
     readonly close = (): void => {
         this.#connectionController?.abort(
-            new MobiusClientError("connection_closed", "The browser relay connection was closed"),
+            new MortyClientError("connection_closed", "The browser relay connection was closed"),
         );
         this.#socket.removeEventListener("message", this.#handleChannelMessage);
         this.#socket.removeEventListener("close", this.#handleClose);
@@ -147,7 +147,7 @@ export class MobiusClient {
             decodeKnownDaemonToServiceMessage(encoded);
         } catch (error) {
             this.#onProtocolError(
-                new MobiusClientError("invalid_protocol_message", "Received an invalid message from the relay", {
+                new MortyClientError("invalid_protocol_message", "Received an invalid message from the relay", {
                     cause: error,
                 }),
             );
@@ -155,7 +155,7 @@ export class MobiusClient {
     };
 }
 
-export async function connectMobiusClient(options: ConnectMobiusClientOptions): Promise<MobiusClient> {
+export async function connectMortyClient(options: ConnectMortyClientOptions): Promise<MortyClient> {
     const connectionController = new AbortController();
     const configuredRelayUrl = options.relayUrl;
     const relayUrl =
@@ -169,7 +169,7 @@ export async function connectMobiusClient(options: ConnectMobiusClientOptions): 
         minReconnectionDelay: MIN_RECONNECTION_DELAY_MILLISECONDS * (1 + Math.random()),
         shouldReconnectOnClose: shouldReconnectAfterClose,
     });
-    const client = new MobiusClient(socket, options, connectionController);
+    const client = new MortyClient(socket, options, connectionController);
 
     try {
         await client.ready();

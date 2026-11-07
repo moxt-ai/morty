@@ -161,7 +161,7 @@ export type NativeSessionCommand = z.infer<typeof nativeSessionCommandSchema>;
 const nativeSessionEntrySchema = z
     .object({
         entryId: identifier,
-        mobiusSessionIds: z.array(identifier).max(500).readonly(),
+        mortySessionIds: z.array(identifier).max(500).readonly(),
         nativeSessionId: identifier,
         title: z.string().max(500),
         directoryId,
@@ -197,13 +197,12 @@ const nativeSessionResultSchema = z.discriminatedUnion("action", [
                 )
                 .readonly(),
             turn: activeTurnSnapshotSchema.nullable(),
-            // Absent when an older Runtime or Relay cannot provide session-scoped interaction recovery.
-            interactionState: sessionInteractionSnapshotSchema.optional(),
-            // Present only when the request named a command and every hop understands it. An
-            // unrecognized delivery from a newer peer reads as absent instead of failing the snapshot.
-            command: commandDeliverySchema.optional().catch(undefined),
-            // Absent from older Runtimes and while the last started command is still running.
-            lastTurn: lastTurnOutcomeSchema.optional().catch(undefined),
+            // Null when this Runtime has no retained Session for the requested identity.
+            interactionState: sessionInteractionSnapshotSchema.nullable(),
+            // Present only when the request named a command.
+            command: commandDeliverySchema.optional(),
+            // Absent while the last started command is running or none has started.
+            lastTurn: lastTurnOutcomeSchema.optional(),
             // The Runtime withdraws a queued command only before it starts.
             queuedCancellation: z.literal("before-start"),
         })

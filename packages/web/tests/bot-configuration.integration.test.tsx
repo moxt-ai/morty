@@ -338,7 +338,7 @@ test("Given a Bot has a recent directory from another harness, When its Runtime 
         connectAgent: true,
         prepare: (current) =>
             window.localStorage.setItem(
-                `mobius:recent-cwd:${encodeURIComponent(current.botId)}`,
+                `morty:recent-cwd:${encodeURIComponent(current.botId)}`,
                 JSON.stringify([{ directoryId: "saved-directory", directoryLabel: "/saved-by-another-harness" }]),
             ),
     });
@@ -701,7 +701,7 @@ test("Given a Bot paired with Pi, When the user opens its settings and sends a p
 test("Given another tab saved a recent directory, When this tab reopens its directory menu and forgets a directory, Then the other tab's directory is listed and remains", {
     timeout: 30_000,
 }, async () => {
-    const key = (botId: string) => `mobius:recent-cwd:${encodeURIComponent(botId)}`;
+    const key = (botId: string) => `morty:recent-cwd:${encodeURIComponent(botId)}`;
     const here = { directoryId: "directory-here", directoryLabel: "/project-here" };
     const there = { directoryId: "directory-there", directoryLabel: "/project-from-another-tab" };
     const app = await createTestApp({

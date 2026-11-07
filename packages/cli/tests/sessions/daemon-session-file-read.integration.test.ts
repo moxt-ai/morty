@@ -36,7 +36,7 @@ class PromptMediaAgent extends ControlledAcpSpecification {
 
 test("Given a persisted conversation with different product and native IDs, When a client prompts after restart without preparing first, Then its generated image is readable under the product Session ID", async () => {
     vi.useFakeTimers({ now: new Date("2026-10-29T00:00:00Z"), toFake: ["Date"] });
-    const directory = await mkdtemp(join(tmpdir(), "mobius-prompt-media-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-prompt-media-"));
     try {
         await withRealDaemon(
             new PromptMediaAgent(),
@@ -92,7 +92,7 @@ test("Given a persisted conversation with different product and native IDs, When
                 await peer.restart();
                 const imageKey = await prompt("generate inline image");
                 expect(imageKey).toMatch(/^[a-f0-9]{64}$/u);
-                const image = await readSessionFile(peer, peer.sessionId, `mobius-content:image:${imageKey}`);
+                const image = await readSessionFile(peer, peer.sessionId, `morty-content:image:${imageKey}`);
                 expect(image.kind).toBe("streamed");
                 expect(image.bytes).toEqual(
                     Buffer.from(
@@ -159,7 +159,7 @@ async function readSessionFile(
 }
 
 test("Given a session with a working directory, When a client reads a root-relative or bare-relative file reference, Then the daemon resolves it against the session directory before the machine root", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-session-file-read-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-session-file-read-"));
     const executableDirectory = join(directory, "bin");
     const executable = join(executableDirectory, "controlled-acp");
     await mkdir(executableDirectory);

@@ -184,7 +184,7 @@ export class NativeSessionService {
             });
             return {
                 entryId,
-                mobiusSessionIds: this.#sessions
+                mortySessionIds: this.#sessions
                     .findLinkedSessions(command.agentId, info.sessionId)
                     .filter((session) => session.prompted && session.cwd === authorized.cwd)
                     .map((session) => decodeIdentifier(session.sessionId)),

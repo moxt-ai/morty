@@ -196,7 +196,7 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
             if (result.requestId !== listRequestId || result.action !== "list") {
                 continue;
             }
-            const source = result.entries.find((candidate) => candidate.mobiusSessionIds.includes(sourceSessionId));
+            const source = result.entries.find((candidate) => candidate.mortySessionIds.includes(sourceSessionId));
             if (source === undefined) {
                 throw new Error("Missing source native Session");
             }
@@ -320,7 +320,7 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
                 continue;
             }
             expect(result.capabilities.unstableForkSession).toBe(true);
-            const source = result.entries.find((candidate) => candidate.mobiusSessionIds.includes(sourceSessionId));
+            const source = result.entries.find((candidate) => candidate.mortySessionIds.includes(sourceSessionId));
             if (source === undefined) {
                 throw new Error("Missing source native Session");
             }

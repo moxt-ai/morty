@@ -143,7 +143,7 @@ test("Given real Claude reads an image, When its reply streams and native histor
             encodeFileReadCommand({
                 kind: "file.read",
                 maxBytes: 2_000_000,
-                path: `mobius-content:image:${key}`,
+                path: `morty-content:image:${key}`,
                 requestId: "image-download",
                 sessionId: peer.sessionId,
             }),

@@ -14,79 +14,67 @@ afterAll(async () => {
     await fixture.close();
 });
 
-test.each(["v1", "migrated"] as const)(
-    "Given local, browser and recovery credentials, When their %s operations end access, Then each preserves the other credential kinds",
-    async (version) => {
-        const owner = await fixture.createAnonymousUser();
-        const request = (path: string, token: string, method = "GET") =>
-            fetchPublicApplication(
-                new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}${path}`, {
-                    method,
-                    headers: { authorization: `Bearer ${token}` },
-                }),
-                fixture.environment(),
-            );
-        const recoveryResponse = await request("/identity/recovery-token", owner.token, "POST");
-        expect(recoveryResponse.status).toBe(201);
-        const recovery = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
-        const share = async () => {
-            const response = await request("/identity/transfers", owner.token, "POST");
-            return new URL(v.parse(v.object({ url: v.string() }), await response.json()).url).hash.slice(6);
-        };
-        const redeem = async (code: string) =>
-            await worker.fetch(
-                new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ code }),
-                }),
-                fixture.environment(),
-            );
-        const browser = v.parse(v.object({ token: v.string() }), await (await redeem(await share())).json()).token;
-        // Another device that never presents its credential, so migration leaves its kind unclassified.
-        expect((await redeem(await share())).status).toBe(200);
-        const operations = [
-            { token: recovery, path: "/identity/v1/recovery-credential" },
-            { token: owner.token, path: "/identity/v1/local-credential" },
-            { token: browser, path: "/identity/v1/browser-access" },
-        ];
-        const namespace = fixture.environment().CHAT_PROJECTS;
-        const storage = namespace.get(namespace.idFromName(owner.projectId));
-        const kinds = async (method = "GET") =>
-            await (await storage.fetch(new Request("https://project.internal/credential-kinds", { method }))).json();
-        expect(await kinds()).toEqual(expect.arrayContaining(["local", "browser", "recovery"]));
-        if (version === "migrated") {
-            expect(await kinds("DELETE")).toEqual([null, null, null, null]);
-            const invalid = `${owner.token.slice(0, -1)}${owner.token.endsWith("A") ? "B" : "A"}`;
-            expect((await request("/session", invalid)).status).toBe(401);
-            expect(await kinds()).toEqual([null, null, null, null]);
+test("Given local, browser and recovery credentials, When their operations end access, Then each preserves the other credential kinds", async () => {
+    const owner = await fixture.createAnonymousUser();
+    const request = (path: string, token: string, method = "GET") =>
+        fetchPublicApplication(
+            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}${path}`, {
+                method,
+                headers: { authorization: `Bearer ${token}` },
+            }),
+            fixture.environment(),
+        );
+    const recoveryResponse = await request("/identity/recovery-token", owner.token, "POST");
+    expect(recoveryResponse.status).toBe(201);
+    const recovery = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
+    const share = async () => {
+        const response = await request("/identity/transfers", owner.token, "POST");
+        return new URL(v.parse(v.object({ url: v.string() }), await response.json()).url).hash.slice(6);
+    };
+    const redeem = async (code: string) =>
+        await worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code }),
+            }),
+            fixture.environment(),
+        );
+    const browser = v.parse(v.object({ token: v.string() }), await (await redeem(await share())).json()).token;
+    // Another device retains its independent browser access.
+    expect((await redeem(await share())).status).toBe(200);
+    const operations = [
+        { token: recovery, path: "/identity/v1/recovery-credential" },
+        { token: owner.token, path: "/identity/v1/local-credential" },
+        { token: browser, path: "/identity/v1/browser-access" },
+    ];
+    const namespace = fixture.environment().CHAT_PROJECTS;
+    const storage = namespace.get(namespace.idFromName(owner.projectId));
+    const kinds = async (method = "GET") =>
+        await (await storage.fetch(new Request("https://project.internal/credential-kinds", { method }))).json();
+    expect(await kinds()).toEqual(expect.arrayContaining(["local", "browser", "recovery"]));
+    for (const operation of operations) {
+        const session = await request("/session", operation.token);
+        expect(session.status).toBe(200);
+        expect(session.headers.get("Morty-Credential-Revocation")).toBe(operation.path);
+        for (const other of operations.filter((entry) => entry.path !== operation.path)) {
+            const rejected = await request(other.path, operation.token, "DELETE");
+            expect(rejected.status).toBe(403);
+            expect(await rejected.json()).toMatchObject({ error: { code: "CREDENTIAL_KIND_REQUIRED" } });
         }
-        for (const operation of operations) {
-            const session = await request("/session", operation.token);
-            expect(session.status).toBe(200);
-            expect(session.headers.get("Morty-Credential-Revocation")).toBe(operation.path);
-            for (const other of operations.filter((entry) => entry.path !== operation.path)) {
-                const rejected = await request(other.path, operation.token, "DELETE");
-                expect(rejected.status).toBe(403);
-                expect(await rejected.json()).toMatchObject({ error: { code: "CREDENTIAL_KIND_REQUIRED" } });
-            }
+    }
+    for (const token of [browser, recovery]) {
+        expect((await request("/identity/revoke-all-access", token, "POST")).status).toBe(403);
+    }
+    for (const [index, operation] of operations.entries()) {
+        expect((await request(operation.path, operation.token, "DELETE")).status).toBe(204);
+        expect((await request("/session", operation.token)).status).toBe(401);
+        expect((await request(operation.path, operation.token, "DELETE")).status).toBe(401);
+        for (const remaining of operations.slice(index + 1)) {
+            expect((await request("/session", remaining.token)).status).toBe(200);
         }
-        if (version === "migrated") {
-            expect(await kinds()).toEqual(expect.arrayContaining(["local", "browser", "recovery", null]));
-        }
-        for (const token of [browser, recovery]) {
-            expect((await request("/identity/revoke-all-access", token, "POST")).status).toBe(403);
-        }
-        for (const [index, operation] of operations.entries()) {
-            expect((await request(operation.path, operation.token, "DELETE")).status).toBe(204);
-            expect((await request("/session", operation.token)).status).toBe(401);
-            expect((await request(operation.path, operation.token, "DELETE")).status).toBe(401);
-            for (const remaining of operations.slice(index + 1)) {
-                expect((await request("/session", remaining.token)).status).toBe(200);
-            }
-        }
-    },
-);
+    }
+});
 
 test("Given a browser that joined through a link, When it asks for recovery access, a Runtime pairing or the Machine's binding, Then only the machine's local credential may issue them", async () => {
     const owner = await fixture.createAnonymousUser();
@@ -214,4 +202,20 @@ test("Given browser access granted through a link, When that browser shares a ne
     const browserLink = await share(browser);
 
     expect(browserLink.accessExpiresAt).toBe(ownerLink.accessExpiresAt);
+});
+
+test("Given a retained credential with no recorded kind, When it is presented to the launch Worker, Then access is denied without upgrading it to local authority", async () => {
+    const owner = await fixture.createAnonymousUser();
+    const namespace = fixture.environment().CHAT_PROJECTS;
+    const storage = namespace.get(namespace.idFromName(owner.projectId));
+    await storage.fetch(new Request("https://project.internal/credential-kinds", { method: "DELETE" }));
+    const response = await fetchPublicApplication(
+        new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/session`, {
+            headers: { authorization: `Bearer ${owner.token}` },
+        }),
+        fixture.environment(),
+    );
+    expect(response.status).toBe(401);
+    const retained = await storage.fetch(new Request("https://project.internal/credential-kinds"));
+    expect(await retained.json()).toEqual([null]);
 });

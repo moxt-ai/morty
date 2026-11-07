@@ -185,13 +185,6 @@ class ProjectDurableObjectStore implements PlatformProjectStore {
 
     readonly listAuditEvents: PlatformProjectStore["listAuditEvents"] = (limit, signal) =>
         this.call("listAuditEvents", (stub, projectId) => stub.listAuditEvents(projectId, limit), signal);
-
-    readonly readLegacyCredentialScope: PlatformProjectStore["readLegacyCredentialScope"] = (credentialId, signal) =>
-        this.call(
-            "readLegacyCredentialScope",
-            (stub, projectId) => stub.readLegacyCredentialScope(projectId, credentialId),
-            signal,
-        );
 }
 
 /**

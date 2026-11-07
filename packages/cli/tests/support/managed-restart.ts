@@ -124,7 +124,7 @@ async function journey(peer: RealDaemonPeer, agentId: string, reply: string): Pr
 
 export function registerManagedRestartScenarios(agentId: "codex" | "claude" | "pi"): void {
     if (agentId === "codex") {
-        test("Given a managed real Codex session, When the user quits and starts Mobius, Then history is restored and another turn completes", async () => {
+        test("Given a managed real Codex session, When the user quits and starts Morty, Then history is restored and another turn completes", async () => {
             await using provider = await FakeOpenAiProvider.start("gpt-5.4", "MANAGED_CODEX_REPLY");
             await using agent = await CodexFixture.create(provider);
             await withRealDaemon(
@@ -136,7 +136,7 @@ export function registerManagedRestartScenarios(agentId: "codex" | "claude" | "p
         });
     }
     if (agentId === "claude") {
-        test("Given a managed real Claude Code session, When the user quits and starts Mobius, Then history is restored and another turn completes", async () => {
+        test("Given a managed real Claude Code session, When the user quits and starts Morty, Then history is restored and another turn completes", async () => {
             await using provider = await FakeAnthropicProvider.start("claude-sonnet-4-6", "MANAGED_CLAUDE_REPLY");
             await using agent = await ClaudeFixture.create(provider);
             await withRealDaemon(
@@ -148,7 +148,7 @@ export function registerManagedRestartScenarios(agentId: "codex" | "claude" | "p
         });
     }
     if (agentId === "pi") {
-        test("Given a managed real Pi session, When the user quits and starts Mobius, Then history is restored and another turn completes", async () => {
+        test("Given a managed real Pi session, When the user quits and starts Morty, Then history is restored and another turn completes", async () => {
             await using provider = await FakeOpenAiProvider.start("gpt-4.1", "MANAGED_PI_REPLY");
             await using agent = await PiFixture.create(provider);
             await withRealDaemon(

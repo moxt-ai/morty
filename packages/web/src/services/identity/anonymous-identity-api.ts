@@ -24,12 +24,12 @@ import {
 const tokenSchema = v.pipe(
     v.string(),
     v.regex(
-        /^(?:mobius_anon_v2_[A-Za-z0-9_-]{43}|mobius_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
+        /^(?:morty_anon_v1_[A-Za-z0-9_-]{43}|morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
     ),
 );
 const recoveryTokenSchema = v.pipe(
     v.string(),
-    v.regex(/^mobius_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43}$/u),
+    v.regex(/^morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43}$/u),
 );
 const projectIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u));
 const botIdSchema = v.custom<Identifier>(isIdentifier);
@@ -43,7 +43,7 @@ const identitySchema = v.pipe(v.object(identityFields), v.readonly());
  */
 export function transferCodeProject(code: string): string | null {
     const parts = code.split(".");
-    return parts.length === 3 && parts[0] === "mobius_transfer_v2" ? (parts[1] ?? null) : null;
+    return parts.length === 3 && parts[0] === "morty_transfer_v1" ? (parts[1] ?? null) : null;
 }
 
 /** Stored key name of the anonymous credential map, shared with browser tests. */

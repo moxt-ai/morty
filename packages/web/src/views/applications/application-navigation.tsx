@@ -4,7 +4,7 @@ import { Card } from "../../components/ui/card.tsx";
 import { NavigationCardLink } from "../../components/ui/navigation-card-link.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 
-export function MobiusApplications({
+export function MortyApplications({
     ChatApplication,
     MortyApplication,
     view: selected,

@@ -153,5 +153,5 @@ await writeFile(
 const notice = await readFile(resolve(directory, "../../NOTICE"), "utf8");
 await writeFile(
     noticePath,
-    `${notice}\nSource paths above refer to the Mobius source repository.\nLicense texts and notices for bundled components are included in\nTHIRD-PARTY-NOTICES.txt alongside this file.\n`,
+    `${notice}\nSource paths above refer to the Morty source repository.\nLicense texts and notices for bundled components are included in\nTHIRD-PARTY-NOTICES.txt alongside this file.\n`,
 );

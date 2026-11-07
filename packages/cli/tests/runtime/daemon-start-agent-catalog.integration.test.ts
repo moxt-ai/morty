@@ -1,11 +1,12 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
-import { openMobiusCliInstallation } from "../../src/daemon/pairing/pair-local-machine.ts";
+import { collectLocalDaemonLogs } from "../../src/cli/handler/logs/logic/collect-local-logs.ts";
+import { openMortyCliInstallation } from "../../src/daemon/pairing/pair-local-machine.ts";
 import { installWorkspaceDaemonRelease } from "../support/installed-daemon-release.ts";
 
 const temporaryDirectories: string[] = [];
@@ -86,20 +87,22 @@ async function catalogRelay() {
     };
 }
 
-it("Given a running daemon whose Agent catalog was read at startup, When the user runs `morty start` again, Then the daemon re-reads the local Agent inventory and republishes the catalog before start returns", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-start-agent-catalog-"));
+it("Given a running daemon with a long temporary directory whose Agent catalog was read at startup, When the user runs `morty start` again, Then the daemon re-reads the local Agent inventory and republishes the catalog before start returns", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "morty-start-agent-catalog-"));
     temporaryDirectories.push(directory);
+    const temporaryFiles = join(directory, "long-temporary-directory-".repeat(6));
+    await mkdir(temporaryFiles);
     // The Agent inventory is read from the same isolated environment on each start.
     const environment = {
         HOME: directory,
         MORTY_STATE_DIRECTORY: join(directory, "state"),
         PATH: dirname(process.execPath),
-        TMPDIR: directory,
+        TMPDIR: temporaryFiles,
     };
     await installWorkspaceDaemonRelease(environment.MORTY_STATE_DIRECTORY);
     const relay = await catalogRelay();
 
-    const installation = await openMobiusCliInstallation(AbortSignal.timeout(10_000), environment);
+    const installation = await openMortyCliInstallation(AbortSignal.timeout(10_000), environment);
     await installation.saveConnection(
         {
             appId: "app_start_catalog",
@@ -114,7 +117,13 @@ it("Given a running daemon whose Agent catalog was read at startup, When the use
     );
     try {
         const started = await runCli(["start"], environment, AbortSignal.timeout(60_000));
-        expect(started.code, started.stderr).toBe(0);
+        expect(
+            started.code,
+            started.stderr +
+                JSON.stringify(
+                    await collectLocalDaemonLogs(environment.MORTY_STATE_DIRECTORY, 20, AbortSignal.timeout(5_000)),
+                ),
+        ).toBe(0);
         await relay.firstPublication;
         const publishedAtStartup = relay.published.length;
 

@@ -277,7 +277,7 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
         await projectResponse.json(),
     );
     expect(identity.projectId).toBe(project.projectId);
-    expect(identity.token).toMatch(/^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u);
+    expect(identity.token).toMatch(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u);
     expect(
         (await worker.fetch(accountRequest(identity.token, `prj_wn_01_${"z".repeat(24)}`), fixture.environment()))
             .status,
@@ -361,7 +361,7 @@ test("Given an anonymous user, When machine access is shared, Then the link adds
     );
     expect(recoveryResponse.status).toBe(201);
     const recoveryToken = v.parse(
-        v.object({ token: v.pipe(v.string(), v.startsWith("mobius_recovery_v1.")) }),
+        v.object({ token: v.pipe(v.string(), v.startsWith("morty_recovery_v1.")) }),
         await recoveryResponse.json(),
     ).token;
     const ended = await worker.fetch(
@@ -444,7 +444,7 @@ test("Given anonymous Morty sessions, When the account endpoint authenticates th
     const unauthenticated = await worker.fetch(accountRequest(), {});
     expect(unauthenticated.status).toBe(401);
     expect(await unauthenticated.json()).toMatchObject({ error: { code: "UNAUTHENTICATED" } });
-    for (const token of ["mobius_anon_v2_invalid", "user_alice"]) {
+    for (const token of ["morty_anon_v1_invalid", "user_alice"]) {
         expect((await worker.fetch(accountRequest(token), fixture.baseConfiguration)).status).toBe(401);
     }
     const environment = fixture.environment();
@@ -493,7 +493,7 @@ test("Given browser access the owner revoked, When the browser presents its cred
             }),
             environment,
         );
-    const unknownToken = `mobius_anon_v2_${"A".repeat(43)}`;
+    const unknownToken = `morty_anon_v1_${"A".repeat(43)}`;
 
     // Released pages read the status and code, which stay as they were.
     for (const response of [

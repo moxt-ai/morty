@@ -25,7 +25,7 @@ test.each(["allow_once", "reject_once"] as const)(
     async (decision) => {
         const prompt = "Run the approval verification command, then report its result.";
         const command = `node -e "require('node:fs').writeFileSync('permission-result.txt', 'permission approved')"`;
-        await using provider = await FakeOpenAiProvider.start("mobius-test-model", "PERMISSION_DETAILS_DONE", {
+        await using provider = await FakeOpenAiProvider.start("morty-test-model", "PERMISSION_DETAILS_DONE", {
             toolPrompt: prompt,
             toolSequence: [
                 {
@@ -148,7 +148,7 @@ test.each(["allow_once", "reject_once"] as const)(
 test.each(["allow_once", "reject_once"] as const)(
     "Given real Claude requests an external file, When the user selects %s, Then its original input and directory survive recovery and the decision reaches the Agent",
     async (decision) => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-permission-file-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-permission-file-"));
         const file = join(await realpath(directory), "approval-target.txt");
         await writeFile(file, "PERMISSION_FILE_CONTENT");
         try {

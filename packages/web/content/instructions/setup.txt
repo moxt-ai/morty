@@ -11,8 +11,8 @@ Chat origin: {{BASE_URL}}
    Keep Node, the Agent, and working directory in the same operating system. WSL is Linux;
    do not mix its executables or paths with native Windows ones.
 2. Ensure Node.js 22.19.0 or newer and npm (including npx) are installed.
-   Setup installs one exact Morty release in a durable user-owned directory. Morty commands use that installation. Old users must reinstall and pair again; old Mobius state is never inherited.
-   Do not install Mobius globally.
+   Setup installs one exact Morty release in a durable user-owned directory. Morty commands use that installation. Old users must reinstall and pair again; old Morty state is never inherited.
+   Do not install Morty globally.
    Choose your own harness: Codex = `codex`, Claude Code = `claude`, Pi = `pi`.
    Honor an explicit user choice; never substitute another harness.
    Setup reads the current session from the harness itself; do not look up or ask
@@ -51,7 +51,7 @@ Do not retry with this option automatically, delete local state, or create anoth
 identity to bypass confirmation. If the user declines, stop and keep the saved state.
 Approved replacement keeps the user, replaces the Project and Machine, and pairs a
 new Runtime. Links and browsers from the replaced Project stop working.
-Mobius owns Runtime connection state and identifiers; do not save or back them up yourself.
+Morty owns Runtime connection state and identifiers; do not save or back them up yourself.
 Normal setup and reconnection need no registration, separate bind command, or confirmation.
 
 ## Finish

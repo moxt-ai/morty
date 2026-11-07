@@ -45,13 +45,13 @@ def main():
     environment = args.environment
     spec = targets['environments'][environment]
     release = ROOT / '.deployment-output' / environment
-    generated = ROOT / 'node_modules/.cache/mobius-deployment' / environment
+    generated = ROOT / 'node_modules/.cache/morty-deployment' / environment
     generated.mkdir(parents=True, exist_ok=True)
     morty = overlay(ROOT / 'wrangler.jsonc', environment)
     morty.update(name=spec['morty'])
     morty['compatibility_flags'] = list(dict.fromkeys(morty.get('compatibility_flags', []) + ['global_fetch_strictly_public']))
     morty['r2_buckets'] = [{'binding': 'CHAT_ATTACHMENTS_APAC', 'bucket_name': spec['buckets']['attachments']}]
-    morty['vars'] = {'APP_ORIGIN': spec['morty_origin'], 'MOBIUS_BASE_URL': spec['platform_origin'], 'MOBIUS_APP_ID': spec['app_id']}
+    morty['vars'] = {'APP_ORIGIN': spec['morty_origin'], 'MORTY_RELAY_URL': spec['platform_origin'], 'MORTY_SERVICE_ID': spec['app_id']}
     write(generated / 'morty.json', morty)
     env = dict(os.environ, WRANGLER_SEND_METRICS='false', MORTY_SETUP_REVISION=os.environ.get('GITHUB_SHA', subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()))
     env.update(MORTY_WORKER_CONFIG=str(generated / 'morty.json'), MORTY_APP_ORIGIN=spec['morty_origin'], MORTY_ASSET_ORIGIN=spec['asset_origin'])
@@ -69,7 +69,7 @@ def main():
     platform['d1_databases'] = [{'binding': 'PLATFORM_DIRECTORY_DATABASE', 'database_name': spec['d1_name'], 'database_id': spec['d1_id'], 'migrations_dir': str(ROOT / 'packages/relay/migrations/d1')}]
     platform['r2_buckets'] = [{'binding': 'R2_BUCKET_APAC', 'bucket_name': spec['buckets']['platform_apac']}, {'binding': 'R2_BUCKET_WNAM', 'bucket_name': spec['buckets']['platform_wnam']}]
     platform['services'] = [{'binding': 'RECORDING', 'service': spec['recording']}]
-    platform['vars'] = {'RECORDING_PROVIDER_ID': spec['recording'], 'MOBIUS_PLATFORM_ALLOWED_ORIGINS': json.dumps(spec['allowed_origins'])}
+    platform['vars'] = {'RECORDING_PROVIDER_ID': spec['recording'], 'MORTY_ALLOWED_ORIGINS': json.dumps(spec['allowed_origins'])}
     platform.pop('assets', None)
     for label, config in [('recording', recording), ('platform', platform)]:
         write(generated / (label + '.json'), config)

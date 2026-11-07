@@ -45,7 +45,7 @@ async function openedStateRoot(): Promise<{
     readonly installation: string;
     readonly home: string;
 }> {
-    const home = await mkdtemp(join(tmpdir(), "mobius-state-root-"));
+    const home = await mkdtemp(join(tmpdir(), "morty-state-root-"));
     temporaryDirectories.push(home);
     const root = join(home, "state");
     const listed = await runCli(["pair", "list"], environment(home, root));
@@ -64,11 +64,11 @@ function environment(home: string, stateDirectory: string): NodeJS.ProcessEnv {
     return { HOME: home, MORTY_STATE_DIRECTORY: stateDirectory, PATH: dirname(process.execPath), TMPDIR: home };
 }
 
-describe("Mobius state root", () => {
+describe("Morty state root", () => {
     it.each(["pair list", "start"])(
         "Given the version-data directory is a symlink, When the user runs %s, Then the CLI or Worker refuses without creating connection state in the link target",
         async (command) => {
-            const home = await mkdtemp(join(tmpdir(), "mobius-version-container-"));
+            const home = await mkdtemp(join(tmpdir(), "morty-version-container-"));
             temporaryDirectories.push(home);
             const root = join(home, "state");
             const target = join(home, "redirected");
@@ -103,7 +103,7 @@ describe("Mobius state root", () => {
     it.skipIf(process.platform === "win32")(
         "Given a user-owned version-data directory allows other users to write, When the user lists pairings, Then the CLI makes the container private before initializing state",
         async () => {
-            const home = await mkdtemp(join(tmpdir(), "mobius-version-container-"));
+            const home = await mkdtemp(join(tmpdir(), "morty-version-container-"));
             temporaryDirectories.push(home);
             const root = join(home, "state");
             await runCli(["pair", "list"], environment(home, root));
@@ -118,7 +118,7 @@ describe("Mobius state root", () => {
         },
     );
 
-    it("Given an Agent environment whose MORTY_STATE_DIRECTORY names an installation's data, When Mobius runs there, Then it refuses with a configuration error that names the owning root and creates nothing inside that data", async () => {
+    it("Given an Agent environment whose MORTY_STATE_DIRECTORY names an installation's data, When Morty runs there, Then it refuses with a configuration error that names the owning root and creates nothing inside that data", async () => {
         const { root, installation, home } = await openedStateRoot();
         const before = await readdir(installation);
 
@@ -129,7 +129,7 @@ describe("Mobius state root", () => {
         expect(await readdir(installation)).toEqual(before);
     });
 
-    it("Given an installation's data where an earlier nested Mobius only left control files, When Mobius runs there, Then it still refuses instead of treating it as a root", async () => {
+    it("Given an installation's data where an earlier nested Morty only left control files, When Morty runs there, Then it still refuses instead of treating it as a root", async () => {
         const { root, installation, home } = await openedStateRoot();
         await mkdir(join(installation, "installations", "build.morty.cli"), { recursive: true, mode: 0o700 });
 

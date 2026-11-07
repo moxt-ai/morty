@@ -11,7 +11,7 @@ import type { CodexSettings } from "../../src/engine/acp/harness/codex/settings.
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { previewCodexHistory } from "../support/codex-history-preview.ts";
 
-it("Given Codex streams detailed reasoning and a summary, When Mobius forwards the turn, Then Thinking keeps the reasoning stream", async () => {
+it("Given Codex streams detailed reasoning and a summary, When Morty forwards the turn, Then Thinking keeps the reasoning stream", async () => {
     const updates: SessionNotification["update"][] = [];
     let resolveTurnStart: ((value: unknown) => void) | undefined;
     const turnStart = new Promise<unknown>((resolve) => {
@@ -111,8 +111,8 @@ it("Given Codex streams detailed reasoning and a summary, When Mobius forwards t
     ).toBe("Detailed chain of thought");
 });
 
-it("Given saved Codex history contains commentary and detailed reasoning, When Mobius previews it, Then commentary stays assistant output and detailed reasoning becomes Thinking", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-codex-history-summary-"));
+it("Given saved Codex history contains commentary and detailed reasoning, When Morty previews it, Then commentary stays assistant output and detailed reasoning becomes Thinking", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "morty-codex-history-summary-"));
     const executable = join(directory, "codex.mjs");
     const nativeSessionId = "native-codex";
     await writeFile(

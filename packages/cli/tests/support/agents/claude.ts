@@ -57,7 +57,7 @@ export class ClaudeFixture implements AsyncDisposable {
         authentication: Readonly<Record<string, string>>,
     ): Promise<ClaudeFixture> {
         const executable = await resolveTestExecutable("claude", "MORTY_TEST_CLAUDE_PATH");
-        const directory = await mkdtemp(join(tmpdir(), "mobius-agent-daemon-claude-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-agent-daemon-claude-"));
         const missing = join(directory, "missing-agent");
         return new ClaudeFixture(directory, executable, {
             ...authentication,

@@ -496,7 +496,7 @@ async function prepare(options) {
         stack = { ...stack, platformPid };
         writeStack(stack);
         await waitForHttp(
-            `${platformOrigin}/mobius/api/dashboard/health`,
+            `${platformOrigin}/morty/api/dashboard/health`,
             (response) => response.ok,
             90_000,
             "Platform health",
@@ -536,9 +536,9 @@ async function prepare(options) {
 
         const variables = {
             APP_ORIGIN: chatOrigin,
-            MOBIUS_APP_ID: appId,
-            MOBIUS_APP_SECRET: appSecret,
-            MOBIUS_BASE_URL: platformOrigin,
+            MORTY_SERVICE_ID: appId,
+            MORTY_SERVICE_SECRET: appSecret,
+            MORTY_RELAY_URL: platformOrigin,
         };
         const variableArguments = Object.entries(variables).flatMap(([key, value]) => ["--var", `${key}:${value}`]);
 
@@ -950,7 +950,7 @@ async function status(options) {
     if (stack.platformOrigin !== undefined) {
         try {
             platformHttp = (
-                await fetch(`${stack.platformOrigin}/mobius/api/dashboard/health`, {
+                await fetch(`${stack.platformOrigin}/morty/api/dashboard/health`, {
                     signal: AbortSignal.timeout(3_000),
                 })
             ).ok;

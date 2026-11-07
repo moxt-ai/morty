@@ -78,7 +78,7 @@ const readExecution = async (peer: RealDaemonPeer, commandId?: string) => {
 
 // @no-uc: Compatibility; a reconnecting client recovers an unconfirmed submission from the Runtime's execution receipt.
 test("Given commands the Runtime finished, failed, is running or never received, When a client reads the Session execution naming each command, Then the Runtime reports each command's delivery, also after a restart", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-command-delivery-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-command-delivery-"));
     try {
         const executableDirectory = await writeControlledAcpExecutable(directory);
         await withControlledDaemon(
@@ -134,7 +134,7 @@ test("Given commands the Runtime finished, failed, is running or never received,
 
 test("Given a running turn and a later queued command, When the clock moves backwards and the daemon restarts twice, Then both reads report the queued command's restart failure", async () => {
     vi.useFakeTimers({ now: new Date("2026-10-28T10:00:00Z"), toFake: ["Date"] });
-    const directory = await mkdtemp(join(tmpdir(), "mobius-last-turn-order-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-last-turn-order-"));
     try {
         const executableDirectory = await writeControlledAcpExecutable(directory);
         await withControlledDaemon(
@@ -202,7 +202,7 @@ test("Given a running turn and a later queued command, When the clock moves back
 
 // @no-uc: Compatibility; a client that missed a turn's live outcome recovers it from the Runtime's execution receipts.
 test("Given turns that complete, fail, run or are interrupted by a restart, When a client reads the Session execution, Then it reports how the last started turn ended until a newer turn replaces it", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-last-turn-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-last-turn-"));
     try {
         const executableDirectory = await writeControlledAcpExecutable(directory);
         await withControlledDaemon(
@@ -302,7 +302,7 @@ test.each([
 ])(
     "Given a running turn steered by a queued prompt, When the turn $ending and a client reads the Session execution, Then it reports how the steered turn ended, also after a restart",
     async ({ instruction, live, restored }) => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-last-turn-steered-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-last-turn-steered-"));
         try {
             const executableDirectory = await writeControlledAcpExecutable(directory);
             await withControlledDaemon(

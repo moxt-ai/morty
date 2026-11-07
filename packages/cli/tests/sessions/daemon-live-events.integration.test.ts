@@ -213,7 +213,7 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
     readonly timer: ControllableTimer;
 }> {
     const ownsStateDirectory = options.stateDirectory === undefined;
-    const stateDirectory = options.stateDirectory ?? (await mkdtemp(join(tmpdir(), "mobius-daemon-timeline-")));
+    const stateDirectory = options.stateDirectory ?? (await mkdtemp(join(tmpdir(), "morty-daemon-timeline-")));
     const workspace = join(stateDirectory, "workspace");
     const nativeStateDirectory = join(stateDirectory, "native");
     await Promise.all([mkdir(workspace, { recursive: true }), mkdir(nativeStateDirectory, { recursive: true })]);
@@ -510,7 +510,7 @@ describe("daemon V2 live delivery", () => {
     );
 
     it("Given a stored conversation has valid user blocks totaling 1666038 characters, When it reopens after restart, Then paginated history retains all text and a follow-up continues the same native session", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-large-saved-history-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-large-saved-history-"));
         try {
             const first = await startControlledDaemon({ stateDirectory });
             try {
@@ -917,7 +917,7 @@ describe("daemon V2 live delivery", () => {
     }, 15_000);
 
     it("Given a Session emits events before a daemon restart, When Sessions emit after restart, Then event IDs restart per generation and positions stay monotonic per Session", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-event-id-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-event-id-"));
         let firstGenerationId = "";
         let firstPosition = "";
         let lastPosition = 0;
@@ -1000,7 +1000,7 @@ describe("daemon V2 live delivery", () => {
                 if (event.type !== "acp" || event.payload.sessionUpdate !== "agent_thought_chunk") {
                     throw new Error("Expected reasoning");
                 }
-                expect(event.mobiusMetadata?.omitted).not.toBe(true);
+                expect(event.mortyMetadata?.omitted).not.toBe(true);
                 expect(event.payload.content).toMatchObject({ type: "text", text: expect.stringContaining("chunk-") });
             }
         } finally {

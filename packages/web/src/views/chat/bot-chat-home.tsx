@@ -50,7 +50,7 @@ import { OnlineComputerAlternative } from "./computer-switcher.tsx";
 import { ConversationSidebar } from "./conversation-sidebar.tsx";
 import { DevicesDialog } from "./devices-dialog.tsx";
 import { DraftChatControls } from "./draft-chat-controls.tsx";
-import { MobiusSessionPane, MobiusSessionPaneLoading, SessionMessageListSkeleton } from "./mobius-session-pane.tsx";
+import { MortySessionPane, MortySessionPaneLoading, SessionMessageListSkeleton } from "./morty-session-pane.tsx";
 import { PairingInstruction } from "./pairing-instruction.tsx";
 
 /** The centered pre-session failure block: card, grouped action buttons and the report entry. */
@@ -288,12 +288,12 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                             className={chatSessionPaneEnterClassName}
                             key={model.selection.session.result.ready.sessionId}
                         >
-                            <MobiusSessionPane workspace={workspace} />
+                            <MortySessionPane workspace={workspace} />
                         </div>
                     ) : (model.selection.kind === "loading" ||
                           (model.selection.kind === "pending" && model.initialization.kind === "loading")) &&
                       pendingConversation.recovery === null ? (
-                        <MobiusSessionPaneLoading
+                        <MortySessionPaneLoading
                             footer={
                                 <BotChatComposer
                                     attachmentModel={attachmentModel}

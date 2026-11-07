@@ -23,7 +23,7 @@ import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 test("Given the Codex app owns a thread whose last turn it interrupted, When a message sent here waits in its paused queue and is stopped, Then it is withdrawn, the owner's later turns still arrive, and a later message reports when the owner starts it", async () => {
     const entered = Promise.withResolvers<void>();
     let holding = true;
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "OWNER_REPLY", {
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "OWNER_REPLY", {
         beforeFirstText: async (signal) => {
             if (holding) {
                 holding = false;
@@ -35,7 +35,7 @@ test("Given the Codex app owns a thread whose last turn it interrupted, When a m
             }
         },
     });
-    await using codex = await CodexFixture.create(provider, { configuredModel: "mobius-test-model" });
+    await using codex = await CodexFixture.create(provider, { configuredModel: "morty-test-model" });
     await withRealDaemon(new CodexAgentSpecification(), codex.environment, async (peer) => {
         let completed = Promise.withResolvers<{ readonly turn: { readonly status: string } }>();
         using _abort = addAbortListener(peer.signal, () => {
@@ -60,7 +60,7 @@ test("Given the Codex app owns a thread whose last turn it interrupted, When a m
         try {
             await owner.initialize(peer.signal);
             const { thread } = threadStartResponseSchema.parse(
-                await owner.request("thread/start", { cwd: peer.workspace, model: "mobius-test-model" }, peer.signal),
+                await owner.request("thread/start", { cwd: peer.workspace, model: "morty-test-model" }, peer.signal),
             );
             const ownerTurn = async (text: string): Promise<string> =>
                 z

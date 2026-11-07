@@ -12,14 +12,14 @@ import {
 import { listen, port } from "@morty-build/platform-test-support/websocket";
 import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
-import { MobiusRuntimeEngine, type RunLoopParams } from "../../src/exports/engine.ts";
+import { MortyRuntimeEngine, type RunLoopParams } from "../../src/exports/engine.ts";
 
 test.for(["saved", "provided"] as const)(
     "Given an embedded Engine with a %s connection, When successive loops prepare concurrent Sessions with and without scoped environments, Then Agent children receive only their own loop and Session identity",
     async (kind, { signal }) => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(new Date("2026-10-29T00:00:00Z"));
-        const directory = await mkdtemp(join(tmpdir(), "mobius-engine-session-env-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-engine-session-env-"));
         const workspace = join(directory, "workspace");
         const executable = join(directory, "codex.mjs");
         const reports = join(directory, "environments.jsonl");
@@ -67,7 +67,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
         });
         await listen(http);
         const origin = `http://127.0.0.1:${port(http)}`;
-        const engine = new MobiusRuntimeEngine({
+        const engine = new MortyRuntimeEngine({
             engineDataDir: join(directory, "data"),
             agentLaunchEnvironment: {
                 PATH: "",

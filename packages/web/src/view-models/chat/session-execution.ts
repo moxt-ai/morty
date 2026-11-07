@@ -1,4 +1,4 @@
-import type { MobiusClient } from "@morty-build/client";
+import type { MortyClient } from "@morty-build/client";
 import { acceptedTurn, type CurrentTurn, type TurnFailure, transitionCurrentTurn } from "./session-current-turn.ts";
 import {
     type DelegationStage,
@@ -17,7 +17,7 @@ import {
 // update some of them and miss the others.
 
 /** The Runtime's account of the Session's execution, as one read returns it. */
-export type SessionExecutionSnapshot = Awaited<ReturnType<MobiusClient["sessions"]["readSessionExecution"]>>;
+export type SessionExecutionSnapshot = Awaited<ReturnType<MortyClient["sessions"]["readSessionExecution"]>>;
 
 /** A message the Runtime holds queued behind the running turn. */
 export type QueuedCommand = SessionExecutionSnapshot["queued"][number];

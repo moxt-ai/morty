@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import { afterAll, expect, it } from "vitest";
-import { createTestMobiusPlatformApp } from "../../platform-test-support/src/app.ts";
+import { createTestMortyPlatformApp } from "../../platform-test-support/src/app.ts";
 import { revokeMortyCredential, seedMortyService } from "../../platform-test-support/src/service-fixture.ts";
 import { createPlatformGateways, PlatformAuthenticationConfiguration } from "../src/worker.ts";
 import { registerRuntimeFixture } from "./registered-runtime.ts";
@@ -50,7 +50,7 @@ class Inbox {
 }
 
 it("Given a quiet /host connection opened with an AppCredential, When the AppCredential is revoked, Then the Relay's next connection check closes it", async () => {
-    const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+    const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
     const { appId, defaultCredential } = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
     const headers = {
         authorization: `Bearer ${defaultCredential.credential}`,
@@ -83,8 +83,8 @@ it("Given a quiet /host connection opened with an AppCredential, When the AppCre
         {
             headers: {
                 Upgrade: "websocket",
-                "x-mobius-channel-id": runtimeId,
-                "x-mobius-runtime-id": runtimeId,
+                "x-morty-channel-id": runtimeId,
+                "x-morty-runtime-id": runtimeId,
             },
         },
     );

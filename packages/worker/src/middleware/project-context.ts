@@ -49,7 +49,7 @@ export async function cloudProjectId(request: Request): Promise<string | null> {
         const input = await readJsonBody(request.clone());
         const parsed = v.safeParse(v.record(v.string(), v.unknown()), input);
         const ticket = parsed.success ? readProjectCredential(parsed.output[inputKey]) : null;
-        if (ticket?.kind === "mobius_transfer_v2") {
+        if (ticket?.kind === "morty_transfer_v1") {
             return ticket.projectId;
         }
     }

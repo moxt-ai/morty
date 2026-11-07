@@ -1,10 +1,10 @@
 export {
-    type ConnectMobiusClientOptions as ConnectMobiusChannelClientOptions,
-    connectMobiusClient as connectMobiusChannelClient,
+    type ConnectMortyClientOptions as ConnectMortyChannelClientOptions,
+    connectMortyClient as connectMortyChannelClient,
     type ElicitationResponseRequest,
-    MobiusClient as MobiusChannelClient,
-    MobiusClientError as MobiusChannelError,
-    type MobiusRelayUrlProvider,
+    MortyClient as MortyChannelClient,
+    MortyClientError as MortyChannelError,
+    type MortyRelayUrlProvider,
     type PermissionResponseRequest,
 } from "./client.ts";
 export * from "./index.ts";

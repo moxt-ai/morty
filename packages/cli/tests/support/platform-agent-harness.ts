@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { mobiusApiPath } from "@morty-build/client/protocol";
-import { MobiusClient, StaticMobiusCredentialProvider } from "@morty-build/client/server";
+import { mortyApiPath } from "@morty-build/client/protocol";
+import { MortyClient, StaticMortyCredentialProvider } from "@morty-build/client/server";
 import * as v from "valibot";
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { type RunRuntimeOptions, runRuntime } from "../../src/engine/runtime/run.ts";
@@ -48,7 +48,7 @@ export async function createFakeAgentHarnessRuntime(options: {
 }) {
     const cancellation = new AbortController();
     const signal = AbortSignal.any([options.signal, cancellation.signal]);
-    const directory = await mkdtemp(join(tmpdir(), "mobius-agent-harness-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-agent-harness-"));
     const workspace = join(directory, "workspace");
     const harnessState = join(directory, "harness");
     let runtime: Promise<void> | undefined;
@@ -77,7 +77,7 @@ export async function createFakeAgentHarnessRuntime(options: {
             runtimePairingSchema,
             await (
                 await options.server.request(
-                    new Request(`${options.origin}/mobius/api/v1/projects/${options.projectId}/runtime-pairings`, {
+                    new Request(`${options.origin}/morty/api/v1/projects/${options.projectId}/runtime-pairings`, {
                         body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
                         headers: {
                             authorization: `Bearer ${options.credential}`,
@@ -93,7 +93,7 @@ export async function createFakeAgentHarnessRuntime(options: {
             v.object({ runtimeCredential: v.string() }),
             await (
                 await options.server.request(
-                    new Request(`${options.origin}/mobius/api/v1/runtime-pairings/${pairing.pairingId}/redeem`, {
+                    new Request(`${options.origin}/morty/api/v1/runtime-pairings/${pairing.pairingId}/redeem`, {
                         body: JSON.stringify({
                             agents: fakeAgentHarnessCatalog(harnesses),
                             machineName: "Controlled Agent harness",
@@ -107,7 +107,7 @@ export async function createFakeAgentHarnessRuntime(options: {
                 )
             ).json(),
         );
-        const relayUrl = new URL(mobiusApiPath("/v1/runtimes/connect"), options.relayOrigin ?? options.origin);
+        const relayUrl = new URL(mortyApiPath("/v1/runtimes/connect"), options.relayOrigin ?? options.origin);
         relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
         relayUrl.searchParams.set("token", claim.runtimeCredential);
         const localContext = new RuntimeLocalContext(directory, process.env);
@@ -145,10 +145,10 @@ export async function createFakeAgentHarnessRuntime(options: {
         } finally {
             startup.removeEventListener("abort", abort);
         }
-        const client = new MobiusClient({
+        const client = new MortyClient({
             endpoint: options.origin,
             projectId: pairing.projectId,
-            credentialProvider: new StaticMobiusCredentialProvider(options.credential),
+            credentialProvider: new StaticMortyCredentialProvider(options.credential),
             transport: { fetch: async (request: Request) => await options.server.request(request) },
         });
         let disposed = false;

@@ -28,13 +28,13 @@ test.each(["codex", "claude"] as const)(
     async (agentId) => {
         await using provider =
             agentId === "codex"
-                ? await FakeOpenAiProvider.start("mobius-test-model", "IDLE_RECOVERY_REPLY")
+                ? await FakeOpenAiProvider.start("morty-test-model", "IDLE_RECOVERY_REPLY")
                 : await FakeAnthropicProvider.start("claude-sonnet-4-6", "IDLE_RECOVERY_REPLY");
         await using agent =
             provider instanceof FakeOpenAiProvider
                 ? await CodexFixture.create(provider)
                 : await ClaudeFixture.create(provider);
-        const directory = await mkdtemp(join(tmpdir(), `mobius-idle-real-${agentId}-`));
+        const directory = await mkdtemp(join(tmpdir(), `morty-idle-real-${agentId}-`));
         const processes = join(directory, "processes");
         const launcher = join(directory, "agent.mjs");
         await mkdir(processes);

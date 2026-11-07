@@ -1,4 +1,4 @@
-import type { ForkMobiusNativeSessionRequest } from "@morty-build/client";
+import type { ForkMortyNativeSessionRequest } from "@morty-build/client";
 import type { AgentSettingsDiscoverCommand, WorkspaceListCommand } from "@morty-build/client/protocol";
 import { decodeRuntimeDiagnosticsRequest } from "@morty-build/client/protocol";
 import { ProjectPermission } from "../../entity/authentication/project-authentication.ts";
@@ -95,7 +95,7 @@ export class PairingService {
         runtimeId: string,
         token: string,
         operationId: string,
-        input: ForkMobiusNativeSessionRequest,
+        input: ForkMortyNativeSessionRequest,
         signal: AbortSignal,
     ) => {
         const access = await this.#pairings.authorizeProject(projectId, token, ProjectPermission.SessionWrite, signal);

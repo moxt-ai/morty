@@ -13,10 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 
 import cliPackage from "../../package.json" with { type: "json" };
-import {
-    openMobiusCliInstallation,
-    openMobiusControlInstallation,
-} from "../../src/daemon/pairing/pair-local-machine.ts";
+import { openMortyCliInstallation, openMortyControlInstallation } from "../../src/daemon/pairing/pair-local-machine.ts";
 import { processPlatformSupportFor } from "../../src/engine/util/process/platform/index.ts";
 import { installWorkspaceDaemonRelease, workspaceDaemonEnvironment } from "../support/installed-daemon-release.ts";
 
@@ -28,18 +25,18 @@ afterEach(async () => {
     );
 });
 
-describe("Mobius manager version compatibility", () => {
+describe("Morty manager version compatibility", () => {
     it.each(["workspace", "database"])(
         "Given an enabled Runtime has a broken %s, When the user starts the daemon, Then startup fails and releases the worker instead of claiming success",
         async (broken) => {
-            const directory = await mkdtemp(join(tmpdir(), "mobius-worker-fail-fast-"));
+            const directory = await mkdtemp(join(tmpdir(), "morty-worker-fail-fast-"));
             temporaryDirectories.push(directory);
             const workspace = join(directory, "workspace");
             await mkdir(workspace);
             const environment = { ...process.env, MORTY_STATE_DIRECTORY: join(directory, "state") };
             await installWorkspaceDaemonRelease(environment.MORTY_STATE_DIRECTORY);
             const signal = AbortSignal.timeout(30_000);
-            const installation = await openMobiusCliInstallation(signal, environment);
+            const installation = await openMortyCliInstallation(signal, environment);
             const channelId = "channel_start_failure";
             await installation.saveConnection(
                 {
@@ -66,7 +63,7 @@ describe("Mobius manager version compatibility", () => {
                 const result = await runCli(["start"], environment, signal);
                 expect(result.code).toBe(1);
                 expect(result.stdout).not.toContain("Morty daemon is running.");
-                const control = await openMobiusControlInstallation(signal, environment);
+                const control = await openMortyControlInstallation(signal, environment);
                 await expect(readFile(join(control.stateDirectory, "worker.lock"))).rejects.toMatchObject({
                     code: "ENOENT",
                 });
@@ -75,8 +72,8 @@ describe("Mobius manager version compatibility", () => {
             }
         },
     );
-    it("Given the daemon is stopped, When the user runs mobius start, Then the daemon is running without requiring a connection", async () => {
-        const stateRoot = await mkdtemp(join(tmpdir(), "mobius-manager-start-"));
+    it("Given the daemon is stopped, When the user runs morty start, Then the daemon is running without requiring a connection", async () => {
+        const stateRoot = await mkdtemp(join(tmpdir(), "morty-manager-start-"));
         temporaryDirectories.push(stateRoot);
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: stateRoot };
         await installWorkspaceDaemonRelease(stateRoot);
@@ -90,7 +87,7 @@ describe("Mobius manager version compatibility", () => {
             expect(started.stdout).toContain(`Morty daemon ${cliPackage.version} started\n`);
             expect(started.stdout).toContain("Morty daemon is running.\n");
 
-            const control = await openMobiusControlInstallation(AbortSignal.timeout(10_000), environment);
+            const control = await openMortyControlInstallation(AbortSignal.timeout(10_000), environment);
             const managerPid = Number(await readFile(join(control.stateDirectory, "manager.lock"), "utf8"));
             expect(
                 (await processPlatformSupportFor(process.platform).readProcessTable()).filter(
@@ -105,14 +102,14 @@ describe("Mobius manager version compatibility", () => {
     });
 
     it("Given a running daemon, When its worker crashes, Then the manager automatically starts a replacement", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-worker-crash-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-worker-crash-"));
         temporaryDirectories.push(directory);
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: directory };
         await installWorkspaceDaemonRelease(directory);
         const deadline = AbortSignal.timeout(60_000);
         try {
             expect((await runCli(["start"], environment, deadline)).code).toBe(0);
-            const control = await openMobiusControlInstallation(deadline, environment);
+            const control = await openMortyControlInstallation(deadline, environment);
             const manager = await readFile(join(control.stateDirectory, "manager.lock"), "utf8");
             const previous = await readFile(join(control.stateDirectory, "worker.lock"), "utf8");
             const replacement = new Promise<string>((resolve_, reject) => {
@@ -156,21 +153,21 @@ describe("Mobius manager version compatibility", () => {
     });
 
     it("Given no daemon is running, When saved pairings are listed, Then the CLI completes without starting a manager", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-local-list-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-local-list-"));
         temporaryDirectories.push(directory);
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: directory };
         const deadline = AbortSignal.timeout(30_000);
         const result = await runCli(["pair", "list"], environment, deadline);
         expect(result.code).toBe(0);
-        expect(result.stdout).not.toContain("Starting mobius");
-        const control = await openMobiusControlInstallation(deadline, environment);
+        expect(result.stdout).not.toContain("Starting morty");
+        const control = await openMortyControlInstallation(deadline, environment);
         await expect(readFile(join(control.stateDirectory, "manager.lock"))).rejects.toMatchObject({
             code: "ENOENT",
         });
     });
 
     it("Given saved data from another version, When the current CLI lists pairings, Then it uses its own directory and preserves existing data", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-version-data-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-version-data-"));
         temporaryDirectories.push(directory);
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: directory };
         const oldDirectory = join(directory, "versions", "0.0.1");
@@ -178,7 +175,7 @@ describe("Mobius manager version compatibility", () => {
         await writeFile(join(oldDirectory, "retained.sqlite"), "old-version-data");
         const deadline = AbortSignal.timeout(30_000);
         expect((await runCli(["pair", "list"], environment, deadline)).code).toBe(0);
-        const installation = await openMobiusCliInstallation(deadline, environment);
+        const installation = await openMortyCliInstallation(deadline, environment);
         expect(
             installation.stateDirectory.startsWith(`${join(directory, "versions", cliPackage.version)}/`) ||
                 installation.stateDirectory.startsWith(`${join(directory, "versions", cliPackage.version)}\\`),
@@ -190,7 +187,7 @@ describe("Mobius manager version compatibility", () => {
     });
 
     it("Given an installed daemon, When another CLI version starts, Then only the working process changes", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-worker-upgrade-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-worker-upgrade-"));
         temporaryDirectories.push(directory);
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: join(directory, "state") };
         await installWorkspaceDaemonRelease(environment.MORTY_STATE_DIRECTORY);
@@ -206,10 +203,10 @@ describe("Mobius manager version compatibility", () => {
         );
         try {
             expect((await runCli(["start"], environment, deadline)).code).toBe(0);
-            const control = await openMobiusControlInstallation(deadline, environment);
+            const control = await openMortyControlInstallation(deadline, environment);
             const manager = await readFile(join(control.stateDirectory, "manager.lock"), "utf8");
             const worker = await readFile(join(control.stateDirectory, "worker.lock"), "utf8");
-            const data = await openMobiusCliInstallation(deadline, environment);
+            const data = await openMortyCliInstallation(deadline, environment);
             const saved = await data.saveConnection(
                 {
                     appId: "app_isolated",
@@ -256,7 +253,7 @@ describe("Mobius manager version compatibility", () => {
     });
 
     it("Given a stopped daemon with saved data, When a manually installed version starts, Then it reuses the last data directory and retains the pointer after quit", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-manual-data-upgrade-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-manual-data-upgrade-"));
         temporaryDirectories.push(directory);
         const stateRoot = join(directory, "state");
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: stateRoot };
@@ -271,7 +268,7 @@ describe("Mobius manager version compatibility", () => {
         await installWorkspaceDaemonRelease(stateRoot, nextVersion, nextCli);
         const pointer = join(stateRoot, "current-data.txt");
         try {
-            const data = await openMobiusCliInstallation(deadline, environment);
+            const data = await openMortyCliInstallation(deadline, environment);
             const saved = await data.saveConnection(
                 {
                     appId: "app_inherited",
@@ -315,7 +312,7 @@ describe("Mobius manager version compatibility", () => {
     });
 
     it("Given another control client remains connected, When the CLI quits, Then both daemon processes exit", async () => {
-        const stateRoot = await mkdtemp(join(tmpdir(), "mobius-manager-quit-"));
+        const stateRoot = await mkdtemp(join(tmpdir(), "morty-manager-quit-"));
         temporaryDirectories.push(stateRoot);
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: stateRoot };
         await installWorkspaceDaemonRelease(stateRoot);
@@ -323,7 +320,7 @@ describe("Mobius manager version compatibility", () => {
         let heldConnection: Socket | undefined;
         try {
             expect((await runCli(["start"], environment, deadline)).code).toBe(0);
-            const control = await openMobiusControlInstallation(deadline, environment);
+            const control = await openMortyControlInstallation(deadline, environment);
             heldConnection = await holdControlConnection(control.stateDirectory, deadline);
             expect(await runCli(["quit"], environment, deadline)).toEqual({
                 code: 0,
@@ -342,9 +339,9 @@ describe("Mobius manager version compatibility", () => {
     });
 });
 
-describe("Mobius pairing lifecycle", () => {
+describe("Morty pairing lifecycle", () => {
     it("Given two saved pairings in one working daemon, When one is stopped and removed, Then the other stays available", async () => {
-        const stateRoot = await mkdtemp(join(tmpdir(), "mobius-manager-pairing-lifecycle-"));
+        const stateRoot = await mkdtemp(join(tmpdir(), "morty-manager-pairing-lifecycle-"));
         temporaryDirectories.push(stateRoot);
         const executableDirectory = join(stateRoot, "empty-path");
         const workspace = join(stateRoot, "workspace");
@@ -353,8 +350,8 @@ describe("Mobius pairing lifecycle", () => {
         await installWorkspaceDaemonRelease(stateRoot);
         const deadline = AbortSignal.timeout(60_000);
         const relay = await startRelay();
-        const installation = await openMobiusCliInstallation(deadline, environment);
-        const control = await openMobiusControlInstallation(deadline, environment);
+        const installation = await openMortyCliInstallation(deadline, environment);
+        const control = await openMortyControlInstallation(deadline, environment);
         const connection = await installation.saveConnection(
             {
                 appId: "app_test",
@@ -523,8 +520,8 @@ async function startRelay(ready = true): Promise<{ readonly origin: URL; readonl
 function controlSocketPath(stateDirectory: string): string {
     const installationHash = createHash("sha256").update(stateDirectory).digest("hex").slice(0, 32);
     return process.platform === "win32"
-        ? `\\\\.\\pipe\\mobius-${installationHash}`
-        : join(tmpdir(), `mobius-${installationHash}.sock`);
+        ? `\\\\.\\pipe\\morty-${installationHash}`
+        : join(tmpdir(), `morty-${installationHash}.sock`);
 }
 
 async function holdControlConnection(stateDirectory: string, signal: AbortSignal): Promise<Socket> {

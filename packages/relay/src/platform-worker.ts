@@ -11,7 +11,7 @@ import {
 import type { LocalSessionOperations, ProjectStore } from "@morty-build/relay-core";
 import {
     CloudflareChannelRuntime,
-    createMobiusApplication,
+    createMortyApplication,
     createWorkerContext,
     decodeSessionRequest,
     errorMiddleware,
@@ -80,7 +80,7 @@ export interface PlatformRelayBindings extends PlatformStorageBindings, ProjectW
 export interface ProjectPlatformRelayBindings extends PlatformRelayBindings, ProjectDurableObjectExecutionBindings {}
 
 export interface RuntimeExecutionBindings extends PlatformRelayBindings {
-    readonly MOBIUS_RUNTIME_EXECUTION: {
+    readonly MORTY_RUNTIME_EXECUTION: {
         readonly projectId: string;
         readonly runtimeId: string;
         readonly operations: LocalSessionOperations;
@@ -92,10 +92,10 @@ export interface ConfiguredPlatformRelayBindings extends PlatformRelayBindings, 
 
 // A request a Session credential authorizes is routed to its Runtime's RuntimeRelay before any Session route runs.
 function sessionOperations(context: { readonly env: PlatformApplicationBindings }) {
-    if (!("MOBIUS_RUNTIME_EXECUTION" in context.env)) {
+    if (!("MORTY_RUNTIME_EXECUTION" in context.env)) {
         throw new Error("Session operations run only in the Runtime's RuntimeRelay");
     }
-    return context.env.MOBIUS_RUNTIME_EXECUTION.operations;
+    return context.env.MORTY_RUNTIME_EXECUTION.operations;
 }
 
 /** Session operations on the Runtime a Session credential authorized. */
@@ -140,7 +140,7 @@ function submittedTurnState(state: TurnAdmission["state"], answeredAt: string): 
     }
 }
 
-const projectApplication = createMobiusApplication();
+const projectApplication = createMortyApplication();
 const scopedProjectApplication = createProjectApplication();
 const controlApplication = createPlatformControlApplication();
 const PLATFORM_REQUEST_TIMEOUT_MILLISECONDS = 30_000;
@@ -197,8 +197,8 @@ function optionalExecutionContext(context: Pick<Context, "executionCtx">): Conte
 
 export function createPlatformAccessServices(environment: PlatformApplicationBindings) {
     const execution =
-        "MOBIUS_PROJECT_STORE" in environment
-            ? { projectId: environment.MOBIUS_PROJECT_ID, store: environment.MOBIUS_PROJECT_STORE }
+        "MORTY_PROJECT_STORE" in environment
+            ? { projectId: environment.MORTY_PROJECT_ID, store: environment.MORTY_PROJECT_STORE }
             : null;
     const stores = new ProjectDurableObjectStores(environment.PROJECT_RELAY, execution);
     const identityStores = execution === null ? [] : [execution.store];
@@ -260,10 +260,10 @@ export function createPlatformApplication(
                 [
                     "authorization",
                     "content-type",
-                    "x-mobius-byte-length",
-                    "x-mobius-content-kind",
-                    "x-mobius-file-name",
-                    "x-mobius-oidc-provider",
+                    "x-morty-byte-length",
+                    "x-morty-content-kind",
+                    "x-morty-file-name",
+                    "x-morty-oidc-provider",
                 ],
                 authentication.allowedOrigins,
             ),
@@ -483,16 +483,16 @@ export function createPlatformApplication(
             const { access, sessionId, contentKey } = authorized;
             const byteLength = v.parse(
                 v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(CONTENT_WRITE_MAX_BYTES)),
-                Number(context.req.header("x-mobius-byte-length") ?? ""),
+                Number(context.req.header("x-morty-byte-length") ?? ""),
             );
-            const contentKind = v.parse(v.picklist(["image", "resource"]), context.req.header("x-mobius-content-kind"));
+            const contentKind = v.parse(v.picklist(["image", "resource"]), context.req.header("x-morty-content-kind"));
             const mediaType = v.parse(
                 v.pipe(v.string(), v.minLength(1), v.maxLength(255)),
                 context.req.header("content-type"),
             );
             const encodedName = v.parse(
                 v.pipe(v.string(), v.minLength(1), v.maxLength(1_500)),
-                context.req.header("x-mobius-file-name"),
+                context.req.header("x-morty-file-name"),
             );
             const uri = v.parse(v.pipe(v.string(), v.minLength(1), v.maxLength(4_096)), context.req.query("uri"));
             const body = context.req.raw.body;
@@ -684,11 +684,11 @@ export function createPlatformApplication(
             );
         }
         v.parse(v.strictObject({}), await context.req.json());
-        if (!("MOBIUS_PROJECT_STORE" in context.env)) {
+        if (!("MORTY_PROJECT_STORE" in context.env)) {
             throw new Error("Session access is revoked only in the Project's ProjectDO");
         }
         const projectId = validateIdentifier(context.req.param("projectId") ?? "", "project_id");
-        const store = context.env.MOBIUS_PROJECT_STORE;
+        const store = context.env.MORTY_PROJECT_STORE;
         const channel = gateways(context.env).channel;
         const revoked = await context.var.sessionAccess.revoke(
             projectId,
@@ -725,7 +725,7 @@ export function createPlatformApplication(
                 return runtimeRoute;
             }
             const routed =
-                "MOBIUS_RUNTIME_EXECUTION" in context.env
+                "MORTY_RUNTIME_EXECUTION" in context.env
                     ? null
                     : await routeProjectDurableObject(context.req.raw, context.env, authentication.allowedOrigins);
             if (routed !== null) {
@@ -804,8 +804,8 @@ function instrumentPlatformDatabases(
 export function createPlatformGateways(environment: PlatformApplicationBindings): WorkerRuntimeGateways {
     return {
         channel: new CloudflareChannelRuntime({ gateways: { runtimeRelay: environment.RUNTIME_RELAY } }),
-        ...("MOBIUS_RUNTIME_EXECUTION" in environment
-            ? { runtimeOperations: environment.MOBIUS_RUNTIME_EXECUTION.operations }
+        ...("MORTY_RUNTIME_EXECUTION" in environment
+            ? { runtimeOperations: environment.MORTY_RUNTIME_EXECUTION.operations }
             : {}),
     };
 }
@@ -818,7 +818,7 @@ export function createPlatformWorker() {
             environment: ConfiguredPlatformRelayBindings,
             executionContext?: ExecutionContext,
         ): Promise<Response> => {
-            const key = environment.MOBIUS_PLATFORM_ALLOWED_ORIGINS;
+            const key = environment.MORTY_ALLOWED_ORIGINS;
             const configured = configuredApplications.get(key);
             if (configured !== undefined) {
                 return await configured.fetch(request, environment, executionContext);

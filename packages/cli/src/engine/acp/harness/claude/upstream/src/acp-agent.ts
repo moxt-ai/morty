@@ -385,7 +385,7 @@ function parseRenameRequest(params: unknown): RenameRequest {
     return { sessionId, title };
 }
 
-/** Custom (extension) request method Mobius uses to learn whether another client
+/** Custom (extension) request method Morty uses to learn whether another client
  *  continued a session's transcript while this Agent kept an earlier copy. Named
  *  `_session/revision` per the ACP extension convention. */
 const REVISION_METHOD = "_session/revision";
@@ -1016,7 +1016,7 @@ type ProviderConfig = {
  * Extra metadata that the agent provides for each tool_call / tool_update update.
  */
 export type ToolUpdateMeta = {
-    "mobius.backgroundTask"?: { readonly id: string; readonly status: "running" | "unknown" };
+    "morty.backgroundTask"?: { readonly id: string; readonly status: "running" | "unknown" };
     claudeCode?: {
         /* The name of the tool that was used in Claude Code. */
         toolName: string;
@@ -8609,7 +8609,7 @@ export function toAcpNotifications(
                             ...(launchedTaskId === undefined
                                 ? {}
                                 : {
-                                      "mobius.backgroundTask": {
+                                      "morty.backgroundTask": {
                                           id: launchedTaskId,
                                           status: options?.historical ? "unknown" : "running",
                                       },

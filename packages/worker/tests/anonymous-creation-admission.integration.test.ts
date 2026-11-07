@@ -71,7 +71,7 @@ test("Given unavailable abuse protection, When a visitor asks for a new identity
 
 test("Given a rejected Platform credential, When a user tries to pair their Machine, Then the HTTP error keeps its code without echoing the upstream message", async () => {
     const identity = await fixture.createAnonymousUser();
-    const original = fixture.baseConfiguration.MOBIUS_APP_SECRET;
+    const original = fixture.baseConfiguration.MORTY_SERVICE_SECRET;
     try {
         await fixture.changePlatformCredential(`${original.slice(0, -1)}${original.endsWith("A") ? "B" : "A"}`);
         const response = await worker.fetch(

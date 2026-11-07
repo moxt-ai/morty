@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { MobiusClient, StaticMobiusCredentialProvider } from "@morty-build/client/server";
+import { MortyClient, StaticMortyCredentialProvider } from "@morty-build/client/server";
 import {
     createFakeDaemon,
     type FakeAgentHarnessOptions,
@@ -182,7 +182,7 @@ export async function connectControlledAgentRuntime(options: {
     const workspace = join(directory, "workspace");
     await mkdir(workspace);
     await writeWorkspaceFiles(options.behavior.files, workspace, options.signal);
-    const relayUrl = new URL("/mobius/api/v1/runtimes/connect", options.connection.origin);
+    const relayUrl = new URL("/morty/api/v1/runtimes/connect", options.connection.origin);
     relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
     relayUrl.searchParams.set("token", options.connection.runtimeCredential);
     // The Agents can change across restarts, as when the user installs another Agent on the machine.
@@ -297,7 +297,7 @@ export async function createControlledAgentRuntime(options: {
         runtimePairingSchema,
         await (
             await options.server.request(
-                new Request(`${options.origin}/mobius/api/v1/projects/${options.projectId}/runtime-pairings`, {
+                new Request(`${options.origin}/morty/api/v1/projects/${options.projectId}/runtime-pairings`, {
                     body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
                     headers: {
                         authorization: `Bearer ${options.credential}`,
@@ -314,7 +314,7 @@ export async function createControlledAgentRuntime(options: {
         runtimeClaimSchema,
         await (
             await options.server.request(
-                new Request(`${options.origin}/mobius/api/v1/runtime-pairings/${pairing.pairingId}/redeem`, {
+                new Request(`${options.origin}/morty/api/v1/runtime-pairings/${pairing.pairingId}/redeem`, {
                     body: JSON.stringify({
                         agents: harness.catalog,
                         machineName: "Controlled Agent Runtime",
@@ -337,8 +337,8 @@ export async function createControlledAgentRuntime(options: {
         },
         signal: options.signal,
     });
-    const client = new MobiusClient({
-        credentialProvider: new StaticMobiusCredentialProvider(options.credential),
+    const client = new MortyClient({
+        credentialProvider: new StaticMortyCredentialProvider(options.credential),
         endpoint: options.origin,
         projectId: pairing.projectId,
         transport: { fetch: async (request: Request) => await options.server.request(request) },

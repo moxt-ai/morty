@@ -1,23 +1,23 @@
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 
 import {
-    MobiusApiError,
-    MobiusCancellationError,
-    MobiusConnectionError,
-    MobiusError,
-    MobiusProtocolError,
-    MobiusTimeoutError,
-    MobiusValidationError,
+    MortyApiError,
+    MortyCancellationError,
+    MortyConnectionError,
+    MortyError,
+    MortyProtocolError,
+    MortyTimeoutError,
+    MortyValidationError,
 } from "./errors.ts";
-import { HttpTransport, type MobiusHttpTransport } from "./transport/http-transport.ts";
+import { HttpTransport, type MortyHttpTransport } from "./transport/http-transport.ts";
 
 const DEFAULT_OPERATION_TIMEOUT_MILLISECONDS = 20_000;
 
-export interface MobiusPublicRequestOptions {
+export interface MortyPublicRequestOptions {
     readonly endpoint: string;
     readonly observeResponse?: (metadata: { readonly serverTiming: string | null; readonly status: number }) => void;
     readonly operationTimeoutMilliseconds?: number;
-    readonly transport?: MobiusHttpTransport;
+    readonly transport?: MortyHttpTransport;
 }
 
 function normalizeEndpoint(value: string): URL {
@@ -25,7 +25,7 @@ function normalizeEndpoint(value: string): URL {
     try {
         endpoint = new URL(value);
     } catch (cause) {
-        throw new MobiusValidationError("The Mobius endpoint is invalid", { cause });
+        throw new MortyValidationError("The Morty endpoint is invalid", { cause });
     }
     if (
         (endpoint.protocol !== "http:" && endpoint.protocol !== "https:") ||
@@ -34,7 +34,7 @@ function normalizeEndpoint(value: string): URL {
         endpoint.search.length > 0 ||
         endpoint.hash.length > 0
     ) {
-        throw new MobiusValidationError("The Mobius endpoint is invalid");
+        throw new MortyValidationError("The Morty endpoint is invalid");
     }
     if (endpoint.pathname === "/") {
         endpoint.pathname = `${MORTY_API_PREFIX}/`;
@@ -47,7 +47,7 @@ function normalizeEndpoint(value: string): URL {
 function operationTimeout(value: number | undefined): number {
     const timeout = value ?? DEFAULT_OPERATION_TIMEOUT_MILLISECONDS;
     if (!Number.isSafeInteger(timeout) || timeout < 1) {
-        throw new MobiusValidationError("The operation timeout is invalid");
+        throw new MortyValidationError("The operation timeout is invalid");
     }
     return timeout;
 }
@@ -58,7 +58,7 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 
 function record(value: unknown): Readonly<Record<string, unknown>> {
     if (!isRecord(value)) {
-        throw new MobiusProtocolError("The service returned an invalid error response");
+        throw new MortyProtocolError("The service returned an invalid error response");
     }
     return value;
 }
@@ -67,7 +67,7 @@ async function responseValue(response: Response): Promise<unknown> {
     try {
         return await response.json();
     } catch (cause) {
-        throw new MobiusProtocolError("The service returned invalid JSON", { cause });
+        throw new MortyProtocolError("The service returned invalid JSON", { cause });
     }
 }
 
@@ -76,18 +76,18 @@ async function throwApiError(response: Response): Promise<never> {
     const code = error["code"];
     const message = error["message"];
     if (typeof code !== "string" || typeof message !== "string") {
-        throw new MobiusProtocolError("The service returned an invalid error response");
+        throw new MortyProtocolError("The service returned an invalid error response");
     }
-    throw new MobiusApiError(code, message, response.status);
+    throw new MortyApiError(code, message, response.status);
 }
 
-export class MobiusPublicRequestExecutor {
+export class MortyPublicRequestExecutor {
     readonly #endpoint: URL;
-    readonly #observeResponse: MobiusPublicRequestOptions["observeResponse"];
+    readonly #observeResponse: MortyPublicRequestOptions["observeResponse"];
     readonly #operationTimeoutMilliseconds: number;
-    readonly #transport: MobiusHttpTransport;
+    readonly #transport: MortyHttpTransport;
 
-    constructor(options: MobiusPublicRequestOptions) {
+    constructor(options: MortyPublicRequestOptions) {
         this.#endpoint = normalizeEndpoint(options.endpoint);
         this.#observeResponse = options.observeResponse;
         this.#operationTimeoutMilliseconds = operationTimeout(options.operationTimeoutMilliseconds);
@@ -97,7 +97,7 @@ export class MobiusPublicRequestExecutor {
     readonly post = async (path: string, body: unknown, signal: AbortSignal): Promise<unknown> => {
         const encoded = JSON.stringify(body);
         if (typeof encoded !== "string") {
-            throw new MobiusValidationError("The Mobius request body is invalid");
+            throw new MortyValidationError("The Morty request body is invalid");
         }
         const timeout = AbortSignal.timeout(this.#operationTimeoutMilliseconds);
         const requestSignal = AbortSignal.any([signal, timeout]);
@@ -120,15 +120,15 @@ export class MobiusPublicRequestExecutor {
             return await responseValue(response);
         } catch (cause) {
             if (signal.aborted) {
-                throw new MobiusCancellationError({ cause });
+                throw new MortyCancellationError({ cause });
             }
             if (timeout.aborted) {
-                throw new MobiusTimeoutError({ cause });
+                throw new MortyTimeoutError({ cause });
             }
-            if (cause instanceof MobiusError) {
+            if (cause instanceof MortyError) {
                 throw cause;
             }
-            throw new MobiusConnectionError("The Mobius service could not be reached", { cause });
+            throw new MortyConnectionError("The Morty service could not be reached", { cause });
         }
     };
 }

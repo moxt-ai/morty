@@ -1,54 +1,54 @@
-export class MobiusError extends Error {
+export class MortyError extends Error {
     readonly code: string;
 
     constructor(code: string, message: string, options: ErrorOptions = {}) {
         super(message, options);
         this.code = code;
-        this.name = "MobiusError";
+        this.name = "MortyError";
     }
 }
 
-export class MobiusApiError extends MobiusError {
+export class MortyApiError extends MortyError {
     readonly status: number;
 
     constructor(code: string, message: string, status: number, options: ErrorOptions = {}) {
         super(code, message, options);
-        this.name = "MobiusApiError";
+        this.name = "MortyApiError";
         this.status = status;
     }
 }
 
-export class MobiusCancellationError extends MobiusError {
+export class MortyCancellationError extends MortyError {
     constructor(options: ErrorOptions = {}) {
-        super("operation_cancelled", "The Mobius operation was cancelled", options);
-        this.name = "MobiusCancellationError";
+        super("operation_cancelled", "The Morty operation was cancelled", options);
+        this.name = "MortyCancellationError";
     }
 }
 
-export class MobiusConnectionError extends MobiusError {
+export class MortyConnectionError extends MortyError {
     constructor(message: string, options: ErrorOptions = {}) {
         super("service_unavailable", message, options);
-        this.name = "MobiusConnectionError";
+        this.name = "MortyConnectionError";
     }
 }
 
-export class MobiusProtocolError extends MobiusError {
+export class MortyProtocolError extends MortyError {
     constructor(message: string, options: ErrorOptions = {}) {
         super("invalid_service_response", message, options);
-        this.name = "MobiusProtocolError";
+        this.name = "MortyProtocolError";
     }
 }
 
-export class MobiusTimeoutError extends MobiusError {
+export class MortyTimeoutError extends MortyError {
     constructor(options: ErrorOptions = {}) {
-        super("operation_timeout", "The Mobius operation timed out", options);
-        this.name = "MobiusTimeoutError";
+        super("operation_timeout", "The Morty operation timed out", options);
+        this.name = "MortyTimeoutError";
     }
 }
 
-export class MobiusValidationError extends MobiusError {
+export class MortyValidationError extends MortyError {
     constructor(message: string, options: ErrorOptions = {}) {
         super("invalid_request", message, options);
-        this.name = "MobiusValidationError";
+        this.name = "MortyValidationError";
     }
 }

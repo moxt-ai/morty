@@ -1,4 +1,4 @@
-import { MobiusError } from "@morty-build/client";
+import { MortyError } from "@morty-build/client";
 import { createStore } from "zustand/vanilla";
 import { isDisplayableImageType } from "../../components/agents/displayable-image-type.ts";
 import {
@@ -160,7 +160,7 @@ const HTML_FAILURE_MESSAGES: Readonly<Record<HtmlPreviewFailure, string>> = {
 };
 
 function readFailure(cause: unknown, timedOut: boolean, path: string): Extract<FilePreviewState, { kind: "failed" }> {
-    const code = cause instanceof MobiusError ? cause.code : null;
+    const code = cause instanceof MortyError ? cause.code : null;
     if (timedOut || code === "operation_timeout") {
         return { kind: "failed", code: "timeout", path, message: "The local file preview timed out. Try reloading." };
     }

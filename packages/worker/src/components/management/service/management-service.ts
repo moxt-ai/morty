@@ -208,7 +208,7 @@ async function derivedToken(
         ["sign"],
     );
     const signed = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(JSON.stringify(input)));
-    return `mobius_anon_v2_${btoa(String.fromCharCode(...new Uint8Array(signed)))
+    return `morty_anon_v1_${btoa(String.fromCharCode(...new Uint8Array(signed)))
         .replaceAll("+", "-")
         .replaceAll("/", "_")
         .replace(/=+$/u, "")}`;

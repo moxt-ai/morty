@@ -26,7 +26,7 @@ test("Given real Pi is waiting for model output, When two multi-block steers are
         },
     });
     await using fixture = await PiFixture.create(provider);
-    const cwd = await mkdtemp(join(tmpdir(), "mobius-pi-steering-identity-"));
+    const cwd = await mkdtemp(join(tmpdir(), "morty-pi-steering-identity-"));
     const updates: IdentifiedSessionUpdate[] = [];
     const endpoint = new PiAgentConnection({
         command: fixture.executable,
@@ -125,7 +125,7 @@ test("Given real Pi transforms input, When a user submits a prompt, Then raw use
                 : { action: "continue" });
         }`,
     );
-    const cwd = await mkdtemp(join(tmpdir(), "mobius-pi-raw-identity-"));
+    const cwd = await mkdtemp(join(tmpdir(), "morty-pi-raw-identity-"));
     const updates: SessionUpdate[] = [];
     const image: ContentBlock = { type: "image", data: imageFixture(128).toString("base64"), mimeType: "image/png" };
     const endpoint = new PiAcpEndpoint({
@@ -216,7 +216,7 @@ test("Given real Pi streams multiple messages, When the harness emits chunks, re
     await using provider = await FakeOpenAiProvider.start("gpt-4.1", "PI_IDENTITY_REPLY");
     await using fixture = await PiFixture.create(provider);
     await fixture.overrideSettings({ quietStartup: false });
-    const cwd = await mkdtemp(join(tmpdir(), "mobius-pi-message-identity-"));
+    const cwd = await mkdtemp(join(tmpdir(), "morty-pi-message-identity-"));
     const updates: IdentifiedSessionUpdate[] = [];
     const observed: IdentifiedSessionUpdate[] = [];
     const endpoint = new PiAgentConnection({

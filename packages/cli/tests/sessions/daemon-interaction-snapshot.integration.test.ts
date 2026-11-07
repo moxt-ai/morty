@@ -90,7 +90,7 @@ class Messages {
 }
 
 test("Given an Agent was inspected transiently, When its first Turn materializes and resolves interactions, Then readiness is recorded and resolved interactions do not appear in its snapshot", async () => {
-    const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-interaction-snapshot-"));
+    const stateDirectory = await mkdtemp(join(tmpdir(), "morty-interaction-snapshot-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);
     const relay = createServer((_request, response) => response.writeHead(404).end());
@@ -270,7 +270,7 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
 }, 30_000);
 
 test("Given an Agent announced a tool call with its input, When it requests permission referencing only that tool call, Then the permission carries the announced input, locations and kind", async () => {
-    const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-announced-permission-"));
+    const stateDirectory = await mkdtemp(join(tmpdir(), "morty-announced-permission-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);
     const relay = createServer((_request, response) => response.writeHead(404).end());
@@ -379,7 +379,7 @@ test("Given an Agent announced a tool call with its input, When it requests perm
 }, 30_000);
 
 test("Given an Agent announced a tool call and then sent a rawInput null update, When it requests permission referencing only that tool call, Then the permission keeps the announced input", async () => {
-    const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-null-input-permission-"));
+    const stateDirectory = await mkdtemp(join(tmpdir(), "morty-null-input-permission-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);
     const relay = createServer((_request, response) => response.writeHead(404).end());
@@ -488,7 +488,7 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
 }, 30_000);
 
 test("Given an Agent's first recorded form of a tool call is an update, When it requests permission referencing only that tool call, Then the permission carries the update's input, locations and kind", async () => {
-    const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-orphan-update-permission-"));
+    const stateDirectory = await mkdtemp(join(tmpdir(), "morty-orphan-update-permission-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);
     const relay = createServer((_request, response) => response.writeHead(404).end());
@@ -597,7 +597,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
 }, 30_000);
 
 test("Given a real daemon prepared a Session, When Platform queries its metadata, Then the daemon returns it without closing the Runtime", async () => {
-    const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-session-query-"));
+    const stateDirectory = await mkdtemp(join(tmpdir(), "morty-session-query-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);
     const relay = createServer((_request, response) => response.writeHead(404).end());
@@ -683,7 +683,7 @@ test("Given a real daemon prepared a Session, When Platform queries its metadata
 }, 30_000);
 
 test("Given a real daemon persisted a Session, When Platform restores it by identifier, Then history is loaded once and remains available for paging", async () => {
-    const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-session-restore-"));
+    const stateDirectory = await mkdtemp(join(tmpdir(), "morty-session-restore-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);
     const relay = createServer((_request, response) => response.writeHead(404).end());
@@ -823,7 +823,7 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
 }, 30_000);
 
 test("Given queued prompts from the running Agent identity and another one, When an active-turn snapshot is taken for the running identity, Then it reports its own queued prompt with that prompt's files and excludes the foreign one", async () => {
-    const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-queued-identity-"));
+    const stateDirectory = await mkdtemp(join(tmpdir(), "morty-queued-identity-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);
     const relay = createServer((_request, response) => response.writeHead(404).end());

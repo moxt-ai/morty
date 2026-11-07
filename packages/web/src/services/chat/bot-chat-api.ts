@@ -1,9 +1,9 @@
 import {
     HttpTransport,
-    MobiusClient,
-    type MobiusHttpTransport,
-    type MobiusLiveEventTransport,
-    type MobiusTransportSessionEvent,
+    MortyClient,
+    type MortyHttpTransport,
+    type MortyLiveEventTransport,
+    type MortyTransportSessionEvent,
     WsTransport,
 } from "@morty-build/client";
 import {
@@ -80,20 +80,15 @@ const managedSessionSchema = v.pipe(
 export type ManagedChatSession = v.InferOutput<typeof managedSessionSchema>;
 /** The Chat Worker sends this once the status stream reaches the Runtime and follows the Sessions. */
 const MANAGED_SESSION_STATUSES_FOLLOWING_KIND = "managed-session.statuses.following";
-/** Only the Chat Worker's `sessions: "owned"` promise is understood; anything else keeps the older contract. */
-const managedSessionStatusesFollowingSchema = v.object({ sessions: v.optional(v.unknown()) });
-const currentManagedSessionStatusesSchema = v.object({
+const managedSessionStatusesFollowingSchema = v.object({
+    sessions: v.literal("owned"),
     statuses: v.array(v.pipe(v.object({ sessionId: identifier, status: managedSessionStatusSchema }), v.readonly())),
 });
-/**
- * What the Chat Worker's Session stream tells this page: it follows the Sessions with their current statuses, a
- * Session's activity changed, or the Runtime closed one. It follows every Session the user owns, including later ones
- * (`owned`), or, from an older Chat Worker, only the Sessions listed when it started (`listed`).
- */
+/** Current statuses precede changes for every owned Session, including Sessions created after subscription. */
 export type ManagedSessionEvent =
     | {
           readonly kind: typeof MANAGED_SESSION_STATUSES_FOLLOWING_KIND;
-          readonly sessions: "owned" | "listed";
+          readonly sessions: "owned";
           readonly statuses: readonly {
               readonly sessionId: string;
               readonly status: ManagedChatSession["status"];
@@ -115,9 +110,9 @@ const chatRuntimeSchema = v.object({
 export type ChatRuntime = v.InferOutput<typeof chatRuntimeSchema>;
 const runtimeConfigurationSchema = v.object({ runtime: chatRuntimeSchema });
 const networkDiagnosticSchema = v.strictObject({
-    mobiusDaemonLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
-    mobiusOrigin: v.pipe(v.string(), v.url()),
-    mortyMobiusLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
+    relayRuntimeLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
+    relayOrigin: v.pipe(v.string(), v.url()),
+    mortyRelayLatencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
 });
 export type BotRuntimeConfiguration = v.InferOutput<typeof runtimeConfigurationSchema>;
 export type ChatAgentSelection = {
@@ -157,7 +152,7 @@ const sessionAccessSchema = v.object({
 });
 const localSessionEntrySchema = v.object({
     entryId: identifier,
-    mobiusSessionIds: v.array(identifier),
+    mortySessionIds: v.array(identifier),
     nativeSessionId: identifier,
     title: v.string(),
     directoryId: v.string(),
@@ -203,7 +198,7 @@ function sessionEndpoint(value: string): string {
     return endpoint.origin;
 }
 
-class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTransport {
+class BrowserSessionTransport implements MortyHttpTransport, MortyLiveEventTransport {
     readonly #http = new HttpTransport();
     #webSocket = new WsTransport();
 
@@ -241,7 +236,7 @@ class BrowserSessionTransport implements MobiusHttpTransport, MobiusLiveEventTra
         }
     };
 
-    readonly openSessionLiveEvents = async (request: Request): Promise<ReadableStream<MobiusTransportSessionEvent>> => {
+    readonly openSessionLiveEvents = async (request: Request): Promise<ReadableStream<MortyTransportSessionEvent>> => {
         recordBrowserDiagnostic({
             at: new Date().toISOString(),
             component: "relay",
@@ -384,7 +379,7 @@ export class BotChatApi {
         },
         entry: {
             entryId: access.sessionId,
-            mobiusSessionIds: [access.sessionId],
+            mortySessionIds: [access.sessionId],
             nativeSessionId: access.sessionId,
             title,
             directoryId: access.workspaceRef,
@@ -407,76 +402,31 @@ export class BotChatApi {
         if (token === null) {
             throw new CloudApiError("UNAUTHENTICATED", "Your session is unavailable.");
         }
-        const stream = new AbortController();
-        const streamSignal = AbortSignal.any([signal, stream.signal]);
-        // Events that arrive while the current statuses are read for an older Chat Worker, delivered after them.
-        let held: ManagedSessionEvent[] | null = null;
-        const deliver = (event: ManagedSessionEvent): void => {
-            if (held === null) {
-                receive(event);
-            } else {
-                held.push(event);
-            }
-        };
-        try {
-            await this.#subscribe(
-                new Request(
-                    new URL(
-                        `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/managed-session/status-events`,
-                        this.#origin,
-                    ),
-                    { method: "POST", headers: { authorization: `Bearer ${token}` }, signal: streamSignal },
+        await this.#subscribe(
+            new Request(
+                new URL(
+                    `/morty/api/chat/projects/${encodeURIComponent(this.#projectId)}/bots/${encodeURIComponent(v.parse(identifier, botId))}/managed-session/status-events`,
+                    this.#origin,
                 ),
-                (data) => {
-                    // A newer Chat Worker may send other kinds; this page skips them and keeps its stream.
-                    switch (decodeMessageKind(data)) {
-                        case MANAGED_SESSION_STATUSES_FOLLOWING_KIND: {
-                            const message: unknown = JSON.parse(data);
-                            if (v.parse(managedSessionStatusesFollowingSchema, message).sessions === "owned") {
-                                const { statuses } = v.parse(currentManagedSessionStatusesSchema, message);
-                                // Current statuses supersede a read still in progress and the changes it holds.
-                                held = null;
-                                receive({ kind: MANAGED_SESSION_STATUSES_FOLLOWING_KIND, sessions: "owned", statuses });
-                                return;
-                            }
-                            // An older Chat Worker sends no current statuses, so they are read once it follows; a
-                            // change that arrives meanwhile is delivered after them and wins.
-                            const backlog: ManagedSessionEvent[] = [];
-                            held = backlog;
-                            this.managedSessions(botId, streamSignal).then(
-                                (listed) => {
-                                    if (held !== backlog || streamSignal.aborted) {
-                                        return;
-                                    }
-                                    held = null;
-                                    receive({
-                                        kind: MANAGED_SESSION_STATUSES_FOLLOWING_KIND,
-                                        sessions: "listed",
-                                        statuses: listed.map((session) => ({
-                                            sessionId: session.id,
-                                            status: session.status,
-                                        })),
-                                    });
-                                    for (const event of backlog) {
-                                        receive(event);
-                                    }
-                                },
-                                (cause: unknown) => stream.abort(cause),
-                            );
-                            return;
-                        }
-                        case SESSION_CLOSE_NOTICE_KIND:
-                            deliver(decodeSessionCloseNoticeEvent(data));
-                            return;
-                        case "session.status.changed":
-                            deliver(decodeSessionStatusChangedEvent(data));
-                            return;
+                { method: "POST", headers: { authorization: `Bearer ${token}` }, signal },
+            ),
+            (data) => {
+                switch (decodeMessageKind(data)) {
+                    case MANAGED_SESSION_STATUSES_FOLLOWING_KIND: {
+                        const message: unknown = JSON.parse(data);
+                        const { sessions, statuses } = v.parse(managedSessionStatusesFollowingSchema, message);
+                        receive({ kind: MANAGED_SESSION_STATUSES_FOLLOWING_KIND, sessions, statuses });
+                        return;
                     }
-                },
-            );
-        } finally {
-            stream.abort(new Error("Session status stream ended"));
-        }
+                    case SESSION_CLOSE_NOTICE_KIND:
+                        receive(decodeSessionCloseNoticeEvent(data));
+                        return;
+                    case "session.status.changed":
+                        receive(decodeSessionStatusChangedEvent(data));
+                        return;
+                }
+            },
+        );
     };
     readonly archiveManagedSession = async (botId: string, sessionId: string, signal: AbortSignal) =>
         v.parse(
@@ -601,7 +551,7 @@ export class BotChatApi {
         botId: string,
         runtimeId: string,
         operationId: string,
-        input: Parameters<MobiusClient["runtimes"]["forkNativeSession"]>[2],
+        input: Parameters<MortyClient["runtimes"]["forkNativeSession"]>[2],
         signal: AbortSignal,
     ) =>
         decodeNativeSessionResult(
@@ -618,7 +568,7 @@ export class BotChatApi {
     readonly nativeSessions = async (
         botId: string,
         runtimeId: string,
-        input: Parameters<MobiusClient["runtimes"]["nativeSessions"]>[1],
+        input: Parameters<MortyClient["runtimes"]["nativeSessions"]>[1],
         signal: AbortSignal,
     ) => {
         if (input.action === "list") {
@@ -672,7 +622,7 @@ export class BotChatApi {
         sessionId: string,
         signal: AbortSignal,
         initialAccess?: ChatAccess,
-    ): Promise<MobiusClient> => {
+    ): Promise<MortyClient> => {
         const readAccess = async (parent: AbortSignal) => {
             for (let attempt = 0; attempt < 2; attempt += 1) {
                 try {
@@ -700,7 +650,7 @@ export class BotChatApi {
         if (access.sessionId !== sessionId) {
             throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session could not be verified.");
         }
-        return new MobiusClient({
+        return new MortyClient({
             endpoint,
             projectId,
             operationTimeoutMilliseconds: 120000,

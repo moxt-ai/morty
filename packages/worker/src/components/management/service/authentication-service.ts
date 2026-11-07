@@ -110,14 +110,11 @@ export class AuthenticationService {
         if (stored === null) {
             return { kind: "unknown" };
         }
-        // Only a successfully authenticated token can supply the missing historical fact. Hashes alone cannot.
-        const kind =
-            stored.kind ??
-            (stored.deviceId !== null
-                ? "browser"
-                : parsed.output.startsWith("mobius_recovery_v1.")
-                  ? "recovery"
-                  : "local");
+        // Missing authority is never inferred from a token's representation.
+        if (stored.kind === null) {
+            return { kind: "unknown" };
+        }
+        const kind = stored.kind;
         let credential: Credential;
         switch (kind) {
             case "browser":
@@ -153,9 +150,6 @@ export class AuthenticationService {
             )
         ) {
             return { kind: "revoked" };
-        }
-        if (stored.kind === null) {
-            await this.identities.identifyLegacyCredential(stored.credentialId, kind, signal);
         }
         return { kind: "active", credential };
     };

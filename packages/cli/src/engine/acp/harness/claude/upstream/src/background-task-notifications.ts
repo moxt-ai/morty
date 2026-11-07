@@ -56,7 +56,7 @@ export function backgroundTaskUpdate(task: BackgroundTaskNotification, linked: b
                 : "failed";
     const fields = {
         toolCallId: task.toolUseId ?? `claude-task-${task.id}`,
-        _meta: { "mobius.backgroundTask": { id: task.id, status: task.status } },
+        _meta: { "morty.backgroundTask": { id: task.id, status: task.status } },
         ...(status === undefined ? {} : { status }),
         content: [{ type: "content", content: { type: "text", text: task.summary } }],
     } satisfies Omit<Extract<SessionNotification["update"], { sessionUpdate: "tool_call_update" }>, "sessionUpdate">;

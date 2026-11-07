@@ -1,4 +1,4 @@
-import type { MobiusClient, PromptAttachment } from "@morty-build/client";
+import type { MortyClient, PromptAttachment } from "@morty-build/client";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 
 async function contentKey(bytes: Uint8Array): Promise<string> {
@@ -7,7 +7,7 @@ async function contentKey(bytes: Uint8Array): Promise<string> {
 }
 
 export async function uploadPromptAttachment(
-    sessions: MobiusClient["sessions"],
+    sessions: MortyClient["sessions"],
     sessionId: string,
     attachment: ComposerAttachment,
     signal: AbortSignal,
@@ -30,7 +30,7 @@ export async function uploadPromptAttachment(
 }
 
 export async function uploadPromptAttachments(
-    sessions: MobiusClient["sessions"],
+    sessions: MortyClient["sessions"],
     sessionId: string,
     attachments: readonly ComposerAttachment[],
     signal: AbortSignal,

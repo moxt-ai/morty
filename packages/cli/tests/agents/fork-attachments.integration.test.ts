@@ -33,7 +33,7 @@ test.each(["pi", "claude", "codex"] as const)(
             agentId === "claude"
                 ? await FakeAnthropicProvider.start("claude-sonnet-4-6", "ATTACHMENTS_SAVED")
                 : await FakeOpenAiProvider.start(
-                      agentId === "pi" ? "gpt-4.1" : "mobius-test-model",
+                      agentId === "pi" ? "gpt-4.1" : "morty-test-model",
                       "ATTACHMENTS_SAVED",
                   );
         await using agent =
@@ -120,7 +120,7 @@ test.each(["pi", "claude", "codex"] as const)(
                     const imageKey = createHash("sha256").update(image).digest("hex");
                     expect.soft(images).toContainEqual(expect.objectContaining({ imageKey, mimeType: "image/png" }));
                     if (images.some((content) => content.imageKey === imageKey)) {
-                        expect(await download(peer, childId, `mobius-content:image:${imageKey}`)).toEqual(image);
+                        expect(await download(peer, childId, `morty-content:image:${imageKey}`)).toEqual(image);
                     }
                     expect(
                         chunks.some(
@@ -218,7 +218,7 @@ async function nativeSource(peer: RealDaemonPeer, agentId: string, configDirecto
             if (listed.action !== "list") {
                 throw new Error("Expected native session list");
             }
-            const source = listed.entries.find((entry) => entry.mobiusSessionIds.includes(peer.sessionId));
+            const source = listed.entries.find((entry) => entry.mortySessionIds.includes(peer.sessionId));
             if (source !== undefined) {
                 return source;
             }

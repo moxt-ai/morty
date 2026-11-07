@@ -6,7 +6,7 @@ import { provisionLocalService } from "../../../scripts/provision-local-service.
 import type { E2EHarness } from "./harness.ts";
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const mobiusRepository = repository;
+const mortyRepository = repository;
 const fixtureDirectory = fileURLToPath(new URL("../fixtures", import.meta.url));
 const platformConfiguration = join(fixtureDirectory, "wrangler.platform.jsonc");
 const chatConfiguration = join(fixtureDirectory, "wrangler.chat.jsonc");
@@ -77,22 +77,20 @@ export class LocalStack {
     }
 
     async startPlatform() {
-        const revision = (
-            await this.harness.run("git", ["rev-parse", "HEAD"], { cwd: mobiusRepository })
-        ).stdout.trim();
-        this.harness.record("mobiusRevision", revision);
+        const revision = (await this.harness.run("git", ["rev-parse", "HEAD"], { cwd: mortyRepository })).stdout.trim();
+        this.harness.record("mortyRevision", revision);
         await this.harness.stage("migrate-platform", async () => {
             await migrate(
                 this.harness,
                 platformConfiguration,
                 "PLATFORM_DIRECTORY_DATABASE",
                 this.directories.platform,
-                mobiusRepository,
+                mortyRepository,
             );
         });
         await this.harness.stage("start-platform", async () => {
             await this.harness.startWorker(
-                "mobius-platform",
+                "morty-platform",
                 wranglerExecutable,
                 [
                     "dev",
@@ -107,12 +105,9 @@ export class LocalStack {
                     "--persist-to",
                     this.directories.platform,
                 ],
-                { cwd: mobiusRepository },
+                { cwd: mortyRepository },
             );
-            await this.harness.checkHttp(
-                `${this.platformOrigin}/mobius/api/dashboard/health`,
-                "mobius-platform health",
-            );
+            await this.harness.checkHttp(`${this.platformOrigin}/morty/api/dashboard/health`, "morty-platform health");
         });
         return await this.harness.stage("provision-morty-service", () =>
             provisionLocalService(platformConfiguration, this.directories.platform, this.harness.signal),
@@ -122,9 +117,9 @@ export class LocalStack {
     async startChat(application: { readonly appId: string; readonly appSecret: string }) {
         const variables = {
             APP_ORIGIN: this.chatOrigin,
-            MOBIUS_APP_ID: application.appId,
-            MOBIUS_APP_SECRET: application.appSecret,
-            MOBIUS_BASE_URL: this.platformOrigin,
+            MORTY_SERVICE_ID: application.appId,
+            MORTY_SERVICE_SECRET: application.appSecret,
+            MORTY_RELAY_URL: this.platformOrigin,
         };
         await this.harness.run(wranglerExecutable, [
             "r2",

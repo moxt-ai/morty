@@ -30,7 +30,7 @@ import { createDeviceAccessStore, type DeviceAccessStore } from "./device-access
 import { createDraftControlsStore, type DraftControlsStore, draftConfiguration } from "./draft-controls-store.ts";
 import { createLinkedDevicesStore, type LinkedDevicesStore } from "./linked-devices-store.ts";
 import { createNetworkDiagnosticStore, type NetworkDiagnosticStore } from "./network-diagnostic-store.ts";
-import type { SelectedMobiusSession } from "./open-session.ts";
+import type { SelectedMortySession } from "./open-session.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
 import { createRuntimeRecovery } from "./runtime-recovery.ts";
 import { connectionWaitsForRuntime } from "./session-connection.ts";
@@ -48,7 +48,7 @@ interface ChatWorkspaceSidebar {
 }
 
 interface ChatWorkspacePaneEntry {
-    readonly session: SelectedMobiusSession;
+    readonly session: SelectedMortySession;
     readonly model: ReturnType<typeof createSessionPaneModel>;
 }
 
@@ -150,7 +150,7 @@ export function createChatWorkspace(options: {
         | ((deviceId: string, signal: AbortSignal) => Promise<OpenWindowsAfterDisconnect>)
         | undefined;
     readonly networkDiagnostics?: {
-        readonly measureBrowserMobius: (origin: string, signal: AbortSignal) => Promise<number>;
+        readonly measureBrowserRelay: (origin: string, signal: AbortSignal) => Promise<number>;
         readonly measureBrowserMorty: (signal: AbortSignal) => Promise<number>;
     };
 }): ChatWorkspace {
@@ -294,11 +294,11 @@ export function createChatWorkspace(options: {
             },
         }),
         networkDiagnostic: createNetworkDiagnosticStore({
-            measureBrowserMobius: (origin, signal) => {
+            measureBrowserRelay: (origin, signal) => {
                 if (options.networkDiagnostics === undefined) {
                     return Promise.reject(new Error("Network diagnostics are unavailable."));
                 }
-                return options.networkDiagnostics.measureBrowserMobius(origin, signal);
+                return options.networkDiagnostics.measureBrowserRelay(origin, signal);
             },
             measureBrowserMorty: (signal) => {
                 if (options.networkDiagnostics === undefined) {

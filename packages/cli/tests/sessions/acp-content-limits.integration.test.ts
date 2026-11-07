@@ -12,7 +12,7 @@ import { UnretainedExternalContentStore } from "../support/unretained-external-c
 import { fakeAgent, RecordingObserver } from "./acp-feature-fixture.ts";
 
 describe("acp content limits", () => {
-    it("Given an ACP tool returns inline image bytes, When Mobius records the tool update, Then the live event exposes an external image reference without inline bytes", async () => {
+    it("Given an ACP tool returns inline image bytes, When Morty records the tool update, Then the live event exposes an external image reference without inline bytes", async () => {
         const observer = new RecordingObserver();
         const manager = new SessionManager({
             observer,
@@ -121,7 +121,7 @@ describe("acp content limits", () => {
         }
     });
 
-    it("Given an ACP tool returns more than 500,000 characters, When Mobius records the tool update, Then the raw output stays intact in the event log", async () => {
+    it("Given an ACP tool returns more than 500,000 characters, When Morty records the tool update, Then the raw output stays intact in the event log", async () => {
         const observer = new RecordingObserver();
         const manager = new SessionManager({
             observer,
@@ -226,8 +226,8 @@ describe("acp content limits", () => {
         }
     });
 
-    it("Given an ACP agent links a local image in Markdown, When Mobius records the reply, Then the reply text preserves the original path", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-markdown-image-"));
+    it("Given an ACP agent links a local image in Markdown, When Morty records the reply, Then the reply text preserves the original path", async () => {
+        const directory = await mkdtemp(join(tmpdir(), "morty-markdown-image-"));
         const observer = new RecordingObserver();
         const manager = new SessionManager({
             observer,
@@ -270,9 +270,9 @@ describe("acp content limits", () => {
         }
     });
 
-    it("Given an ACP Agent links an image outside its workspace, When Mobius records the reply, Then the reply text preserves the Agent path", async () => {
-        const workspace = await mkdtemp(join(tmpdir(), "mobius-agent-workspace-"));
-        const generatedImages = await mkdtemp(join(tmpdir(), "mobius-agent-generated-images-"));
+    it("Given an ACP Agent links an image outside its workspace, When Morty records the reply, Then the reply text preserves the Agent path", async () => {
+        const workspace = await mkdtemp(join(tmpdir(), "morty-agent-workspace-"));
+        const generatedImages = await mkdtemp(join(tmpdir(), "morty-agent-generated-images-"));
         const observer = new RecordingObserver();
         const manager = new SessionManager({
             observer,
@@ -318,8 +318,8 @@ describe("acp content limits", () => {
         }
     });
 
-    it("Given an ACP agent returns image and video output, When Mobius records the reply, Then the image stays referenced in text and the video is externalized", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-media-output-"));
+    it("Given an ACP agent returns image and video output, When Morty records the reply, Then the image stays referenced in text and the video is externalized", async () => {
+        const directory = await mkdtemp(join(tmpdir(), "morty-media-output-"));
         const observer = new RecordingObserver();
         const manager = new SessionManager({
             observer,

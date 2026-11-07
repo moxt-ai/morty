@@ -1521,12 +1521,12 @@ function ToastGallery() {
 function CopyButtonGallery() {
     return (
         <Specimen title="Copies and toasts">
-            <code className="font-mono text-12">mobius bot approve --bot preview</code>
+            <code className="font-mono text-12">morty bot approve --bot preview</code>
             <CopyToClipboardButton
                 failureToast={{ description: "Select the command and copy it manually.", title: "Copy failed" }}
                 label="Copy command"
                 successToast={{ title: "Copied" }}
-                value="mobius bot approve --bot preview"
+                value="morty bot approve --bot preview"
             />
         </Specimen>
     );

@@ -25,10 +25,10 @@ export async function codexFixture(
     providerOptions: Parameters<typeof FakeOpenAiProvider.start>[2] = {},
     adapters: AdapterResolver = acpAdapters,
 ) {
-    const temporary = await realpath(await mkdtemp(join(tmpdir(), "mobius-native-codex-")));
+    const temporary = await realpath(await mkdtemp(join(tmpdir(), "morty-native-codex-")));
     const workspace = join(temporary, "workspace");
     await mkdir(workspace);
-    const provider = await FakeOpenAiProvider.start("mobius-test-model", answer, providerOptions);
+    const provider = await FakeOpenAiProvider.start("morty-test-model", answer, providerOptions);
     const codex = await CodexFixture.create(provider);
     const agent = new AcpAgentDefinition(
         "codex",
@@ -75,6 +75,7 @@ export async function codexFixture(
         async () => ({
             turn: null,
             queued: [],
+            interactionState: null,
         }),
     );
     const identity = {

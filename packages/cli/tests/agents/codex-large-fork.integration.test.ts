@@ -17,7 +17,7 @@ import { prepareNewRealSession, withRealDaemon } from "../support/agents/real-da
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 
 test("Given real Codex saved more than 32 MiB of answers, When a user forks through the daemon, Then the copy opens, recent history is readable and a new prompt completes", async () => {
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "Large saved answer. ".repeat(45_000));
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "Large saved answer. ".repeat(45_000));
     await using agent = await CodexFixture.create(provider);
     await withRealDaemon(new CodexAgentSpecification(), agent.environment, async (peer) => {
         const sourceSessionId = await prepareNewRealSession(peer, "codex");
@@ -89,7 +89,7 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
         if (directory.action !== "list") {
             throw new Error("Expected native directory");
         }
-        const source = directory.entries.find((entry) => entry.mobiusSessionIds.includes(sourceSessionId));
+        const source = directory.entries.find((entry) => entry.mortySessionIds.includes(sourceSessionId));
         if (source === undefined) {
             throw new Error("Missing source conversation");
         }

@@ -59,7 +59,7 @@ function questionField(question: Question): ElicitationPropertySchema {
                 title,
                 default: question.prefill,
                 maxLength: 10_000,
-                _meta: { "io.mobius/multiline": true },
+                _meta: { "io.morty/multiline": true },
             };
     }
 }

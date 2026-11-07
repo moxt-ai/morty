@@ -9,7 +9,7 @@ import {
 } from "@morty-build/client/protocol";
 import { DurableObjectSqlDatabase, RuntimeRelay } from "@morty-build/relay-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createTestMobiusPlatformApp } from "../../platform-test-support/src/app.ts";
+import { createTestMortyPlatformApp } from "../../platform-test-support/src/app.ts";
 import { seedMortyService, setMortyRecording } from "../../platform-test-support/src/service-fixture.ts";
 import { createDurableObjectDependencies } from "../../relay-core/src/di/create-durable-object-dependencies.ts";
 import { createPlatformDurableObjectContext } from "../src/durable-objects/platform-durable-object-context.ts";
@@ -142,8 +142,8 @@ async function recordThroughRelay(projectId: string, sessionId: string, textCont
             new Request(`https://runtime.internal/projects/${projectId}/daemon`, {
                 headers: {
                     Upgrade: "websocket",
-                    "x-mobius-runtime-id": projectId,
-                    "x-mobius-channel-id": projectId,
+                    "x-morty-runtime-id": projectId,
+                    "x-morty-channel-id": projectId,
                 },
             }),
         );
@@ -206,8 +206,8 @@ async function recordSessionEvents(
             new Request(`https://runtime.internal/projects/${projectId}/daemon`, {
                 headers: {
                     Upgrade: "websocket",
-                    "x-mobius-runtime-id": projectId,
-                    "x-mobius-channel-id": projectId,
+                    "x-morty-runtime-id": projectId,
+                    "x-morty-channel-id": projectId,
                 },
             }),
         );
@@ -257,7 +257,7 @@ afterEach(() => {
 describe.sequential("Platform Recording read route", () => {
     // @no-uc: Technical regression; authenticated reads must traverse Platform routing into durable Recording.
     it("Given an enabled Project policy, When a Platform app reads through the production boundary, Then durable events are returned", async () => {
-        const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+        const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const environment = bindings();
 
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
@@ -313,7 +313,7 @@ describe.sequential("Platform Recording read route", () => {
     });
     // @no-uc: Technical regression; incremental cursor reads must traverse Platform routing unchanged.
     it("Given an enabled Project policy, When a Platform app reads after a cursor, Then only later events arrive as a bounded page", async () => {
-        const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+        const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const environment = bindings();
 
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
@@ -393,7 +393,7 @@ describe.sequential("Platform Recording read route", () => {
     });
 
     it("Given an enabled Project policy, When a Platform app reads Turn history through the production boundary, Then Recording serves the projected page", async () => {
-        const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+        const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const environment = bindings();
 
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
@@ -482,7 +482,7 @@ describe.sequential("Platform Recording read route", () => {
     });
 
     it("Given a daemon reload and Session generation reset, When a Platform app continues from an append cursor, Then reloaded events are retained", async () => {
-        const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+        const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const environment = bindings();
 
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);

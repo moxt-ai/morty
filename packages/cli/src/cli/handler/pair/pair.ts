@@ -2,8 +2,8 @@ import { type Command, Option } from "commander";
 import { reloadDaemon } from "../../../daemon/lifecycle/daemon.ts";
 import { ensureDaemon } from "../../../daemon/lifecycle/daemon-client.ts";
 import {
-    openMobiusCliInstallation,
-    openMobiusControlInstallation,
+    openMortyCliInstallation,
+    openMortyControlInstallation,
     pairLocalMachine,
 } from "../../../daemon/pairing/pair-local-machine.ts";
 import type { CliContext } from "../../context.ts";
@@ -21,9 +21,9 @@ export function registerPairAction(command: Command, context: CliContext): void 
         .addOption(valueOption("--workspace <directory>", "default workspace directory"))
         .action(async (options: ParsedPairOptions) => {
             const requested = await requirePairOptions(options, command, process.stdin, context.shutdownSignal);
-            const control = await openMobiusControlInstallation(context.shutdownSignal, process.env);
+            const control = await openMortyControlInstallation(context.shutdownSignal, process.env);
             await ensureDaemon(control.stateDirectory, context.version, context.shutdownSignal);
-            const installation = await openMobiusCliInstallation(context.shutdownSignal, process.env);
+            const installation = await openMortyCliInstallation(context.shutdownSignal, process.env);
             process.stdout.write(`morty version: ${context.version}\n`);
             const paired = await pairLocalMachine(pairArguments(requested), context.shutdownSignal);
             const connection = await installation.setConnectionActivation(

@@ -3,7 +3,7 @@ import { createConnection } from "node:net";
 import * as acp from "@agentclientprotocol/sdk";
 import { readableWebStream, writableWebStream } from "../support/acp-process.ts";
 
-const control = process.env["MOBIUS_TEST_OUTPUT_CONTROL_PATH"];
+const control = process.env["MORTY_TEST_OUTPUT_CONTROL_PATH"];
 if (control === undefined) {
     throw new Error("The pressure driver socket is required");
 }

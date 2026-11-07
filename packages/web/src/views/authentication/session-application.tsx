@@ -5,7 +5,7 @@ import { isComponentLibraryPath } from "../../navigation/component-library-path.
 import { useExternalStore } from "../../view-models/external-store.ts";
 import type { MortyApplication } from "../../view-models/morty-application.ts";
 import { App } from "../application/app.tsx";
-import { MobiusManagement } from "../applications/mobius-management.tsx";
+import { MortyManagement } from "../applications/morty-management.tsx";
 
 const PlaygroundApplication = lazy(() =>
     import("../playground/playground-application.tsx").then((module) => ({
@@ -16,11 +16,10 @@ const PlaygroundApplication = lazy(() =>
 export function createSignedInRouter(application: MortyApplication) {
     const authorize = (signal: AbortSignal) => application.anonymousSession.getState().authorize(signal);
     const Standard = ({ children }: { readonly children: ReactNode }) => <>{children}</>;
-    return createApplicationRouter(
-        authorize,
-        ({ view }) => <MobiusManagement application={application} view={view} />,
-        { Application: Standard, Standard },
-    );
+    return createApplicationRouter(authorize, ({ view }) => <MortyManagement application={application} view={view} />, {
+        Application: Standard,
+        Standard,
+    });
 }
 
 export function SessionApplication({

@@ -67,7 +67,7 @@ export async function fixture(
     sessionIdentity: "assigned" | "native" = "assigned",
     adapters: AdapterResolver = acpAdapters,
 ) {
-    const temporary = await realpath(await mkdtemp(join(tmpdir(), "mobius-native-boundary-")));
+    const temporary = await realpath(await mkdtemp(join(tmpdir(), "morty-native-boundary-")));
     const workspace = join(temporary, "workspace");
     const native = join(temporary, "native");
     await mkdir(workspace);
@@ -146,6 +146,7 @@ export async function fixture(
         async () => ({
             turn: null,
             queued: [],
+            interactionState: null,
         }),
     );
     const identity = {
@@ -266,6 +267,7 @@ export async function fixture(
                 async () => ({
                     turn: null,
                     queued: [],
+                    interactionState: null,
                 }),
             );
         },

@@ -32,7 +32,7 @@ export async function discoverRuntimeAgentInventory(options: DiscoverLocalAgentI
     const log = new RuntimeDiagnosticLog(options.dataDirectory);
     const record = (details: Readonly<Record<string, string | number>>): void => {
         log.record(
-            `Mobius agent discovery diagnostic ${JSON.stringify({
+            `Morty agent discovery diagnostic ${JSON.stringify({
                 timestamp: new Date().toISOString(),
                 channelId,
                 ...details,

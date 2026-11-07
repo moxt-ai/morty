@@ -230,7 +230,7 @@ const sessionRecordingTurnPrecedingSchema = z
 
 const sessionRecordingCompactionSchema = z
     .object({
-        // Agent-owned identity: retain the ACP contract rather than imposing Mobius identifier syntax.
+        // Agent-owned identity: retain the ACP contract rather than imposing Morty identifier syntax.
         compactionId: z.string().max(2_048),
         sequence: z.number().int().nonnegative().safe(),
         status: z.enum(["in_progress", "completed", "failed", "cancelled"]),

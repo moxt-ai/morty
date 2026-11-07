@@ -7,10 +7,10 @@ import {
     encodeSessionEventEnvelope,
     MORTY_API_PREFIX,
 } from "@morty-build/client/protocol";
-import { MobiusClient, StaticMobiusCredentialProvider } from "@morty-build/client/server";
+import { MortyClient, StaticMortyCredentialProvider } from "@morty-build/client/server";
 import { DurableObjectSqlDatabase, RuntimeRelay } from "@morty-build/relay-core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createTestMobiusPlatformApp } from "../../platform-test-support/src/app.ts";
+import { createTestMortyPlatformApp } from "../../platform-test-support/src/app.ts";
 import { seedMortyService, setMortyRecording } from "../../platform-test-support/src/service-fixture.ts";
 import { createDurableObjectDependencies } from "../../relay-core/src/di/create-durable-object-dependencies.ts";
 import { createPlatformDurableObjectContext } from "../src/durable-objects/platform-durable-object-context.ts";
@@ -116,8 +116,8 @@ async function recordThroughRelay(projectId: string, runtimeId: string, messages
             new Request(`https://runtime.internal/projects/${projectId}/daemon`, {
                 headers: {
                     Upgrade: "websocket",
-                    "x-mobius-runtime-id": runtimeId,
-                    "x-mobius-channel-id": runtimeId,
+                    "x-morty-runtime-id": runtimeId,
+                    "x-morty-channel-id": runtimeId,
                 },
             }),
         );
@@ -143,9 +143,9 @@ async function createRecordingProject(): Promise<{
     readonly credential: string;
     readonly environment: PlatformRelayBindings;
     readonly projectId: string;
-    readonly worker: ReturnType<typeof createTestMobiusPlatformApp>;
+    readonly worker: ReturnType<typeof createTestMortyPlatformApp>;
 }> {
-    const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+    const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
     const environment = bindings();
 
     const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
@@ -202,7 +202,7 @@ describe.sequential("Mini-client Recording integration", () => {
                 sessionId,
                 type,
                 futureEventField: { retained: true },
-                mobiusMetadata: { futureMetadata: "retained" },
+                mortyMetadata: { futureMetadata: "retained" },
                 payload: {
                     sessionUpdate: "agent_message_chunk",
                     futurePayloadField: "retained",
@@ -228,15 +228,15 @@ describe.sequential("Mini-client Recording integration", () => {
         },
     );
 
-    it("Given an enabled Project and recorded Turn, When a mini-client reads through MobiusClient, Then it sees durable history and the session directory", async () => {
+    it("Given an enabled Project and recorded Turn, When a mini-client reads through MortyClient, Then it sees durable history and the session directory", async () => {
         const { credential, environment, projectId, worker } = await createRecordingProject();
 
         const runtimeId = "runtime-mini-recording";
         const sessionId = "mini-client-recording-session";
         await recordThroughRelay(projectId, runtimeId, [turnMessage(sessionId)]);
 
-        new MobiusClient({
-            credentialProvider: new StaticMobiusCredentialProvider(credential),
+        new MortyClient({
+            credentialProvider: new StaticMortyCredentialProvider(credential),
             endpoint: relayOrigin,
             projectId,
             transport: {

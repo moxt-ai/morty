@@ -30,7 +30,7 @@ test.runIf(process.platform === "win32").each([
     async ({ directories }) => {
         await using provider = await FakeAnthropicProvider.start("claude-sonnet-4-6", "WINDOWS_DISCOVERY_REPLY");
         await using claude = await ClaudeFixture.create(provider);
-        const directory = await mkdtemp(join(tmpdir(), "mobius-windows-claude-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-windows-claude-"));
         const workspace = join(directory, "workspace");
         const userProfile = join(directory, "user");
         const localAppData = join(userProfile, "AppData", "Local");

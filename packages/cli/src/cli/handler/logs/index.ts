@@ -19,7 +19,7 @@ export function registerLogsCommand(program: Command, context: CliContext): void
         .command("logs")
         .description("print the local daemon diagnostic logs for a bug report")
         .option("--json", "write the collected logs as JSON")
-        .option("--state-directory <path>", "read logs from a specific Mobius state directory")
+        .option("--state-directory <path>", "read logs from a specific Morty state directory")
         .option(
             "--tail <lines>",
             `keep at most this many lines per log file (default ${DEFAULT_TAIL_LINES.toString()})`,

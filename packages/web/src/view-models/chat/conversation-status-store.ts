@@ -105,11 +105,6 @@ export function createConversationStatusStore(
     let watcher: {
         readonly botId: string;
         readonly controller: AbortController;
-        /**
-         * The Sessions the stream follows: every Session the user owns, or, until the stream says so or from an older
-         * Chat Worker, those listed when it started.
-         */
-        readonly follows: { readonly kind: "owned" } | { readonly kind: "listed"; readonly directoryKey: string };
     } | null = null;
     let activeBotId = "";
     // The stream and the open pane report changes as they happen, while a directory snapshot describes the moment its
@@ -176,21 +171,15 @@ export function createConversationStatusStore(
 
         /**
          * Follows the Sessions' statuses. Each time the stream follows, it reports their current statuses with that
-         * notice, before their changes, so a gap before it needs no snapshot of its own. A stream that follows only the Sessions listed when
-         * it started starts again when they change.
+         * notice, before their changes, so a gap before it needs no snapshot of its own.
          */
-        const watch = (botId: string, sessionIds: readonly string[], parent: AbortSignal): void => {
-            const directoryKey = JSON.stringify([...sessionIds].sort());
-            if (
-                (watcher?.botId === botId &&
-                    (watcher.follows.kind === "owned" || watcher.follows.directoryKey === directoryKey)) ||
-                parent.aborted
-            ) {
+        const watch = (botId: string, parent: AbortSignal): void => {
+            if (watcher?.botId === botId || parent.aborted) {
                 return;
             }
             closeWatcher();
             const controller = new AbortController();
-            watcher = { botId, controller, follows: { kind: "listed", directoryKey } };
+            watcher = { botId, controller };
             const signal = AbortSignal.any([parent, controller.signal]);
             void (async () => {
                 let recoveries = 0;
@@ -204,15 +193,6 @@ export function createConversationStatusStore(
                                     // Opening the stream shows it works, but only a later Session event shows it keeps
                                     // working, so only that restores the stream's own retries.
                                     if (event.kind === "managed-session.statuses.following") {
-                                        if (watcher?.controller === controller) {
-                                            watcher = {
-                                                ...watcher,
-                                                follows:
-                                                    event.sessions === "owned"
-                                                        ? { kind: "owned" }
-                                                        : { kind: "listed", directoryKey },
-                                            };
-                                        }
                                         applyCurrentStatuses(event.statuses, streamStartedAt);
                                         onFollowing();
                                         return;
@@ -265,11 +245,7 @@ export function createConversationStatusStore(
                 }
                 replaceDirectory(sessions, directorySnapshotStartedAt);
                 if (sessions.length > 0) {
-                    watch(
-                        botId,
-                        sessions.map((session) => session.id),
-                        signal,
-                    );
+                    watch(botId, signal);
                 }
             },
             opened: (sessionId) => {
@@ -297,7 +273,7 @@ export function createConversationStatusStore(
             unfollowed: () => watcher === null && get().statuses.size > 0,
             follow: (signal) => {
                 if (watcher === null && get().statuses.size > 0) {
-                    watch(activeBotId, [...get().statuses.keys()], signal);
+                    watch(activeBotId, signal);
                 }
             },
             close: closeWatcher,

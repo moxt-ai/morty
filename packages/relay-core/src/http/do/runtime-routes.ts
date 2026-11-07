@@ -28,22 +28,22 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
     return new Hono().all("/projects/:projectId/*", async (c) => {
         const request = c.req.raw;
         if (request.method === "DELETE" && new URL(request.url).pathname.endsWith("/session-viewers/revoke")) {
-            const revokedThrough = Number(request.headers.get("x-mobius-session-access-revoked-through"));
+            const revokedThrough = Number(request.headers.get("x-morty-session-access-revoked-through"));
             if (!Number.isSafeInteger(revokedThrough)) {
                 return unauthorized("A verified Session access revocation is required");
             }
             runtime.revokeSessionViewers(new ProjectScope(c.req.param("projectId")), revokedThrough);
             return new Response(null, { status: 204 });
         }
-        const channelId = request.headers.get("x-mobius-channel-id");
-        const runtimeId = request.headers.get("x-mobius-runtime-id");
+        const channelId = request.headers.get("x-morty-channel-id");
+        const runtimeId = request.headers.get("x-morty-runtime-id");
         const projectId = c.req.param("projectId");
         if (channelId === null || runtimeId === null || projectId === null) {
             return unauthorized("Verified channel access is required");
         }
         const scope = new ProjectScope(projectId);
         const url = new URL(request.url);
-        const credentialId = request.headers.get("x-mobius-host-credential-id");
+        const credentialId = request.headers.get("x-morty-host-credential-id");
         if (request.method === "DELETE" && url.pathname.endsWith("/runtime/revoke")) {
             await runtime.revokeRuntime(channelId, runtimeId, scope, request.signal);
             return new Response(null, { status: 204 });
@@ -90,7 +90,7 @@ export function createRuntimeRoutes(runtime: RuntimeService) {
             return unreachable;
         }
         if (url.pathname.endsWith("/host")) {
-            const credential = hostCredential(credentialId, request.headers.get("x-mobius-host-credential-kind"));
+            const credential = hostCredential(credentialId, request.headers.get("x-morty-host-credential-kind"));
             if (credential === null) {
                 return unauthorized("Verified host credential access is required");
             }

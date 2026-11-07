@@ -76,7 +76,7 @@ import { sessionTitle } from "../../view-models/chat/session-titles-store.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import { ChatMessageQueue } from "./chat-message-queue.tsx";
 import { FilePreview } from "./file-preview.tsx";
-import { MobiusAssistantText, MobiusSessionMessage } from "./mobius-session-message.tsx";
+import { MortyAssistantText, MortySessionMessage } from "./morty-session-message.tsx";
 
 type SessionRenderItem =
     | {
@@ -436,7 +436,7 @@ function SessionRenderItemContent({
     }
     if (item.kind === "assistant-text") {
         return (
-            <MobiusAssistantText
+            <MortyAssistantText
                 createResourceStore={createSessionResourceStore}
                 openLocalFile={openLocalFile}
                 readImage={pane.readResource}
@@ -458,7 +458,7 @@ function SessionRenderItemContent({
         );
     }
     return (
-        <MobiusSessionMessage
+        <MortySessionMessage
             active={active}
             deliveryUnknownUserMessageId={presentation.deliveryUnknownUserMessageId}
             failureAgentRef={pane.agentRef}
@@ -672,7 +672,7 @@ function SessionConversationTitleBar({
  * read, so both stand in as skeletons: a title shown here would appear and then
  * be withdrawn again while the loaded pane waits for that read.
  */
-export function MobiusSessionPaneLoading({ footer }: { readonly footer?: ReactNode }) {
+export function MortySessionPaneLoading({ footer }: { readonly footer?: ReactNode }) {
     return (
         <DesktopChatLayout>
             {(desktop) => (
@@ -780,7 +780,7 @@ function OlderHistorySkeleton() {
     );
 }
 
-export function MobiusSessionPane({ workspace }: { readonly workspace: ChatWorkspace }) {
+export function MortySessionPane({ workspace }: { readonly workspace: ChatWorkspace }) {
     // The workspace owns the pane model outside React; the keyed view reads
     // it and hands it to the pane body, which subscribes to its stores. The
     // pane for a ready selection is always built before the view renders
@@ -790,10 +790,10 @@ export function MobiusSessionPane({ workspace }: { readonly workspace: ChatWorks
     if (pane === null) {
         return <section className={chatSessionPaneFillClassName} />;
     }
-    return <MobiusSessionPaneBody pane={pane} workspace={workspace} />;
+    return <MortySessionPaneBody pane={pane} workspace={workspace} />;
 }
 
-function MobiusSessionPaneBody({
+function MortySessionPaneBody({
     pane,
     workspace,
 }: {

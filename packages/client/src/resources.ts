@@ -10,7 +10,7 @@ import {
     type TurnRequest,
 } from "@morty-build/client/protocol";
 
-import { MobiusProtocolError, MobiusValidationError } from "./errors.ts";
+import { MortyProtocolError, MortyValidationError } from "./errors.ts";
 
 // The capabilities this SDK build understands. A newer service may advertise
 // additional capabilities; unknown fields are ignored and missing fields default
@@ -49,8 +49,8 @@ function unsupportedSessionCapabilities(): SessionCapabilities {
     });
 }
 
-function invalidResponse(message: string): MobiusProtocolError {
-    return new MobiusProtocolError(message);
+function invalidResponse(message: string): MortyProtocolError {
+    return new MortyProtocolError(message);
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -107,7 +107,7 @@ function validateTimestamp(value: string, field: string): string {
     return value;
 }
 
-export class MobiusSessionAccess {
+export class MortySessionAccess {
     readonly credential: string;
     readonly credentialId: string;
     readonly projectId: string;
@@ -127,7 +127,7 @@ export class MobiusSessionAccess {
 }
 
 /** A revocation of a Project's Session credentials: every one issued no later than `revokedThrough`. */
-export class MobiusSessionAccessRevocation {
+export class MortySessionAccessRevocation {
     readonly revokedThrough: string;
     constructor(value: unknown) {
         const resource = record(value, "Session access revocation");
@@ -135,7 +135,7 @@ export class MobiusSessionAccessRevocation {
     }
 }
 
-export interface CreateMobiusSessionRequest {
+export interface CreateMortySessionRequest {
     readonly additionalDirectoryIds: readonly string[];
     readonly agentId: string;
     readonly directoryId: string;
@@ -148,13 +148,13 @@ export interface CreateMobiusSessionRequest {
  * left out is the Session's own, and a supplied field is checked against it. Relays released before binding resolution
  * require every field, so leave fields out only with a Relay that resolves them.
  */
-export interface MobiusSessionBinding {
+export interface MortySessionBinding {
     readonly additionalDirectoryIds?: readonly string[];
     readonly agentId?: string;
     readonly directoryId?: string;
 }
 
-export interface SubmitMobiusTurnRequest extends MobiusSessionBinding {
+export interface SubmitMortyTurnRequest extends MortySessionBinding {
     readonly attachments: readonly PromptAttachment[];
     readonly content: string;
     readonly disposition?: string;
@@ -165,34 +165,34 @@ export interface SubmitMobiusTurnRequest extends MobiusSessionBinding {
 }
 
 /** How a cancelled Turn ended: `cancelled`, or the Agent's stop reason when the Turn finished first. */
-export interface MobiusTurnCancellation {
+export interface MortyTurnCancellation {
     readonly turnId: string;
     readonly stopReason: string;
 }
 
-export class MobiusBrowserCredentialRequest {
+export class MortyBrowserCredentialRequest {
     readonly expiresInSeconds: number;
 
     constructor(expiresInSeconds: number) {
         if (!Number.isSafeInteger(expiresInSeconds) || expiresInSeconds < 60 || expiresInSeconds > 3_600) {
-            throw new MobiusValidationError("The browser credential lifetime is invalid");
+            throw new MortyValidationError("The browser credential lifetime is invalid");
         }
         this.expiresInSeconds = expiresInSeconds;
     }
 }
 
-export class MobiusRuntimePairingRequest {
+export class MortyRuntimePairingRequest {
     readonly idempotencyKey: string;
 
     constructor(idempotencyKey: string) {
         if (!isIdentifier(idempotencyKey)) {
-            throw new MobiusValidationError("The Runtime pairing idempotency key is invalid");
+            throw new MortyValidationError("The Runtime pairing idempotency key is invalid");
         }
         this.idempotencyKey = idempotencyKey;
     }
 }
 
-export class MobiusBrowserCredential {
+export class MortyBrowserCredential {
     readonly credentialId: string;
     readonly expiresAt: string;
     readonly projectId: string;
@@ -206,9 +206,9 @@ export class MobiusBrowserCredential {
     }
 }
 
-export function decodeMobiusBrowserCredential(value: unknown): MobiusBrowserCredential {
+export function decodeMortyBrowserCredential(value: unknown): MortyBrowserCredential {
     const credential = record(value, "browser credential");
-    return new MobiusBrowserCredential(
+    return new MortyBrowserCredential(
         identifierField(credential, "credentialId"),
         validateTimestamp(stringField(credential, "expiresAt", 128), "expiresAt"),
         identifierField(credential, "projectId"),
@@ -216,7 +216,7 @@ export function decodeMobiusBrowserCredential(value: unknown): MobiusBrowserCred
     );
 }
 
-export class MobiusChannelAccessGrant {
+export class MortyChannelAccessGrant {
     readonly expiresAt: string;
     readonly grantId: string;
     readonly grantSecret: string;
@@ -228,20 +228,20 @@ export class MobiusChannelAccessGrant {
     }
 }
 
-export function decodeMobiusChannelAccessGrant(value: unknown): MobiusChannelAccessGrant {
+export function decodeMortyChannelAccessGrant(value: unknown): MortyChannelAccessGrant {
     const grant = record(value, "channel access grant");
     const grantSecret = stringField(grant, "grantSecret", 256);
     if (!/^[a-zA-Z0-9_-]{32,256}$/.test(grantSecret)) {
         throw invalidResponse("The service returned an invalid channel access grant");
     }
-    return new MobiusChannelAccessGrant(
+    return new MortyChannelAccessGrant(
         identifierField(grant, "grantId"),
         grantSecret,
         validateTimestamp(stringField(grant, "expiresAt", 128), "expiresAt"),
     );
 }
 
-export class MobiusLinkedChannelDevice {
+export class MortyLinkedChannelDevice {
     readonly createdAt: string;
     readonly credentialId: string;
     readonly lastUsedAt: string;
@@ -253,25 +253,25 @@ export class MobiusLinkedChannelDevice {
     }
 }
 
-function decodeMobiusLinkedChannelDevice(value: unknown): MobiusLinkedChannelDevice {
+function decodeMortyLinkedChannelDevice(value: unknown): MortyLinkedChannelDevice {
     const device = record(value, "linked channel device");
-    return new MobiusLinkedChannelDevice(
+    return new MortyLinkedChannelDevice(
         identifierField(device, "credentialId"),
         validateTimestamp(stringField(device, "createdAt", 128), "createdAt"),
         validateTimestamp(stringField(device, "lastUsedAt", 128), "lastUsedAt"),
     );
 }
 
-export function decodeMobiusLinkedChannelDeviceList(value: unknown): readonly MobiusLinkedChannelDevice[] {
+export function decodeMortyLinkedChannelDeviceList(value: unknown): readonly MortyLinkedChannelDevice[] {
     const response = record(value, "linked channel device list");
-    const devices = arrayField(response, "devices", 1_000).map(decodeMobiusLinkedChannelDevice);
+    const devices = arrayField(response, "devices", 1_000).map(decodeMortyLinkedChannelDevice);
     if (new Set(devices.map((device) => device.credentialId)).size !== devices.length) {
         throw invalidResponse("The service returned duplicate linked channel devices");
     }
     return devices;
 }
 
-export class MobiusRedeemedChannelCredential {
+export class MortyRedeemedChannelCredential {
     readonly channelId: string;
     readonly hostToken: string;
     readonly projectId: string;
@@ -283,20 +283,20 @@ export class MobiusRedeemedChannelCredential {
     }
 }
 
-export function decodeMobiusRedeemedChannelCredential(value: unknown): MobiusRedeemedChannelCredential {
+export function decodeMortyRedeemedChannelCredential(value: unknown): MortyRedeemedChannelCredential {
     const credential = record(value, "redeemed channel credential");
     const hostToken = stringField(credential, "hostToken", 256);
     if (!/^[a-zA-Z0-9_-]{32,256}$/.test(hostToken)) {
         throw invalidResponse("The service returned an invalid channel credential");
     }
-    return new MobiusRedeemedChannelCredential(
+    return new MortyRedeemedChannelCredential(
         identifierField(credential, "channelId"),
         hostToken,
         identifierField(credential, "projectId"),
     );
 }
 
-export class MobiusAgentDescriptor {
+export class MortyAgentDescriptor {
     readonly agentPath: string;
     readonly agentVersion: string;
     readonly capabilities: SessionCapabilities;
@@ -316,7 +316,7 @@ export class MobiusAgentDescriptor {
 // shape is validated explicitly into a fresh object, unknown fields are ignored,
 // and missing known fields default to unsupported. This keeps an older SDK
 // compatible with a newer service that advertises capabilities it does not know.
-export function decodeMobiusAgentCapabilities(value: unknown): SessionCapabilities {
+export function decodeMortyAgentCapabilities(value: unknown): SessionCapabilities {
     const capabilities = record(value, "Agent capabilities");
     const decoded: Record<keyof SessionCapabilities, boolean> = { ...unsupportedSessionCapabilities() };
     for (const field of KNOWN_SESSION_CAPABILITY_FIELDS) {
@@ -332,7 +332,7 @@ export function decodeMobiusAgentCapabilities(value: unknown): SessionCapabiliti
     return Object.freeze(decoded);
 }
 
-function decodeAgentDescriptor(value: unknown): MobiusAgentDescriptor {
+function decodeAgentDescriptor(value: unknown): MortyAgentDescriptor {
     const agent = record(value, "Agent descriptor");
     // Fields a newer service adds are ignored, so an older SDK can still list the Agent.
     if (
@@ -350,17 +350,17 @@ function decodeAgentDescriptor(value: unknown): MobiusAgentDescriptor {
     if (agentPath.trim().length === 0 || agentVersion.trim().length === 0 || label.trim().length === 0) {
         throw invalidResponse("The service returned an invalid Agent descriptor");
     }
-    return new MobiusAgentDescriptor(
+    return new MortyAgentDescriptor(
         agentPath,
         agentVersion,
-        decodeMobiusAgentCapabilities(agent["capabilities"]),
+        decodeMortyAgentCapabilities(agent["capabilities"]),
         identifierField(agent, "id"),
         label.trim(),
     );
 }
 
-export class MobiusRuntimeDescriptor {
-    readonly agents: readonly MobiusAgentDescriptor[];
+export class MortyRuntimeDescriptor {
+    readonly agents: readonly MortyAgentDescriptor[];
     readonly channelId: string;
     readonly machineName: string;
     readonly online: boolean;
@@ -369,7 +369,7 @@ export class MobiusRuntimeDescriptor {
     readonly workspaceName: string;
 
     constructor(
-        agents: readonly MobiusAgentDescriptor[],
+        agents: readonly MortyAgentDescriptor[],
         channelId: string,
         machineName: string,
         online: boolean,
@@ -387,8 +387,8 @@ export class MobiusRuntimeDescriptor {
     }
 }
 
-export class MobiusChannelDescriptor {
-    readonly agents: readonly MobiusAgentDescriptor[];
+export class MortyChannelDescriptor {
+    readonly agents: readonly MortyAgentDescriptor[];
     readonly channelId: string;
     readonly machineName: string;
     readonly projectId: string;
@@ -396,7 +396,7 @@ export class MobiusChannelDescriptor {
     readonly workspaceName: string;
 
     constructor(
-        agents: readonly MobiusAgentDescriptor[],
+        agents: readonly MortyAgentDescriptor[],
         channelId: string,
         machineName: string,
         projectId: string,
@@ -412,9 +412,9 @@ export class MobiusChannelDescriptor {
     }
 }
 
-export function decodeMobiusChannelDescriptor(value: unknown): MobiusChannelDescriptor {
+export function decodeMortyChannelDescriptor(value: unknown): MortyChannelDescriptor {
     const channel = record(value, "channel descriptor");
-    return new MobiusChannelDescriptor(
+    return new MortyChannelDescriptor(
         arrayField(channel, "agents", 100).map(decodeAgentDescriptor),
         identifierField(channel, "channelId"),
         stringField(channel, "machineName", 255),
@@ -424,9 +424,9 @@ export function decodeMobiusChannelDescriptor(value: unknown): MobiusChannelDesc
     );
 }
 
-export function decodeRuntimeDescriptor(value: unknown): MobiusRuntimeDescriptor {
+export function decodeRuntimeDescriptor(value: unknown): MortyRuntimeDescriptor {
     const runtime = record(value, "Runtime descriptor");
-    return new MobiusRuntimeDescriptor(
+    return new MortyRuntimeDescriptor(
         arrayField(runtime, "agents", 100).map(decodeAgentDescriptor),
         identifierField(runtime, "channelId"),
         stringField(runtime, "machineName", 255),
@@ -437,12 +437,12 @@ export function decodeRuntimeDescriptor(value: unknown): MobiusRuntimeDescriptor
     );
 }
 
-export function decodeMobiusRuntimeList(value: unknown): readonly MobiusRuntimeDescriptor[] {
+export function decodeMortyRuntimeList(value: unknown): readonly MortyRuntimeDescriptor[] {
     const response = record(value, "Runtime list");
     return arrayField(response, "runtimes", 100).map(decodeRuntimeDescriptor);
 }
 
-export class MobiusRuntimePairing {
+export class MortyRuntimePairing {
     readonly channelId: string;
     readonly expiresAt: string;
     readonly pairingCode: string;
@@ -470,7 +470,7 @@ export class MobiusRuntimePairing {
     }
 }
 
-export class MobiusRuntimePairingWaitOptions {
+export class MortyRuntimePairingWaitOptions {
     readonly pollIntervalMilliseconds: number;
     readonly timeoutMilliseconds: number;
 
@@ -483,14 +483,14 @@ export class MobiusRuntimePairingWaitOptions {
             pollIntervalMilliseconds < 1 ||
             pollIntervalMilliseconds > timeoutMilliseconds
         ) {
-            throw new MobiusValidationError("The Runtime pairing wait bounds are invalid");
+            throw new MortyValidationError("The Runtime pairing wait bounds are invalid");
         }
         this.pollIntervalMilliseconds = pollIntervalMilliseconds;
         this.timeoutMilliseconds = timeoutMilliseconds;
     }
 }
 
-export function decodeMobiusRuntimePairing(value: unknown): MobiusRuntimePairing {
+export function decodeMortyRuntimePairing(value: unknown): MortyRuntimePairing {
     const pairing = record(value, "Runtime pairing");
     const pairingCode = stringField(pairing, "pairingCode", 24);
     const pollToken = stringField(pairing, "pollToken", 256);
@@ -500,7 +500,7 @@ export function decodeMobiusRuntimePairing(value: unknown): MobiusRuntimePairing
     ) {
         throw invalidResponse("The service returned invalid Runtime pairing credentials");
     }
-    return new MobiusRuntimePairing(
+    return new MortyRuntimePairing(
         identifierField(pairing, "channelId"),
         validateTimestamp(stringField(pairing, "expiresAt", 128), "expiresAt"),
         pairingCode,
@@ -511,20 +511,20 @@ export function decodeMobiusRuntimePairing(value: unknown): MobiusRuntimePairing
     );
 }
 
-export const MobiusRuntimePairingLifecycle = Object.freeze({
+export const MortyRuntimePairingLifecycle = Object.freeze({
     Expired: "expired",
     Paired: "paired",
     Pending: "pending",
     Revoked: "revoked",
 });
 
-export abstract class MobiusRuntimePairingStatus {
+export abstract class MortyRuntimePairingStatus {
     abstract readonly status: string;
 }
 
-export class MobiusPendingRuntimePairingStatus extends MobiusRuntimePairingStatus {
+export class MortyPendingRuntimePairingStatus extends MortyRuntimePairingStatus {
     readonly expiresAt: string;
-    readonly status = MobiusRuntimePairingLifecycle.Pending;
+    readonly status = MortyRuntimePairingLifecycle.Pending;
 
     constructor(expiresAt: string) {
         super();
@@ -532,21 +532,21 @@ export class MobiusPendingRuntimePairingStatus extends MobiusRuntimePairingStatu
     }
 }
 
-export class MobiusExpiredRuntimePairingStatus extends MobiusRuntimePairingStatus {
-    readonly status = MobiusRuntimePairingLifecycle.Expired;
+export class MortyExpiredRuntimePairingStatus extends MortyRuntimePairingStatus {
+    readonly status = MortyRuntimePairingLifecycle.Expired;
 }
 
-export class MobiusPairedRuntimePairingStatus extends MobiusRuntimePairingStatus {
-    readonly agents: readonly MobiusAgentDescriptor[];
+export class MortyPairedRuntimePairingStatus extends MortyRuntimePairingStatus {
+    readonly agents: readonly MortyAgentDescriptor[];
     readonly channelId: string;
     readonly machineName: string;
     readonly projectId: string;
     readonly runtimeId: string;
-    readonly status = MobiusRuntimePairingLifecycle.Paired;
+    readonly status = MortyRuntimePairingLifecycle.Paired;
     readonly workspaceName: string;
 
     constructor(
-        agents: readonly MobiusAgentDescriptor[],
+        agents: readonly MortyAgentDescriptor[],
         channelId: string,
         machineName: string,
         projectId: string,
@@ -563,9 +563,9 @@ export class MobiusPairedRuntimePairingStatus extends MobiusRuntimePairingStatus
     }
 }
 
-export class MobiusRevokedRuntimePairingStatus extends MobiusRuntimePairingStatus {
+export class MortyRevokedRuntimePairingStatus extends MortyRuntimePairingStatus {
     readonly revokedAt: string;
-    readonly status = MobiusRuntimePairingLifecycle.Revoked;
+    readonly status = MortyRuntimePairingLifecycle.Revoked;
 
     constructor(revokedAt: string) {
         super();
@@ -573,24 +573,24 @@ export class MobiusRevokedRuntimePairingStatus extends MobiusRuntimePairingStatu
     }
 }
 
-export function decodeMobiusRuntimePairingStatus(value: unknown): MobiusRuntimePairingStatus {
+export function decodeMortyRuntimePairingStatus(value: unknown): MortyRuntimePairingStatus {
     const status = record(value, "Runtime pairing status");
     const lifecycle = stringField(status, "status", 32);
-    if (lifecycle === MobiusRuntimePairingLifecycle.Pending) {
-        return new MobiusPendingRuntimePairingStatus(
+    if (lifecycle === MortyRuntimePairingLifecycle.Pending) {
+        return new MortyPendingRuntimePairingStatus(
             validateTimestamp(stringField(status, "expiresAt", 128), "expiresAt"),
         );
     }
-    if (lifecycle === MobiusRuntimePairingLifecycle.Expired) {
-        return new MobiusExpiredRuntimePairingStatus();
+    if (lifecycle === MortyRuntimePairingLifecycle.Expired) {
+        return new MortyExpiredRuntimePairingStatus();
     }
-    if (lifecycle === MobiusRuntimePairingLifecycle.Revoked) {
-        return new MobiusRevokedRuntimePairingStatus(
+    if (lifecycle === MortyRuntimePairingLifecycle.Revoked) {
+        return new MortyRevokedRuntimePairingStatus(
             validateTimestamp(stringField(status, "revokedAt", 128), "revokedAt"),
         );
     }
-    if (lifecycle === MobiusRuntimePairingLifecycle.Paired) {
-        return new MobiusPairedRuntimePairingStatus(
+    if (lifecycle === MortyRuntimePairingLifecycle.Paired) {
+        return new MortyPairedRuntimePairingStatus(
             arrayField(status, "agents", 100).map(decodeAgentDescriptor),
             identifierField(status, "channelId"),
             stringField(status, "machineName", 255),
@@ -602,7 +602,7 @@ export function decodeMobiusRuntimePairingStatus(value: unknown): MobiusRuntimeP
     throw invalidResponse("The service returned an unsupported Runtime pairing status");
 }
 
-export abstract class MobiusInteractionResponseRequest {
+export abstract class MortyInteractionResponseRequest {
     abstract readonly kind: string;
     readonly responderId: string;
 
@@ -611,7 +611,7 @@ export abstract class MobiusInteractionResponseRequest {
     }
 }
 
-export class MobiusPermissionResponseRequest extends MobiusInteractionResponseRequest {
+export class MortyPermissionResponseRequest extends MortyInteractionResponseRequest {
     readonly kind = "permission";
     readonly optionId: string;
     readonly outcome: string;
@@ -623,7 +623,7 @@ export class MobiusPermissionResponseRequest extends MobiusInteractionResponseRe
     }
 }
 
-export class MobiusElicitationResponseRequest extends MobiusInteractionResponseRequest {
+export class MortyElicitationResponseRequest extends MortyInteractionResponseRequest {
     readonly action: string;
     readonly content: string;
     readonly kind = "elicitation";
@@ -635,28 +635,28 @@ export class MobiusElicitationResponseRequest extends MobiusInteractionResponseR
     }
 }
 
-export class MobiusPageRequest {
+export class MortyPageRequest {
     readonly cursor: string;
     readonly limit: number;
 
     constructor(limit: number, cursor: string) {
         if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500 || cursor.length > 512) {
-            throw new MobiusValidationError("The page request is invalid");
+            throw new MortyValidationError("The page request is invalid");
         }
         this.cursor = cursor;
         this.limit = limit;
     }
 }
 
-export abstract class MobiusTurnState {
+export abstract class MortyTurnState {
     abstract readonly kind: string;
 }
 
-export class MobiusQueuedTurnState extends MobiusTurnState {
+export class MortyQueuedTurnState extends MortyTurnState {
     readonly kind = "queued";
 }
 
-export class MobiusRunningTurnState extends MobiusTurnState {
+export class MortyRunningTurnState extends MortyTurnState {
     readonly kind = "running";
     readonly startedAt: string;
 
@@ -666,7 +666,7 @@ export class MobiusRunningTurnState extends MobiusTurnState {
     }
 }
 
-export class MobiusSucceededTurnState extends MobiusTurnState {
+export class MortySucceededTurnState extends MortyTurnState {
     readonly completedAt: string;
     readonly kind = "succeeded";
     readonly stopReason: string;
@@ -678,7 +678,7 @@ export class MobiusSucceededTurnState extends MobiusTurnState {
     }
 }
 
-export class MobiusFailedTurnState extends MobiusTurnState {
+export class MortyFailedTurnState extends MortyTurnState {
     readonly code: string;
     readonly failedAt: string;
     readonly kind = "failed";
@@ -694,7 +694,7 @@ export class MobiusFailedTurnState extends MobiusTurnState {
     }
 }
 
-export class MobiusCancelledTurnState extends MobiusTurnState {
+export class MortyCancelledTurnState extends MortyTurnState {
     readonly cancelledAt: string;
     readonly kind = "cancelled";
 
@@ -704,7 +704,7 @@ export class MobiusCancelledTurnState extends MobiusTurnState {
     }
 }
 
-export class MobiusIndeterminateTurnState extends MobiusTurnState {
+export class MortyIndeterminateTurnState extends MortyTurnState {
     readonly detectedAt: string;
     readonly kind = "indeterminate";
     readonly reason: string;
@@ -716,13 +716,13 @@ export class MobiusIndeterminateTurnState extends MobiusTurnState {
     }
 }
 
-export class MobiusTurn {
+export class MortyTurn {
     readonly acceptedAt: string;
     readonly bindingId: string;
     readonly idempotencyKey: string;
     readonly request: TurnRequest;
     readonly sessionId: string;
-    readonly state: MobiusTurnState;
+    readonly state: MortyTurnState;
     readonly turnId: string;
 
     constructor(
@@ -732,7 +732,7 @@ export class MobiusTurn {
         idempotencyKey: string,
         sessionId: string,
         sessionConfigurations: readonly SessionConfigurationSelection[],
-        state: MobiusTurnState,
+        state: MortyTurnState,
         turnId: string,
         request: TurnRequest = { content, kind: "prompt", sessionConfigurations },
     ) {
@@ -754,24 +754,24 @@ export class MobiusTurn {
     }
 }
 
-export function decodeMobiusTurn(value: unknown): MobiusTurn | null {
+export function decodeMortyTurn(value: unknown): MortyTurn | null {
     const turn = decodeTurn(value);
     if (turn === null) {
         return null;
     }
-    let state: MobiusTurnState;
+    let state: MortyTurnState;
     switch (turn.state.kind) {
         case "queued":
-            state = new MobiusQueuedTurnState();
+            state = new MortyQueuedTurnState();
             break;
         case "running":
-            state = new MobiusRunningTurnState(turn.state.startedAt);
+            state = new MortyRunningTurnState(turn.state.startedAt);
             break;
         case "succeeded":
-            state = new MobiusSucceededTurnState(turn.state.completedAt, turn.state.result.stopReason);
+            state = new MortySucceededTurnState(turn.state.completedAt, turn.state.result.stopReason);
             break;
         case "failed":
-            state = new MobiusFailedTurnState(
+            state = new MortyFailedTurnState(
                 turn.state.failedAt,
                 turn.state.error.code,
                 turn.state.error.message,
@@ -779,16 +779,16 @@ export function decodeMobiusTurn(value: unknown): MobiusTurn | null {
             );
             break;
         case "cancelled":
-            state = new MobiusCancelledTurnState(turn.state.cancelledAt);
+            state = new MortyCancelledTurnState(turn.state.cancelledAt);
             break;
         case "indeterminate":
-            state = new MobiusIndeterminateTurnState(
+            state = new MortyIndeterminateTurnState(
                 turn.state.reconciliation.detectedAt,
                 turn.state.reconciliation.reason,
             );
             break;
     }
-    return new MobiusTurn(
+    return new MortyTurn(
         turn.acceptedAt,
         turn.bindingId,
         turn.request.kind === "prompt" ? turn.request.content : "",

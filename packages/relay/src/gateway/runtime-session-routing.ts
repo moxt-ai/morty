@@ -7,7 +7,7 @@ export async function routeRuntimeSessionRequest(
     request: Request,
     environment: PlatformRelayBindings | RuntimeExecutionBindings,
 ): Promise<Response | null> {
-    if ("MOBIUS_RUNTIME_EXECUTION" in environment) {
+    if ("MORTY_RUNTIME_EXECUTION" in environment) {
         return null;
     }
     const target = runtimeRequestTarget(request);

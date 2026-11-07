@@ -1,8 +1,8 @@
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
-import { MobiusValidationError } from "../src/errors.ts";
-import { MobiusClient, StaticMobiusCredentialProvider } from "../src/index.ts";
+import { MortyValidationError } from "../src/errors.ts";
+import { MortyClient, StaticMortyCredentialProvider } from "../src/index.ts";
 
 describe("Runtime diagnostics SDK", () => {
     const servers: ReturnType<typeof createServer>[] = [];
@@ -45,8 +45,8 @@ describe("Runtime diagnostics SDK", () => {
         if (address === null || typeof address === "string") {
             throw new Error("Expected an IP server address");
         }
-        const client = new MobiusClient({
-            credentialProvider: new StaticMobiusCredentialProvider("test-credential"),
+        const client = new MortyClient({
+            credentialProvider: new StaticMortyCredentialProvider("test-credential"),
             endpoint: `http://127.0.0.1:${address.port}`,
             projectId: "project-1",
         });
@@ -57,7 +57,7 @@ describe("Runtime diagnostics SDK", () => {
             client.close();
         }
         expect(received).toEqual([
-            { method: "GET", path: "/mobius/api/v1/projects/project-1/runtimes/runtime-1/diagnostics" },
+            { method: "GET", path: "/morty/api/v1/projects/project-1/runtimes/runtime-1/diagnostics" },
         ]);
     });
 
@@ -76,15 +76,15 @@ describe("Runtime diagnostics SDK", () => {
         if (address === null || typeof address === "string") {
             throw new Error("Expected an IP server address");
         }
-        const client = new MobiusClient({
-            credentialProvider: new StaticMobiusCredentialProvider("test-credential"),
+        const client = new MortyClient({
+            credentialProvider: new StaticMortyCredentialProvider("test-credential"),
             endpoint: `http://127.0.0.1:${address.port}`,
             projectId: "project-1",
         });
         const signal = new AbortController().signal;
         try {
             await expect(client.runtimes.readDiagnostics("runtime 1/../etc", signal)).rejects.toBeInstanceOf(
-                MobiusValidationError,
+                MortyValidationError,
             );
         } finally {
             client.close();

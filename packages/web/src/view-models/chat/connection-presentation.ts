@@ -2,10 +2,10 @@ import type { ConnectionFeedback, ExecutionContext } from "../../components/chat
 import { type BotChatHomeStore, botConnectionStatus } from "./bot-chat-home-store.ts";
 import type { SessionConnection } from "./session-connection.ts";
 
-/** A computer goes offline when it sleeps, loses its network, or restarts; only a restart needs the user to start Mobius again. */
+/** A computer goes offline when it sleeps, loses its network, or restarts; only a restart needs the user to start Morty again. */
 const COMPUTER_OFFLINE_RECOVERY = "Make sure it’s awake and online. Your draft is saved.";
 /** Starts the daemon, which resumes the saved connection. */
-const MOBIUS_START_COMMAND = "npx @morty-build/cli@latest start";
+const MORTY_START_COMMAND = "npx @morty-build/cli@latest start";
 
 type ConnectionPresentation = Pick<
     ExecutionContext,
@@ -124,7 +124,7 @@ export function connectionPresentation(
                         ? COMPUTER_OFFLINE_RECOVERY
                         : "Updates are paused. We’ll retry automatically. Your draft is saved.",
                 remainingSeconds: session.retry.kind === "scheduled" ? session.retry.remainingSeconds : null,
-                restartCommand: computer.kind === "disconnected" ? MOBIUS_START_COMMAND : null,
+                restartCommand: computer.kind === "disconnected" ? MORTY_START_COMMAND : null,
             },
         );
     }
@@ -135,7 +135,7 @@ export function connectionPresentation(
                 kind: "waiting",
                 title: "Computer is offline",
                 description: COMPUTER_OFFLINE_RECOVERY,
-                restartCommand: MOBIUS_START_COMMAND,
+                restartCommand: MORTY_START_COMMAND,
             },
         );
     }

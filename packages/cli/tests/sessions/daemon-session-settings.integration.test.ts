@@ -199,7 +199,7 @@ async function readAgentSettings(frames: ClientFrames, requestId: string) {
 
 describe("daemon session configuration boundary", () => {
     it("Given Codex removes a model between capability probes, When settings are discovered, Then the daemon returns supported settings and records the unavailable value", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-changing-model-catalog-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-changing-model-catalog-"));
         const workspace = join(stateDirectory, "workspace");
         const nativeStateDirectory = join(stateDirectory, "native");
         await Promise.all([mkdir(workspace), mkdir(nativeStateDirectory)]);
@@ -298,7 +298,7 @@ describe("daemon session configuration boundary", () => {
     });
 
     it("Given an Agent withholds effort for its default model, When settings are discovered without a model, Then the default model's own capability is reported", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-default-effort-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-default-effort-"));
         const workspace = join(stateDirectory, "workspace");
         const nativeStateDirectory = join(stateDirectory, "native");
         await Promise.all([mkdir(workspace), mkdir(nativeStateDirectory)]);
@@ -405,7 +405,7 @@ describe("daemon session configuration boundary", () => {
     });
 
     it("Given a project directory whose Agent settings choose another model, When settings are discovered for that directory, Then the daemon reports that directory's default model", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-directory-settings-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-directory-settings-"));
         const workspace = join(stateDirectory, "workspace");
         const project = join(stateDirectory, "project");
         const nativeStateDirectory = join(stateDirectory, "native");
@@ -525,7 +525,7 @@ describe("daemon session configuration boundary", () => {
     });
 
     it("Given an Agent offers a single model and withholds its effort, When settings are discovered without a model, Then that model is reported without effort", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-single-model-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-single-model-"));
         const workspace = join(stateDirectory, "workspace");
         const nativeStateDirectory = join(stateDirectory, "native");
         await Promise.all([mkdir(workspace), mkdir(nativeStateDirectory)]);
@@ -637,7 +637,7 @@ describe("daemon session configuration boundary", () => {
     });
 
     it("Given an Agent offers effort for its default model, When settings are discovered without a model, Then the session can adjust effort without switching models", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-default-effort-offered-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-default-effort-offered-"));
         const workspace = join(stateDirectory, "workspace");
         const nativeStateDirectory = join(stateDirectory, "native");
         await Promise.all([mkdir(workspace), mkdir(nativeStateDirectory)]);
@@ -748,7 +748,7 @@ describe("daemon session configuration boundary", () => {
     });
 
     it("Given a Turn is running with an Agent settings snapshot, When a steering prompt reuses that snapshot while the live Session exposes fewer settings, Then the Agent receives the steering prompt", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-steer-settings-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-steer-settings-"));
         const workspace = join(stateDirectory, "workspace");
         const nativeStateDirectory = join(stateDirectory, "native");
         await Promise.all([mkdir(workspace), mkdir(nativeStateDirectory)]);
@@ -875,7 +875,7 @@ describe("daemon session configuration boundary", () => {
     }, 30_000);
 
     it("Given a Turn runs with a settings snapshot, When a steering prompt names a setting value the live Session does not hold, Then the Agent receives the steering prompt", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-steer-drifted-settings-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-steer-drifted-settings-"));
         const workspace = join(stateDirectory, "workspace");
         const nativeStateDirectory = join(stateDirectory, "native");
         await Promise.all([mkdir(workspace), mkdir(nativeStateDirectory)]);

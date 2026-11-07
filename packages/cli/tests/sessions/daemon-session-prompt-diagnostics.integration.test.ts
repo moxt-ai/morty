@@ -18,7 +18,7 @@ import { writeControlledAcpExecutable } from "../support/controlled-acp-executab
 
 // @no-uc: Technical regression; a failed turn must leave a correlated local trace without persisting Agent free text.
 test("Given an Agent rejects a turn, When the turn fails, Then the failure event carries the reason to the user while neither the local log nor the exported report persists it", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-prompt-diagnostics-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-prompt-diagnostics-"));
     const executableDirectory = await writeControlledAcpExecutable(directory);
     try {
         await withRealDaemon(

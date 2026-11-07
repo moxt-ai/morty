@@ -18,7 +18,7 @@ afterEach(async () => {
 });
 
 async function stateDirectory() {
-    const root = await mkdtemp(join(tmpdir(), "mobius-daemon-lock-"));
+    const root = await mkdtemp(join(tmpdir(), "morty-daemon-lock-"));
     cleanups.push(async () => await rm(root, { force: true, recursive: true }));
     const directory = installationDirectory(root, "installation");
     await mkdir(directory);

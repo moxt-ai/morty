@@ -69,13 +69,13 @@ async function launchCount(path: string): Promise<number> {
 }
 
 test("Given Codex publishes complete model settings and defaults to Full access, When a user discovers settings and runs a tool, Then discovery uses one process and the turn completes without approval", async () => {
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "SETTINGS_REPLY", {
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "SETTINGS_REPLY", {
         patch: "*** Begin Patch\n*** Add File: full-access-check.txt\n+full access\n*** End Patch",
     });
     await using codex = await CodexFixture.create(provider, {
         approvalPolicy: "on-request",
     });
-    const directory = await mkdtemp(join(tmpdir(), "mobius-codex-settings-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-codex-settings-"));
     const launcher = join(directory, "codex.mjs");
     const recording = join(directory, "turn-policy.json");
     const launches = join(directory, "launches.log");
@@ -182,7 +182,7 @@ test("Given Codex publishes complete model settings and defaults to Full access,
 });
 
 test("Given Codex starts with a configured model outside its catalog, When Agent settings are discovered, Then the configured model remains the default", async () => {
-    await using provider = await FakeOpenAiProvider.start("mobius-custom-model", "CUSTOM_MODEL_REPLY");
+    await using provider = await FakeOpenAiProvider.start("morty-custom-model", "CUSTOM_MODEL_REPLY");
     await using codex = await CodexFixture.create(provider, { configuredModel: provider.model });
 
     await withRealDaemon(new CodexAgentSpecification(), codex.environment, async (peer) => {
@@ -200,8 +200,8 @@ test("Given Codex starts with a configured model outside its catalog, When Agent
 
         expect(discovered.requestId).toBe(requestId);
         expect(discovered.settings.find((setting) => setting.id === "model")).toMatchObject({
-            defaultValue: "mobius-custom-model",
-            values: expect.arrayContaining([expect.objectContaining({ value: "mobius-custom-model" })]),
+            defaultValue: "morty-custom-model",
+            values: expect.arrayContaining([expect.objectContaining({ value: "morty-custom-model" })]),
         });
     });
 });

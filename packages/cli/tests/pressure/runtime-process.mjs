@@ -29,7 +29,7 @@ const agent = new AcpAgentDefinition(
             },
             options,
         ),
-    { MOBIUS_TEST_OUTPUT_CONTROL_PATH: control },
+    { MORTY_TEST_OUTPUT_CONTROL_PATH: control },
     "1.0.0",
     undefined,
     undefined,

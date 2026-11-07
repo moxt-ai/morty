@@ -338,7 +338,7 @@ test("Given Morty cannot load and no daemon is connected, When a user reports a 
             online: navigator.onLine,
             measurements: {
                 browserMorty: { kind: "unavailable", code: "bridge_unavailable" },
-                browserMobius: { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" },
+                browserRelay: { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" },
             },
         });
         expect(report.network).not.toHaveProperty("vpn");
@@ -410,7 +410,7 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
             network: {
                 measurements: {
                     browserMorty: { kind: "available", latencyMs: expect.any(Number) },
-                    mobiusDaemon: { kind: "unavailable" },
+                    relayRuntime: { kind: "unavailable" },
                 },
             },
         });
@@ -475,7 +475,7 @@ test("Given two Runtime views are mounted, When a user reports from the first vi
         expect(report.botId).toBe(first.botId);
         expect(report.botId).not.toBe(second.botId);
         expect(report.daemon.kind).toBe("available");
-        expect(report.network.measurements.mobiusDaemon.kind).toBe("available");
+        expect(report.network.measurements.relayRuntime.kind).toBe("available");
     } finally {
         await inbox.close();
     }

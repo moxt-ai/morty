@@ -3,7 +3,7 @@ import { link, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/pr
 import { join } from "node:path";
 
 const markerName = "morty-installation.json";
-const marker = JSON.stringify({ product: "morty", generation: 1 });
+const marker = JSON.stringify({ product: "morty", generation: 2 });
 
 export class MortyOwnershipError extends Error {
     readonly code = "morty_state_not_owned";
@@ -39,7 +39,7 @@ export async function claimMortyState(root: string, signal: AbortSignal): Promis
                 !("product" in value) ||
                 value.product !== "morty" ||
                 !("generation" in value) ||
-                value.generation !== 1
+                value.generation !== 2
             ) {
                 throw new MortyOwnershipError("This directory belongs to another installation generation");
             }

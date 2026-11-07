@@ -39,9 +39,9 @@ async function runCli(
     return { code, stderr, stdout };
 }
 
-/** A computer whose PATH offers Node but no Agent, with private Mobius state. */
+/** A computer whose PATH offers Node but no Agent, with private Morty state. */
 async function machineWithoutAgents(): Promise<{ readonly environment: NodeJS.ProcessEnv; readonly root: string }> {
-    const root = await mkdtemp(join(tmpdir(), "mobius-agents-command-"));
+    const root = await mkdtemp(join(tmpdir(), "morty-agents-command-"));
     temporaryDirectories.push(root);
     return {
         root,
@@ -58,7 +58,7 @@ async function machineWithoutAgents(): Promise<{ readonly environment: NodeJS.Pr
     };
 }
 
-describe("Mobius agents command", () => {
+describe("Morty agents command", () => {
     it("Given an obsolete default-workspace environment override, When the user discovers Agents, Then the CLI uses the stable workspace outside its data container and leaves the override path untouched", async () => {
         const { environment, root } = await machineWithoutAgents();
         const obsoleteWorkspace = join(root, "obsolete-workspace");

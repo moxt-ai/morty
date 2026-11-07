@@ -41,7 +41,7 @@ describe("daemon environment proxy", () => {
         const relaySockets = new Set<Socket>();
         const proxySockets = new Set<Socket>();
         const tunnelTargets: string[] = [];
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-proxy-test-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-proxy-test-"));
 
         const pairingPaths: string[] = [];
         const pairingServer = createServer((request, response) => {
@@ -150,7 +150,7 @@ describe("daemon environment proxy", () => {
         const previousCodexPath = process.env["MORTY_CODEX_PATH"];
         const previousPiPath = process.env["MORTY_PI_PATH"];
         const proxyOrigin = `http://127.0.0.1:${port(proxyServer)}`;
-        const proxyUrl = proxyOrigin.replace("http://", "http://mobius:proxy-secret@");
+        const proxyUrl = proxyOrigin.replace("http://", "http://morty:proxy-secret@");
 
         process.env["HTTP_PROXY"] = proxyUrl;
         process.env["HTTPS_PROXY"] = proxyUrl;
@@ -163,14 +163,14 @@ describe("daemon environment proxy", () => {
         Object.assign(process.env, codex.environment);
 
         try {
-            const { MobiusRuntimeEngine } = await import("../../src/exports/engine.ts");
+            const { MortyRuntimeEngine } = await import("../../src/exports/engine.ts");
             const { connectRelay } = await import("../../src/engine/runtime/relay/connect.ts");
             const { describeEnvironmentProxyRoute, environmentProxyDispatcher } = await import(
                 "../../src/engine/util/network/environment-proxy.ts"
             );
 
             const pairingPort = port(pairingServer);
-            const engine = new MobiusRuntimeEngine({
+            const engine = new MortyRuntimeEngine({
                 engineDataDir: stateDirectory,
                 agentLaunchEnvironment: process.env,
             });

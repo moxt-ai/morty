@@ -18,7 +18,7 @@ import { seedMortyService, setMortyRecording } from "../../../platform-test-supp
 // @no-uc: Performance; concurrent output must preserve transport, cancellation and durable Recording.
 // This opt-in E2E runner crosses the public Runtime, HTTP, WebSocket and Recording boundaries.
 const here = dirname(fileURLToPath(import.meta.url));
-const repository = resolve(process.env["MOBIUS_PRESSURE_SOURCE_ROOT"] ?? resolve(here, "../../../.."));
+const repository = resolve(process.env["MORTY_PRESSURE_SOURCE_ROOT"] ?? resolve(here, "../../../.."));
 const require = createRequire(join(repository, "packages/platform-test-support/package.json"));
 const { build } = require("esbuild");
 const { Miniflare, convertV4MiniflareOptions } = require("miniflare");
@@ -26,12 +26,12 @@ const pluginDirectory = join(repository, "packages/platform-test-support/node_mo
 const pluginPackage = JSON.parse(await readFile(join(pluginDirectory, "package.json"), "utf8"));
 const { readD1Migrations } = await import(pathToFileURL(join(pluginDirectory, pluginPackage.main)));
 const { WebSocket } = require("ws");
-const output = resolve(process.argv[2] ?? (await mkdtemp(join(tmpdir(), "mobius-pressure-evidence-"))));
+const output = resolve(process.argv[2] ?? (await mkdtemp(join(tmpdir(), "morty-pressure-evidence-"))));
 await mkdir(output, { recursive: true });
 const counts = process.argv.slice(3).map(Number);
-const durationSeconds = Number(process.env["MOBIUS_PRESSURE_DURATION_SECONDS"] ?? 60);
+const durationSeconds = Number(process.env["MORTY_PRESSURE_DURATION_SECONDS"] ?? 60);
 assert.ok(Number.isSafeInteger(durationSeconds) && durationSeconds > 0);
-const expectBatches = process.env["MOBIUS_PRESSURE_EXPECT_BATCH"] !== "0";
+const expectBatches = process.env["MORTY_PRESSURE_EXPECT_BATCH"] !== "0";
 const bundledWorkers = new Map();
 const report = {
     revision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repository, encoding: "utf8" }).trim(),
@@ -75,7 +75,7 @@ async function bundle(path) {
         external: ["cloudflare:workers"],
         write: false,
         plugins:
-            process.env["MOBIUS_PRESSURE_SOURCE_OVERRIDES"] === undefined
+            process.env["MORTY_PRESSURE_SOURCE_OVERRIDES"] === undefined
                 ? []
                 : [
                       {
@@ -89,7 +89,7 @@ async function bundle(path) {
                                   try {
                                       return {
                                           contents: await readFile(
-                                              join(process.env["MOBIUS_PRESSURE_SOURCE_OVERRIDES"], source),
+                                              join(process.env["MORTY_PRESSURE_SOURCE_OVERRIDES"], source),
                                               "utf8",
                                           ),
                                           loader: "ts",
@@ -134,13 +134,13 @@ async function exercise(count) {
             }
         }
     };
-    const state = await mkdtemp(join(tmpdir(), "mobius-pressure-runtime-"));
+    const state = await mkdtemp(join(tmpdir(), "morty-pressure-runtime-"));
     await Promise.all([mkdir(join(state, "home")), mkdir(join(state, "workspace"))]);
     const streams = new Map();
     const emitted = new Set();
     const sessionViewers = new Map();
     const controlSockets = new Set();
-    const controlDirectory = await mkdtemp("/tmp/mobius-pressure-control-");
+    const controlDirectory = await mkdtemp("/tmp/morty-pressure-control-");
     const controlPath = join(controlDirectory, "driver.sock");
     const control = createServer((socket) => {
         controlSockets.add(socket);
@@ -195,7 +195,7 @@ async function exercise(count) {
                     serviceBindings: { RECORDING: "recording" },
                     bindings: {
                         RECORDING_PROVIDER_ID: "recording-local",
-                        MOBIUS_PLATFORM_ALLOWED_ORIGINS: '["*"]',
+                        MORTY_ALLOWED_ORIGINS: '["*"]',
                     },
                 },
                 {
@@ -230,7 +230,7 @@ async function exercise(count) {
             );
         }
         const api = async (path, method = "GET", body, token, status = 200) => {
-            const response = await requestJson(new URL(`${origin}/mobius/api${path}`), {
+            const response = await requestJson(new URL(`${origin}/morty/api${path}`), {
                 method,
                 headers: {
                     authorization: `Bearer ${token ?? app.defaultCredential.credential}`,
@@ -262,7 +262,7 @@ async function exercise(count) {
             machineName: "Isolated pressure test",
             workspaceName: "workspace",
         });
-        const relay = new URL(`${origin}/mobius/api/v1/runtimes/connect`);
+        const relay = new URL(`${origin}/morty/api/v1/runtimes/connect`);
         relay.protocol = "ws:";
         relay.searchParams.set("token", claimed.runtimeCredential);
         const connectionStates = [];
@@ -295,7 +295,7 @@ async function exercise(count) {
         });
         stage("connecting Runtime");
         await check(() => connectionStates.includes("online"), "Runtime online");
-        const hostUrl = new URL(`${origin}/mobius/api${base}/runtimes/${claimed.runtimeId}/host`);
+        const hostUrl = new URL(`${origin}/morty/api${base}/runtimes/${claimed.runtimeId}/host`);
         hostUrl.protocol = "ws:";
         hostUrl.searchParams.set("token", credential);
         host = new WebSocket(hostUrl);
@@ -703,7 +703,7 @@ async function exercise(count) {
                 `Recorded event order/completeness: ${id}`,
             );
             assert.equal(
-                history.events.some((event) => event.mobiusMetadata?.omitted),
+                history.events.some((event) => event.mortyMetadata?.omitted),
                 false,
                 `Recording gap: ${id}`,
             );

@@ -9,7 +9,7 @@ export function openTemporarySessionEventCache(): {
     readonly table: SessionEventCacheTable;
     readonly removeFiles: () => void;
 } {
-    const directory = mkdtempSync(join(tmpdir(), "mobius-preview-events-"));
+    const directory = mkdtempSync(join(tmpdir(), "morty-preview-events-"));
     const removeFiles = (): void => rmSync(directory, { recursive: true, force: true });
     try {
         return {

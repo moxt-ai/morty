@@ -61,7 +61,7 @@ async function promptRealSession(peer: RealDaemonPeer, sessionId: string, text: 
 }
 
 test("Given a real Codex conversation, When more Sessions are opened than the daemon can retain, Then the original native Session continues with its history intact", async () => {
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "RESTORED_REPLY");
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "RESTORED_REPLY");
     await using agent = await CodexFixture.create(provider);
     await withRealDaemon(new CodexAgentSpecification(), evictingEnvironment(agent.environment), async (peer) => {
         const sessionId = await prepareNewRealSession(peer, "codex");

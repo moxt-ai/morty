@@ -129,7 +129,7 @@ export class BestEffortRecording {
                 const events: readonly SessionWireEvent[] =
                     head === undefined
                         ? batch
-                        : [{ ...head, mobiusMetadata: { ...head.mobiusMetadata, omitted: true } }, ...tail];
+                        : [{ ...head, mortyMetadata: { ...head.mortyMetadata, omitted: true } }, ...tail];
                 lane.gap = false;
                 lane.state = "delivering";
                 this.#ready.delete(lane);

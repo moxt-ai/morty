@@ -61,7 +61,7 @@ const lifecycle =
             ("commandId" in frame.event.payload && frame.event.payload.commandId === commandId));
 
 test("Given a running prompt, When queue prompts are rejected, admitted and retried, Then the daemon answers each command for itself", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-prompt-acknowledgement-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-prompt-acknowledgement-"));
     try {
         const executableDirectory = await writeControlledAcpExecutable(directory);
         await withControlledDaemon(

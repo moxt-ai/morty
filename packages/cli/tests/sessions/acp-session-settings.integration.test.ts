@@ -16,7 +16,7 @@ import { createControlledSession } from "./acp-controls-fixture.ts";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
 
 describe("Agent setting capabilities", () => {
-    it("Given an Agent reports its reasoning effort as the provider default, When a session is prepared, Then Mobius keeps the effort setting with that current value", async () => {
+    it("Given an Agent reports its reasoning effort as the provider default, When a session is prepared, Then Morty keeps the effort setting with that current value", async () => {
         const manager = new SessionManager({
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
@@ -96,7 +96,7 @@ describe("Agent setting capabilities", () => {
         }
     });
 
-    it("Given an Agent does not expose adjustable reasoning effort, When a session is prepared, Then Mobius does not invent an effort setting", async () => {
+    it("Given an Agent does not expose adjustable reasoning effort, When a session is prepared, Then Morty does not invent an effort setting", async () => {
         const manager = new SessionManager({
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
@@ -159,7 +159,7 @@ describe("Agent setting capabilities", () => {
         }
     });
 
-    it("Given Pi exposes no approval or sandbox setting, When its session is prepared, Then Mobius exposes no synthetic execution control", async () => {
+    it("Given Pi exposes no approval or sandbox setting, When its session is prepared, Then Morty exposes no synthetic execution control", async () => {
         const manager = new SessionManager({
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
@@ -215,7 +215,7 @@ describe("Agent setting capabilities", () => {
         }
     });
 
-    it("Given an Agent acknowledges a setting without applying it, When Mobius configures the session, Then the Turn is rejected", async () => {
+    it("Given an Agent acknowledges a setting without applying it, When Morty configures the session, Then the Turn is rejected", async () => {
         const manager = new SessionManager({
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
@@ -280,7 +280,7 @@ it("Given ACP exposes select and boolean settings, When a user configures the co
     await using session = await createControlledSession();
     const prepared = await session.manager.prepareSession(session.request);
     expect(prepared).toMatchObject({
-        agentName: "Mobius test agent",
+        agentName: "Morty test agent",
         capabilities: {
             additionalDirectories: true,
             embeddedContextPrompt: true,

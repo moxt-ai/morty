@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import cliPackage from "../../package.json" with { type: "json" };
 import { sendLocalRequest } from "../../src/daemon/control/local-client.ts";
-import { openMobiusControlInstallation } from "../../src/daemon/pairing/pair-local-machine.ts";
+import { openMortyControlInstallation } from "../../src/daemon/pairing/pair-local-machine.ts";
 import { installWorkspaceDaemonRelease } from "../support/installed-daemon-release.ts";
 
 const temporaryDirectories: string[] = [];
@@ -43,9 +43,9 @@ async function runCli(
     return { code, stderr, stdout };
 }
 
-describe("Mobius version command", () => {
+describe("Morty version command", () => {
     it("Given no running daemon, When the user asks for the version, Then the CLI reports its own version and that no daemon is running", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-version-command-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-version-command-"));
         temporaryDirectories.push(directory);
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: join(directory, "state") };
         const signal = AbortSignal.timeout(30_000);
@@ -55,7 +55,7 @@ describe("Mobius version command", () => {
     }, 60_000);
 
     it("Given a running daemon, When the user asks for the version, Then the CLI reports both the CLI and daemon versions", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-version-command-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-version-command-"));
         temporaryDirectories.push(directory);
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: join(directory, "state") };
         const signal = AbortSignal.timeout(60_000);
@@ -68,7 +68,7 @@ describe("Mobius version command", () => {
             for (const result of started) {
                 expect(result.code, result.stderr).toBe(0);
             }
-            const control = await openMobiusControlInstallation(signal, environment);
+            const control = await openMortyControlInstallation(signal, environment);
             expect(await sendLocalRequest(control.stateDirectory, "manager", { kind: "reload" }, signal)).toEqual({
                 kind: "reloaded",
             });

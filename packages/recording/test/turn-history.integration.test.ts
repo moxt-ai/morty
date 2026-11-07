@@ -397,7 +397,7 @@ describe("Recording Turn history", () => {
         const settled = (await turnPage()).turns.find((turn) => turn.commandId === "settled-command")?.attempt;
         const restated = (commandId: string, at: string, recordedOutcome: boolean) => ({
             ...completed(commandId),
-            mobiusMetadata: recordedOutcome ? { recordedOutcome: true, restated: true } : { restated: true },
+            mortyMetadata: recordedOutcome ? { recordedOutcome: true, restated: true } : { restated: true },
             recordedAt: at,
         });
         const lostAt = "2026-10-15T00:00:30.000Z";

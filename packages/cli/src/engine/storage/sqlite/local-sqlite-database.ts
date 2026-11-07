@@ -39,7 +39,7 @@ export class LocalSqliteDatabase {
             .object({ user_version: z.number().int().nonnegative() })
             .parse(this.#sqlite.prepare("PRAGMA user_version").get()).user_version;
         if (version > migrations.length) {
-            throw new Error(`The ${label} was created by a newer Mobius version`);
+            throw new Error(`The ${label} was created by a newer Morty version`);
         }
         for (let index = version; index < migrations.length; index += 1) {
             const migration = migrations[index];

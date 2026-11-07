@@ -48,7 +48,7 @@ beforeAll(async () => {
             d1Databases: ["PLATFORM_DIRECTORY_DATABASE"],
             r2Buckets: ["R2_BUCKET_APAC", "R2_BUCKET_WNAM"],
             bindings: {
-                MOBIUS_PLATFORM_ALLOWED_ORIGINS: '["*"]',
+                MORTY_ALLOWED_ORIGINS: '["*"]',
             },
             handleStructuredLogs: (log) => {
                 const value: unknown = JSON.parse(log.message);
@@ -70,7 +70,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
     await runtime?.dispose();
-    const artifact = process.env["MOBIUS_LOG_E2E_ARTIFACT"];
+    const artifact = process.env["MORTY_LOG_E2E_ARTIFACT"];
     if (artifact !== undefined) {
         await mkdir(dirname(artifact), { recursive: true });
         await writeFile(artifact, `${JSON.stringify({ runtime: "workerd", logs }, null, 2)}\n`);
@@ -97,7 +97,7 @@ async function api(
     init: { method?: string; headers?: Record<string, string>; body?: string },
     status: number,
 ) {
-    const response = await runtime.dispatchFetch(`https://relay.test/mobius/api${path}`, {
+    const response = await runtime.dispatchFetch(`https://relay.test/morty/api${path}`, {
         ...init,
         headers: {
             "content-type": "application/json",
@@ -182,8 +182,8 @@ async function httpFailure(kind: string): Promise<Record<string, unknown>> {
     });
     expect(response.status).toBe(500);
     expect(await response.json()).toMatchObject({ error: { code: "internal_error" } });
-    await expect.poll(() => logs.slice(start).find((log) => log["msg"] === "Mobius request failed")).toBeDefined();
-    const log = logs.slice(start).find((log) => log["msg"] === "Mobius request failed");
+    await expect.poll(() => logs.slice(start).find((log) => log["msg"] === "Morty request failed")).toBeDefined();
+    const log = logs.slice(start).find((log) => log["msg"] === "Morty request failed");
     if (log === undefined) {
         throw new Error("Expected a collected HTTP failure log");
     }
@@ -235,7 +235,7 @@ it.each(["primitive", "object", "circular", "deep", "long", "secrets", "getter"]
 it("identifies the failing Runtime Durable Object through the public pairing and connect APIs", async () => {
     const { projectId, pairing, claimed } = await pairRuntime();
     const start = logs.length;
-    const response = await runtime.dispatchFetch("https://relay.test/mobius/api/v1/runtimes/connect", {
+    const response = await runtime.dispatchFetch("https://relay.test/morty/api/v1/runtimes/connect", {
         headers: {
             authorization: `Bearer ${text(claimed, "runtimeCredential")}`,
             Upgrade: "websocket",
@@ -327,9 +327,9 @@ it("keeps ordinary Host closes quiet after the real platform close callback comp
     const response = await runtime.dispatchFetch(`https://relay.test/projects/${projectId}/host`, {
         headers: {
             Upgrade: "websocket",
-            "x-mobius-runtime-id": runtimeId,
-            "x-mobius-channel-id": channelId,
-            "x-mobius-host-credential-id": "ctl_HOST_CREDENTIAL_CANARY",
+            "x-morty-runtime-id": runtimeId,
+            "x-morty-channel-id": channelId,
+            "x-morty-host-credential-id": "ctl_HOST_CREDENTIAL_CANARY",
         },
     });
     expect(response.status).toBe(101);
@@ -365,8 +365,8 @@ async function daemon() {
     const response = await runtime.dispatchFetch(`https://relay.test/projects/${projectId}/daemon`, {
         headers: {
             Upgrade: "websocket",
-            "x-mobius-runtime-id": runtimeId,
-            "x-mobius-channel-id": channelId,
+            "x-morty-runtime-id": runtimeId,
+            "x-morty-channel-id": channelId,
         },
     });
     expect(response.status).toBe(101);

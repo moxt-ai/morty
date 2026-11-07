@@ -19,7 +19,7 @@ interface AuthenticationMethod {
 export const appCredentialAuthentication: AuthenticationMethod = {
     accepts: (request) => /^Bearer mapp_/iu.test(request.headers.get("authorization") ?? ""),
     middleware: async (context, next) => {
-        if (context.req.header("x-mobius-oidc-provider") !== undefined) {
+        if (context.req.header("x-morty-oidc-provider") !== undefined) {
             throw new PlatformControlPlaneError("ambiguous_authentication", "Select one authentication method", 400);
         }
         const credential = context.req.header("authorization")?.match(/^Bearer ([^\s]+)$/iu)?.[1];

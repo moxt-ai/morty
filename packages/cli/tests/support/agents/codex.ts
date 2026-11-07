@@ -29,9 +29,9 @@ export class CodexFixture implements AsyncDisposable {
         } = {},
     ): Promise<CodexFixture> {
         // Codex is an in-process Agent: there is no ACP adapter to resolve, only the real binary
-        // that Mobius drives through `codex app-server`.
+        // that Morty drives through `codex app-server`.
         const executable = await resolveTestExecutable("codex", "MORTY_TEST_CODEX_PATH");
-        const directory = await mkdtemp(join(tmpdir(), "mobius-agent-daemon-codex-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-agent-daemon-codex-"));
         const codexHome = join(directory, "codex");
         const missing = join(directory, "missing-agent");
         await mkdir(codexHome, { recursive: true });
@@ -72,16 +72,16 @@ export class CodexFixture implements AsyncDisposable {
                 ...(options.autoCompactTokenLimit === undefined
                     ? []
                     : [`model_auto_compact_token_limit = ${options.autoCompactTokenLimit.toString()}`]),
-                'model_provider = "mobius"',
+                'model_provider = "morty"',
                 'model_reasoning_effort = "low"',
                 'model_reasoning_summary = "none"',
                 // The CI host cannot create the sandbox namespaces Codex needs, so the fixture runs
-                // its tool calls without one. This is Codex configuration, not Mobius policy.
+                // its tool calls without one. This is Codex configuration, not Morty policy.
                 'sandbox_mode = "danger-full-access"',
                 `approval_policy = ${JSON.stringify(options.approvalPolicy ?? "never")}`,
                 "",
-                "[model_providers.mobius]",
-                'name = "Mobius fake provider"',
+                "[model_providers.morty]",
+                'name = "Morty fake provider"',
                 `base_url = ${JSON.stringify(`${provider.origin}/v1`)}`,
                 'env_key = "CODEX_API_KEY"',
                 'wire_api = "responses"',

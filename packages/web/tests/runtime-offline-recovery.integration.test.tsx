@@ -155,7 +155,10 @@ test("Given a background reply is running when the Runtime goes offline, When th
         throw new Error("Expected a connected controlled Agent Runtime");
     }
     await sendPrompt(app, await readyComposer(app), "Background conversation");
-    await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: Background conversation")).toBe(true));
+    await app.waitForView(() => {
+        expect(agentAnswered(app, "Codex turn 1: Background conversation")).toBe(true);
+        expect(entryStatus(app, "Background conversation")).toBeNull();
+    });
     await app.user.click(app.elementByTestId(dataTestId.newConversation));
     await app.waitForView(() => expect(directoryTitles(app)).toHaveLength(1));
     // Another page starts a reply in the background conversation that is still running when the Runtime goes away.
@@ -166,6 +169,10 @@ test("Given a background reply is running when the Runtime goes offline, When th
         ),
     );
     await sendPrompt(viewer, await readyComposer(viewer), "hold after first delta");
+    await viewer.waitForView(() => {
+        expect(agentAnswered(viewer, "Partial reply")).toBe(true);
+        expect(entryStatus(viewer, "Background conversation")).toBe("Session working");
+    });
     await app.waitForView(() => expect(entryStatus(app, "Background conversation")).toBe("Session working"));
     await viewer.close();
 

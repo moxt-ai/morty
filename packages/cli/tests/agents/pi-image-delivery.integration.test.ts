@@ -29,7 +29,7 @@ for (const side of [128, 500]) {
             await verifyImageDelivery(peer, {
                 agentId: "pi",
                 image,
-                reference: `mobius-content:image:${createHash("sha256").update(image).digest("hex")}`,
+                reference: `morty-content:image:${createHash("sha256").update(image).digest("hex")}`,
                 prompt,
             });
         });

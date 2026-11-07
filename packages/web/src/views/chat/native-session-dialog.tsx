@@ -24,7 +24,7 @@ import type { NativeSessionAgent } from "../../view-models/chat/native-session-a
 import { type NativeSessionStore, nativeSessionPresentation } from "../../view-models/chat/native-session-store.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
-import { MobiusSessionMessage } from "./mobius-session-message.tsx";
+import { MortySessionMessage } from "./morty-session-message.tsx";
 
 /** Touch-sized on the phone sheet, back to the dialog's compact height and type from the sm breakpoint up. */
 const sheetControlHeightClassName = "min-h-11 max-sm:[font-size:15px] sm:min-h-9";
@@ -521,7 +521,7 @@ export function NativeSessionDialog({
                                                         <p>No events in this session.</p>
                                                     )}
                                                     {model.preview.content.messages.map((message) => (
-                                                        <MobiusSessionMessage
+                                                        <MortySessionMessage
                                                             deliveryUnknownUserMessageId={null}
                                                             failureApproval={{ kind: "unavailable" }}
                                                             key={message.firstEvent.eventId}

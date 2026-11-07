@@ -53,7 +53,7 @@ export function buildPromptContent(options: PromptContent, capabilities: Session
     }
     for (const image of options.images) {
         prompt.push({
-            _meta: { mobius: { name: image.name } },
+            _meta: { morty: { name: image.name } },
             data: image.data,
             mimeType: image.mimeType,
             type: "image",

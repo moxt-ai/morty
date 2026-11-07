@@ -7,7 +7,7 @@ import { startTestPlatform } from "../support/platform.ts";
 
 // @no-uc: Performance; validating a directory must not require enumerating its children.
 it("describes a selected directory without browsing its children and still rejects unavailable directories", async () => {
-    const root = await mkdtemp(join(tmpdir(), "mobius-workspace-metadata-"));
+    const root = await mkdtemp(join(tmpdir(), "morty-workspace-metadata-"));
     try {
         await mkdir(join(root, "child"));
         const canonical = await realpath(root);

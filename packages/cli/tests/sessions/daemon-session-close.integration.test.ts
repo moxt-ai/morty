@@ -140,7 +140,7 @@ test("Given retained Agent teardown does not finish, When the Session close dead
 });
 
 test("Given an active Agent session holding an exclusive writer lock, When a public close command reaches the daemon, Then the process stops and releases the writer lock", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-session-close-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-session-close-"));
     const executableDirectory = join(directory, "bin");
     const executable = join(executableDirectory, "controlled-acp");
     const nativeStateDirectory = join(directory, "native");

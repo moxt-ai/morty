@@ -1,13 +1,13 @@
 import { isIdentifier, PROJECT_PERMISSION_NAMES } from "@morty-build/client/protocol";
-import { MobiusProtocolError, MobiusValidationError } from "./errors.ts";
-import type { MobiusCredentialProvider } from "./service-client.ts";
+import { MortyProtocolError, MortyValidationError } from "./errors.ts";
+import type { MortyCredentialProvider } from "./service-client.ts";
 
-export const MOBIUS_PROJECT_PERMISSIONS: readonly string[] = PROJECT_PERMISSION_NAMES;
+export const MORTY_PROJECT_PERMISSIONS: readonly string[] = PROJECT_PERMISSION_NAMES;
 
 function text(value: Readonly<Record<string, unknown>>, key: string, name: string, allowEmpty = false): string {
     const field = value[key];
     if (typeof field !== "string" || (!allowEmpty && field.length === 0)) {
-        throw new MobiusProtocolError(`The service returned an invalid ${name}`);
+        throw new MortyProtocolError(`The service returned an invalid ${name}`);
     }
     return field;
 }
@@ -15,7 +15,7 @@ function text(value: Readonly<Record<string, unknown>>, key: string, name: strin
 function optionalIdentifierField(value: Readonly<Record<string, unknown>>, key: string, name: string): string {
     const field = text(value, key, name, true);
     if (field.length > 0 && !isIdentifier(field)) {
-        throw new MobiusProtocolError(`The service returned an invalid ${name}`);
+        throw new MortyProtocolError(`The service returned an invalid ${name}`);
     }
     return field;
 }
@@ -23,7 +23,7 @@ function optionalIdentifierField(value: Readonly<Record<string, unknown>>, key: 
 function timestamp(value: Readonly<Record<string, unknown>>, key: string, name: string, allowEmpty = false): string {
     const field = text(value, key, name, allowEmpty);
     if (field.length > 0 && Number.isNaN(Date.parse(field))) {
-        throw new MobiusProtocolError(`The service returned an invalid ${name}`);
+        throw new MortyProtocolError(`The service returned an invalid ${name}`);
     }
     return field;
 }
@@ -31,7 +31,7 @@ function timestamp(value: Readonly<Record<string, unknown>>, key: string, name: 
 function _booleanField(value: Readonly<Record<string, unknown>>, key: string, name: string): boolean {
     const field = value[key];
     if (typeof field !== "boolean") {
-        throw new MobiusProtocolError(`The service returned an invalid ${name}`);
+        throw new MortyProtocolError(`The service returned an invalid ${name}`);
     }
     return field;
 }
@@ -48,15 +48,15 @@ function hasControlCharacters(value: string): boolean {
 
 function credential(value: string): string {
     if (value.length === 0 || value.length > 16 * 1024 || hasControlCharacters(value)) {
-        throw new MobiusValidationError("The credential is invalid");
+        throw new MortyValidationError("The credential is invalid");
     }
     return value;
 }
 
-export class MobiusCredentialLifecycle {
-    static readonly Current = new MobiusCredentialLifecycle("current");
-    static readonly Replaced = new MobiusCredentialLifecycle("replaced");
-    static readonly Revoked = new MobiusCredentialLifecycle("revoked");
+export class MortyCredentialLifecycle {
+    static readonly Current = new MortyCredentialLifecycle("current");
+    static readonly Replaced = new MortyCredentialLifecycle("replaced");
+    static readonly Revoked = new MortyCredentialLifecycle("revoked");
 
     readonly value: string;
 
@@ -67,15 +67,15 @@ export class MobiusCredentialLifecycle {
     readonly toJSON = (): string => this.value;
 }
 
-export abstract class MobiusCredentialReplacement {
+export abstract class MortyCredentialReplacement {
     abstract readonly exists: boolean;
 }
 
-export class MobiusNoCredentialReplacement extends MobiusCredentialReplacement {
+export class MortyNoCredentialReplacement extends MortyCredentialReplacement {
     readonly exists = false;
 }
 
-export class MobiusRecordedCredentialReplacement extends MobiusCredentialReplacement {
+export class MortyRecordedCredentialReplacement extends MortyCredentialReplacement {
     readonly credentialId: string;
     readonly exists = true;
     readonly overlapEndsAt: string;
@@ -87,57 +87,57 @@ export class MobiusRecordedCredentialReplacement extends MobiusCredentialReplace
     }
 }
 
-export abstract class MobiusCredentialState {
-    abstract readonly lifecycle: MobiusCredentialLifecycle;
+export abstract class MortyCredentialState {
+    abstract readonly lifecycle: MortyCredentialLifecycle;
 }
 
-export class MobiusCurrentCredentialState extends MobiusCredentialState {
-    readonly lifecycle = MobiusCredentialLifecycle.Current;
+export class MortyCurrentCredentialState extends MortyCredentialState {
+    readonly lifecycle = MortyCredentialLifecycle.Current;
 }
 
-export class MobiusReplacedCredentialState extends MobiusCredentialState {
-    readonly lifecycle = MobiusCredentialLifecycle.Replaced;
-    readonly replacement: MobiusRecordedCredentialReplacement;
+export class MortyReplacedCredentialState extends MortyCredentialState {
+    readonly lifecycle = MortyCredentialLifecycle.Replaced;
+    readonly replacement: MortyRecordedCredentialReplacement;
 
-    constructor(replacement: MobiusRecordedCredentialReplacement) {
+    constructor(replacement: MortyRecordedCredentialReplacement) {
         super();
         this.replacement = replacement;
     }
 }
 
-export class MobiusRevokedCredentialState extends MobiusCredentialState {
-    readonly lifecycle = MobiusCredentialLifecycle.Revoked;
-    readonly replacement: MobiusCredentialReplacement;
+export class MortyRevokedCredentialState extends MortyCredentialState {
+    readonly lifecycle = MortyCredentialLifecycle.Revoked;
+    readonly replacement: MortyCredentialReplacement;
     readonly revokedAt: string;
 
-    constructor(revokedAt: string, replacement: MobiusCredentialReplacement) {
+    constructor(revokedAt: string, replacement: MortyCredentialReplacement) {
         super();
         this.revokedAt = revokedAt;
         this.replacement = replacement;
     }
 }
 
-function _credentialState(value: Readonly<Record<string, unknown>>, name: string): MobiusCredentialState {
+function _credentialState(value: Readonly<Record<string, unknown>>, name: string): MortyCredentialState {
     const overlapEndsAt = timestamp(value, "overlapEndsAt", name, true);
     const replacementCredentialId = optionalIdentifierField(value, "replacedByCredentialId", name);
     const revokedAt = timestamp(value, "revokedAt", name, true);
     if ((overlapEndsAt.length === 0) !== (replacementCredentialId.length === 0)) {
-        throw new MobiusProtocolError(`The service returned an invalid ${name}`);
+        throw new MortyProtocolError(`The service returned an invalid ${name}`);
     }
     const replacement =
         replacementCredentialId.length === 0
-            ? new MobiusNoCredentialReplacement()
-            : new MobiusRecordedCredentialReplacement(replacementCredentialId, overlapEndsAt);
+            ? new MortyNoCredentialReplacement()
+            : new MortyRecordedCredentialReplacement(replacementCredentialId, overlapEndsAt);
     if (revokedAt.length > 0) {
-        return new MobiusRevokedCredentialState(revokedAt, replacement);
+        return new MortyRevokedCredentialState(revokedAt, replacement);
     }
-    if (replacement instanceof MobiusRecordedCredentialReplacement) {
-        return new MobiusReplacedCredentialState(replacement);
+    if (replacement instanceof MortyRecordedCredentialReplacement) {
+        return new MortyReplacedCredentialState(replacement);
     }
-    return new MobiusCurrentCredentialState();
+    return new MortyCurrentCredentialState();
 }
 
-export class RotatingMobiusCredentialProvider implements MobiusCredentialProvider {
+export class RotatingMortyCredentialProvider implements MortyCredentialProvider {
     #credential: string;
 
     constructor(initialCredential: string) {

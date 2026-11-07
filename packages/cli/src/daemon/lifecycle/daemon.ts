@@ -12,10 +12,10 @@ import { logDirectory, WORKER_LIFECYCLE_LOG_FILENAME } from "../../engine/storag
 import { isNodeError } from "../../engine/util/node-error.ts";
 import { releaseEntry, requireInstalledRelease } from "../../installation/releases.ts";
 import { acquireDaemonLock } from "../../storage/daemon/daemon-lock.ts";
-import { prepareMobiusEngineDataDir, resolveMaxAcpProcesses } from "../config.ts";
+import { prepareMortyEngineDataDir, resolveMaxAcpProcesses } from "../config.ts";
 import { sendLocalRequest } from "../control/local-client.ts";
 import { serveLocalControl } from "../control/local-server.ts";
-import { openMobiusControlInstallation } from "../pairing/pair-local-machine.ts";
+import { openMortyControlInstallation } from "../pairing/pair-local-machine.ts";
 import { surviveUnhandledRejections, type UnhandledRejectionGuard } from "./unhandled-rejection.ts";
 
 class DaemonRuntimeError extends Error {
@@ -79,7 +79,7 @@ export async function runDaemon(version: string, signal: AbortSignal): Promise<v
     try {
         await runDaemonRuntime(version, combined, shutdown, rejectionGuard);
     } catch (cause) {
-        const control = await openMobiusControlInstallation(AbortSignal.timeout(5_000), process.env);
+        const control = await openMortyControlInstallation(AbortSignal.timeout(5_000), process.env);
         new BoundedLineLog(logDirectory(control.stateDirectory), WORKER_LIFECYCLE_LOG_FILENAME, 512 * 1024).record(
             JSON.stringify({
                 kind: "daemon_failed",
@@ -99,7 +99,7 @@ async function runDaemonRuntime(
     shutdown: AbortController,
     rejectionGuard: UnhandledRejectionGuard,
 ): Promise<void> {
-    const control = await openMobiusControlInstallation(combined, process.env);
+    const control = await openMortyControlInstallation(combined, process.env);
     const releaseDaemon = await acquireDaemonLock(control.stateDirectory, "manager.lock");
     if (releaseDaemon === null) {
         return;
@@ -113,7 +113,7 @@ async function runDaemonRuntime(
         JSON.stringify({ kind: "daemon_started", pid: process.pid, version, timestamp: new Date().toISOString() }),
     );
     try {
-        const engineDataDir = await prepareMobiusEngineDataDir(version, combined, process.env);
+        const engineDataDir = await prepareMortyEngineDataDir(version, combined, process.env);
         const installation = await RuntimeInstallationStore.open(engineDataDir, combined);
         rejectionGuard.bindStateDirectory(control.stateDirectory);
         const turnActivity = new RuntimeTurnActivity();

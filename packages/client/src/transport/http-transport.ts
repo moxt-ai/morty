@@ -1,23 +1,23 @@
-export interface MobiusHttpTransport {
+export interface MortyHttpTransport {
     readonly fetch: (request: Request) => Promise<Response>;
 }
 
-export interface MobiusTransportSessionEvent {
+export interface MortyTransportSessionEvent {
     readonly data: string;
     readonly eventId: string;
     readonly seqId: number;
 }
 
-export interface MobiusLiveEventTransport {
-    readonly openSessionLiveEvents: (request: Request) => Promise<ReadableStream<MobiusTransportSessionEvent>>;
+export interface MortyLiveEventTransport {
+    readonly openSessionLiveEvents: (request: Request) => Promise<ReadableStream<MortyTransportSessionEvent>>;
 }
 
-export function isMobiusLiveEventTransport(
-    transport: MobiusHttpTransport,
-): transport is MobiusHttpTransport & MobiusLiveEventTransport {
+export function isMortyLiveEventTransport(
+    transport: MortyHttpTransport,
+): transport is MortyHttpTransport & MortyLiveEventTransport {
     return "openSessionLiveEvents" in transport && typeof transport.openSessionLiveEvents === "function";
 }
 
-export class HttpTransport implements MobiusHttpTransport {
+export class HttpTransport implements MortyHttpTransport {
     readonly fetch = async (request: Request): Promise<Response> => await globalThis.fetch(request);
 }

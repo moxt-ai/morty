@@ -166,7 +166,7 @@ export function buildSessionLayer(options: SessionLayerOptions) {
             });
             return {
                 ...snapshot,
-                ...(interactionState === undefined ? {} : { interactionState }),
+                interactionState: interactionState ?? null,
                 ...(request.deliveryCommandId === undefined
                     ? {}
                     : { command: operations.delivery(request.deliveryCommandId, request.targetSessionId) }),

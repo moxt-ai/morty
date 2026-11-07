@@ -61,7 +61,7 @@ async function prepare(peer: RealDaemonPeer, sessionId: string, directoryId: str
 }
 
 test("Given a Session whose directory was deleted, When a client queries it with other Sessions, Then every Session is described with its recorded directory", async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), "mobius-session-query-")));
+    const root = await realpath(await mkdtemp(join(tmpdir(), "morty-session-query-")));
     const deleted = join(root, "deleted-project");
     await mkdir(deleted);
     const deletedDirectoryId = `path-${Buffer.from(deleted, "utf8").toString("base64url")}`;

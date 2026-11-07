@@ -206,8 +206,8 @@ export class PromptLifecycle {
         const restated = this.#append(sessionId, event, recordedAt);
         this.#publishInOrder({
             ...restated,
-            mobiusMetadata: {
-                ...restated.mobiusMetadata,
+            mortyMetadata: {
+                ...restated.mortyMetadata,
                 ...(recordedAt === undefined ? {} : { recordedOutcome: true }),
                 restated: true,
             },

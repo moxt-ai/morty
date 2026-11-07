@@ -1,4 +1,4 @@
-const projectPathPrefix = "/mobius/internal/projects/";
+const projectPathPrefix = "/morty/internal/projects/";
 
 export interface ProjectDurableObjectPath {
     readonly projectId: string;

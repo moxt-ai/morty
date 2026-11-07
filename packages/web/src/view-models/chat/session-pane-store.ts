@@ -1,12 +1,12 @@
 import {
-    MobiusApiError,
-    type MobiusClient,
-    MobiusElicitationResponseRequest,
-    MobiusError,
-    MobiusPageRequest,
-    MobiusPermissionResponseRequest,
-    type MobiusSessionEventObserver,
-    MobiusTimeoutError,
+    MortyApiError,
+    type MortyClient,
+    MortyElicitationResponseRequest,
+    MortyError,
+    MortyPageRequest,
+    MortyPermissionResponseRequest,
+    type MortySessionEventObserver,
+    MortyTimeoutError,
     type PromptAttachment,
     SESSION_CLOSED_ERROR_CODE,
     type SessionConfigOption,
@@ -32,7 +32,7 @@ import { reportApplicationError } from "../report-error.ts";
 import { type AgentQuestionChoices, agentQuestionAnswer, openAgentQuestions } from "./agent-question-answer.ts";
 import type { ComposerAttachmentStore } from "./composer-attachment-store.ts";
 import { createBrowserFilePreviewStore } from "./file-preview-store.ts";
-import type { SelectedMobiusSession } from "./open-session.ts";
+import type { SelectedMortySession } from "./open-session.ts";
 import { uploadPromptAttachment, uploadPromptAttachments } from "./prompt-attachment-upload.ts";
 import { startRecoveryNotice } from "./recovery-notice.ts";
 import { type SessionActivityState, workingCommandId } from "./session-activity-machine.ts";
@@ -397,7 +397,7 @@ interface SessionIdentity {
 }
 
 async function readSessionHistory(
-    client: MobiusClient,
+    client: MortyClient,
     sessionId: string,
     initialCursor: string | null,
     newerEvents: readonly SessionEvent[],
@@ -418,7 +418,7 @@ async function readSessionHistory(
         const requestedCursor = nextCursor;
         const page = await client.events.list(
             sessionId,
-            new MobiusPageRequest(SESSION_EVENT_PAGE_LIMIT, requestedCursor ?? ""),
+            new MortyPageRequest(SESSION_EVENT_PAGE_LIMIT, requestedCursor ?? ""),
             signal,
         );
         signal.throwIfAborted();
@@ -467,7 +467,7 @@ function mergeSessionEvents(
 
 export function createSessionPaneModel(options: {
     readonly clock: Clock;
-    readonly session: SelectedMobiusSession;
+    readonly session: SelectedMortySession;
     readonly composerAttachments: StoreApi<ComposerAttachmentStore>;
     readonly attachmentSignal: AbortSignal;
     readonly delivery: StoreApi<SessionDeliveryStore>;
@@ -513,7 +513,7 @@ export function createSessionPaneModel(options: {
                   startedAt: fallbackStartedAt,
               })
             : idleTurn;
-    let client: MobiusClient | null = null;
+    let client: MortyClient | null = null;
     let recoveryRequested = false;
     let countdownInterrupt: AbortController | null = null;
     // The Runtime closed the Session. The connect loop turns this into the closed connection state.
@@ -550,7 +550,7 @@ export function createSessionPaneModel(options: {
     let loadingOlderHistory = false;
     const instructionUri = "morty://bot/instructions";
     const withInstructions = async <T extends { readonly attachments: readonly PromptAttachment[] }>(
-        connected: MobiusClient,
+        connected: MortyClient,
         request: T,
         signal: AbortSignal,
     ): Promise<T> => {
@@ -579,7 +579,7 @@ export function createSessionPaneModel(options: {
      * Submits through the client the attempt started with. Closing a client ends only its live subscriptions, so the
      * attempt keeps its requests when this pane reconnects or stops.
      */
-    const submitTurn = (connected: MobiusClient | null): SubmitTurn =>
+    const submitTurn = (connected: MortyClient | null): SubmitTurn =>
         noticingClosure(async (request, signal) => {
             if (connected === null) {
                 throw new Error("The Session is not connected.");
@@ -643,7 +643,7 @@ export function createSessionPaneModel(options: {
             await client.interactions.respond(
                 sessionId,
                 response.interactionId,
-                new MobiusPermissionResponseRequest("mobius-web", response.outcome, response.optionId),
+                new MortyPermissionResponseRequest("morty-web", response.outcome, response.optionId),
                 AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
             );
         } catch (cause) {
@@ -666,7 +666,7 @@ export function createSessionPaneModel(options: {
             await client.interactions.respond(
                 sessionId,
                 response.interactionId,
-                new MobiusElicitationResponseRequest("mobius-web", response.action, response.content),
+                new MortyElicitationResponseRequest("morty-web", response.action, response.content),
                 AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
             );
         } catch (cause) {
@@ -776,7 +776,7 @@ export function createSessionPaneModel(options: {
          */
         const submitCommand =
             (
-                connected: MobiusClient | null,
+                connected: MortyClient | null,
                 commandId: string,
                 target: DeliveryTarget["disposition"],
                 startedAt: number,
@@ -841,7 +841,7 @@ export function createSessionPaneModel(options: {
         };
         /** Reads the Runtime's execution snapshot, observes it and returns it. */
         const readExecution = async (
-            connected: MobiusClient,
+            connected: MortyClient,
             turnAtRead: CurrentTurn,
             signal: AbortSignal,
             deliveryCommandId: string | null = null,
@@ -887,7 +887,7 @@ export function createSessionPaneModel(options: {
         };
         const loadProjectionHistory = async (
             effect: Extract<SessionProjectionEffect, { readonly kind: "load-history" }>,
-            connected: MobiusClient,
+            connected: MortyClient,
             parentSignal: AbortSignal,
         ): Promise<void> => {
             historyLoadController?.abort();
@@ -939,7 +939,7 @@ export function createSessionPaneModel(options: {
                 // This pane owns the history deadline. The SDK only sees an aborted
                 // caller signal, so retain timeout semantics for subscription recovery.
                 if (deadline.signal.aborted) {
-                    throw new MobiusTimeoutError({ cause });
+                    throw new MortyTimeoutError({ cause });
                 }
                 throw cause;
             } finally {
@@ -951,7 +951,7 @@ export function createSessionPaneModel(options: {
         };
         const dispatchProjection = async (
             input: SessionProjectionInput,
-            connected: MobiusClient,
+            connected: MortyClient,
             signal: AbortSignal,
         ): Promise<void> => {
             const effects = commitProjection(input);
@@ -1219,7 +1219,7 @@ export function createSessionPaneModel(options: {
                                 return fact satisfies never;
                         }
                     };
-                    const observer: MobiusSessionEventObserver = {
+                    const observer: MortySessionEventObserver = {
                         reconcile: async (connection) => {
                             const reconcilingTurn = get().turn;
                             const reconciliation =
@@ -1385,7 +1385,7 @@ export function createSessionPaneModel(options: {
                             at: new Date().toISOString(),
                             component: "web",
                             operation: "session-interruption",
-                            outcome: cause instanceof MobiusError ? cause.code : "bridge_unavailable",
+                            outcome: cause instanceof MortyError ? cause.code : "bridge_unavailable",
                             attempt: consecutiveFailures,
                             elapsedMs: 0,
                             requestId: "",
@@ -1708,7 +1708,7 @@ export function createSessionPaneModel(options: {
                         get().sessionClosed(null);
                         return;
                     }
-                    if (cause instanceof MobiusApiError && cause.code === "session_configuration_conflict") {
+                    if (cause instanceof MortyApiError && cause.code === "session_configuration_conflict") {
                         settings
                             .getState()
                             .readInBackground(
@@ -1825,7 +1825,7 @@ export function createSessionPaneModel(options: {
         }
         return renaming;
     };
-    const waitForConnectionReady = async (signal: AbortSignal): Promise<MobiusClient> => {
+    const waitForConnectionReady = async (signal: AbortSignal): Promise<MortyClient> => {
         while (true) {
             signal.throwIfAborted();
             const current = store.getState().connection;
@@ -1833,10 +1833,10 @@ export function createSessionPaneModel(options: {
                 return current.client;
             }
             if (current.kind === "failed" || (current.kind === "disconnected" && current.retry.kind === "exhausted")) {
-                throw new MobiusError("session_not_connected", current.message);
+                throw new MortyError("session_not_connected", current.message);
             }
             if (current.kind === "closed") {
-                throw new MobiusError(SESSION_CLOSED_ERROR_CODE, "The session is closed.");
+                throw new MortyError(SESSION_CLOSED_ERROR_CODE, "The session is closed.");
             }
             await new Promise<void>((resolve, reject) => {
                 const wake = (): void => {
@@ -1860,7 +1860,7 @@ export function createSessionPaneModel(options: {
         signal.throwIfAborted();
         const current = store.getState().connection;
         if (current.kind !== "ready") {
-            throw new MobiusError("session_not_connected", "The Session is not connected.");
+            throw new MortyError("session_not_connected", "The Session is not connected.");
         }
         return await current.client.sessions.readFile(
             sessionId,

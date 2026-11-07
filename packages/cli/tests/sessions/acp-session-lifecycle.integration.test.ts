@@ -68,7 +68,7 @@ function processExists(pid: number): boolean {
 
 describe("ACP conversation sessions", () => {
     it("Given a prompt that already finished, When its cancellation arrives late, Then the next prompt in the conversation still runs", async () => {
-        const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-acp-late-cancel-"));
+        const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-acp-late-cancel-"));
         const agent = new AcpAgentDefinition(
             "codex",
             "Codex",
@@ -124,7 +124,7 @@ describe("ACP conversation sessions", () => {
     it("Given an inactive existing conversation, When it is reopened, Then its directory activity time stays unchanged", async () => {
         vi.useFakeTimers({ toFake: ["Date"] });
         const store = new MemorySessionStore();
-        const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-acp-activity-time-"));
+        const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-acp-activity-time-"));
         const agent = new AcpAgentDefinition(
             "codex",
             "Codex",
@@ -244,7 +244,7 @@ describe("ACP conversation sessions", () => {
     it("Given a projected tool has flushed to SQLite, When more live updates arrive, Then history replaces that Session event while keeping the projected live identity", async () => {
         vi.useFakeTimers({ toFake: ["clearImmediate", "setImmediate"] });
         vi.setSystemTime(new Date("2026-10-12T00:00:00.000Z"));
-        const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-session-event-tool-projection-"));
+        const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-session-event-tool-projection-"));
         const sessionDatabase = openAcpSessionDatabase(join(temporaryDirectory, "sessions.sqlite"));
         const store = new CachedSessionEventStore(
             new SessionEventCacheTable(openSessionEventCacheDatabase(join(temporaryDirectory, "events.sqlite"))),
@@ -327,7 +327,7 @@ describe("ACP conversation sessions", () => {
         "Given %s history far beyond the memory tier, When terminal tool calls accumulate across flushes, Then materialized event payloads stay bounded",
         async (kind) => {
             vi.useFakeTimers({ toFake: ["clearImmediate", "setImmediate"] });
-            const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-session-event-bounded-"));
+            const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-session-event-bounded-"));
             const sessionDatabase = openAcpSessionDatabase(join(temporaryDirectory, "sessions.sqlite"));
             const previewCache = kind === "adapter preview" ? openPreviewEventCache() : null;
             const store =
@@ -397,7 +397,7 @@ describe("ACP conversation sessions", () => {
     );
 
     it("Given a previous process filled the event cache database, When a new process opens it, Then the cache file is compact again", async () => {
-        const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-session-event-cache-vacuum-"));
+        const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-session-event-cache-vacuum-"));
         const databasePath = join(temporaryDirectory, "events.sqlite");
         const sessionDatabasePath = join(temporaryDirectory, "sessions.sqlite");
         const firstSessionDatabase = openAcpSessionDatabase(sessionDatabasePath);
@@ -442,7 +442,7 @@ describe("ACP conversation sessions", () => {
 
     it("Given two conversations replay the same deterministic native history, When both page history after flushing, Then each keeps its own full event tier", async () => {
         vi.useFakeTimers({ toFake: ["clearImmediate", "setImmediate"] });
-        const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-session-event-shared-generation-"));
+        const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-session-event-shared-generation-"));
         const sessionDatabase = openAcpSessionDatabase(join(temporaryDirectory, "sessions.sqlite"));
         const store = new CachedSessionEventStore(
             new SessionEventCacheTable(openSessionEventCacheDatabase(join(temporaryDirectory, "events.sqlite"))),
@@ -484,7 +484,7 @@ describe("ACP conversation sessions", () => {
     it("Given more V2 events than the memory tier retains, When history is paged after background caching, Then one ordered sequence is returned", async () => {
         vi.useFakeTimers({ toFake: ["clearImmediate", "setImmediate"] });
         vi.setSystemTime(new Date("2026-10-09T00:00:00.000Z"));
-        const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-session-event-tiering-"));
+        const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-session-event-tiering-"));
         const sessionDatabase = openAcpSessionDatabase(join(temporaryDirectory, "sessions.sqlite"));
         const store = new CachedSessionEventStore(
             new SessionEventCacheTable(openSessionEventCacheDatabase(join(temporaryDirectory, "events.sqlite"))),
@@ -518,7 +518,7 @@ describe("ACP conversation sessions", () => {
     it("Given projected history spanning cache tiers, When newer events arrive between pages, Then the event-ID cursor resumes before the same event", async () => {
         vi.useFakeTimers({ toFake: ["clearImmediate", "setImmediate"] });
         vi.setSystemTime(new Date("2026-10-14T00:00:00.000Z"));
-        const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-session-event-cursor-"));
+        const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-session-event-cursor-"));
         const sessionDatabase = openAcpSessionDatabase(join(temporaryDirectory, "sessions.sqlite"));
         const store = new CachedSessionEventStore(
             new SessionEventCacheTable(openSessionEventCacheDatabase(join(temporaryDirectory, "events.sqlite"))),
@@ -564,7 +564,7 @@ describe("ACP conversation sessions", () => {
     });
 
     it("Given V2 Session events cached by one process, When a new process opens the cache, Then stale V2 events are unavailable under a new Session generation", async () => {
-        const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-session-event-cache-"));
+        const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-session-event-cache-"));
         const databasePath = join(temporaryDirectory, "events.sqlite");
         const sessionDatabasePath = join(temporaryDirectory, "sessions.sqlite");
         const firstSessionDatabase = openAcpSessionDatabase(sessionDatabasePath);
@@ -649,8 +649,8 @@ describe("ACP conversation sessions", () => {
         }
     });
 
-    it("Given an ACP Session database from the persisted-event release, When Mobius opens it, Then the unused event table is removed", async () => {
-        const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-acp-session-store-migration-"));
+    it("Given an ACP Session database from the persisted-event release, When Morty opens it, Then the unused event table is removed", async () => {
+        const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-acp-session-store-migration-"));
         const databasePath = join(temporaryDirectory, "sessions.sqlite");
         const legacyDatabase = new DatabaseSync(databasePath);
         try {
@@ -678,7 +678,7 @@ describe("ACP conversation sessions", () => {
     });
 
     it("Given a managed Claude Code conversation, When the Runtime restarts, Then its Session remains discoverable", async () => {
-        const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-acp-session-store-"));
+        const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-acp-session-store-"));
         const databasePath = join(temporaryDirectory, "sessions.sqlite");
         const sessionId = `chat_${"a".repeat(64)}`;
         const agent = new AcpAgentDefinition(
@@ -767,9 +767,9 @@ describe("ACP conversation sessions", () => {
     });
 
     it.skipIf(process.platform === "win32")(
-        "Given an ACP Turn keeps running, When it is cancelled, Then Mobius keeps its Agent process for the next Turn",
+        "Given an ACP Turn keeps running, When it is cancelled, Then Morty keeps its Agent process for the next Turn",
         async () => {
-            const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-acp-long-turn-"));
+            const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-acp-long-turn-"));
             const adapterPath = join(temporaryDirectory, "pi-acp");
             const piPidPath = join(temporaryDirectory, "pi.pid");
             await writeFile(
@@ -897,7 +897,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
         },
     );
 
-    it("Given a prepared conversation has no turns, When its agent selection changes, Then the same Mobius session is rebound before the first prompt", async () => {
+    it("Given a prepared conversation has no turns, When its agent selection changes, Then the same Morty session is rebound before the first prompt", async () => {
         const manager = new SessionManager({
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
@@ -1138,12 +1138,12 @@ child.once("exit", (code) => process.exit(code ?? 84));
         expect(observer.toolUpdates("tool-1").at(-1)).toMatchObject({
             sessionUpdate: "tool_call_update",
             status: "completed",
-            rawOutput: { name: "mobius-workspace" },
+            rawOutput: { name: "morty-workspace" },
         });
     });
 
     it("Given the least recently used conversation has an active turn, When an eleventh conversation starts, Then the active process is retained and the oldest idle process is released", async () => {
-        const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-acp-active-process-lru-"));
+        const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-acp-active-process-lru-"));
         const store = new MemorySessionStore();
         // The scenario exercises retirement at the boundary, so it pins the
         // retained process budget instead of inheriting the production default.
@@ -1245,7 +1245,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
         }
     });
 
-    it("Given an ACP agent announces a different session while creating one, When Mobius receives the created session, Then the local boundary rejects the queued update", async () => {
+    it("Given an ACP agent announces a different session while creating one, When Morty receives the created session, Then the local boundary rejects the queued update", async () => {
         const manager = new SessionManager({
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
@@ -1302,7 +1302,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
         }
     });
 
-    it("Given an ACP agent returns the standard authentication error, When Mobius starts its session, Then the local boundary preserves an authentication-required code", async () => {
+    it("Given an ACP agent returns the standard authentication error, When Morty starts its session, Then the local boundary preserves an authentication-required code", async () => {
         const manager = new SessionManager({
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
@@ -1353,7 +1353,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
         }
     });
 
-    it("Given an ACP agent rejects a prompt with a non-authentication error, When Mobius runs that turn, Then the local boundary preserves the agent's real failure reason", async () => {
+    it("Given an ACP agent rejects a prompt with a non-authentication error, When Morty runs that turn, Then the local boundary preserves the agent's real failure reason", async () => {
         const manager = new SessionManager({
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
@@ -1411,7 +1411,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
         }
     });
 
-    it("Given Codex includes an invalid-prompt detail in an internal ACP error, When Mobius runs that turn, Then the user receives the actionable detail", async () => {
+    it("Given Codex includes an invalid-prompt detail in an internal ACP error, When Morty runs that turn, Then the user receives the actionable detail", async () => {
         const manager = new SessionManager({
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
@@ -1469,8 +1469,8 @@ child.once("exit", (code) => process.exit(code ?? 84));
         }
     });
 
-    it("Given an ACP Agent has a tool subprocess, When the turn is cancelled, Then Mobius retains the process tree until Runtime shutdown", async () => {
-        const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-acp-cancel-tree-"));
+    it("Given an ACP Agent has a tool subprocess, When the turn is cancelled, Then Morty retains the process tree until Runtime shutdown", async () => {
+        const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-acp-cancel-tree-"));
         const observer = new RecordingObserver();
         const manager = new SessionManager({
             observer,

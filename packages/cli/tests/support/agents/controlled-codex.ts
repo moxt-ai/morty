@@ -26,7 +26,7 @@ export class ControlledCodexFixture implements AsyncDisposable {
             readonly skipSecondSteering?: boolean;
         } = {},
     ): Promise<ControlledCodexFixture> {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-controlled-codex-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-controlled-codex-"));
         const executable = join(directory, "codex.mjs");
         await writeFile(
             executable,

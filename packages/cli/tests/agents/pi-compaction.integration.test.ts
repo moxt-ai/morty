@@ -18,7 +18,7 @@ import { withRealDaemon } from "../support/agents/real-daemon.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 
 test("Given pi compacts the conversation, When the daemon relays the turn, Then the client receives the compaction lifecycle and the retained summary", async () => {
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "REAL_PI_REPLY");
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "REAL_PI_REPLY");
     await using agent = await PiFixture.create(provider);
     // pi keeps the most recent `keepRecentTokens` tokens out of compaction
     // (default 20 000 — more than this whole session). Shrink it so a couple of

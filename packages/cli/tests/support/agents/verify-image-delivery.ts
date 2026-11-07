@@ -28,7 +28,7 @@ function imageReferences(events: readonly (SessionEvent | SessionLiveEvent)[]): 
             }
             switch (item.content.type) {
                 case "external_image":
-                    return [`mobius-content:image:${item.content.imageKey}`];
+                    return [`morty-content:image:${item.content.imageKey}`];
                 case "image":
                     return item.content.uri ? [item.content.uri] : [];
                 default:

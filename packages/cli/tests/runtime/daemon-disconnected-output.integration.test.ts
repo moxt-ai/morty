@@ -252,7 +252,7 @@ function answer(events: readonly SessionLiveEvent[], sessionId: string): string 
 }
 
 async function startRuntime() {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-disconnected-output-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-disconnected-output-"));
     const workspace = join(directory, "workspace");
     await mkdir(workspace);
     const http = createServer((request, response) => {

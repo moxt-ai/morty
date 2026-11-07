@@ -22,14 +22,14 @@ import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 test("Given a borrowed Codex conversation with queued input, When the user stops it, Then the input is withdrawn and the native owner can finish", async () => {
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "OWNER_FINISHED", {
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "OWNER_FINISHED", {
         beforeFirstText: async (signal) => {
             entered.resolve();
             using _abort = addAbortListener(signal, () => release.resolve());
             await release.promise;
         },
     });
-    await using codex = await CodexFixture.create(provider, { configuredModel: "mobius-test-model" });
+    await using codex = await CodexFixture.create(provider, { configuredModel: "morty-test-model" });
     await withRealDaemon(new CodexAgentSpecification(), codex.environment, async (peer) => {
         const queued = Promise.withResolvers<void>();
         const completed = Promise.withResolvers<unknown>();
@@ -59,7 +59,7 @@ test("Given a borrowed Codex conversation with queued input, When the user stops
         try {
             await native.initialize(peer.signal);
             const { thread } = threadStartResponseSchema.parse(
-                await native.request("thread/start", { cwd: peer.workspace, model: "mobius-test-model" }, peer.signal),
+                await native.request("thread/start", { cwd: peer.workspace, model: "morty-test-model" }, peer.signal),
             );
             await native.request(
                 "turn/start",

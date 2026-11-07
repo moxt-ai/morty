@@ -53,7 +53,7 @@ function openedImageKeys(events: readonly SessionEvent[]): readonly string[] {
 }
 
 test("Given saved Codex image generation, When the real daemon reopens it through Codex, Then history opens the tool, retrieves its image without base64 and can continue chatting", async () => {
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "IMAGE_REPLY");
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "IMAGE_REPLY");
     await using agent = await CodexFixture.create(provider);
     await withRealDaemon(new CodexAgentSpecification(), agent.environment, async (peer) => {
         const sessionId = "01a11f74-cbc4-7112-9c63-df87608c81c0";
@@ -78,7 +78,7 @@ test("Given saved Codex image generation, When the real daemon reopens it throug
                     cli_version: "0.154.0",
                     source: "cli",
                     history_mode: "paginated",
-                    model_provider: "mobius",
+                    model_provider: "morty",
                 },
             },
             {
@@ -264,7 +264,7 @@ test("Given saved Codex image generation, When the real daemon reopens it throug
             encodeFileReadCommand({
                 kind: "file.read",
                 maxBytes: 2_000_000,
-                path: `mobius-content:image:${key}`,
+                path: `morty-content:image:${key}`,
                 requestId: "image-download",
                 sessionId: managedSessionId,
             }),

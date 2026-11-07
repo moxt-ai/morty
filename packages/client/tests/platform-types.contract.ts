@@ -1,7 +1,7 @@
 import type { ProjectLocationHint } from "@morty-build/client/protocol";
-import type { MobiusCreatePlatformProjectRequest } from "../src/platform.ts";
+import type { MortyCreatePlatformProjectRequest } from "../src/platform.ts";
 
-const request: MobiusCreatePlatformProjectRequest = {
+const request: MortyCreatePlatformProjectRequest = {
     clientReference: "user-1",
     displayName: "Personal workspace",
     idempotencyKey: "project-1",

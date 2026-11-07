@@ -74,7 +74,7 @@ export function registerInitialization(agent: ReturnType<typeof acp.agent>) {
                       },
                   ]
                 : [],
-            agentInfo: { name: "Mobius test agent", version: readAgentVersion() },
+            agentInfo: { name: "Morty test agent", version: readAgentVersion() },
             protocolVersion: acp.PROTOCOL_VERSION,
         };
     });
