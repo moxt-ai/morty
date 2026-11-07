@@ -7,31 +7,43 @@ import { expect, it } from "vitest";
 
 const execute = promisify(execFile);
 
-it("Given an old Mobius installation, When Morty is directed to its state, Then adoption is refused and pairing credentials and Agent history remain unchanged", async () => {
-    const root = await mkdtemp(join(tmpdir(), "morty-refuse-legacy-"));
-    try {
-        const installation = join(root, "versions", "0.0.431", "installations", "dev.mobius.cli", "old-installation");
-        await mkdir(installation, { recursive: true });
-        await writeFile(join(root, "current-data.txt"), "versions/0.0.431\n");
-        await writeFile(join(installation, "credentials.json"), '{"token":"old-product-credential"}');
-        await writeFile(join(installation, "agent-history.jsonl"), '{"message":"keep my history"}\n');
-        const before = await readdir(root);
-        for (const command of [["pair", "list"], ["start"], ["stop"], ["install"]]) {
-            await expect(
-                execute(process.execPath, [resolve(import.meta.dirname, "../../dist/cli.js"), ...command], {
-                    env: { ...process.env, MORTY_STATE_DIRECTORY: root },
-                    timeout: 10_000,
-                }),
-            ).rejects.toMatchObject({ code: 1 });
+it.each([
+    { product: "Moxt", applicationId: "dev.mobius.cli", generation: null },
+    { product: "earlier Morty", applicationId: "dev.morty.cli", generation: 1 },
+])(
+    "Given an $product installation, When Morty is directed to its state, Then adoption is refused and pairing credentials and Agent history remain unchanged",
+    async ({ applicationId, generation }) => {
+        const root = await mkdtemp(join(tmpdir(), "morty-refuse-legacy-"));
+        try {
+            const installation = join(root, "versions", "0.0.431", "installations", applicationId, "old-installation");
+            await mkdir(installation, { recursive: true });
+            await writeFile(join(root, "current-data.txt"), "versions/0.0.431\n");
+            await writeFile(join(installation, "credentials.json"), '{"token":"old-product-credential"}');
+            await writeFile(join(installation, "agent-history.jsonl"), '{"message":"keep my history"}\n');
+            if (generation !== null) {
+                await writeFile(
+                    join(root, "morty-installation.json"),
+                    JSON.stringify({ product: "morty", generation }),
+                );
+            }
+            const before = await readdir(root);
+            for (const command of [["pair", "list"], ["start"], ["stop"], ["install"]]) {
+                await expect(
+                    execute(process.execPath, [resolve(import.meta.dirname, "../../dist/cli.js"), ...command], {
+                        env: { ...process.env, MORTY_STATE_DIRECTORY: root },
+                        timeout: 10_000,
+                    }),
+                ).rejects.toMatchObject({ code: 1 });
+            }
+            expect(await readdir(root)).toEqual(before);
+            expect(await readFile(join(installation, "credentials.json"), "utf8")).toBe(
+                '{"token":"old-product-credential"}',
+            );
+            expect(await readFile(join(installation, "agent-history.jsonl"), "utf8")).toBe(
+                '{"message":"keep my history"}\n',
+            );
+        } finally {
+            await rm(root, { recursive: true, force: true });
         }
-        expect(await readdir(root)).toEqual(before);
-        expect(await readFile(join(installation, "credentials.json"), "utf8")).toBe(
-            '{"token":"old-product-credential"}',
-        );
-        expect(await readFile(join(installation, "agent-history.jsonl"), "utf8")).toBe(
-            '{"message":"keep my history"}\n',
-        );
-    } finally {
-        await rm(root, { recursive: true, force: true });
-    }
-});
+    },
+);

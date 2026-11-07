@@ -191,7 +191,7 @@ async function importSavedSession(peer: RealDaemonPeer, agent: PiFixture): Promi
         if (source === undefined) {
             throw new Error("Missing saved Pi session");
         }
-        expect(source.mobiusSessionIds).toEqual([]);
+        expect(source.mortySessionIds).toEqual([]);
         entryId = source.entryId;
         break;
     }

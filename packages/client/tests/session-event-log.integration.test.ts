@@ -2,7 +2,7 @@ import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { ExternalImageContentBlock, SessionEvent } from "@morty-build/client/protocol";
 import { afterEach, describe, expect, it } from "vitest";
-import { MobiusClient, MobiusPageRequest, StaticMobiusCredentialProvider } from "../src/index.ts";
+import { MortyClient, MortyPageRequest, StaticMortyCredentialProvider } from "../src/index.ts";
 
 const recordedAt = "2026-10-07T00:00:00.000Z";
 
@@ -46,8 +46,8 @@ describe("Session Event Log V2 SDK", () => {
             if (path.includes("/files/content")) {
                 response.setHeader("content-type", "image/png");
                 response.setHeader("last-modified", recordedAt);
-                response.setHeader("x-mobius-byte-length", "3");
-                response.setHeader("x-mobius-file-name", "image");
+                response.setHeader("x-morty-byte-length", "3");
+                response.setHeader("x-morty-file-name", "image");
                 response.end(Buffer.from([1, 2, 3]));
             } else if (path.includes("/events-v2")) {
                 response.setHeader("content-type", "application/json");
@@ -75,15 +75,15 @@ describe("Session Event Log V2 SDK", () => {
         if (address === null || typeof address === "string") {
             throw new Error("Expected an IP server address");
         }
-        const client = new MobiusClient({
-            credentialProvider: new StaticMobiusCredentialProvider("test-credential"),
+        const client = new MortyClient({
+            credentialProvider: new StaticMortyCredentialProvider("test-credential"),
             endpoint: `http://127.0.0.1:${address.port}`,
             projectId: "project-1",
         });
         const signal = new AbortController().signal;
 
         try {
-            expect(await client.events.list("source-session", new MobiusPageRequest(500, ""), signal)).toEqual({
+            expect(await client.events.list("source-session", new MortyPageRequest(500, ""), signal)).toEqual({
                 sessionGenerationId: "session-generation-1",
                 events: [sourceEvent],
                 nextCursor: null,
@@ -104,11 +104,11 @@ describe("Session Event Log V2 SDK", () => {
         expect(received).toEqual([
             {
                 method: "GET",
-                path: "/mobius/api/v1/projects/project-1/sessions/source-session/events-v2?limit=500",
+                path: "/morty/api/v1/projects/project-1/sessions/source-session/events-v2?limit=500",
             },
             {
                 method: "GET",
-                path: `/mobius/api/v1/projects/project-1/sessions/source-session/files/content?maxBytes=3&path=mobius-content%3Aimage%3A${"a".repeat(64)}`,
+                path: `/morty/api/v1/projects/project-1/sessions/source-session/files/content?maxBytes=3&path=morty-content%3Aimage%3A${"a".repeat(64)}`,
             },
         ]);
     });

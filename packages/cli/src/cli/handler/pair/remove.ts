@@ -1,10 +1,7 @@
 import type { Command } from "commander";
 
 import { reloadDaemon } from "../../../daemon/lifecycle/daemon.ts";
-import {
-    openMobiusCliInstallation,
-    openMobiusControlInstallation,
-} from "../../../daemon/pairing/pair-local-machine.ts";
+import { openMortyCliInstallation, openMortyControlInstallation } from "../../../daemon/pairing/pair-local-machine.ts";
 import { removeHistoricalPairingFiles } from "../../../storage/daemon/pairing-copies.ts";
 import { readStateDirectory } from "../../../storage/state-directory.ts";
 import type { CliContext } from "../../context.ts";
@@ -17,7 +14,7 @@ export function registerPairRemoveCommand(command: Command, context: CliContext)
         .description("remove a saved pairing")
         .addOption(valueOption("--connection <connection-id>", "saved Runtime connection identifier", true))
         .action(async (options: ConnectionOptions) => {
-            const installation = await openMobiusCliInstallation(context.shutdownSignal, process.env);
+            const installation = await openMortyCliInstallation(context.shutdownSignal, process.env);
             const connection = await installation.readConnection(options.connection, context.shutdownSignal);
             // Keep the authoritative record until cleanup succeeds, so a failed
             // cleanup can be retried without losing the pairing's identity.
@@ -30,7 +27,7 @@ export function registerPairRemoveCommand(command: Command, context: CliContext)
                 context.shutdownSignal,
             );
             await installation.removeConnection(options.connection, context.shutdownSignal);
-            const control = await openMobiusControlInstallation(context.shutdownSignal, process.env);
+            const control = await openMortyControlInstallation(context.shutdownSignal, process.env);
             await reloadDaemon(control.stateDirectory, context.shutdownSignal);
             process.stdout.write(`Pairing removed: ${options.connection}\n`);
         });

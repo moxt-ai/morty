@@ -14,7 +14,7 @@ export function resolveMaxAcpProcesses(environment: Readonly<NodeJS.ProcessEnv>)
     return parsed;
 }
 
-export async function prepareMobiusEngineDataDir(
+export async function prepareMortyEngineDataDir(
     version: string,
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,

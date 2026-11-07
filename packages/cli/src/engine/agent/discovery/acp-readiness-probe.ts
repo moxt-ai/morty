@@ -89,7 +89,7 @@ export async function probeAcpReadiness(
                         methods.agent.initialize,
                         {
                             clientCapabilities: {},
-                            clientInfo: { name: "mobius", version: "0.0.3" },
+                            clientInfo: { name: "morty", version: "0.0.3" },
                             protocolVersion: PROTOCOL_VERSION,
                         },
                         { cancellationSignal: controller.signal },

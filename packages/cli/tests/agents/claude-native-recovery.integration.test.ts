@@ -205,7 +205,7 @@ test("Given a completed real Claude Session, When it is forked, Then its history
             if (result.action !== "list") {
                 throw new Error("Expected native sessions");
             }
-            const entry = result.entries.find((entry) => entry.mobiusSessionIds.includes(peer.sessionId));
+            const entry = result.entries.find((entry) => entry.mortySessionIds.includes(peer.sessionId));
             if (entry === undefined) {
                 throw new Error("Missing source native session");
             }

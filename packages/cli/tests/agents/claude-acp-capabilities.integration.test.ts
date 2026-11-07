@@ -34,7 +34,7 @@ test("Given a client advertises JetBrains Air extensions, When it initializes th
                     },
                 },
             },
-            clientInfo: { name: "mobius-contract-test", version: "1.0.0" },
+            clientInfo: { name: "morty-contract-test", version: "1.0.0" },
             protocolVersion: PROTOCOL_VERSION,
         });
 

@@ -1,12 +1,12 @@
 import type {
-    MobiusClient,
+    MortyClient,
     SessionElicitationRequestedEvent,
     SessionPermissionRequestedEvent,
 } from "@morty-build/client";
 import { promptCompletion, type SessionInteractionSnapshot, type SessionLiveEvent } from "@morty-build/client/protocol";
 import type { SessionInteraction } from "./session-pane-types.ts";
 
-// The Session pane reads Mobius lifecycle metadata only through this module, so
+// The Session pane reads Morty lifecycle metadata only through this module, so
 // a lifecycle protocol change is absorbed here instead of across pane workflows.
 
 type LifecycleMetadata = Extract<SessionLiveEvent, { readonly type: "lifecycle-metadata" }>["payload"];
@@ -102,17 +102,11 @@ export function requestedInteraction(
     }
 }
 
-export type SessionInteractionRecovery =
-    | { readonly kind: "session"; readonly snapshot: SessionInteractionSnapshot }
-    | { readonly kind: "legacy-turn"; readonly interactions: readonly SessionInteraction[] };
+export type SessionInteractionRecovery = SessionInteractionSnapshot | null;
 
-/** Older relays strip additive fields, so fallback belongs at the protocol adapter. */
+/** A missing Session has no actionable requests to restore. */
 export function sessionInteractionRecovery(
-    execution: Awaited<ReturnType<MobiusClient["sessions"]["readSessionExecution"]>>,
+    execution: Awaited<ReturnType<MortyClient["sessions"]["readSessionExecution"]>>,
 ): SessionInteractionRecovery {
-    if (execution.interactionState !== undefined) {
-        return { kind: "session", snapshot: execution.interactionState };
-    }
-    const interaction = execution.turn?.interaction;
-    return { kind: "legacy-turn", interactions: interaction == null ? [] : [requestedInteraction(interaction)] };
+    return execution.interactionState;
 }

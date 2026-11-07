@@ -92,7 +92,7 @@ const observe = (peer: RealDaemonPeer) => {
 const scenario = async (run: (peer: RealDaemonPeer) => Promise<void>) => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-29T00:00:00Z"));
-    const directory = await mkdtemp(join(tmpdir(), "mobius-queued-steer-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-queued-steer-"));
     try {
         const executableDirectory = await writeControlledAcpExecutable(directory);
         await withControlledDaemon(

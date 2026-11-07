@@ -21,9 +21,9 @@ import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 test.each(["owned", "borrowed"])(
     "Given a real %s Codex session, When the harness streams a message and replays history, Then every message has its native messageId",
     async (ownership) => {
-        await using provider = await FakeOpenAiProvider.start("mobius-test-model", "Native identity reply");
-        await using codex = await CodexFixture.create(provider, { configuredModel: "mobius-test-model" });
-        const cwd = await mkdtemp(join(tmpdir(), "mobius-codex-message-identity-"));
+        await using provider = await FakeOpenAiProvider.start("morty-test-model", "Native identity reply");
+        await using codex = await CodexFixture.create(provider, { configuredModel: "morty-test-model" });
+        const cwd = await mkdtemp(join(tmpdir(), "morty-codex-message-identity-"));
         const updates: CodexSessionUpdate[] = [];
         const seeded = Promise.withResolvers<void>();
         const endpoint = new CodexAcpAgent({
@@ -85,7 +85,7 @@ test.each(["owned", "borrowed"])(
                     sessionId = created.sessionId;
                 } else {
                     const created = threadStartResponseSchema.parse(
-                        await native.request("thread/start", { cwd, model: "mobius-test-model" }, signal),
+                        await native.request("thread/start", { cwd, model: "morty-test-model" }, signal),
                     );
                     sessionId = created.thread.id;
                     await native.request(

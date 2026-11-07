@@ -87,7 +87,7 @@
     ],
     "vars": {
         "RECORDING_PROVIDER_ID": "recording-local",
-        "MOBIUS_PLATFORM_ALLOWED_ORIGINS": "[\"*\"]"
+        "MORTY_ALLOWED_ORIGINS": "[\"*\"]"
     },
     "observability": {
         "enabled": true,

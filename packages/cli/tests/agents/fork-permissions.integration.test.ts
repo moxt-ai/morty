@@ -31,7 +31,7 @@ test.each(["codex", "claude"] as const)(
     async (agentId) => {
         await using provider =
             agentId === "codex"
-                ? await FakeOpenAiProvider.start("mobius-test-model", "FORK_PERMISSION_DONE", {
+                ? await FakeOpenAiProvider.start("morty-test-model", "FORK_PERMISSION_DONE", {
                       toolPrompt,
                       toolSequence: [
                           {
@@ -196,7 +196,7 @@ async function nativeSource(peer: RealDaemonPeer, agentId: string, configDirecto
             if (listed.action !== "list") {
                 throw new Error("Expected native session list");
             }
-            const source = listed.entries.find((entry) => entry.mobiusSessionIds.includes(peer.sessionId));
+            const source = listed.entries.find((entry) => entry.mortySessionIds.includes(peer.sessionId));
             if (source !== undefined) {
                 return source;
             }

@@ -37,7 +37,7 @@ class ForkSettingsAgent extends ControlledAcpSpecification {
 test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-model", "--model-dependent-mode"])(
     "Given source selections and a Fork Agent %s, When a retained client forks, Then settings are inherited or the Fork fails without changing its source",
     async (fault) => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-fork-settings-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-fork-settings-"));
         try {
             await withControlledDaemon(
                 new ForkSettingsAgent(fault),

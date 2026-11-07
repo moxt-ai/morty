@@ -4,7 +4,7 @@ import { installationPointerPath } from "../engine/storage/installation/installa
 import { readStateDirectory } from "./state-directory.ts";
 import { STATE_ROOT_LAYOUT } from "./state-root-layout.ts";
 
-/** The configured state directory holds another root's installation data, so Mobius must not create a root there. */
+/** The configured state directory holds another root's installation data, so Morty must not create a root there. */
 export class StateRootError extends Error {
     readonly code = "state_root_is_installation_data";
     readonly owningRoot: string;

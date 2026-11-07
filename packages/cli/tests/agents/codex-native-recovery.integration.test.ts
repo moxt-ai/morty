@@ -17,7 +17,7 @@ import { prepareNewRealSession, withRealDaemon } from "../support/agents/real-da
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 
 test("Given a newly created real Codex Session, When Chat requests its V2 history before the first prompt, Then Runtime returns an empty replay without resuming the active Codex thread", async () => {
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "UNUSED_REPLY");
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "UNUSED_REPLY");
     await using agent = await CodexFixture.create(provider);
     await withRealDaemon(new CodexAgentSpecification(), agent.environment, async (peer) => {
         const sessionId = await prepareNewRealSession(peer, "codex");
@@ -62,7 +62,7 @@ test("Given a real Codex native Session, When the active prompt is cancelled wit
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
     let holdResponse = false;
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "NATIVE_RECOVERY_REPLY", {
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "NATIVE_RECOVERY_REPLY", {
         beforeFirstText: async () => {
             if (holdResponse) {
                 entered.resolve();

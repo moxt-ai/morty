@@ -33,7 +33,7 @@ it("Given pre-recovery Fork receipts, When upgraded and written by either deploy
             }
             state.storage.sql.exec(revocations);
             state.storage.sql.exec(
-                "DELETE FROM _mobius_do_schema_migrations WHERE namespace = 'runtime-connection-do' AND name > '0005_glamorous_stick.sql'",
+                "DELETE FROM _morty_do_schema_migrations WHERE namespace = 'runtime-connection-do' AND name > '0005_glamorous_stick.sql'",
             );
             const oldWrite = (id: string, result: string | null) =>
                 state.storage.sql.exec(

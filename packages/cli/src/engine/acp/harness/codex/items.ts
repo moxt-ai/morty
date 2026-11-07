@@ -13,8 +13,8 @@ import { type ThreadItem, threadItemSchema } from "./app-server-protocol.ts";
 
 const TOOL_OUTPUT_CHARACTER_LIMIT = 32_768;
 const TITLE_CHARACTER_LIMIT = 500;
-// Mobius reads this key in its activity tracker to split streamed commentary from the final answer.
-// It is a Mobius-internal convention, not an app-server field.
+// Morty reads this key in its activity tracker to split streamed commentary from the final answer.
+// It is a Morty-internal convention, not an app-server field.
 
 function truncate(value: string, limit: number): string {
     return value.length <= limit ? value : value.slice(0, limit);
@@ -52,7 +52,7 @@ function firstLine(value: string): string {
     return line.trim().length > 0 ? line.trim() : value.trim();
 }
 
-/** The ACP framing Mobius needs to display one app-server item as a tool call. */
+/** The ACP framing Morty needs to display one app-server item as a tool call. */
 interface ToolCallPresentation {
     readonly kind: ToolKind;
     readonly status: ToolCallStatus;
@@ -266,7 +266,7 @@ export function toolCallUpdate(
     };
 }
 
-/** Parses an untrusted app-server item, returning null when the shape is not one Mobius presents. */
+/** Parses an untrusted app-server item, returning null when the shape is not one Morty presents. */
 export function decodeThreadItem(value: unknown): ThreadItem | null {
     const decoded = threadItemSchema.safeParse(value);
     return decoded.success ? decoded.data : null;

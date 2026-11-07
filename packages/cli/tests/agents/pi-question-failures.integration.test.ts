@@ -38,7 +38,7 @@ for (const operation of ["prompt", "compact"] as const) {
                     });
                 }`,
             );
-            const workspace = await mkdtemp(join(tmpdir(), "mobius-pi-question-failure-"));
+            const workspace = await mkdtemp(join(tmpdir(), "morty-pi-question-failure-"));
             const updates: SessionNotification[] = [];
             const endpoint = new PiAcpEndpoint({
                 command: agent.executable,

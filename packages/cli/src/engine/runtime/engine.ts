@@ -3,15 +3,15 @@ import { waitForSharedOperation } from "../session/manager/operation-drain.ts";
 import { ConnectionManager } from "./connection/connection-manager.ts";
 import type { VerifiedRuntimeConnection } from "./connection/runtime-connection.ts";
 import { RuntimeInstallationStore } from "./connection/runtime-installation-store.ts";
-import { type MobiusRuntimePairingOptions, pairRuntimeConnection, prepareRuntimeConnection } from "./pairing.ts";
+import { type MortyRuntimePairingOptions, pairRuntimeConnection, prepareRuntimeConnection } from "./pairing.ts";
 import {
-    type MobiusRuntimeConnection,
+    type MortyRuntimeConnection,
     prepareProvidedRuntime,
     RuntimeLoop,
     type RuntimeLoopOptions,
 } from "./runtime-loop.ts";
 
-export interface MobiusRuntimeEngineParams {
+export interface MortyRuntimeEngineParams {
     readonly engineDataDir: string;
     readonly agentLaunchEnvironment: Readonly<NodeJS.ProcessEnv>;
     readonly maxAcpProcesses?: number;
@@ -19,7 +19,7 @@ export interface MobiusRuntimeEngineParams {
 
 export type EngineLoopConnection =
     | { readonly kind: "saved"; readonly connectionId: string }
-    | { readonly kind: "provided"; readonly connection: MobiusRuntimeConnection };
+    | { readonly kind: "provided"; readonly connection: MortyRuntimeConnection };
 
 export interface RunLoopParams extends RuntimeLoopOptions {
     readonly connection: EngineLoopConnection;
@@ -31,14 +31,14 @@ type InstallationState =
     | { readonly kind: "initializing"; readonly completion: Promise<void> }
     | { readonly kind: "ready"; readonly installation: RuntimeInstallationStore };
 
-export class MobiusRuntimeEngine {
+export class MortyRuntimeEngine {
     readonly #engineDataDir: string;
     readonly #agentLaunchEnvironment: Readonly<NodeJS.ProcessEnv>;
     readonly #maxAcpProcesses: number;
     readonly #connections: ConnectionManager;
     #installation: InstallationState = { kind: "uninitialized" };
 
-    constructor(params: MobiusRuntimeEngineParams) {
+    constructor(params: MortyRuntimeEngineParams) {
         this.#engineDataDir = resolve(params.engineDataDir);
         this.#agentLaunchEnvironment = Object.freeze({ ...params.agentLaunchEnvironment });
         this.#maxAcpProcesses = params.maxAcpProcesses ?? 1000;
@@ -84,7 +84,7 @@ export class MobiusRuntimeEngine {
     readonly getConnectionManager = (): ConnectionManager => this.#connections;
 
     readonly pair = async (
-        input: MobiusRuntimePairingOptions,
+        input: MortyRuntimePairingOptions,
         signal: AbortSignal,
     ): Promise<VerifiedRuntimeConnection> =>
         await pairRuntimeConnection(
@@ -128,6 +128,6 @@ export class MobiusRuntimeEngine {
 
 export type { ConnectionManager } from "./connection/connection-manager.ts";
 export type { RuntimeConnectionInput, VerifiedRuntimeConnection } from "./connection/runtime-connection.ts";
-export type { MobiusRuntimePairingOptions } from "./pairing.ts";
+export type { MortyRuntimePairingOptions } from "./pairing.ts";
 export { RuntimeRelayRevokedError } from "./relay/runtime-revocation.ts";
-export type { MobiusRuntimeConnection } from "./runtime-loop.ts";
+export type { MortyRuntimeConnection } from "./runtime-loop.ts";

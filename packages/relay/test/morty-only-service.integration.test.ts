@@ -1,9 +1,71 @@
-import { applyD1Migrations } from "cloudflare:test";
+import { applyD1Migrations, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
-import { describe, expect, it } from "vitest";
-import { revokeMortyCredential, seedMortyService } from "../../platform-test-support/src/service-fixture.ts";
+import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import { drizzle as durableDrizzle } from "drizzle-orm/durable-sqlite";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+    revokeMortyCredential,
+    seedMortyCredential,
+    seedMortyService,
+} from "../../platform-test-support/src/service-fixture.ts";
+import { platformAppCredentialScope } from "../src/schema/d1/index.ts";
+import { platformAppCredentialProject } from "../src/schema/project-do/index.ts";
 import worker from "../src/worker.ts";
+
+beforeEach(() => vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-07T00:00:00Z") }));
+afterEach(() => vi.useRealTimers());
+
+it("Given a scoped service credential and a retained Project-local grant, When its authoritative grant is removed, Then access is denied until explicitly granted again", async () => {
+    const service = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
+    const created = await worker.fetch(
+        new Request(`https://relay.test${MORTY_API_PREFIX}/dashboard/v1/apps/${service.appId}/projects`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${service.credential}`, "content-type": "application/json" },
+            body: JSON.stringify({ displayName: "Scoped", idempotencyKey: "scoped-project", locationHint: "wnam" }),
+        }),
+        env,
+    );
+    expect(created.status).toBe(201);
+    const project: unknown = await created.json();
+    if (
+        typeof project !== "object" ||
+        project === null ||
+        !("projectId" in project) ||
+        typeof project.projectId !== "string"
+    ) {
+        throw new Error("Expected a created Project");
+    }
+    const { projectId } = project;
+    const scoped = await seedMortyCredential(
+        env.PLATFORM_DIRECTORY_DATABASE,
+        service.appId,
+        ["runtime:read"],
+        [projectId],
+    );
+    const read = () =>
+        worker.fetch(
+            new Request(`https://relay.test${MORTY_API_PREFIX}/v1/projects/${projectId}/runtimes`, {
+                headers: { authorization: `Bearer ${scoped.credential}` },
+            }),
+            env,
+        );
+    expect((await read()).status).toBe(200);
+    await runInDurableObject(env.PROJECT_RELAY.getByName(projectId), (_instance, state) => {
+        durableDrizzle(state.storage)
+            .insert(platformAppCredentialProject)
+            .values({ credentialId: scoped.credentialId, projectId, createdAt: Date.now() })
+            .run();
+    });
+    const db = drizzle(env.PLATFORM_DIRECTORY_DATABASE);
+    await db.delete(platformAppCredentialScope).where(eq(platformAppCredentialScope.credentialId, scoped.credentialId));
+    expect((await read()).status).toBe(403);
+    await db
+        .insert(platformAppCredentialScope)
+        .values({ credentialId: scoped.credentialId, projectId, createdAt: Date.now() });
+    expect((await read()).status).toBe(200);
+});
 
 describe("Morty-only relay", () => {
     it("Given Morty service bindings, When a visitor requests the retired platform API, Then no management surface exists", async () => {
@@ -59,4 +121,12 @@ it("Given separate production and benchmark service identities, When either cred
     await revokeMortyCredential(env.PLATFORM_DIRECTORY_DATABASE, production.credentialId);
     expect((await worker.fetch(request(production.appId, production.credential), env)).status).toBe(401);
     expect((await worker.fetch(request(benchmark.appId, benchmark.credential), benchmarkBindings)).status).toBe(201);
+});
+
+it("Given the launch relay, When a visitor uses its Morty health endpoint or the retired product prefix, Then only the Morty endpoint is available", async () => {
+    const health = await worker.fetch(new Request("https://relay.test/morty/api/dashboard/health"), env);
+    expect(health.status).toBe(200);
+    expect(await health.json()).toEqual({ service: "morty-relay", status: "ok" });
+    const retired = await worker.fetch(new Request("https://relay.test/mobius/api/dashboard/health"), env);
+    expect(retired.status).toBe(404);
 });

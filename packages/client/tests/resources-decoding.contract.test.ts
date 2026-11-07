@@ -1,8 +1,8 @@
 import {
-    decodeMobiusChannelDescriptor,
-    decodeMobiusRuntimeList,
-    decodeMobiusRuntimePairingStatus,
-    MobiusRuntimePairingLifecycle,
+    decodeMortyChannelDescriptor,
+    decodeMortyRuntimeList,
+    decodeMortyRuntimePairingStatus,
+    MortyRuntimePairingLifecycle,
 } from "@morty-build/client";
 import { describe, expect, it } from "vitest";
 
@@ -36,22 +36,22 @@ const pairedStatus = {
 
 describe("Runtime descriptor decoding contracts", () => {
     it("Given a Runtime list, When it is decoded, Then its Agents are available", () => {
-        const decoded = decodeMobiusRuntimeList({ runtimes: [runtime] });
+        const decoded = decodeMortyRuntimeList({ runtimes: [runtime] });
         expect(decoded[0]?.agents[0]?.id).toBe("codex");
     });
 
     it("Given a Runtime list whose Agents carry fields from a newer service, When it is decoded, Then its Agents are available", () => {
         const agents = runtime.agents.map((agent) => ({ ...agent, futureAgentField: { format: 2 } }));
-        const decoded = decodeMobiusRuntimeList({ runtimes: [{ ...runtime, agents }] });
+        const decoded = decodeMortyRuntimeList({ runtimes: [{ ...runtime, agents }] });
         expect(decoded[0]?.agents[0]?.id).toBe("codex");
     });
 
     it("Given a paired status, When it is decoded, Then it is accepted", () => {
-        const decoded = decodeMobiusRuntimePairingStatus(pairedStatus);
-        expect(decoded.status).toBe(MobiusRuntimePairingLifecycle.Paired);
+        const decoded = decodeMortyRuntimePairingStatus(pairedStatus);
+        expect(decoded.status).toBe(MortyRuntimePairingLifecycle.Paired);
     });
 
     it("Given a channel descriptor, When it is decoded, Then it is accepted", () => {
-        expect(() => decodeMobiusChannelDescriptor(runtime)).not.toThrow();
+        expect(() => decodeMortyChannelDescriptor(runtime)).not.toThrow();
     });
 });

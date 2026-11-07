@@ -26,7 +26,7 @@ import { createControlledRuntimeConfig } from "../support/controlled-runtime-con
 test("Given a completed foreground turn, When its Agent requests background permission, Then the session snapshot recovers that request and removes it after the user responds", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-30T00:00:00Z"));
-    const directory = await mkdtemp(join(tmpdir(), "mobius-background-interaction-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-background-interaction-"));
     const workspace = join(directory, "workspace");
     await mkdir(workspace);
     const relay = createServer((_request, response) => response.writeHead(404).end());

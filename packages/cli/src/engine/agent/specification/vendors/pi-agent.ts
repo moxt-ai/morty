@@ -19,14 +19,14 @@ export class PiAgentSpecification extends InProcessAcpAgentSpecification {
     override readonly acpProbeTimeoutMilliseconds = ACP_PROBE_TIMEOUT_MILLISECONDS;
     readonly agentExecutable = "pi";
     readonly createConnection: AgentConnectionFactory = (options) => new PiAgentConnection(options);
-    // The Pi ACP fork inlines embedded prompt resources into the turn message, so Mobius
+    // The Pi ACP fork inlines embedded prompt resources into the turn message, so Morty
     // keeps the adapter's opt-in capability flag enabled for every launch it owns.
     override readonly createLaunchEnvironment = async (
         _agent: ResolvedExecutable,
         context: LocalAgentDiscoveryContext,
     ): Promise<Readonly<Record<string, string>>> => {
         // Pi encodes the workspace path itself into a native session directory name. Long nested
-        // workspaces therefore exceed filesystem name limits before Mobius can run a readiness turn.
+        // workspaces therefore exceed filesystem name limits before Morty can run a readiness turn.
         // Keep persistence, but derive a bounded, stable directory from the resolved workspace.
         const workspaceHash = createHash("sha256").update(context.defaultWorkspace).digest("hex").slice(0, 24);
         const sessionDirectory = join(context.dataDirectory, "agents", "pi", "sessions", workspaceHash);

@@ -20,7 +20,7 @@ function executableSource(source: string): string {
 }
 
 test("Given an ACP Agent repeatedly fails Runtime initialization, When a conversation is prepared, Then the public failure has a correlated local diagnostic with the sanitized cause chain", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-prepare-diagnostics-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-prepare-diagnostics-"));
     const executableDirectory = join(directory, "bin");
     const executable = join(executableDirectory, "controlled-acp");
     await mkdir(executableDirectory);

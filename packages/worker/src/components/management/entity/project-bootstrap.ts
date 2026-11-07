@@ -12,7 +12,7 @@ const bootstrapOrigin = v.variant("kind", [
         v.object({
             kind: v.literal("replacement"),
             previousProjectId: platformIdentifier,
-            token: v.pipe(v.string(), v.regex(/^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u)),
+            token: v.pipe(v.string(), v.regex(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u)),
         }),
         v.readonly(),
     ),

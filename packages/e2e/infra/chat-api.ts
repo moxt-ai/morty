@@ -41,7 +41,7 @@ export async function jsonRequest(
         headers["authorization"] = `Bearer ${token}`;
     }
     if (provider !== undefined) {
-        headers["x-mobius-oidc-provider"] = provider;
+        headers["x-morty-oidc-provider"] = provider;
     }
     const scopedPath =
         project !== undefined && path.startsWith("/morty/api/") && !path.startsWith("/morty/api/chat/projects/")

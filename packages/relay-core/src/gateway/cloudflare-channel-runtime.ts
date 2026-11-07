@@ -9,11 +9,11 @@ import { logger } from "../infra/logger.ts";
 import { RuntimeStatus } from "../service/channel/channel.ts";
 import type { ChannelGateway } from "./channel-gateway.ts";
 
-const INTERNAL_CHANNEL_ID_HEADER = "x-mobius-channel-id";
-const INTERNAL_HOST_CREDENTIAL_ID_HEADER = "x-mobius-host-credential-id";
-const INTERNAL_HOST_CREDENTIAL_KIND_HEADER = "x-mobius-host-credential-kind";
-const INTERNAL_RUNTIME_ID_HEADER = "x-mobius-runtime-id";
-const INTERNAL_SESSION_ACCESS_REVOKED_THROUGH_HEADER = "x-mobius-session-access-revoked-through";
+const INTERNAL_CHANNEL_ID_HEADER = "x-morty-channel-id";
+const INTERNAL_HOST_CREDENTIAL_ID_HEADER = "x-morty-host-credential-id";
+const INTERNAL_HOST_CREDENTIAL_KIND_HEADER = "x-morty-host-credential-kind";
+const INTERNAL_RUNTIME_ID_HEADER = "x-morty-runtime-id";
+const INTERNAL_SESSION_ACCESS_REVOKED_THROUGH_HEADER = "x-morty-session-access-revoked-through";
 
 export class CloudflareChannelRuntime implements ChannelGateway {
     readonly #namespace: DurableObjectNamespace;

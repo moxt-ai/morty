@@ -19,7 +19,7 @@ test("Given desktop Codex owns the Session, When Morty imports it and receives s
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
     let hold = false;
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "LOCKED_SESSION_REPLY", {
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "LOCKED_SESSION_REPLY", {
         beforeFirstText: async () => {
             if (hold) {
                 entered.resolve();
@@ -47,7 +47,7 @@ test("Given desktop Codex owns the Session, When Morty imports it and receives s
             await owner.initialize(peer.signal);
             const started = await owner.request(
                 "thread/start",
-                { cwd: peer.workspace, model: "mobius-test-model" },
+                { cwd: peer.workspace, model: "morty-test-model" },
                 peer.signal,
             );
             const thread: unknown =

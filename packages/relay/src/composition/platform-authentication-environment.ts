@@ -2,7 +2,7 @@ import { ProjectAuthenticationError } from "@morty-build/relay-core";
 import { PlatformAuthenticationConfiguration } from "../entity/platform-control-plane.ts";
 
 export interface PlatformAuthenticationEnvironment {
-    readonly MOBIUS_PLATFORM_ALLOWED_ORIGINS: string;
+    readonly MORTY_ALLOWED_ORIGINS: string;
 }
 
 export function platformAuthenticationFromEnvironment(
@@ -10,7 +10,7 @@ export function platformAuthenticationFromEnvironment(
 ): PlatformAuthenticationConfiguration {
     let value: unknown;
     try {
-        value = JSON.parse(environment.MOBIUS_PLATFORM_ALLOWED_ORIGINS);
+        value = JSON.parse(environment.MORTY_ALLOWED_ORIGINS);
     } catch (cause) {
         throw new ProjectAuthenticationError("relay_configuration_invalid", "The allowed origins are invalid", {
             cause,

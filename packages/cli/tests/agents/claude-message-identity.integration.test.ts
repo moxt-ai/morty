@@ -15,7 +15,7 @@ import { fakeProviderPrompts } from "../support/llm/scenarios.ts";
 test("Given real Claude streams a message, When its harness emits chunks and replays history, Then each message has a required messageId", async () => {
     await using provider = await FakeAnthropicProvider.start("claude-sonnet-4-6", "CLAUDE_IDENTITY_REPLY");
     await using fixture = await ClaudeFixture.create(provider);
-    const cwd = await mkdtemp(join(tmpdir(), "mobius-claude-message-identity-"));
+    const cwd = await mkdtemp(join(tmpdir(), "morty-claude-message-identity-"));
     const updates: ClaudeSessionUpdate[] = [];
     const followUp = "A new prompt from idle steering";
     const submittedFollowUp = Promise.withResolvers<string>();

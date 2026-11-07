@@ -11,9 +11,9 @@ import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 test.runIf(process.platform === "win32")(
     "Given real Codex is installed behind an npm Windows shim, When the user lists Agents from a workspace containing shell characters, Then Codex is ready without a command shell",
     async () => {
-        await using provider = await FakeOpenAiProvider.start("mobius-test-model", "WINDOWS_DISCOVERY_REPLY");
+        await using provider = await FakeOpenAiProvider.start("morty-test-model", "WINDOWS_DISCOVERY_REPLY");
         await using codex = await CodexFixture.create(provider);
-        const directory = await mkdtemp(join(tmpdir(), "mobius-windows-codex-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-windows-codex-"));
         const workspace = join(directory, "workspace & ' spaces");
         const bin = join(directory, "npm bin & spaces");
         await Promise.all([workspace, bin].map((path) => mkdir(path)));

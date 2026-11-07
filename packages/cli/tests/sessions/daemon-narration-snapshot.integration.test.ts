@@ -107,7 +107,7 @@ class ClientFrames {
 
 describe("daemon narration delivery", () => {
     it("Given an Agent streams a long reasoning activity, When the turn completes, Then bounded narration increments preserve it without duplicate text", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-narration-delta-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-narration-delta-"));
         const workspace = join(stateDirectory, "workspace");
         const nativeStateDirectory = join(stateDirectory, "native");
         await Promise.all([mkdir(workspace), mkdir(nativeStateDirectory)]);

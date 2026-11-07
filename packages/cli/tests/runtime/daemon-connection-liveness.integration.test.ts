@@ -247,7 +247,7 @@ describe("daemon relay connection liveness", () => {
     });
 
     it("Given a liveness-capable relay stops acknowledging heartbeats, When the acknowledgement deadline expires, Then the daemon reconnects", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-heartbeat-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-heartbeat-"));
         const defaultWorkspace = join(stateDirectory, "workspace");
         await mkdir(defaultWorkspace);
         const relay = createServer((request, response) => {
@@ -392,7 +392,7 @@ describe("daemon relay connection liveness", () => {
     });
 
     it("Given an active Runtime is revoked by the Relay, When the daemon receives the terminal close, Then it exits instead of reconnecting", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-runtime-revoked-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-runtime-revoked-"));
         const defaultWorkspace = join(stateDirectory, "workspace");
         await mkdir(defaultWorkspace);
         const relay = createServer((request, response) => {
@@ -526,7 +526,7 @@ describe("daemon relay connection liveness", () => {
     });
 
     it("Given a healthy idle daemon connection, When the Relay sends a future event and twenty minutes pass, Then the same connection remains available", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-liveness-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-liveness-"));
         const defaultWorkspace = join(stateDirectory, "workspace");
         await mkdir(defaultWorkspace);
         let catalogRequestCount = 0;
@@ -690,7 +690,7 @@ describe("daemon relay connection liveness", () => {
     });
 
     it("Given a connected daemon, When the Relay sends command kinds the daemon does not recognize, Then it skips them and keeps serving the same connection", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-unsupported-command-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-unsupported-command-"));
         const defaultWorkspace = join(stateDirectory, "workspace");
         await mkdir(defaultWorkspace);
         const relay = createServer((request, response) => {
@@ -862,7 +862,7 @@ describe("daemon relay connection liveness", () => {
     });
 
     it("Given a live daemon sends without acknowledgements, When it reconnects, Then it resumes live delivery without replaying prior events", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-reconciliation-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-reconciliation-"));
         const defaultWorkspace = join(stateDirectory, "workspace");
         await mkdir(defaultWorkspace);
         let reconciliationRequestCount = 0;

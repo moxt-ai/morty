@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { decodeInteraction, decodeTurn } from "../../src/protocol/index.ts";
 
-describe("Mobius resource contract", () => {
+describe("Morty resource contract", () => {
     it("Given a persisted Turn page, When a caller decodes it, Then every terminal state round-trips", () => {
         const turn = {
             acceptedAt: "2026-09-07T00:00:01.000Z",

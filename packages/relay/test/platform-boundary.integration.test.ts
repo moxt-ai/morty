@@ -34,7 +34,7 @@ import {
 } from "@morty-build/client/protocol";
 import { DurableObjectSqlDatabase, RuntimeRelay, type SessionRecording } from "@morty-build/relay-core";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createTestMobiusPlatformApp } from "../../platform-test-support/src/app.ts";
+import { createTestMortyPlatformApp } from "../../platform-test-support/src/app.ts";
 import {
     retireMortyService,
     seedMortyCredential,
@@ -286,7 +286,7 @@ describe.sequential("Platform Session-only boundary", () => {
 
     it("Given an allowed Chat origin, When the browser preflights a Session file read, Then Platform permits the request", async () => {
         const browserOrigin = "https://chat.test";
-        const worker = createTestMobiusPlatformApp(
+        const worker = createTestMortyPlatformApp(
             new PlatformAuthenticationConfiguration(new Set([browserOrigin])),
             createPlatformGateways,
         );
@@ -314,7 +314,7 @@ describe.sequential("Platform Session-only boundary", () => {
     });
 
     it("Given a Session route the Platform no longer serves, When an app requests pending interactions, Then the Platform answers with a typed JSON not_found error", async () => {
-        const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+        const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const projectId = "prj_ap_01_abcdefghijklmnopqrstuvwx";
 
         const response = await worker.fetch(
@@ -331,7 +331,7 @@ describe.sequential("Platform Session-only boundary", () => {
     });
 
     it("Given a created Project, When its creation is retried from another location, Then the retry returns the same Project and a different request still conflicts", async () => {
-        const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+        const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const environment = bindings();
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
         const create = (displayName: string, locationHint: string) =>
@@ -356,7 +356,7 @@ describe.sequential("Platform Session-only boundary", () => {
     // Graceful eviction drains in-flight Runtime events before hibernating the sockets.
     it("Given a linked Codex Runtime with required empty installation metadata, When Chat imports, forks, configures and prompts Sessions across Relay hibernation, Then results, answers and connection status arrive without cloud Session storage", async () => {
         vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
-        const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+        const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const environment = bindings();
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
         const appId = text(app, "appId");
@@ -529,6 +529,7 @@ describe.sequential("Platform Session-only boundary", () => {
                               turn: null,
                               queued: [],
                               queuedCancellation: "before-start",
+                              interactionState: null,
                           })
                         : encodeSessionOperationFailedEvent({
                               kind: "session.operation.failed",
@@ -1298,7 +1299,7 @@ describe.sequential("Platform Session-only boundary", () => {
     }, 180_000);
 
     it("Given a machine with no discovered local Agent, When it redeems a Runtime pairing and publishes its catalog, Then pairing succeeds and the Runtime advertises an empty Agent directory", async () => {
-        const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+        const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const environment = bindings();
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
         const appCredential = text(record(app["defaultCredential"]), "credential");
@@ -1394,7 +1395,7 @@ describe.sequential("Platform Session-only boundary", () => {
 describe.sequential("Platform Recording policy configuration", () => {
     /** Creates an App and Project through the production dashboard boundary. */
     async function createPolicyTarget(
-        worker: ReturnType<typeof createTestMobiusPlatformApp>,
+        worker: ReturnType<typeof createTestMortyPlatformApp>,
         environment: PlatformRelayBindings,
     ) {
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
@@ -1449,8 +1450,8 @@ describe.sequential("Platform Recording policy configuration", () => {
                 new Request(`https://runtime.internal/projects/${projectId}/daemon`, {
                     headers: {
                         Upgrade: "websocket",
-                        "x-mobius-runtime-id": projectId,
-                        "x-mobius-channel-id": projectId,
+                        "x-morty-runtime-id": projectId,
+                        "x-morty-channel-id": projectId,
                     },
                 }),
             );
@@ -1508,7 +1509,7 @@ describe.sequential("Platform Recording policy configuration", () => {
     it.each(["enabled", "disabled"] as const)(
         "Given a legacy %s Project override, When App recording is toggled, Then only the service setting governs recording",
         async (legacyMode) => {
-            const worker = createTestMobiusPlatformApp(
+            const worker = createTestMortyPlatformApp(
                 new PlatformAuthenticationConfiguration(),
                 createPlatformGateways,
             );
@@ -1536,7 +1537,7 @@ describe.sequential("Platform Recording policy configuration", () => {
     );
 
     it("Given a Runtime streaming into an enabled App, When the App disables Recording, Then output after the policy reuse window is not recorded", async () => {
-        const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+        const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const environment = recordingBindings();
         const { appId, projectId } = await createPolicyTarget(worker, environment);
         const policy = async (_path: string, mode: "disabled" | "enabled") =>
@@ -1570,7 +1571,7 @@ describe.sequential("Platform Recording policy configuration", () => {
  * before the Session credential is issued, so later times are explicit offsets from it.
  */
 async function connectRuntimeDaemon(slug: string, options: { readonly anchorClockToHeartbeat?: boolean } = {}) {
-    const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+    const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
     const environment = bindings();
     const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
     const appCredential = text(record(app["defaultCredential"]), "credential");
@@ -1778,9 +1779,9 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                         headers: {
                             authorization: `Bearer ${text(sessionAccess, "credential")}`,
                             "content-type": metadata.mediaType,
-                            "x-mobius-byte-length": String(bytes.byteLength),
-                            "x-mobius-content-kind": metadata.kind,
-                            "x-mobius-file-name": encodeURIComponent(metadata.name),
+                            "x-morty-byte-length": String(bytes.byteLength),
+                            "x-morty-content-kind": metadata.kind,
+                            "x-morty-file-name": encodeURIComponent(metadata.name),
                         },
                         method: "PUT",
                     },
@@ -2076,6 +2077,7 @@ it("Given Chat reads the Session execution naming an unconfirmed command, When t
                 queued: [],
                 command: { state: "completed", stopReason: "end_turn" },
                 queuedCancellation: "before-start",
+                interactionState: null,
             }),
         );
         expect(await responseJson(await response, 200)).toMatchObject({
@@ -2114,6 +2116,7 @@ it("Given Chat reads the Session execution after missing a turn's outcome, When 
                 turn: null,
                 queued: [],
                 queuedCancellation: "before-start",
+                interactionState: null,
                 lastTurn: {
                     code: "model_unavailable",
                     commandId: "failed-command",
@@ -2124,6 +2127,7 @@ it("Given Chat reads the Session execution after missing a turn's outcome, When 
         );
         expect(await responseJson(await response, 200)).toMatchObject({
             queuedCancellation: "before-start",
+            interactionState: null,
             lastTurn: { commandId: "failed-command", state: "failed", code: "model_unavailable" },
         });
     } finally {
@@ -2518,6 +2522,7 @@ describe.sequential("Platform Turn submission", () => {
                     turn: null,
                     queued: [],
                     queuedCancellation: "before-start",
+                    interactionState: null,
                 }),
             );
             expect(await responseJson(await read, 200)).toMatchObject({ action: "active-turn", turn: null });
@@ -2576,7 +2581,7 @@ describe.sequential("Platform Turn submission", () => {
     // @no-uc: Security regression; a Runtime host connection must not exceed the permissions of its AppCredential.
     it("Given an AppCredential that reads but cannot change Sessions, When it uses a Runtime host connection, Then it cannot open one without Session read access, can still read the Runtime, and cannot send a prompt", async () => {
         const runtime = await connectRuntimeDaemon("app-host-permissions");
-        const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+        const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const environment = bindings();
         const openHost = async (credential: string) =>
             await worker.fetch(
@@ -2829,6 +2834,7 @@ describe.sequential("Platform Turn submission", () => {
                     kind: "native.session.result",
                     queued: [],
                     queuedCancellation: "before-start",
+                    interactionState: null,
                     requestId: command.requestId,
                     sessionId: runtime.sessionId,
                     targetSessionId: runtime.sessionId,
@@ -3017,7 +3023,7 @@ describe.sequential("Platform Turn submission", () => {
         }
     });
     it("Given a linked Runtime, When Chat submits a first Turn longer than 10,000 characters or an invalid Turn, Then the long Turn reaches the Runtime and the invalid Turn is rejected as a client error", async () => {
-        const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+        const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const environment = bindings();
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
         const appCredential = text(record(app["defaultCredential"]), "credential");
@@ -3377,7 +3383,7 @@ describe.sequential("Platform Turn submission", () => {
         if (gatedAgent === undefined) {
             throw new Error("Expected the shared Agent directory entry");
         }
-        const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+        const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const environment = bindings();
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
         const appId = text(app, "appId");
@@ -3547,7 +3553,7 @@ describe.sequential("Platform Turn submission", () => {
     });
 
     it("Given an Agent advertisement carrying fields and capability values the Relay cannot interpret, When it pairs, Then pairing succeeds and the unreadable capabilities stay withheld", async () => {
-        const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+        const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
         const environment = bindings();
         const app = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
         const appId = text(app, "appId");
@@ -3753,7 +3759,7 @@ it.each(["completed", "interrupted"] as const)(
                 entry: {
                     entryId: "native-entry",
                     nativeSessionId: "native-source",
-                    mobiusSessionIds: [],
+                    mortySessionIds: [],
                     title: "Source",
                     directoryId: "default",
                     directoryLabel: "Workspace",
@@ -3834,7 +3840,7 @@ it("Given the Runtime rejects a Fork, When the same operation is retried, Then t
                 entry: {
                     entryId: "native-entry",
                     nativeSessionId: "native-source",
-                    mobiusSessionIds: [],
+                    mortySessionIds: [],
                     title: "Source",
                     directoryId: "default",
                     directoryLabel: "Workspace",
@@ -4028,10 +4034,10 @@ it("Given an anonymous browser knows a Runtime, When it declares a full-budget u
                 bodyByteLength: 1,
                 headers: [
                     ["authorization", `Bearer ${runtime.credential}`],
-                    ["x-mobius-byte-length", "1"],
-                    ["x-mobius-content-kind", "resource"],
+                    ["x-morty-byte-length", "1"],
+                    ["x-morty-content-kind", "resource"],
                     ["content-type", "text/plain"],
-                    ["x-mobius-file-name", "test.txt"],
+                    ["x-morty-file-name", "test.txt"],
                 ],
                 path: `${path}?uri=file%3A%2F%2F%2Ftmp%2Ftest.txt`,
             }),

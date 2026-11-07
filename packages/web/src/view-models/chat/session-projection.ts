@@ -257,7 +257,7 @@ export function observeSessionProjectionExecution(
             entries: [
                 ...state.reduction.entries,
                 ...(observed.running === null
-                    ? // Native replay can retain unfinished tools without Mobius lifecycle metadata.
+                    ? // Native replay can retain unfinished tools without Morty lifecycle metadata.
                       [{ kind: "execution-idle" as const }]
                     : [
                           {

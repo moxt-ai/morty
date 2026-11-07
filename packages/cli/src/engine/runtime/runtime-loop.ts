@@ -14,7 +14,7 @@ import { runRuntime } from "./run.ts";
 
 const RUNTIME_CREDENTIAL_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
 
-export interface MobiusRuntimeConnection {
+export interface MortyRuntimeConnection {
     readonly channelId: string;
     readonly defaultWorkspace: string;
     readonly relayUrl: string;
@@ -53,7 +53,7 @@ function validateRuntimeConfiguration(config: RuntimeConfig): void {
     validateRuntimeRelay(config.relayUrl);
 }
 
-function relayUrlFromConnection(connection: MobiusRuntimeConnection): URL {
+function relayUrlFromConnection(connection: MortyRuntimeConnection): URL {
     let relayUrl: URL;
     try {
         relayUrl = new URL(connection.relayUrl);
@@ -81,7 +81,7 @@ async function resolveWorkspace(path: string): Promise<string> {
 
 interface PrepareProvidedRuntimeParams {
     readonly installation: RuntimeInstallationStore;
-    readonly connection: MobiusRuntimeConnection;
+    readonly connection: MortyRuntimeConnection;
     readonly signal: AbortSignal;
     readonly agentLaunchEnvironment: Readonly<NodeJS.ProcessEnv>;
     readonly maxAcpProcesses: number;

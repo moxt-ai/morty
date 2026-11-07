@@ -60,10 +60,10 @@ def main():
     assert platform['d1_databases'][0]['database_id'] == expected['d1_id']
     assert {x['bucket_name'] for x in platform['r2_buckets']} == {expected['buckets']['platform_apac'], expected['buckets']['platform_wnam']}
     assert platform['services'] == [{'binding': 'RECORDING', 'service': expected['recording']}]
-    assert morty['vars']['MOBIUS_BASE_URL'] == expected['platform_origin'] and morty['vars']['MOBIUS_APP_ID'] == expected['app_id']
+    assert morty['vars']['MORTY_RELAY_URL'] == expected['platform_origin'] and morty['vars']['MORTY_SERVICE_ID'] == expected['app_id']
     assert morty['r2_buckets'] == [{'binding': 'CHAT_ATTACHMENTS_APAC', 'bucket_name': expected['buckets']['attachments']}]
     assert morty['vars']['APP_ORIGIN'] == expected['morty_origin']
-    assert json.loads(platform['vars']['MOBIUS_PLATFORM_ALLOWED_ORIGINS']) == expected['allowed_origins']
+    assert json.loads(platform['vars']['MORTY_ALLOWED_ORIGINS']) == expected['allowed_origins']
     if args.verify_release_only:
         print(json.dumps({'releaseVerified': True, 'appId': expected['app_id'], 'origin': expected['morty_origin'], 'deploymentAttempted': False}))
         return
@@ -86,8 +86,8 @@ def main():
             raise ValueError('Release omits an existing Durable Object migration: ' + component)
     # Validate the migrated identity and its deploy-time secret before any R2,
     # D1 migration, or Worker write. A successful health page is not sufficient.
-    secrets_by_component = {'platform': {}, 'morty': {'MOBIUS_APP_SECRET': os.environ['MORTY_SERVICE_SECRET']}}
-    app_secret = secrets_by_component['morty'].get('MOBIUS_APP_SECRET')
+    secrets_by_component = {'platform': {}, 'morty': {'MORTY_SERVICE_SECRET': os.environ['MORTY_SERVICE_SECRET']}}
+    app_secret = secrets_by_component['morty'].get('MORTY_SERVICE_SECRET')
     if not isinstance(app_secret, str) or not app_secret:
         raise ValueError('Missing production application credential')
     credentials = cloud('/d1/database/' + expected['d1_id'] + '/query', {'sql': "SELECT c.secret_digest FROM platform_app_credentials c JOIN platform_apps a ON a.app_id = c.app_id WHERE a.app_id = ? AND a.lifecycle = 'active' AND c.revoked_at IS NULL", 'params': [expected['app_id']]})
@@ -119,7 +119,7 @@ def main():
         run(WRANGLER + ['r2', 'object', 'put', expected['buckets']['attachments'] + '/artifacts/setup.mjs', '--file', str(release / 'setup.mjs'), '--content-type', 'text/javascript; charset=utf-8', '--remote', '--config', str(configs['morty'])], env)
         run(WRANGLER + ['d1', 'migrations', 'apply', expected['d1_name'], '--remote', '--config', str(configs['platform'])], env)
         for component in ['recording', 'platform', 'morty']:
-            command = WRANGLER + ['deploy', '--config', str(configs[component]), '--message', 'mobius-morty ' + manifest['revision']]
+            command = WRANGLER + ['deploy', '--config', str(configs[component]), '--message', 'morty ' + manifest['revision']]
             if secrets_by_component.get(component):
                 secrets = secrets_by_component[component]
                 if not secrets or not all(isinstance(k, str) and isinstance(v, str) and v for k, v in secrets.items()):
@@ -130,7 +130,7 @@ def main():
                 command += ['--secrets-file', str(secret_file)]
             run(command, env)
         checks = []
-        for url, content in [(expected['platform_origin'] + '/mobius/api/dashboard/health', 'morty-relay'), (expected['morty_origin'] + '/', 'Morty'), (expected['morty_origin'] + '/setup.mjs', None)]:
+        for url, content in [(expected['platform_origin'] + '/morty/api/dashboard/health', 'morty-relay'), (expected['morty_origin'] + '/', 'Morty'), (expected['morty_origin'] + '/setup.mjs', None)]:
             with urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'Morty-Deployment/1.0'}), timeout=40) as response:
                 body = response.read()
                 if response.status != 200 or content and content not in body.decode():

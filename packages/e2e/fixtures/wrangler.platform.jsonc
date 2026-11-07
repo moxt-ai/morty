@@ -1,6 +1,6 @@
 {
     "$schema": "../../../node_modules/wrangler/config-schema.json",
-    "name": "mobius-platform-local-e2e",
+    "name": "morty-platform-local-e2e",
     "main": "local-platform-worker.ts",
     "compatibility_date": "2026-09-03",
     "kv_namespaces": [{ "binding": "APP_CREDENTIAL_CACHE" }],
@@ -22,17 +22,17 @@
     "d1_databases": [
         {
             "binding": "PLATFORM_DIRECTORY_DATABASE",
-            "database_name": "mobius-platform-e2e-directory",
+            "database_name": "morty-platform-e2e-directory",
             "database_id": "00000000-0000-0000-0000-000000000102",
             "migrations_dir": "../../../packages/relay/migrations/d1"
         }
     ],
     "r2_buckets": [
-        { "binding": "R2_BUCKET_APAC", "bucket_name": "mobius-platform-local-e2e-objects" },
-        { "binding": "R2_BUCKET_WNAM", "bucket_name": "mobius-platform-local-e2e-wnam-objects" }
+        { "binding": "R2_BUCKET_APAC", "bucket_name": "morty-platform-local-e2e-objects" },
+        { "binding": "R2_BUCKET_WNAM", "bucket_name": "morty-platform-local-e2e-wnam-objects" }
     ],
     "vars": {
-        "MOBIUS_PLATFORM_ALLOWED_ORIGINS": "[\"*\"]",
+        "MORTY_ALLOWED_ORIGINS": "[\"*\"]",
         "SESSION_ACTIVE_SESSIONS_PER_PROJECT": "1000",
         "SESSION_ARCHIVE_BYTES_PER_SESSION": "268435456"
     }

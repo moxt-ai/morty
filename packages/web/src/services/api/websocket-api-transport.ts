@@ -29,7 +29,7 @@ const watchReadyFrame = v.strictObject({
 const notificationFrame = v.strictObject({ kind: v.literal("notification"), subscriptionId: v.string() });
 const eventFrame = v.strictObject({ kind: v.literal("event"), subscriptionId: v.string(), data: v.string() });
 const subscriptionEndFrame = v.strictObject({ kind: v.literal("subscription.end"), subscriptionId: v.string() });
-const mobiusHealthSchema = v.strictObject({ service: v.literal("morty-relay"), status: v.literal("ok") });
+const mortyHealthSchema = v.strictObject({ service: v.literal("morty-relay"), status: v.literal("ok") });
 const serverFrame = v.variant("kind", [
     responseFrame,
     errorFrame,
@@ -43,9 +43,9 @@ const serverFrame = v.variant("kind", [
 const permittedHeaders = new Set([
     "authorization",
     "content-type",
-    "x-mobius-byte-length",
-    "x-mobius-content-kind",
-    "x-mobius-file-name",
+    "x-morty-byte-length",
+    "x-morty-content-kind",
+    "x-morty-file-name",
 ]);
 const KEEPALIVE_MILLISECONDS = 25_000;
 /** Delays between automatic reconnects; the last entry repeats until the bridge returns. */
@@ -354,7 +354,7 @@ export class WebSocketApiTransport {
             }
             headers.push([name, value]);
         }
-        const binaryRequest = request.headers.has("x-mobius-byte-length");
+        const binaryRequest = request.headers.has("x-morty-byte-length");
         const binaryBody = binaryRequest ? new Uint8Array(await request.arrayBuffer()) : null;
         const body = binaryRequest || request.body === null ? null : await request.text();
         request.signal.throwIfAborted();
@@ -428,7 +428,7 @@ export class WebSocketApiTransport {
         });
     };
 
-    readonly measureMobiusLatency = async (origin: string, parent: AbortSignal): Promise<number> => {
+    readonly measureRelayLatency = async (origin: string, parent: AbortSignal): Promise<number> => {
         parent.throwIfAborted();
         const endpoint = new URL(origin);
         if (
@@ -443,7 +443,7 @@ export class WebSocketApiTransport {
         ) {
             throw new Error("The Morty relay diagnostic endpoint is invalid.");
         }
-        endpoint.pathname = "/mobius/api/dashboard/health";
+        endpoint.pathname = "/morty/api/dashboard/health";
         endpoint.searchParams.set("diagnostic", crypto.randomUUID());
         const signal = AbortSignal.any([parent, AbortSignal.timeout(10_000)]);
         const startedAt = performance.now();
@@ -453,7 +453,7 @@ export class WebSocketApiTransport {
             await response.body?.cancel();
             throw new Error("The Morty relay did not respond to the network diagnostic.");
         }
-        v.parse(mobiusHealthSchema, await response.json());
+        v.parse(mortyHealthSchema, await response.json());
         return Math.max(0, Math.round(performance.now() - startedAt));
     };
 

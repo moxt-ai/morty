@@ -8,9 +8,9 @@ const WATCH_REQUEST_TIMEOUT_MILLISECONDS = 120_000;
 const permittedHeaders = new Set([
     "authorization",
     "content-type",
-    "x-mobius-byte-length",
-    "x-mobius-content-kind",
-    "x-mobius-file-name",
+    "x-morty-byte-length",
+    "x-morty-content-kind",
+    "x-morty-file-name",
 ]);
 const STATUS_SUBSCRIPTION_PATH =
     /^\/morty\/api\/chat\/projects\/([^/]+)\/bots\/([^/]+)\/managed-session\/status-events$/u;

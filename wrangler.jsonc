@@ -48,7 +48,7 @@
                 }
             ],
             "placement": { "mode": "off" },
-            "secrets": { "required": ["MOBIUS_APP_SECRET"] },
+            "secrets": { "required": ["MORTY_SERVICE_SECRET"] },
             "routes": [
                 {
                     "pattern": "morty.build",

@@ -12,7 +12,7 @@ import {
 
 describe("Runtime installation storage", () => {
     it("Given an ordinary data directory name, When a host saves a connection, Then local storage accepts the path without treating it as an application identity", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-engine-directory-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-engine-directory-"));
         const signal = new AbortController().signal;
         try {
             const installation = await RuntimeInstallationStore.open(join(directory, "data"), signal);
@@ -51,7 +51,7 @@ describe("Runtime installation storage", () => {
     });
 
     it("Given version-5 connection and version-1 index records, When Engine updates activation, Then they stay readable and the connection is rewritten in the current format", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-retained-pairing-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-retained-pairing-"));
         const signal = new AbortController().signal;
         try {
             const installation = await RuntimeInstallationStore.open(join(directory, "data"), signal);
@@ -125,7 +125,7 @@ describe("Runtime installation storage", () => {
     });
 
     it("Given an existing installation moved to a differently named directory, When a host opens it explicitly, Then old and new entrypoints retain the same identity and connections", async () => {
-        const stateRoot = await mkdtemp(join(tmpdir(), "mobius-engine-context-"));
+        const stateRoot = await mkdtemp(join(tmpdir(), "morty-engine-context-"));
         const signal = new AbortController().signal;
         try {
             const original = await RuntimeInstallationStore.open(
@@ -170,7 +170,7 @@ describe("Runtime installation storage", () => {
     });
 
     it("Given an obsolete pairing record, When the Runtime restores it, Then it rejects the record without a compatibility fallback", async () => {
-        const stateRoot = await mkdtemp(join(tmpdir(), "mobius-obsolete-pairing-"));
+        const stateRoot = await mkdtemp(join(tmpdir(), "morty-obsolete-pairing-"));
         const signal = new AbortController().signal;
         try {
             const installation = await RuntimeInstallationStore.open(
@@ -207,21 +207,21 @@ describe("Runtime installation storage", () => {
     });
 
     it("Given two isolated Engine data directories, When each saves a Runtime connection, Then each resumes only its own opaque connection", async () => {
-        const stateRoot = await mkdtemp(join(tmpdir(), "mobius-runtime-installations-"));
+        const stateRoot = await mkdtemp(join(tmpdir(), "morty-runtime-installations-"));
         const signal = new AbortController().signal;
         const channelId = "shared:channel";
         try {
-            const mobius = await RuntimeInstallationStore.open(join(stateRoot, "mobius-data"), signal);
+            const morty = await RuntimeInstallationStore.open(join(stateRoot, "morty-data"), signal);
             const moxt = await RuntimeInstallationStore.open(join(stateRoot, "moxt-data"), signal);
-            const mobiusConnection = await mobius.saveConnection(
+            const mortyConnection = await morty.saveConnection(
                 {
-                    appId: "app_mobius",
+                    appId: "app_morty",
                     channelId,
-                    defaultWorkspace: "/workspace/mobius",
-                    pairingId: "pairing_mobius",
+                    defaultWorkspace: "/workspace/morty",
+                    pairingId: "pairing_morty",
                     relayOrigin: new URL("https://relay.example.com/"),
                     runtimeCredential: "a".repeat(43),
-                    runtimeId: "runtime_mobius",
+                    runtimeId: "runtime_morty",
                 },
                 signal,
             );
@@ -249,22 +249,22 @@ describe("Runtime installation storage", () => {
             expect(resumed.appId).toBe("app_moxt");
             await expect(moxt.listConnections(signal)).resolves.toEqual([resumed]);
             await expect(moxt.readConnectionForPairing("pairing_moxt", signal)).resolves.toEqual(resumed);
-            expect(mobius.connectionPath(mobiusConnection.connectionId)).not.toContain("moxt-data");
+            expect(morty.connectionPath(mortyConnection.connectionId)).not.toContain("moxt-data");
             expect(moxt.connectionPath(moxtConnection.connectionId)).toContain("moxt-data");
-            expect(mobius.connectionPath(mobiusConnection.connectionId)).not.toContain(channelId);
+            expect(morty.connectionPath(mortyConnection.connectionId)).not.toContain(channelId);
             expect(moxt.connectionPath(moxtConnection.connectionId)).not.toContain(channelId);
             expect(await readdir(join(moxt.stateDirectory, "channels"))).toEqual([
                 expect.stringMatching(/^mci_[a-f0-9]{64}\.json$/),
             ]);
-            await expect(mobius.readConnection(moxtConnection.connectionId, signal)).rejects.toMatchObject({
+            await expect(morty.readConnection(moxtConnection.connectionId, signal)).rejects.toMatchObject({
                 code: "connection_not_found",
             } satisfies Pick<RuntimeInstallationStoreError, "code">);
             await writeFile(
-                mobius.connectionPath(moxtConnection.connectionId),
+                morty.connectionPath(moxtConnection.connectionId),
                 await readFile(moxt.connectionPath(moxtConnection.connectionId)),
                 { mode: 0o600 },
             );
-            await expect(mobius.readConnection(moxtConnection.connectionId, signal)).rejects.toMatchObject({
+            await expect(morty.readConnection(moxtConnection.connectionId, signal)).rejects.toMatchObject({
                 code: "connection_owner_mismatch",
             });
         } finally {

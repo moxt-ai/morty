@@ -21,8 +21,8 @@ class TestApplication<E extends Env> extends Hono<E> {
     }
 }
 
-/** Share the production Platform boundary across Mobius and embedding application tests. */
-export function createTestMobiusPlatformApp(
+/** Share the production Platform boundary across Morty and embedding application tests. */
+export function createTestMortyPlatformApp(
     options: PlatformAuthenticationConfiguration & {
         readonly bindings?: PlatformRelayBindings;
     },

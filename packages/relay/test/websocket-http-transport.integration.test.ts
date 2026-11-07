@@ -37,7 +37,7 @@ function nextMessage(socket: WebSocket): Promise<string> {
 
 it("Given a browser connection, When it heartbeats through the public Platform transport, Then the Runtime acknowledges it and application requests remain usable", async () => {
     const response = await SELF.fetch(
-        "https://platform.test/mobius/api/v1/projects/project/runtimes/runtime/transport",
+        "https://platform.test/morty/api/v1/projects/project/runtimes/runtime/transport",
         {
             headers: { Upgrade: "websocket" },
         },
@@ -58,7 +58,7 @@ it("Given a browser connection, When it heartbeats through the public Platform t
                 kind: "http.request",
                 requestId: "after-heartbeat",
                 method: "GET",
-                path: "/mobius/api/v1/projects/project/runtimes/runtime/diagnostics",
+                path: "/morty/api/v1/projects/project/runtimes/runtime/diagnostics",
                 headers: [],
                 body: "",
             }),
@@ -75,7 +75,7 @@ it("Given a browser connection, When it heartbeats through the public Platform t
 
 it("Given a Runtime-bound browser, When it addresses another Runtime, Then the request is rejected without closing the browser connection", async () => {
     const response = await SELF.fetch(
-        "https://platform.test/mobius/api/v1/projects/project/runtimes/runtime/transport",
+        "https://platform.test/morty/api/v1/projects/project/runtimes/runtime/transport",
         {
             headers: { Upgrade: "websocket" },
         },
@@ -93,7 +93,7 @@ it("Given a Runtime-bound browser, When it addresses another Runtime, Then the r
                 kind: "http.request",
                 requestId: "request-identity",
                 method: "GET",
-                path: "/mobius/api/v1/projects/project/runtimes/another-runtime/diagnostics",
+                path: "/morty/api/v1/projects/project/runtimes/another-runtime/diagnostics",
                 headers: [],
                 body: "",
             }),
@@ -117,7 +117,7 @@ it("Given two browser connections to one Runtime, When their pending uploads exc
     const daemon = new TextDaemonBoundary("uploaded");
     const connect = () =>
         acceptWebSocketHttpTransport(
-            new Request("https://platform.test/mobius/api/v1/transport", { headers: { Upgrade: "websocket" } }),
+            new Request("https://platform.test/morty/api/v1/transport", { headers: { Upgrade: "websocket" } }),
             daemon.fetch,
             standardWebSocketHost,
             { uploads, validateTarget: () => true },
@@ -134,7 +134,7 @@ it("Given two browser connections to one Runtime, When their pending uploads exc
             kind: "http.request",
             requestId,
             method: "POST",
-            path: "/mobius/api/v1/projects/upload-project/runtimes/upload-runtime/content",
+            path: "/morty/api/v1/projects/upload-project/runtimes/upload-runtime/content",
             headers: [],
             body: "",
             bodyByteLength: 8 * 1024 * 1024,
@@ -182,7 +182,7 @@ it.each([
             headers.set("Authorization", authorization);
         }
         const response = await SELF.fetch(
-            "https://platform.test/mobius/api/v1/projects/prj_wn_01_ABCDEFGHIJKLMNOPQRSTUVWX/sessions/session-unauthorized/events-v2",
+            "https://platform.test/morty/api/v1/projects/prj_wn_01_ABCDEFGHIJKLMNOPQRSTUVWX/sessions/session-unauthorized/events-v2",
             { headers },
         );
         expect(response.status).toBe(401);
@@ -219,7 +219,7 @@ it("Given two quiet subscriptions, When multiple heartbeat intervals pass, Then 
     vi.setSystemTime(new Date("2030-01-01T00:00:00Z"));
     const daemon = new MultipleSubscriptionDaemonBoundary();
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/mobius/api/v1/transport", {
+        new Request("https://platform.test/morty/api/v1/transport", {
             headers: { Upgrade: "websocket" },
         }),
         daemon.fetch,
@@ -237,7 +237,7 @@ it("Given two quiet subscriptions, When multiple heartbeat intervals pass, Then 
                 JSON.stringify({
                     kind: "session.events.subscribe",
                     subscriptionId,
-                    path: "/mobius/api/v1/projects/project/sessions/session/events-v2",
+                    path: "/morty/api/v1/projects/project/sessions/session/events-v2",
                     headers: [],
                 }),
             );
@@ -293,10 +293,10 @@ class TextDaemonBoundary {
 
 it("Given a Unicode JSON request and response, When the relay carries them over WebSocket, Then it transfers their text without Base64 wrapping", async () => {
     const requestBody = JSON.stringify({ prompt: "show café ☕" });
-    const responseBody = JSON.stringify({ message: "Olá, Mobius" });
+    const responseBody = JSON.stringify({ message: "Olá, Morty" });
     const daemon = new TextDaemonBoundary(responseBody);
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/mobius/api/v1/transport", {
+        new Request("https://platform.test/morty/api/v1/transport", {
             headers: { Upgrade: "websocket" },
         }),
         daemon.fetch,
@@ -315,7 +315,7 @@ it("Given a Unicode JSON request and response, When the relay carries them over 
             headers: [["content-type", "application/json"]],
             kind: "http.request",
             method: "POST",
-            path: "/mobius/api/v1/projects/project/sessions",
+            path: "/morty/api/v1/projects/project/sessions",
             requestId: "text-body",
         }),
     );
@@ -334,7 +334,7 @@ it("Given a Unicode JSON request and response, When the relay carries them over 
 it("Given an invalid binary declaration, When the request ID is reused for a valid upload, Then validation happens before buffering", async () => {
     const daemon = new TextDaemonBoundary("uploaded");
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/mobius/api/v1/transport", { headers: { Upgrade: "websocket" } }),
+        new Request("https://platform.test/morty/api/v1/transport", { headers: { Upgrade: "websocket" } }),
         daemon.fetch,
         standardWebSocketHost,
     );
@@ -351,7 +351,7 @@ it("Given an invalid binary declaration, When the request ID is reused for a val
             headers: [],
             kind: "http.request",
             method: "POST",
-            path: "/outside/mobius",
+            path: "/outside/morty",
             requestId: "reused-upload",
         }),
     );
@@ -365,7 +365,7 @@ it("Given an invalid binary declaration, When the request ID is reused for a val
             headers: [],
             kind: "http.request",
             method: "POST",
-            path: "/mobius/api/v1/projects/project/sessions",
+            path: "/morty/api/v1/projects/project/sessions",
             requestId: "reused-upload",
         }),
     );
@@ -385,7 +385,7 @@ it("Given an invalid binary declaration, When the request ID is reused for a val
 it("Given a binary upload sends an invalid chunk, When it retries the same request ID, Then the failed buffer was released", async () => {
     const daemon = new TextDaemonBoundary("uploaded");
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/mobius/api/v1/transport", { headers: { Upgrade: "websocket" } }),
+        new Request("https://platform.test/morty/api/v1/transport", { headers: { Upgrade: "websocket" } }),
         daemon.fetch,
         standardWebSocketHost,
     );
@@ -400,7 +400,7 @@ it("Given a binary upload sends an invalid chunk, When it retries the same reque
         headers: [],
         kind: "http.request",
         method: "POST",
-        path: "/mobius/api/v1/projects/project/sessions",
+        path: "/morty/api/v1/projects/project/sessions",
         requestId: "retry-upload",
     };
     const invalid = nextMessage(socket);
@@ -424,7 +424,7 @@ it("Given an incomplete upload consumes the aggregate byte budget, When its dead
     try {
         const daemon = new TextDaemonBoundary("uploaded");
         const response = acceptWebSocketHttpTransport(
-            new Request("https://platform.test/mobius/api/v1/transport", { headers: { Upgrade: "websocket" } }),
+            new Request("https://platform.test/morty/api/v1/transport", { headers: { Upgrade: "websocket" } }),
             daemon.fetch,
             standardWebSocketHost,
         );
@@ -440,7 +440,7 @@ it("Given an incomplete upload consumes the aggregate byte budget, When its dead
                 headers: [],
                 kind: "http.request",
                 method: "POST",
-                path: "/mobius/api/v1/projects/project/sessions",
+                path: "/morty/api/v1/projects/project/sessions",
                 requestId: "abandoned-upload",
             }),
         );
@@ -452,7 +452,7 @@ it("Given an incomplete upload consumes the aggregate byte budget, When its dead
                 headers: [],
                 kind: "http.request",
                 method: "POST",
-                path: "/mobius/api/v1/projects/project/sessions",
+                path: "/morty/api/v1/projects/project/sessions",
                 requestId: "next-upload",
             }),
         );
@@ -478,7 +478,7 @@ it("Given an incomplete upload consumes the aggregate byte budget, When its dead
                 headers: [],
                 kind: "http.request",
                 method: "POST",
-                path: "/mobius/api/v1/projects/project/sessions",
+                path: "/morty/api/v1/projects/project/sessions",
                 requestId: "next-upload",
             }),
         );
@@ -499,7 +499,7 @@ it("Given an incomplete upload consumes the aggregate byte budget, When its dead
 it("Given many incomplete binary uploads, When their count reaches the pending limit, Then another declaration is rejected", async () => {
     const daemon = new TextDaemonBoundary("unused");
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/mobius/api/v1/transport", { headers: { Upgrade: "websocket" } }),
+        new Request("https://platform.test/morty/api/v1/transport", { headers: { Upgrade: "websocket" } }),
         daemon.fetch,
         standardWebSocketHost,
     );
@@ -516,7 +516,7 @@ it("Given many incomplete binary uploads, When their count reaches the pending l
                 headers: [],
                 kind: "http.request",
                 method: "POST",
-                path: "/mobius/api/v1/projects/project/sessions",
+                path: "/morty/api/v1/projects/project/sessions",
                 requestId: `pending-${index}`,
             }),
         );
@@ -529,7 +529,7 @@ it("Given many incomplete binary uploads, When their count reaches the pending l
             headers: [],
             kind: "http.request",
             method: "POST",
-            path: "/mobius/api/v1/projects/project/sessions",
+            path: "/morty/api/v1/projects/project/sessions",
             requestId: "pending-overflow",
         }),
     );
@@ -544,7 +544,7 @@ it("Given many incomplete binary uploads, When their count reaches the pending l
 it("Given a daemon request fails with a 5XX error, When the WebSocket transport reports it, Then the client receives its detailed code and message", async () => {
     const daemon = new FailingDaemonBoundary();
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/mobius/api/v1/transport", {
+        new Request("https://platform.test/morty/api/v1/transport", {
             headers: { Upgrade: "websocket" },
         }),
         daemon.fetch,
@@ -563,7 +563,7 @@ it("Given a daemon request fails with a 5XX error, When the WebSocket transport 
             headers: [],
             kind: "http.request",
             method: "GET",
-            path: "/mobius/api/v1/events",
+            path: "/morty/api/v1/events",
             requestId: "daemon-failure",
         }),
     );
@@ -582,7 +582,7 @@ it("Given a daemon request fails with a 5XX error, When the WebSocket transport 
 it("Given an established event subscription, When the browser transport closes, Then the downstream socket closes without aborting its upgraded request", async () => {
     const daemon = new SubscriptionDaemonBoundary();
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/mobius/api/v1/transport", {
+        new Request("https://platform.test/morty/api/v1/transport", {
             headers: { Upgrade: "websocket" },
         }),
         daemon.fetch,
@@ -598,7 +598,7 @@ it("Given an established event subscription, When the browser transport closes, 
         JSON.stringify({
             headers: [],
             kind: "session.events.subscribe",
-            path: "/mobius/api/v1/projects/project/sessions/session/events-v2",
+            path: "/morty/api/v1/projects/project/sessions/session/events-v2",
             subscriptionId: "subscription-1",
         }),
     );
@@ -624,7 +624,7 @@ it("Given an established event subscription, When the browser transport closes, 
 it("Given two live subscriptions, When each receives event batches, Then delivery sequence IDs start at one and advance per subscription", async () => {
     const daemon = new MultipleSubscriptionDaemonBoundary();
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/mobius/api/v1/transport", {
+        new Request("https://platform.test/morty/api/v1/transport", {
             headers: { Upgrade: "websocket" },
         }),
         daemon.fetch,
@@ -641,7 +641,7 @@ it("Given two live subscriptions, When each receives event batches, Then deliver
             JSON.stringify({
                 headers: [],
                 kind: "session.events.subscribe",
-                path: `/mobius/api/v1/projects/project/sessions/${subscriptionId}/events-v2`,
+                path: `/morty/api/v1/projects/project/sessions/${subscriptionId}/events-v2`,
                 subscriptionId,
             }),
         );
@@ -689,7 +689,7 @@ it("Given an established event subscription is quiet, When the transport idle de
     try {
         const daemon = new SubscriptionDaemonBoundary();
         const response = acceptWebSocketHttpTransport(
-            new Request("https://platform.test/mobius/api/v1/transport", {
+            new Request("https://platform.test/morty/api/v1/transport", {
                 headers: { Upgrade: "websocket" },
             }),
             daemon.fetch,
@@ -705,7 +705,7 @@ it("Given an established event subscription is quiet, When the transport idle de
             JSON.stringify({
                 headers: [],
                 kind: "session.events.subscribe",
-                path: "/mobius/api/v1/projects/project/sessions/session/events-v2",
+                path: "/morty/api/v1/projects/project/sessions/session/events-v2",
                 subscriptionId: "subscription-1",
             }),
         );
@@ -730,7 +730,7 @@ it("Given an established event subscription is quiet, When the transport idle de
 it("Given a finite request is in flight, When the browser transport closes, Then the dispatched request can finish without disconnecting its downstream transport", async () => {
     const daemon = new PendingDaemonBoundary();
     const response = acceptWebSocketHttpTransport(
-        new Request("https://platform.test/mobius/api/v1/transport", {
+        new Request("https://platform.test/morty/api/v1/transport", {
             headers: { Upgrade: "websocket" },
         }),
         daemon.fetch,
@@ -747,7 +747,7 @@ it("Given a finite request is in flight, When the browser transport closes, Then
             headers: [],
             kind: "http.request",
             method: "GET",
-            path: "/mobius/api/v1/projects/project/runtimes/runtime/agents",
+            path: "/morty/api/v1/projects/project/runtimes/runtime/agents",
             requestId: "pending-request",
         }),
     );

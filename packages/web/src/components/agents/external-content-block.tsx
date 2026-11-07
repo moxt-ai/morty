@@ -1,4 +1,4 @@
-import { externalContentPath, type MobiusExternalContentBlock } from "@morty-build/client";
+import { externalContentPath, type MortyExternalContentBlock } from "@morty-build/client";
 import { type ReactNode, useMemo } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";
@@ -74,7 +74,7 @@ export function ExternalContentBlock({
     readContent,
     speaker,
 }: {
-    readonly content: MobiusExternalContentBlock;
+    readonly content: MortyExternalContentBlock;
     /** The view-model resource store factory that owns the load. */
     readonly createResourceStore: SessionResourceStoreFactory;
     readonly readContent?: MarkdownImageReader | undefined;
@@ -91,7 +91,7 @@ export function ExternalContentBlock({
     );
 }
 
-function requestKind(content: MobiusExternalContentBlock): SessionResourceRequest["kind"] {
+function requestKind(content: MortyExternalContentBlock): SessionResourceRequest["kind"] {
     if (content.type === "external_resource" && content.mimeType === "image/svg+xml") {
         return "image";
     }
@@ -108,7 +108,7 @@ function requestKind(content: MobiusExternalContentBlock): SessionResourceReques
 }
 
 function renderContent(
-    content: MobiusExternalContentBlock,
+    content: MortyExternalContentBlock,
     state: SessionResourceState,
     speaker: "assistant" | "user",
 ): ReactNode {

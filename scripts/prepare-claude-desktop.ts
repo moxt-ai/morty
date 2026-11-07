@@ -183,7 +183,7 @@ try {
     if (summary !== undefined) {
         await appendFile(
             summary,
-            `## Claude Desktop distribution compatibility\n\nDesktop: ${desktopVersion}\n\nEngine: ${version}\n\nPlatform: ${platform}\n\nArchive SHA-256: ${checksum}\n\nThis verifies the Desktop-selected engine through Mobius, not a signed-in GUI session.\n`,
+            `## Claude Desktop distribution compatibility\n\nDesktop: ${desktopVersion}\n\nEngine: ${version}\n\nPlatform: ${platform}\n\nArchive SHA-256: ${checksum}\n\nThis verifies the Desktop-selected engine through Morty, not a signed-in GUI session.\n`,
         );
     }
     console.log(JSON.stringify(result));

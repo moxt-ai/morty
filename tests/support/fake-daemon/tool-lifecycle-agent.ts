@@ -103,7 +103,7 @@ export function createToolLifecycleAgent(beforeCancellationApplied?: () => Promi
                             title: "Background verification",
                             kind: "other",
                             status: "completed",
-                            _meta: { "mobius.backgroundTask": { id: "verification", status: "running" } },
+                            _meta: { "morty.backgroundTask": { id: "verification", status: "running" } },
                             content: [],
                         });
                         await emitText("Background verification launched.");
@@ -120,7 +120,7 @@ export function createToolLifecycleAgent(beforeCancellationApplied?: () => Promi
                             sessionUpdate: "tool_call_update",
                             toolCallId: `background-${sessionId}`,
                             status: backgroundStatus === "completed" ? "completed" : "failed",
-                            _meta: { "mobius.backgroundTask": { id: "verification", status: backgroundStatus } },
+                            _meta: { "morty.backgroundTask": { id: "verification", status: backgroundStatus } },
                             content: [
                                 {
                                     type: "content",

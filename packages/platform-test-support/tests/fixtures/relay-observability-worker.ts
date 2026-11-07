@@ -100,7 +100,7 @@ const application = new Hono<{ Bindings: TestBindings }>()
 
 export default {
     fetch: (request: Request, environment: TestBindings) => {
-        if (new URL(request.url).pathname.startsWith("/mobius/")) {
+        if (new URL(request.url).pathname.startsWith("/morty/")) {
             return platform.fetch(
                 request,
                 request.headers.has("x-test-project-failure")

@@ -1,4 +1,4 @@
-import { MobiusError, SESSION_CLOSED_ERROR_CODE } from "@morty-build/client";
+import { MortyError, SESSION_CLOSED_ERROR_CODE } from "@morty-build/client";
 import { isChatBridgeError } from "../services/api/websocket-api-transport.ts";
 import { isRuntimeConnectionFailure } from "../services/management/management-api.ts";
 
@@ -71,7 +71,7 @@ export function formatError(cause: unknown, fallback: string): string {
  * broken: reopening it makes its operations work again.
  */
 export function isSessionClosedFailure(cause: unknown): boolean {
-    return cause instanceof MobiusError && cause.code === SESSION_CLOSED_ERROR_CODE;
+    return cause instanceof MortyError && cause.code === SESSION_CLOSED_ERROR_CODE;
 }
 
 /**
@@ -83,5 +83,5 @@ export function isRetryableRuntimeConnectionFailure(cause: unknown): boolean {
     if (isChatBridgeError(cause) || isRuntimeConnectionFailure(cause)) {
         return true;
     }
-    return cause instanceof MobiusError && retryableRuntimeFailureCodes.has(cause.code);
+    return cause instanceof MortyError && retryableRuntimeFailureCodes.has(cause.code);
 }

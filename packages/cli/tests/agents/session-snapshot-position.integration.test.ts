@@ -36,7 +36,7 @@ for (const agentId of ["codex", "claude", "pi"] as const) {
         const provider =
             agentId === "claude"
                 ? await FakeAnthropicProvider.start("claude-sonnet-4-6", answer, options)
-                : await FakeOpenAiProvider.start(agentId === "pi" ? "gpt-4.1" : "mobius-test-model", answer, options);
+                : await FakeOpenAiProvider.start(agentId === "pi" ? "gpt-4.1" : "morty-test-model", answer, options);
         const agent =
             provider instanceof FakeAnthropicProvider
                 ? await ClaudeFixture.create(provider)

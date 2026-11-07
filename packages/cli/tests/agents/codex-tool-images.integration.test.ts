@@ -41,7 +41,7 @@ for (const tool of ["view_image", "mcp"] as const) {
                 image,
                 reference:
                     tool === "mcp"
-                        ? `mobius-content:image:${createHash("sha256").update(image).digest("hex")}`
+                        ? `morty-content:image:${createHash("sha256").update(image).digest("hex")}`
                         : pathToFileURL(await realpath(path)).href,
                 prompt,
             });

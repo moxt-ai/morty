@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { MobiusClient, MobiusPageRequest } from "@morty-build/client";
+import { MortyClient, MortyPageRequest } from "@morty-build/client";
 import * as v from "valibot";
 import { afterEach, test as baseTest, beforeEach, expect, vi } from "vitest";
 import type { ControlledAgent } from "../../../tests/support/fake-daemon/runtime.ts";
@@ -655,13 +655,13 @@ test("Given a chat opened with a Session credential, When the machine's owner re
         v.object({ endpoint: v.string(), projectId: v.string(), sessionId: v.string(), credential: v.string() }),
         await opened.json(),
     );
-    const client = new MobiusClient({
+    const client = new MortyClient({
         endpoint: access.endpoint,
         projectId: access.projectId,
         credentialProvider: { credential: async () => access.credential },
     });
     const readHistory = () =>
-        client.events.list(access.sessionId, new MobiusPageRequest(1, ""), AbortSignal.timeout(15_000));
+        client.events.list(access.sessionId, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
     await readHistory();
 
     const revoked = await fixture.request("identity/revoke-all-access", {});
@@ -807,11 +807,11 @@ test("Given two browsers joined through links, When one disconnects the other br
         await opened.json(),
     );
     const readHistory = () =>
-        new MobiusClient({
+        new MortyClient({
             endpoint: window.endpoint,
             projectId: window.projectId,
             credentialProvider: { credential: async () => window.credential },
-        }).events.list(window.sessionId, new MobiusPageRequest(1, ""), AbortSignal.timeout(15_000));
+        }).events.list(window.sessionId, new MortyPageRequest(1, ""), AbortSignal.timeout(15_000));
     await readHistory();
 
     const ended = await asBrowser(owner, `projects/${fixture.projectId}/identity/v1/other-browser-access`, "DELETE");

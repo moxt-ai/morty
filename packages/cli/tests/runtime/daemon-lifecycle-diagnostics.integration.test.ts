@@ -11,7 +11,7 @@ import { writeControlledAcpExecutable } from "../support/controlled-acp-executab
 
 // @no-uc: Technical regression; process lifecycle logs must reach Runtime bug reports.
 test("Given a daemon, When a bug report is read through the Runtime, Then it carries the daemon startup and readiness records", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-lifecycle-diagnostics-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-lifecycle-diagnostics-"));
     const executableDirectory = await writeControlledAcpExecutable(directory);
     try {
         await withRealDaemon(
@@ -73,7 +73,7 @@ test("Given a daemon, When a bug report is read through the Runtime, Then it car
 }, 180_000);
 
 test("Given a discovered executable with a known version, When diagnostics are requested through the public Runtime protocol, Then the current inventory reports its version without paths or environment values", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-inventory-diagnostics-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-inventory-diagnostics-"));
     const executableDirectory = await writeControlledAcpExecutable(directory);
     try {
         await withControlledDaemon(

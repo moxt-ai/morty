@@ -1,4 +1,4 @@
-/** The entries a Mobius state root owns at its top level. */
+/** The entries a Morty state root owns at its top level. */
 export const STATE_ROOT_LAYOUT = Object.freeze({
     /** Names the shared data container in the format understood by installed CLIs. */
     currentData: "current-data.txt",

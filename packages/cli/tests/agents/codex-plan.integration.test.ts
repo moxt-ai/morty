@@ -26,10 +26,10 @@ test.each(["owned", "borrowed"])(
         const body =
             "# PLAN_BODY\n\n1. Preserve the default addition behavior.\n2. Add division and verify zero-divisor handling.";
         await using provider = await FakeOpenAiProvider.start(
-            "mobius-test-model",
+            "morty-test-model",
             `<proposed_plan>\n${body}\n</proposed_plan>\n`,
         );
-        await using codex = await CodexFixture.create(provider, { configuredModel: "mobius-test-model" });
+        await using codex = await CodexFixture.create(provider, { configuredModel: "morty-test-model" });
         await withRealDaemon(new CodexAgentSpecification(), codex.environment, async (peer) => {
             const seeded = Promise.withResolvers<void>();
             const native =
@@ -58,7 +58,7 @@ test.each(["owned", "borrowed"])(
                             "thread/start",
                             {
                                 cwd: peer.workspace,
-                                model: "mobius-test-model",
+                                model: "morty-test-model",
                             },
                             peer.signal,
                         ),
@@ -70,7 +70,7 @@ test.each(["owned", "borrowed"])(
                             collaborationMode: {
                                 mode: "plan",
                                 settings: {
-                                    model: "mobius-test-model",
+                                    model: "morty-test-model",
                                     reasoning_effort: "low",
                                     developer_instructions: null,
                                 },

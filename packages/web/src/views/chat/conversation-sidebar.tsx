@@ -1028,7 +1028,7 @@ export function ConversationSidebar({
                                                                         className="font-mono font-medium"
                                                                         role="status"
                                                                     >
-                                                                        {diagnostic.state.browserMobiusLatencyMs} ms
+                                                                        {diagnostic.state.browserRelayLatencyMs} ms
                                                                     </dd>
                                                                 </div>
                                                                 <div
@@ -1045,7 +1045,7 @@ export function ConversationSidebar({
                                                                         className="font-mono font-medium"
                                                                         role="status"
                                                                     >
-                                                                        {diagnostic.state.mortyMobiusLatencyMs} ms
+                                                                        {diagnostic.state.mortyRelayLatencyMs} ms
                                                                     </dd>
                                                                 </div>
                                                                 <div
@@ -1062,7 +1062,7 @@ export function ConversationSidebar({
                                                                         className="font-mono font-medium"
                                                                         role="status"
                                                                     >
-                                                                        {diagnostic.state.mobiusDaemonLatencyMs} ms
+                                                                        {diagnostic.state.relayRuntimeLatencyMs} ms
                                                                     </dd>
                                                                 </div>
                                                             </dl>

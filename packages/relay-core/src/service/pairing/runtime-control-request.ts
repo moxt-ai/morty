@@ -480,8 +480,8 @@ export async function requestRuntimeFile(
                                 "content-length": begin.byteLength.toString(),
                                 "content-type": begin.mediaType,
                                 "last-modified": new Date(begin.modifiedAt).toUTCString(),
-                                "x-mobius-byte-length": begin.byteLength.toString(),
-                                "x-mobius-file-name": encodeURIComponent(begin.name),
+                                "x-morty-byte-length": begin.byteLength.toString(),
+                                "x-morty-file-name": encodeURIComponent(begin.name),
                             },
                         }),
                     );

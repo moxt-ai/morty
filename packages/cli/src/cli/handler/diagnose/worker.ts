@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { z } from "zod";
-import { MobiusRuntimeEngine } from "../../../engine/runtime/engine.ts";
+import { MortyRuntimeEngine } from "../../../engine/runtime/engine.ts";
 import { describeRelayFailure } from "../../../engine/runtime/relay/diagnostics.ts";
 import { ensureProbeDirectory } from "../../../storage/diagnostics/relay-probe-files.ts";
 import { configuredProbeProxy, failureCode, type RelayProbeRole, readProbeConfiguration } from "./config.ts";
@@ -56,7 +56,7 @@ export async function runRelayProbeWorker(
         ]);
         const workspace = join(directory, "workspace");
         await ensureProbeDirectory(workspace);
-        const engine = new MobiusRuntimeEngine({
+        const engine = new MortyRuntimeEngine({
             engineDataDir: join(directory, "state"),
             agentLaunchEnvironment: { HOME: join(directory, "home"), PATH: "" },
         });

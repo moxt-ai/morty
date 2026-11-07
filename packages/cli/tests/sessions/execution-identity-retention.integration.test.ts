@@ -46,7 +46,7 @@ async function observe(peer: RealDaemonPeer, commandIds: readonly string[]) {
                 }
                 const payload = event.payload;
                 if (payload.kind === "prompt.completed") {
-                    (event.mobiusMetadata?.restated === true ? restatedCommandIds : completedCommandIds).push(
+                    (event.mortyMetadata?.restated === true ? restatedCommandIds : completedCommandIds).push(
                         payload.commandId,
                     );
                     if (payload.execution === "not-started") {
@@ -68,7 +68,7 @@ async function observe(peer: RealDaemonPeer, commandIds: readonly string[]) {
 }
 
 test("Given an executed command, When its receipt is evicted and the daemon restarts, Then retries and delayed cancellations preserve its executed identity", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-execution-identity-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-execution-identity-"));
     try {
         const executableDirectory = await writeControlledAcpExecutable(directory);
         await withControlledDaemon(

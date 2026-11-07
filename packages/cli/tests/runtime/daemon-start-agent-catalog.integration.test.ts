@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
-import { openMobiusCliInstallation } from "../../src/daemon/pairing/pair-local-machine.ts";
+import { openMortyCliInstallation } from "../../src/daemon/pairing/pair-local-machine.ts";
 import { installWorkspaceDaemonRelease } from "../support/installed-daemon-release.ts";
 
 const temporaryDirectories: string[] = [];
@@ -87,7 +87,7 @@ async function catalogRelay() {
 }
 
 it("Given a running daemon whose Agent catalog was read at startup, When the user runs `morty start` again, Then the daemon re-reads the local Agent inventory and republishes the catalog before start returns", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-start-agent-catalog-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-start-agent-catalog-"));
     temporaryDirectories.push(directory);
     // The Agent inventory is read from the same isolated environment on each start.
     const environment = {
@@ -99,7 +99,7 @@ it("Given a running daemon whose Agent catalog was read at startup, When the use
     await installWorkspaceDaemonRelease(environment.MORTY_STATE_DIRECTORY);
     const relay = await catalogRelay();
 
-    const installation = await openMobiusCliInstallation(AbortSignal.timeout(10_000), environment);
+    const installation = await openMortyCliInstallation(AbortSignal.timeout(10_000), environment);
     await installation.saveConnection(
         {
             appId: "app_start_catalog",

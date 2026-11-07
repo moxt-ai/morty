@@ -11,14 +11,14 @@ import {
 import { listen, port } from "@morty-build/platform-test-support/websocket";
 import { expect, it } from "vitest";
 import { WebSocketServer } from "ws";
-import { MobiusRuntimeEngine } from "../../src/exports/engine.ts";
+import { MortyRuntimeEngine } from "../../src/exports/engine.ts";
 
 it("Given an explicit data directory, When a host constructs Engine and reopens its store, Then construction has no side effects and saved connections survive", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-engine-api-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-engine-api-"));
     const signal = AbortSignal.timeout(5_000);
     const params = { engineDataDir: join(directory, "data"), agentLaunchEnvironment: { PATH: "" } };
     try {
-        const engine = new MobiusRuntimeEngine(params);
+        const engine = new MortyRuntimeEngine(params);
         expect(await readdir(directory)).toEqual([]);
         const store = engine.getConnectionManager();
         expect(engine.getConnectionManager()).toBe(store);
@@ -34,7 +34,7 @@ it("Given an explicit data directory, When a host constructs Engine and reopens 
             },
             signal,
         );
-        const reopened = new MobiusRuntimeEngine(params).getConnectionManager();
+        const reopened = new MortyRuntimeEngine(params).getConnectionManager();
         expect(await reopened.read(connection.connectionId, signal)).toEqual(connection);
         expect(await reopened.list(signal)).toEqual([connection]);
         await reopened.setActivation(connection.connectionId, "stopped", signal);
@@ -47,9 +47,9 @@ it("Given an explicit data directory, When a host constructs Engine and reopens 
 });
 
 it("Given a cancelled connection lookup, When another caller lists saved connections, Then cancellation does not poison lazy initialization", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-engine-cancel-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-engine-cancel-"));
     try {
-        const engine = new MobiusRuntimeEngine({ engineDataDir: directory, agentLaunchEnvironment: { PATH: "" } });
+        const engine = new MortyRuntimeEngine({ engineDataDir: directory, agentLaunchEnvironment: { PATH: "" } });
         const cancelled = AbortSignal.abort(new Error("Lookup cancelled"));
         await expect(engine.getConnectionManager().list(cancelled)).rejects.toBe(cancelled.reason);
         const signal = AbortSignal.timeout(5_000);
@@ -62,9 +62,9 @@ it("Given a cancelled connection lookup, When another caller lists saved connect
 });
 
 it("Given first-use initialization is pending, When its owner and one waiter cancel, Then another waiter initializes successfully and later callers reuse that installation", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-engine-first-use-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-engine-first-use-"));
     try {
-        const engine = new MobiusRuntimeEngine({ engineDataDir: directory, agentLaunchEnvironment: { PATH: "" } });
+        const engine = new MortyRuntimeEngine({ engineDataDir: directory, agentLaunchEnvironment: { PATH: "" } });
         const manager = engine.getConnectionManager();
         const owner = new AbortController();
         const waiter = new AbortController();
@@ -92,10 +92,10 @@ it("Given first-use initialization is pending, When its owner and one waiter can
 });
 
 it("Given a fresh Engine data directory, When a host concurrently saves connections on first use, Then every connection belongs to the same readable installation", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-engine-concurrent-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-engine-concurrent-"));
     const signal = AbortSignal.timeout(5_000);
     try {
-        const manager = new MobiusRuntimeEngine({
+        const manager = new MortyRuntimeEngine({
             engineDataDir: directory,
             agentLaunchEnvironment: { PATH: "" },
         }).getConnectionManager();
@@ -130,12 +130,12 @@ it("Given a fresh Engine data directory, When a host concurrently saves connecti
 });
 
 it("Given installation initialization fails, When the host fixes the data directory and tries again, Then Engine does not cache the failed initialization", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-engine-retry-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-engine-retry-"));
     const data = join(directory, "data");
     const signal = AbortSignal.timeout(5_000);
     try {
         await writeFile(data, "not a directory");
-        const manager = new MobiusRuntimeEngine({
+        const manager = new MortyRuntimeEngine({
             engineDataDir: data,
             agentLaunchEnvironment: { PATH: "" },
         }).getConnectionManager();
@@ -148,7 +148,7 @@ it("Given installation initialization fails, When the host fixes the data direct
 });
 
 it("Given saved and provided connections with opaque credentials, When a host serves and cancels successive loops, Then both publish their Agent directory and disconnect before completion without saving the provided connection", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-engine-loop-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-engine-loop-"));
     const catalogs: unknown[] = [];
     const requests: string[] = [];
     const authorizations: (string | undefined)[] = [];
@@ -185,7 +185,7 @@ it("Given saved and provided connections with opaque credentials, When a host se
     const deadline = AbortSignal.timeout(20_000);
     try {
         const origin = `http://127.0.0.1:${port(http)}`;
-        const engine = new MobiusRuntimeEngine({
+        const engine = new MortyRuntimeEngine({
             engineDataDir: join(directory, "data"),
             agentLaunchEnvironment: {
                 PATH: "",
@@ -215,7 +215,7 @@ it("Given saved and provided connections with opaque credentials, When a host se
                 connection: {
                     channelId: "provided_channel",
                     defaultWorkspace: saved.defaultWorkspace,
-                    relayUrl: `ws://127.0.0.1:${port(http)}/mobius/api/v1/runtimes/connect`,
+                    relayUrl: `ws://127.0.0.1:${port(http)}/morty/api/v1/runtimes/connect`,
                     runtimeCredential: "b".repeat(73),
                 },
             },

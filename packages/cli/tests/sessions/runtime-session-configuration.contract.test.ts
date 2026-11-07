@@ -1,4 +1,4 @@
-import { MobiusApiError } from "@morty-build/client";
+import { MortyApiError } from "@morty-build/client";
 import { expect, it } from "vitest";
 import { startTestPlatform } from "../support/platform.ts";
 
@@ -52,7 +52,7 @@ it("Given two clients holding one configuration revision, When they edit concurr
         expect(accepted).toHaveLength(1);
         const rejected = results.filter((result) => result.status === "rejected");
         expect(rejected).toHaveLength(1);
-        expect(rejected[0]?.reason).toBeInstanceOf(MobiusApiError);
+        expect(rejected[0]?.reason).toBeInstanceOf(MortyApiError);
         expect(rejected[0]?.reason).toMatchObject({ code: "session_configuration_conflict", status: 409 });
         const committed = accepted[0];
         if (committed === undefined) {

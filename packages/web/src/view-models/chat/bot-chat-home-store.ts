@@ -31,7 +31,7 @@ import {
 import { createConversationSessionStore } from "./conversation-session-store.ts";
 import { type DraftControlsStore, draftConfiguration } from "./draft-controls-store.ts";
 import { canRetryFirstMessage, canSendFirstMessage, type NewConversationFacts } from "./new-conversation-rules.ts";
-import type { OpenMobiusSession } from "./open-session.ts";
+import type { OpenMortySession } from "./open-session.ts";
 import { startRecoveryNotice } from "./recovery-notice.ts";
 import type { RuntimeObservation } from "./runtime-recovery.ts";
 import { prependToDraft, type SubmittedMessage } from "./session-delivery-store.ts";
@@ -932,7 +932,7 @@ export const createBotChatHomeStore = (
                 // The page follows it only if the user is still on this draft.
                 const sending = get().creation;
                 const following = sending.kind === "draft-message-sending" && sending.message.commandId === commandId;
-                let session: OpenMobiusSession | null = null;
+                let session: OpenMortySession | null = null;
                 if (following) {
                     try {
                         session = requests.conversationSession(

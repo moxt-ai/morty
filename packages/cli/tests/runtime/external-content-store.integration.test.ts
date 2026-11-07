@@ -8,7 +8,7 @@ import { LocalExternalContentStore } from "../../src/engine/session/content/exte
 test("Given two Sessions produce identical media, When each retrieves its granted reference, Then they share one file while an unrelated Session cannot read it", async () => {
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     vi.setSystemTime(new Date("2026-10-08T00:00:00Z"));
-    const directory = await mkdtemp(join(tmpdir(), "mobius-media-cache-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-media-cache-"));
     try {
         await using cache = new LocalExternalContentStore(directory);
         const bytes = Buffer.from("media owned by both Sessions");
@@ -21,7 +21,7 @@ test("Given two Sessions produce identical media, When each retrieves its grante
             sessionId: "first",
             signal,
         });
-        const request = `mobius-content:resource:${first.key}`;
+        const request = `morty-content:resource:${first.key}`;
         expect(first.key).toBe(createHash("sha256").update(bytes).digest("hex"));
         const original = await cache.resolve("first", request, signal);
         expect(original).not.toBeNull();
@@ -55,7 +55,7 @@ test("Given two Sessions produce identical media, When each retrieves its grante
 test("Given a daemon's disposable media cache, When the owner closes it, Then files and grants disappear and a new daemon cannot read old references", async () => {
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     vi.setSystemTime(new Date("2026-10-08T00:00:00Z"));
-    const directory = await mkdtemp(join(tmpdir(), "mobius-media-close-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-media-close-"));
     try {
         const cache = new LocalExternalContentStore(directory);
         const signal = new AbortController().signal;
@@ -67,7 +67,7 @@ test("Given a daemon's disposable media cache, When the owner closes it, Then fi
             sessionId: "owner",
             signal,
         });
-        const request = `mobius-content:resource:${reference.key}`;
+        const request = `morty-content:resource:${reference.key}`;
         const original = await cache.resolve("owner", request, signal);
         if (original === null) {
             throw new Error("Expected a retrievable media file");

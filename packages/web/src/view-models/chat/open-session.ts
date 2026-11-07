@@ -1,7 +1,7 @@
 import type { NativeSessionEntry, NativeSessionResult, SessionReadyEvent } from "@morty-build/client/channel";
 import type { ChatAccess, ConversationActiveTurn } from "../../services/chat/bot-chat-api.ts";
 
-export interface OpenMobiusSession {
+export interface OpenMortySession {
     readonly agentRef: string;
     readonly instructions?: string;
     readonly result:
@@ -22,11 +22,11 @@ export interface OpenMobiusSession {
 }
 
 /** The selected Session retains its connection metadata; its display title belongs to the title store. */
-export type SelectedMobiusSession = Omit<OpenMobiusSession, "entry"> & {
+export type SelectedMortySession = Omit<OpenMortySession, "entry"> & {
     readonly entry: Omit<NativeSessionEntry, "title">;
 };
 
-export function selectedSession(session: OpenMobiusSession): SelectedMobiusSession {
+export function selectedSession(session: OpenMortySession): SelectedMortySession {
     const { title: _title, ...entry } = session.entry;
     return { ...session, entry };
 }

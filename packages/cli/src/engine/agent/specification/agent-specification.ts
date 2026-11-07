@@ -52,9 +52,9 @@ export abstract class LocalAgentSpecification {
 }
 
 /**
- * A vendor CLI that does not speak ACP, which Mobius drives through the vendor's own protocol from an
+ * A vendor CLI that does not speak ACP, which Morty drives through the vendor's own protocol from an
  * ACP Agent hosted inside the daemon. There is no adapter to install or version-probe: the same
- * executable is both the Agent and the thing Mobius spawns, so it shares the Agent's override
+ * executable is both the Agent and the thing Morty spawns, so it shares the Agent's override
  * variable.
  *
  * `createConnection` is the whole vendor contract. Discovery, the readiness probe, and the session

@@ -493,7 +493,7 @@ test("Given saved access for the same computer, When an old native handoff link 
 }, async () => {
     const app = await createTestApp({ agent: { id: "pi", label: "Pi" }, connectAgent: true });
     await startConversation(app, "Keep the issued grant");
-    window.location.href = `${app.origin}/continue?harness=pi&sessionId=missing-session&workspace=${encodeURIComponent(tmpdir())}#code=mobius_transfer_v2.${app.identity.projectId}.${"a".repeat(43)}`;
+    window.location.href = `${app.origin}/continue?harness=pi&sessionId=missing-session&workspace=${encodeURIComponent(tmpdir())}#code=morty_transfer_v1.${app.identity.projectId}.${"a".repeat(43)}`;
     const continued = await app.reload();
     await continued.waitForView(() =>
         expect(getByRole(document.body, "alert").textContent).toContain("The native session was not found"),
@@ -512,7 +512,7 @@ test("Given another saved computer, When a transfer link cannot be redeemed, The
             kind: "continue",
             harness: "pi",
             sessionId: "missing-session",
-            code: (application) => `mobius_transfer_v2.${application.identity.projectId}.${"a".repeat(43)}`,
+            code: (application) => `morty_transfer_v1.${application.identity.projectId}.${"a".repeat(43)}`,
         },
     });
     await other.waitForView(() =>
@@ -624,7 +624,7 @@ test("Given a computer I keep using, When ten more computers are saved in this b
 
 // Another Morty version can store access this version cannot read, such as a newer token format.
 const FUTURE_USER_ID = "usr_saved-by-a-newer-version";
-const FUTURE_TOKEN = `mobius_anon_v3_${"f".repeat(43)}`;
+const FUTURE_TOKEN = `morty_anon_v3_${"f".repeat(43)}`;
 
 function addStoredValue(key: string, add: (stored: unknown) => unknown): void {
     const raw = window.localStorage.getItem(key);
@@ -636,7 +636,7 @@ test("Given a remembered computer and a credential this version cannot read, Whe
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
     const sessionId = await startConversation(app, "Keep my computer");
-    addStoredValue("mobius.anonymous-credentials.v1", (stored) => ({
+    addStoredValue("morty.anonymous-credentials.v1", (stored) => ({
         ...(typeof stored === "object" && stored !== null ? stored : {}),
         [FUTURE_USER_ID]: FUTURE_TOKEN,
     }));
@@ -646,7 +646,7 @@ test("Given a remembered computer and a credential this version cannot read, Whe
     await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ }));
     expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
     // Opening the computer saved its visit; the credential this version cannot read is still there for the other.
-    expect(JSON.parse(window.localStorage.getItem("mobius.anonymous-credentials.v1") ?? "{}")).toMatchObject({
+    expect(JSON.parse(window.localStorage.getItem("morty.anonymous-credentials.v1") ?? "{}")).toMatchObject({
         [FUTURE_USER_ID]: FUTURE_TOKEN,
     });
 });
@@ -671,20 +671,20 @@ test("Given a computer record this version cannot read whose token it can read, 
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
     const sessionId = await startConversation(app, "Keep the other version's computer");
-    const theirToken = `mobius_anon_v2_${"t".repeat(43)}`;
+    const theirToken = `morty_anon_v1_${"t".repeat(43)}`;
     const future = { scope: { userId: FUTURE_USER_ID }, destination: { kind: "workspace" }, lastUsedAt: 0 };
     addStoredValue("morty:remembered-computers:v1", (stored) => [...(Array.isArray(stored) ? stored : []), future]);
-    addStoredValue("mobius.anonymous-credentials.v1", (stored) => ({
+    addStoredValue("morty.anonymous-credentials.v1", (stored) => ({
         ...(typeof stored === "object" && stored !== null ? stored : {}),
         [FUTURE_USER_ID]: theirToken,
-        "usr_unclaimed-0": `mobius_anon_v2_${"0".repeat(43)}`,
+        "usr_unclaimed-0": `morty_anon_v1_${"0".repeat(43)}`,
     }));
 
     window.location.href = `${app.origin}/`;
     const returned = await app.reload();
     await returned.waitForView(() => getByRole(document.body, "button", { name: /Switch computer/ }));
     expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
-    const credentials = JSON.parse(window.localStorage.getItem("mobius.anonymous-credentials.v1") ?? "{}");
+    const credentials = JSON.parse(window.localStorage.getItem("morty.anonymous-credentials.v1") ?? "{}");
     expect(credentials).toMatchObject({ [FUTURE_USER_ID]: theirToken });
     expect(credentials).not.toHaveProperty("usr_unclaimed-0");
 });

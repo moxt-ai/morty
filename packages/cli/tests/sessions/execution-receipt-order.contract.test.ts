@@ -20,14 +20,11 @@ const migrationsThroughExecutionIdentity = [
     "0008_execution_identity.sql",
 ];
 
-/** A database as CLI 0.0.349 left it, or as a later release left it with admission order applied but unrecorded. */
-function writeExistingDatabase(path: string, admissionOrder: boolean): void {
+/** Retained migration input before receipt admission order was introduced. */
+function writeExistingDatabase(path: string): void {
     const database = new DatabaseSync(path);
     try {
-        for (const name of [
-            ...migrationsThroughExecutionIdentity,
-            ...(admissionOrder ? ["0009_receipt_admission_order.sql"] : []),
-        ]) {
+        for (const name of migrationsThroughExecutionIdentity) {
             database.exec(readFileSync(new URL(`../../migrations/acp-session-store/${name}`, import.meta.url), "utf8"));
         }
         database.exec("PRAGMA user_version = 9");
@@ -38,54 +35,37 @@ function writeExistingDatabase(path: string, admissionOrder: boolean): void {
         );
         insert.run("late", "attempt-late", "2026-10-28T10:00:00.000Z");
         insert.run("early", "attempt-early", "2026-10-28T09:00:00.000Z");
-        if (admissionOrder) {
-            database
-                .prepare(
-                    `INSERT INTO execution_receipt
-                        (command_id, session_id, command_hash, attempt_id, admission_order, state, started, outcome,
-                         updated_at)
-                     VALUES ('ordered', 'session', 'hash', 'attempt-ordered', 7, 'running', 1, NULL, ?)`,
-                )
-                .run("2026-10-28T11:00:00.000Z");
-        }
     } finally {
         database.close();
     }
 }
 
-test.each([
-    { release: "CLI 0.0.349", admissionOrder: false, expected: ["early", "late"] },
-    { release: "a later CLI", admissionOrder: true, expected: ["ordered", "early", "late"] },
-])(
-    "Given receipts in a database written by $release, When the Runtime opens it, Then every receipt has an admission order after the ordered ones, by last update",
-    async ({ admissionOrder, expected }) => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-receipt-order-migration-"));
-        const path = join(directory, "sessions.sqlite");
-        try {
-            writeExistingDatabase(path, admissionOrder);
-            for (let reopen = 0; reopen < 2; reopen += 1) {
-                const database = openAcpSessionDatabase(path);
-                try {
-                    const receipts = new ExecutionReceiptTable(database).list();
-                    expect(receipts.map((receipt) => receipt.commandId)).toEqual(expected);
-                    expect(new Set(receipts.map((receipt) => receipt.admissionOrder)).size).toBe(expected.length);
-                } finally {
-                    database.close();
-                }
-            }
-            const migrated = new DatabaseSync(path);
+test("Given retained receipt migrations, When the Runtime opens the database, Then receipts receive stable admission order by last update", async () => {
+    const expected = ["early", "late"];
+    const directory = await mkdtemp(join(tmpdir(), "morty-receipt-order-migration-"));
+    const path = join(directory, "sessions.sqlite");
+    try {
+        writeExistingDatabase(path);
+        for (let reopen = 0; reopen < 2; reopen += 1) {
+            const database = openAcpSessionDatabase(path);
             try {
-                expect(migrated.prepare("PRAGMA user_version").get()).toEqual({ user_version: 12 });
-                expect(
-                    migrated
-                        .prepare("SELECT name FROM pragma_table_info('execution_receipt') WHERE name = 'state'")
-                        .get(),
-                ).toBeUndefined();
+                const receipts = new ExecutionReceiptTable(database).list();
+                expect(receipts.map((receipt) => receipt.commandId)).toEqual(expected);
+                expect(new Set(receipts.map((receipt) => receipt.admissionOrder)).size).toBe(expected.length);
             } finally {
-                migrated.close();
+                database.close();
             }
-        } finally {
-            await rm(directory, { recursive: true, force: true });
         }
-    },
-);
+        const migrated = new DatabaseSync(path);
+        try {
+            expect(migrated.prepare("PRAGMA user_version").get()).toEqual({ user_version: 12 });
+            expect(
+                migrated.prepare("SELECT name FROM pragma_table_info('execution_receipt') WHERE name = 'state'").get(),
+            ).toBeUndefined();
+        } finally {
+            migrated.close();
+        }
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
+});

@@ -86,21 +86,21 @@ type ExecutionState =
     | { readonly kind: "closed" };
 
 /**
- * Moves the Mobius fields a harness carries in ACP `_meta` onto the event update the protocol defines them on. Every
+ * Moves the Morty fields a harness carries in ACP `_meta` onto the event update the protocol defines them on. Every
  * reader that turns a harness update into a Session event applies it.
  */
-export function withMobiusFields(update: SessionUpdate, eventUpdate: unknown): unknown {
+export function withMortyFields(update: SessionUpdate, eventUpdate: unknown): unknown {
     if (typeof eventUpdate !== "object" || eventUpdate === null) {
         return eventUpdate;
     }
     switch (update.sessionUpdate) {
         case "tool_call":
         case "tool_call_update": {
-            const backgroundTask = update._meta?.["mobius.backgroundTask"];
+            const backgroundTask = update._meta?.["morty.backgroundTask"];
             return backgroundTask === undefined ? eventUpdate : { ...eventUpdate, backgroundTask };
         }
         case "agent_message_chunk": {
-            const questions = update._meta?.["mobius.questions"];
+            const questions = update._meta?.["morty.questions"];
             return questions === undefined ? eventUpdate : { ...eventUpdate, questions };
         }
         default:
@@ -149,7 +149,7 @@ export class AdapterSessionConnection {
             const update = externalized.agent;
             for (const eventUpdate of externalized.events) {
                 const payload = decodeAcpSessionUpdate(
-                    JSON.stringify(normalizeEvent(withMobiusFields(update, eventUpdate))),
+                    JSON.stringify(normalizeEvent(withMortyFields(update, eventUpdate))),
                 );
                 let event: AdapterSessionEvent;
                 switch (update.sessionUpdate) {

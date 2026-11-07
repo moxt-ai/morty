@@ -66,7 +66,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
             return {
                 failure: runtime.failure,
                 continueReply: runtime.continueReply,
-                /** Closes a Session through the Platform, the way another Mobius client of this Runtime would. */
+                /** Closes a Session through the Platform, the way another Morty client of this Runtime would. */
                 closeSession: async (sessionId: string): Promise<void> => {
                     await runtime.client.sessions.close(runtime.runtimeId, sessionId, new AbortController().signal);
                 },
@@ -94,7 +94,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                         signal,
                     );
                 },
-                /** Starts a turn through the Platform, the way another Mobius client of this Runtime would. */
+                /** Starts a turn through the Platform, the way another Morty client of this Runtime would. */
                 submitTurn: async (sessionId: string, content: string): Promise<void> => {
                     await runtime.client.turns.submitToRuntime(
                         runtime.runtimeId,
@@ -122,7 +122,7 @@ export async function createChatWorkerEnvironment(loseTurnResponses = false, del
                         agentName: first.label,
                     });
                 },
-                /** Renames a Session through the Platform, the way another Mobius client of this Runtime would. */
+                /** Renames a Session through the Platform, the way another Morty client of this Runtime would. */
                 renameSession: async (sessionId: string, title: string): Promise<void> => {
                     await runtime.client.sessions.rename(
                         runtime.runtimeId,

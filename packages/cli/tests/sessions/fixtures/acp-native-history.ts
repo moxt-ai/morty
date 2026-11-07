@@ -173,7 +173,7 @@ export function registerHistory(agent: ReturnType<typeof acp.agent>) {
                     update: {
                         rawOutput: process.argv.includes("--large-replay-activity")
                             ? { output: "x".repeat(100_000) }
-                            : { name: "mobius-workspace" },
+                            : { name: "morty-workspace" },
                         sessionUpdate: "tool_call_update",
                         status: "completed",
                         toolCallId: `tool-${replayId}`,

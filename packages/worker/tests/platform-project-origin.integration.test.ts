@@ -62,7 +62,7 @@ test("Given an existing Project and Machine, When the same Platform moves to ano
         const bot = await originalBot.json();
 
         // A second listener forwards to the same real Platform and its existing storage.
-        const relocated = await createResponseLossProxy(fixture.baseConfiguration.MOBIUS_BASE_URL);
+        const relocated = await createResponseLossProxy(fixture.baseConfiguration.MORTY_RELAY_URL);
         try {
             await fixture.changePlatformOrigin(relocated.origin);
             const environment = fixture.environment();

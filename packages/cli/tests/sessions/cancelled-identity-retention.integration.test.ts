@@ -117,7 +117,7 @@ const cancelBeforeStart = (peer: RealDaemonPeer, commandId: string) =>
 test("Given an executed command and a command cancelled before start, When later commands evict both receipts without a restart, Then the cancelled command reads as cancelled rather than expired and cannot execute", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-30T08:00:00Z"));
-    const directory = await mkdtemp(join(tmpdir(), "mobius-cancelled-delivery-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-cancelled-delivery-"));
     try {
         const executable = await writeControlledAcpExecutable(directory);
         await withControlledDaemon(
@@ -167,7 +167,7 @@ for (const admission of ["before-admission", "queued"] as const) {
     test(`Given a command was explicitly cancelled ${admission}, When receipts are evicted and the Runtime restarts, Then the command cannot execute again and cancellation remains unstarted`, async () => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(new Date("2026-10-30T08:00:00Z"));
-        const directory = await mkdtemp(join(tmpdir(), "mobius-cancelled-identity-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-cancelled-identity-"));
         try {
             const executable = await writeControlledAcpExecutable(directory);
             await withControlledDaemon(
@@ -297,7 +297,7 @@ for (const admission of ["before-admission", "queued"] as const) {
 test("Given cancellation committed before its receipt, When the Runtime recovers, Then cancellation retries confirm not-started work and replay cannot execute it", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-30T08:00:00Z"));
-    const directory = await mkdtemp(join(tmpdir(), "mobius-cancellation-recovery-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-cancellation-recovery-"));
     try {
         const executable = await writeControlledAcpExecutable(directory);
         await withControlledDaemon(

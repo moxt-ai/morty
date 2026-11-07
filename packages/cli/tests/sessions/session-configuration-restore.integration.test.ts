@@ -35,7 +35,7 @@ class ModelDependentSettingsAgent extends ControlledAcpSpecification {
 }
 
 test("Given effort was chosen before the model it depends on, When the conversation reopens in a new Agent process, Then both settings are restored", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-config-restore-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-config-restore-"));
     try {
         await withControlledDaemon(
             new ModelDependentSettingsAgent(),
@@ -67,7 +67,7 @@ test("Given effort was chosen before the model it depends on, When the conversat
 });
 
 test("Given a setting was chosen before the first prompt, When the daemon restarts and the Session reopens, Then the setting is kept", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-config-restore-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-config-restore-"));
     try {
         await withControlledDaemon(
             new ModelDependentSettingsAgent(),

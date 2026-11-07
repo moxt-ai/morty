@@ -346,7 +346,7 @@ export class CodexSettings {
         }
     };
 
-    /** The ACP settings Mobius discovers and renders in Run settings. */
+    /** The ACP settings Morty discovers and renders in Run settings. */
     readonly configOptions = (): SessionConfigOption[] => {
         const options: SessionConfigOption[] = [];
         const model = modelSetting(this.#models, this.#selection.model);

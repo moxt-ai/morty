@@ -60,7 +60,7 @@ export class RuntimeRelay extends DurableObject<ConfiguredPlatformRelayBindings>
         if (current !== null) {
             const environment = {
                 ...this.#environment,
-                MOBIUS_RUNTIME_EXECUTION: {
+                MORTY_RUNTIME_EXECUTION: {
                     projectId: current.projectId,
                     runtimeId: current.runtimeId,
                     operations: createLocalSessionOperations(this.#context, current.projectId, current.runtimeId),

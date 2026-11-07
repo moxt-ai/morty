@@ -9,7 +9,7 @@ const replacementSchema = v.object({
     bot: v.object({ botId: v.string(), displayName: v.string() }),
     projectId: v.string(),
     // Independently retained setup decoder from main at 81157fb4: no new token format is required.
-    token: v.pipe(v.string(), v.regex(/^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u)),
+    token: v.pipe(v.string(), v.regex(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u)),
     userId: v.string(),
 });
 
@@ -136,7 +136,7 @@ test("Given bootstrap persisted only its local credential, When the saved Machin
     ).toBe(401);
 
     // Reload the real Worker with its durable storage intact before resuming the incomplete bootstrap.
-    await fixture.changePlatformOrigin(fixture.baseConfiguration.MOBIUS_BASE_URL);
+    await fixture.changePlatformOrigin(fixture.baseConfiguration.MORTY_RELAY_URL);
 
     const retry = await replace();
     expect(retry.status).toBe(201);

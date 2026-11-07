@@ -19,7 +19,7 @@ async function controlledAgent(
     agentId: string,
     additionalArguments: readonly string[] = [],
 ): Promise<{ agent: AcpAgentDefinition; stateDirectory: string }> {
-    const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-session-config-reads-"));
+    const stateDirectory = await mkdtemp(join(tmpdir(), "morty-session-config-reads-"));
     const agent = new AcpAgentDefinition(
         agentId,
         "Controlled ACP",
@@ -150,10 +150,10 @@ describe("Session settings reads after a daemon restart", () => {
     });
 
     it("Given a native chat session whose process the daemon retired, When it is looked up after a restart, Then it is still known with its title and a prepare restores its configured settings", async () => {
-        const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-session-config-read-retired-"));
+        const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-session-config-read-retired-"));
         const databasePath = join(temporaryDirectory, "sessions.sqlite");
         // Native chat session ids are the Agent's own UUIDs for codex/claude/pi;
-        // the mobius session id doubles as the native id for imported sessions.
+        // the morty session id doubles as the native id for imported sessions.
         const sessionId = crypto.randomUUID();
         const { agent, stateDirectory } = await controlledAgent("claude");
         await seedPeerSession(stateDirectory, sessionId);

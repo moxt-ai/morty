@@ -101,7 +101,7 @@ test("Given Morty access from a finished setup, When the user reopens Morty in a
     expect(await app.queryElementByTestId(dataTestId.chatLanding)).toBeInstanceOf(HTMLElement);
     expect(queryByRole(document.body, "heading", { name: "Step away. Keep your agent working." })).toBeNull();
     expect(window.location.search).toContain("identity=");
-    expect(window.sessionStorage.getItem("mobius.anonymous-credential.v2")).toBeNull();
+    expect(window.sessionStorage.getItem("morty.anonymous-credential.v2")).toBeNull();
 });
 
 test("Given shared Morty access, When the user continues on another device, Then the visible entry opens sharing with its scope and expiry before the link", {
@@ -217,7 +217,7 @@ test("Given an expired handoff with no retained access, When the failure page sh
 }, async () => {
     const app = await createTestApp({
         page: {
-            code: (application) => `mobius_transfer_v2.${application.identity.projectId}.${"a".repeat(43)}`,
+            code: (application) => `morty_transfer_v1.${application.identity.projectId}.${"a".repeat(43)}`,
             harness: "pi",
             kind: "continue",
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
@@ -244,7 +244,7 @@ test("Given an expired handoff with no retained access, When the user copies the
 }, async () => {
     const app = await createTestApp({
         page: {
-            code: (application) => `mobius_transfer_v2.${application.identity.projectId}.${"a".repeat(43)}`,
+            code: (application) => `morty_transfer_v1.${application.identity.projectId}.${"a".repeat(43)}`,
             harness: "pi",
             kind: "continue",
             sessionId: "01a0d270-0d62-7003-98df-22a5d11dc644",
@@ -264,7 +264,7 @@ test("Given an expired handoff with no retained access, When the user copies the
     );
 });
 
-test("Given a native session handoff whose Runtime went offline, When the page loads, Then the page reports Mobius is disconnected instead of a transfer-link problem", {
+test("Given a native session handoff whose Runtime went offline, When the page loads, Then the page reports Morty is disconnected instead of a transfer-link problem", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({
@@ -467,7 +467,7 @@ test("Given an expired sharing link with no retained access, When I open it, The
     const app = await createTestApp({
         page: {
             kind: "share",
-            code: (application) => `mobius_transfer_v2.${application.identity.projectId}.${"a".repeat(43)}`,
+            code: (application) => `morty_transfer_v1.${application.identity.projectId}.${"a".repeat(43)}`,
         },
     });
     await app.waitForView(() =>
@@ -487,7 +487,7 @@ for (const linkKind of ["handoff", "sharing"] as const) {
         timeout: 30_000,
     }, async () => {
         const code = (application: TestApp["identity"]) =>
-            `mobius_transfer_v2.${application.projectId}.${"a".repeat(43)}`;
+            `morty_transfer_v1.${application.projectId}.${"a".repeat(43)}`;
         const app = await createTestApp({
             page:
                 linkKind === "handoff"

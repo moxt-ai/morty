@@ -21,7 +21,7 @@ import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 test("Given a real Codex model that asks the user a question while it keeps working, When the turn runs, the conversation is reopened, and the saved thread is previewed, Then its message carries the question and its suggested answers each time", async () => {
     const prompt = "Ask which way to go before continuing";
     const question = "Append the sections to the existing page?";
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "Continuing with the code.", {
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "Continuing with the code.", {
         toolPrompt: prompt,
         toolSequence: [
             {
@@ -31,7 +31,7 @@ test("Given a real Codex model that asks the user a question while it keeps work
         ],
     });
     await using codex = await CodexFixture.create(provider, {
-        configuredModel: "mobius-test-model",
+        configuredModel: "morty-test-model",
         modelTools: ["send_user_message_async"],
     });
     await withRealDaemon(new CodexAgentSpecification(), codex.environment, async (peer) => {
@@ -117,7 +117,7 @@ test("Given a real Codex model that asks the user a question while it keeps work
                 const result = decodeNativeSessionResult(message);
                 if (result.action === "list") {
                     nativeSessionId =
-                        result.entries.find((entry) => entry.mobiusSessionIds.includes(peer.sessionId))
+                        result.entries.find((entry) => entry.mortySessionIds.includes(peer.sessionId))
                             ?.nativeSessionId ?? "";
                     expect(nativeSessionId).not.toBe("");
                 }

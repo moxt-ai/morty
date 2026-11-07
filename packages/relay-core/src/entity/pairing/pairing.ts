@@ -350,7 +350,7 @@ export async function hashSecret(secret: string): Promise<string> {
 
 /** Morty's authorized fresh-enrollment cutover leaves old records readable but old bearer hashes unusable. */
 export async function hashPairingCredential(secret: string): Promise<string> {
-    return await hashSecret(`morty-pairing-v1\0${secret}`);
+    return await hashSecret(`morty-pairing-v2\0${secret}`);
 }
 
 export function parseAgents(encoded: string): readonly AgentDescriptor[] {
@@ -362,7 +362,7 @@ export function parseAgents(encoded: string): readonly AgentDescriptor[] {
             cause: error,
         });
     }
-    return validateAgents(normalizePersistedAgents(value));
+    return validateAgents(value);
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -384,60 +384,6 @@ function unsupportedSessionCapabilities(): SessionCapabilities {
         resumeSession: false,
         steering: false,
         unstableForkSession: false,
-    });
-}
-
-function normalizePersistedAgents(value: unknown): unknown {
-    if (!Array.isArray(value)) {
-        return value;
-    }
-    return value.map((candidate) => {
-        if (
-            isRecord(candidate) &&
-            Object.keys(candidate).length === 2 &&
-            Object.hasOwn(candidate, "id") &&
-            Object.hasOwn(candidate, "label")
-        ) {
-            return {
-                agentPath: "Not reported",
-                agentVersion: "Not reported",
-                capabilities: unsupportedSessionCapabilities(),
-                id: candidate["id"],
-                label: candidate["label"],
-            };
-        }
-        if (
-            isRecord(candidate) &&
-            Object.keys(candidate).length === 3 &&
-            Object.hasOwn(candidate, "capabilities") &&
-            Object.hasOwn(candidate, "id") &&
-            Object.hasOwn(candidate, "label")
-        ) {
-            return {
-                agentPath: "Not reported",
-                agentVersion: "Not reported",
-                capabilities: candidate["capabilities"],
-                id: candidate["id"],
-                label: candidate["label"],
-            };
-        }
-        if (
-            isRecord(candidate) &&
-            Object.keys(candidate).length === 4 &&
-            Object.hasOwn(candidate, "agentPath") &&
-            Object.hasOwn(candidate, "agentVersion") &&
-            Object.hasOwn(candidate, "id") &&
-            Object.hasOwn(candidate, "label")
-        ) {
-            return {
-                agentPath: candidate["agentPath"],
-                agentVersion: candidate["agentVersion"],
-                capabilities: unsupportedSessionCapabilities(),
-                id: candidate["id"],
-                label: candidate["label"],
-            };
-        }
-        return candidate;
     });
 }
 

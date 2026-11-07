@@ -156,7 +156,7 @@ export async function publishContentScenario(
                       ]
                     : prompt === "generate local image"
                       ? (() => {
-                            const path = join(tmpdir(), `mobius-fake-agent-${process.pid.toString()}.png`);
+                            const path = join(tmpdir(), `morty-fake-agent-${process.pid.toString()}.png`);
                             writeFileSync(
                                 path,
                                 Buffer.from(
@@ -193,7 +193,7 @@ export async function publishContentScenario(
                     ? "x".repeat(500_001)
                     : prompt === "stream cumulative tool output"
                       ? { output: "final snapshot" }
-                      : { name: "mobius-workspace" },
+                      : { name: "morty-workspace" },
             sessionUpdate: "tool_call_update",
             status: "completed",
             toolCallId,

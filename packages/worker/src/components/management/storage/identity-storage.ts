@@ -165,20 +165,6 @@ export class IdentityStorage {
         return rows;
     };
 
-    readonly identifyLegacyCredential = async (
-        credentialId: string,
-        kind: Credential["kind"],
-        signal: AbortSignal,
-    ): Promise<void> => {
-        signal.throwIfAborted();
-        await requireIdentityDatabase(this.#database)
-            .update(anonymousCredential)
-            .set({ kind })
-            .where(and(eq(anonymousCredential.id, credentialId), isNull(anonymousCredential.kind)))
-            .run();
-        signal.throwIfAborted();
-    };
-
     readonly revokeOtherAccess = async (
         userId: string,
         token: string,
@@ -252,7 +238,7 @@ export class IdentityStorage {
         signal: AbortSignal,
     ): Promise<IdentityTransfer | null> => {
         signal.throwIfAborted();
-        const code = createProjectCredential("mobius_transfer_v2", v.parse(v.string(), this.#projectId));
+        const code = createProjectCredential("morty_transfer_v1", v.parse(v.string(), this.#projectId));
         // Check the issuing credential in the write itself so revocation cannot race issuance. Its term needs no check
         // here: the terms are capped by it, so a link shared after it ended adds no device.
         const database = requireIdentityDatabase(this.#database);
@@ -312,7 +298,7 @@ export class IdentityStorage {
         signal: AbortSignal,
     ): Promise<string | null> => {
         signal.throwIfAborted();
-        const token = createProjectCredential("mobius_recovery_v1", v.parse(v.string(), this.#projectId));
+        const token = createProjectCredential("morty_recovery_v1", v.parse(v.string(), this.#projectId));
         const database = requireIdentityDatabase(this.#database);
         const result = await database
             .insert(anonymousCredential)
@@ -384,7 +370,7 @@ export class IdentityStorage {
         signal: AbortSignal,
     ): Promise<AnonymousIdentity | null> => {
         const parsed = readProjectCredential(code);
-        if (parsed?.kind !== "mobius_transfer_v2" || parsed.projectId !== this.#projectId) {
+        if (parsed?.kind !== "morty_transfer_v1" || parsed.projectId !== this.#projectId) {
             return null;
         }
         signal.throwIfAborted();

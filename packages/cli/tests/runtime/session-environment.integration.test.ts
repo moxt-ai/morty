@@ -305,7 +305,7 @@ test.for(["import", "fork"] as const)(
 async function runtimePeer(signal: AbortSignal, resolveAgent?: RuntimeConfig["resolveAgent"]) {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-26T00:00:00Z"));
-    const directory = await mkdtemp(join(tmpdir(), "mobius-session-environment-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-session-environment-"));
     const workspace = join(directory, "workspace");
     const harnessState = join(directory, "harness");
     const launches = join(directory, "launches.jsonl");
@@ -381,7 +381,7 @@ await import(${JSON.stringify(agentPeer)});
                 channelId: "environment",
                 defaultWorkspace: workspace,
                 relayUrl: new URL(
-                    `ws://127.0.0.1:${address.port}/mobius/api/v1/runtimes/connect?token=${"r".repeat(43)}`,
+                    `ws://127.0.0.1:${address.port}/morty/api/v1/runtimes/connect?token=${"r".repeat(43)}`,
                 ),
             },
             [agent, otherAgent],

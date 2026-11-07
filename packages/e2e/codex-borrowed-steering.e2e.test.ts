@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { MobiusRuntimeEngine } from "@morty-build/cli/engine";
+import { MortyRuntimeEngine } from "@morty-build/cli/engine";
 import { expect, test } from "@playwright/test";
 import { CodexAppServerClient } from "../../packages/cli/src/engine/acp/harness/codex/app-server-client.ts";
 import { stopProcessTree } from "../../packages/cli/src/engine/util/process/executable.ts";
@@ -24,7 +24,7 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
     let hold = false;
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "BORROWED_REPLY", {
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "BORROWED_REPLY", {
         beforeFirstText: async () => {
             if (hold) {
                 entered.resolve();
@@ -59,7 +59,7 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         const started = object(
             await owner.request(
                 "thread/start",
-                { cwd: stack.directories.workspace, model: "mobius-test-model" },
+                { cwd: stack.directories.workspace, model: "morty-test-model" },
                 signal,
             ),
             "started thread",
@@ -84,7 +84,7 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         // biome-ignore lint/correctness/useHookAtTopLevel: ChatApi authentication is not a React hook.
         await chat.useBrowserIdentity({ projectId, token });
         const pairing = await chat.createPairing();
-        const engine = new MobiusRuntimeEngine({
+        const engine = new MortyRuntimeEngine({
             engineDataDir: join(harness.workDirectory, "runtime"),
             agentLaunchEnvironment: environment,
         });

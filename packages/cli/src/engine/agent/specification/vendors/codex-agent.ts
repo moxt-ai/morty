@@ -2,7 +2,7 @@ import { CodexAgentConnection } from "../../../acp/adapter/codex/agent-connectio
 import type { AgentConnectionFactory } from "../../../acp/connection/agent-connection.ts";
 import { InProcessAcpAgentSpecification } from "../agent-specification.ts";
 
-// Codex speaks its own app-server protocol rather than ACP, so Mobius hosts the ACP Agent in-process
+// Codex speaks its own app-server protocol rather than ACP, so Morty hosts the ACP Agent in-process
 // and drives `codex app-server` directly. There is no adapter package to install or version-probe.
 export class CodexAgentSpecification extends InProcessAcpAgentSpecification {
     override readonly versionProbeTimeoutMilliseconds = 10_000;

@@ -62,7 +62,7 @@ function selectTool(
     readPath?: string,
     bash?: { readonly command: string; readonly runInBackground: boolean },
 ): { readonly id: string; readonly input: JsonObject; readonly name: string } | undefined {
-    const id = `toolu_mobius_${(completedToolCalls + 1).toString()}`;
+    const id = `toolu_morty_${(completedToolCalls + 1).toString()}`;
     if (readPath !== undefined && tools.length > 0) {
         const read = tools.find((tool) => /(?:^|_)(?:read|read_file)$/iu.test(tool.name));
         if (read !== undefined) {
@@ -93,7 +93,7 @@ function selectTool(
         if (path !== undefined) {
             return {
                 id,
-                input: { [path]: scenario.command === "false" ? "./mobius-missing-file" : "." },
+                input: { [path]: scenario.command === "false" ? "./morty-missing-file" : "." },
                 name: read.name,
             };
         }
@@ -103,7 +103,7 @@ function selectTool(
 
 function message(model: string, content: readonly JsonObject[], stopReason: "end_turn" | "tool_use"): JsonObject {
     return {
-        id: "msg_mobius",
+        id: "msg_morty",
         type: "message",
         role: "assistant",
         model,
@@ -140,7 +140,7 @@ function subagentStep(
         }
         return {
             tool: {
-                id: "toolu_mobius_subagent",
+                id: "toolu_morty_subagent",
                 input: {
                     description: script.dispatchDescription,
                     prompt: script.innerPrompt,
@@ -206,7 +206,7 @@ function sendStream(
 }
 
 export class FakeAnthropicProvider implements AsyncDisposable {
-    static readonly apiKey = "mobius-agent-daemon-fixture";
+    static readonly apiKey = "morty-agent-daemon-fixture";
 
     readonly model: string;
     readonly origin: string;

@@ -1,25 +1,25 @@
 import { CONTENT_CHUNK_MAX_BYTES, encodeContentChunkFrame, MORTY_API_PREFIX } from "@morty-build/client/protocol";
-import { MobiusApiError, MobiusConnectionError, MobiusProtocolError, MobiusValidationError } from "../errors.ts";
-import { HttpTransport, type MobiusHttpTransport, type MobiusTransportSessionEvent } from "./http-transport.ts";
+import { MortyApiError, MortyConnectionError, MortyProtocolError, MortyValidationError } from "../errors.ts";
+import { HttpTransport, type MortyHttpTransport, type MortyTransportSessionEvent } from "./http-transport.ts";
 import { runtimeRequestTarget } from "./runtime-request-target.ts";
 
 const DEFAULT_CONNECTION_TIMEOUT_MILLISECONDS = 15_000;
 const HEARTBEAT_INTERVAL_MILLISECONDS = 20_000;
 const HEARTBEAT_TIMEOUT_MILLISECONDS = 10_000;
 
-export interface MobiusWebSocketConnector {
+export interface MortyWebSocketConnector {
     readonly connect: (endpoint: URL, signal: AbortSignal) => Promise<WebSocket>;
 }
 
 export interface WsTransportOptions {
     readonly connectionTimeoutMilliseconds?: number;
-    readonly connector?: MobiusWebSocketConnector;
+    readonly connector?: MortyWebSocketConnector;
     readonly idleTimeoutMilliseconds?: number;
 }
 
 function validatePositiveInteger(value: number, name: string): number {
     if (!Number.isSafeInteger(value) || value < 1) {
-        throw new MobiusValidationError(`The ${name} is invalid`);
+        throw new MortyValidationError(`The ${name} is invalid`);
     }
     return value;
 }
@@ -43,11 +43,11 @@ type LiveEventSubscription =
           readonly cleanup: () => void;
           readonly kind: "opening";
           readonly reject: (cause: unknown) => void;
-          readonly resolve: (events: ReadableStream<MobiusTransportSessionEvent>) => void;
+          readonly resolve: (events: ReadableStream<MortyTransportSessionEvent>) => void;
       }
     | {
           readonly cleanup: () => void;
-          readonly controller: ReadableStreamDefaultController<MobiusTransportSessionEvent>;
+          readonly controller: ReadableStreamDefaultController<MortyTransportSessionEvent>;
           readonly kind: "open";
       };
 
@@ -58,14 +58,14 @@ const EVENT_SUBSCRIBE_KIND = "session.events.subscribe";
 const EVENT_UNSUBSCRIBE_KIND = "session.events.unsubscribe";
 const SAFE_WEBSOCKET_CLOSE_REASONS = new Set(["WebSocket transport closed", "WebSocket transport idle timeout"]);
 
-function webSocketCloseError(event: CloseEvent, action: "connect" | "remain connected"): MobiusConnectionError {
+function webSocketCloseError(event: CloseEvent, action: "connect" | "remain connected"): MortyConnectionError {
     const reason = SAFE_WEBSOCKET_CLOSE_REASONS.has(event.reason) ? `: ${event.reason}` : "";
-    return new MobiusConnectionError(`The Mobius WebSocket could not ${action} (close code ${event.code}${reason})`);
+    return new MortyConnectionError(`The Morty WebSocket could not ${action} (close code ${event.code}${reason})`);
 }
 
 function wsRecord(value: unknown): Readonly<Record<string, unknown>> {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
-        throw new MobiusProtocolError("The WebSocket transport returned an invalid message");
+        throw new MortyProtocolError("The WebSocket transport returned an invalid message");
     }
     return Object.freeze(Object.fromEntries(Object.entries(value)));
 }
@@ -73,7 +73,7 @@ function wsRecord(value: unknown): Readonly<Record<string, unknown>> {
 function wsString(value: Readonly<Record<string, unknown>>, field: string, maximum: number): string {
     const candidate = value[field];
     if (typeof candidate !== "string" || candidate.length > maximum) {
-        throw new MobiusProtocolError("The WebSocket transport returned an invalid message");
+        throw new MortyProtocolError("The WebSocket transport returned an invalid message");
     }
     return candidate;
 }
@@ -81,14 +81,14 @@ function wsString(value: Readonly<Record<string, unknown>>, field: string, maxim
 function wsPositiveInteger(value: Readonly<Record<string, unknown>>, field: string): number {
     const candidate = value[field];
     if (typeof candidate !== "number" || !Number.isSafeInteger(candidate) || candidate < 1) {
-        throw new MobiusProtocolError("The WebSocket transport returned an invalid message");
+        throw new MortyProtocolError("The WebSocket transport returned an invalid message");
     }
     return candidate;
 }
 
 function wsHeaders(value: unknown): Headers {
     if (!Array.isArray(value) || value.length > 128) {
-        throw new MobiusProtocolError("The WebSocket transport returned invalid response headers");
+        throw new MortyProtocolError("The WebSocket transport returned invalid response headers");
     }
     const headers = new Headers();
     for (const entry of value) {
@@ -100,14 +100,14 @@ function wsHeaders(value: unknown): Headers {
             entry[0].length > 256 ||
             entry[1].length > 16_384
         ) {
-            throw new MobiusProtocolError("The WebSocket transport returned invalid response headers");
+            throw new MortyProtocolError("The WebSocket transport returned invalid response headers");
         }
         headers.append(entry[0], entry[1]);
     }
     return headers;
 }
 
-class PlatformMobiusWebSocketConnector implements MobiusWebSocketConnector {
+class PlatformMortyWebSocketConnector implements MortyWebSocketConnector {
     readonly connect = async (endpoint: URL, signal: AbortSignal): Promise<WebSocket> => {
         signal.throwIfAborted();
         const socket = new WebSocket(endpoint.toString());
@@ -131,7 +131,7 @@ class PlatformMobiusWebSocketConnector implements MobiusWebSocketConnector {
             const abort = (): void => fail(signal.reason);
             const close = (event: CloseEvent): void => fail(webSocketCloseError(event, "connect"));
             const error = (): void =>
-                fail(new MobiusConnectionError("The browser reported an error while connecting the Mobius WebSocket"));
+                fail(new MortyConnectionError("The browser reported an error while connecting the Morty WebSocket"));
             const open = (): void => {
                 if (completed) {
                     return;
@@ -151,9 +151,9 @@ class PlatformMobiusWebSocketConnector implements MobiusWebSocketConnector {
     };
 }
 
-export class WsTransport implements MobiusHttpTransport {
+export class WsTransport implements MortyHttpTransport {
     readonly #connectionTimeoutMilliseconds: number;
-    readonly #connector: MobiusWebSocketConnector;
+    readonly #connector: MortyWebSocketConnector;
     readonly #idleTimeoutMilliseconds: number;
     readonly #pending = new Map<string, PendingWsRequest>();
     readonly #subscriptions = new Map<string, LiveEventSubscription>();
@@ -171,7 +171,7 @@ export class WsTransport implements MobiusHttpTransport {
             options.connectionTimeoutMilliseconds ?? DEFAULT_CONNECTION_TIMEOUT_MILLISECONDS,
             "WebSocket transport connection timeout",
         );
-        this.#connector = options.connector ?? new PlatformMobiusWebSocketConnector();
+        this.#connector = options.connector ?? new PlatformMortyWebSocketConnector();
         this.#idleTimeoutMilliseconds = validatePositiveInteger(
             options.idleTimeoutMilliseconds ?? 60_000,
             "WebSocket transport idle timeout",
@@ -181,7 +181,7 @@ export class WsTransport implements MobiusHttpTransport {
     readonly fetch = async (request: Request): Promise<Response> => {
         request.signal.throwIfAborted();
         if (this.#state.kind === "closed") {
-            throw new MobiusConnectionError("The Mobius WebSocket transport is closed");
+            throw new MortyConnectionError("The Morty WebSocket transport is closed");
         }
         if (runtimeRequestTarget(request) === null) {
             return await this.#http.fetch(request);
@@ -191,7 +191,7 @@ export class WsTransport implements MobiusHttpTransport {
         request.signal.throwIfAborted();
         request.signal.throwIfAborted();
         const requestId = crypto.randomUUID();
-        const binaryRequest = request.headers.has("x-mobius-byte-length");
+        const binaryRequest = request.headers.has("x-morty-byte-length");
         const binaryBody = binaryRequest ? new Uint8Array(await request.arrayBuffer()) : null;
         const body = binaryRequest ? "" : await request.text();
         request.signal.throwIfAborted();
@@ -245,7 +245,7 @@ export class WsTransport implements MobiusHttpTransport {
         return await response;
     };
 
-    readonly openSessionLiveEvents = async (request: Request): Promise<ReadableStream<MobiusTransportSessionEvent>> => {
+    readonly openSessionLiveEvents = async (request: Request): Promise<ReadableStream<MortyTransportSessionEvent>> => {
         request.signal.throwIfAborted();
         const requestUrl = new URL(request.url);
         const socket = await this.#socket(request);
@@ -262,7 +262,7 @@ export class WsTransport implements MobiusHttpTransport {
             this.#sendUnsubscribe(id);
         };
         const cleanup = (): void => request.signal.removeEventListener("abort", abort);
-        const events = new Promise<ReadableStream<MobiusTransportSessionEvent>>((resolve, reject) => {
+        const events = new Promise<ReadableStream<MortyTransportSessionEvent>>((resolve, reject) => {
             this.#subscriptions.set(id, { cleanup, kind: "opening", reject, resolve });
         });
         request.signal.addEventListener("abort", abort, { once: true });
@@ -290,16 +290,16 @@ export class WsTransport implements MobiusHttpTransport {
         this.#state = { kind: "closed" };
         if (state.kind === "connected") {
             globalThis.clearTimeout(state.idleTimeoutId);
-            state.socket.close(1000, "Mobius transport closed");
+            state.socket.close(1000, "Morty transport closed");
         }
-        this.#failPending(new MobiusConnectionError("The Mobius WebSocket transport closed"));
-        this.#failSubscriptions(new MobiusConnectionError("The live Session event transport closed"));
+        this.#failPending(new MortyConnectionError("The Morty WebSocket transport closed"));
+        this.#failSubscriptions(new MortyConnectionError("The live Session event transport closed"));
     };
 
     readonly #socket = async (request: Request): Promise<WebSocket> => {
         const target = runtimeRequestTarget(request);
         if (target === null) {
-            throw new MobiusValidationError("A WebSocket subscription requires a Runtime target");
+            throw new MortyValidationError("A WebSocket subscription requires a Runtime target");
         }
         const endpoint = new URL(
             `${MORTY_API_PREFIX}/v1/projects/${target.projectId}/runtimes/${target.runtimeId}/transport`,
@@ -307,12 +307,12 @@ export class WsTransport implements MobiusHttpTransport {
         );
         endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
         if (this.#endpoint !== null && this.#endpoint !== endpoint.href) {
-            throw new MobiusValidationError("A WebSocket transport cannot connect to multiple Runtimes");
+            throw new MortyValidationError("A WebSocket transport cannot connect to multiple Runtimes");
         }
         this.#endpoint = endpoint.href;
         switch (this.#state.kind) {
             case "closed":
-                throw new MobiusConnectionError("The Mobius WebSocket transport is closed");
+                throw new MortyConnectionError("The Morty WebSocket transport is closed");
             case "connected":
                 return this.#state.socket;
             case "connecting":
@@ -328,14 +328,14 @@ export class WsTransport implements MobiusHttpTransport {
     readonly #connect = async (endpoint: URL): Promise<WebSocket> => {
         const controller = new AbortController();
         const timeout = globalThis.setTimeout(
-            () => controller.abort(new MobiusConnectionError("The Mobius WebSocket connection timed out")),
+            () => controller.abort(new MortyConnectionError("The Morty WebSocket connection timed out")),
             this.#connectionTimeoutMilliseconds,
         );
         try {
             const socket = await this.#connector.connect(endpoint, controller.signal);
             if (this.#state.kind === "closed") {
-                socket.close(1000, "Mobius transport closed");
-                throw new MobiusConnectionError("The Mobius WebSocket transport is closed");
+                socket.close(1000, "Morty transport closed");
+                throw new MortyConnectionError("The Morty WebSocket transport is closed");
             }
             socket.addEventListener("message", (event) => {
                 if (this.#state.kind === "connected" && this.#state.socket === socket) {
@@ -354,7 +354,7 @@ export class WsTransport implements MobiusHttpTransport {
                 () =>
                     this.#disconnected(
                         socket,
-                        new MobiusConnectionError("The browser reported an error on the Mobius WebSocket"),
+                        new MortyConnectionError("The browser reported an error on the Morty WebSocket"),
                     ),
                 { once: true },
             );
@@ -365,10 +365,10 @@ export class WsTransport implements MobiusHttpTransport {
             if (this.#state.kind !== "closed") {
                 this.#state = { kind: "disconnected" };
             }
-            if (cause instanceof MobiusConnectionError) {
+            if (cause instanceof MortyConnectionError) {
                 throw cause;
             }
-            throw new MobiusConnectionError("The Mobius WebSocket transport could not connect", { cause });
+            throw new MortyConnectionError("The Morty WebSocket transport could not connect", { cause });
         } finally {
             globalThis.clearTimeout(timeout);
         }
@@ -380,7 +380,7 @@ export class WsTransport implements MobiusHttpTransport {
                 this.#touch(this.#state.socket);
             }
             if (typeof event.data !== "string") {
-                throw new MobiusProtocolError("The WebSocket transport returned a binary message");
+                throw new MortyProtocolError("The WebSocket transport returned a binary message");
             }
             const value: unknown = JSON.parse(event.data);
             const message = wsRecord(value);
@@ -404,19 +404,19 @@ export class WsTransport implements MobiusHttpTransport {
             if (kind === WS_ERROR_KIND) {
                 const status = message["status"];
                 if (typeof status !== "number" || !Number.isSafeInteger(status) || status < 400 || status > 599) {
-                    throw new MobiusProtocolError("The WebSocket transport returned an invalid error status");
+                    throw new MortyProtocolError("The WebSocket transport returned an invalid error status");
                 }
                 pending.reject(
-                    new MobiusApiError(wsString(message, "code", 128), wsString(message, "message", 1_024), status),
+                    new MortyApiError(wsString(message, "code", 128), wsString(message, "message", 1_024), status),
                 );
                 return;
             }
             if (kind !== WS_RESPONSE_KIND) {
-                throw new MobiusProtocolError("The WebSocket transport returned an unsupported message");
+                throw new MortyProtocolError("The WebSocket transport returned an unsupported message");
             }
             const status = message["status"];
             if (typeof status !== "number" || !Number.isSafeInteger(status) || status < 200 || status > 599) {
-                throw new MobiusProtocolError("The WebSocket transport returned an invalid response status");
+                throw new MortyProtocolError("The WebSocket transport returned an invalid response status");
             }
             const body = wsString(message, "body", 16_777_216);
             pending.resolve(
@@ -431,7 +431,7 @@ export class WsTransport implements MobiusHttpTransport {
         }
     };
 
-    readonly #disconnected = (socket: WebSocket, cause: MobiusConnectionError): void => {
+    readonly #disconnected = (socket: WebSocket, cause: MortyConnectionError): void => {
         if (this.#state.kind !== "connected" || this.#state.socket !== socket) {
             return;
         }
@@ -471,10 +471,10 @@ export class WsTransport implements MobiusHttpTransport {
         }
         if (kind === "session.events.ready") {
             if (subscription.kind !== "opening") {
-                throw new MobiusProtocolError("The live Session event subscription became ready more than once");
+                throw new MortyProtocolError("The live Session event subscription became ready more than once");
             }
-            let streamController: ReadableStreamDefaultController<MobiusTransportSessionEvent> | null = null;
-            const stream = new ReadableStream<MobiusTransportSessionEvent>({
+            let streamController: ReadableStreamDefaultController<MortyTransportSessionEvent> | null = null;
+            const stream = new ReadableStream<MortyTransportSessionEvent>({
                 start(controller) {
                     streamController = controller;
                 },
@@ -485,7 +485,7 @@ export class WsTransport implements MobiusHttpTransport {
                 },
             });
             if (streamController === null) {
-                throw new MobiusProtocolError("The live Session event subscription could not initialize");
+                throw new MortyProtocolError("The live Session event subscription could not initialize");
             }
             this.#subscriptions.set(id, { cleanup: subscription.cleanup, controller: streamController, kind: "open" });
             subscription.resolve(stream);
@@ -494,9 +494,9 @@ export class WsTransport implements MobiusHttpTransport {
         if (kind === "session.events.error") {
             const status = message["status"];
             if (typeof status !== "number" || !Number.isSafeInteger(status) || status < 400 || status > 599) {
-                throw new MobiusProtocolError("The live Session event subscription returned an invalid status");
+                throw new MortyProtocolError("The live Session event subscription returned an invalid status");
             }
-            const cause = new MobiusApiError(
+            const cause = new MortyApiError(
                 wsString(message, "code", 128),
                 wsString(message, "message", 1_024),
                 status,
@@ -511,7 +511,7 @@ export class WsTransport implements MobiusHttpTransport {
             return;
         }
         if (subscription.kind !== "open") {
-            throw new MobiusProtocolError("The live Session event subscription received data before it was ready");
+            throw new MortyProtocolError("The live Session event subscription received data before it was ready");
         }
         if (kind === "session.events.end") {
             this.#subscriptions.delete(id);
@@ -520,7 +520,7 @@ export class WsTransport implements MobiusHttpTransport {
             return;
         }
         if (kind !== "session.events.event") {
-            throw new MobiusProtocolError("The live Session event subscription returned an unsupported message");
+            throw new MortyProtocolError("The live Session event subscription returned an unsupported message");
         }
         subscription.controller.enqueue({
             data: wsString(message, "data", 8 * 1024 * 1024),
@@ -543,8 +543,8 @@ export class WsTransport implements MobiusHttpTransport {
             if (this.#state.kind === "connected" && this.#state.socket === socket) {
                 // Live streams fail with their socket: the next request opens a replacement that
                 // never carries their subscription, and their owner must reconnect and reconcile.
-                this.#disconnected(socket, new MobiusConnectionError("The Mobius WebSocket transport became inactive"));
-                socket.close(4000, "Mobius transport idle timeout");
+                this.#disconnected(socket, new MortyConnectionError("The Morty WebSocket transport became inactive"));
+                socket.close(4000, "Morty transport idle timeout");
             }
         }, this.#idleTimeoutMilliseconds),
         socket,
@@ -576,11 +576,8 @@ export class WsTransport implements MobiusHttpTransport {
                 this.#heartbeat = {
                     kind: "awaiting",
                     timer: globalThis.setTimeout(() => {
-                        this.#disconnected(
-                            socket,
-                            new MobiusConnectionError("The Mobius WebSocket heartbeat timed out"),
-                        );
-                        socket.close(4001, "Mobius transport heartbeat timed out");
+                        this.#disconnected(socket, new MortyConnectionError("The Morty WebSocket heartbeat timed out"));
+                        socket.close(4001, "Morty transport heartbeat timed out");
                     }, HEARTBEAT_TIMEOUT_MILLISECONDS),
                 };
                 try {
@@ -588,9 +585,9 @@ export class WsTransport implements MobiusHttpTransport {
                 } catch (cause) {
                     this.#disconnected(
                         socket,
-                        new MobiusConnectionError("The Mobius WebSocket heartbeat failed", { cause }),
+                        new MortyConnectionError("The Morty WebSocket heartbeat failed", { cause }),
                     );
-                    socket.close(4001, "Mobius transport heartbeat failed");
+                    socket.close(4001, "Morty transport heartbeat failed");
                 }
             }, HEARTBEAT_INTERVAL_MILLISECONDS),
         };

@@ -19,7 +19,7 @@ export class PiFixture implements AsyncDisposable {
 
     static async create(provider: FakeOpenAiProvider): Promise<PiFixture> {
         const executable = await resolveTestExecutable("pi", "MORTY_TEST_PI_PATH");
-        const directory = await mkdtemp(join(tmpdir(), "mobius-agent-daemon-pi-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-agent-daemon-pi-"));
         const configDirectory = join(directory, ".pi", "agent");
         const missing = join(directory, "missing-agent");
         await mkdir(configDirectory, { recursive: true });

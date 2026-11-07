@@ -5,21 +5,21 @@ type NetworkDiagnosticState =
     | { readonly kind: "closed" }
     | { readonly kind: "measuring" }
     | {
-          readonly browserMobiusLatencyMs: number;
+          readonly browserRelayLatencyMs: number;
           readonly browserMortyLatencyMs: number;
           readonly kind: "ready";
-          readonly mobiusDaemonLatencyMs: number;
-          readonly mortyMobiusLatencyMs: number;
+          readonly relayRuntimeLatencyMs: number;
+          readonly mortyRelayLatencyMs: number;
       }
     | { readonly kind: "failed"; readonly message: string };
 
 interface NetworkDiagnosticOperations {
-    readonly measureBrowserMobius: (origin: string, signal: AbortSignal) => Promise<number>;
+    readonly measureBrowserRelay: (origin: string, signal: AbortSignal) => Promise<number>;
     readonly measureBrowserMorty: (signal: AbortSignal) => Promise<number>;
     readonly measureServerHops: (signal: AbortSignal) => Promise<{
-        readonly mobiusDaemonLatencyMs: number;
-        readonly mobiusOrigin: string;
-        readonly mortyMobiusLatencyMs: number;
+        readonly relayRuntimeLatencyMs: number;
+        readonly relayOrigin: string;
+        readonly mortyRelayLatencyMs: number;
     }>;
 }
 
@@ -49,16 +49,16 @@ export const createNetworkDiagnosticStore = (operations: NetworkDiagnosticOperat
                     operations.measureBrowserMorty(signal),
                     operations.measureServerHops(signal),
                 ]);
-                const browserMobiusLatencyMs = await operations.measureBrowserMobius(platform.mobiusOrigin, signal);
+                const browserRelayLatencyMs = await operations.measureBrowserRelay(platform.relayOrigin, signal);
                 signal.throwIfAborted();
                 if (active === controller) {
                     set({
                         state: {
-                            browserMobiusLatencyMs,
+                            browserRelayLatencyMs,
                             browserMortyLatencyMs,
                             kind: "ready",
-                            mobiusDaemonLatencyMs: platform.mobiusDaemonLatencyMs,
-                            mortyMobiusLatencyMs: platform.mortyMobiusLatencyMs,
+                            relayRuntimeLatencyMs: platform.relayRuntimeLatencyMs,
+                            mortyRelayLatencyMs: platform.mortyRelayLatencyMs,
                         },
                     });
                 }

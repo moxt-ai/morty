@@ -107,8 +107,8 @@ export class ProjectDO extends DurableObject<ConfiguredPlatformRelayBindings> {
             const routedRequest = new Request(requestUrl, request);
             const environment: ConfiguredPlatformRelayBindings & ProjectPlatformRelayBindings = {
                 ...this.#environment,
-                MOBIUS_PROJECT_STORE: store,
-                MOBIUS_PROJECT_ID: projectId,
+                MORTY_PROJECT_STORE: store,
+                MORTY_PROJECT_ID: projectId,
             };
             return await this.#application.fetch(routedRequest, environment);
         } catch (error) {
@@ -241,9 +241,5 @@ export class ProjectDO extends DurableObject<ConfiguredPlatformRelayBindings> {
 
     async listAuditEvents(projectId: string, limit: number): Promise<readonly ProjectAuditRow[]> {
         return await this.#operate(projectId).listAuditEvents(limit, uncancelled);
-    }
-
-    async readLegacyCredentialScope(projectId: string, credentialId: string): Promise<number | null> {
-        return await this.#operate(projectId).readLegacyCredentialScope(credentialId, uncancelled);
     }
 }

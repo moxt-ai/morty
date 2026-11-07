@@ -112,12 +112,12 @@ export class SessionLiveEventRelay {
                   ? envelope
                   : { ...envelope, events };
         };
-        const notified = select((event) => event.mobiusMetadata?.restated !== true);
+        const notified = select((event) => event.mortyMetadata?.restated !== true);
         if (notified !== null) {
             this.#notifications?.publish(scope, notified);
         }
         const recorded = select(
-            (event) => event.mobiusMetadata?.restated !== true || event.mobiusMetadata.recordedOutcome === true,
+            (event) => event.mortyMetadata?.restated !== true || event.mortyMetadata.recordedOutcome === true,
         );
         if (recorded !== null) {
             this.#recording.publish(scope, recorded);

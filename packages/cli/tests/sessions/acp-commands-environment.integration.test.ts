@@ -17,7 +17,7 @@ import { UnretainedExternalContentStore } from "../support/unretained-external-c
 import { fakeAgent, fakeAgentPath, RecordingObserver } from "./acp-feature-fixture.ts";
 
 describe("acp commands environment", () => {
-    it("Given an ACP Agent has not advertised commands, When Mobius prepares a session, Then it does not invent compact", async () => {
+    it("Given an ACP Agent has not advertised commands, When Morty prepares a session, Then it does not invent compact", async () => {
         const manager = new SessionManager({
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
@@ -68,7 +68,7 @@ describe("acp commands environment", () => {
         }
     });
 
-    it("Given an ACP Agent advertises compact, When its commands update, Then Mobius preserves the ACP command", async () => {
+    it("Given an ACP Agent advertises compact, When its commands update, Then Morty preserves the ACP command", async () => {
         const agentId = "unknown-acp";
         const observer = new RecordingObserver();
         const manager = new SessionManager({
@@ -123,8 +123,8 @@ describe("acp commands environment", () => {
     });
 
     it("Given a managed Runtime has a login-shell-only Agent environment, When it starts an ACP session, Then the Agent receives that environment", async () => {
-        const workspace = await mkdtemp(join(tmpdir(), "mobius-login-shell-workspace-"));
-        const generatedImages = await mkdtemp(join(tmpdir(), "mobius-login-shell-images-"));
+        const workspace = await mkdtemp(join(tmpdir(), "morty-login-shell-workspace-"));
+        const generatedImages = await mkdtemp(join(tmpdir(), "morty-login-shell-images-"));
         const observer = new RecordingObserver();
         const manager = new SessionManager({
             observer,

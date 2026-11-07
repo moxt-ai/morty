@@ -18,7 +18,7 @@ type Connection = Readonly<{
     origin: string;
 }>;
 
-/** An installed Agent the machine's Mobius cannot offer, as `mobius agents` reports it. */
+/** An installed Agent the machine's Morty cannot offer, as `morty agents` reports it. */
 export interface UnavailableAgentReport {
     readonly id: string;
     readonly label: string;
@@ -28,11 +28,11 @@ export interface UnavailableAgentReport {
     readonly recoveryCommand: string;
 }
 
-/** How `mobius upgrade` behaves on the controlled machine. */
+/** How `morty upgrade` behaves on the controlled machine. */
 type ControlledUpgrade = "available" | "unavailable" | "unresponsive" | "interrupted-switch";
 
 /**
- * The Mobius release the machine's daemon runs: an outdated one that `mobius upgrade` switches to the
+ * The Morty release the machine's daemon runs: an outdated one that `morty upgrade` switches to the
  * latest, or the latest already. Only the release switch is modeled; the Agent always runs on this
  * checkout's daemon engine.
  */
@@ -46,9 +46,9 @@ export class ControlledSetupRuntime implements SetupRuntime {
     readonly failure = this.#failed.promise;
 
     #options: ControlledAgentBehavior;
-    /** What `mobius agents --output-json` reports as unavailable; `null` is a release without that option. */
+    /** What `morty agents --output-json` reports as unavailable; `null` is a release without that option. */
     #unavailableAgents: readonly UnavailableAgentReport[] | null = null;
-    /** Agents `mobius agents` reports ready although the running Runtime did not publish them. */
+    /** Agents `morty agents` reports ready although the running Runtime did not publish them. */
     #unpublishedReadyAgents: readonly { readonly id: string; readonly label: string }[] = [];
     readonly #machineName: string;
     #upgrade: ControlledUpgrade;
@@ -57,7 +57,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
     /** Settles when setup first asks for an upgrade. */
     readonly upgradeRequested = this.#upgradeRequested.promise;
     /**
-     * `upgrade` says how `mobius upgrade` behaves; `release` is the release the machine's daemon runs before setup.
+     * `upgrade` says how `morty upgrade` behaves; `release` is the release the machine's daemon runs before setup.
      */
     constructor(
         options: ControlledAgentBehavior,
@@ -140,7 +140,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
         }
         const origin = option("--url");
         const daemon = createMortyFakeDaemon(this.#options);
-        const claim = await jsonRequest(origin, `/mobius/api/v1/runtime-pairings/${option("--pairing")}/redeem`, {
+        const claim = await jsonRequest(origin, `/morty/api/v1/runtime-pairings/${option("--pairing")}/redeem`, {
             body: {
                 agents: daemon.catalog,
                 machineName: this.#machineName,
@@ -176,7 +176,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
     };
 
     /**
-     * Sets what this machine's Mobius reports: Agents it cannot offer, such as one the user has not signed in to, and
+     * Sets what this machine's Morty reports: Agents it cannot offer, such as one the user has not signed in to, and
      * Agents that are ready now but missing from the catalog a running Runtime published at startup.
      */
     readonly reportAgentInventory = (
@@ -187,15 +187,15 @@ export class ControlledSetupRuntime implements SetupRuntime {
         this.#unpublishedReadyAgents = unpublishedReady;
     };
 
-    /** Changes how later `mobius upgrade` runs behave, such as when the registry becomes reachable. */
+    /** Changes how later `morty upgrade` runs behave, such as when the registry becomes reachable. */
     readonly setUpgrade = (upgrade: ControlledUpgrade): void => {
         this.#upgrade = upgrade;
     };
 
-    /** The release the machine's daemon runs, as `mobius --version` reports it. */
+    /** The release the machine's daemon runs, as `morty --version` reports it. */
     readonly daemonRelease = (): DaemonRelease => this.#release;
 
-    // Like `mobius upgrade`: the running daemon switches to the newest release, and
+    // Like `morty upgrade`: the running daemon switches to the newest release, and
     // its active connections come back on it.
     async #upgradeDaemon(signal: AbortSignal): Promise<void> {
         const cancelled = (): Promise<never> =>
@@ -206,7 +206,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
         switch (this.#upgrade) {
             case "unavailable":
                 this.#upgradeRequested.resolve();
-                throw new Error("npm could not return a valid latest Mobius version");
+                throw new Error("npm could not return a valid latest Morty version");
             case "unresponsive":
                 // A download that never finishes: only cancellation ends it.
                 this.#upgradeRequested.resolve();

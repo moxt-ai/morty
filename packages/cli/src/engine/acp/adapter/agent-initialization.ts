@@ -19,7 +19,7 @@ export async function validateAgentRuntime(agent: AcpAgentDefinition, signal: Ab
     signal.throwIfAborted();
     if (unchanged.some((result) => !result)) {
         throw new AcpExecutionError(
-            "The local Agent runtime changed; restart Mobius before starting a new conversation",
+            "The local Agent runtime changed; restart Morty before starting a new conversation",
             {},
             "agent_runtime_changed",
         );
@@ -48,7 +48,7 @@ export async function initializeAgentConnection(
                         plan: {},
                         session: { compaction: {}, configOptions: { boolean: {} } },
                     },
-                    clientInfo: { name: "mobius", version: "0.0.3" },
+                    clientInfo: { name: "morty", version: "0.0.3" },
                     protocolVersion: PROTOCOL_VERSION,
                 },
                 { cancellationSignal: signal },

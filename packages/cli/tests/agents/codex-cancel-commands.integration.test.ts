@@ -41,7 +41,7 @@ test.each(["foreground", "background"] as const)(
         const command = `node -e ${JSON.stringify(script)}`;
         const providerEntered = Promise.withResolvers<void>();
         let hold = true;
-        await using provider = await FakeOpenAiProvider.start("mobius-test-model", "CONTINUED_AFTER_STOP", {
+        await using provider = await FakeOpenAiProvider.start("morty-test-model", "CONTINUED_AFTER_STOP", {
             toolPrompt: "Start the gated command",
             toolSequence: [
                 {

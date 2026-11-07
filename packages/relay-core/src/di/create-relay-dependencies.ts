@@ -1,4 +1,4 @@
-import { parseMobiusApiPrefix } from "@morty-build/client/protocol";
+import { parseMortyApiPrefix } from "@morty-build/client/protocol";
 import type { ChannelGateway } from "../gateway/channel-gateway.ts";
 import type { ProjectAccessAuthorizer } from "../gateway/project-access-authorizer.ts";
 import type { ProjectApplicationResolver } from "../infra/project-application-resolver.ts";
@@ -48,7 +48,7 @@ function createPairings(cx: PairingInfrastructure) {
 
 function createHttpContext(infrastructure: RelayInfrastructure, pairings: PairingDirectoryService) {
     const cx = {
-        config: { apiPrefix: parseMobiusApiPrefix(infrastructure.config.apiPrefix) },
+        config: { apiPrefix: parseMortyApiPrefix(infrastructure.config.apiPrefix) },
         logger: infrastructure.logger,
         services: { pairings },
         gateways: {

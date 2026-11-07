@@ -10,7 +10,7 @@ export function applyDurableObjectMigrations(
     namespace: string,
     migrations: readonly DurableObjectMigration[],
 ): void {
-    database.run(`CREATE TABLE IF NOT EXISTS _mobius_do_schema_migrations (
+    database.run(`CREATE TABLE IF NOT EXISTS _morty_do_schema_migrations (
         namespace TEXT NOT NULL,
         name TEXT NOT NULL,
         applied_at INTEGER NOT NULL,
@@ -19,7 +19,7 @@ export function applyDurableObjectMigrations(
 
     for (const migration of migrations) {
         const applied = database.query(
-            "SELECT 1 AS present FROM _mobius_do_schema_migrations WHERE namespace = ? AND name = ?",
+            "SELECT 1 AS present FROM _morty_do_schema_migrations WHERE namespace = ? AND name = ?",
             [namespace, migration.name],
         )[0];
         if (applied !== undefined) {
@@ -27,7 +27,7 @@ export function applyDurableObjectMigrations(
         }
         database.transaction(() => {
             database.run(migration.sql);
-            database.run("INSERT INTO _mobius_do_schema_migrations (namespace, name, applied_at) VALUES (?, ?, ?)", [
+            database.run("INSERT INTO _morty_do_schema_migrations (namespace, name, applied_at) VALUES (?, ?, ?)", [
                 namespace,
                 migration.name,
                 Date.now(),

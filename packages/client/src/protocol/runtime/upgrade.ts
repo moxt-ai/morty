@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { type Identifier, isIdentifier } from "../shared/identifier.ts";
 
-// Only exact releases of the fixed Mobius npm package are supported.
+// Only exact releases of the fixed Morty npm package are supported.
 const runtimeUpgradeVersionSchema = z
     .string()
     .max(128)

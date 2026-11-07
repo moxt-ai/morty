@@ -260,7 +260,7 @@ class ControlledAgentState {
                     messageId: output.kind === "message" ? id : `assistant-${active.turnNumber.toString()}`,
                     sessionUpdate: "agent_message_chunk",
                     ...(output.kind === "message" && output.questions !== undefined
-                        ? { _meta: { "mobius.questions": output.questions } }
+                        ? { _meta: { "morty.questions": output.questions } }
                         : {}),
                 },
             };

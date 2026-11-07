@@ -108,7 +108,7 @@ async function runCli(
 
 describe("pairing a machine without a local Agent", () => {
     it("Given a pairing code piped to the CLI, When the user pairs with --code-stdin, Then the machine redeems that code without it appearing in the command line", async () => {
-        const home = await mkdtemp(join(tmpdir(), "mobius-piped-pairing-"));
+        const home = await mkdtemp(join(tmpdir(), "morty-piped-pairing-"));
         const relay = await createPairingRelay();
         const environment = { ...agentlessEnvironment(join(home, "state")), HOME: home, TMPDIR: home };
         const pairing = [
@@ -138,12 +138,12 @@ describe("pairing a machine without a local Agent", () => {
     });
 
     it("Given no supported Agent is discoverable, When the machine redeems its pairing, Then it pairs and advertises an empty Agent directory", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-unattended-pairing-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-unattended-pairing-"));
         const relay = await createPairingRelay();
 
         try {
-            const { MobiusRuntimeEngine } = await import("../../src/exports/engine.ts");
-            const engine = new MobiusRuntimeEngine({
+            const { MortyRuntimeEngine } = await import("../../src/exports/engine.ts");
+            const engine = new MortyRuntimeEngine({
                 engineDataDir: stateDirectory,
                 agentLaunchEnvironment: agentlessEnvironment(stateDirectory),
             });
@@ -177,13 +177,13 @@ describe("pairing a machine without a local Agent", () => {
     });
 
     it("Given an unattended machine is already paired, When another Engine reads its saved connection, Then pairing is retained without redeeming again", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-unattended-resume-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-unattended-resume-"));
         const relay = await createPairingRelay();
         const environment = agentlessEnvironment(stateDirectory);
 
         try {
-            const { MobiusRuntimeEngine } = await import("../../src/exports/engine.ts");
-            const engine = new MobiusRuntimeEngine({
+            const { MortyRuntimeEngine } = await import("../../src/exports/engine.ts");
+            const engine = new MortyRuntimeEngine({
                 engineDataDir: stateDirectory,
                 agentLaunchEnvironment: environment,
             });
@@ -197,7 +197,7 @@ describe("pairing a machine without a local Agent", () => {
                 AbortSignal.timeout(20_000),
             );
 
-            const resumed = await new MobiusRuntimeEngine({
+            const resumed = await new MortyRuntimeEngine({
                 engineDataDir: stateDirectory,
                 agentLaunchEnvironment: environment,
             })

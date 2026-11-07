@@ -6,7 +6,7 @@ import {
     RuntimeInstallationStore,
     RuntimeInstallationStoreError,
 } from "../../engine/runtime/connection/runtime-installation-store.ts";
-import { MobiusRuntimeEngine } from "../../engine/runtime/engine.ts";
+import { MortyRuntimeEngine } from "../../engine/runtime/engine.ts";
 import {
     PairingClientError,
     parsePairingCode,
@@ -17,7 +17,7 @@ import {
 import { ensurePrivateDirectory } from "../../engine/storage/files/local-files.ts";
 import { validateLocalPath } from "../../engine/util/filesystem/private-path.ts";
 import { readStateDirectory } from "../../storage/state-directory.ts";
-import { prepareMobiusEngineDataDir, resolveMaxAcpProcesses } from "../config.ts";
+import { prepareMortyEngineDataDir, resolveMaxAcpProcesses } from "../config.ts";
 
 function readSingleOption(arguments_: readonly string[], option: string): string {
     const values: string[] = [];
@@ -53,7 +53,7 @@ function parsePairCommand(arguments_: readonly string[], defaultWorkspace: strin
     };
 }
 
-export async function openMobiusControlInstallation(
+export async function openMortyControlInstallation(
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,
 ): Promise<RuntimeInstallationStore> {
@@ -74,12 +74,12 @@ export async function openMobiusControlInstallation(
 }
 
 // Commands and daemons resolve the same directory before writing any data.
-export async function openMobiusCliInstallation(
+export async function openMortyCliInstallation(
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,
 ): Promise<RuntimeInstallationStore> {
     return await RuntimeInstallationStore.open(
-        await prepareMobiusEngineDataDir(packageMetadata.version, signal, environment),
+        await prepareMortyEngineDataDir(packageMetadata.version, signal, environment),
         signal,
     );
 }
@@ -89,8 +89,8 @@ export async function pairLocalMachine(
     signal: AbortSignal = new AbortController().signal,
 ): Promise<VerifiedRuntimeConnection> {
     const requested = parsePairCommand(arguments_, "");
-    const engineDataDir = await prepareMobiusEngineDataDir(packageMetadata.version, signal, process.env);
-    const engine = new MobiusRuntimeEngine({ engineDataDir, agentLaunchEnvironment: process.env });
+    const engineDataDir = await prepareMortyEngineDataDir(packageMetadata.version, signal, process.env);
+    const engine = new MortyRuntimeEngine({ engineDataDir, agentLaunchEnvironment: process.env });
     const installation = await RuntimeInstallationStore.open(engineDataDir, signal);
     if (requested.pairingId.length > 0) {
         const existing = await installation.readConnectionForPairing(requested.pairingId, signal);

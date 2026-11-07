@@ -1,11 +1,11 @@
 export {
-    MOBIUS_API_VERSION,
     MORTY_API_PREFIX,
-    MobiusApiConfigurationError,
-    mobiusApiPath,
-    mobiusApiUrl,
-    parseMobiusApiPrefix,
-} from "./platform/mobius-api.ts";
+    MORTY_API_VERSION,
+    MortyApiConfigurationError,
+    mortyApiPath,
+    mortyApiUrl,
+    parseMortyApiPrefix,
+} from "./platform/morty-api.ts";
 
 export type { ProjectLocationHint } from "./platform/project-location.ts";
 

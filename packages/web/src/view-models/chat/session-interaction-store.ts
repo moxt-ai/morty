@@ -200,25 +200,18 @@ export function createSessionInteractionStore(ports: {
                     coverage: { sessionGenerationId: event.sessionGenerationId, throughPosition: event.position },
                 }));
             },
-            recover: (recovery) => {
-                switch (recovery.kind) {
-                    case "session":
-                        set({
-                            interactions: recovery.snapshot.interactions.map(requestedInteraction),
-                            coverage: {
-                                sessionGenerationId: recovery.snapshot.sessionGenerationId,
-                                throughPosition: recovery.snapshot.throughPosition,
-                            },
-                        });
-                        keepPendingDrafts();
-                        return;
-                    case "legacy-turn":
-                        // Preserve the old foreground recovery contract without claiming full session coverage.
-                        set({ interactions: recovery.interactions, coverage: null });
-                        return;
-                    default:
-                        return recovery satisfies never;
-                }
+            recover: (snapshot) => {
+                set({
+                    interactions: snapshot === null ? [] : snapshot.interactions.map(requestedInteraction),
+                    coverage:
+                        snapshot === null
+                            ? null
+                            : {
+                                  sessionGenerationId: snapshot.sessionGenerationId,
+                                  throughPosition: snapshot.throughPosition,
+                              },
+                });
+                keepPendingDrafts();
             },
             restore: (interactions) => set({ interactions, coverage: null }),
             respondToPermission: (response, signal) =>

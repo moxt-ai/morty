@@ -463,7 +463,7 @@ export class SessionManager {
     /**
      * Opens a short-lived native ACP session only to read the local Agent's
      * authoritative settings. Its identity and store are private to this
-     * operation and never become a Mobius Session.
+     * operation and never become a Morty Session.
      */
     readonly inspectAgentSettings = async (options: AgentSettingsInspectionOptions): Promise<AgentSettingsSnapshot> =>
         this.#operations.run(options, async (options) => {

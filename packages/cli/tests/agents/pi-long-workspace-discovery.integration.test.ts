@@ -12,14 +12,14 @@ function sessionHeader(sessionId: string, cwd: string): string {
     return `${JSON.stringify({ type: "session", id: sessionId, cwd })}\n`;
 }
 
-test("Given Pi's default workspace creates an oversized native session path, When Mobius discovers Pi, Then Pi remains available and stores its session under Mobius state", async () => {
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "SESSION_PROBE_COMPLETED");
+test("Given Pi's default workspace creates an oversized native session path, When Morty discovers Pi, Then Pi remains available and stores its session under Morty state", async () => {
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "SESSION_PROBE_COMPLETED");
     await using agent = await PiFixture.create(provider);
     const fixtureHome = agent.environment["HOME"];
     if (fixtureHome === undefined) {
         throw new Error("The Pi fixture must set HOME");
     }
-    const stateDirectory = join(fixtureHome, "mobius-state");
+    const stateDirectory = join(fixtureHome, "morty-state");
     const workspace = join(tmpdir(), "w".repeat(130), "w".repeat(130));
     await mkdir(workspace, { recursive: true });
     try {
@@ -40,8 +40,8 @@ test("Given Pi's default workspace creates an oversized native session path, Whe
         expect(inventory.available).toHaveLength(1);
         expect(inventory.available[0]).toMatchObject({ specification: { id: "pi", label: "Pi" }, status: "ready" });
         const workspaceHash = createHash("sha256").update(workspace).digest("hex").slice(0, 24);
-        const mobiusSessionsRoot = join(stateDirectory, "agents", "pi", "sessions");
-        const sessionsRoot = join(mobiusSessionsRoot, workspaceHash);
+        const mortySessionsRoot = join(stateDirectory, "agents", "pi", "sessions");
+        const sessionsRoot = join(mortySessionsRoot, workspaceHash);
         expect((await readdir(sessionsRoot)).every((entry) => entry.length <= 128)).toBe(true);
 
         const legacyDirectory = join(fixtureHome, ".pi", "agent", "sessions", "terminal-project");
@@ -57,7 +57,7 @@ test("Given Pi's default workspace creates an oversized native session path, Whe
         );
 
         const otherWorkspaceHash = createHash("sha256").update(`${workspace}-other`).digest("hex").slice(0, 24);
-        const otherSessionsDirectory = join(mobiusSessionsRoot, otherWorkspaceHash);
+        const otherSessionsDirectory = join(mortySessionsRoot, otherWorkspaceHash);
         await mkdir(otherSessionsDirectory, { recursive: true });
         await writeFile(
             join(otherSessionsDirectory, "other-connection-session.jsonl"),

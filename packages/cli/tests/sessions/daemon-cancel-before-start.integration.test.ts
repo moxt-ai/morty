@@ -20,7 +20,7 @@ import { writeControlledAcpExecutable } from "../support/controlled-acp-executab
 test("Given a command already completed, When a delayed queue edit cancels it before start, Then the Runtime refuses to claim that it was withdrawn", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-29T00:00:00Z"));
-    const directory = await mkdtemp(join(tmpdir(), "mobius-late-queue-edit-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-late-queue-edit-"));
     try {
         const executableDirectory = await writeControlledAcpExecutable(directory);
         await withControlledDaemon(
@@ -75,7 +75,7 @@ test("Given a command already completed, When a delayed queue edit cancels it be
 test("Given running and queued work, When cancellation permits only unstarted work, Then the queued work stops and the running work is preserved", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-27T00:00:00Z"));
-    const directory = await mkdtemp(join(tmpdir(), "mobius-cancel-before-start-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-cancel-before-start-"));
     try {
         const executableDirectory = await writeControlledAcpExecutable(directory);
         await withControlledDaemon(
@@ -206,7 +206,7 @@ test("Given running and queued work, When cancellation permits only unstarted wo
 test("Given an unacknowledged command, When Stop arrives before its prompt, Then a recorded cancellation prevents later execution", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-27T00:00:00Z"));
-    const directory = await mkdtemp(join(tmpdir(), "mobius-cancel-admission-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-cancel-admission-"));
     try {
         const executableDirectory = await writeControlledAcpExecutable(directory);
         await withControlledDaemon(
@@ -306,7 +306,7 @@ function fileCreated(directory: string, name: string): Promise<void> {
 test("Given a prompt still loading its conversation's saved history, When the client withdraws it, Then the Runtime withdraws it before it starts and the next prompt runs", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-30T00:00:00Z"));
-    const directory = await mkdtemp(join(tmpdir(), "mobius-withdraw-loading-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-withdraw-loading-"));
     try {
         const agentDirectory = join(directory, "agent");
         await mkdir(agentDirectory, { recursive: true });

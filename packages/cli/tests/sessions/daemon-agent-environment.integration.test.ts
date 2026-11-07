@@ -62,7 +62,7 @@ function nextMessageOfKind(socket: Duplex, kind: string): Promise<void> {
 
 /** Starts a daemon whose Runtime keeps its data in an installation directory, launches its Agent, and reads what the Agent inherited. */
 async function inheritedStateDirectory(daemonEnvironment: NodeJS.ProcessEnv): Promise<unknown> {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-agent-environment-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-agent-environment-"));
     const installationData = join(
         directory,
         "root",
@@ -154,13 +154,13 @@ async function inheritedStateDirectory(daemonEnvironment: NodeJS.ProcessEnv): Pr
 test("Given a daemon started with a custom state root, When it launches an Agent, Then the Agent inherits that root rather than the Runtime's installation data", {
     timeout: 60_000,
 }, async () => {
-    const root = join(tmpdir(), "mobius-custom-root");
+    const root = join(tmpdir(), "morty-custom-root");
     const environment = { ...process.env, MORTY_STATE_DIRECTORY: root };
 
     expect(await inheritedStateDirectory(environment)).toEqual({ stateDirectory: root });
 });
 
-test("Given a daemon started with the default state root, When it launches an Agent, Then the Agent's environment leaves the root unset so Mobius there uses the same default", {
+test("Given a daemon started with the default state root, When it launches an Agent, Then the Agent's environment leaves the root unset so Morty there uses the same default", {
     timeout: 60_000,
 }, async () => {
     const environment = { ...process.env };

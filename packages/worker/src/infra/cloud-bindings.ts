@@ -32,15 +32,15 @@ export type ProjectStorageBindings = v.InferOutput<typeof projectStorageBindings
 
 export const platformEndpointBindingsSchema = v.pipe(
     v.object({
-        MOBIUS_APP_ID: v.string(),
-        MOBIUS_BASE_URL: v.string(),
+        MORTY_SERVICE_ID: v.string(),
+        MORTY_RELAY_URL: v.string(),
     }),
     v.readonly(),
 );
 
 export const appOriginBindingSchema = v.pipe(v.object({ APP_ORIGIN: v.string() }), v.readonly());
 
-export const platformCredentialBindingsSchema = v.pipe(v.object({ MOBIUS_APP_SECRET: v.string() }), v.readonly());
+export const platformCredentialBindingsSchema = v.pipe(v.object({ MORTY_SERVICE_SECRET: v.string() }), v.readonly());
 
 export interface CloudBindings {
     readonly CHAT_WEBSOCKETS?: unknown;
@@ -54,7 +54,7 @@ export interface CloudBindings {
     readonly CHAT_SESSION_OPERATIONS?: ManagedSessionOperations;
     /** The Project object's own key for credentials that a repeated request derives again. */
     readonly CHAT_CREDENTIAL_KEY?: (signal: AbortSignal) => Promise<Uint8Array>;
-    readonly MOBIUS_BASE_URL?: unknown;
-    readonly MOBIUS_APP_ID?: unknown;
-    readonly MOBIUS_APP_SECRET?: unknown;
+    readonly MORTY_RELAY_URL?: unknown;
+    readonly MORTY_SERVICE_ID?: unknown;
+    readonly MORTY_SERVICE_SECRET?: unknown;
 }

@@ -1,8 +1,8 @@
-import { createMobiusApplication, errorMiddleware, type RelayContext, rethrowHonoError } from "@morty-build/relay-core";
+import { createMortyApplication, errorMiddleware, type RelayContext, rethrowHonoError } from "@morty-build/relay-core";
 import { Hono } from "hono";
 
 export function createProjectApplication() {
-    const projectApplication = createMobiusApplication();
+    const projectApplication = createMortyApplication();
     return new Hono<{
         readonly Bindings: { readonly relay: RelayContext; readonly allowedOrigins: ReadonlySet<string> };
     }>()

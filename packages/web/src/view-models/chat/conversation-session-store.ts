@@ -2,7 +2,7 @@ import { createStore } from "zustand/vanilla";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
 import { formatError } from "../format-error.ts";
-import type { OpenMobiusSession } from "./open-session.ts";
+import type { OpenMortySession } from "./open-session.ts";
 
 type ConversationSessionState =
     | { readonly kind: "idle" }
@@ -10,7 +10,7 @@ type ConversationSessionState =
     | {
           readonly kind: "ready";
           readonly conversationId: string;
-          readonly session: OpenMobiusSession;
+          readonly session: OpenMortySession;
       }
     | { readonly kind: "failed"; readonly code: string | null; readonly message: string };
 

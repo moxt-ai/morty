@@ -171,7 +171,7 @@ export class SessionEventCacheTable {
         } catch (cause) {
             this.#isAvailable = false;
             this.#ignoredPersistedSessions.add(sessionId);
-            console.warn("Mobius V2 Session event cache writes are unavailable; retaining events in memory", cause);
+            console.warn("Morty V2 Session event cache writes are unavailable; retaining events in memory", cause);
         }
     };
 
@@ -182,7 +182,7 @@ export class SessionEventCacheTable {
             try {
                 this.#checkpoint();
             } catch (cause) {
-                console.warn("Mobius V2 Session event cache checkpoint on close failed", cause);
+                console.warn("Morty V2 Session event cache checkpoint on close failed", cause);
             }
         }
         this.#localDatabase.close();
@@ -195,6 +195,6 @@ export class SessionEventCacheTable {
 
     readonly #disableWrites = (cause: unknown): void => {
         this.#isAvailable = false;
-        console.warn("Mobius V2 Session event cache writes are unavailable; retaining events in memory", cause);
+        console.warn("Morty V2 Session event cache writes are unavailable; retaining events in memory", cause);
     };
 }

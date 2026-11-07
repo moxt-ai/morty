@@ -20,7 +20,7 @@ import { FakeAnthropicProvider } from "../support/llm/anthropic.ts";
 test("Given real Claude saves text and four resources, When its ACP history is replayed, Then saved links and context remain text with their message identity", async () => {
     await using provider = await FakeAnthropicProvider.start("claude-sonnet-4-6", "ATTACHMENT_REPLAY_REPLY");
     await using fixture = await ClaudeFixture.create(provider);
-    const cwd = await mkdtemp(join(tmpdir(), "mobius-claude-attachment-replay-"));
+    const cwd = await mkdtemp(join(tmpdir(), "morty-claude-attachment-replay-"));
     const updates: ClaudeSessionUpdate[] = [];
     const claude = createClaudeAcpApp({
         environment: { ...process.env, ...fixture.environment, CLAUDE_CODE_EXECUTABLE: fixture.executable },

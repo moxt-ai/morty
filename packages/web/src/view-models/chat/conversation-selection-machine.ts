@@ -1,4 +1,4 @@
-import { type OpenMobiusSession, type SelectedMobiusSession, selectedSession } from "./open-session.ts";
+import { type OpenMortySession, type SelectedMortySession, selectedSession } from "./open-session.ts";
 
 type ConversationTarget =
     | { readonly kind: "conversation"; readonly conversationId: string }
@@ -11,7 +11,7 @@ export type ConversationSelectionState =
     | { readonly kind: "loading"; readonly target: ConversationTarget }
     | {
           readonly kind: "ready";
-          readonly session: SelectedMobiusSession;
+          readonly session: SelectedMortySession;
           readonly target: ConversationTarget;
       }
     | {
@@ -27,7 +27,7 @@ export type ConversationSelectionEvent =
     | { readonly kind: "session-load-started" }
     | {
           readonly kind: "session-loaded";
-          readonly session: OpenMobiusSession;
+          readonly session: OpenMortySession;
           readonly target: ConversationTarget;
       }
     | {
@@ -37,7 +37,7 @@ export type ConversationSelectionEvent =
           readonly target: ConversationTarget;
       }
     | { readonly kind: "retry-requested" }
-    | { readonly kind: "conversation-created"; readonly conversationId: string; readonly session: OpenMobiusSession };
+    | { readonly kind: "conversation-created"; readonly conversationId: string; readonly session: OpenMortySession };
 
 function sameTarget(left: ConversationTarget, right: ConversationTarget): boolean {
     return left.kind === "conversation"

@@ -51,15 +51,15 @@ async function writeInstallationLog(
     await writeFile(join(logs, filename), `${lines.join("\n")}\n`, { mode: 0o600 });
 }
 
-describe("Mobius logs command", () => {
+describe("Morty logs command", () => {
     // @no-uc: Technical regression; a bug report must collect logs from every installation, not just the active one.
     it("Given a stopped daemon with logs from both the Runtime and its manager, When the user collects them for a bug report, Then every installation's log is printed with its state-relative path", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-logs-command-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
         await writeInstallationLog(stateDirectory, "build.morty.cli", "worker-lifecycle.log", [
-            'Mobius worker lifecycle {"kind":"worker_started","pid":4242,"version":"0.0.272"}',
-            'Mobius worker lifecycle {"kind":"worker_exited","pid":4242,"exitCode":137,"signal":"SIGKILL","stderr":"/home/user/secret-path boom"}',
+            'Morty worker lifecycle {"kind":"worker_started","pid":4242,"version":"0.0.272"}',
+            'Morty worker lifecycle {"kind":"worker_exited","pid":4242,"exitCode":137,"signal":"SIGKILL","stderr":"/home/user/secret-path boom"}',
         ]);
         await writeInstallationLog(stateDirectory, "ai.moxt.machine-connector", "daemon.log", [
             'Morty relay diagnostic {"event":"relay_connection_opened","channelId":"channel-1"}',
@@ -82,7 +82,7 @@ describe("Mobius logs command", () => {
 
     // @no-uc: Technical regression; a CLI upgrade relocates Runtime state, and both installations shapes must still be found.
     it("Given a version-scoped CLI installation, When the user collects logs, Then the versioned Runtime log and the unversioned manager log are both found", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-logs-command-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
         // A CLI upgrade moves the Runtime's own state under `versions/<version>/`
@@ -92,7 +92,7 @@ describe("Mobius logs command", () => {
             'Morty relay diagnostic {"event":"relay_connection_opened"}',
         ]);
         await writeInstallationLog(stateDirectory, "build.morty.cli", "worker-lifecycle.log", [
-            'Mobius worker lifecycle {"kind":"worker_exited","exitCode":137,"signal":"SIGKILL"}',
+            'Morty worker lifecycle {"kind":"worker_exited","exitCode":137,"signal":"SIGKILL"}',
         ]);
 
         const result = await runCli(
@@ -109,7 +109,7 @@ describe("Mobius logs command", () => {
 
     // @no-uc: Technical regression; bounded log tailing must report what it dropped rather than hide it.
     it("Given more log lines than the requested tail, When the user collects them, Then the oldest lines are reported as omitted instead of printed", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-logs-command-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
         await writeInstallationLog(stateDirectory, "build.morty.cli", "daemon.log", [
@@ -131,7 +131,7 @@ describe("Mobius logs command", () => {
 
     // @no-uc: Technical regression; machine-readable log export must keep stdout parseable for evidence pipelines.
     it("Given logs collected as JSON, When the output is piped, Then stdout is machine-parseable and the sharing notice goes to stderr", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-logs-command-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
         await writeInstallationLog(stateDirectory, "build.morty.cli", "daemon.log", [
@@ -155,7 +155,7 @@ describe("Mobius logs command", () => {
 
     // @no-uc: Technical regression; a forensic log export must not mutate the files it reads.
     it("Given logs with permissions the daemon did not tighten, When the user collects them, Then collection is read-only and the file modes are unchanged", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-logs-command-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
         await writeInstallationLog(stateDirectory, "build.morty.cli", "daemon.log", [
@@ -189,7 +189,7 @@ describe("Mobius logs command", () => {
 
     // @no-uc: Technical regression; unreadable evidence must not be reported as absent.
     it("Given a log the collector cannot read, When the user collects logs, Then the report names the missing file and fails instead of claiming no logs exist", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-logs-command-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
         await writeInstallationLog(stateDirectory, "build.morty.cli", "daemon.log", [
@@ -243,7 +243,7 @@ describe("Mobius logs command", () => {
 
     // @no-uc: Technical regression; an unlistable log directory must count as a collection failure.
     it("Given a log directory this user cannot list, When the user collects logs, Then the directory is reported unreadable instead of being treated as holding no logs", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-logs-command-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");
         await writeInstallationLog(stateDirectory, "build.morty.cli", "daemon.log", [
@@ -278,7 +278,7 @@ describe("Mobius logs command", () => {
 
     // @no-uc: Technical regression; a clean machine must report no logs distinctly from an unreadable one.
     it("Given no daemon has ever run here, When the user collects logs, Then the command reports that nothing was found instead of failing", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-logs-command-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
 
         const result = await runCli(

@@ -23,14 +23,14 @@ class HistoryAgentSpecification extends ControlledAcpSpecification {
 
 import { withControlledDaemon as withRealDaemon } from "../support/agents/real-daemon.ts";
 
-// Persisted native history is owned by the controlled ACP peer, not by Mobius.
+// Persisted native history is owned by the controlled ACP peer, not by Morty.
 test.each([
     { name: "6000 messages", count: 6000, images: false },
     { name: "32 embedded images", count: 32, images: true },
 ])(
     "Given native history with $name, When its preview is loaded through the daemon, Then replay drains without losing messages or overflowing the output queue",
     async (scenario) => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-history-backpressure-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-history-backpressure-"));
         const executable = join(directory, "controlled-acp");
         const stateDirectory = join(directory, "state");
         const nativeSessionId = "large-native-history";

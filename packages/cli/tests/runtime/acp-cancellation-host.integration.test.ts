@@ -10,7 +10,7 @@ import { expect, test } from "vitest";
 test.each(["before-observation", "while-pending"])(
     "settles %s ACP startup cancellation and serves later settings in the same process",
     async (cancellation) => {
-        const directory = await mkdtemp(join(tmpdir(), "mobius-acp-cancellation-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-acp-cancellation-"));
         const fixture = fileURLToPath(new URL("./fixtures/acp-cancellation-host.ts", import.meta.url));
         const child = spawn(process.execPath, [fixture, directory, cancellation], {
             env: { PATH: process.env["PATH"], HOME: directory, TMPDIR: directory },

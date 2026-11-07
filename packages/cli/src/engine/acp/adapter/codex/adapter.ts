@@ -22,7 +22,7 @@ import { createdNativeSessionId, normalizeOpenedSession, sessionWorkspace } from
 import { findNativeSession } from "../native-session-lookup.ts";
 import { openPreviewEventCache, type PreviewEventCache } from "../preview-event-cache.ts";
 import { AgentQueryProcesses } from "../query-processes.ts";
-import { AcpSessionConnector, type AdapterSessionConnection, withMobiusFields } from "../session-events.ts";
+import { AcpSessionConnector, type AdapterSessionConnection, withMortyFields } from "../session-events.ts";
 import { fitCodexToolEvent, prepareCodexToolUpdate } from "./tool-event.ts";
 
 /**
@@ -208,7 +208,7 @@ export class CodexAdapter implements Adapter {
         }
         if (!(await revalidateExecutable(agent.agentIdentity))) {
             throw new AcpExecutionError(
-                "The local Codex executable changed. Restart Mobius to discover it again.",
+                "The local Codex executable changed. Restart Morty to discover it again.",
                 {},
                 "agent_executable_changed",
             );
@@ -255,7 +255,7 @@ export class CodexAdapter implements Adapter {
                             events.push({
                                 type: "acp",
                                 payload: decodeAcpSessionUpdate(
-                                    JSON.stringify(fitCodexToolEvent(withMobiusFields(update, event))),
+                                    JSON.stringify(fitCodexToolEvent(withMortyFields(update, event))),
                                 ),
                             });
                         }

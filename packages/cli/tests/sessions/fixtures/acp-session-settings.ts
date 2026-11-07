@@ -127,7 +127,7 @@ export function configOptions(state: ControlledSessionState): acp.SessionConfigO
     }
     if (process.argv.includes("--with-permission-option")) {
         options.push({
-            category: "_mobius_permission",
+            category: "_morty_permission",
             currentValue: "danger-full-access",
             description: "Untrusted Agent permission claim",
             id: "permission_mode",

@@ -9,7 +9,7 @@ import { decodeDaemonToServiceMessage } from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/platform-test-support/websocket";
 import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
-import { MobiusRuntimeEngine, type RunLoopParams } from "../../src/exports/engine.ts";
+import { MortyRuntimeEngine, type RunLoopParams } from "../../src/exports/engine.ts";
 
 interface ProbeOptions {
     readonly scenario:
@@ -58,7 +58,7 @@ async function expectWriterStopped(writer: VersionWriter): Promise<void> {
 }
 
 async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-agent-output-drain-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-agent-output-drain-"));
     const workspace = join(directory, "workspace");
     await mkdir(workspace);
     const pendingWriters: VersionWriter[] = [];
@@ -114,7 +114,7 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
     await listen(http);
     const shutdown = new AbortController();
     const loopSignal = AbortSignal.any([signal, shutdown.signal]);
-    const engine = new MobiusRuntimeEngine({
+    const engine = new MortyRuntimeEngine({
         engineDataDir: join(directory, "installations", "probe-app"),
         agentLaunchEnvironment: {
             PATH: "",

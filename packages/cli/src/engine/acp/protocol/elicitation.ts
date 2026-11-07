@@ -93,7 +93,7 @@ export function normalizeElicitationFields(requestedSchema: unknown): readonly S
             maximumLength: numericString(property["maxLength"] ?? property["maxItems"]),
             minimum: numericString(property["minimum"]),
             minimumLength: numericString(property["minLength"] ?? property["minItems"]),
-            ...(normalizedType === "string" && isRecord(metadata) && metadata["io.mobius/multiline"] === true
+            ...(normalizedType === "string" && isRecord(metadata) && metadata["io.morty/multiline"] === true
                 ? { multiline: true }
                 : {}),
             name: truncate(name, 128),

@@ -19,7 +19,7 @@ afterEach(async () => {
 });
 
 async function appServer(responseCharacters = 1024 * 1024): Promise<string> {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-codex-app-server-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-codex-app-server-"));
     temporaryDirectories.push(directory);
     const executable = join(directory, "codex");
     await writeFile(
@@ -44,7 +44,7 @@ async function historyAppServer(
     savedItems: readonly unknown[] | null = null,
     error: { readonly message: string } | null = null,
 ): Promise<string> {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-codex-history-server-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-codex-history-server-"));
     temporaryDirectories.push(directory);
     const executable = join(directory, "codex");
     await writeFile(
@@ -116,7 +116,7 @@ it("Given a long-lived Codex app-server returns more than 32 MiB across consumed
     }
 });
 
-it("Given Codex sends an individual protocol message above 32 MiB, When Mobius receives it, Then the connection stops at the bounded transport boundary", async () => {
+it("Given Codex sends an individual protocol message above 32 MiB, When Morty receives it, Then the connection stops at the bounded transport boundary", async () => {
     const command = await appServer(33 * 1024 * 1024);
     const client = new CodexAppServerClient({
         command,
@@ -156,7 +156,7 @@ it("Given a non-Codex agent, When its history is requested through the Codex ada
     });
 });
 
-it("Given paginated Codex history exceeds 32 MiB across consumed responses, When Mobius reads every page, Then the bounded history reader completes", async () => {
+it("Given paginated Codex history exceeds 32 MiB across consumed responses, When Morty reads every page, Then the bounded history reader completes", async () => {
     const command = await historyAppServer();
     const agent = new AcpAgentDefinition(
         "codex",

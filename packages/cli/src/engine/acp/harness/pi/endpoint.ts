@@ -36,7 +36,7 @@ export class PiAcpEndpoint implements InProcessAcpEndpoint {
             PI_ACP_PI_COMMAND: options.command,
         });
         let piAgent: PiAcpAgent | null = null;
-        this.#app = createAgentApp({ name: "mobius-pi" })
+        this.#app = createAgentApp({ name: "morty-pi" })
             .onConnect((connection) => {
                 this.#connection = connection;
                 piAgent = new PiAcpAgent(

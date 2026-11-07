@@ -12,7 +12,7 @@ function directoryId(path: string): string {
 
 describe("machine directory selection", () => {
     it("Given a paired machine and a default workspace, When the browser browses or directly enters a displayed home path, Then accessible canonical directories are available without granting another workspace", async () => {
-        const temporaryDirectory = await mkdtemp(join(homedir(), ".mobius-workspace-"));
+        const temporaryDirectory = await mkdtemp(join(homedir(), ".morty-workspace-"));
         const defaultWorkspace = join(temporaryDirectory, "default");
         const outside = join(temporaryDirectory, "outside");
         await mkdir(join(defaultWorkspace, "apps", "web"), { recursive: true });

@@ -200,29 +200,12 @@ export class PlatformControlPlaneStorage {
         };
     };
 
-    /**
-     * The candidates a scoped credential may use. Until its scope is copied to D1, only the candidates' Project
-     * storage is asked, so a request never depends on Projects it does not name.
-     */
+    /** The authoritative grant list is owned by the credential in D1. */
     readonly scopedProjects = async (
         credentialId: string,
         candidates: readonly string[],
         signal: AbortSignal,
     ): Promise<readonly string[]> => {
-        const scope = await this.copiedScope(credentialId, signal);
-        if (scope.length > 0) {
-            return candidates.filter((projectId) => scope.includes(projectId));
-        }
-        const scoped: string[] = [];
-        for (const projectId of candidates) {
-            if ((await this.projectStorageScope(credentialId, projectId, signal)) !== null) {
-                scoped.push(projectId);
-            }
-        }
-        return scoped;
-    };
-
-    private readonly copiedScope = async (credentialId: string, signal: AbortSignal): Promise<readonly string[]> => {
         const rows = await waitForD1(
             () =>
                 platformDrizzle(this.#database)
@@ -232,16 +215,9 @@ export class PlatformControlPlaneStorage {
                     .orderBy(asc(platformAppCredentialScope.projectId)),
             signal,
         );
-        return rows.map((row) => row.projectId);
+        const scope = new Set(rows.map((row) => row.projectId));
+        return candidates.filter((projectId) => scope.has(projectId));
     };
-
-    /** Reads the scope Workers kept in Project storage before D1 owned it. */
-    private readonly projectStorageScope = async (
-        credentialId: string,
-        projectId: string,
-        signal: AbortSignal,
-    ): Promise<number | null> =>
-        await this.#projects.forProject(projectId).readLegacyCredentialScope(credentialId, signal);
 
     private readonly statement = (query: { readonly toSQL: () => { sql: string; params: unknown[] } }) => {
         const { sql: text, params } = query.toSQL();

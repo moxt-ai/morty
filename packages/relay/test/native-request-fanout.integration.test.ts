@@ -44,10 +44,10 @@ it("isolates native query replies from live fanout across hibernation and daemon
         const response = await relay.fetch(`https://runtime.internal/projects/${projectId}/${path}`, {
             headers: {
                 Upgrade: "websocket",
-                "x-mobius-channel-id": "fanout-channel",
-                "x-mobius-runtime-id": runtimeId,
-                "x-mobius-host-credential-id": "apc_fanout",
-                "x-mobius-host-credential-kind": "project",
+                "x-morty-channel-id": "fanout-channel",
+                "x-morty-runtime-id": runtimeId,
+                "x-morty-host-credential-id": "apc_fanout",
+                "x-morty-host-credential-kind": "project",
             },
         });
         expect(response.status).toBe(101);
@@ -150,6 +150,7 @@ it("isolates native query replies from live fanout across hibernation and daemon
                 turn: null,
                 queued: [],
                 queuedCancellation: "before-start",
+                interactionState: null,
             });
         daemon.socket.send(reply("query-7"));
         expect(await queries[7]?.inbox.next()).toMatchObject({ kind: "native.session.result", requestId: "query-7" });

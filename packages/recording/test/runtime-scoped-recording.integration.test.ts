@@ -1,10 +1,15 @@
+import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { encodeSessionRecordingWrite, type SessionLiveEvent } from "@morty-build/client/protocol";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SessionRecordingStorage } from "../src/storage/session-recording-storage.ts";
 import { createRecordingWorker } from "../src/worker.ts";
 
 const worker = createRecordingWorker();
 const projectId = "scoped-project";
+
+beforeEach(() => vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-07T00:00:00Z") }));
+afterEach(() => vi.useRealTimers());
 
 function event(sessionId: string, position: number, text: string): SessionLiveEvent {
     return {
@@ -59,24 +64,38 @@ describe("Recording per Runtime", () => {
         expect(await history("runtime-second", sessionId)).toEqual([second.eventId]);
     });
 
-    it("Given a history recorded before Recording was addressed by Runtime, When its Runtime keeps recording, Then the whole history stays readable and other Runtimes record their own", async () => {
+    it("Given retained history in an old Session object, When the launch Runtime records the same Session, Then only current Runtime-scoped history is served and retained data stays untouched", async () => {
         const sessionId = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
         const earlier = event(sessionId, 1, "earlier");
         const later = event(sessionId, 2, "earlier");
         const other = event(sessionId, 1, "other");
         // An earlier deployment kept the Session's only history in an object addressed by Project and Session.
-        const stored = await env.SESSION_RECORDING.getByName(JSON.stringify([projectId, sessionId])).fetch(
-            new Request("https://legacy-recording.internal/events", {
-                method: "POST",
-                body: batch("runtime-owner", [earlier]),
-            }),
-        );
-        expect(stored.status).toBe(201);
+        const retained = env.SESSION_RECORDING.getByName(JSON.stringify([projectId, sessionId]));
+        await runInDurableObject(retained, (_instance, state) => {
+            const stored = new SessionRecordingStorage(state.storage);
+            expect(
+                stored.append(
+                    {
+                        projectId,
+                        runtimeId: "runtime-owner",
+                        envelope: { kind: "session.event.v2", events: [earlier] },
+                    },
+                    { events: 1, operations: [] },
+                ),
+            ).toEqual({ kind: "recorded" });
+        });
 
         expect(await record("runtime-owner", [later])).toEqual([{ sessionId, kind: "recorded" }]);
         expect(await record("runtime-other", [other])).toEqual([{ sessionId, kind: "recorded" }]);
 
-        expect(await history("runtime-owner", sessionId)).toEqual([earlier.eventId, later.eventId]);
+        expect(await history("runtime-owner", sessionId)).toEqual([later.eventId]);
         expect(await history("runtime-other", sessionId)).toEqual([other.eventId]);
+        await runInDurableObject(retained, (_instance, state) => {
+            expect(
+                state.storage.sql.exec("SELECT count(*) AS count FROM recorded_session_events_v2").one()["count"],
+            ).toBe(1);
+        });
+        const oldOwnerRoute = await retained.fetch(new Request("https://legacy-recording.internal/owner"));
+        expect(oldOwnerRoute.status).toBe(400);
     });
 });

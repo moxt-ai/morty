@@ -89,7 +89,7 @@ class Messages {
 test("Given real Codex streams commentary after a tool, When clients watch and reopen the completed Session, Then commentary remains assistant output in chronological history", async () => {
     let providerEntered = Promise.withResolvers<void>();
     let releaseProvider = Promise.withResolvers<void>();
-    const provider = await FakeOpenAiProvider.start("mobius-test-model", "Codex live reply", {
+    const provider = await FakeOpenAiProvider.start("morty-test-model", "Codex live reply", {
         commentary: "Checking the live progress boundary.",
         beforeFirstText: async () => {
             providerEntered.resolve();
@@ -97,7 +97,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
         },
     });
     const codex = await CodexFixture.create(provider);
-    const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-real-codex-live-"));
+    const stateDirectory = await mkdtemp(join(tmpdir(), "morty-real-codex-live-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);
     const relay = createServer((_request, response) => response.writeHead(404).end());
@@ -343,7 +343,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                         }
                         if (event.type === "lifecycle-metadata" && event.payload.kind === "prompt.completed") {
                             expect(event.payload.commandId).toBe(commandId);
-                            expect(event.mobiusMetadata).toEqual({ recordedOutcome: true, restated: true });
+                            expect(event.mortyMetadata).toEqual({ recordedOutcome: true, restated: true });
                             restated = true;
                         }
                     }

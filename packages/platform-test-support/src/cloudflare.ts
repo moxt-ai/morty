@@ -15,7 +15,7 @@ import { miniflareDurableObjects } from "./miniflare-durable-objects.ts";
 export { convertV4MiniflareOptions, Miniflare, miniflareDurableObjects, WebSocketPair, WorkerResponse };
 
 /** Prepare once per suite run; only immutable code is shared, never a runtime or its storage. */
-export async function prepareTestMobiusPlatformBindings() {
+export async function prepareTestMortyPlatformBindings() {
     const bundle = await build({
         entryPoints: [fileURLToPath(new NodeURL("./platform-worker-entry.ts", import.meta.url))],
         bundle: true,
@@ -43,7 +43,7 @@ function createCloudflareRuntime(script: string, allowedOrigins: ReadonlySet<str
             d1Databases: ["PLATFORM_DIRECTORY_DATABASE"],
             r2Buckets: ["R2_BUCKET_APAC", "R2_BUCKET_WNAM"],
             bindings: {
-                MOBIUS_PLATFORM_ALLOWED_ORIGINS: JSON.stringify([...allowedOrigins]),
+                MORTY_ALLOWED_ORIGINS: JSON.stringify([...allowedOrigins]),
             },
             durableObjects: miniflareDurableObjects(new NodeURL("wrangler.jsonc", packageDirectory)),
         }),
@@ -57,8 +57,8 @@ async function migrate(database: D1Database, directory: NodeURL) {
     }
 }
 
-export async function createTestMobiusPlatformBindings(allowedOrigins: ReadonlySet<string> = new Set(["*"])) {
-    const createBindings = await prepareTestMobiusPlatformBindings();
+export async function createTestMortyPlatformBindings(allowedOrigins: ReadonlySet<string> = new Set(["*"])) {
+    const createBindings = await prepareTestMortyPlatformBindings();
     return createBindings(allowedOrigins);
 }
 

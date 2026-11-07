@@ -499,14 +499,14 @@ const positionSchema = z.string().regex(/^(0|[1-9][0-9]*)$/);
  * than an acknowledgement composed when no record remains. Only such a restatement can settle, in Recording, a Turn
  * whose outcome Recording missed. Runtimes before it existed never send it.
  */
-const mobiusMetadataFields = {
+const mortyMetadataFields = {
     omitted: z.literal(true).optional(),
     recordedOutcome: z.literal(true).optional(),
     restated: z.literal(true).optional(),
 };
 const sharedSessionEventFields = {
     eventId: identifier,
-    mobiusMetadata: z.object(mobiusMetadataFields).readonly().optional(),
+    mortyMetadata: z.object(mortyMetadataFields).readonly().optional(),
     recordedAt: z.iso.datetime({ offset: true }),
     sessionGenerationId: identifier,
     sessionId: identifier,
@@ -541,7 +541,7 @@ const wireLifecyclePayloadSchema = z
     .readonly();
 const wireEventFields = {
     ...sessionLiveEventFields,
-    mobiusMetadata: z.object(mobiusMetadataFields).passthrough().readonly().optional(),
+    mortyMetadata: z.object(mortyMetadataFields).passthrough().readonly().optional(),
 };
 const sessionWireEventSchema = z.union([
     z

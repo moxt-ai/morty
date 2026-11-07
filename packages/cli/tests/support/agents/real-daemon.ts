@@ -24,8 +24,8 @@ import { resolveMaxAcpProcesses } from "../../../src/daemon/config.ts";
 import { sendLocalRequest } from "../../../src/daemon/control/local-client.ts";
 import { lifecycleResponse } from "../../../src/daemon/control/protocol.ts";
 import {
-    openMobiusCliInstallation,
-    openMobiusControlInstallation,
+    openMortyCliInstallation,
+    openMortyControlInstallation,
 } from "../../../src/daemon/pairing/pair-local-machine.ts";
 import { harnessAdapters } from "../../../src/engine/acp/adapter/registry.ts";
 import type { AdapterResolver } from "../../../src/engine/acp/native-history/preview-contract.ts";
@@ -39,7 +39,7 @@ import { acpAdapters } from "../acp-adapters.ts";
 import { installWorkspaceDaemonRelease } from "../installed-daemon-release.ts";
 
 export interface RealDaemonPeer {
-    /** Runs a `mobius` command against this daemon's installation, as the user's terminal would. */
+    /** Runs a `morty` command against this daemon's installation, as the user's terminal would. */
     readonly cli: (args: readonly string[]) => Promise<void>;
     readonly restart: (mode?: "crash", restoreFiles?: () => Promise<void>) => Promise<void>;
     readonly stateDirectory: string;
@@ -75,7 +75,7 @@ export async function withRealDaemon(
     timer: Timer = systemTimer,
     adapters: AdapterResolver = harnessAdapters,
 ): Promise<void> {
-    const directory = await mkdtemp(join(tmpdir(), `mobius-real-${specification.id}-`));
+    const directory = await mkdtemp(join(tmpdir(), `morty-real-${specification.id}-`));
     const workspace = workspaceDirectory ?? join(directory, "workspace");
     const controller = new AbortController();
     const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(90_000)]);
@@ -199,7 +199,7 @@ export async function withRealDaemon(
                 : null;
         if (launch === "managed") {
             await installWorkspaceDaemonRelease(cliEnvironment.MORTY_STATE_DIRECTORY);
-            const installation = await openMobiusCliInstallation(signal, cliEnvironment);
+            const installation = await openMortyCliInstallation(signal, cliEnvironment);
             await installation.saveConnection(
                 {
                     appId: "app_real",
@@ -256,7 +256,7 @@ export async function withRealDaemon(
                 connected = Promise.withResolvers<void>();
                 if (launch === "managed") {
                     if (mode === "crash") {
-                        const control = await openMobiusControlInstallation(signal, cliEnvironment);
+                        const control = await openMortyControlInstallation(signal, cliEnvironment);
                         const status = lifecycleResponse.parse(
                             await sendLocalRequest(control.stateDirectory, "manager", { kind: "status" }, signal),
                         );

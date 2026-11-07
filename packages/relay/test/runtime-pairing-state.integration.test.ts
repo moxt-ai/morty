@@ -11,7 +11,7 @@ import {
 import { eq } from "drizzle-orm";
 import * as v from "valibot";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { createTestMobiusPlatformApp } from "../../platform-test-support/src/app.ts";
+import { createTestMortyPlatformApp } from "../../platform-test-support/src/app.ts";
 import { seedMortyService } from "../../platform-test-support/src/service-fixture.ts";
 import {
     hashPairingCredential,
@@ -51,7 +51,7 @@ afterEach(() => vi.useRealTimers());
 afterAll(async () => await abortAllDurableObjects());
 
 async function project(_name = "Runtime pairing") {
-    const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+    const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
     const { appId, defaultCredential } = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
     const headers = {
         authorization: `Bearer ${defaultCredential.credential}`,
@@ -87,11 +87,11 @@ async function project(_name = "Runtime pairing") {
                 }),
                 {
                     ...env,
-                    MOBIUS_PROJECT_STORE: new SqlitePlatformProjectStore(
+                    MORTY_PROJECT_STORE: new SqlitePlatformProjectStore(
                         projectId,
                         new DurableObjectDatabaseAdapter(state.storage),
                     ),
-                    MOBIUS_PROJECT_ID: projectId,
+                    MORTY_PROJECT_ID: projectId,
                 },
             );
             // Consume the HTTP body within its DO request context so an unread
@@ -740,27 +740,30 @@ it("Given stored Relay control host leases beside other Channel credentials, Whe
     expect(remaining).toEqual([{ credential_id: "ctlX_owner" }, { credential_id: "lnk_device" }]);
 });
 
-it("Given a retained pre-cutover Runtime credential, When it reaches the Morty authorization boundary, Then it is rejected while project records remain and new pairing succeeds", async () => {
-    const app = await project();
-    const oldPairing = await app.pair("pre-cutover-runtime");
-    const old = v.parse(
-        v.object({ runtimeCredential: v.string() }),
-        await responseJson(await app.claim(oldPairing), 200),
-    );
-    await app.storage(async (storage) => {
-        const database = new DurableObjectSqlDatabase(storage);
-        database.orm
-            .update(runtimeDaemonCredential)
-            .set({ tokenHash: await hashSecret(old.runtimeCredential) })
-            .where(eq(runtimeDaemonCredential.runtimeId, oldPairing.runtimeId))
-            .run();
-    });
-    expect((await app.publish(oldPairing, old.runtimeCredential)).status).toBe(401);
-    expect(await responseJson(await app.status(oldPairing), 200)).toMatchObject({ status: "paired" });
-    const replacement = await app.pair("morty-generation-one");
-    const current = v.parse(
-        v.object({ runtimeCredential: v.string() }),
-        await responseJson(await app.claim(replacement), 200),
-    );
-    expect((await app.publish(replacement, current.runtimeCredential)).status).toBe(204);
-});
+it.each(["", "morty-pairing-v1\0"])(
+    "Given a retained Runtime credential from retired domain %j, When it reaches Morty authorization, Then it is rejected while project records remain and new pairing succeeds",
+    async (retiredDomain) => {
+        const app = await project();
+        const oldPairing = await app.pair("pre-cutover-runtime");
+        const old = v.parse(
+            v.object({ runtimeCredential: v.string() }),
+            await responseJson(await app.claim(oldPairing), 200),
+        );
+        await app.storage(async (storage) => {
+            const database = new DurableObjectSqlDatabase(storage);
+            database.orm
+                .update(runtimeDaemonCredential)
+                .set({ tokenHash: await hashSecret(`${retiredDomain}${old.runtimeCredential}`) })
+                .where(eq(runtimeDaemonCredential.runtimeId, oldPairing.runtimeId))
+                .run();
+        });
+        expect((await app.publish(oldPairing, old.runtimeCredential)).status).toBe(401);
+        expect(await responseJson(await app.status(oldPairing), 200)).toMatchObject({ status: "paired" });
+        const replacement = await app.pair("morty-generation-two");
+        const current = v.parse(
+            v.object({ runtimeCredential: v.string() }),
+            await responseJson(await app.claim(replacement), 200),
+        );
+        expect((await app.publish(replacement, current.runtimeCredential)).status).toBe(204);
+    },
+);

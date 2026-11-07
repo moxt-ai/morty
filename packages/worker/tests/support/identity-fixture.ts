@@ -2,7 +2,7 @@ import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import {
     miniflareDurableObjects,
-    prepareTestMobiusPlatformBindings,
+    prepareTestMortyPlatformBindings,
 } from "@morty-build/platform-test-support/cloudflare";
 import { createResponseLossProxy } from "@morty-build/platform-test-support/response-loss-proxy";
 import { build } from "esbuild";
@@ -89,14 +89,14 @@ export async function prepareIdentityFixture(options: IdentityFixtureOptions = {
         throw new Error("Missing Chat Worker bundle");
     }
     const script = output.text;
-    const createBindings = await prepareTestMobiusPlatformBindings();
+    const createBindings = await prepareTestMortyPlatformBindings();
     return () => startIdentityFixture(options, script, createBindings);
 }
 
 async function startIdentityFixture(
     options: IdentityFixtureOptions,
     script: string,
-    createBindings: Awaited<ReturnType<typeof prepareTestMobiusPlatformBindings>>,
+    createBindings: Awaited<ReturnType<typeof prepareTestMortyPlatformBindings>>,
 ) {
     const platform = await startTestPlatform(
         options.platformAllowedOrigins === undefined ? {} : { allowedOrigins: options.platformAllowedOrigins },
@@ -113,9 +113,9 @@ async function startIdentityFixture(
                 const listener = new URL(appOrigin);
                 const baseConfiguration = {
                     APP_ORIGIN: appOrigin,
-                    MOBIUS_APP_ID: platform.appId,
-                    MOBIUS_APP_SECRET: platform.appCredential,
-                    MOBIUS_BASE_URL: executionNetwork?.origin ?? network?.origin ?? platform.baseUrl,
+                    MORTY_SERVICE_ID: platform.appId,
+                    MORTY_SERVICE_SECRET: platform.appCredential,
+                    MORTY_RELAY_URL: executionNetwork?.origin ?? network?.origin ?? platform.baseUrl,
                 };
                 const runtimeOptions = {
                     ...(options.listenOnLoopback === true
@@ -224,7 +224,7 @@ async function startIdentityFixture(
                     projectObjects = await cloudflare.getDurableObjectNamespace("CHAT_PROJECTS");
                 },
                 changePlatformCredential: async (credential: string) => {
-                    baseConfiguration.MOBIUS_APP_SECRET = credential;
+                    baseConfiguration.MORTY_SERVICE_SECRET = credential;
                     await cloudflare.setOptions(
                         convertV4MiniflareOptions({ ...runtimeOptions, bindings: baseConfiguration }),
                     );
@@ -232,7 +232,7 @@ async function startIdentityFixture(
                     projectObjects = await cloudflare.getDurableObjectNamespace("CHAT_PROJECTS");
                 },
                 changePlatformOrigin: async (origin: string) => {
-                    baseConfiguration.MOBIUS_BASE_URL = origin;
+                    baseConfiguration.MORTY_RELAY_URL = origin;
                     await cloudflare.setOptions(
                         convertV4MiniflareOptions({ ...runtimeOptions, bindings: baseConfiguration }),
                     );

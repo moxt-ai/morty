@@ -24,8 +24,8 @@ describe("local Agent discovery", () => {
         vi.useRealTimers();
     });
 
-    it("Given Pi needs local authentication, When discovery runs through the in-process adapter, Then Mobius reports only the Pi terminal login entrypoint", async () => {
-        const temporaryDirectory = await mkdtemp(join(tmpdir(), "mobius-pi-authentication-"));
+    it("Given Pi needs local authentication, When discovery runs through the in-process adapter, Then Morty reports only the Pi terminal login entrypoint", async () => {
+        const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-pi-authentication-"));
         const piPath = join(temporaryDirectory, "pi");
         const sessionPath = join(temporaryDirectory, "session.jsonl");
         try {
@@ -85,7 +85,7 @@ if (process.argv.includes("--version")) {
     });
 
     it("Given PATH contains an Agent in the default working directory, When the paired machine discovers Agents, Then the working directory does not exclude that executable", async () => {
-        const workspace = await mkdtemp(join(tmpdir(), "mobius-path-boundary-"));
+        const workspace = await mkdtemp(join(tmpdir(), "morty-path-boundary-"));
         const codexPath = join(workspace, "codex");
         try {
             await writeFile(codexPath, executableSource('process.stdout.write("codex 0.153.0\\n");'), { mode: 0o700 });

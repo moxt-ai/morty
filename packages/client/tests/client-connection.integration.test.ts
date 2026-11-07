@@ -9,7 +9,7 @@ import {
     port as readPort,
     sendText as writeServerTextFrame,
 } from "../../platform-test-support/src/websocket.ts";
-import { connectMobiusClient, type MobiusClient } from "../src/client.ts";
+import { connectMortyClient, type MortyClient } from "../src/client.ts";
 
 const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -85,10 +85,10 @@ describe("browser relay connection", () => {
         const statuses: boolean[] = [];
         const nextStatus = new ValueFeed<boolean>();
         const reconnecting = new ValueFeed<string>();
-        let client: MobiusClient | undefined;
+        let client: MortyClient | undefined;
 
         try {
-            const connecting = connectMobiusClient({
+            const connecting = connectMortyClient({
                 onReconnecting: () => reconnecting.push("reconnecting"),
                 onStatus: (online) => {
                     statuses.push(online);

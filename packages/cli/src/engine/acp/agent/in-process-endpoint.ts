@@ -21,7 +21,7 @@ export function acpEndpointTerminationError(termination: AcpEndpointTermination)
 }
 
 /**
- * An ACP Agent that Mobius hosts inside the daemon instead of spawning as an adapter process.
+ * An ACP Agent that Morty hosts inside the daemon instead of spawning as an adapter process.
  *
  * The implementation owns whatever it needs to serve ACP for one session — typically a vendor CLI
  * child process speaking that vendor's own protocol — and exposes it as a plain ACP `AgentApp`. The
@@ -62,7 +62,7 @@ export interface InProcessAcpEndpointOptions {
     readonly command: string;
     readonly cwd: string;
     readonly environment: Readonly<Record<string, string>>;
-    /** Resolves after Mobius processes the update, backpressuring the local producer. */
+    /** Resolves after Morty processes the update, backpressuring the local producer. */
     readonly onSessionUpdate: (notification: IdentifiedSessionNotification) => Promise<void>;
 }
 

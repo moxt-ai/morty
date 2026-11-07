@@ -11,8 +11,8 @@ export interface ProjectWorkerRoutingBindings {
 
 /** A request executing inside the Project Durable Object, beside the Project's own store. */
 export interface ProjectDurableObjectExecutionBindings extends ProjectWorkerRoutingBindings {
-    readonly MOBIUS_PROJECT_STORE: PlatformProjectStore;
-    readonly MOBIUS_PROJECT_ID: string;
+    readonly MORTY_PROJECT_STORE: PlatformProjectStore;
+    readonly MORTY_PROJECT_ID: string;
 }
 
 export type ProjectDurableObjectRoutingBindings = ProjectWorkerRoutingBindings | ProjectDurableObjectExecutionBindings;
@@ -75,7 +75,7 @@ export async function routeProjectDurableObject(
     bindings: ProjectDurableObjectRoutingBindings,
     allowedOrigins: ReadonlySet<string>,
 ): Promise<Response | null> {
-    if ("MOBIUS_PROJECT_STORE" in bindings) {
+    if ("MORTY_PROJECT_STORE" in bindings) {
         return null;
     }
     const pathname = new URL(request.url).pathname;

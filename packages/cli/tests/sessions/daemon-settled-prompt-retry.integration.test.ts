@@ -79,7 +79,7 @@ async function retrySettled(peer: RealDaemonPeer, commandId: string): Promise<re
 }
 
 test("Given a completed prompt, When a client retries it before and after a daemon restart, Then each retry is answered settled and restates the outcome once, marked as restated", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-settled-prompt-retry-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-settled-prompt-retry-"));
     try {
         const executableDirectory = await writeControlledAcpExecutable(directory);
         await withControlledDaemon(
@@ -92,12 +92,12 @@ test("Given a completed prompt, When a client retries it before and after a daem
                 if (original.kind !== "event") {
                     throw new Error("Expected the command's outcome");
                 }
-                expect(original.event.mobiusMetadata?.restated).toBeUndefined();
+                expect(original.event.mortyMetadata?.restated).toBeUndefined();
                 // A restatement keeps when the outcome was recorded: receivers that predate the restated marker
                 // report that time as when the command ended. It is marked as the outcome the Runtime recorded.
                 const restatement = {
                     payload: original.event.payload,
-                    mobiusMetadata: { recordedOutcome: true, restated: true },
+                    mortyMetadata: { recordedOutcome: true, restated: true },
                     recordedAt: original.event.recordedAt,
                 };
 

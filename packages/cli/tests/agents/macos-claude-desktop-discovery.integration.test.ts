@@ -15,7 +15,7 @@ test.runIf(process.platform === "darwin").each([
     async ({ directories }) => {
         await using provider = await FakeAnthropicProvider.start("claude-sonnet-4-6", "DESKTOP_DISCOVERY_REPLY");
         await using claude = await ClaudeFixture.create(provider);
-        const directory = await mkdtemp(join(tmpdir(), "mobius-macos-desktop-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-macos-desktop-"));
         const workspace = join(directory, "workspace");
         const home = join(directory, "home");
         const engineDirectory = join(home, "Library", "Application Support", "Claude", "claude-code", ...directories);

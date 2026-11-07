@@ -15,9 +15,9 @@ import { SessionRuntimeFixture as SessionManager } from "../support/session-runt
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 
 test("Given real Codex initializes but its process is killed during model discovery, When discovery completes, Then the dead backend is unavailable", async () => {
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "DISCOVERY_REPLY");
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "DISCOVERY_REPLY");
     await using codex = await CodexFixture.create(provider);
-    const directory = await mkdtemp(join(tmpdir(), "mobius-real-codex-exit-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-real-codex-exit-"));
     try {
         const executable = join(directory, "codex.mjs");
         await writeFile(
@@ -58,9 +58,9 @@ child.once("exit", code => process.exit(code ?? 1));
 test.skipIf(process.platform === "win32")(
     "Given a discovered real Codex executable changes, When the existing conversation continues and a new one opens, Then the existing process works and the new runtime is rejected",
     async () => {
-        await using provider = await FakeOpenAiProvider.start("mobius-test-model", "IDENTITY_REPLY");
+        await using provider = await FakeOpenAiProvider.start("morty-test-model", "IDENTITY_REPLY");
         await using codex = await CodexFixture.create(provider);
-        const directory = await mkdtemp(join(tmpdir(), "mobius-real-codex-identity-"));
+        const directory = await mkdtemp(join(tmpdir(), "morty-real-codex-identity-"));
         const observer = new RecordingObserver();
         const manager = new SessionManager({
             observer,

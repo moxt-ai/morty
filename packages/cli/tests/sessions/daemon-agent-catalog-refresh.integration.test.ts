@@ -235,7 +235,7 @@ test.for([
     async ({ agentId, queryBeforeUpgrade }) => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(new Date("2026-10-29T00:00:00Z"));
-        const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-daemon-agent-refresh-"));
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-agent-refresh-"));
         const workspace = join(stateDirectory, "workspace");
         const nativeStateDirectory = join(stateDirectory, "native");
         const binDirectory = join(stateDirectory, "bin");

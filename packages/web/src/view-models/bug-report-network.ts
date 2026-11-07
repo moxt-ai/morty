@@ -79,7 +79,7 @@ export async function collectNetworkDiagnostics(
         server === null
             ? Promise.resolve(unavailable("NO_ACTIVE_RUNTIME"))
             : probe(() => server.readNetwork(signal), signal, parent);
-    async function measureBrowserMobius(): Promise<Probe<number>> {
+    async function measureBrowserRelay(): Promise<Probe<number>> {
         const hops = await hopsResult;
         if (hops.kind !== "available") {
             return unavailable(hops.code);
@@ -87,12 +87,12 @@ export async function collectNetworkDiagnostics(
         if (browser === null) {
             return unavailable("NO_ACTIVE_TRANSPORT");
         }
-        return await probe(() => browser.measureMobiusLatency(hops.value.mobiusOrigin, signal), signal, parent);
+        return await probe(() => browser.measureRelayLatency(hops.value.relayOrigin, signal), signal, parent);
     }
-    const [browserMorty, hops, browserMobius] = await Promise.all([
+    const [browserMorty, hops, browserRelay] = await Promise.all([
         browserMortyResult,
         hopsResult,
-        measureBrowserMobius(),
+        measureBrowserRelay(),
     ]);
     parent.throwIfAborted();
     return {
@@ -101,14 +101,14 @@ export async function collectNetworkDiagnostics(
         connection,
         measurements: {
             browserMorty: latency(browserMorty),
-            browserMobius: latency(browserMobius),
-            mortyMobius:
+            browserRelay: latency(browserRelay),
+            mortyMorty:
                 hops.kind === "available"
-                    ? latency({ kind: "available", value: hops.value.mortyMobiusLatencyMs })
+                    ? latency({ kind: "available", value: hops.value.mortyRelayLatencyMs })
                     : hops,
-            mobiusDaemon:
+            relayRuntime:
                 hops.kind === "available"
-                    ? latency({ kind: "available", value: hops.value.mobiusDaemonLatencyMs })
+                    ? latency({ kind: "available", value: hops.value.relayRuntimeLatencyMs })
                     : hops,
         },
     };

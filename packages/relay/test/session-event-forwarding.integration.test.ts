@@ -65,10 +65,10 @@ async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<Ru
         const response = await relay.fetch(`https://runtime.internal/projects/${projectId}/${path}`, {
             headers: {
                 Upgrade: "websocket",
-                "x-mobius-channel-id": "wire-events-channel",
-                "x-mobius-runtime-id": runtimeId,
-                "x-mobius-host-credential-id": hostCredentialId,
-                "x-mobius-host-credential-kind": "project",
+                "x-morty-channel-id": "wire-events-channel",
+                "x-morty-runtime-id": runtimeId,
+                "x-morty-host-credential-id": hostCredentialId,
+                "x-morty-host-credential-kind": "project",
             },
         });
         expect(response.status).toBe(101);

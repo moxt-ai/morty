@@ -1,8 +1,8 @@
 import { relayDrizzle, type SqlDatabase } from "@morty-build/relay-core/database";
 import { SqliteProjectStore } from "@morty-build/relay-core/project-store";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import type { PlatformProjectStore } from "../infra/platform-project-store.ts";
-import { platformAppCredentialProject, platformAuditEvent } from "../schema/project-do/index.ts";
+import { platformAuditEvent } from "../schema/project-do/index.ts";
 
 /**
  * A Project's Relay and Platform operations over its own SQLite storage. Only the Project Durable Object
@@ -57,22 +57,5 @@ export class SqlitePlatformProjectStore extends SqliteProjectStore implements Pl
             recorded_at: row.recordedAt,
             subject_id: row.subjectId,
         }));
-    };
-
-    readonly readLegacyCredentialScope: PlatformProjectStore["readLegacyCredentialScope"] = async (
-        credentialId,
-        signal,
-    ) => {
-        const rows = await relayDrizzle(this.#database, signal)
-            .select({ createdAt: platformAppCredentialProject.createdAt })
-            .from(platformAppCredentialProject)
-            .where(
-                and(
-                    eq(platformAppCredentialProject.credentialId, credentialId),
-                    eq(platformAppCredentialProject.projectId, this.#projectId),
-                ),
-            )
-            .limit(1);
-        return rows[0]?.createdAt ?? null;
     };
 }

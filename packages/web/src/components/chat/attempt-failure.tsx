@@ -11,7 +11,7 @@ export function AttemptFailure({
 }) {
     const command =
         code === "binding_not_approved" && approval.kind === "bot-approval" && isIdentifier(approval.botId)
-            ? `mobius bot approve --bot ${approval.botId}`
+            ? `morty bot approve --bot ${approval.botId}`
             : "";
     return (
         <div

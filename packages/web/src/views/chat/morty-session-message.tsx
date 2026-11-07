@@ -230,7 +230,7 @@ function UserMessage({
     );
 }
 
-export function MobiusAssistantText({
+export function MortyAssistantText({
     text,
     createResourceStore,
     openLocalFile,
@@ -258,7 +258,7 @@ export function MobiusAssistantText({
     );
 }
 
-export function MobiusSessionMessage({
+export function MortySessionMessage({
     message,
     deliveryUnknownUserMessageId,
     onRemoveUnknownDelivery,
@@ -304,7 +304,7 @@ export function MobiusSessionMessage({
     if (presentation.kind === "message") {
         if (presentation.content.type === "text") {
             return (
-                <MobiusAssistantText
+                <MortyAssistantText
                     createResourceStore={createResourceStore}
                     openLocalFile={openLocalFile}
                     readImage={readImage}

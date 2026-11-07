@@ -17,7 +17,7 @@ export class CodexAppServerError extends AcpExecutionError {
     }
 }
 
-/** A request the app-server addressed to Mobius, which Mobius must answer by id. */
+/** A request the app-server addressed to Morty, which Morty must answer by id. */
 export interface CodexAppServerServerRequest {
     readonly id: number | string;
     readonly method: string;
@@ -194,7 +194,7 @@ export class CodexAppServerClient {
                     ? error
                     : new CodexAppServerError(
                           "codex_app_server_client_error",
-                          "Mobius could not process a Codex app-server message",
+                          "Morty could not process a Codex app-server message",
                           { cause: error },
                       ),
             );
@@ -285,7 +285,7 @@ export class CodexAppServerClient {
             "initialize",
             {
                 capabilities: { experimentalApi: true },
-                clientInfo: { name: "mobius", version: "1.0.0" },
+                clientInfo: { name: "morty", version: "1.0.0" },
             },
             AbortSignal.any([signal, AbortSignal.timeout(INITIALIZE_TIMEOUT_MILLISECONDS)]),
         );

@@ -1,10 +1,10 @@
 import {
-    MobiusApiError,
-    MobiusAppCredentialProvider,
-    MobiusCancellationError,
-    MobiusError,
-    MobiusPlatformAppClient,
-    MobiusTimeoutError,
+    MortyApiError,
+    MortyAppCredentialProvider,
+    MortyCancellationError,
+    MortyError,
+    MortyPlatformAppClient,
+    MortyTimeoutError,
 } from "@morty-build/client/platform";
 import {
     decodeRuntimeDiagnosticsResult,
@@ -12,7 +12,7 @@ import {
     type SessionConfigurationSelection,
     type SessionReadyEvent,
 } from "@morty-build/client/protocol";
-import { MobiusClient, MobiusRuntimePairingRequest } from "@morty-build/client/server";
+import { MortyClient, MortyRuntimePairingRequest } from "@morty-build/client/server";
 import * as v from "valibot";
 import {
     PlatformProjectError,
@@ -103,7 +103,7 @@ export class PlatformProjectGateway {
         try {
             const bindings = v.parse(platformEndpointBindingsSchema, this.#bindings);
             const appOrigin = v.safeParse(appOriginBindingSchema, this.#bindings);
-            const endpoint = new URL(bindings.MOBIUS_BASE_URL);
+            const endpoint = new URL(bindings.MORTY_RELAY_URL);
             if (
                 (endpoint.protocol !== "https:" &&
                     !(
@@ -118,7 +118,7 @@ export class PlatformProjectGateway {
             ) {
                 throw new Error("Invalid Morty relay endpoint");
             }
-            return { origin: endpoint.origin, appId: v.parse(platformIdentifier, bindings.MOBIUS_APP_ID) };
+            return { origin: endpoint.origin, appId: v.parse(platformIdentifier, bindings.MORTY_SERVICE_ID) };
         } catch (cause) {
             throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Morty relay is not configured.", 503, { cause });
         }
@@ -126,10 +126,7 @@ export class PlatformProjectGateway {
 
     readonly createPairing = async (projectId: string, idempotencyKey: string, signal: AbortSignal) =>
         await this.#withProject(projectId, signal, async (client) => {
-            const pairing = await client.runtimePairings.create(
-                new MobiusRuntimePairingRequest(idempotencyKey),
-                signal,
-            );
+            const pairing = await client.runtimePairings.create(new MortyRuntimePairingRequest(idempotencyKey), signal);
             if (pairing.projectId !== projectId) {
                 throw new PlatformProjectError(
                     "PLATFORM_INVALID_RESPONSE",
@@ -157,11 +154,11 @@ export class PlatformProjectGateway {
         const parsedRuntimeId = v.parse(platformIdentifier, runtimeId);
         const signal = AbortSignal.any([parent, AbortSignal.timeout(15000)]);
         const endpoint = new URL(this.configuration().origin);
-        endpoint.pathname = `/mobius/api/v1/projects/${encodeURIComponent(parsedProjectId)}/runtimes/${encodeURIComponent(parsedRuntimeId)}/agents`;
+        endpoint.pathname = `/morty/api/v1/projects/${encodeURIComponent(parsedProjectId)}/runtimes/${encodeURIComponent(parsedRuntimeId)}/agents`;
         try {
             const response = await fetch(endpoint, {
                 headers: {
-                    authorization: `Bearer ${v.parse(platformCredentialBindingsSchema, this.#bindings).MOBIUS_APP_SECRET}`,
+                    authorization: `Bearer ${v.parse(platformCredentialBindingsSchema, this.#bindings).MORTY_SERVICE_SECRET}`,
                 },
                 signal,
             });
@@ -204,13 +201,13 @@ export class PlatformProjectGateway {
 
     readonly readRuntimeDiagnostics = async (projectId: string, runtimeId: string, parent: AbortSignal) => {
         const endpoint = new URL(this.configuration().origin);
-        endpoint.pathname = `/mobius/api/v1/projects/${encodeURIComponent(v.parse(platformIdentifier, projectId))}/runtimes/${encodeURIComponent(v.parse(platformIdentifier, runtimeId))}/diagnostics`;
+        endpoint.pathname = `/morty/api/v1/projects/${encodeURIComponent(v.parse(platformIdentifier, projectId))}/runtimes/${encodeURIComponent(v.parse(platformIdentifier, runtimeId))}/diagnostics`;
         const signal = AbortSignal.any([parent, AbortSignal.timeout(10_000)]);
         try {
             const response = await fetch(endpoint, {
                 signal,
                 headers: {
-                    authorization: `Bearer ${v.parse(platformCredentialBindingsSchema, this.#bindings).MOBIUS_APP_SECRET}`,
+                    authorization: `Bearer ${v.parse(platformCredentialBindingsSchema, this.#bindings).MORTY_SERVICE_SECRET}`,
                 },
             });
             if (!response.ok) {
@@ -234,11 +231,11 @@ export class PlatformProjectGateway {
         const parsedRuntimeId = v.parse(platformIdentifier, runtimeId);
         const signal = AbortSignal.any([parent, AbortSignal.timeout(15_000)]);
         const endpoint = new URL(this.configuration().origin);
-        endpoint.pathname = `/mobius/api/v1/projects/${encodeURIComponent(parsedProjectId)}/runtimes/${encodeURIComponent(parsedRuntimeId)}/latency`;
+        endpoint.pathname = `/morty/api/v1/projects/${encodeURIComponent(parsedProjectId)}/runtimes/${encodeURIComponent(parsedRuntimeId)}/latency`;
         try {
             const response = await fetch(endpoint, {
                 headers: {
-                    authorization: `Bearer ${v.parse(platformCredentialBindingsSchema, this.#bindings).MOBIUS_APP_SECRET}`,
+                    authorization: `Bearer ${v.parse(platformCredentialBindingsSchema, this.#bindings).MORTY_SERVICE_SECRET}`,
                 },
                 signal,
             });
@@ -268,16 +265,16 @@ export class PlatformProjectGateway {
         }
     };
 
-    readonly measureMobiusLatency = async (projectId: string, parent: AbortSignal): Promise<number> => {
+    readonly measureRelayLatency = async (projectId: string, parent: AbortSignal): Promise<number> => {
         const parsedProjectId = v.parse(platformIdentifier, projectId);
         const signal = AbortSignal.any([parent, AbortSignal.timeout(15_000)]);
         const endpoint = new URL(this.configuration().origin);
-        endpoint.pathname = `/mobius/api/v1/projects/${encodeURIComponent(parsedProjectId)}/latency`;
+        endpoint.pathname = `/morty/api/v1/projects/${encodeURIComponent(parsedProjectId)}/latency`;
         const startedAt = performance.now();
         try {
             const response = await fetch(endpoint, {
                 headers: {
-                    authorization: `Bearer ${v.parse(platformCredentialBindingsSchema, this.#bindings).MOBIUS_APP_SECRET}`,
+                    authorization: `Bearer ${v.parse(platformCredentialBindingsSchema, this.#bindings).MORTY_SERVICE_SECRET}`,
                 },
                 signal,
             });
@@ -315,8 +312,11 @@ export class PlatformProjectGateway {
     ): Promise<WebSocket> => {
         signal.throwIfAborted();
         const endpoint = new URL(this.configuration().origin);
-        endpoint.pathname = `/mobius/api/v1/projects/${encodeURIComponent(v.parse(platformIdentifier, projectId))}/runtimes/${encodeURIComponent(v.parse(platformIdentifier, runtimeId))}/host`;
-        endpoint.searchParams.set("token", v.parse(platformCredentialBindingsSchema, this.#bindings).MOBIUS_APP_SECRET);
+        endpoint.pathname = `/morty/api/v1/projects/${encodeURIComponent(v.parse(platformIdentifier, projectId))}/runtimes/${encodeURIComponent(v.parse(platformIdentifier, runtimeId))}/host`;
+        endpoint.searchParams.set(
+            "token",
+            v.parse(platformCredentialBindingsSchema, this.#bindings).MORTY_SERVICE_SECRET,
+        );
         const handshake = new AbortController();
         const abort = () => handshake.abort(signal.reason);
         signal.addEventListener("abort", abort, { once: true });
@@ -523,7 +523,7 @@ export class PlatformProjectGateway {
                     ready,
                     entry: {
                         entryId: session.sessionId,
-                        mobiusSessionIds: [session.sessionId],
+                        mortySessionIds: [session.sessionId],
                         nativeSessionId: session.sessionId,
                         title: session.title,
                         directoryId: ready.directoryId,
@@ -568,7 +568,7 @@ export class PlatformProjectGateway {
     readonly nativeSessions = async (
         projectId: string,
         runtimeId: string,
-        request: Parameters<MobiusClient["runtimes"]["nativeSessions"]>[1],
+        request: Parameters<MortyClient["runtimes"]["nativeSessions"]>[1],
         signal: AbortSignal,
     ) =>
         await this.#withProject(
@@ -584,7 +584,7 @@ export class PlatformProjectGateway {
         projectId: string,
         runtimeId: string,
         operationId: string,
-        input: Parameters<MobiusClient["runtimes"]["forkNativeSession"]>[2],
+        input: Parameters<MortyClient["runtimes"]["forkNativeSession"]>[2],
         signal: AbortSignal,
     ) =>
         await this.#withProject(
@@ -598,8 +598,8 @@ export class PlatformProjectGateway {
         projectId: string,
         runtimeId: string,
         sessionId: string,
-        identity: Parameters<MobiusClient["sessions"]["previewRuntimeNativeEvents"]>[2],
-        page: Parameters<MobiusClient["sessions"]["previewRuntimeNativeEvents"]>[3],
+        identity: Parameters<MortyClient["sessions"]["previewRuntimeNativeEvents"]>[2],
+        page: Parameters<MortyClient["sessions"]["previewRuntimeNativeEvents"]>[3],
         signal: AbortSignal,
     ) =>
         await this.#withProject(
@@ -613,7 +613,7 @@ export class PlatformProjectGateway {
     readonly findNativeSessionByNativeSessionId = async (
         projectId: string,
         runtimeId: string,
-        request: Parameters<MobiusClient["runtimes"]["findNativeSessionByNativeSessionId"]>[1],
+        request: Parameters<MortyClient["runtimes"]["findNativeSessionByNativeSessionId"]>[1],
         signal: AbortSignal,
     ) =>
         await this.#withProject(
@@ -633,15 +633,15 @@ export class PlatformProjectGateway {
     readonly #withProject = async <T>(
         projectId: string,
         signal: AbortSignal,
-        operation: (client: MobiusClient) => Promise<T>,
+        operation: (client: MortyClient) => Promise<T>,
         operationTimeoutMilliseconds = 15000,
     ): Promise<T> => {
         signal.throwIfAborted();
-        const client = new MobiusClient({
+        const client = new MortyClient({
             endpoint: this.configuration().origin,
             projectId: v.parse(platformIdentifier, projectId),
-            credentialProvider: new MobiusAppCredentialProvider(
-                v.parse(platformCredentialBindingsSchema, this.#bindings).MOBIUS_APP_SECRET,
+            credentialProvider: new MortyAppCredentialProvider(
+                v.parse(platformCredentialBindingsSchema, this.#bindings).MORTY_SERVICE_SECRET,
             ),
             operationTimeoutMilliseconds,
         });
@@ -649,22 +649,22 @@ export class PlatformProjectGateway {
             return await operation(client);
         } catch (cause) {
             signal.throwIfAborted();
-            if (cause instanceof MobiusCancellationError || cause instanceof PlatformProjectError) {
+            if (cause instanceof MortyCancellationError || cause instanceof PlatformProjectError) {
                 throw cause;
             }
-            if (cause instanceof MobiusTimeoutError) {
+            if (cause instanceof MortyTimeoutError) {
                 throw new PlatformProjectError("PLATFORM_TIMEOUT", "Morty relay did not respond in time.", 504, {
                     cause,
                 });
             }
-            if (cause instanceof MobiusApiError && cause.status === 404) {
+            if (cause instanceof MortyApiError && cause.status === 404) {
                 throw new PlatformProjectError("NOT_FOUND", "The Runtime pairing was not found.", 404, { cause });
             }
-            if (cause instanceof MobiusError) {
+            if (cause instanceof MortyError) {
                 throw new PlatformProjectError(
                     cause.code,
                     runtimeSetupMessage(cause.code),
-                    cause instanceof MobiusApiError ? cause.status : 502,
+                    cause instanceof MortyApiError ? cause.status : 502,
                     { cause },
                 );
             }
@@ -685,10 +685,10 @@ export class PlatformProjectGateway {
         const configuration = this.configuration();
         const locationHint = requestedLocationHint ?? "apac";
         const reference = clientReference ?? userId;
-        const client = new MobiusPlatformAppClient({
+        const client = new MortyPlatformAppClient({
             endpoint: configuration.origin,
-            credentialProvider: new MobiusAppCredentialProvider(
-                v.parse(platformCredentialBindingsSchema, this.#bindings).MOBIUS_APP_SECRET,
+            credentialProvider: new MortyAppCredentialProvider(
+                v.parse(platformCredentialBindingsSchema, this.#bindings).MORTY_SERVICE_SECRET,
             ),
             operationTimeoutMilliseconds: 15000,
         });
@@ -717,15 +717,15 @@ export class PlatformProjectGateway {
             return v.parse(platformProjectSchema, project);
         } catch (cause) {
             signal.throwIfAborted();
-            if (cause instanceof MobiusCancellationError || cause instanceof PlatformProjectError) {
+            if (cause instanceof MortyCancellationError || cause instanceof PlatformProjectError) {
                 throw cause;
             }
-            if (cause instanceof MobiusTimeoutError) {
+            if (cause instanceof MortyTimeoutError) {
                 throw new PlatformProjectError("PLATFORM_TIMEOUT", "Morty relay did not respond in time.", 504, {
                     cause,
                 });
             }
-            if (cause instanceof MobiusApiError && (cause.status === 401 || cause.status === 403)) {
+            if (cause instanceof MortyApiError && (cause.status === 401 || cause.status === 403)) {
                 throw new PlatformProjectError(
                     "PLATFORM_APP_UNAUTHORIZED",
                     "The Chat App is not authorized to provision Projects.",
@@ -733,7 +733,7 @@ export class PlatformProjectGateway {
                     { cause },
                 );
             }
-            if (cause instanceof MobiusApiError && cause.status === 409) {
+            if (cause instanceof MortyApiError && cause.status === 409) {
                 throw new PlatformProjectError(
                     "PLATFORM_PROJECT_CONFLICT",
                     "Project provisioning conflicts with an earlier request.",

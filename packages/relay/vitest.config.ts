@@ -62,7 +62,7 @@ export default defineConfig(async (): Promise<ViteUserConfig> => {
                     d1Databases: ["TEST_UNINITIALIZED_SHARD"],
                     r2Buckets: ["R2_BUCKET_WNAM"],
                     bindings: {
-                        MOBIUS_PLATFORM_ALLOWED_ORIGINS: '["*"]',
+                        MORTY_ALLOWED_ORIGINS: '["*"]',
                         TEST_PLATFORM_MIGRATIONS: platformMigrations,
                     },
                     workers: [recording],

@@ -1,4 +1,4 @@
-import type { ForkMobiusNativeSessionRequest } from "@morty-build/client";
+import type { ForkMortyNativeSessionRequest } from "@morty-build/client";
 import type {
     AgentSettingsDiscoverCommand,
     AgentSettingsDiscoveredEvent,
@@ -25,7 +25,7 @@ export interface LocalSessionOperations extends SessionRuntimeOperations {
         scope: Scope,
         runtimeId: string,
         operationId: string,
-        input: ForkMobiusNativeSessionRequest,
+        input: ForkMortyNativeSessionRequest,
         signal: AbortSignal,
     ) => ReturnType<NativeSessionForks["fork"]>;
     readonly requestWorkspace: (

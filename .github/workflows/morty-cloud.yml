@@ -46,7 +46,7 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.local/share/pnpm/store
-          key: mobius-cloud-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: morty-cloud-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
       - name: Install Morty dependencies
         run: pnpm install --frozen-lockfile
       - name: Prepare the environment-owned Morty service credential
@@ -94,7 +94,7 @@ jobs:
           if not re.fullmatch(r'[0-9]+', run_id):
               raise SystemExit('A numeric successful archive run is required')
           run = json.loads(subprocess.check_output(['gh', 'api', f'repos/moxt-ai/mobius-morty/actions/runs/{run_id}']))
-          if run['conclusion'] != 'success' or run['head_branch'] != 'main' or run['head_repository']['full_name'] != 'moxt-ai/mobius-morty' or run['path'] != '.github/workflows/mobius-cloud.yml' or run['event'] not in ['push', 'workflow_dispatch']:
+          if run['conclusion'] != 'success' or run['head_branch'] != 'main' or run['head_repository']['full_name'] != 'moxt-ai/mobius-morty' or run['path'] != '.github/workflows/morty-cloud.yml' or run['event'] not in ['push', 'workflow_dispatch']:
               raise SystemExit('Archive run is not an authorized successful release')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('revision=' + run['head_sha'] + '\n')

@@ -750,7 +750,7 @@ function applySessionEvent(
 function restatedOutcomeEvent(outcome: PromptMessageOutcome, page: SessionPresentationEvent): RestatedOutcomeEvent {
     return {
         eventId: `restated-outcome:${outcome.payload.commandId}`,
-        mobiusMetadata: { restated: true },
+        mortyMetadata: { restated: true },
         payload: outcome.payload,
         recordedAt: outcome.recordedAt,
         sessionGenerationId: page.sessionGenerationId,

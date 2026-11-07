@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import { afterAll, expect, it } from "vitest";
-import { createTestMobiusPlatformApp } from "../../platform-test-support/src/app.ts";
+import { createTestMortyPlatformApp } from "../../platform-test-support/src/app.ts";
 import { revokeMortyCredential, seedMortyService } from "../../platform-test-support/src/service-fixture.ts";
 import { createPlatformGateways, PlatformAuthenticationConfiguration } from "../src/worker.ts";
 import { registerRuntimeFixture } from "./registered-runtime.ts";
@@ -50,7 +50,7 @@ class Inbox {
 }
 
 async function openSessionView(slug: string) {
-    const worker = createTestMobiusPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
+    const worker = createTestMortyPlatformApp(new PlatformAuthenticationConfiguration(), createPlatformGateways);
     const { appId, defaultCredential } = await seedMortyService(env.PLATFORM_DIRECTORY_DATABASE);
     const headers = {
         authorization: `Bearer ${defaultCredential.credential}`,
@@ -79,7 +79,7 @@ async function openSessionView(slug: string) {
     await registerRuntimeFixture(projectId, runtimeId);
     const daemonResponse = await env.RUNTIME_RELAY.getByName(runtimeId).fetch(
         `https://runtime.internal/projects/${projectId}/daemon`,
-        { headers: { Upgrade: "websocket", "x-mobius-channel-id": runtimeId, "x-mobius-runtime-id": runtimeId } },
+        { headers: { Upgrade: "websocket", "x-morty-channel-id": runtimeId, "x-morty-runtime-id": runtimeId } },
     );
     expect(daemonResponse.status).toBe(101);
     const daemon = daemonResponse.webSocket;

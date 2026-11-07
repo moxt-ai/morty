@@ -23,7 +23,7 @@ function decodedProtocolValue<T>(decode: (value: unknown) => T): z.ZodType<T> {
         try {
             return decode(value);
         } catch {
-            context.addIssue({ code: "custom", message: "Value does not match the Mobius protocol" });
+            context.addIssue({ code: "custom", message: "Value does not match the Morty protocol" });
             return z.NEVER;
         }
     });

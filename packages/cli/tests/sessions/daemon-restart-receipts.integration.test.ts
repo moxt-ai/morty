@@ -14,7 +14,7 @@ import { writeControlledAcpExecutable } from "../support/controlled-acp-executab
 
 // @no-uc: Compatibility; restart receipts distinguish started, queued and completed commands through the daemon wire protocol.
 test("Given running and queued prompts, When the daemon restarts, Then it reports restart outcomes and only unstarted commands can be resubmitted", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-restart-receipts-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-restart-receipts-"));
     try {
         const executableDirectory = await writeControlledAcpExecutable(directory);
         await withRealDaemon(

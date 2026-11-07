@@ -83,7 +83,7 @@ export const sessionPromptCommand: RuntimeCommand = {
             readArtifact: async (attachment, signal) => {
                 const artifact = await context.externalContent.read(
                     message.sessionId,
-                    `mobius-content:${attachment.kind}:${attachment.contentKey}`,
+                    `morty-content:${attachment.kind}:${attachment.contentKey}`,
                     signal,
                 );
                 if (artifact === null) {

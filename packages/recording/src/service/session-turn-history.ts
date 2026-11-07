@@ -354,7 +354,7 @@ class ProjectionFold {
             if (input.kind === "unreadable_text") {
                 this.#foldUnreadableText(input);
             } else if (input.event.type === "lifecycle-metadata") {
-                if (input.event.mobiusMetadata?.restated === true) {
+                if (input.event.mortyMetadata?.restated === true) {
                     this.#foldRestatedOutcome(input.event, input.event.payload);
                 } else {
                     this.#foldLifecycle(input.event, input.event.payload);
@@ -645,7 +645,7 @@ class ProjectionFold {
             payload.kind === "prompt.completed" ||
             payload.kind === "prompt.failed" ||
             payload.kind === "prompt.failed-before-start";
-        if (outcome && event.mobiusMetadata?.recordedOutcome === true && this.#turn(payload.commandId) !== null) {
+        if (outcome && event.mortyMetadata?.recordedOutcome === true && this.#turn(payload.commandId) !== null) {
             this.#foldLifecycle(event, payload);
         }
     }

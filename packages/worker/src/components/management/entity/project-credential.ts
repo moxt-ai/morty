@@ -2,7 +2,7 @@ import * as v from "valibot";
 
 const projectId = v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u));
 const secret = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/u));
-const credentialKind = v.picklist(["mobius_transfer_v2", "mobius_recovery_v1"]);
+const credentialKind = v.picklist(["morty_transfer_v1", "morty_recovery_v1"]);
 const credential = v.tuple([credentialKind, projectId, secret]);
 
 export function readProjectCredential(value: unknown) {

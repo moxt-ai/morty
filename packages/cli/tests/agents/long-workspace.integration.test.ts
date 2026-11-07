@@ -17,7 +17,7 @@ import { withRealDaemon } from "../support/agents/real-daemon.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 
 test("Given a deeply nested multibyte workspace, When real Codex runs a tool through the daemon, Then it writes in the selected directory and its native history reopens", async () => {
-    const root = await mkdtemp(join(tmpdir(), "mobius-long-codex-"));
+    const root = await mkdtemp(join(tmpdir(), "morty-long-codex-"));
     try {
         // macOS has a lower filesystem path limit; Linux also crosses the old 2048-character wire limit.
         const workspace = join(
@@ -32,7 +32,7 @@ test("Given a deeply nested multibyte workspace, When real Codex runs a tool thr
         }
         const prompt = "Write the actual working directory to workspace-result.txt, then report completion.";
         const command = `node -e "require('node:fs').writeFileSync('workspace-result.txt', process.cwd())"`;
-        await using provider = await FakeOpenAiProvider.start("mobius-test-model", "LONG_WORKSPACE_DONE", {
+        await using provider = await FakeOpenAiProvider.start("morty-test-model", "LONG_WORKSPACE_DONE", {
             toolPrompt: prompt,
             toolSequence: [
                 {

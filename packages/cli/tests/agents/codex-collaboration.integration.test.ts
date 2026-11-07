@@ -67,7 +67,7 @@ class Messages {
 test("Given real Codex dispatches and waits for a subagent, When the turn runs through the daemon, Then ACP exposes both collaboration calls", async () => {
     const prompt = "Dispatch a subagent, wait for it, then report completion.";
     const childPrompt = "Reply exactly: child complete.";
-    const provider = await FakeOpenAiProvider.start("mobius-test-model", "Parent complete", {
+    const provider = await FakeOpenAiProvider.start("morty-test-model", "Parent complete", {
         toolPrompt: prompt,
         toolSequence: [
             {
@@ -78,7 +78,7 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
         ],
     });
     const codex = await CodexFixture.create(provider);
-    const stateDirectory = await mkdtemp(join(tmpdir(), "mobius-real-codex-collaboration-"));
+    const stateDirectory = await mkdtemp(join(tmpdir(), "morty-real-codex-collaboration-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);
     const relay = createServer((_request, response) => response.writeHead(404).end());

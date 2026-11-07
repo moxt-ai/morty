@@ -365,7 +365,7 @@ interface ErrorCause {
 
 function sanitizeErrorText(value: string) {
     return value
-        .replace(/mobius_anon_v2_[A-Za-z0-9_-]+|mobius_(?:transfer_v2|recovery_v1)\.[A-Za-z0-9._-]+/gu, "[REDACTED]")
+        .replace(/morty_anon_v1_[A-Za-z0-9_-]+|morty_(?:transfer_v1|recovery_v1)\.[A-Za-z0-9._-]+/gu, "[REDACTED]")
         .replace(/([?&](?:token|code)=)[^&\s#]+/giu, "$1[REDACTED]");
 }
 
@@ -444,7 +444,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return fail("INVALID_RESPONSE");
         }
     };
-    const credential = (value: unknown) => text(value, /^mobius_anon_v2_[A-Za-z0-9_-]{43}$/u);
+    const credential = (value: unknown) => text(value, /^morty_anon_v1_[A-Za-z0-9_-]{43}$/u);
 
     function origin(value: unknown) {
         const url = new URL(text(value));

@@ -52,28 +52,32 @@ describe("Session execution read contracts", () => {
         kind: "native.session.result",
         queued: [],
         queuedCancellation: "before-start",
+        interactionState: null,
         requestId: "request-execution-1",
         sessionId: "session-1",
         targetSessionId: "session-1",
         turn: null,
     } as const;
 
-    // @no-uc: Compatibility; a delivery state from a newer Runtime must not fail the execution read it rides on.
-    it("Given an execution whose command delivery state this reader does not know, When it is decoded, Then the execution is kept and the delivery reads as absent", () => {
-        const decoded = decodeNativeSessionResult(
-            JSON.stringify({ ...execution, command: { state: "superseded", by: "command-2" } }),
-        );
-        expect(decoded).toMatchObject({ action: "active-turn", turn: null, queued: [] });
-        expect(decoded.action === "active-turn" ? decoded.command : null).toBeUndefined();
+    it("Given an execution with an unknown command delivery state, When it crosses the launch protocol boundary, Then the malformed snapshot is rejected", () => {
+        expect(() =>
+            decodeNativeSessionResult(
+                JSON.stringify({ ...execution, command: { state: "superseded", by: "command-2" } }),
+            ),
+        ).toThrow();
     });
 
-    // @no-uc: Compatibility; a last-turn outcome from a newer Runtime must not fail the execution read it rides on.
-    it("Given an execution whose last turn outcome this reader does not know, When it is decoded, Then the execution is kept and the outcome reads as absent", () => {
-        const decoded = decodeNativeSessionResult(
-            JSON.stringify({ ...execution, lastTurn: { commandId: "command-1", state: "abandoned" } }),
-        );
-        expect(decoded).toMatchObject({ action: "active-turn", turn: null, queued: [] });
-        expect(decoded.action === "active-turn" ? decoded.lastTurn : null).toBeUndefined();
+    it("Given an execution with an unknown last turn outcome, When it crosses the launch protocol boundary, Then the malformed snapshot is rejected", () => {
+        expect(() =>
+            decodeNativeSessionResult(
+                JSON.stringify({ ...execution, lastTurn: { commandId: "command-1", state: "abandoned" } }),
+            ),
+        ).toThrow();
+    });
+
+    it("Given an execution missing current interaction recovery, When it crosses the launch protocol boundary, Then an older snapshot cannot silently clear pending requests", () => {
+        const { interactionState: _interactionState, ...oldSnapshot } = execution;
+        expect(() => decodeNativeSessionResult(JSON.stringify(oldSnapshot))).toThrow();
     });
 
     it("Given an execution with a known command delivery, When it is decoded, Then the delivery is kept", () => {

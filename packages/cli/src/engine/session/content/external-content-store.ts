@@ -5,7 +5,7 @@ import { z } from "zod";
 import { OperationError } from "../../infra/operation-error.ts";
 import { ScratchDirectory } from "../../storage/files/scratch-directory.ts";
 
-const contentRequest = /^mobius-content:(image|audio|resource):([a-f0-9]{64})$/u;
+const contentRequest = /^morty-content:(image|audio|resource):([a-f0-9]{64})$/u;
 const CONTENT_LIFETIME_MILLISECONDS = 24 * 60 * 60 * 1_000;
 const metadataSchema = z.strictObject({
     kind: z.enum(["image", "audio", "resource"]),
@@ -116,7 +116,7 @@ export class LocalExternalContentStore implements ExternalContentStore, AsyncDis
         active.throwIfAborted();
         const metadata = metadataSchema.parse({ kind, mediaType, name });
         const key = createHash("sha256").update(bytes).digest("hex");
-        const request = `mobius-content:${kind}:${key}`;
+        const request = `morty-content:${kind}:${key}`;
         const existing = this.#entries.get(request);
         if (existing !== undefined && existing.expiresAt > Date.now()) {
             this.#entries.set(request, {
@@ -190,7 +190,7 @@ export class LocalExternalContentStore implements ExternalContentStore, AsyncDis
             readonly resource: ResolvedExternalContent & { readonly uri: string };
         }[] = [];
         for (const [request, entry] of this.#entries) {
-            if (!request.startsWith("mobius-content:resource:") || entry.expiresAt <= Date.now()) {
+            if (!request.startsWith("morty-content:resource:") || entry.expiresAt <= Date.now()) {
                 continue;
             }
             const uri = pathToFileURL(entry.path).href;

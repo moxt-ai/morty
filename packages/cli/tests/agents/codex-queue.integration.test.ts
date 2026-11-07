@@ -21,7 +21,7 @@ import { fakeProviderPrompts } from "../support/llm/scenarios.ts";
 test("Given real Codex has accepted a steering prompt, When V2 recovery reloads the working Session, Then the steered user message remains visible", async () => {
     const activeEntered = Promise.withResolvers<void>();
     const releaseActive = Promise.withResolvers<void>();
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "STEERED_REPLY", {
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "STEERED_REPLY", {
         beforeFirstText: async () => {
             activeEntered.resolve();
             await releaseActive.promise;
@@ -169,7 +169,7 @@ test("Given real Codex advances between repeated prompts, When V2 recovery pagin
     const releaseActive = Promise.withResolvers<void>();
     const releaseQueued = Promise.withResolvers<void>();
     let responseNumber = 0;
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "BOUNDARY_REPLY", {
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "BOUNDARY_REPLY", {
         beforeFirstText: async () => {
             responseNumber += 1;
             if (responseNumber === 1) {
@@ -322,7 +322,7 @@ test("Given real Codex advances between repeated prompts, When V2 recovery pagin
 test("Given real Codex with an active turn, When three follow-ups are accepted and the middle one is cancelled, Then the remaining prompts execute in FIFO order without depending on the original turn", async () => {
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
-    await using provider = await FakeOpenAiProvider.start("mobius-test-model", "FIFO_REPLY", {
+    await using provider = await FakeOpenAiProvider.start("morty-test-model", "FIFO_REPLY", {
         beforeFirstText: async () => {
             entered.resolve();
             await release.promise;

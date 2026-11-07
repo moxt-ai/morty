@@ -22,22 +22,15 @@ import {
     type SessionRecordingWireWrite,
 } from "@morty-build/client/protocol";
 import { type Context, Hono } from "hono";
-import { z } from "zod";
 import { decodeKnownDirectoryUpdate } from "./entity/recording-directory-update.ts";
 import { RecordingSqlMetrics } from "./infra/recording-sql-metrics.ts";
 import { RecordingDirectory } from "./service/recording-directory.ts";
 import { RecordingDirectoryOutbox } from "./service/recording-directory-outbox.ts";
 import { projectDirectoryChange } from "./service/recording-directory-update.ts";
 import { RecordingEventWaiters } from "./service/recording-event-waiters.ts";
-import { resolveRecordingLocation } from "./service/session-recording-location.ts";
 import { SessionTurnHistory, type TurnHistoryRead } from "./service/session-turn-history.ts";
 import { RecordingDirectoryStorage } from "./storage/recording-directory-storage.ts";
-import {
-    type AppendOutcome,
-    legacyRecordingOwner,
-    type PageRead,
-    SessionRecordingStorage,
-} from "./storage/session-recording-storage.ts";
+import { type AppendOutcome, type PageRead, SessionRecordingStorage } from "./storage/session-recording-storage.ts";
 import { SessionTurnHistoryStorage } from "./storage/session-turn-history-storage.ts";
 
 export interface RecordingWorkerBindings {
@@ -582,15 +575,6 @@ function sessionRecordingName(target: RecordingTarget): string {
     return JSON.stringify([target.projectId, target.runtimeId, target.sessionId]);
 }
 
-/** The object a Session's history lived in before Recording was addressed by Runtime; its first writer owns it. */
-function legacySessionRecordingName(target: RecordingTarget): string {
-    return JSON.stringify([target.projectId, target.sessionId]);
-}
-
-/** Requests to this host reach a Session's legacy object on behalf of its owner's history. */
-const legacyRecordingHost = "legacy-recording.internal";
-const legacyOwnerSchema = z.object({ runtimeId: z.string() });
-
 function durableObjectFetch(namespace: DurableObjectNamespace, name: string, request: Request): Promise<Response> {
     return namespace.getByName(name).fetch(request);
 }
@@ -819,51 +803,13 @@ interface OpenedSessionRecording {
 
 export class SessionRecordingDurableObject extends DurableObject<RecordingWorkerBindings> {
     readonly #waiters = new RecordingEventWaiters();
-    // Opened on first use, so probing a Session's legacy object that never recorded leaves it without storage.
     #session: OpenedSessionRecording | undefined;
     override async fetch(request: Request): Promise<Response> {
         const url = new URL(request.url);
-        if (url.hostname === legacyRecordingHost) {
-            if (url.pathname === "/owner") {
-                const owner = legacyRecordingOwner(this.ctx.storage);
-                return owner === null ? errorResponse("not_found", 404) : Response.json({ runtimeId: owner });
-            }
-            return await this.#opened().routes.fetch(request);
-        }
-        const target = recordingTarget(url.searchParams);
-        if (target === null) {
+        if (recordingTarget(url.searchParams) === null) {
             return errorResponse("invalid_target", 400);
         }
-        const session = this.#opened();
-        const location = await resolveRecordingLocation(session.recording, target.runtimeId, async () => {
-            const response = await durableObjectFetch(
-                this.env.SESSION_RECORDING,
-                legacySessionRecordingName(target),
-                new Request(`https://${legacyRecordingHost}/owner`, { signal: AbortSignal.timeout(10_000) }),
-            );
-            if (response.status === 404) {
-                await response.body?.cancel();
-                return null;
-            }
-            if (!response.ok) {
-                await response.body?.cancel();
-                throw new Error(`The legacy Recording owner could not be read (${response.status})`);
-            }
-            return legacyOwnerSchema.parse(await response.json()).runtimeId;
-        });
-        switch (location) {
-            case "local":
-                return await session.routes.fetch(request);
-            case "legacy": {
-                const legacy = new URL(url);
-                legacy.hostname = legacyRecordingHost;
-                return await durableObjectFetch(
-                    this.env.SESSION_RECORDING,
-                    legacySessionRecordingName(target),
-                    new Request(legacy, request),
-                );
-            }
-        }
+        return await this.#opened().routes.fetch(request);
     }
     readonly #opened = (): OpenedSessionRecording => {
         if (this.#session !== undefined) {

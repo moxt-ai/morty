@@ -62,7 +62,7 @@ async function withIdleDaemon(
     recovery: "resume" | "load",
     scenario: (peer: RealDaemonPeer, native: string, timer: IdleTimeoutTimer) => Promise<void>,
 ): Promise<void> {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-idle-process-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-idle-process-"));
     const native = join(directory, "native");
     const executable = join(directory, "controlled-acp");
     await mkdir(native);
@@ -254,7 +254,7 @@ test.each(["resume", "load"] as const)(
                 if (directory.action !== "list") {
                     throw new Error("Expected the native directory");
                 }
-                expect(directory.entries.find((entry) => entry.mobiusSessionIds.includes(sessionId))?.title).toBe(
+                expect(directory.entries.find((entry) => entry.mortySessionIds.includes(sessionId))?.title).toBe(
                     "Renamed after reclamation",
                 );
             };

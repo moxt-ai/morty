@@ -1,11 +1,11 @@
-import { type MobiusClient, MobiusError } from "@morty-build/client";
+import { type MortyClient, MortyError } from "@morty-build/client";
 
 // The Session pane owns live-stream recovery; SDK retries are disabled so
 // connection attempts and reconciliation share one bounded retry policy.
 
 export type SessionConnection =
     | { readonly kind: "first-loading" }
-    | { readonly kind: "ready"; readonly client: MobiusClient }
+    | { readonly kind: "ready"; readonly client: MortyClient }
     | { readonly kind: "reconnecting"; readonly message: string | null; readonly notice: "quiet" | "visible" }
     | {
           readonly kind: "disconnected";
@@ -37,8 +37,8 @@ const SESSION_AUTO_RECONNECT_ATTEMPTS = 7;
 /** The live subscription ended without failing, which only happens when it was closed deliberately. */
 const SESSION_UPDATES_ENDED_ERROR_CODE = "session_updates_ended";
 
-export function sessionUpdatesEndedError(): MobiusError {
-    return new MobiusError(
+export function sessionUpdatesEndedError(): MortyError {
+    return new MortyError(
         SESSION_UPDATES_ENDED_ERROR_CODE,
         "Session updates disconnected. Reopen the Session to continue.",
     );

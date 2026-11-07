@@ -1,4 +1,4 @@
-import type { ForkMobiusNativeSessionRequest } from "@morty-build/client";
+import type { ForkMortyNativeSessionRequest } from "@morty-build/client";
 import {
     decodeNativeSessionRequest,
     decodeNativeSessionResult,
@@ -65,7 +65,7 @@ export class NativeSessionForks {
     async #recover(
         scope: ProjectScope,
         runtimeId: string,
-        input: ForkMobiusNativeSessionRequest,
+        input: ForkMortyNativeSessionRequest,
         attemptJson: string,
         request: SessionRuntimeOperations["requestProjectScopeControl"],
         signal: AbortSignal,
@@ -158,7 +158,7 @@ export class NativeSessionForks {
         scope: ProjectScope,
         runtimeId: string,
         operationId: string,
-        input: ForkMobiusNativeSessionRequest,
+        input: ForkMortyNativeSessionRequest,
         request: SessionRuntimeOperations["requestProjectScopeControl"],
         signal: AbortSignal,
     ) => {

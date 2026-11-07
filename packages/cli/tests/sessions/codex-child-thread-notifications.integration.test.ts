@@ -62,7 +62,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 
 // @no-uc: Technical regression; Codex subagent threads must not leak into the parent Session at the daemon boundary.
 test("Given a Codex turn whose subagent thread reports on the same connection, When a member's prompt runs through the daemon, Then only the parent thread's reply, title and command reach the Session", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-controlled-codex-threads-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-controlled-codex-threads-"));
     try {
         const executable = join(directory, "codex.mjs");
         await writeFile(executable, CONTROLLED_CODEX, { mode: 0o700 });

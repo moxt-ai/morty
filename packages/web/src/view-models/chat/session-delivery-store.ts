@@ -1,8 +1,8 @@
 import {
-    MobiusApiError,
-    MobiusCancellationError,
-    type MobiusClient,
-    MobiusError,
+    MortyApiError,
+    MortyCancellationError,
+    type MortyClient,
+    MortyError,
     type PromptAttachment,
 } from "@morty-build/client";
 import { createStore } from "zustand/vanilla";
@@ -10,7 +10,7 @@ import type { ComposerAttachment } from "../../components/chat/composer-attachme
 import { CloudApiError } from "../../services/management/management-api.ts";
 import { formatError } from "../format-error.ts";
 
-type SubmitRequest = Parameters<MobiusClient["turns"]["submit"]>[1];
+type SubmitRequest = Parameters<MortyClient["turns"]["submit"]>[1];
 type AcceptedTurn = { readonly turnId: string };
 export type SubmitTurn = (request: SubmitRequest, signal: AbortSignal) => Promise<AcceptedTurn>;
 /**
@@ -86,7 +86,7 @@ export function deliveryMessagePresentation(message: SubmittedMessage) {
 export type SubmissionFailure = { readonly code: string; readonly message: string };
 
 function submissionFailure(cause: unknown, fallback: string): SubmissionFailure {
-    return { code: cause instanceof MobiusError ? cause.code : "", message: formatError(cause, fallback) };
+    return { code: cause instanceof MortyError ? cause.code : "", message: formatError(cause, fallback) };
 }
 
 export type DeliveryState =
@@ -195,7 +195,7 @@ export function prependToDraft(content: string, draft: string): string {
 
 function isAuthoritativeFailure(cause: unknown): boolean {
     return (
-        (cause instanceof MobiusApiError && cause.status >= 400 && cause.status < 500) ||
+        (cause instanceof MortyApiError && cause.status >= 400 && cause.status < 500) ||
         (cause instanceof CloudApiError && cause.status !== null && cause.status >= 400 && cause.status < 500)
     );
 }
@@ -245,7 +245,7 @@ export const createSessionDeliveryStore = (options: {
             confirm(journal, set, get);
             return { kind: "accepted", turn: accepted };
         } catch (cause) {
-            if (signal.aborted || cause instanceof MobiusCancellationError) {
+            if (signal.aborted || cause instanceof MortyCancellationError) {
                 // The Session's lifetime on this page ended first. Losing the attempt's connection does not discard
                 // its submitted intent: what the service confirmed stays, the rest is unknown for the next page.
                 const state = get().state;

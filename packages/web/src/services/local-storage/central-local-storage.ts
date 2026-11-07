@@ -125,7 +125,7 @@ export const MAX_AGENT_SETTING_PREFERENCES = 100;
  */
 export const lastAgentSettingsEntry = (botId: string, agentRef: string) =>
     jsonLocalStorageEntry({
-        key: scopedKey("mobius:last-agent-settings:v2:", botId, agentRef),
+        key: scopedKey("morty:last-agent-settings:v2:", botId, agentRef),
         schema: v.pipe(
             v.array(agentSettingPreferenceSchema),
             v.maxLength(MAX_AGENT_SETTING_PREFERENCES),
@@ -148,7 +148,7 @@ export const lastAgentSettingsEntry = (botId: string, agentRef: string) =>
  */
 export const lastHarnessEntry = (botId: string): LocalStorageEntry<string> =>
     stringLocalStorageEntry({
-        key: scopedKey("mobius:last-harness:v1:", botId),
+        key: scopedKey("morty:last-harness:v1:", botId),
         schema: settingIdentifierSchema,
     });
 
@@ -161,7 +161,7 @@ const directoryLabelSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_
 
 export const lastCwdEntry = (botId: string, runtimeId: string, agentRef: string): LocalStorageEntry<string> =>
     stringLocalStorageEntry({
-        key: scopedKey("mobius:last-cwd:", botId, runtimeId, agentRef),
+        key: scopedKey("morty:last-cwd:", botId, runtimeId, agentRef),
         schema: directoryIdSchema,
     });
 
@@ -173,7 +173,7 @@ export type RecentCwdPreference = v.InferOutput<typeof recentCwdPreferenceSchema
 
 export const recentCwdEntry = (botId: string) =>
     jsonLocalStorageEntry({
-        key: scopedKey("mobius:recent-cwd:", botId),
+        key: scopedKey("morty:recent-cwd:", botId),
         schema: v.pipe(
             v.array(recentCwdPreferenceSchema),
             v.maxLength(10),
@@ -192,7 +192,7 @@ export const recentCwdEntry = (botId: string) =>
 const anonymousTokenSchema = v.pipe(
     v.string(),
     v.regex(
-        /^(?:mobius_anon_v2_[A-Za-z0-9_-]{43}|mobius_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
+        /^(?:morty_anon_v1_[A-Za-z0-9_-]{43}|morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
     ),
 );
 
@@ -206,7 +206,7 @@ const credentialUserIdSchema = v.pipe(v.string(), v.minLength(8), v.maxLength(12
  * store tokens this one cannot read, and those stay stored. The remembered computers decide which tokens are kept.
  */
 export const anonymousCredentialsEntry = jsonLocalStorageEntry({
-    key: "mobius.anonymous-credentials.v1",
+    key: "morty.anonymous-credentials.v1",
     schema: v.pipe(v.record(v.string(), v.unknown()), v.readonly()),
 });
 

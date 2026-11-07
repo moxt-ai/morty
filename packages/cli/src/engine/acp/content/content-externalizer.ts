@@ -155,7 +155,7 @@ export class AcpContentExternalizer {
                         signal,
                     );
                     return {
-                        agent: { ...content, data: "", uri: `mobius-content:image:${stored.key}` },
+                        agent: { ...content, data: "", uri: `morty-content:image:${stored.key}` },
                         event: {
                             _meta: content._meta,
                             annotations: content.annotations,

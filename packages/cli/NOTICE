@@ -33,6 +33,6 @@ Pi ACP adapter
   Licensed under the MIT License.
   License text: packages/cli/src/engine/acp/harness/pi/LICENSE
 
-Source paths above refer to the Mobius source repository.
+Source paths above refer to the Morty source repository.
 License texts and notices for bundled components are included in
 THIRD-PARTY-NOTICES.txt alongside this file.

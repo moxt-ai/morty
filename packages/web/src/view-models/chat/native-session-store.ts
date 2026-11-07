@@ -3,7 +3,7 @@ import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ChatRuntime, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import { formatError } from "../format-error.ts";
 import { harnessValue, type NativeSessionAgent, nativeSessionAgentTabs } from "./native-session-agents.ts";
-import type { OpenMobiusSession } from "./open-session.ts";
+import type { OpenMortySession } from "./open-session.ts";
 import { type SessionMessage, sessionEventLogPresentation } from "./session-presentation.ts";
 
 type NativeSessionDirectory =
@@ -75,7 +75,7 @@ export function nativeSessionPresentation(model: NativeSessionStore, sessions: r
     const present = (entry: NativeSessionEntry) => {
         // Several Morty Sessions can link to one native session; prefer the most recently updated one.
         const linked = sessions
-            .filter((session) => entry.mobiusSessionIds.includes(session.id) && session.title.trim().length > 0)
+            .filter((session) => entry.mortySessionIds.includes(session.id) && session.title.trim().length > 0)
             .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id));
         return { ...entry, displayTitle: linked[0]?.title ?? (entry.title || "Untitled session") };
     };
@@ -124,7 +124,7 @@ export const createNativeSessionStore = (
     requests: Pick<BotChatApi, "nativeSessions" | "nativeSession" | "forkNativeSession">,
     /** The Runtime the page follows, the one owner of which agents it offers. */
     runtime: () => ChatRuntime | null,
-    onOpen: (session: OpenMobiusSession) => void,
+    onOpen: (session: OpenMortySession) => void,
 ) => {
     let selection: AbortController | null = null;
     let discovery: AbortController | null = null;

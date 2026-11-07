@@ -4,7 +4,7 @@ import type { IdentityTransfer, SharingTerms } from "../../services/identity/ano
 import type { Clock } from "../../services/time/clock.ts";
 import { createIdentitySharingStore, type IdentitySharingStore } from "./identity-sharing-store.ts";
 import { createNativeSessionStore, type NativeSessionStore } from "./native-session-store.ts";
-import type { OpenMobiusSession } from "./open-session.ts";
+import type { OpenMortySession } from "./open-session.ts";
 
 export type SidebarDialogs = StoreApi<SidebarDialogsState>;
 
@@ -57,7 +57,7 @@ export function createSidebarDialogs(options: {
     /** The Runtime the page follows. */
     readonly runtime: () => ChatRuntime | null;
     readonly createTransfer: (terms: SharingTerms, signal: AbortSignal) => Promise<IdentityTransfer>;
-    readonly onOpenSession: (session: OpenMobiusSession) => void;
+    readonly onOpenSession: (session: OpenMortySession) => void;
     readonly onOpenedSession: () => void;
 }): SidebarDialogs {
     const { botId, clock, requests, runtime, createTransfer, onOpenSession, onOpenedSession } = options;

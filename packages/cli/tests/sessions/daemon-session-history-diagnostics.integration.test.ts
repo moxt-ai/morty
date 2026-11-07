@@ -25,7 +25,7 @@ import { withControlledDaemon as withRealDaemon } from "../support/agents/real-d
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
 
 test("Given native history contains oversized and embedded ACP media, When Chat loads V2 history, Then it receives retrievable keys instead of embedded bodies", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "mobius-external-history-image-"));
+    const directory = await mkdtemp(join(tmpdir(), "morty-external-history-image-"));
     const executableDirectory = join(directory, "bin");
     const executable = join(executableDirectory, "controlled-acp");
     await mkdir(executableDirectory);
@@ -145,7 +145,7 @@ if (process.argv.includes("--version")) {
                         encodeFileReadCommand({
                             kind: "file.read",
                             maxBytes: 2_000_000,
-                            path: `mobius-content:${kind}:${key}`,
+                            path: `morty-content:${kind}:${key}`,
                             requestId: `read-external-${kind}`,
                             sessionId: peer.sessionId,
                         }),

@@ -2,7 +2,7 @@ import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Command } from "commander";
 import { ensureDaemon, readDaemonVersion, stopDaemon } from "../../../daemon/lifecycle/daemon-client.ts";
-import { openMobiusControlInstallation } from "../../../daemon/pairing/pair-local-machine.ts";
+import { openMortyControlInstallation } from "../../../daemon/pairing/pair-local-machine.ts";
 import {
     executableDirectory,
     prepareRelease,
@@ -21,7 +21,7 @@ interface InstallOptions {
 
 async function install(options: InstallOptions, context: CliContext): Promise<void> {
     const signal = AbortSignal.any([context.shutdownSignal, AbortSignal.timeout(180_000)]);
-    const control = await openMobiusControlInstallation(signal, process.env);
+    const control = await openMortyControlInstallation(signal, process.env);
     const releaseLock = await acquireDaemonLock(control.stateDirectory, "installation.lock");
     if (releaseLock === null) {
         throw new Error("Another Morty installation operation is running; retry after it finishes");
@@ -107,7 +107,7 @@ export function registerInstallCommands(program: Command, context: CliContext): 
         .description("stop Morty and remove its managed executables, retaining pairings and user data")
         .action(async () => {
             const signal = AbortSignal.any([context.shutdownSignal, AbortSignal.timeout(60_000)]);
-            const control = await openMobiusControlInstallation(signal, process.env);
+            const control = await openMortyControlInstallation(signal, process.env);
             const releaseLock = await acquireDaemonLock(control.stateDirectory, "installation.lock");
             if (releaseLock === null) {
                 throw new Error("Another Morty installation operation is running");

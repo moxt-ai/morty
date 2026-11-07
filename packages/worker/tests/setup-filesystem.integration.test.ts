@@ -32,7 +32,7 @@ async function writeNpxFixture(bin: string, body: string): Promise<void> {
 }
 
 // Budgets for the scenarios that run Setup as a child process. CI also runs some of them on Windows, the slowest
-// platform: there each run checks path permissions through PowerShell, which Mobius bounds at 30 s per check, and a
+// platform: there each run checks path permissions through PowerShell, which Morty bounds at 30 s per check, and a
 // fixture's first workerd start has taken over 10 s. The child's deadline leaves room for one check to reach that
 // bound and for the run to finish and report. The test's timeout adds room to start the fixture and to clean up.
 const SETUP_PROCESS_TIMEOUT_MS = 60_000;
@@ -78,7 +78,7 @@ test.each([
     { replacementState: "revoked", launcher: "npx" },
     { replacementState: "fresh", launcher: "local" },
 ] as const)(
-    "Given an invalid Mobius state root and $replacementState replacement state using $launcher, When setup stops at preflight, Then it preserves the identity and accurately reports earlier shared access",
+    "Given an invalid Morty state root and $replacementState replacement state using $launcher, When setup stops at preflight, Then it preserves the identity and accurately reports earlier shared access",
     {
         timeout: SETUP_PROCESS_TEST_TIMEOUT_MS,
     },
@@ -126,16 +126,16 @@ test.each([
                 );
             }
             const saved = replacementState === "fresh" ? null : await readFile(join(state, "config.json"), "utf8");
-            // Mobius 0.0.315 and later refuse another root's installation data with EX_CONFIG.
+            // Morty refuses another root's installation data with EX_CONFIG.
             const refusal =
-                "MORTY_STATE_DIRECTORY is Mobius installation data, not a state root. Use the state root that owns it: MORTY_STATE_DIRECTORY=/owning-root";
+                "MORTY_STATE_DIRECTORY is Morty installation data, not a state root. Use the state root that owns it: MORTY_STATE_DIRECTORY=/owning-root";
             if (launcher === "npx") {
                 await writeNpxFixture(
                     bin,
                     `process.stderr.write(${JSON.stringify(`${refusal}\n`)}); process.exit(78);`,
                 );
             }
-            const localCli = join(bin, "local-mobius.cjs");
+            const localCli = join(bin, "local-morty.cjs");
             if (launcher === "local") {
                 await writeFile(localCli, `process.stderr.write(${JSON.stringify(refusal)}); process.exit(78);`);
             }
@@ -198,7 +198,7 @@ test.each([
 );
 
 test.each(["missing", "unlaunchable", "npm-missing", "npm-unlaunchable"] as const)(
-    "Given a %s local dependency, When setup checks the Mobius executable, Then it fails before creating an identity and reports recovery instructions",
+    "Given a %s local dependency, When setup checks the Morty executable, Then it fails before creating an identity and reports recovery instructions",
     async (failure) => {
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-preflight-"));
         const state = join(directory, "state");
@@ -242,7 +242,7 @@ test.each(["missing", "unlaunchable", "npm-missing", "npm-unlaunchable"] as cons
                     env: {
                         ...process.env,
                         PATH: bin,
-                        MOBIUS_STATE_DIRECTORY: join(directory, "mobius-state"),
+                        MOBIUS_STATE_DIRECTORY: join(directory, "morty-state"),
                         MORTY_STATE_DIRECTORY: state,
                     },
                     stdio: ["ignore", "pipe", "pipe"],
@@ -319,7 +319,7 @@ process.exitCode = await runSetup(process.argv.slice(2), {
             env: {
                 ...process.env,
                 MORTY_STATE_DIRECTORY: state,
-                MOBIUS_STATE_DIRECTORY: join(directory, "mobius-state"),
+                MOBIUS_STATE_DIRECTORY: join(directory, "morty-state"),
                 PATH: `${bin}${process.platform === "win32" ? ";" : ":"}${process.env["PATH"] ?? ""}`,
             },
             stdio: ["ignore", "pipe", "pipe"],
@@ -346,7 +346,7 @@ process.exitCode = await runSetup(process.argv.slice(2), {
         const config: unknown = JSON.parse(await readFile(configPath, "utf8"));
         expect(config).toMatchObject({
             base_url: fixture.origin,
-            user_token: expect.stringMatching(/^mobius_anon_v2_/u),
+            user_token: expect.stringMatching(/^morty_anon_v1_/u),
         });
         if (process.platform === "win32") {
             const execute = promisify(execFile);
@@ -419,8 +419,8 @@ test.runIf(process.platform !== "win32")(
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-home-"));
         const state =
             process.platform === "darwin"
-                ? join(directory, "Library", "Application Support", "Morty", "v1")
-                : join(directory, ".local", "state", "morty", "v1");
+                ? join(directory, "Library", "Application Support", "Morty", "v2")
+                : join(directory, ".local", "state", "morty", "v2");
         const workspace = join(directory, "workspace");
         await mkdir(workspace);
         const bin = join(directory, "bin");
@@ -451,7 +451,7 @@ test.runIf(process.platform !== "win32")(
                 env: {
                     ...environment,
                     HOME: directory,
-                    MOBIUS_STATE_DIRECTORY: join(directory, "mobius-state"),
+                    MOBIUS_STATE_DIRECTORY: join(directory, "morty-state"),
                     PATH: `${bin}:${environment["PATH"] ?? ""}`,
                 },
                 stdio: ["ignore", "pipe", "pipe"],
@@ -532,7 +532,7 @@ for (const [failure, scenario] of starterFailures) {
                 });
                 await runtime.disconnect();
                 const connection = {
-                    app_id: fixture.baseConfiguration.MOBIUS_APP_ID,
+                    app_id: fixture.baseConfiguration.MORTY_SERVICE_ID,
                     runtime_id: runtime.runtimeId,
                     connection_id: "managed-test-connection",
                 };

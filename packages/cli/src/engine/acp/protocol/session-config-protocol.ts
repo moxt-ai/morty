@@ -138,7 +138,7 @@ function normalizeConfigOptions(value: unknown, modes: unknown): readonly Sessio
             const id = truncate(readString(option["id"]), 128);
             const name = truncate(readString(option["name"], id), 255);
             const category = truncate(readString(option["category"]), 128);
-            if (id.length === 0 || name.length === 0 || category === "_mobius_permission") {
+            if (id.length === 0 || name.length === 0 || category === "_morty_permission") {
                 continue;
             }
             if (option["type"] === "boolean") {
