@@ -19,6 +19,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  security:
+    uses: ./.github/workflows/security.yml
+
   package:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -57,6 +60,7 @@ jobs:
       - run: pnpm build:cli
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm test:client
       - run: pnpm test:relay
       - run: pnpm test:recording
       - run: pnpm test:runtime
@@ -116,7 +120,7 @@ jobs:
 
   publish:
     if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'
-    needs: [package, validate, installed, browser]
+    needs: [security, package, validate, installed, browser]
     runs-on: ubuntu-latest
     environment: morty-npm
     timeout-minutes: 10

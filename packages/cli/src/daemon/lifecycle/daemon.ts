@@ -27,7 +27,7 @@ class DaemonRuntimeError extends Error {
 
 export async function reloadDaemon(stateDirectory: InstallationDirectory, signal: AbortSignal): Promise<void> {
     try {
-        const response = await sendLocalRequest(stateDirectory, "manager", { kind: "reload" }, signal);
+        const response = await sendLocalRequest(stateDirectory, { kind: "reload" }, signal);
         if (
             typeof response !== "object" ||
             response === null ||
@@ -49,7 +49,7 @@ export async function releaseIdleAgentProcesses(
     signal: AbortSignal,
 ): Promise<void> {
     try {
-        const response = await sendLocalRequest(stateDirectory, "manager", { kind: "release" }, signal);
+        const response = await sendLocalRequest(stateDirectory, { kind: "release" }, signal);
         if (typeof response === "object" && response !== null && "kind" in response && response.kind === "released") {
             return;
         }
@@ -212,8 +212,8 @@ async function runDaemonRuntime(
         let reload: Promise<void> = Promise.resolve();
         const handle = async (request: unknown) => {
             if (typeof request === "object" && request !== null && "kind" in request) {
-                if (request.kind === "status" || request.kind === "ensure") {
-                    return { kind: "status", protocolVersion: 2, worker: { pid: process.pid, version } };
+                if (request.kind === "status") {
+                    return { kind: "status", protocolVersion: 3, daemon: { pid: process.pid, version } };
                 }
                 if (request.kind === "stop") {
                     return { kind: "stopped" };
@@ -225,7 +225,7 @@ async function runDaemonRuntime(
                 return { kind: "released" };
             }
             if (typeof request !== "object" || request === null || !("kind" in request) || request.kind !== "reload") {
-                return { kind: "error", code: "invalid_reload", message: "Expected a configuration reload" };
+                return { kind: "error", code: "unsupported_operation", message: "Unknown local control operation" };
             }
             // A reload, such as `morty start` after the user installs or signs in to an Agent, also re-reads the
             // Agent inventory of Runtimes that were already running; Runtimes it starts read it themselves.
@@ -245,37 +245,22 @@ async function runDaemonRuntime(
                     timestamp: new Date().toISOString(),
                 }),
             );
-            const servers: readonly ("manager" | "worker")[] = ["manager"];
-            const results = await Promise.allSettled(
-                servers.map(async (endpoint) => {
-                    try {
-                        await serveLocalControl(
-                            control.stateDirectory,
-                            endpoint,
-                            combined,
-                            handle,
-                            () => undefined,
-                            (response) => {
-                                if (
-                                    typeof response === "object" &&
-                                    response !== null &&
-                                    "kind" in response &&
-                                    response.kind === "stopped"
-                                ) {
-                                    shutdown.abort();
-                                }
-                            },
-                        );
-                    } finally {
+            await serveLocalControl(
+                control.stateDirectory,
+                combined,
+                handle,
+                () => undefined,
+                (response) => {
+                    if (
+                        typeof response === "object" &&
+                        response !== null &&
+                        "kind" in response &&
+                        response.kind === "stopped"
+                    ) {
                         shutdown.abort();
                     }
-                }),
+                },
             );
-            for (const result of results) {
-                if (result.status === "rejected") {
-                    throw result.reason;
-                }
-            }
             if (shutdown.signal.reason instanceof DaemonRuntimeError) {
                 throw shutdown.signal.reason;
             }

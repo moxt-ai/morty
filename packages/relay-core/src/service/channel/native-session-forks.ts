@@ -182,7 +182,7 @@ export class NativeSessionForks {
             return await waitForFork(running.completion, signal);
         }
         if (prior !== undefined && prior.attemptJson === null) {
-            // Legacy receipts cannot identify the target. Never turn an unknown attempt into another Fork.
+            // A receipt without its target cannot be retried safely. Never turn an unknown attempt into another Fork.
             throw unknownOutcome();
         }
         // Share the whole bounded operation, including lookup. Disconnecting one HTTP waiter only cancels its wait.

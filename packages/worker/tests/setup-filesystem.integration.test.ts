@@ -543,8 +543,6 @@ for (const [failure, scenario] of starterFailures) {
                         user_token: identity.token,
                         user_id: identity.userId,
                         project_id: identity.projectId,
-                        bot_id: botId,
-                        agent_ref: "codex",
                         workspace: directory,
                     }),
                     { mode: 0o600 },

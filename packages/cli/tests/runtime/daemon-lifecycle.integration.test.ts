@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { watch } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { createConnection, type Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -13,8 +12,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 
 import cliPackage from "../../package.json" with { type: "json" };
+import { controlSocketPath } from "../../src/daemon/control/local-client.ts";
 import { openMortyCliInstallation, openMortyControlInstallation } from "../../src/daemon/pairing/pair-local-machine.ts";
-import { processPlatformSupportFor } from "../../src/engine/util/process/platform/index.ts";
+import type { InstallationDirectory } from "../../src/engine/storage/installation/installation-files.ts";
 import { installWorkspaceDaemonRelease, workspaceDaemonEnvironment } from "../support/installed-daemon-release.ts";
 
 const temporaryDirectories: string[] = [];
@@ -25,9 +25,9 @@ afterEach(async () => {
     );
 });
 
-describe("Morty manager version compatibility", () => {
+describe("Morty daemon lifecycle", () => {
     it.each(["workspace", "database"])(
-        "Given an enabled Runtime has a broken %s, When the user starts the daemon, Then startup fails and releases the worker instead of claiming success",
+        "Given an enabled Runtime has a broken %s, When the user starts the daemon, Then startup fails and releases its lock instead of claiming success",
         async (broken) => {
             const directory = await mkdtemp(join(tmpdir(), "morty-worker-fail-fast-"));
             temporaryDirectories.push(directory);
@@ -87,13 +87,6 @@ describe("Morty manager version compatibility", () => {
             expect(started.stdout).toContain(`Morty daemon ${cliPackage.version} started\n`);
             expect(started.stdout).toContain("Morty daemon is running.\n");
 
-            const control = await openMortyControlInstallation(AbortSignal.timeout(10_000), environment);
-            const managerPid = Number(await readFile(join(control.stateDirectory, "manager.lock"), "utf8"));
-            expect(
-                (await processPlatformSupportFor(process.platform).readProcessTable()).filter(
-                    (entry) => entry.parentProcessId === managerPid,
-                ),
-            ).toHaveLength(1);
             const ensured = await runCli(["start"], environment, AbortSignal.timeout(60_000));
             expect(ensured).toEqual({ code: 0, stderr: "", stdout: "Morty daemon is running.\n" });
         } finally {
@@ -101,58 +94,7 @@ describe("Morty manager version compatibility", () => {
         }
     });
 
-    it("Given a running daemon, When its worker crashes, Then the manager automatically starts a replacement", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "morty-worker-crash-"));
-        temporaryDirectories.push(directory);
-        const environment = { ...process.env, MORTY_STATE_DIRECTORY: directory };
-        await installWorkspaceDaemonRelease(directory);
-        const deadline = AbortSignal.timeout(60_000);
-        try {
-            expect((await runCli(["start"], environment, deadline)).code).toBe(0);
-            const control = await openMortyControlInstallation(deadline, environment);
-            const manager = await readFile(join(control.stateDirectory, "manager.lock"), "utf8");
-            const previous = await readFile(join(control.stateDirectory, "worker.lock"), "utf8");
-            const replacement = new Promise<string>((resolve_, reject) => {
-                const watcher = watch(control.stateDirectory, (_event, filename) => {
-                    if (filename !== "worker.lock") {
-                        return;
-                    }
-                    void readFile(join(control.stateDirectory, "worker.lock"), "utf8").then(
-                        (pid) => {
-                            if (Number(pid) > 1 && pid !== previous) {
-                                cleanup();
-                                resolve_(pid);
-                            }
-                        },
-                        () => undefined,
-                    );
-                });
-                const abort = (): void => {
-                    cleanup();
-                    reject(deadline.reason);
-                };
-                function cleanup(): void {
-                    watcher.close();
-                    deadline.removeEventListener("abort", abort);
-                }
-                watcher.once("error", (cause) => {
-                    cleanup();
-                    reject(cause);
-                });
-                deadline.addEventListener("abort", abort, { once: true });
-            });
-            process.kill(Number(previous), "SIGKILL");
-            const next = await replacement;
-            expect(next).not.toBe(previous);
-            expect(await readFile(join(control.stateDirectory, "manager.lock"), "utf8")).toBe(manager);
-            expect((await runCli(["pair", "list"], environment, deadline)).code).toBe(0);
-            expect(await readFile(join(control.stateDirectory, "worker.lock"), "utf8")).toBe(next);
-        } finally {
-            await runCli(["quit"], environment, AbortSignal.timeout(20_000)).catch(() => undefined);
-        }
-    });
-
-    it("Given no daemon is running, When saved pairings are listed, Then the CLI completes without starting a manager", async () => {
+    it("Given no daemon is running, When saved pairings are listed, Then the CLI completes without starting a daemon", async () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-local-list-"));
         temporaryDirectories.push(directory);
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: directory };
@@ -166,152 +108,7 @@ describe("Morty manager version compatibility", () => {
         });
     });
 
-    it("Given saved data from another version, When the current CLI lists pairings, Then it uses its own directory and preserves existing data", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "morty-version-data-"));
-        temporaryDirectories.push(directory);
-        const environment = { ...process.env, MORTY_STATE_DIRECTORY: directory };
-        const oldDirectory = join(directory, "versions", "0.0.1");
-        await mkdir(oldDirectory, { recursive: true });
-        await writeFile(join(oldDirectory, "retained.sqlite"), "old-version-data");
-        const deadline = AbortSignal.timeout(30_000);
-        expect((await runCli(["pair", "list"], environment, deadline)).code).toBe(0);
-        const installation = await openMortyCliInstallation(deadline, environment);
-        expect(
-            installation.stateDirectory.startsWith(`${join(directory, "versions", cliPackage.version)}/`) ||
-                installation.stateDirectory.startsWith(`${join(directory, "versions", cliPackage.version)}\\`),
-        ).toBe(true);
-        expect(await readFile(join(oldDirectory, "retained.sqlite"), "utf8")).toBe("old-version-data");
-        await expect(
-            readFile(join(directory, "versions", cliPackage.version, "retained.sqlite")),
-        ).rejects.toMatchObject({ code: "ENOENT" });
-    });
-
-    it("Given an installed daemon, When another CLI version starts, Then only the working process changes", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "morty-worker-upgrade-"));
-        temporaryDirectories.push(directory);
-        const environment = { ...process.env, MORTY_STATE_DIRECTORY: join(directory, "state") };
-        await installWorkspaceDaemonRelease(environment.MORTY_STATE_DIRECTORY);
-        const deadline = AbortSignal.timeout(90_000);
-        const release = join(directory, "release");
-        await cp(resolve(import.meta.dirname, "../../src"), join(release, "src"), { recursive: true });
-        await writeFile(join(release, "package.json"), JSON.stringify({ ...cliPackage, version: "99.0.0-test" }));
-        await symlink(resolve(import.meta.dirname, "../../node_modules"), join(release, "node_modules"), "junction");
-        await installWorkspaceDaemonRelease(
-            environment.MORTY_STATE_DIRECTORY,
-            "99.0.0-test",
-            join(release, "src/cli/entrypoint.ts"),
-        );
-        try {
-            expect((await runCli(["start"], environment, deadline)).code).toBe(0);
-            const control = await openMortyControlInstallation(deadline, environment);
-            const manager = await readFile(join(control.stateDirectory, "manager.lock"), "utf8");
-            const worker = await readFile(join(control.stateDirectory, "worker.lock"), "utf8");
-            const data = await openMortyCliInstallation(deadline, environment);
-            const saved = await data.saveConnection(
-                {
-                    appId: "app_isolated",
-                    channelId: "channel_isolated",
-                    defaultWorkspace: directory,
-                    pairingId: "",
-                    relayOrigin: new URL("http://127.0.0.1:1"),
-                    runtimeCredential: "a".repeat(43),
-                    runtimeId: "runtime_isolated",
-                },
-                deadline,
-            );
-            await data.setConnectionActivation(saved.connectionId, "stopped", deadline);
-
-            const upgraded = await runCli(["start"], environment, deadline, join(release, "src/cli/entrypoint.ts"));
-            expect(upgraded).toEqual({ code: 0, stderr: "", stdout: "Morty daemon is running.\n" });
-            expect(await readFile(join(control.stateDirectory, "manager.lock"), "utf8")).toBe(manager);
-            const replacement = await readFile(join(control.stateDirectory, "worker.lock"), "utf8");
-            expect(replacement).not.toBe(worker);
-            expect(
-                (await processPlatformSupportFor(process.platform).readProcessTable()).filter(
-                    (entry) => entry.parentProcessId === Number(manager),
-                ),
-            ).toHaveLength(1);
-            expect((await runCli(["start"], environment, deadline, join(release, "src/cli/entrypoint.ts"))).code).toBe(
-                0,
-            );
-            expect(await readFile(join(control.stateDirectory, "worker.lock"), "utf8")).toBe(replacement);
-            const otherList = await runCli(
-                ["pair", "list"],
-                environment,
-                deadline,
-                join(release, "src/cli/entrypoint.ts"),
-            );
-            expect(otherList.code).toBe(0);
-            expect(otherList.stdout).toContain(saved.connectionId);
-            const originalList = await runCli(["pair", "list"], environment, deadline);
-            expect(originalList.code).toBe(0);
-            expect(originalList.stdout).toContain(saved.connectionId);
-            expect(await readFile(data.connectionPath(saved.connectionId), "utf8")).toContain("app_isolated");
-        } finally {
-            await runCli(["quit"], environment, AbortSignal.timeout(20_000)).catch(() => undefined);
-        }
-    });
-
-    it("Given a stopped daemon with saved data, When a manually installed version starts, Then it reuses the last data directory and retains the pointer after quit", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "morty-manual-data-upgrade-"));
-        temporaryDirectories.push(directory);
-        const stateRoot = join(directory, "state");
-        const environment = { ...process.env, MORTY_STATE_DIRECTORY: stateRoot };
-        await installWorkspaceDaemonRelease(stateRoot);
-        const deadline = AbortSignal.timeout(90_000);
-        const release = join(directory, "release");
-        const nextVersion = "99.0.0";
-        await cp(resolve(import.meta.dirname, "../../src"), join(release, "src"), { recursive: true });
-        await writeFile(join(release, "package.json"), JSON.stringify({ ...cliPackage, version: nextVersion }));
-        await symlink(resolve(import.meta.dirname, "../../node_modules"), join(release, "node_modules"), "junction");
-        const nextCli = join(release, "src/cli/entrypoint.ts");
-        await installWorkspaceDaemonRelease(stateRoot, nextVersion, nextCli);
-        const pointer = join(stateRoot, "current-data.txt");
-        try {
-            const data = await openMortyCliInstallation(deadline, environment);
-            const saved = await data.saveConnection(
-                {
-                    appId: "app_inherited",
-                    channelId: "channel_inherited",
-                    defaultWorkspace: directory,
-                    pairingId: "",
-                    relayOrigin: new URL("http://127.0.0.1:1"),
-                    runtimeCredential: "a".repeat(43),
-                    runtimeId: "runtime_inherited",
-                },
-                deadline,
-            );
-            await data.setConnectionActivation(saved.connectionId, "stopped", deadline);
-            const original = join(stateRoot, "versions", cliPackage.version);
-            await writeFile(join(original, "retained-data"), "original");
-            expect((await runCli(["start"], environment, deadline)).code).toBe(0);
-            expect((await runCli(["quit"], environment, deadline)).code).toBe(0);
-            expect((await readFile(pointer, "utf8")).trim()).toBe(`versions/${cliPackage.version}`);
-            const listed = await runCli(["pair", "list"], environment, deadline, nextCli);
-            expect(listed.code).toBe(0);
-            expect(listed.stdout).toContain(saved.connectionId);
-            expect((await readFile(pointer, "utf8")).trim()).toBe(`versions/${cliPackage.version}`);
-            expect((await runCli(["start"], environment, deadline, nextCli)).code).toBe(0);
-            expect((await readFile(pointer, "utf8")).trim()).toBe(`versions/${cliPackage.version}`);
-            expect((await runCli(["quit"], environment, deadline, nextCli)).code).toBe(0);
-            expect((await readFile(pointer, "utf8")).trim()).toBe(`versions/${cliPackage.version}`);
-            expect(await readFile(join(original, "retained-data"), "utf8")).toBe("original");
-            await writeFile(join(original, "retained-data"), "newer");
-            // An older CLI uses the newer daemon's data and never brings back its own stale copy.
-            expect((await runCli(["start"], environment, deadline)).code).toBe(0);
-            expect((await readFile(pointer, "utf8")).trim()).toBe(`versions/${cliPackage.version}`);
-            expect(
-                (await runCli(["pair", "remove", "--connection", saved.connectionId], environment, deadline)).code,
-            ).toBe(0);
-            expect((await runCli(["pair", "list"], environment, deadline, nextCli)).stdout).not.toContain(
-                saved.connectionId,
-            );
-        } finally {
-            await runCli(["quit"], environment, AbortSignal.timeout(20_000)).catch(() => undefined);
-        }
-    });
-
-    it("Given another control client remains connected, When the CLI quits, Then both daemon processes exit", async () => {
+    it("Given another control client remains connected, When the CLI quits, Then the daemon exits", async () => {
         const stateRoot = await mkdtemp(join(tmpdir(), "morty-manager-quit-"));
         temporaryDirectories.push(stateRoot);
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: stateRoot };
@@ -327,7 +124,7 @@ describe("Morty manager version compatibility", () => {
                 stderr: "",
                 stdout: "Morty daemon stopped.\n",
             });
-            for (const name of ["manager.lock", "worker.lock"]) {
+            for (const name of ["manager.lock"]) {
                 await expect(readFile(join(control.stateDirectory, name), "utf8")).rejects.toMatchObject({
                     code: "ENOENT",
                 });
@@ -345,9 +142,9 @@ describe("Morty pairing lifecycle", () => {
         temporaryDirectories.push(stateRoot);
         const executableDirectory = join(stateRoot, "empty-path");
         const workspace = join(stateRoot, "workspace");
+        await installWorkspaceDaemonRelease(stateRoot);
         await Promise.all([mkdir(executableDirectory), mkdir(workspace)]);
         const environment = { ...process.env, MORTY_STATE_DIRECTORY: stateRoot, PATH: executableDirectory };
-        await installWorkspaceDaemonRelease(stateRoot);
         const deadline = AbortSignal.timeout(60_000);
         const relay = await startRelay();
         const installation = await openMortyCliInstallation(deadline, environment);
@@ -387,13 +184,7 @@ describe("Morty pairing lifecycle", () => {
             expect(initiallyListed.stdout).toContain("app_test");
 
             expect(initiallyListed.stdout).toContain(second.connectionId);
-            const managerPid = Number(await readFile(join(control.stateDirectory, "manager.lock"), "utf8"));
-            const workerPid = await readFile(join(control.stateDirectory, "worker.lock"), "utf8");
-            expect(
-                (await processPlatformSupportFor(process.platform).readProcessTable()).filter(
-                    (entry) => entry.parentProcessId === managerPid,
-                ),
-            ).toHaveLength(1);
+            const daemonPid = await readFile(join(control.stateDirectory, "manager.lock"), "utf8");
             const outputPath = join(stateRoot, "pairings.json");
             await writeFile(outputPath, "", { mode: 0o600 });
             const listedAsJson = await runCli(["pair", "list", `--output-json=${outputPath}`], environment, deadline);
@@ -431,7 +222,7 @@ describe("Morty pairing lifecycle", () => {
             expect(stopped.code).toBe(0);
             expect(stopped.stdout).toContain(`Pairing stopped: ${connection.connectionId}\n`);
 
-            expect(await readFile(join(control.stateDirectory, "worker.lock"), "utf8")).toBe(workerPid);
+            expect(await readFile(join(control.stateDirectory, "manager.lock"), "utf8")).toBe(daemonPid);
             const listedStopped = await runCli(["pair", "list"], environment, deadline);
             expect(listedStopped.stdout).toContain(connection.connectionId);
             expect(listedStopped.stdout).toContain("stopped");
@@ -517,14 +308,8 @@ async function startRelay(ready = true): Promise<{ readonly origin: URL; readonl
         },
     };
 }
-function controlSocketPath(stateDirectory: string): string {
-    const installationHash = createHash("sha256").update(stateDirectory).digest("hex").slice(0, 32);
-    return process.platform === "win32"
-        ? `\\\\.\\pipe\\morty-${installationHash}`
-        : join(tmpdir(), `morty-${installationHash}.sock`);
-}
 
-async function holdControlConnection(stateDirectory: string, signal: AbortSignal): Promise<Socket> {
+async function holdControlConnection(stateDirectory: InstallationDirectory, signal: AbortSignal): Promise<Socket> {
     const token = (await readFile(join(stateDirectory, "manager.token"), "utf8")).trim();
     const socket = createConnection({ allowHalfOpen: true, path: controlSocketPath(stateDirectory) });
     try {

@@ -6,7 +6,7 @@ import { managedBot, platformProjectMapping } from "../../src/schema/project-do/
 
 export { ChatWebSocketDurableObject, default } from "../../src/index.ts";
 
-/** Seeds the persisted legacy shape while leaving authentication and revocation on the production HTTP path. */
+/** Seeds persisted boundary conditions while keeping authentication and revocation on the production HTTP path. */
 export class ProjectDurableObject extends Project {
     override async fetch(request: Request): Promise<Response> {
         if (request.url === "https://project.internal/incomplete-bootstrap" && request.method === "DELETE") {
@@ -15,8 +15,8 @@ export class ProjectDurableObject extends Project {
             await database.batch([database.delete(managedBot), database.delete(platformProjectMapping)]);
             return new Response(null, { status: 204 });
         }
-        if (request.url === "https://project.internal/legacy-machine" && request.method === "POST") {
-            // Earlier releases could give one user several Machines; this one never got a Runtime.
+        if (request.url === "https://project.internal/additional-machine" && request.method === "POST") {
+            // Reconstruct invalid persisted state; current management must reject multiple Machines.
             const machine = v.parse(
                 v.object({ userId: v.string(), botId: v.string(), createdAt: v.number() }),
                 await request.json(),

@@ -193,7 +193,7 @@ class RuntimeStartError extends Error {
     readonly termination: RuntimeTermination;
     readonly logPath: string;
     readonly nextStep =
-        "Inspect the Runtime log, then run morty start --connection <connectionId> for the managed connection and rerun setup. Check morty --version when diagnosing compatibility; setup does not stop an existing daemon.";
+        "Inspect the Runtime log, then run morty start --connection <connectionId> for the managed connection and rerun setup. Check morty --version when diagnosing startup; setup does not stop an existing daemon.";
 
     constructor(termination: RuntimeTermination, logPath: string, cause?: unknown) {
         let reason: string;
@@ -530,13 +530,21 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         await writePrivateFile(path, JSON.stringify(value, null, 2));
     }
 
-    /** Earlier releases also saved a `bot_id`; the Worker now names the Machine, so the next save drops that key. */
+    /** Accept only fields written by this Setup. Unsupported state is never converted or rewritten. */
     function savedIdentity(config: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
-        return Object.fromEntries(
-            Object.entries(config).filter(([key]) =>
-                ["identity_creation_key", "user_token", "user_id", "project_id", "pairing_runtime_id"].includes(key),
-            ),
-        );
+        const {
+            base_url,
+            workspace: _workspace,
+            replacement_access: _replacement,
+            replaced_project_id: _replacedProject,
+            replaced_user_token: _replacedToken,
+            ...identity
+        } = config;
+        const fields = ["identity_creation_key", "user_token", "user_id", "project_id", "pairing_runtime_id"];
+        if (typeof base_url !== "string" || Object.keys(identity).some((key) => !fields.includes(key))) {
+            fail("INVALID_CONFIGURATION");
+        }
+        return identity;
     }
 
     async function loadConfiguration(directory: string, base: string): Promise<Context> {
@@ -549,9 +557,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             }
             return { directory, base, config, replacement: { kind: "unchanged" } };
         }
-        // Preserve identity and Bot configuration; resolve Runtime connections through the manager.
-        const saved = config["base_url"] !== undefined && config["base_url"] !== base ? {} : config;
-        return { directory, base, config: savedIdentity(saved), replacement: readReplacementState(saved) };
+        const identity = savedIdentity(config);
+        if (config["base_url"] !== base) {
+            return { directory, base, config: {}, replacement: { kind: "unchanged" } };
+        }
+        return { directory, base, config: identity, replacement: readReplacementState(config) };
     }
 
     /** Decode the saved replacement once. Business operations never read or synchronize its overlapping keys. */
@@ -1535,19 +1545,17 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const context = await retireReplacedIdentity({
             directory,
             base,
-            config: Object.fromEntries(
-                Object.entries(config).filter(
-                    ([key]) => !["replacement_access", "replaced_project_id", "replaced_user_token"].includes(key),
-                ),
-            ),
+            config: savedIdentity(config),
             replacement: readReplacementState(config),
         });
         const revoked = await request(context, "/identity/revoke-all-access", {});
         if (revoked["status"] !== "access_revoked") {
             fail("INVALID_RESPONSE");
         }
-        // A server that predates closing open chat windows leaves them as an unconfirmed revocation does.
-        const sessionAccess = revoked["sessionAccess"] === "revoked" ? "revoked" : "unconfirmed";
+        const sessionAccess = revoked["sessionAccess"];
+        if (sessionAccess !== "revoked" && sessionAccess !== "unconfirmed") {
+            fail("INVALID_RESPONSE");
+        }
         emit({
             status: "access_revoked",
             projectId: identifier(context.config["project_id"]),

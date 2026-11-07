@@ -69,16 +69,15 @@ describe("Morty version command", () => {
                 expect(result.code, result.stderr).toBe(0);
             }
             const control = await openMortyControlInstallation(signal, environment);
-            expect(await sendLocalRequest(control.stateDirectory, "manager", { kind: "reload" }, signal)).toEqual({
+            expect(await sendLocalRequest(control.stateDirectory, { kind: "reload" }, signal)).toEqual({
                 kind: "reloaded",
             });
-            expect(await sendLocalRequest(control.stateDirectory, "manager", { kind: "release" }, signal)).toEqual({
+            expect(await sendLocalRequest(control.stateDirectory, { kind: "release" }, signal)).toEqual({
                 kind: "released",
             });
             expect(
                 await sendLocalRequest(
                     control.stateDirectory,
-                    "manager",
                     {
                         kind: "ensure",
                         launch: {
@@ -89,7 +88,7 @@ describe("Morty version command", () => {
                     },
                     signal,
                 ),
-            ).toMatchObject({ kind: "status", worker: { version: cliPackage.version } });
+            ).toMatchObject({ kind: "error", code: "unsupported_operation" });
             const daemonPid = await readFile(join(control.stateDirectory, "manager.lock"), "utf8");
             await expect(access(join(control.stateDirectory, "worker.lock"))).rejects.toMatchObject({ code: "ENOENT" });
             expect((await runCli(["start"], environment, signal)).code).toBe(0);

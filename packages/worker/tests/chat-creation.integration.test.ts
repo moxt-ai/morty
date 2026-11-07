@@ -63,17 +63,17 @@ async function createChatFixture(
         botId,
         projectId: identity.projectId,
         request,
-        /** A second Machine of the same user, as earlier releases could create. */
-        addLegacyMachine: async () => {
-            const legacy = `bot_legacy_${crypto.randomUUID()}`;
+        /** Invalid persisted state must not allow access to another Machine's sessions. */
+        addAdditionalMachine: async () => {
+            const additional = `bot_additional_${crypto.randomUUID()}`;
             const seeded = await projectObject(environment, identity.projectId).fetch(
-                new Request("https://project.internal/legacy-machine", {
+                new Request("https://project.internal/additional-machine", {
                     method: "POST",
-                    body: JSON.stringify({ userId: identity.userId, botId: legacy, createdAt: Date.now() }),
+                    body: JSON.stringify({ userId: identity.userId, botId: additional, createdAt: Date.now() }),
                 }),
             );
             expect(seeded.status).toBe(204);
-            return legacy;
+            return additional;
         },
         runtime,
         [Symbol.asyncDispose]: () => runtime[Symbol.asyncDispose](),
@@ -111,7 +111,7 @@ test("Given an owned Machine, When its owner requests access to an unmanaged ses
     expect(access.status).toBe(200);
     expect(await access.json()).toMatchObject({ sessionId, credential: expect.stringMatching(/^msession_/u) });
 
-    const botId = await fixture.addLegacyMachine();
+    const botId = await fixture.addAdditionalMachine();
     expect(
         (
             await fixture.request(`chat/bots/${botId}/setup`, {
@@ -540,7 +540,7 @@ test("Given two Bots on the same Runtime, When a conversation ID is opened throu
     await using fixture = await createChatFixture(cloud);
     const setup = { runtimeId: fixture.runtime.runtimeId, agentRef: "codex" };
     expect((await fixture.request(`chat/bots/${fixture.botId}/setup`, setup)).status).toBe(202);
-    const otherBotId = await fixture.addLegacyMachine();
+    const otherBotId = await fixture.addAdditionalMachine();
     expect((await fixture.request(`chat/bots/${otherBotId}/setup`, setup)).status).toBe(202);
     const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, {
         agentRef: "codex",

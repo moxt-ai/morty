@@ -22,7 +22,7 @@ export function registerPairAction(command: Command, context: CliContext): void 
         .action(async (options: ParsedPairOptions) => {
             const requested = await requirePairOptions(options, command, process.stdin, context.shutdownSignal);
             const control = await openMortyControlInstallation(context.shutdownSignal, process.env);
-            await ensureDaemon(control.stateDirectory, context.version, context.shutdownSignal);
+            await ensureDaemon(control.stateDirectory, context.shutdownSignal);
             const installation = await openMortyCliInstallation(context.shutdownSignal, process.env);
             process.stdout.write(`morty version: ${context.version}\n`);
             const paired = await pairLocalMachine(pairArguments(requested), context.shutdownSignal);

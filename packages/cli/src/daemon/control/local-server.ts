@@ -6,7 +6,6 @@ import { controlSocketPath, readSocketMessage } from "./local-client.ts";
 
 export async function serveLocalControl(
     stateDirectory: InstallationDirectory,
-    endpoint: "manager" | "worker",
     signal: AbortSignal,
     handle: (request: unknown, signal: AbortSignal) => Promise<unknown>,
     onListening: () => void | Promise<void> = () => undefined,
@@ -15,7 +14,7 @@ export async function serveLocalControl(
     signal.throwIfAborted();
     const token = await readOrCreateControlToken(stateDirectory);
     const platform = platformSupportFor(process.platform);
-    const path = controlSocketPath(stateDirectory, endpoint);
+    const path = controlSocketPath(stateDirectory);
     const secured = Promise.withResolvers<void>();
     void secured.promise.catch(() => undefined);
     const sockets = new Set<Socket>();

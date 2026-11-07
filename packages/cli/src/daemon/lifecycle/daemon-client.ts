@@ -6,7 +6,7 @@ import { isNodeError } from "../../engine/util/node-error.ts";
 import { releaseEntry, requireInstalledRelease } from "../../installation/releases.ts";
 import { daemonLockExists } from "../../storage/daemon/daemon-lock.ts";
 import { CONTROL_TIMEOUT_MILLISECONDS, sendLocalRequest } from "../control/local-client.ts";
-import { decodeKnownLifecycleResponse, type LifecycleResponse } from "../control/protocol.ts";
+import { decodeLifecycleResponse, type LifecycleResponse } from "../control/protocol.ts";
 
 async function spawnDaemon(entry: string): Promise<ChildProcess> {
     if (entry === undefined) {
@@ -49,11 +49,7 @@ async function waitForDaemonExit(stateDirectory: InstallationDirectory, signal: 
 }
 
 // Only the verified durable installation may own the long-lived daemon.
-export async function ensureDaemon(
-    stateDirectory: InstallationDirectory,
-    _version: string,
-    signal: AbortSignal,
-): Promise<string> {
+export async function ensureDaemon(stateDirectory: InstallationDirectory, signal: AbortSignal): Promise<string> {
     const running = await readDaemonVersion(stateDirectory, signal);
     if (running !== null) {
         return running;
@@ -63,17 +59,15 @@ export async function ensureDaemon(
     return await waitForDaemon(stateDirectory, installed.version, releaseEntry(installed), deadline);
 }
 
-// Status keeps the released wire format; the worker field identifies the daemon.
+// Status identifies the currently running daemon.
 export async function readDaemonVersion(
     stateDirectory: InstallationDirectory,
     signal: AbortSignal,
 ): Promise<string | null> {
     try {
-        const response = decodeKnownLifecycleResponse(
-            await sendLocalRequest(stateDirectory, "manager", { kind: "status" }, signal),
-        );
-        if (response?.kind === "status") {
-            return response.worker?.version ?? null;
+        const response = decodeLifecycleResponse(await sendLocalRequest(stateDirectory, { kind: "status" }, signal));
+        if (response.kind === "status") {
+            return response.daemon.version;
         }
     } catch (cause) {
         if (!isNodeError(cause, "ENOENT") && !isNodeError(cause, "ECONNREFUSED")) {
@@ -93,17 +87,17 @@ async function waitForDaemon(
     let child: ChildProcess | undefined;
     while (!signal.aborted) {
         try {
-            const response = decodeKnownLifecycleResponse(
-                await sendLocalRequest(stateDirectory, "manager", { kind: "status" }, signal),
+            const response = decodeLifecycleResponse(
+                await sendLocalRequest(stateDirectory, { kind: "status" }, signal),
             );
-            if (response?.kind === "error") {
+            if (response.kind === "error") {
                 throw new Error(response.message);
             }
-            if (response?.kind === "status" && response.worker !== null) {
+            if (response.kind === "status") {
                 if (daemonStarted) {
                     process.stdout.write(`Morty daemon ${version} started\n`);
                 }
-                return response.worker.version;
+                return response.daemon.version;
             }
             throw new Error("The daemon could not return its status");
         } catch (cause) {
@@ -146,13 +140,13 @@ export async function stopDaemon(
     while (true) {
         deadline.throwIfAborted();
         try {
-            const response = decodeKnownLifecycleResponse(
-                await sendLocalRequest(stateDirectory, "manager", { kind: "stop" }, deadline),
+            const response = decodeLifecycleResponse(
+                await sendLocalRequest(stateDirectory, { kind: "stop" }, deadline),
             );
-            if (response?.kind === "error") {
+            if (response.kind === "error") {
                 throw new Error(response.message);
             }
-            if (response?.kind !== "stopped") {
+            if (response.kind !== "stopped") {
                 throw new Error("The Morty daemon returned an unexpected response");
             }
             await waitForDaemonExit(stateDirectory, deadline);
