@@ -48,7 +48,7 @@ corepack enable
 pnpm install --frozen-lockfile
 pnpm build:cli
 pnpm local-dev --help
-pnpm local-dev web-server --background
+pnpm local-dev prepare web-server --background
 ```
 
 The last command builds the application, starts isolated local services and prints
