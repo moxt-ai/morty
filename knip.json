@@ -34,6 +34,9 @@
         },
         "packages/relay": {
             "entry": ["src/schema/**/*.ts"]
+        },
+        "packages/platform-test-support": {
+            "entry": ["src/platform-worker-entry.ts"]
         }
     },
     "ignoreBinaries": ["openssl"],

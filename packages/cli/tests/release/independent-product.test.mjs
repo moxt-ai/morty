@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
-import { access, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { access, mkdtemp, readdir, readFile, realpath, rm, watch, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { test } from "node:test";
@@ -71,5 +71,56 @@ test("Given a packed Morty release, installation and daemon lifecycle preserve a
         await run("stop").catch(() => undefined);
         await rm(morty, { recursive: true, force: true });
         await rm(existing, { recursive: true, force: true });
+    }
+});
+
+test("Given a running Morty installation, When an update process is interrupted during preparation, Then the selected daemon survives and a subsequent update recovers", async () => {
+    const archive = process.env.MORTY_RELEASE_ARCHIVE;
+    assert.ok(archive, "MORTY_RELEASE_ARCHIVE is required");
+    const root = await mkdtemp(join(tmpdir(), "morty-interrupted-update-"));
+    const env = { ...process.env, MORTY_STATE_DIRECTORY: root };
+    const run = (...args) => execute(process.execPath, [entry, ...args], { env, timeout: 180_000 });
+    const cancellation = new AbortController();
+    let updater;
+    try {
+        await run("install", "--archive", archive);
+        await run("start");
+        const directory = join(root, "executables");
+        const events = watch(directory, {
+            signal: AbortSignal.any([cancellation.signal, AbortSignal.timeout(30_000)]),
+        });
+        const interrupted = (async () => {
+            for await (const event of events) {
+                if (event.filename !== "operation.json") {
+                    continue;
+                }
+                const operation = JSON.parse(await readFile(join(directory, "operation.json"), "utf8"));
+                if (operation.kind === "preparing") {
+                    assert.ok(updater);
+                    updater.kill("SIGKILL");
+                    return;
+                }
+            }
+            throw new Error("The update never exposed its preparation state");
+        })();
+        updater = spawn(process.execPath, [entry, "update", "--archive", archive], { env, stdio: "ignore" });
+        const exited = new Promise((resolve, reject) => {
+            updater.once("exit", (code, signal) => resolve({ code, signal }));
+            updater.once("error", reject);
+        });
+        await interrupted;
+        const outcome = await exited;
+        assert.ok(outcome.signal !== null || outcome.code !== 0);
+        cancellation.abort();
+        assert.match((await run("status")).stdout, /Daemon: 0\.1\.0/);
+        assert.match((await run("doctor")).stdout, /preparing/);
+        await run("update", "--archive", archive);
+        assert.match((await run("doctor")).stdout, /complete/);
+        assert.match((await run("status")).stdout, /Daemon: 0\.1\.0/);
+    } finally {
+        cancellation.abort();
+        updater?.kill();
+        await run("stop").catch(() => undefined);
+        await rm(root, { recursive: true, force: true });
     }
 });

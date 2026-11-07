@@ -18,7 +18,9 @@ $pipe = New-Object IO.Pipes.NamedPipeClientStream('.', $env:MORTY_PIPE_NAME, $ri
 try {
     $pipe.Connect(5000)
     $acl = $pipe.GetAccessControl()
-    if ($acl.GetOwner([Security.Principal.SecurityIdentifier]) -ne $sid) { throw 'Control pipe is not user-owned' }
+    $owner = $acl.GetOwner([Security.Principal.SecurityIdentifier])
+    $administrator = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if ($owner -ne $sid -and -not ($owner.Value -eq 'S-1-5-32-544' -and $administrator)) { throw 'Control pipe is not user-owned' }
     $write = [IO.Pipes.PipeAccessRights]::Write -bor [IO.Pipes.PipeAccessRights]::CreateNewInstance -bor [IO.Pipes.PipeAccessRights]::Delete -bor [IO.Pipes.PipeAccessRights]::ChangePermissions -bor [IO.Pipes.PipeAccessRights]::TakeOwnership
     foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
         if ($rule.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow -and ($rule.PipeAccessRights -band $write) -ne 0 -and $rule.IdentityReference.Value -notin @($sid.Value, 'S-1-5-18', 'S-1-5-32-544', 'S-1-3-0')) {
@@ -56,8 +58,11 @@ export async function validateWindowsPipe(path: string, signal: AbortSignal): Pr
         if (cause instanceof Error && "code" in cause && cause.code === 3) {
             throw Object.assign(new Error("Morty control pipe is not running"), { code: "ENOENT" });
         }
-        throw new LocalPathError("The Morty control pipe ownership or access permissions could not be verified", {
-            cause,
-        });
+        throw new LocalPathError(
+            `The Morty control pipe ownership or access permissions could not be verified${cause instanceof Error && "stderr" in cause && typeof cause.stderr === "string" ? `: ${cause.stderr.slice(0, 1024).trim()}` : ""}`,
+            {
+                cause,
+            },
+        );
     }
 }
