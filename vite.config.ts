@@ -70,7 +70,7 @@ export default defineConfig({
         license: { fileName: "bundle-licenses.json" },
         rolldownOptions: {
             output: {
-                postBanner: `/* License texts: ${assetOrigins?.generated ?? ""}/${licenseFile} */`,
+                postBanner: `/* License texts: /${licenseFile} on this asset's origin. */`,
             },
         },
     },
