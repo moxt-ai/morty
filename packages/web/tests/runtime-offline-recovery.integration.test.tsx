@@ -79,7 +79,7 @@ test("Given a saved conversation, When reloading it while its Runtime is offline
         expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
             "History is temporarily unavailable. It will load when the connection returns.",
         );
-        expect(document.body.textContent).not.toContain("Your Mobius is disconnected.");
+        expect(document.body.textContent).not.toContain("Your Morty Runtime is disconnected.");
     }, RUNTIME_CHANGE_TIMEOUT_MS);
 
     // Connection and history recover independently. Every rendered recovery snapshot

@@ -3,8 +3,8 @@ import { isChatBridgeError } from "../services/api/websocket-api-transport.ts";
 import { isRuntimeConnectionFailure } from "../services/management/management-api.ts";
 
 const runtimeDisconnectedFailure = {
-    detail: "Start your Mobius to reconnect, then try again.",
-    title: "Your Mobius is disconnected.",
+    detail: "Start your Morty Runtime to reconnect, then try again.",
+    title: "Your Morty Runtime is disconnected.",
 } as const;
 
 /** How a failure because the Runtime cannot be reached reads everywhere. */

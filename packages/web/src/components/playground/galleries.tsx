@@ -1038,7 +1038,7 @@ function AlertGallery() {
                 <MortyAlert>
                     The live session event stream could not recover. Cause: The live session event stream disconnected
                 </MortyAlert>
-                <MortyAlert description="Mobius is reconnecting…">
+                <MortyAlert description="Morty is reconnecting…">
                     The live session event stream could not recover. Cause: The live session event stream disconnected
                 </MortyAlert>
             </Specimen>
@@ -1056,7 +1056,7 @@ function AlertGallery() {
                 </MortyAlert>
             </Specimen>
             <Specimen layout="stack" title="Neutral">
-                <MortyAlert tone="neutral">Mobius is reconnecting…</MortyAlert>
+                <MortyAlert tone="neutral">Morty is reconnecting…</MortyAlert>
             </Specimen>
         </div>
     );

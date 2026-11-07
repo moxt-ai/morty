@@ -32,6 +32,7 @@ async function install(options: InstallOptions, context: CliContext): Promise<vo
     try {
         previous = await readInstalledRelease(signal);
         await recordInstallationState({ kind: "preparing", previous }, signal);
+        process.stdout.write("Preparing Morty release; the current service remains available.\n");
         const candidate = await prepareRelease(
             options.archive === undefined
                 ? { kind: "registry", selector: options.version }

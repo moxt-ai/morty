@@ -198,7 +198,7 @@ test("Given the Morty access was redeemed and opening the original session faile
 
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
     expect(alert.textContent).toContain("The native session was not found");
-    expect(getByRole(document.body, "heading", { name: "Platform could not complete Runtime setup" })).toBeInstanceOf(
+    expect(getByRole(document.body, "heading", { name: "Morty could not complete Runtime setup" })).toBeInstanceOf(
         HTMLElement,
     );
     expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
@@ -280,8 +280,8 @@ test("Given a native session handoff whose Runtime went offline, When the page l
     });
 
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
-    expect(alert.textContent).toContain("Your Mobius is disconnected");
-    expect(alert.textContent).toContain("Start your Mobius");
+    expect(alert.textContent).toContain("Your Morty Runtime is disconnected");
+    expect(alert.textContent).toContain("Start your Morty Runtime");
     expect(alert.textContent?.toLowerCase()).not.toContain("transfer link");
     expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
 });

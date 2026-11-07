@@ -383,7 +383,7 @@ export class ChatService {
                     if (typeof event.data !== "string") {
                         throw new PlatformProjectError(
                             "PLATFORM_INVALID_RESPONSE",
-                            "Platform returned an invalid Session status event.",
+                            "Morty returned an invalid Session status event.",
                             502,
                         );
                     }
@@ -408,7 +408,7 @@ export class ChatService {
                             ? cause
                             : new PlatformProjectError(
                                   "PLATFORM_INVALID_RESPONSE",
-                                  "Platform returned an invalid Session status event.",
+                                  "Morty returned an invalid Session status event.",
                                   502,
                                   { cause },
                               ),

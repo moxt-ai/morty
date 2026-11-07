@@ -190,6 +190,7 @@ for (const schedule of ["before-snapshot", "after-snapshot", "after-recovery"] a
         const wire: unknown[] = [];
         const observed = new Set<string>();
         const waiters = new Map<string, () => void>();
+        const recoveredHistory = Promise.withResolvers<void>();
         let phase = "initial";
         const capture = (value: unknown, kind: string): void => {
             if (Array.isArray(value)) {
@@ -217,6 +218,9 @@ for (const schedule of ["before-snapshot", "after-snapshot", "after-recovery"] a
                     generation: item["sessionGenerationId"],
                     text: content["text"],
                 });
+                if (phase === "recovery" && kind === "http.response") {
+                    recoveredHistory.resolve();
+                }
                 if (kind === "session.events.event") {
                     observed.add(content["text"]);
                     waiters.get(content["text"])?.();
@@ -277,6 +281,9 @@ for (const schedule of ["before-snapshot", "after-snapshot", "after-recovery"] a
         await resumed;
         await expect(page.getByTestId(dataTestId.sessionReconnectNotice)).toBeHidden();
         if (schedule === "after-recovery") {
+            // Recovery is initially quiet, so a hidden notice does not establish that
+            // the new connection has consumed its history snapshot.
+            await recoveredHistory.promise;
             await runtime.continueReply("wait for steering", {
                 outcome: "hold",
                 output: [{ kind: "text", text: "|B|" }],
