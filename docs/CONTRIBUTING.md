@@ -40,20 +40,41 @@ Morty contracts; Moxt and Agent-owned data remain outside that exception.
 
 ## Local development
 
-Use the Node and pnpm versions pinned in [package.json](../package.json), then install
-the locked Morty workspace:
+Install Git and the Node version in [.nvmrc](../.nvmrc). Use Corepack to select the
+pnpm version pinned in [package.json](../package.json). From your clone:
 
 ```sh
+corepack enable
 pnpm install --frozen-lockfile
+pnpm build:cli
 pnpm local-dev --help
+pnpm local-dev web-server --background
 ```
 
-Use [the local-stack skill](../.agents/skills/chat-local-full-dev/SKILL.md) for isolated
-Morty Web and relay startup and cleanup. Runtime, protocol, client, and server
+The last command builds the application, starts isolated local services and prints
+JSON with `chatOrigin` and `stateDir`. Open `chatOrigin` in a browser. Keep `stateDir`
+for status and cleanup; replace `<stateDir>` below with that exact returned path:
+
+```sh
+pnpm local-dev status --state-dir <stateDir>
+pnpm local-dev remove --state-dir <stateDir>
+```
+
+No production Cloudflare credentials, paid model account, or access to the original
+Mobius repository is needed to build the workspace or start the local web stack.
+Continuing a real Agent conversation requires that Agent to be installed and
+configured. See [the local-stack guide](../.agents/skills/chat-local-full-dev/SKILL.md)
+for connecting it to the isolated stack. Runtime, protocol, client, and server
 sources belong to the same Morty workspace. Normal Morty builds must not require
 the original Mobius distribution; use an isolated released copy only when
 verifying coexistence with Moxt.
 Runtime configuration is described in [deployment](deployment.md).
+
+Before proposing a change, run `pnpm lint`, `pnpm typecheck`, and the relevant
+commands in [TESTING.md](TESTING.md). New behavior starts with an acceptance scenario
+through a supported product boundary. Documentation-only changes do not need new
+behavior tests. Follow the [Code of Conduct](../CODE_OF_CONDUCT.md); use
+[Support](../SUPPORT.md) to choose the right channel for questions and reports.
 
 ## Build and artifact operations
 

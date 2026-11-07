@@ -1,0 +1,65 @@
+---
+metadata:
+  change-policy: >-
+    Submit changes in a separate documentation-only pull request for review and
+    approval. The recommended reviewer is taowen-paraflow.
+---
+
+# Morty CLI
+
+Continue Codex, Claude Code and Pi conversations from a browser while the Agent
+runs on your own computer. Visit [morty.build](https://morty.build) to connect.
+
+## Requirements and setup
+
+Use Node.js 22.19+ on the 22.x line or 24.20+ on the 24.x line, and an installed,
+configured Codex, Claude Code or Pi Agent. Keep the computer awake and online.
+Morty's installed package is tested on Linux, macOS and Windows.
+
+Give your coding Agent this prompt:
+
+```text
+Fetch https://morty.build/setup.md and complete the Morty setup for me.
+You may install missing prerequisites and pair this machine.
+```
+
+Read the [setup instructions](https://morty.build/setup.md) before running them.
+Open the resulting link in a browser or scan its QR code on your phone.
+The launch release requires fresh Morty installation and pairing; earlier Morty
+state and browser links are unsupported. Agent-owned history is preserved.
+
+## Manage your installation
+
+```sh
+npx --yes @morty-build/cli status
+npx --yes @morty-build/cli doctor
+npx --yes @morty-build/cli stop
+npx --yes @morty-build/cli start
+npx --yes @morty-build/cli update
+npx --yes @morty-build/cli uninstall
+```
+
+Uninstall stops Morty and removes managed executables while retaining local
+identity, pairings, workspaces and Agent history. `release` hands idle Agent
+sessions back to the terminal without disconnecting Morty. Exit an active terminal
+conversation before continuing it in Morty to avoid competing writers.
+
+## Data and support
+
+Conversation history is read from the connected computer. Cloud Recording is off.
+Traffic passes through a trusted relay; Morty is **not end-to-end encrypted**.
+Sharing gives another device permission to view and control sessions, so protect
+sharing links and revoke access when it is no longer needed.
+
+See the [product guide](https://github.com/moxt-ai/mobius-morty/blob/main/README.md)
+for full data handling and limitations. For installation help and ordinary bugs,
+use [support](https://github.com/moxt-ai/mobius-morty/blob/main/SUPPORT.md) or email
+[acmerfight@gmail.com](mailto:acmerfight@gmail.com) if the source repository is not
+accessible. Report security vulnerabilities privately to that email; never put
+credentials or pairing links in a public issue.
+
+## License
+
+Apache-2.0; see `LICENSE` and `NOTICE` in this package. Bundled third-party
+components retain their own terms in `THIRD-PARTY-NOTICES.txt`. The Morty and Moxt
+names and logos are trademarks; the code license does not grant trademark rights.
