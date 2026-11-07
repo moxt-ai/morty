@@ -100,8 +100,7 @@ test("Given a browser opened the saved Machine's link, When the user approves re
         { headers: { authorization: `Bearer ${String(previousToken)}` } },
     );
     expect(session.status()).toBe(401);
-    await page.reload();
-    // Replacing the Project revoked the access this browser held, so the page says it ended.
+    // Observe the open page: reloading after it detects revocation dismisses this one-time notice.
     await expect(page.getByRole("status")).toContainText("Current access ended");
     await page.goto(original.url);
     await expect(page.getByRole("heading", { name: "This link is no longer available" })).toBeVisible();
