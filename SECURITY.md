@@ -42,6 +42,13 @@ report. Describe where they appear instead.
 
 ## Scope
 
+Security fixes target the latest published `@morty-build/cli` release and current
+Morty services. Earlier pre-launch releases and saved state are unsupported under
+the documented [launch reset](README.md#installing-the-launch-release). Include
+your exact version even if you are unsure whether it is supported. Do not assume
+that a package update alone revokes exposed credentials; report the exposure so
+revocation and recovery can be assessed.
+
 In scope:
 
 - this repository and the deployed application at `morty.build`
