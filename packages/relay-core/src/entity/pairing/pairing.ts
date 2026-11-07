@@ -348,6 +348,11 @@ export async function hashSecret(secret: string): Promise<string> {
     return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+/** Morty's authorized fresh-enrollment cutover leaves old records readable but old bearer hashes unusable. */
+export async function hashPairingCredential(secret: string): Promise<string> {
+    return await hashSecret(`morty-pairing-v1\0${secret}`);
+}
+
 export function parseAgents(encoded: string): readonly AgentDescriptor[] {
     let value: unknown;
     try {

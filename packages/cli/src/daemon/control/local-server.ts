@@ -34,7 +34,7 @@ export async function serveLocalControl(
             const response = await handle(request, deadline);
             socket.end(`${JSON.stringify(response)}\n`, () => onResponse(response));
         } catch {
-            if (!signal.aborted) {
+            if (!signal.aborted && !socket.destroyed && !socket.writableEnded) {
                 socket.end(
                     `${JSON.stringify({ kind: "error", code: "control_request_failed", message: "Local control request failed" })}\n`,
                 );

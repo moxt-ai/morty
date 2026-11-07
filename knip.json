@@ -8,6 +8,7 @@
                 "vite.web-dev.config.ts",
                 ".agents/skills/*/scripts/*.{ts,cjs}",
                 "deployment/platform-entry.mjs",
+                "deployment/provision-service.ts",
                 "scripts/prepare-claude-desktop.ts"
             ]
         },

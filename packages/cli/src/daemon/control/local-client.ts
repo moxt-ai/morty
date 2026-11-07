@@ -22,13 +22,16 @@ export function controlSocketPath(
 
 export async function readSocketMessage(socket: Socket, signal: AbortSignal): Promise<unknown> {
     signal.throwIfAborted();
+    if (socket.destroyed || socket.readableEnded) {
+        throw new Error("The manager connection closed without a response");
+    }
     return await new Promise((resolve, reject) => {
         let encoded = "";
         const finish = (error?: unknown, value?: unknown): void => {
             signal.removeEventListener("abort", abort);
-            socket.removeAllListeners("data");
-            socket.removeAllListeners("error");
-            socket.removeAllListeners("end");
+            socket.off("data", data);
+            socket.off("error", onError);
+            socket.off("end", end);
             if (error === undefined) {
                 resolve(value);
             } else {
@@ -39,7 +42,7 @@ export async function readSocketMessage(socket: Socket, signal: AbortSignal): Pr
             socket.destroy();
             finish(signal.reason);
         };
-        socket.on("data", (chunk: Buffer) => {
+        const data = (chunk: Buffer): void => {
             encoded += chunk.toString("utf8");
             if (encoded.length > MAXIMUM_MESSAGE_BYTES) {
                 finish(new Error("The manager message is too large"));
@@ -54,9 +57,12 @@ export async function readSocketMessage(socket: Socket, signal: AbortSignal): Pr
                     finish(cause);
                 }
             }
-        });
-        socket.once("error", finish);
-        socket.once("end", () => finish(new Error("The manager connection closed without a response")));
+        };
+        const onError = (cause: Error): void => finish(cause);
+        const end = (): void => finish(new Error("The manager connection closed without a response"));
+        socket.on("data", data);
+        socket.once("error", onError);
+        socket.once("end", end);
         signal.addEventListener("abort", abort, { once: true });
     });
 }

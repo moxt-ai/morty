@@ -15,7 +15,7 @@ on:
         description: Build only, deploy, or restore a successful archived release
         type: choice
         default: build
-        options: [build, deploy, restore]
+        options: [build, deploy, restore, provision-service]
       artifact_run_id:
         description: Successful Morty Cloud run to restore
         type: string
@@ -34,7 +34,7 @@ jobs:
     if: github.repository == 'moxt-ai/mobius-morty'
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    environment: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (inputs.operation == 'deploy' || inputs.operation == 'restore' || (github.event_name == 'push' && vars.AUTO_DEPLOY_PRODUCTION == 'true'))) && format('mobius-{0}', inputs.environment || 'production') || 'build-only' }}
+    environment: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (inputs.operation == 'deploy' || inputs.operation == 'restore' || inputs.operation == 'provision-service' || (github.event_name == 'push' && vars.AUTO_DEPLOY_PRODUCTION == 'true'))) && format('mobius-{0}', inputs.environment || 'production') || 'build-only' }}
     env:
       TARGET_ENVIRONMENT: ${{ inputs.environment || 'production' }}
       OPERATION: ${{ inputs.operation || 'build' }}
@@ -54,25 +54,31 @@ jobs:
           key: mobius-cloud-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
       - name: Install Morty dependencies
         run: pnpm install --frozen-lockfile
+      - name: Prepare the environment-owned Morty service credential
+        if: github.ref == 'refs/heads/main' && env.OPERATION == 'provision-service'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          MORTY_SERVICE_SECRET: ${{ secrets.MORTY_SERVICE_SECRET }}
+        run: node deployment/provision-service.ts "$TARGET_ENVIRONMENT" prepare
       - name: Build the Runtime and Agent harnesses
-        if: env.OPERATION != 'restore'
+        if: env.OPERATION != 'restore' && env.OPERATION != 'provision-service'
         run: pnpm build:cli
       - name: Check Morty formatting and architecture
-        if: env.OPERATION != 'restore'
+        if: env.OPERATION != 'restore' && env.OPERATION != 'provision-service'
         run: pnpm lint
       - name: Check Morty types
-        if: env.OPERATION != 'restore'
+        if: env.OPERATION != 'restore' && env.OPERATION != 'provision-service'
         run: pnpm typecheck
       - name: Build the portable release
-        if: env.OPERATION != 'restore'
+        if: env.OPERATION != 'restore' && env.OPERATION != 'provision-service'
         run: python3 deployment/build.py "$TARGET_ENVIRONMENT"
       - name: Verify the production release configuration without deploying
-        if: env.OPERATION != 'restore'
+        if: env.OPERATION != 'restore' && env.OPERATION != 'provision-service'
         env:
           EXPECTED_REVISION: ${{ github.sha }}
         run: python3 deployment/deploy.py "$TARGET_ENVIRONMENT" --release ".deployment-output/$TARGET_ENVIRONMENT" --verify-release-only
       - name: Archive compiled code, assets, migrations and checksums
-        if: env.OPERATION != 'restore'
+        if: env.OPERATION != 'restore' && env.OPERATION != 'provision-service'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-${{ env.TARGET_ENVIRONMENT }}

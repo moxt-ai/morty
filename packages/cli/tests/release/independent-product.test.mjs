@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { once } from "node:events";
 import { access, mkdtemp, readdir, readFile, realpath, rm, watch, writeFile } from "node:fs/promises";
+import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { test } from "node:test";
@@ -56,6 +59,31 @@ test("Given a packed Morty release, installation and daemon lifecycle preserve a
         await writeFile(join(existing, "owned-by-moxt"), "preserve this installation\n");
         await run("install", "--archive", archive);
         await Promise.all([run("start"), run("start"), run("start")]);
+        assert.match((await run("status")).stdout, /Daemon: 0\.1\.0/);
+        const control = join(morty, "installations", "build.morty.cli");
+        const pointer = JSON.parse(await readFile(join(control, "current.json"), "utf8"));
+        const installation = join(control, pointer.installationId);
+        const hash = createHash("sha256").update(installation).digest("hex").slice(0, 32);
+        const endpoint =
+            process.platform === "win32"
+                ? `\\\\.\\pipe\\morty-${hash}`
+                : join(tmpdir(), `morty-${process.getuid()}`, `${hash}.sock`);
+        const probe = createConnection(endpoint);
+        await once(probe, "connect");
+        const closed = once(probe, "close");
+        probe.destroy();
+        await closed;
+        assert.match((await run("status")).stdout, /Daemon: 0\.1\.0/);
+        const unauthorized = createConnection(endpoint);
+        try {
+            await once(unauthorized, "connect");
+            const reply = once(unauthorized, "data");
+            unauthorized.write(`${JSON.stringify({ kind: "stop", token: "not-a-morty-control-token" })}\n`);
+            const [response] = await reply;
+            assert.equal(JSON.parse(response.toString()).code, "unauthorized");
+        } finally {
+            unauthorized.destroy();
+        }
         assert.match((await run("status")).stdout, /Daemon: 0\.1\.0/);
         await run("restart");
         await assert.rejects(run("update", "--archive", join(morty, "missing.tgz")));

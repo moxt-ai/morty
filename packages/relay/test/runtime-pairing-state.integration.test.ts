@@ -5,6 +5,7 @@ import { DurableObjectDatabaseAdapter, DurableObjectSqlDatabase } from "@morty-b
 import {
     channelAccessGrant,
     channelHostCredential,
+    runtimeDaemonCredential,
     runtimePairingAuditEvent,
 } from "@morty-build/relay-core/schema/project-do";
 import { eq } from "drizzle-orm";
@@ -12,7 +13,11 @@ import * as v from "valibot";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createTestMobiusPlatformApp } from "../../platform-test-support/src/app.ts";
 import { seedMortyService } from "../../platform-test-support/src/service-fixture.ts";
-import { hashSecret, MAX_RUNTIMES_PER_PROJECT } from "../../relay-core/src/entity/pairing/pairing.ts";
+import {
+    hashPairingCredential,
+    hashSecret,
+    MAX_RUNTIMES_PER_PROJECT,
+} from "../../relay-core/src/entity/pairing/pairing.ts";
 import { RuntimeDirectoryStorage } from "../../relay-core/src/storage/runtime-directory-storage.ts";
 import { projectDurableObjectMigrations } from "../src/generated/project-do-migrations.ts";
 import { pairingChannel } from "../src/schema/legacy-project-do/pairing-channel.ts";
@@ -178,7 +183,7 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
     const app = await project();
     const pairing = await app.pair("delayed-claim");
     const claimTime = Date.now();
-    const codeHash = await hashSecret(pairing.pairingCode);
+    const codeHash = await hashPairingCredential(pairing.pairingCode);
     vi.setSystemTime(new Date(pairing.expiresAt));
     await Promise.all(Array.from({ length: MAX_RUNTIMES_PER_PROJECT }, (_, index) => app.pair(`replacement-${index}`)));
     // Execute the original command against the real Project database after
@@ -188,7 +193,7 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
             {
                 pairingId: pairing.pairingId,
                 codeHash,
-                daemonHash: await hashSecret("delayed-runtime-credential"),
+                daemonHash: await hashPairingCredential("delayed-runtime-credential"),
                 now: claimTime,
                 machineName: "Delayed machine",
                 workspaceName: "Delayed workspace",
@@ -298,7 +303,7 @@ async function pairedChannelWithLegacyOwner() {
             .values({
                 credentialId: "legacy-owner",
                 channelId: pairing.channelId,
-                tokenHash: await hashSecret(hostToken),
+                tokenHash: await hashPairingCredential(hostToken),
                 authority: "owner",
                 createdAt: Date.now(),
                 lastUsedAt: Date.now(),
@@ -445,7 +450,7 @@ async function insertLegacyPairing(
         .run();
 }
 
-it("Given all legacy pairing lifecycles and existing credentials, When the Project upgrades and restarts, Then identities, deadlines, retries, and channel access are preserved", async () => {
+it("Given pre-cutover pairing records, When Morty upgrades and restarts, Then project identities and audit history remain while old credentials and pairing replays are rejected", async () => {
     const app = await project();
     const now = Date.now();
     const pending = await app.pair("legacy-pending");
@@ -562,33 +567,16 @@ it("Given all legacy pairing lifecycles and existing credentials, When the Proje
         expect((await app.claim(pairing)).status).toBe(400);
     }
     for (const row of rows) {
-        expect(await app.pair(row.key)).toEqual(row.pairing);
+        expect((await app.create(row.key)).status).toBe(400);
     }
-    expect((await app.publish(paired, daemonToken)).status).toBe(204);
-    // An old random credential cannot be reconstructed. A replay must neither
-    // replace it nor return a newly derived credential that cannot authenticate.
-    expect(await responseJson(await app.claim(paired), 400)).toMatchObject({
-        error: { code: "invalid_pairing_code" },
-    });
+    expect((await app.publish(paired, daemonToken)).status).toBe(401);
+    expect((await app.claim(paired)).status).toBe(400);
     vi.setSystemTime(new Date(paired.expiresAt));
     expect(await responseJson(await app.status(paired), 200)).toMatchObject({ status: "paired" });
-    expect((await app.publish(paired, daemonToken)).status).toBe(204);
-    expect(await responseJson(await app.readChannel(paired, hostToken), 200)).toMatchObject({
-        runtimeId: paired.runtimeId,
-    });
-    const grant = v.parse(
-        v.object({ grantId: v.string(), grantSecret: v.string() }),
-        await responseJson(await app.createGrant(paired, hostToken), 201),
-    );
-    const linked = v.parse(
-        v.object({ hostToken: v.string() }),
-        await responseJson(await app.redeemGrant(paired, grant.grantId, grant.grantSecret), 200),
-    );
-    expect((await app.readChannel(paired, linked.hostToken)).status).toBe(200);
-    expect((await app.revoke(paired)).status).toBe(204);
     expect((await app.publish(paired, daemonToken)).status).toBe(401);
     expect((await app.readChannel(paired, hostToken)).status).toBe(401);
-    expect((await app.readChannel(paired, linked.hostToken)).status).toBe(401);
+    expect((await app.createGrant(paired, hostToken)).status).toBe(401);
+    expect((await app.revoke(paired)).status).toBe(204);
     const audit = await app.storage((storage) =>
         storage.sql
             .exec(
@@ -599,10 +587,10 @@ it("Given all legacy pairing lifecycles and existing credentials, When the Proje
     );
     expect(audit).toEqual({ action: "runtime_pairing.expired", recorded_at: now - 1 });
     await app.restart();
-    expect((await app.claim(pending)).status).toBe(200);
+    expect((await app.claim(pending)).status).toBe(400);
 });
 
-it("Given legacy records and an interrupted data copy, When migration retries, Then the original pairing and credential survive without a partial migration", async () => {
+it("Given legacy records and an interrupted data copy, When migration retries, Then original project records survive and retired credentials remain rejected", async () => {
     const app = await project();
     const pairing = await app.pair("migration-retry");
     const daemonToken = `${app.projectId}_${"M".repeat(43)}`;
@@ -641,8 +629,12 @@ it("Given legacy records and an interrupted data copy, When migration retries, T
         initializeProjectDurableObjectSchema(database);
     });
     await app.restart();
-    expect(await app.pair("migration-retry")).toEqual(pairing);
-    expect((await app.publish(pairing, daemonToken)).status).toBe(204);
+    expect(await responseJson(await app.status(pairing), 200)).toMatchObject({
+        status: "paired",
+        runtimeId: pairing.runtimeId,
+    });
+    expect((await app.create("migration-retry")).status).toBe(400);
+    expect((await app.publish(pairing, daemonToken)).status).toBe(401);
 });
 
 it("Given one available Runtime place, When distinct requests compete, Then exactly one reserves it and retries keep the same identity", async () => {
@@ -746,4 +738,29 @@ it("Given stored Relay control host leases beside other Channel credentials, Whe
         return database.query("SELECT credential_id FROM channel_host_credentials ORDER BY credential_id");
     });
     expect(remaining).toEqual([{ credential_id: "ctlX_owner" }, { credential_id: "lnk_device" }]);
+});
+
+it("Given a retained pre-cutover Runtime credential, When it reaches the Morty authorization boundary, Then it is rejected while project records remain and new pairing succeeds", async () => {
+    const app = await project();
+    const oldPairing = await app.pair("pre-cutover-runtime");
+    const old = v.parse(
+        v.object({ runtimeCredential: v.string() }),
+        await responseJson(await app.claim(oldPairing), 200),
+    );
+    await app.storage(async (storage) => {
+        const database = new DurableObjectSqlDatabase(storage);
+        database.orm
+            .update(runtimeDaemonCredential)
+            .set({ tokenHash: await hashSecret(old.runtimeCredential) })
+            .where(eq(runtimeDaemonCredential.runtimeId, oldPairing.runtimeId))
+            .run();
+    });
+    expect((await app.publish(oldPairing, old.runtimeCredential)).status).toBe(401);
+    expect(await responseJson(await app.status(oldPairing), 200)).toMatchObject({ status: "paired" });
+    const replacement = await app.pair("morty-generation-one");
+    const current = v.parse(
+        v.object({ runtimeCredential: v.string() }),
+        await responseJson(await app.claim(replacement), 200),
+    );
+    expect((await app.publish(replacement, current.runtimeCredential)).status).toBe(204);
 });

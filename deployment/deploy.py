@@ -141,6 +141,7 @@ def main():
             with urllib.request.urlopen(urllib.request.Request(expected['asset_origin'] + '/' + entry['key'], headers={'Origin': expected['morty_origin'], 'User-Agent': 'Morty-Deployment/1.0'}), timeout=40) as response:
                 if hashlib.sha256(response.read()).hexdigest() != hashlib.sha256(Path(entry['file']).read_bytes()).hexdigest() or response.headers.get('Access-Control-Allow-Origin') != expected['morty_origin'] or 'immutable' not in response.headers.get('Cache-Control', ''):
                     raise ValueError('Asset content, CORS, or cache verification failed')
+        run(['node', str(ROOT / 'deployment/provision-service.ts'), args.environment, 'retire'], env)
         deployed = {}
         for component in configs:
             deployment = cloud('/workers/scripts/' + expected[component] + '/deployments')['deployments'][0]

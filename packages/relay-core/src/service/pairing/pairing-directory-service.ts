@@ -14,7 +14,7 @@ import {
     CreatedBrowserCredential,
     CreatedRuntimePairing,
     createRandomToken,
-    hashSecret,
+    hashPairingCredential,
     LinkedChannelDevice,
     MAX_BROWSER_CREDENTIAL_LIFETIME_MILLISECONDS,
     MAX_RUNTIMES_PER_PROJECT,
@@ -82,7 +82,7 @@ export class PairingDirectoryService implements PairingOperations {
         signal: AbortSignal,
     ): Promise<AuthorizedChannelRow> => {
         signal.throwIfAborted();
-        const tokenHash = await hashSecret(validateToken(token));
+        const tokenHash = await hashPairingCredential(validateToken(token));
         const storage = await this.identityStorage({ kind: "host", channelId, tokenHash }, signal);
         const row = await storage.authenticateHost(
             validateIdentifier(channelId, "channel_id"),
@@ -109,7 +109,7 @@ export class PairingDirectoryService implements PairingOperations {
 
     readonly authorizeDaemon: PairingOperations["authorizeDaemon"] = async (channelId, token, signal) => {
         signal.throwIfAborted();
-        const tokenHash = await hashSecret(validateToken(token));
+        const tokenHash = await hashPairingCredential(validateToken(token));
         const storage = await this.identityStorage({ kind: "daemon", channelId, tokenHash }, signal);
         const row = await storage.readDaemon(channelId, tokenHash, signal);
         if (row === null) {
@@ -128,7 +128,10 @@ export class PairingDirectoryService implements PairingOperations {
 
     readonly authorizeRuntimeCredential: PairingOperations["authorizeRuntimeCredential"] = async (token, signal) => {
         signal.throwIfAborted();
-        return await this.#cx.services.identities.authenticateRuntime(await hashSecret(validateToken(token)), signal);
+        return await this.#cx.services.identities.authenticateRuntime(
+            await hashPairingCredential(validateToken(token)),
+            signal,
+        );
     };
 
     readonly authorizeHost: PairingOperations["authorizeHost"] = async (channelId, token, signal) => {
@@ -216,11 +219,14 @@ export class PairingDirectoryService implements PairingOperations {
             );
         }
         const secrets = await deriveRuntimePairingSecrets(token, owner.projectId, idempotencyKey);
-        const codeHash = await hashSecret(secrets.pairingCode);
-        const pollHash = await hashSecret(secrets.pollToken);
+        const codeHash = await hashPairingCredential(secrets.pairingCode);
+        const pollHash = await hashPairingCredential(secrets.pollToken);
         signal.throwIfAborted();
         if (row.pairing_code_hash !== codeHash || row.poll_token_hash !== pollHash) {
-            throw new PairingDirectoryError("invalid_directory_record", "The Runtime pairing directory is invalid");
+            throw new PairingDirectoryError(
+                "invalid_directory_record",
+                "This pairing cannot be reused; reinstall Morty and create a new pairing",
+            );
         }
         return new CreatedRuntimePairing(
             row.channel_id,
@@ -255,8 +261,8 @@ export class PairingDirectoryService implements PairingOperations {
             stored = await storage.requestRuntimePairing(
                 {
                     pairingId,
-                    codeHash: await hashSecret(secrets.pairingCode),
-                    pollHash: await hashSecret(secrets.pollToken),
+                    codeHash: await hashPairingCredential(secrets.pairingCode),
+                    pollHash: await hashPairingCredential(secrets.pollToken),
                     channelId,
                     runtimeId,
                     now,
@@ -353,7 +359,7 @@ export class PairingDirectoryService implements PairingOperations {
         signal: AbortSignal,
     ): Promise<ClaimedPairing> => {
         signal.throwIfAborted();
-        const codeHash = await hashSecret(normalizePairingCode(pairingCode));
+        const codeHash = await hashPairingCredential(normalizePairingCode(pairingCode));
         const storage = await this.identityStorage({ kind: "pairing-code", codeHash }, signal);
         const pairing = await storage.readPairingCode(codeHash, signal);
         if (pairing === null || (expectedPairingId.length > 0 && pairing.pairing_id !== expectedPairingId)) {
@@ -370,7 +376,7 @@ export class PairingDirectoryService implements PairingOperations {
             {
                 pairingId: pairing.pairing_id,
                 codeHash,
-                daemonHash: await hashSecret(daemonToken),
+                daemonHash: await hashPairingCredential(daemonToken),
                 now: Date.now(),
                 machineName,
                 workspaceName,
@@ -426,7 +432,7 @@ export class PairingDirectoryService implements PairingOperations {
             {
                 grantId,
                 channelId: owner.channel_id,
-                secretHash: await hashSecret(grantSecret),
+                secretHash: await hashPairingCredential(grantSecret),
                 ownerCredentialId: owner.credential_id,
                 now,
                 expiresAt,
@@ -461,7 +467,7 @@ export class PairingDirectoryService implements PairingOperations {
         const created = await storage.createBrowserCredential(
             {
                 credentialId,
-                tokenHash: await hashSecret(browserToken),
+                tokenHash: await hashPairingCredential(browserToken),
                 ownerCredentialId: owner.credentialId,
                 now,
                 expiresAt,
@@ -543,7 +549,7 @@ export class PairingDirectoryService implements PairingOperations {
         signal.throwIfAborted();
         const normalizedChannelId = validateIdentifier(channelId, "channel_id");
         const normalizedGrantId = validateIdentifier(grantId, "grant_id");
-        const secretHash = await hashSecret(validateToken(grantSecret));
+        const secretHash = await hashPairingCredential(validateToken(grantSecret));
         const now = Date.now();
         const credentialId = `hcr_${createRandomToken(18)}`;
         const hostToken = createRandomToken(32);
@@ -554,7 +560,7 @@ export class PairingDirectoryService implements PairingOperations {
                 grantId: normalizedGrantId,
                 secretHash,
                 credentialId,
-                tokenHash: await hashSecret(hostToken),
+                tokenHash: await hashPairingCredential(hostToken),
                 now,
             },
             signal,
@@ -611,7 +617,7 @@ export class PairingDirectoryService implements PairingOperations {
 
     readonly updateAgentCatalog: PairingOperations["updateAgentCatalog"] = async (channelId, token, agents, signal) => {
         signal.throwIfAborted();
-        const tokenHash = await hashSecret(validateToken(token));
+        const tokenHash = await hashPairingCredential(validateToken(token));
         const storage = await this.identityStorage({ kind: "daemon", channelId, tokenHash }, signal);
         if (!(await storage.updateAgentCatalog(channelId, tokenHash, JSON.stringify(agents), signal))) {
             throw new PairingDirectoryError("unauthorized", "A valid channel token is required");
