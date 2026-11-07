@@ -41,7 +41,7 @@ executable and production adapter; a controlled provider can supply deterministi
 model responses without coding-plan credentials. Do not infer compatibility from an
 Agent label on a controlled peer.
 
-Hosted sign-in and visual layout checks remain manual. Record manual verification
+Visual layout checks remain manual. Record manual verification
 results in the relevant pull request and attach screenshots there. Do not commit
 one-off reports or screenshots to the repository. Keep durable behavioral
 guarantees in executable tests.
@@ -57,7 +57,10 @@ compatibility with a vendor Agent.
 A released Moxt/Mobius installation must remain usable while Morty starts, stops,
 updates, and is removed; verify the converse as well. This is a non-interference
 requirement, not support for old Morty installations. The issue #6 cutover requires
-old Morty users to reinstall instead of inheriting their old pairing state.
+old Morty installations to be replaced instead of inheriting their pairing state.
+The subsequent pre-launch reset also retires earlier Morty wire contracts and
+credential representations. Verify the current release end to end and rejection
+of retired credentials; do not preserve mixed-version Morty adapters for this reset.
 
 Exercise interrupted installation and update through the supported installation
 boundary. Verify local IPC authentication, resolved-path ownership, and rejected

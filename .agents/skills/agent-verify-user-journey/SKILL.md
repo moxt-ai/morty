@@ -90,8 +90,8 @@ app or screenshots.
 
 Use `chat-local-full-dev` to:
 
-1. Validate the checkout, pinned Node and pnpm versions, dependencies, and the
-   `third-party/mobius` submodule revision.
+1. Validate the Morty checkout, pinned Node and pnpm versions, and locked
+   workspace dependencies.
 2. Start an isolated local stack in `web-server` mode. This must include the
    local Chat Worker, its Durable Objects/queues/R2/assets, and the local
    Platform fixture. Read `chatOrigin`, `platformOrigin`, and `stateDir` from

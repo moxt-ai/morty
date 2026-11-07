@@ -1,11 +1,11 @@
 ---
 name: cli-debug
-description: Debug Mobius CLI daemon failures on a user's local machine using the bounded local diagnostic log. Use when a user asks why a local Agent operation failed (for example a native session import, fork, or preview returning "The local agent operation could not be completed."), where the daemon writes diagnostics, how to read logs/daemon.log, or how to correlate a Platform relay failure code with the local cause.
+description: Debug Morty CLI daemon failures on a user's local machine using the bounded local diagnostic log. Use when a user asks why a local Agent operation failed (for example a native session import, fork, or preview returning "The local agent operation could not be completed."), where the daemon writes diagnostics, how to read logs/daemon.log, or how to correlate a Platform relay failure code with the local cause.
 ---
 
 # CLI Debugging
 
-Investigate Mobius CLI (local daemon) failures from the local diagnostic log to
+Investigate Morty CLI (local daemon) failures from the local diagnostic log to
 root cause. The daemon keeps its own evidence on the user's machine; prefer that
 file over asking the user to reproduce or enabling verbose output.
 
@@ -15,12 +15,12 @@ Resolve the CLI state root before anything else:
 
 | Precedence | Source | Path |
 | --- | --- | --- |
-| 1 | `MOBIUS_STATE_DIRECTORY` environment variable of the daemon process | its value |
-| 2 | default | `~/.mobius` |
+| 1 | `MORTY_STATE_DIRECTORY` environment variable of the daemon process | its value |
+| 2 | platform default | macOS: `~/Library/Application Support/Morty/v2`; Windows: `%LOCALAPPDATA%\Morty\v2`; Linux: `$XDG_STATE_HOME/morty/v2` or `~/.local/state/morty/v2` |
 
 Read the variable from the environment the daemon actually runs in (for example
 the shell or service definition that started it); do not assume your current
-shell matches. When it is unset, use `~/.mobius`.
+shell matches. When unset, use the platform default from the table.
 
 The running daemon's diagnostic directory may be nested beneath that root, under
 `installations/<applicationId>/<installationId>`. Locate the actual log rather than
@@ -39,26 +39,25 @@ mode `0600` inside a mode `0700` `logs/` directory, and bounded at 1 MiB: when a
 new record would exceed the limit, the oldest complete lines are removed first,
 so the newest history is always retained.
 
-Confirm the CLI version the user runs (`mobius --version` or the installed
-package version). The bounded log exists from CLI version `0.0.72`; earlier
-versions only wrote to stderr, so an absent `logs/daemon.log` on an older
-version is expected and should be reported, not worked around.
+Confirm the CLI version the user runs (`morty --version` or the installed
+package version). Compare the invoking CLI and running Runtime versions using
+`morty status`; an absent diagnostic file can mean no event has been recorded.
 
 ## Read the log
 
 Each line is one JSON diagnostic with a stable prefix:
 
 ```text
-Mobius relay diagnostic {"channelId":"...","event":"relay_connection_failed",...}
-Mobius daemon diagnostic {"channelId":"...","event":"native_session_operation_failed","requestId":"...",...,"failureName":"Error","failureMessage":"...","failureCode":"...","cause1Name":"...","cause1Message":"..."}
+Morty relay diagnostic {"channelId":"...","event":"relay_connection_failed",...}
+Morty daemon diagnostic {"channelId":"...","event":"native_session_operation_failed","requestId":"...",...,"failureName":"Error","failureMessage":"...","failureCode":"...","cause1Name":"...","cause1Message":"..."}
 ```
 
 Extract evidence with line-oriented tools; the file is small by design:
 
 ```sh
-MOBIUS_DIAGNOSTIC_LOG='/absolute/path/to/logs/daemon.log'
-tail -n 200 "$MOBIUS_DIAGNOSTIC_LOG"
-grep '"event":"native_session_operation_failed"' "$MOBIUS_DIAGNOSTIC_LOG" | tail -n 5
+MORTY_DIAGNOSTIC_LOG='/absolute/path/to/logs/daemon.log'
+tail -n 200 "$MORTY_DIAGNOSTIC_LOG"
+rg '"event":"native_session_operation_failed"' "$MORTY_DIAGNOSTIC_LOG" | tail -n 5
 ```
 
 Event families written to the log:
@@ -119,7 +118,7 @@ history" — if the needed evidence was already trimmed, say so.
 Distinguish evidence sources:
 
 - `logs/daemon.log`: durable local diagnostics (this skill's primary source).
-- Daemon stderr/stdout lines (`Mobius daemon diagnostic ...`, `Mobius relay
+- Daemon stderr/stdout lines (`Morty daemon diagnostic ...`, `Morty relay
   diagnostic ...`): same events, ephemeral console stream.
 - Local `wrangler dev` or Chat web output: not evidence of daemon behavior.
 
@@ -133,8 +132,8 @@ and delete it afterward. Preserve typed error codes and sanitized messages at
 every boundary, and keep new daemon-side failures wired into
 `DaemonDiagnosticLog` so they remain diagnosable locally.
 
-Run only relevant tests, then `pnpm lint` and `pnpm typecheck` in the
-`third-party/mobius` submodule. Never run `pnpm ci:check` locally. Do not
+Run only relevant tests, then `pnpm lint` and `pnpm typecheck` in the Morty
+workspace. Use `pnpm ci:check` only to diagnose combined CI validation. Do not
 publish or release the CLI unless the user explicitly asks.
 
 ## Report findings
@@ -148,6 +147,6 @@ Return:
 4. Fix and verification performed, or the next missing piece of evidence.
 
 Redact secrets, tokens, and personal paths. It is acceptable to report that the
-relevant lines were already trimmed by the 1 MiB bound or that the installed CLI
-predates the log; it is not acceptable to claim the daemon "has no logs"
+relevant lines were already trimmed by the 1 MiB bound or no diagnostic event
+was recorded; it is not acceptable to claim the daemon "has no logs"
 without checking `logs/daemon.log`.

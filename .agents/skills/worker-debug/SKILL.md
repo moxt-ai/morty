@@ -1,6 +1,6 @@
 ---
 name: worker-debug
-description: Debug retained or live Cloudflare Worker failures for Morty staging or production. Use when a user asks to inspect deployed Worker logs, investigate an online API error, correlate a browser request with Worker execution, or compare staging and production behavior.
+description: Debug retained or live Cloudflare Worker failures for Morty production. Use when a user asks to inspect deployed Worker logs, investigate an online API error, correlate a browser request with Worker execution, or verify a production deployment.
 ---
 
 # Worker Debugging
@@ -13,17 +13,11 @@ that already happened; `wrangler tail` only observes new events.
 
 Resolve the repository root with `git rev-parse --show-toplevel`, inspect
 `wrangler.jsonc`, and inspect `git status --short` without changing user work.
-Use only configuration read from this checkout:
-
-| Environment | Worker | Origin |
-| --- | --- | --- |
-| staging | `morty-staging` | `https://morty.paradev.biz` |
-| production | `morty-production` | `https://morty.build` |
-
-Treat “online” as ambiguous. Infer the environment only from a supplied URL or
-other concrete evidence; otherwise ask. Never default a destructive operation to
-production. Log reads and bounded health requests are read-only, but still state
-which environment is being inspected.
+Read `deployment/targets.json` for the production account, Worker names and origins.
+The only hosted application environment is production; staging and benchmark
+are retired. Resolve the target service from the supplied URL or concrete evidence.
+State which production service is being inspected. Bounded health and log reads
+are read-only; infer authorization for mutations from the user's task.
 
 Record the narrowest available time window, including its timezone. Capture a
 Cloudflare Ray ID, request ID, URL/path, HTTP status, user-visible error code, and
@@ -36,7 +30,7 @@ Use the installed Cloudflare CLI for account APIs and retained telemetry. Run
 `cf --version` first. If it is missing, install it globally only when the user
 has explicitly authorized a machine-wide installation. Use `cf auth whoami` for
 an ordinary login or API token, and confirm that the selected account matches
-`account_id` in `wrangler.jsonc`. A narrowly scoped Workers Observability token
+the account in `deployment/targets.json`. A narrowly scoped Workers Observability token
 may fail the general identity probe while still authorizing telemetry, so prove
 that token with one bounded telemetry query instead of rejecting it based only on
 `cf auth whoami`. Never print, paste, commit, or return API/OAuth tokens.
@@ -65,9 +59,9 @@ cf o11y telemetry query --body "$QUERY_BODY"
 
 Use `cf cli search "query Workers observability telemetry logs"` to discover the
 command and `cf schema o11y telemetry query` before relying on its request shape.
-Prefer the dedicated `MOBIUS_CF_LOG_API_TOKEN`, then `CLOUDFLARE_API_TOKEN`. The
+Prefer the dedicated `MORTY_CF_LOG_API_TOKEN`, then `CLOUDFLARE_API_TOKEN`. The
 token needs **Account → Workers Observability → Edit** for the account in
-`wrangler.jsonc`; the telemetry query API currently calls this permission Workers
+`deployment/targets.json`; the telemetry query API currently calls this permission Workers
 Observability Write. Wrangler OAuth credentials do not include this permission
 by default, so do not use one until a bounded API probe proves it is authorized.
 
@@ -76,7 +70,7 @@ value. If the user configured it in `.zshrc`, run the diagnostic process through
 an interactive Zsh invocation so the process inherits it without copying the
 secret into a command argument or repository file. Map the dedicated token to
 `CLOUDFLARE_API_TOKEN` only in the `cf` process environment and set
-`CLOUDFLARE_ACCOUNT_ID` from `wrangler.jsonc`. Never place a token in the query
+`CLOUDFLARE_ACCOUNT_ID` from `deployment/targets.json`. Never place a token in the query
 body, source files, shell history, command output, or generated diagnostics.
 Pipe `cf` JSON output directly into a sanitizer because telemetry can contain
 headers and user content; do not print or retain the raw response. Delete
@@ -104,7 +98,7 @@ larger than 100, and `dry: true`. Example body shape:
         "key": "$metadata.service",
         "operation": "eq",
         "type": "string",
-        "value": "morty-staging"
+        "value": "morty-production"
       }
     ]
   }
@@ -133,10 +127,10 @@ When retained evidence has no match and reproduction is safe, start a bounded
 tail against the explicit environment with the repository-pinned Wrangler:
 
 ```sh
-pnpm exec wrangler tail --env staging --format json
+pnpm exec wrangler tail morty-production --format json
 ```
 
-Use `--env production` only after the target is confirmed. Apply supported
+Use the exact Worker name from the production target. Apply supported
 status, method, header, or search filters to reduce unrelated traffic. Start the
 tail before one reproduction, stop it immediately afterward, and never ask a user
 to repeat a destructive or privacy-sensitive action merely to create logs.
@@ -155,7 +149,7 @@ guessing from the sanitized response. Compare all deployed boundaries involved:
 4. Platform Worker's body parser and schema.
 5. Runtime or agent protocol validation.
 
-Check the deployed script version against Git history and submodule revisions.
+Check the deployed script version against the archived release revision and Git history.
 Do not assume the current checkout was deployed at the failure time. Distinguish
 an already-fixed deployment mismatch from a defect still present on current
 `main`.
@@ -163,7 +157,7 @@ an already-fixed deployment mismatch from a defect still present on current
 ### Read deployed D1 or Durable Object data
 
 When retained telemetry cannot reveal the persisted value needed to diagnose a
-staging or production failure, deploy a separate, short-lived, token-gated
+production failure, deploy a separate, short-lived, token-gated
 Worker in the same account and bind the target deployment's D1 database or
 Durable Object class with `script_name`. Query only the records required for the
 diagnosis through an existing internal read boundary, then delete the helper on
@@ -171,8 +165,7 @@ success or failure.
 
 Do not upload diagnostic code as a version of the application Worker, alter its
 active deployment, copy an encrypted application secret, weaken an authorization
-gate, or run a migration merely to read data. State the exact staging or
-production target before deploying the helper, keep its token in a mode `0600`
+gate, or run a migration merely to read data. State the exact production target before deploying the helper, keep its token in a mode `0600`
 file, never print it, and independently verify that the helper was deleted.
 
 ## Implement and verify a fix
@@ -183,8 +176,7 @@ boundary. Preserve typed error codes and sanitized client messages; enrich local
 structured logs with safe schema issue paths when generic validation responses
 otherwise hide the cause.
 
-Run only relevant tests, then `pnpm lint` and `pnpm typecheck`. Never run
-`pnpm ci:check` locally. Do not deploy unless the user explicitly asks.
+Run only relevant tests, then `pnpm lint` and `pnpm typecheck`. Use `pnpm ci:check` only to diagnose combined CI validation. Do not deploy unless the user explicitly asks.
 
 ## Report findings
 
