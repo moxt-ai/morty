@@ -1573,7 +1573,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             if (host.runtime === undefined && process.env["MORTY_LOCAL_CLI"] === undefined) {
                 await runMorty(
                     context,
-                    ["install", "--version", runtimeRelease.version],
+                    // runMorty already selects the exact package; install defaults to that CLI's version.
+                    ["install"],
                     cwd,
                     AbortSignal.any([signal, deadline(180_000)]),
                 );
