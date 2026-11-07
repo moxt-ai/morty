@@ -51,16 +51,16 @@ export function getPiSessionsDir(environment: Readonly<NodeJS.ProcessEnv> = proc
 
 function getPiSessionDiscoveryDirs(environment: Readonly<NodeJS.ProcessEnv>): string[] {
     const discoveryDirectories = [getPiSessionsDir(environment)];
-    const mobiusSessionDirectory = environment["MOBIUS_PI_SESSION_DIR"];
-    if (mobiusSessionDirectory !== undefined && mobiusSessionDirectory.trim().length > 0) {
+    const mortySessionDirectory = environment["MORTY_PI_SESSION_DIR"];
+    if (mortySessionDirectory !== undefined && mortySessionDirectory.trim().length > 0) {
         // Discovery is not paired to the current default workspace: sibling hashed
-        // directories contain sessions created by other Mobius connections.
-        const mobiusSessionsRoot = resolve(mobiusSessionDirectory, "..");
-        for (const entry of readdirSync(mobiusSessionsRoot, { withFileTypes: true, encoding: "utf-8" })) {
+        // directories contain sessions created by other Morty connections.
+        const mortySessionsRoot = resolve(mortySessionDirectory, "..");
+        for (const entry of readdirSync(mortySessionsRoot, { withFileTypes: true, encoding: "utf-8" })) {
             if (!entry.isDirectory()) {
                 continue;
             }
-            const directory = join(mobiusSessionsRoot, entry.name);
+            const directory = join(mortySessionsRoot, entry.name);
             if (!discoveryDirectories.includes(directory)) {
                 discoveryDirectories.push(directory);
             }

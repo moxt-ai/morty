@@ -198,11 +198,11 @@ export class PiRpcProcess {
         // Keep extensions + prompt templates enabled because ACP users may rely on them
         // (e.g. MCP extensions, prompt templates for workflows).
         const args = ["--mode", "rpc", "--no-themes"];
-        const sessionDirectory = params.environment["MOBIUS_PI_SESSION_DIR"];
+        const sessionDirectory = params.environment["MORTY_PI_SESSION_DIR"];
         if (sessionDirectory !== undefined && sessionDirectory.trim().length > 0) {
             // The flag predates the equivalent environment variable, so pass both: the
             // flag configures older Pi versions while the variable identifies the same
-            // directory to Mobius's native-session discovery.
+            // directory to Morty's native-session discovery.
             args.push("--session-dir", sessionDirectory);
         }
         switch (params.origin.kind) {

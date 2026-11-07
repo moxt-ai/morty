@@ -54,7 +54,6 @@ async function availablePort() {
         });
     });
 }
-const DEFAULT_BENCHMARK_RELAY = "https://morty-platform-benchmark.mobius-b90.workers.dev";
 
 function log(message) {
     process.stderr.write(`[local-dev] ${message}\n`);
@@ -80,27 +79,9 @@ function parseArguments(argv) {
             options.mode = token;
             continue;
         }
-        const equals = token.indexOf("=");
-        if (equals > 0 && (token.startsWith("--app-id") || token.startsWith("--app-secret"))) {
-            const name = token.slice(0, equals);
-            const value = token.slice(equals + 1);
-            if (value.length === 0) {
-                fail(`${name} requires a value`);
-            }
-            options[name === "--app-id" ? "appId" : "appSecret"] = value;
-            continue;
-        }
         switch (token) {
             case "--state-dir":
                 options.stateDir = path.resolve(requireValue(index, token));
-                index += 1;
-                break;
-            case "--app-id":
-                options.appId = requireValue(index, token);
-                index += 1;
-                break;
-            case "--app-secret":
-                options.appSecret = requireValue(index, token);
                 index += 1;
                 break;
             case "--platform-port":
@@ -424,34 +405,6 @@ function writeStack(stack) {
     });
 }
 
-async function prepareWeb(options) {
-    const chatPort = options.chatPort ?? (await availablePort());
-    const stateDir = options.stateDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "chat-local-web-dev-"));
-    fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-    const chatOrigin = `http://localhost:${chatPort}`;
-    const logPath = path.join(stateDir, "web.log");
-    const appId = options.appId;
-    const appSecret = options.appSecret;
-    if (appId === undefined || appId.length === 0 || appSecret === undefined || appSecret.length === 0) {
-        throw new Error("web mode requires --app-id and --app-secret");
-    }
-    const pid = await startProcess(
-        "web",
-        ["exec", "vite", "--host", "localhost", "--port", String(chatPort)],
-        logPath,
-        "pnpm",
-        {
-            VITE_MOBIUS_BASE_URL: process.env.MORTY_LOCAL_PLATFORM_URL ?? DEFAULT_BENCHMARK_RELAY,
-            VITE_MOBIUS_APP_ID: appId,
-        },
-    );
-    await waitForHttp(chatOrigin, (response) => response.ok, 90_000, "local web app");
-    const stack = { mode: options.mode, appId, chatOrigin, chatLog: logPath, chatPid: pid, stateDir, ready: true };
-    writeStack(stack);
-    process.stdout.write(`${JSON.stringify(stack)}\n`);
-    await keepAlive(stack, options);
-}
-
 async function keepAlive(stack, options) {
     if (options.background === true) {
         return;
@@ -467,12 +420,9 @@ async function keepAlive(stack, options) {
 }
 
 async function prepare(options) {
-    const validModes = new Set(["web", "web-server", "web-server-morty-cli"]);
+    const validModes = new Set(["web-server", "web-server-morty-cli"]);
     if (!validModes.has(options.mode)) {
-        throw new Error(`Unknown mode ${options.mode}; use web, web-server, or web-server-morty-cli`);
-    }
-    if (options.mode === "web") {
-        return prepareWeb(options);
+        throw new Error(`Unknown mode ${options.mode}; use web-server or web-server-morty-cli`);
     }
     const platformPort = options.platformPort ?? (await availablePort());
     const chatPort = options.chatPort ?? (await availablePort());
@@ -553,27 +503,13 @@ async function prepare(options) {
             { pid: platformPid, logPath: platformLog },
         );
 
-        let appId = options.appId;
-        let appSecret = options.appSecret;
-        if (appId === undefined || appId.length === 0 || appSecret === undefined || appSecret.length === 0) {
-            log("provisioning local Morty service");
-            const { provisionLocalService } = await import("./provision-local-service.ts");
-            const application = await provisionLocalService(
-                path.resolve(REPO_ROOT, PLATFORM_CONFIG),
-                platformPersist,
-                AbortSignal.timeout(60_000),
-            );
-            appId = application.appId;
-            appSecret = application.appSecret;
-        }
-        if (
-            typeof appId !== "string" ||
-            appId.length === 0 ||
-            typeof appSecret !== "string" ||
-            appSecret.length === 0
-        ) {
-            throw new Error("Set --app-id and --app-secret, or allow local app provisioning");
-        }
+        log("provisioning local Morty service");
+        const { provisionLocalService } = await import("./provision-local-service.ts");
+        const { appId, appSecret } = await provisionLocalService(
+            path.resolve(REPO_ROOT, PLATFORM_CONFIG),
+            platformPersist,
+            AbortSignal.timeout(60_000),
+        );
 
         if (options.build !== false) {
             log("building Chat Worker and setup bundle");
@@ -935,7 +871,7 @@ async function reload(options) {
     if (stack === null) {
         throw new Error("pass --state-dir for a stack created by prepare");
     }
-    if (!["web", "web-server", "web-server-morty-cli"].includes(stack.mode)) {
+    if (!["web-server", "web-server-morty-cli"].includes(stack.mode)) {
         throw new Error("unsupported stack mode; run prepare first");
     }
     const origin = new URL(stack.chatOrigin);
@@ -944,7 +880,7 @@ async function reload(options) {
     }
     const stateDir = fs.realpathSync(options.stateDir);
     const chatPersist = path.join(stateDir, "chat");
-    if (stack.mode !== "web" && fs.realpathSync(chatPersist) !== chatPersist) {
+    if (fs.realpathSync(chatPersist) !== chatPersist) {
         throw new Error("Chat persistence must resolve inside the selected state directory");
     }
     if (!isAlive(stack.chatPid)) {
@@ -956,34 +892,28 @@ async function reload(options) {
     process.once("SIGTERM", cancel);
     const operation = { signal: controller.signal, timeout: SETUP_READY_TIMEOUT_MILLISECONDS };
     try {
-        if (stack.mode === "web") {
-            log("Vite already hot-reloads web source changes; checking health");
-        } else {
-            log("rebuilding web/Chat; Platform and paired runtimes will stay running");
-            // Do not delete the entrypoint/assets while the live Wrangler watcher reads them.
-            await run("pnpm", ["build", "--emptyOutDir", "false"], operation);
-            controller.signal.throwIfAborted();
-            log("refreshing the local setup bundle");
-            await run(
-                WRANGLER,
-                [
-                    "r2",
-                    "object",
-                    "put",
-                    `${CHAT_ATTACHMENTS_BUCKET}/artifacts/setup.mjs`,
-                    "--file",
-                    SETUP_BUNDLE,
-                    "--local",
-                    "--persist-to",
-                    chatPersist,
-                    "--config",
-                    CHAT_CONFIG,
-                ],
-                operation,
-            );
-            // Wrangler watches the built Worker entrypoint and serves assets from disk.
-            // Keep its process (and in-memory credentials) rather than reprovisioning the stack.
-        }
+        log("rebuilding web/Chat; Platform and paired runtimes will stay running");
+        // Do not delete the entrypoint/assets while the live Wrangler watcher reads them.
+        await run("pnpm", ["build", "--emptyOutDir", "false"], operation);
+        controller.signal.throwIfAborted();
+        log("refreshing the local setup bundle");
+        await run(
+            WRANGLER,
+            [
+                "r2",
+                "object",
+                "put",
+                `${CHAT_ATTACHMENTS_BUCKET}/artifacts/setup.mjs`,
+                "--file",
+                SETUP_BUNDLE,
+                "--local",
+                "--persist-to",
+                chatPersist,
+                "--config",
+                CHAT_CONFIG,
+            ],
+            operation,
+        );
         await waitForHttp(
             stack.chatOrigin,
             (response) => response.ok,
@@ -1178,7 +1108,7 @@ function usage(stream = process.stdout) {
     stream.write(
         [
             "Usage:",
-            "  node scripts/local-dev.cjs prepare <web|web-server|web-server-morty-cli> [--state-dir DIR] [--platform-port N] [--chat-port N] [--app-id ID --app-secret SECRET] [--force] [--no-build] [--background]",
+            "  node scripts/local-dev.cjs prepare <web-server|web-server-morty-cli> [--state-dir DIR] [--platform-port N] [--chat-port N] [--force] [--no-build] [--background]",
             "  node scripts/local-dev.cjs setup  --state-dir DIR --harness ID --session-id ID [--workspace DIR]",
             "  node scripts/local-dev.cjs status --state-dir DIR",
             "  node scripts/local-dev.cjs reload <web|chat> --state-dir DIR",
@@ -1186,7 +1116,6 @@ function usage(stream = process.stdout) {
             "  node scripts/local-dev.cjs remove --state-dir DIR [--keep-state]",
             "",
             "reload rebuilds web/Chat and refreshes setup.mjs without restarting Platform or runtimes.",
-            "In web mode, Vite already hot-reloads source changes; reload checks health only.",
             "",
         ].join("\n"),
     );

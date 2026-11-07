@@ -177,7 +177,7 @@ try {
     await writeFile("test-results/claude-desktop-distribution.json", `${JSON.stringify(result, null, 2)}\n`);
     const environment = process.env["GITHUB_ENV"];
     if (environment !== undefined) {
-        await appendFile(environment, `MORTY_TEST_CLAUDE_PATH=${binary}\nMOBIUS_DESKTOP_ENGINE_VERSION=${version}\n`);
+        await appendFile(environment, `MORTY_TEST_CLAUDE_PATH=${binary}\nMORTY_DESKTOP_ENGINE_VERSION=${version}\n`);
     }
     const summary = process.env["GITHUB_STEP_SUMMARY"];
     if (summary !== undefined) {
