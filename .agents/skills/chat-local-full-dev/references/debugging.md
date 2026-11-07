@@ -17,7 +17,7 @@ Durable Objects, so most deployed failure modes reproduce locally.
 | --- | --- |
 | Chat Worker output | `chatLog` from `prepare` |
 | Platform fixture output | `platformLog` from `prepare` |
-| Runtime manager diagnostics | `setupLog` from the stack `runtimes` record (`logs --worker runtime`) and the manager's `daemon.log` at a versioned installation path under `<stateDir>/mobius` (`find <stateDir>/mobius -name daemon.log`) |
+| Runtime manager diagnostics | `setupLog` from the stack `runtimes` record (`logs --worker runtime`) and the manager's `daemon.log` at a versioned installation path under `<stateDir>/morty` (`find <stateDir>/morty -name daemon.log`) |
 | Chat D1 / Durable Objects / R2 / KV | `chatPersist` |
 | Platform D1 / Durable Objects / R2 / KV | `platformPersist` |
 | Stack record (pids, origins, paths) | `<stateDir>/stack.json` |
@@ -29,7 +29,7 @@ than opening files directly, so filtering and following stay consistent.
 
 1. Capture the request from the browser tool's network view: method, path, status,
    and the `server-timing` response header. The header names each phase, for
-   example `total`, `authentication`, `ownership`, `session`, and `mobius`.
+   example `total`, `authentication`, `ownership`, `session`, and `morty`.
 2. Find the matching one-line JSON event in the Chat log (`chat-request-timing`)
    and read its `timings` object. A phase that dominates the total points at the
    boundary to inspect next.
@@ -77,16 +77,14 @@ part of the live state.
 
 | Symptom | Likely cause | Check |
 | --- | --- | --- |
-| Agent Runtime reconnect loop, close code 1008 `Invalid protocol message` | `third-party/mobius` checkout is older than the relay protocol the local Platform speaks | `git submodule status third-party/mobius`; run `git submodule update --init third-party/mobius`, then `prepare --force`; for a hand-run setup, make `mobius` on `PATH` resolve to this checkout's CLI |
-| Platform Worker process exits after `Can't call WebSocket send() after close()` | Relay sent to a replaced/closing daemon socket without a readyState guard | `platformLog`; the uncaught TypeError is a relay bug - fix it in `third-party/mobius` rather than retrying |
-| `PLATFORM_UNAVAILABLE` (502) on first request | Platform D1 schema is older than the code | `platformLog`; re-run `prepare --force` to recreate the state directory |
-| `SETUP_ARTIFACT_UNAVAILABLE` (503) on `/setup.mjs` | R2 seed missing in this state directory | Re-run `prepare --force`; confirm the seed step logged success |
-| `INVALID_REQUEST` (400) with a generic message | Schema validation rejected the body | Find the logged typed error and its validation issue path in `chatLog` |
-| `NOT_FOUND` on a Session or Conversation | Wrong Project, or the record lives in another state directory | Inspect `chat_managed_session` and the stack's `appId` |
-| Process exited but the port stays bound | A previous stack was not removed | `status` then `remove --state-dir` the old stack |
-| Platform health times out with unresolved Mobius packages in `platformLog` | The submodule's independent dependencies were not installed | Re-run the current `scripts/local-dev` entrypoint; for an older checkout run `pnpm --dir third-party/mobius install --frozen-lockfile` first |
-| Tests that start an Agent fail with `ACP agent initialization failed` (`target[appBuilder] is not a function`) | A submodule install relinked the Mobius packages the root workspace lists, so two copies of the ACP SDK load | Re-run the current `scripts/local-dev` entrypoint, or remove those packages' `node_modules` and rerun the root `pnpm install --frozen-lockfile` |
-| Mobius relay exits because `packages/web/dist` does not exist | Relay web assets were not built after checking out the submodule | Re-run the current `scripts/local-dev` entrypoint without `--no-build` |
+| Agent Runtime reconnect loop, close code 1008 `Invalid protocol message` | The running Runtime and local relay use different release contracts | Rebuild the checkout CLI and start a fresh isolated stack through `scripts/local-dev`; check `morty status` |
+| Relay exits after `Can't call WebSocket send() after close()` | A replaced or closing daemon socket received a send | Correlate `platformLog` and Runtime diagnostics; fix the relay boundary |
+| `PLATFORM_UNAVAILABLE` (502) on first request | Local relay storage is not ready or its schema does not match | Inspect `platformLog`; recreate only the disposable local stack |
+| `SETUP_ARTIFACT_UNAVAILABLE` (503) on `/setup.mjs` | The local R2 seed is missing | Recreate the stack with the current helper and verify its seed step |
+| `INVALID_REQUEST` (400) with a generic message | Schema validation rejected the body | Read the logged typed error and validation issue path in `chatLog` |
+| `NOT_FOUND` on a Session or Conversation | Wrong Project or local state directory | Compare the requested identity with the stack record |
+| A stopped stack's port remains bound | Another stack still owns the port | Use `status` and remove only the identified stack |
+| Unresolved workspace packages or duplicated ACP SDK instances | Locked dependencies were not installed consistently | Run `pnpm install --frozen-lockfile` at the workspace root and rebuild the CLI |
 
 ## Boundary checklist
 
@@ -100,18 +98,11 @@ When a request fails validation, compare every boundary in order:
 
 ## Reproduce with a narrow API call
 
-For a contract-level reproduction, call the Chat HTTP API directly against
-`chatOrigin`. A first-time visitor must mint an anonymous identity first:
-
-```sh
-curl -sS -X POST "$CHAT_ORIGIN/morty/api/identity/anonymous-users" \
-  -H 'content-type: application/json' -d '{}'
-```
-
-The response carries the browser identity, including the Project ID and token.
-Reuse those as `authorization: Bearer <token>` against
-`/morty/api/chat/projects/<projectId>/...`. Keep tokens out of transcripts
-and logs.
+For a contract-level reproduction, call the supported Chat HTTP boundary at
+`chatOrigin`. Establish an isolated identity through the setup helper first;
+creation is idempotent and requires a creation key. Reuse the fixture's authorized
+identity for the relevant Project, and keep credentials out of transcripts and
+logs. Do not bypass admission or authorization just to reach a handler.
 
 ## Escalating to deployed environments
 
