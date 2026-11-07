@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { listen, port } from "@morty-build/platform-test-support/websocket";
 import { describe, expect, it } from "vitest";
+import { collectLocalDaemonLogs } from "../../src/cli/handler/logs/logic/collect-local-logs.ts";
 import { installWorkspaceDaemonRelease } from "../support/installed-daemon-release.ts";
 
 interface PairingRelay {
@@ -126,7 +127,11 @@ describe("pairing a machine without a local Agent", () => {
             await installWorkspaceDaemonRelease(join(home, "state"));
             const paired = await runCli(pairing, environment, "ABCD-EFGH-JKLM-NPQR-STUV\n");
 
-            expect(paired.code, paired.stderr).toBe(0);
+            expect(
+                paired.code,
+                paired.stderr +
+                    JSON.stringify(await collectLocalDaemonLogs(join(home, "state"), 20, AbortSignal.timeout(5_000))),
+            ).toBe(0);
             expect(relay.claims).toHaveLength(1);
             expect(relay.claims[0]).toMatchObject({ pairingCode: "ABCD-EFGH-JKLM-NPQR-STUV" });
             expect(pairing.join(" ")).not.toContain("ABCD-EFGH");
