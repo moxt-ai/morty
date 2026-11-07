@@ -1035,15 +1035,14 @@ async function logs(options) {
 }
 
 async function stopRecorded(stack) {
+    const runtimeStateDirectory = path.join(stack.stateDir, "morty");
     for (const runtime of Array.isArray(stack.runtimes) ? stack.runtimes : []) {
         if (typeof runtime.connectionId === "string" && /^mcn_[a-f0-9]{32}$/u.test(runtime.connectionId)) {
             log(`stopping paired connection ${runtime.connectionId}`);
             try {
-                const runtimeStateDirectory = mortyStateDirectory;
-                const environment =
-                    runtime.runtimeStateDirectory === runtimeStateDirectory
-                        ? { MORTY_STATE_DIRECTORY: runtimeStateDirectory }
-                        : {};
+                if (runtime.runtimeStateDirectory !== runtimeStateDirectory) {
+                    throw new Error("The recorded Runtime does not belong to this local stack");
+                }
                 await run(
                     process.execPath,
                     [
@@ -1053,7 +1052,7 @@ async function stopRecorded(stack) {
                         "--connection",
                         runtime.connectionId,
                     ],
-                    { env: environment },
+                    { env: { MORTY_STATE_DIRECTORY: runtimeStateDirectory } },
                 );
             } catch (cause) {
                 log(`could not stop paired connection: ${cause instanceof Error ? cause.message : String(cause)}`);
@@ -1061,7 +1060,6 @@ async function stopRecorded(stack) {
         }
         await stopProcess(runtime.runtimePid);
     }
-    const runtimeStateDirectory = mortyStateDirectory;
     if (fs.existsSync(runtimeStateDirectory)) {
         log(`stopping the Morty manager at ${runtimeStateDirectory}`);
         try {

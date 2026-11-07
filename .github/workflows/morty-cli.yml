@@ -134,4 +134,6 @@ jobs:
           name: morty-cli
           path: .release
       - name: Publish accepted bytes with OIDC and verify registry integrity
+        env:
+          GITHUB_REPOSITORY_VISIBILITY: ${{ github.event.repository.visibility }}
         run: node scripts/publish-release.mjs

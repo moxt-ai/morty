@@ -9,7 +9,10 @@ if (
 ) {
     throw new Error("Publishing requires the Morty main-branch OIDC job");
 }
-execFileSync("npm", ["publish", release.archive, "--access", "public", "--provenance"], {
+// npm cannot generate public provenance for a private source repository.
+// OIDC still binds publisher authority; release.json records the tested archive and revision.
+const provenance = process.env.GITHUB_REPOSITORY_VISIBILITY === "public";
+execFileSync("npm", ["publish", release.archive, "--access", "public", `--provenance=${provenance}`], {
     stdio: "inherit",
     timeout: 180000,
 });

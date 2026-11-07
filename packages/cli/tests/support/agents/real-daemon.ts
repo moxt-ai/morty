@@ -129,6 +129,7 @@ export async function withRealDaemon(
     };
     let socket: WebSocket | undefined;
     const messages: Array<string | Buffer> = [];
+    const recentFrames: string[] = [];
     let waiter: PromiseWithResolvers<string | Buffer> | undefined;
     const stopWaiting = (): void => waiter?.reject(signal.reason);
     signal.addEventListener("abort", stopWaiting, { once: true });
@@ -142,6 +143,12 @@ export async function withRealDaemon(
             socket = connection;
             connection.on("message", (value, isBinary) => {
                 const message = isBinary ? Buffer.from(value as Buffer) : value.toString();
+                if (typeof message === "string" && message !== RUNTIME_HEARTBEAT_MESSAGE) {
+                    recentFrames.push(message);
+                    if (recentFrames.length > 10) {
+                        recentFrames.shift();
+                    }
+                }
                 // Like the Relay's host, answer exactly the heartbeat text without the application.
                 if (message === RUNTIME_HEARTBEAT_MESSAGE) {
                     connection.send(RUNTIME_HEARTBEAT_ACK_MESSAGE);
@@ -308,6 +315,7 @@ export async function withRealDaemon(
         );
         process.stderr.write(
             `Real ${specification.label} ${launch} scenario failed: ${inspect(cause, { depth: 8 })}\n` +
+                `Recent test transport frames:\n${recentFrames.join("\n")}\n` +
                 `Daemon diagnostics:\n${inspect(diagnostics, { depth: 8 }).slice(-32_768)}\n`,
         );
         throw cause;

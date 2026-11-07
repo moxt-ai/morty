@@ -60,7 +60,10 @@ test("Given Claude receives a model-not-found response, When I send a prompt, Th
                 if (event.type === "lifecycle-metadata" && event.payload.kind === "prompt.completed") {
                     throw new Error("A model API error must not succeed");
                 }
-                if (event.type === "lifecycle-metadata" && event.payload.kind === "prompt.failed") {
+                if (
+                    event.type === "lifecycle-metadata" &&
+                    (event.payload.kind === "prompt.failed" || event.payload.kind === "prompt.failed-before-start")
+                ) {
                     expect(event.payload.commandId).toBe(commandId);
                     expect(event.payload.code).toBe("acp_agent_error");
                     break;

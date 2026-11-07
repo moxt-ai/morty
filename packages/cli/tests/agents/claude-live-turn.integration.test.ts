@@ -96,7 +96,10 @@ test("Given native Claude is installed outside PATH, When two prompts execute th
                     const workspaceTail = `${basename(dirname(peer.workspace))}/${basename(peer.workspace)}`;
                     expect(JSON.stringify(event.payload.content).replaceAll("\\", "/")).toContain(workspaceTail);
                     toolSucceeded = true;
-                } else if (event.type === "lifecycle-metadata" && event.payload.kind === "prompt.failed") {
+                } else if (
+                    event.type === "lifecycle-metadata" &&
+                    (event.payload.kind === "prompt.failed" || event.payload.kind === "prompt.failed-before-start")
+                ) {
                     throw new Error(JSON.stringify(event));
                 } else if (event.type === "lifecycle-metadata" && event.payload.kind === "prompt.completed") {
                     expect(event.payload.commandId).toBe(commandId);
@@ -145,7 +148,10 @@ test.skipIf(process.platform !== "darwin")(
                     event.payload.content.type === "text"
                 ) {
                     text += event.payload.content.text;
-                } else if (event.type === "lifecycle-metadata" && event.payload.kind === "prompt.failed") {
+                } else if (
+                    event.type === "lifecycle-metadata" &&
+                    (event.payload.kind === "prompt.failed" || event.payload.kind === "prompt.failed-before-start")
+                ) {
                     throw new Error(JSON.stringify(event));
                 } else if (event.type === "lifecycle-metadata" && event.payload.kind === "prompt.completed") {
                     break;
