@@ -10,11 +10,11 @@ metadata:
 
 Morty owns one workspace and one public npm distribution, `@morty-build/cli`.
 Internal client, Runtime, relay, and storage packages are not separately published.
-Production and benchmark have separate service identities, credentials, and
-Cloudflare resources. They intentionally share the Morty Cloudflare account and
-its account-level deployment authority. This is not an authorization boundary
-between production and benchmark. Moxt credentials and release channels must not
-be used.
+The only hosted application environment is production in the Morty Cloudflare
+account. Development, integration and performance checks use isolated local or
+CI services; there is no permanent staging or benchmark deployment. Local
+services must not use production credentials or silently fall back to production.
+Moxt resources, credentials, local state and release channels remain independent.
 
 ## Cloud deployment
 
@@ -23,11 +23,11 @@ source revision and pinned destination, then archives it. Pull requests build
 without deployment secrets. Deployment runs only from main with explicit dispatch
 or the configured production auto-deploy switch.
 
-Each deployment environment supplies `CLOUDFLARE_API_TOKEN` and
+The production deployment environment supplies `CLOUDFLARE_API_TOKEN` and
 `MORTY_SERVICE_SECRET` individually. The latter authenticates Morty's internal
-service, is stored only as a digest in the relay database, and must differ between
-production and benchmark. Runtime secret values are assembled in a private
-short-lived file and removed after deployment. Never log credentials.
+service and is stored only as a digest in the relay database. Runtime secret
+values are assembled in a private short-lived file and removed after deployment.
+Never log credentials.
 
 Clerk, developer sign-in, organization management, and the generic platform
 console are retired. Morty's anonymous identity, sharing, pairing and authorization
