@@ -17,8 +17,8 @@ def read(file):
     return json.loads(file.read_text())
 
 
-def cloud(path, query=None):
-    request = urllib.request.Request('https://api.cloudflare.com/client/v4/accounts/' + ACCOUNT + path, data=None if query is None else json.dumps(query).encode(), headers={'Authorization': 'Bearer ' + os.environ['CLOUDFLARE_API_TOKEN'], 'Content-Type': 'application/json'})
+def cloud(path, query=None, method=None):
+    request = urllib.request.Request('https://api.cloudflare.com/client/v4/accounts/' + ACCOUNT + path, method=method, data=None if query is None else json.dumps(query).encode(), headers={'Authorization': 'Bearer ' + os.environ['CLOUDFLARE_API_TOKEN'], 'Content-Type': 'application/json'})
     with urllib.request.urlopen(request, timeout=40) as response:
         value = json.load(response)
     if not value.get('success'):
@@ -141,6 +141,15 @@ def main():
             with urllib.request.urlopen(urllib.request.Request(expected['asset_origin'] + '/' + entry['key'], headers={'Origin': expected['morty_origin'], 'User-Agent': 'Morty-Deployment/1.0'}), timeout=40) as response:
                 if hashlib.sha256(response.read()).hexdigest() != hashlib.sha256(Path(entry['file']).read_bytes()).hexdigest() or response.headers.get('Access-Control-Allow-Origin') != expected['morty_origin'] or 'immutable' not in response.headers.get('Cache-Control', ''):
                     raise ValueError('Asset content, CORS, or cache verification failed')
+        # The launch reset does not retain an unused secret binding from old Workers.
+        secrets_path = '/workers/scripts/' + expected['morty'] + '/secrets'
+        secret_names = {item['name'] for item in cloud(secrets_path)}
+        if 'MORTY_SERVICE_SECRET' not in secret_names:
+            raise ValueError('The deployed Morty service secret binding is missing')
+        if 'MOBIUS_APP_SECRET' in secret_names:
+            cloud(secrets_path + '/MOBIUS_APP_SECRET', method='DELETE')
+        if 'MOBIUS_APP_SECRET' in {item['name'] for item in cloud(secrets_path)}:
+            raise ValueError('The retired service secret binding still exists')
         run(['node', str(ROOT / 'deployment/provision-service.ts'), args.environment, 'retire'], env)
         deployed = {}
         for component in configs:
