@@ -5,7 +5,7 @@ import { once } from "node:events";
 import { access, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 
@@ -29,6 +29,7 @@ const entry = await installedEntry();
 if (!entry) {
     throw new Error("MORTY_RELEASE_ENTRY must identify the installed release entrypoint");
 }
+const releaseVersion = JSON.parse(await readFile(join(dirname(entry), "../package.json"), "utf8")).version;
 
 test("Given an existing Mobius state root, Morty help identifies its own product without changing that root", async () => {
     const existing = await mkdtemp(join(tmpdir(), "moxt-coexistence-"));
@@ -48,7 +49,7 @@ test("Given an existing Mobius state root, Morty help identifies its own product
     }
 });
 
-test("Given a packed Morty release, installation and daemon lifecycle preserve adjacent Moxt data and a failed update preserves the installed release", async () => {
+test("Given a packed Morty release, version-selected installation and daemon lifecycle preserve adjacent Moxt data and a failed update preserves the installed release", async () => {
     const archive = process.env.MORTY_RELEASE_ARCHIVE;
     assert.ok(archive, "MORTY_RELEASE_ARCHIVE is required");
     const existing = await mkdtemp(join(tmpdir(), "moxt-lifecycle-"));
@@ -57,9 +58,9 @@ test("Given a packed Morty release, installation and daemon lifecycle preserve a
     const run = (...args) => execute(process.execPath, [entry, ...args], { env, timeout: 180_000 });
     try {
         await writeFile(join(existing, "owned-by-moxt"), "preserve this installation\n");
-        await run("install", "--archive", archive);
+        await run("install", "--version", releaseVersion, "--archive", archive);
         await Promise.all([run("start"), run("start"), run("start")]);
-        assert.match((await run("status")).stdout, /Daemon: 0\.1\.0/);
+        assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
         const control = join(morty, "installations", "build.morty.cli");
         const pointer = JSON.parse(await readFile(join(control, "current.json"), "utf8"));
         const installation = join(control, pointer.installationId);
@@ -73,7 +74,7 @@ test("Given a packed Morty release, installation and daemon lifecycle preserve a
         const closed = once(probe, "close");
         probe.destroy();
         await closed;
-        assert.match((await run("status")).stdout, /Daemon: 0\.1\.0/);
+        assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
         const unauthorized = createConnection(endpoint);
         try {
             await once(unauthorized, "connect");
@@ -84,10 +85,10 @@ test("Given a packed Morty release, installation and daemon lifecycle preserve a
         } finally {
             unauthorized.destroy();
         }
-        assert.match((await run("status")).stdout, /Daemon: 0\.1\.0/);
+        assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
         await run("restart");
-        await assert.rejects(run("update", "--archive", join(morty, "missing.tgz")));
-        assert.match((await run("status")).stdout, /Daemon: 0\.1\.0/);
+        await assert.rejects(run("update", "--version", releaseVersion, "--archive", join(morty, "missing.tgz")));
+        assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
         await run("stop");
         assert.match((await run("status")).stdout, /Daemon: not running/);
         await writeFile(join(morty, "user-data"), "keep this file");
@@ -135,11 +136,11 @@ test("Given a running Morty installation, When an update process is interrupted 
         await interrupted;
         const outcome = await exited;
         assert.ok(outcome.signal !== null || outcome.code !== 0);
-        assert.match((await run("status")).stdout, /Daemon: 0\.1\.0/);
+        assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
         assert.match((await run("doctor")).stdout, /preparing/);
         await run("update", "--archive", archive);
         assert.match((await run("doctor")).stdout, /complete/);
-        assert.match((await run("status")).stdout, /Daemon: 0\.1\.0/);
+        assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
     } finally {
         updater?.kill();
         await run("stop").catch(() => undefined);

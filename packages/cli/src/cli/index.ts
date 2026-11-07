@@ -14,6 +14,7 @@ import { registerVersionHandler } from "./handler/version/index.ts";
 function createProgram(cliContext: CliContext): Command {
     const program = new Command()
         .name("morty")
+        .enablePositionalOptions()
         .description("Pair and run local AI agent services.")
         .showHelpAfterError()
         .exitOverride()
