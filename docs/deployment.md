@@ -58,6 +58,11 @@ Publishing for this repository, `morty-cli.yml`, and the `morty-npm` environment
 First-publication authorization must be established separately; scope membership
 alone does not configure a publisher. Verify registry integrity after publication.
 
+npm public provenance is available only for public source repositories. While this
+repository is private, OIDC still binds publishing authority to the configured
+workflow and environment, and the archived release records its source revision and
+checksums. Do not describe that release record as a public provenance attestation.
+
 Keep the previous production setup available until the new package is published
 and its replacement verified. Existing Morty users reinstall and pair again;
 there is no old-installation takeover or legacy forwarding fallback. Preserve
