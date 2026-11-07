@@ -1,4 +1,4 @@
-import { readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { copyFile, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { build } from "esbuild";
 import { z } from "zod";
@@ -155,3 +155,6 @@ await writeFile(
     noticePath,
     `${notice}\nSource paths above refer to the Morty source repository.\nLicense texts and notices for bundled components are included in\nTHIRD-PARTY-NOTICES.txt alongside this file.\n`,
 );
+
+// Ship Morty's own terms alongside the independently licensed bundled components.
+await copyFile(resolve(directory, "../../LICENSE"), resolve(directory, "LICENSE"));
