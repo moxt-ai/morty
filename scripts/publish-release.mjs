@@ -1,4 +1,6 @@
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { setTimeout as delay } from "node:timers/promises";
+import { promisify } from "node:util";
 import { verifiedRelease } from "./release-artifact.mjs";
 
 const release = await verifiedRelease();
@@ -12,15 +14,50 @@ if (
 // npm cannot generate public provenance for a private source repository.
 // OIDC still binds publisher authority; release.json records the tested archive and revision.
 const provenance = process.env.GITHUB_REPOSITORY_VISIBILITY === "public";
-execFileSync("npm", ["publish", release.archive, "--access", "public", `--provenance=${provenance}`], {
-    stdio: "inherit",
-    timeout: 180000,
-});
-const integrity = execFileSync("npm", ["view", `${release.name}@${release.version}`, "dist.integrity"], {
-    encoding: "utf8",
-    timeout: 60000,
-}).trim();
-if (integrity !== release.integrity) {
-    throw new Error("Registry integrity differs from the tested archive");
+const interrupted = new AbortController();
+process.once("SIGINT", () => interrupted.abort());
+process.once("SIGTERM", () => interrupted.abort());
+const signal = AbortSignal.any([interrupted.signal, AbortSignal.timeout(8 * 60_000)]);
+const registryUrl = `https://registry.npmjs.org/${encodeURIComponent(release.name)}/${release.version}`;
+
+async function registryContainsAcceptedRelease() {
+    const response = await fetch(registryUrl, {
+        headers: { "cache-control": "no-cache" },
+        signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+    });
+    if (response.status === 404) {
+        await response.body?.cancel();
+        return false;
+    }
+    if (!response.ok) {
+        await response.body?.cancel();
+        throw new Error(`Registry verification failed with HTTP ${response.status}`);
+    }
+    const published = await response.json();
+    if (
+        published?.name !== release.name ||
+        published?.version !== release.version ||
+        published?.dist?.integrity !== release.integrity
+    ) {
+        throw new Error("Registry identity or integrity differs from the tested archive");
+    }
+    return true;
+}
+
+if (await registryContainsAcceptedRelease()) {
+    console.log("The accepted archive is already published; verifying this retry without republishing.");
+} else {
+    const result = await promisify(execFile)(
+        "npm",
+        ["publish", release.archive, "--access", "public", `--provenance=${provenance}`],
+        { encoding: "utf8", timeout: 180000, signal, maxBuffer: 4 * 1024 * 1024 },
+    );
+    process.stdout.write(result.stdout);
+    process.stderr.write(result.stderr);
+    // A successful publish can precede public registry visibility by several minutes.
+    while (!(await registryContainsAcceptedRelease())) {
+        console.log("npm accepted the publication; waiting for public registry verification.");
+        await delay(5000, undefined, { signal });
+    }
 }
 console.log(`Verified ${release.name}@${release.version} from ${release.revision}`);
