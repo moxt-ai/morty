@@ -100,7 +100,7 @@ def main():
     for key in ['CLOUDFLARE_ENV', 'CF_ACCOUNT_ID', 'CF_API_TOKEN']:
         env.pop(key, None)
     previous = {component: cloud('/workers/scripts/' + expected[component] + '/deployments')['deployments'][0] for component in configs}
-    types = {'.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf'}
+    types = {'.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.txt': 'text/plain; charset=utf-8'}
     with tempfile.TemporaryDirectory(prefix='morty-deploy-') as temporary:
         temporary = Path(temporary)
         groups = {extension: [] for extension in types}

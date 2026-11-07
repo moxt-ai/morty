@@ -5,6 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import * as v from "valibot";
 import { defineConfig } from "vite";
+import { bundleLicenses } from "./scripts/bundle-licenses.ts";
 
 const sentry = v.parse(
     v.object({
@@ -16,6 +17,11 @@ const sentry = v.parse(
     process.env,
 );
 const workerConfig = process.env["MORTY_WORKER_CONFIG"];
+const revision = process.env["MORTY_SETUP_REVISION"];
+if (revision !== undefined && !/^[0-9a-f]{40}$/u.test(revision)) {
+    throw new Error("MORTY_SETUP_REVISION must be a full commit SHA");
+}
+const licenseFile = `assets/THIRD-PARTY-NOTICES-${revision ?? "local"}.txt`;
 const assetOrigins =
     process.env["MORTY_ASSET_ORIGIN"] === undefined
         ? undefined
@@ -35,6 +41,7 @@ export default defineConfig({
               },
           }),
     plugins: [
+        bundleLicenses({ kind: "asset", fileName: licenseFile }),
         react(),
         tailwindcss(),
         cloudflare(workerConfig === undefined ? {} : { configPath: workerConfig }),
@@ -58,7 +65,15 @@ export default defineConfig({
               }))
             : []),
     ],
-    build: { sourcemap: "hidden" },
+    build: {
+        sourcemap: "hidden",
+        license: { fileName: "bundle-licenses.json" },
+        rolldownOptions: {
+            output: {
+                postBanner: `/* License texts: ${assetOrigins?.generated ?? ""}/${licenseFile} */`,
+            },
+        },
+    },
     resolve: {
         alias: [{ find: "@", replacement: fileURLToPath(new URL("./packages/web/src", import.meta.url)) }],
     },
