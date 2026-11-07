@@ -1,3 +1,6 @@
+// Modified and maintained by Moxt for Morty.
+// Part of the Claude ACP adapter derived from Zed Industries' claude-code-acp (Apache-2.0).
+
 import type { ToolCallStatus } from "@agentclientprotocol/sdk";
 import type { ClaudeSessionNotification as SessionNotification } from "./session-update.js";
 

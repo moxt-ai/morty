@@ -1,3 +1,6 @@
+// Modified and maintained by Moxt for Morty.
+// Part of the Claude ACP adapter derived from Zed Industries' claude-code-acp (Apache-2.0).
+
 // Export the main agent class and utilities for library usage
 export {
     ClaudeAcpAgent,

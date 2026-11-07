@@ -20,7 +20,7 @@ This product bundles the following third-party components.
 
 Claude ACP adapter
   packages/cli/src/engine/acp/harness/claude/upstream
-  Derived from claude-code-acp.
+  Derived from claude-code-acp; modified and maintained by Moxt for Morty.
   Copyright 2025 Zed Industries, Inc. and contributors
   Licensed under the Apache License, Version 2.0.
   License text: packages/cli/src/engine/acp/harness/claude/LICENSE
@@ -29,6 +29,7 @@ Pi ACP adapter
   packages/cli/src/engine/acp/harness/pi/upstream
   Derived from pi-acp v0.0.34 (https://github.com/svkozak/pi-acp),
   commit b0581c9c1d675e634234674484247008b03d69b4.
+  Modified and maintained by Moxt for Morty.
   Copyright (c) 2025 Sergii Kozak
   Licensed under the MIT License.
   License text: packages/cli/src/engine/acp/harness/pi/LICENSE
