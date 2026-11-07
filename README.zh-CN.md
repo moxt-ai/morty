@@ -19,7 +19,6 @@ metadata:
 [打开 Morty →](https://morty.build) · [开始连接](#一条提示词然后拿起手机) · [参与贡献](docs/CONTRIBUTING.md)
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Built on Mobius](https://img.shields.io/badge/built_on-Mobius-111.svg)](https://github.com/moxt-ai/mobius)
 
 <img src="docs/assets/readme-accent.svg" width="320" height="40" alt="" />
 
@@ -57,10 +56,19 @@ You may install missing prerequisites and pair this machine.
 ## 运行条件
 
 - 电脑上装有并已登录 **Codex**、**Claude Code** 或 **Pi** 其中之一
-- **Node.js 22.19.0 或更高版本**
+- **Node.js 22.19+（22.x）或 24.20+（24.x）**
 - 连接的机器保持**唤醒并联网**。Morty 是你本地会话的一扇窗，不是云端沙箱；
   电脑休眠时会话随之暂停，重新连上之前浏览器里看不到历史
   （[#907](https://github.com/moxt-ai/morty/issues/907)）。
+
+## 重新安装独立版 Morty
+
+旧 Morty 用户需要重新安装并配对。新版不会继承 `.mobius` 状态，也不会停止已有的
+Moxt/Mobius 服务。Agent 自己的会话历史仍保留在机器上。重新运行上面的安装提示，
+并使用新生成的浏览器链接。
+
+`npx --yes @morty-build/cli uninstall` 停止 Morty 并移除托管的可执行文件，
+保留本地身份、配对、工作区和 Agent 历史。
 
 ## 已知限制
 
@@ -69,7 +77,7 @@ You may install missing prerequisites and pair this machine.
   都能接上。但一直开着没退出的终端会话保留的是它自己的那份对话：看不到你在 Morty 里发的
   消息，**Claude Code** 和 **Pi** 在那里发下一条消息时还会让对话分叉。
 - **Codex 同一时间只允许一个应用写入同一个 thread。** 在 Morty 里用过某个 thread 之后，
-  如果终端提示 `thread ... already has an active writer`，执行 `mobius release`。它会交还
+  如果终端提示 `thread ... already has an active writer`，执行 `npx --yes @morty-build/cli release`。它会交还
   闲置的会话，不会断开 Morty；之后在 Morty 里继续时会重新打开。
 
 ## Morty 如何处理你的数据
@@ -77,10 +85,8 @@ You may install missing prerequisites and pair this machine.
 - **对话是从你的机器实时读取的。** 浏览器只保存会话 ID 和标题，历史记录在每次打开
   会话时从你电脑上的 daemon 取回。电脑离线时，浏览器里看不到历史——这是设计如此，
   不是缓存没命中。
-- **云端 Recording 是关闭的。** Mobius 为需要"机器离线后历史仍可访问"的应用提供可选的
-  云端 Recording 能力。Morty 没有启用它：应用级策略将 Recording 设为 `disabled`，
-  且没有任何 Morty 项目覆盖该设置。
-- **Relay 负责传输，不是保险箱。** 会话流量经由 Mobius relay 到达你的机器。
+- **云端 Recording 是关闭的。** Morty 从连接的机器读取会话历史，不把它保存为云端档案。
+- **Relay 负责传输，不是保险箱。** 会话流量经由 Morty relay 到达你的机器。
   **Morty 不是端到端加密的**——在这个设计里，relay 是一个被信任的组件。
   如果端到端加密是你的硬性要求，Morty 目前不满足。
 - **机器身份只留在本机。** 安装程序把这台电脑的 Morty 身份保存在当前用户的本地应用
@@ -90,9 +96,10 @@ You may install missing prerequisites and pair this machine.
   此前从某台机器分享出去的全部链接和浏览器访问，对你的 Agent 说：
   *"Revoke all links I previously shared from this machine."* 已经连上某个会话的浏览器，
   在你撤销后最多还能继续使用一小时。
-- **Mobius 会自动更新。** 安装程序从 npm 安装 Mobius CLI（`@moxt-ai/mobius`）。运行期间，
-  Mobius 每小时检查一次 npm 上的新版本，安装时不执行包脚本，并在你的 Morty 会话空闲
-  30 分钟后切换到新版本。`mobius quit` 可以停止它。
+- **Morty 独立管理安装和更新。** 安装程序将确定版本的 `@morty-build/cli`
+  安装到持久的用户目录。运行 `npx --yes @morty-build/cli update` 安装并启用新版，
+  运行 `npx --yes @morty-build/cli status` 比较已安装与正在运行的版本。
+  更新保留配对和 Agent 历史，不操作 Moxt 的服务。
 - **网站会统计页面访问和 setup 步骤，并上报错误。** morty.build 把页面访问发送给 Google
   Analytics，把错误发送给 Sentry。两者收到的页面路径都不带查询参数，因此不包含会话 ID；
   Sentry 事件还会去掉用户、cookie、请求头和请求体数据。Google Analytics 还会收到两种不带
@@ -103,7 +110,7 @@ You may install missing prerequisites and pair this machine.
 
 ## 离开
 
-Morty 不会扣住你的会话。执行 `mobius quit`，这台电脑上所有 Morty 会话都会关闭，
+Morty 不会扣住你的会话。执行 `npx --yes @morty-build/cli stop`，这台电脑上所有 Morty 会话都会关闭，
 而配对关系和 Agent 自身的历史记录完整保留。回到原生客户端继续：
 
 | Agent | 恢复会话 |
@@ -112,8 +119,8 @@ Morty 不会扣住你的会话。执行 `mobius quit`，这台电脑上所有 Mo
 | Claude Code | `claude --resume`，或用 `claude --continue` 直接接上最近一次 |
 | Pi | `pi --resume`，或用 `pi --continue` 直接接上最近一次 |
 
-之后执行 `mobius start` 即可重新连接 Morty。如果只想把闲置的会话交还给终端、
-不断开 Morty，改用 `mobius release`。
+之后执行 `npx --yes @morty-build/cli start` 即可重新连接 Morty。如果只想把闲置的会话交还给终端、
+不断开 Morty，改用 `npx --yes @morty-build/cli release`。
 
 ## 安全
 
@@ -122,8 +129,7 @@ Morty 不会扣住你的会话。执行 `mobius quit`，这台电脑上所有 Mo
 
 ---
 
-基于 [**Mobius**](https://github.com/moxt-ai/mobius) 构建。
-Mobius 为开发者提供远程连接编程 Agent 的 SDK 和基础设施，Morty 则是开箱即用的浏览器应用。
+Morty 的浏览器、云端服务和本地 Runtime 源码统一由本仓库维护。
 
 [参与贡献](docs/CONTRIBUTING.md) · [测试指南](docs/TESTING.md) · [使用指南](docs/GUIDE.md) · [部署说明](docs/deployment.md) · [安全](SECURITY.md)
 

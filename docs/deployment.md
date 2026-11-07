@@ -6,66 +6,56 @@ metadata:
     and approval. The recommended reviewer is taowen-paraflow.
 ---
 
-# GitHub-managed Worker configuration
+# Morty releases and deployment
 
-After this, an operator can update individual runtime variables and secrets in
-GitHub and see them applied to Cloudflare by the next successful CD deployment.
+Morty owns one workspace and one public npm distribution, `@morty-build/cli`.
+Internal client, Runtime, relay, and storage packages are not separately published.
+Production and benchmark have separate service identities, credentials, and
+Cloudflare resources. Moxt credentials and release channels must not be used.
 
-Both `moxt-ai/morty` and `moxt-ai/mobius` use separate `staging` and
-`production` GitHub Environments. Each runtime setting has its own GitHub name;
-the workflows explicitly map those names to Worker bindings. Configuration is
-validated by `scripts/validate-worker-config.ts` before migrations/deployment.
-The executable configuration and deployment steps are in
-[Morty workflows](../.github/workflows/) and [Mobius workflows](../third-party/mobius/.github/workflows/).
+## Cloud deployment
 
-## Chat
+The Morty Cloud workflow builds a checksummed portable artifact, validates its
+source revision and pinned destination, then archives it. Pull requests build
+without deployment secrets. Deployment runs only from main with explicit dispatch
+or the configured production auto-deploy switch.
 
-Configure these **GitHub Environment variables** individually:
+Each deployment environment supplies `CLOUDFLARE_API_TOKEN` and
+`MORTY_SERVICE_SECRET` individually. The latter authenticates Morty's internal
+service, is stored only as a digest in the relay database, and must differ between
+production and benchmark. Runtime secret values are assembled in a private
+short-lived file and removed after deployment. Never log credentials.
 
-- `APP_ORIGIN` — canonical Chat origin, without a trailing slash.
-- `MOBIUS_BASE_URL` — Platform origin.
-- `MOBIUS_APP_ID` — environment-specific Platform App ID.
+Clerk, developer sign-in, organization management, and the generic platform
+console are retired. Morty's anonymous identity, sharing, pairing and authorization
+remain enforced. Removing unused authentication surfaces must not remove project
+or Agent data. Historical database migrations are immutable.
 
-Configure these **GitHub Environment secrets** individually:
+Deployment checks the selected service credential against its destination before
+writes. Production additionally refuses to activate an installer until the exact
+Morty npm version exists. Upload assets and setup before changing the Worker.
+A restore uses the archived bytes and source revision, validates current Durable
+Object migration history, and never rolls persistent data backwards.
 
-- `MOBIUS_APP_SECRET` — full `mapp_…` AppCredential.
+Wrangler updates supplied secrets additively. Remove retired Clerk/OIDC/webhook
+secrets explicitly only after replacing their consumers and verifying the target
+service. Cloudflare cannot return stored secret plaintext; obtain it from its
+owner or rotate the environment's service credential through storage operations.
 
-Retain the deployment secrets `CLOUDFLARE_API_TOKEN` and `SENTRY_AUTH_TOKEN`,
-and the variables `SENTRY_DSN`, `SENTRY_ORG`, and `SENTRY_PROJECT`. These are
-CD/build settings, not Worker bindings.
+## CLI publication
 
-Public Mobius checkout should use GitHub's automatic `GITHUB_TOKEN` with
-`contents: read` and without persisting Git credentials. Fork pull requests
-must be able to build and test without repository or environment secrets.
-Keep deployment credentials in the controlled deployment jobs, and keep the
-required approval for external contributors' workflow runs.
+Build and pack once, then test that same archive across supported systems and
+Node versions, including coexistence with a real released Moxt installation.
+Record its source revision and integrity. Do not publish a public prerelease to
+bypass the acceptance gate in issue #6.
 
-Retire `MOBIUS_READ_TOKEN` after all checkout workflows use the default token,
-validation has passed, and older workflow runs that require it have finished.
-Check other consumers before revoking the underlying token.
+The Morty CLI workflow publishes only from main after its checks pass and the
+complete product acceptance and review are finished. Configure npm Trusted
+Publishing for this repository, `morty-cli.yml`, and the `morty-npm` environment.
+First-publication authorization must be established separately; scope membership
+alone does not configure a publisher. Verify registry integrity after publication.
 
-CD assembles a private temporary JSON file from the individual runtime secrets
-and uploads it with the Worker version using Wrangler's `--secrets-file`. The
-file is removed when the deployment step exits.
-
-The `production` GitHub Environment uses a one-minute deployment wait timer.
-
-## Mobius Platform
-
-Configure Platform independently using the
-[Mobius workflows](../third-party/mobius/.github/workflows/) for its current
-runtime, frontend, deployment, and migration requirements. Chat's anonymous
-identity flow does not configure Platform developer authentication.
-Resource bindings and database
-names are defined in each Worker's Wrangler configuration.
-
-## Updating settings
-
-Staging Chat (`morty.paradev.biz`) calls production Platform (`mobius.moxt.ai`).
-Use the matching App ID and full AppCredential (`mapp_...`), not its public key ID.
-
-Cloudflare cannot return secret plaintext; obtain it from the original store or
-rotate the credential. Never commit credentials. GitHub Environment settings are
-validated by [validate-worker-config.ts](../scripts/validate-worker-config.ts).
-Wrangler updates supplied secrets additively: omitting a secret does not delete it.
-Remove retired secrets explicitly after removing their application dependencies.
+Keep the previous production setup available until the new package is published
+and its replacement verified. Existing Morty users reinstall and pair again;
+there is no old-installation takeover or legacy forwarding fallback. Preserve
+Moxt and Agent-owned data throughout the cutover.

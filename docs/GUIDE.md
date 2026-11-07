@@ -36,18 +36,30 @@ promptly even during a long answer. Displaying each update should process the ne
 changed content without repeatedly rebuilding the entire turn; opening or reconnecting
 may require a separate catch-up step.
 
-[Mobius](https://github.com/moxt-ai/mobius) provides remote access to local
-Agents. Morty supplies Bots, conversation access and the browser experience, so users
-can focus on their work without building a client themselves. Available operations
-depend on the Agent and configuration, and unavailable capabilities or history must
-be clear to the user.
+Morty includes the local Runtime, relay, and browser experience. Available operations
+depend on the Agent and configuration; unavailable capabilities or history must be
+clear to the user. Morty and Moxt may discover the same installed Agent, but must not
+write to the same Agent conversation concurrently. Stop or release the current
+writer before continuing it elsewhere.
 
 ## Data ownership and recovery
 
 Live output favors responsiveness over guaranteed delivery. Disconnects and restarts
-can leave gaps; catch-up depends on the current turn, native Agent history or available
-cloud recordings. Optional Recording must not slow the conversation and is not a
-lossless archive. See Mobius's [data ownership and recovery](https://github.com/moxt-ai/mobius/blob/main/docs/GUIDE.md#data-ownership-and-recovery)
-for where retained data lives.
+can leave gaps; catch-up depends on native Agent history. Morty does not enable
+cloud recording. Agent-owned history stays in the Agent's directories; Morty
+uninstall must never remove it.
+
+Morty's state directory is `~/Library/Application Support/Morty/v1` on macOS,
+`%LOCALAPPDATA%\Morty\v1` on Windows, and `$XDG_STATE_HOME/morty/v1` (or
+`~/.local/state/morty/v1`) on Linux. An absolute `MORTY_STATE_DIRECTORY` overrides
+it. Use a fresh empty directory; existing unmarked data is not adopted.
+
+The `@morty-build/cli` npm command is a launcher for the persistent installed
+release. Use `npx --yes @morty-build/cli` followed by `status`, `doctor`, `stop`,
+`start`, `restart`, `update`, or `uninstall`. `restart` does not download a version;
+`update` verifies a candidate before switching and attempts to restore the previous
+release if activation fails. `doctor` reports the last installation operation.
+After an interrupted update, inspect `doctor` and restart the selected release;
+reinstall a known-good exact version if its files are incomplete.
 
 For hosting and runtime configuration, see [deployment](deployment.md).
