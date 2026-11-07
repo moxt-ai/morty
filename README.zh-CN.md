@@ -58,12 +58,12 @@ You may install missing prerequisites and pair this machine.
 - 电脑上装有并已登录 **Codex**、**Claude Code** 或 **Pi** 其中之一
 - **Node.js 22.19+（22.x）或 24.20+（24.x）**
 - 连接的机器保持**唤醒并联网**。Morty 是你本地会话的一扇窗，不是云端沙箱；
-  电脑休眠时会话随之暂停，重新连上之前浏览器里看不到历史
-  （[#907](https://github.com/moxt-ai/morty/issues/907)）。
+  电脑休眠时会话随之暂停，重新连上之前浏览器里看不到历史。
 
 ## 重新安装独立版 Morty
 
-旧 Morty 用户需要重新安装并配对。新版不会继承 `.mobius` 状态，也不会停止已有的
+早期 Morty 测试版本、安装状态和浏览器链接不再受支持，需要重新安装并配对。
+新版不会继承 `.mobius` 状态，也不会停止已有的
 Moxt/Mobius 服务。Agent 自己的会话历史仍保留在机器上。重新运行上面的安装提示，
 并使用新生成的浏览器链接。
 

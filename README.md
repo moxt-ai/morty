@@ -67,8 +67,7 @@ running it. Read it yourself before you paste the prompt.
 - **Node.js 22.19+ (22.x) or 24.20+ (24.x)**
 - The connected machine **awake and online**. Morty is a window into a session running
   on your computer, not a cloud sandbox. When the computer sleeps the session pauses with
-  it, and the browser shows no history until it reconnects
-  ([#907](https://github.com/moxt-ai/morty/issues/907)).
+  it, and the browser shows no history until it reconnects.
 
 ## Installing the launch release
 
