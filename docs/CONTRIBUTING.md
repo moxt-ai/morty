@@ -39,44 +39,30 @@ consequences in the PR; cite the explicit instruction for any intentional break.
 ## Local development
 
 Use the Node and pnpm versions pinned in [package.json](../package.json), then install
-the workspace and sync the Mobius submodule:
+the locked Morty workspace:
 
 ```sh
-pnpm install
-pnpm sync:submodules
+pnpm install --frozen-lockfile
 pnpm local-dev --help
 ```
 
 Use [the local-stack skill](../.agents/skills/chat-local-full-dev/SKILL.md) for isolated
-Chat and Platform startup and cleanup. Protocol and SDK workspace dependencies come
-from the Mobius submodule; sync it before repository work.
+Morty Web and relay startup and cleanup. Runtime, protocol, client, and server
+sources belong to the same Morty workspace. Normal Morty builds must not require
+the original Mobius distribution; use an isolated released copy only when
+verifying coexistence with Moxt.
 Runtime configuration is described in [deployment](deployment.md).
 
 ## Build and artifact operations
 
 ### Web asset CDN
 
-Staging and production builds load content-addressed JavaScript and CSS from an
-append-only R2 bucket. Deployments upload the new assets before activating the
-new Worker, so an already-open page can continue loading its original chunks
-after later deployments. Do not delete objects from these buckets.
-
-Provision the buckets and their custom domains once, replacing each zone ID
-with the Cloudflare zone that owns the domain:
-
-```sh
-pnpm exec wrangler r2 bucket create morty-staging-web-assets
-pnpm exec wrangler r2 bucket domain add morty-staging-web-assets --domain assets.morty.paradev.biz --zone-id <PARADEV_ZONE_ID> --min-tls 1.2 --force
-pnpm exec wrangler r2 bucket cors set morty-staging-web-assets --file config/r2/staging-web-assets-cors.json --force
-
-pnpm exec wrangler r2 bucket create morty-production-web-assets
-pnpm exec wrangler r2 bucket domain add morty-production-web-assets --domain assets.morty.build --zone-id <MORTY_BUILD_ZONE_ID> --min-tls 1.2 --force
-pnpm exec wrangler r2 bucket cors set morty-production-web-assets --file config/r2/production-web-assets-cors.json --force
-```
-
-The deployment token needs R2 object-write permission for both web asset
-buckets. Objects are served with a one-year immutable browser cache policy;
-their content hashes make overwriting unnecessary.
+Production and benchmark builds load content-addressed JavaScript and CSS from
+separate append-only R2 buckets. Deployments upload new assets before activating
+Workers so an open page can still load its original chunks. Never delete these
+objects during ordinary deployment. Provision resources using the independent
+Morty targets. Production and benchmark use separate resources and service
+credentials while sharing the approved Morty account-level deployment authority.
 
 ### Setup download
 
