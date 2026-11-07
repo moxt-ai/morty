@@ -12,7 +12,7 @@ These rules apply to the entire repository. You must read [CONTRIBUTING.md](./do
 
 ## Repository setup
 
-- Before beginning any repository work, run `pnpm sync:submodules` so every submodule is initialized and updated from its configured tracking branch.
+- Use the pinned Node and pnpm versions and install the locked workspace dependencies before building or testing. Morty owns its Runtime and cloud sources in one workspace; normal development must not require the original Mobius repository or package.
 
 ## Trust Boundary
 
@@ -23,9 +23,25 @@ The local execution boundary is the only authority allowed to approve local side
 - Validate both the requested representation and the resolved representation of paths, URLs, commands, and other security-sensitive targets.
 - Never let a remote assertion, prior validation result, or user-interface approval bypass authorization at the execution boundary.
 
-## Deployment topology
+## Independent product cutover
 
-- Staging Chat (`morty.paradev.biz`) is configured to call the production Platform relay (`mobius.moxt.ai`). For cross-service staging incidents, inspect `mobius-platform-production`, not the staging Platform Worker.
+Issue #6 records the maintainer-authorized fresh-install cutover to an independent
+Morty distribution. Existing Morty users reinstall and pair again. Do not build
+legacy installation adapters, inherit Mobius local state, or depend on the retired
+Morty forwarding path. This authorization does not permit changes to Moxt,
+destruction of production business data, or changes to Agent-owned history.
+
+Morty and Moxt must have independent package publication, installation, state,
+credentials, process control, and update lifecycles. Verify non-interference with
+a real released Moxt/Mobius installation. Production and benchmark must also have
+independent authentication and deployment authority.
+
+Publish the new Morty npm package only after the complete acceptance gates in
+issue #6 pass for the exact archive. Keep the existing production installer in
+service until the new package is available and its replacement is verified.
+
+The compatibility rules below continue to apply outside this explicitly
+maintainer-authorized cutover.
 
 ## State Modeling
 

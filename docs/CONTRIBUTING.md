@@ -39,17 +39,18 @@ consequences in the PR; cite the explicit instruction for any intentional break.
 ## Local development
 
 Use the Node and pnpm versions pinned in [package.json](../package.json), then install
-the workspace and sync the Mobius submodule:
+the locked Morty workspace:
 
 ```sh
-pnpm install
-pnpm sync:submodules
+pnpm install --frozen-lockfile
 pnpm local-dev --help
 ```
 
 Use [the local-stack skill](../.agents/skills/chat-local-full-dev/SKILL.md) for isolated
-Chat and Platform startup and cleanup. Protocol and SDK workspace dependencies come
-from the Mobius submodule; sync it before repository work.
+Chat and Platform startup and cleanup. Runtime, protocol, client, and server
+sources belong to the same Morty workspace. Normal Morty builds must not require
+the original Mobius distribution; use an isolated released copy only when
+verifying coexistence with Moxt.
 Runtime configuration is described in [deployment](deployment.md).
 
 ## Build and artifact operations
