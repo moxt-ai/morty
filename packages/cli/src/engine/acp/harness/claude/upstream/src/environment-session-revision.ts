@@ -1,3 +1,6 @@
+// Modified and maintained by Moxt for Morty.
+// Part of the Claude ACP adapter derived from Zed Industries' claude-code-acp (Apache-2.0).
+
 import { isTaskNotificationOrigin } from "./background-task-notifications.js";
 import { getEnvironmentSessionMessages } from "./environment-session-messages.js";
 

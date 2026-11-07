@@ -1,3 +1,6 @@
+// Modified and maintained by Moxt for Morty.
+// Part of the Claude ACP adapter derived from Zed Industries' claude-code-acp (Apache-2.0).
+
 import * as fs from "node:fs";
 import * as path from "node:path";
 // resolveSettings and filterEscalatingDefaultMode are marked @alpha in the

@@ -1,3 +1,6 @@
+// Modified and maintained by Moxt for Morty.
+// Part of the Claude ACP adapter derived from Zed Industries' claude-code-acp (Apache-2.0).
+
 export function formatUriAsLink(uri: string): string {
     if (uri.startsWith("file://")) {
         const path = uri.slice(7);

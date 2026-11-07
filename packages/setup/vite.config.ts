@@ -1,5 +1,6 @@
 import { builtinModules } from "node:module";
 import { defineConfig } from "vite";
+import { bundleLicenses } from "../../scripts/bundle-licenses.ts";
 
 // A release build names the public source it came from, so whoever inspects the downloaded
 // script can rebuild that revision and compare. Development builds carry no revision.
@@ -9,10 +10,12 @@ if (revision !== undefined && !/^[0-9a-f]{40}$/u.test(revision)) {
 }
 
 export default defineConfig({
+    plugins: [bundleLicenses({ kind: "standalone" })],
     resolve: {
         mainFields: ["module", "main"],
     },
     build: {
+        license: { fileName: "bundle-licenses.json" },
         target: "node22",
         minify: false,
         lib: {
