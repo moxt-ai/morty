@@ -25,6 +25,14 @@ The local execution boundary is the only authority allowed to approve local side
 
 ## Independent product cutover
 
+Morty is one product. Cloud Relay and Recording are internal Morty services, not
+a public developer platform. Retire the separate platform dashboard, app
+registration, Clerk login, organization/invite management, and Clerk proxy.
+Preserve Morty device, recovery, pairing and service authorization, production
+business records, and immutable migration history. Production and benchmark use
+independent service credentials. Removing a login provider never authorizes
+anonymous access to privileged operations.
+
 Issue #6 records the maintainer-authorized fresh-install cutover to an independent
 Morty distribution. Existing Morty users reinstall and pair again. Do not build
 legacy installation adapters, inherit Mobius local state, or depend on the retired
