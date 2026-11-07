@@ -25,7 +25,7 @@ test.describe("composer stays pinned to the pane bottom", () => {
         const pane = page.locator(`section[aria-label="Conversation"] section`).first();
         const header = page.locator(`section[aria-label="Conversation"] header`).first();
         const composer = page.getByRole("textbox", { name: "Message" }).locator("xpath=ancestor::form[1]");
-        const interactionScroller = card.locator("xpath=ancestor::div[contains(@class, 'overflow-y-auto')][1]");
+        const interactionScroller = page.getByRole("region", { name: "Pending Agent requests" });
         await page.screenshot({ animations: "disabled", path: testInfo.outputPath("after-tab.png") });
 
         // The pane clips, so revealing a control can never scroll the header away.

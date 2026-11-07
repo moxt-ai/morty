@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { createResponseLossProxy } from "@moxt-ai/mobius-test/response-loss-proxy";
+import { createResponseLossProxy } from "@morty-build/platform-test-support/response-loss-proxy";
 import * as v from "valibot";
 import { expect, test } from "vitest";
 import legacyMapping from "../migrations/project-do/0003_platform_project.sql?raw";

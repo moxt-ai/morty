@@ -5,14 +5,14 @@ import {
     MobiusError,
     MobiusPlatformAppClient,
     MobiusTimeoutError,
-} from "@moxt-ai/mobius-sdk/platform";
+} from "@morty-build/client/platform";
 import {
     decodeRuntimeDiagnosticsResult,
     type SessionConfigOption,
     type SessionConfigurationSelection,
     type SessionReadyEvent,
-} from "@moxt-ai/mobius-sdk/protocol";
-import { MobiusClient, MobiusRuntimePairingRequest } from "@moxt-ai/mobius-sdk/server";
+} from "@morty-build/client/protocol";
+import { MobiusClient, MobiusRuntimePairingRequest } from "@morty-build/client/server";
 import * as v from "valibot";
 import {
     PlatformProjectError,
@@ -31,13 +31,13 @@ function runtimeSetupMessage(code: string): string {
     // Keep actionable, locally owned explanations without forwarding untrusted upstream text.
     switch (code) {
         case "native_session_not_found":
-            return "Platform could not complete Runtime setup. Cause: The native session was not found.";
+            return "Morty could not complete Runtime setup. Cause: The native session was not found.";
         case "session_not_found":
-            return "Platform could not complete Runtime setup. Cause: The session was not found.";
+            return "Morty could not complete Runtime setup. Cause: The session was not found.";
         case "local_authorization_failed":
-            return "Platform could not complete Runtime setup. Cause: This directory is missing or unavailable, or the Runtime denied access to the selected session.";
+            return "Morty could not complete Runtime setup. Cause: This directory is missing or unavailable, or the Runtime denied access to the selected session.";
         default:
-            return "Platform could not complete Runtime setup.";
+            return "Morty could not complete Runtime setup.";
     }
 }
 
@@ -116,11 +116,11 @@ export class PlatformProjectGateway {
                 endpoint.hash !== "" ||
                 (appOrigin.success && endpoint.origin === new URL(appOrigin.output.APP_ORIGIN).origin)
             ) {
-                throw new Error("Invalid Platform endpoint");
+                throw new Error("Invalid Morty relay endpoint");
             }
             return { origin: endpoint.origin, appId: v.parse(platformIdentifier, bindings.MOBIUS_APP_ID) };
         } catch (cause) {
-            throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Platform is not configured.", 503, { cause });
+            throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Morty relay is not configured.", 503, { cause });
         }
     };
 
@@ -133,7 +133,7 @@ export class PlatformProjectGateway {
             if (pairing.projectId !== projectId) {
                 throw new PlatformProjectError(
                     "PLATFORM_INVALID_RESPONSE",
-                    "Platform returned an unexpected pairing.",
+                    "Morty returned an unexpected pairing.",
                     502,
                 );
             }
@@ -170,7 +170,7 @@ export class PlatformProjectGateway {
                 await response.body?.cancel();
                 throw new PlatformProjectError(
                     response.status === 404 ? "NOT_FOUND" : "PLATFORM_UNAVAILABLE",
-                    "Platform could not read the Runtime's Agents.",
+                    "Morty could not read the Runtime's Agents.",
                     response.status === 404 ? 404 : 502,
                 );
             }
@@ -178,7 +178,7 @@ export class PlatformProjectGateway {
             if (runtime.runtimeId !== parsedRuntimeId) {
                 throw new PlatformProjectError(
                     "PLATFORM_INVALID_RESPONSE",
-                    "Platform returned Agents for an unexpected Runtime.",
+                    "Morty returned Agents for an unexpected Runtime.",
                     502,
                 );
             }
@@ -196,7 +196,7 @@ export class PlatformProjectGateway {
             if (cause instanceof PlatformProjectError) {
                 throw cause;
             }
-            throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Platform could not read Runtime Agents.", 502, {
+            throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Morty could not read Runtime Agents.", 502, {
                 cause,
             });
         }
@@ -286,7 +286,7 @@ export class PlatformProjectGateway {
                 await response.body?.cancel();
                 throw new PlatformProjectError(
                     "PLATFORM_UNAVAILABLE",
-                    "Mobius did not respond to the network diagnostic.",
+                    "Morty relay did not respond to the network diagnostic.",
                     502,
                 );
             }
@@ -370,7 +370,7 @@ export class PlatformProjectGateway {
                 ) {
                     throw new PlatformProjectError(
                         "PLATFORM_INVALID_RESPONSE",
-                        "Platform returned settings for an unexpected Agent or directory.",
+                        "Morty returned settings for an unexpected Agent or directory.",
                         502,
                     );
                 }
@@ -416,7 +416,7 @@ export class PlatformProjectGateway {
                 if (ready.sessionId !== sessionId) {
                     throw new PlatformProjectError(
                         "PLATFORM_INVALID_RESPONSE",
-                        "Platform returned an unexpected Session.",
+                        "Morty returned an unexpected Session.",
                         502,
                     );
                 }
@@ -653,7 +653,9 @@ export class PlatformProjectGateway {
                 throw cause;
             }
             if (cause instanceof MobiusTimeoutError) {
-                throw new PlatformProjectError("PLATFORM_TIMEOUT", "Platform did not respond in time.", 504, { cause });
+                throw new PlatformProjectError("PLATFORM_TIMEOUT", "Morty relay did not respond in time.", 504, {
+                    cause,
+                });
             }
             if (cause instanceof MobiusApiError && cause.status === 404) {
                 throw new PlatformProjectError("NOT_FOUND", "The Runtime pairing was not found.", 404, { cause });
@@ -666,7 +668,7 @@ export class PlatformProjectGateway {
                     { cause },
                 );
             }
-            throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Platform could not complete Runtime setup.", 502, {
+            throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Morty could not complete Runtime setup.", 502, {
                 cause,
             });
         }
@@ -708,7 +710,7 @@ export class PlatformProjectGateway {
             ) {
                 throw new PlatformProjectError(
                     "PLATFORM_INVALID_RESPONSE",
-                    "Platform returned an unexpected Project.",
+                    "Morty returned an unexpected Project.",
                     502,
                 );
             }
@@ -719,7 +721,9 @@ export class PlatformProjectGateway {
                 throw cause;
             }
             if (cause instanceof MobiusTimeoutError) {
-                throw new PlatformProjectError("PLATFORM_TIMEOUT", "Platform did not respond in time.", 504, { cause });
+                throw new PlatformProjectError("PLATFORM_TIMEOUT", "Morty relay did not respond in time.", 504, {
+                    cause,
+                });
             }
             if (cause instanceof MobiusApiError && (cause.status === 401 || cause.status === 403)) {
                 throw new PlatformProjectError(
@@ -737,7 +741,7 @@ export class PlatformProjectGateway {
                     { cause },
                 );
             }
-            throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Platform could not provision the Project.", 502, {
+            throw new PlatformProjectError("PLATFORM_UNAVAILABLE", "Morty could not provision the Project.", 502, {
                 cause,
             });
         }

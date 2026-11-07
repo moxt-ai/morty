@@ -1,4 +1,4 @@
-import type { AgentQuestion } from "@moxt-ai/mobius-sdk/protocol";
+import type { AgentQuestion } from "@morty-build/client/protocol";
 import { HelpCircle } from "lucide-react";
 import { useId } from "react";
 import { Button } from "@/components/ui/cloud-button";

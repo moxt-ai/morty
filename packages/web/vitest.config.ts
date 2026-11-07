@@ -9,6 +9,8 @@ export default defineConfig({
     },
     test: {
         environment: "happy-dom",
+        // Retain diagnostics for failures without streaming every real-service event to CI.
+        silent: "passed-only",
         environmentOptions: {
             happyDOM: {
                 settings: {

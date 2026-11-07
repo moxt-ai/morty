@@ -5,7 +5,7 @@ import {
     type MobiusLiveEventTransport,
     type MobiusTransportSessionEvent,
     WsTransport,
-} from "@moxt-ai/mobius-sdk";
+} from "@morty-build/client";
 import {
     decodeAgentSettingsDiscoveredEvent,
     decodeMessageKind,
@@ -24,7 +24,7 @@ import {
     type SessionConfigOption,
     type SessionConfigurationSelection,
     type SessionStatusChangedEvent,
-} from "@moxt-ai/mobius-sdk/protocol";
+} from "@morty-build/client/protocol";
 import * as v from "valibot";
 import type { ApiResponseSnapshot, ApiTransport } from "../api/api-transport.ts";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";

@@ -1,13 +1,13 @@
 {
-    "name": "@moxt-ai/morty-e2e",
+    "name": "@morty-build/e2e",
     "version": "0.0.1",
     "license": "Apache-2.0",
     "private": true,
     "type": "module",
     "scripts": {
-        "mobius:codegen": "node ../../third-party/mobius/scripts/generate-sql-modules.ts",
-        "pretest": "pnpm mobius:codegen",
-        "pretypecheck": "pnpm mobius:codegen",
+        "db:codegen": "node ../../scripts/generate-sql-modules.ts",
+        "pretest": "pnpm db:codegen",
+        "pretypecheck": "pnpm db:codegen",
         "test": "playwright test",
         "typecheck": "tsc --project tsconfig.json"
     },

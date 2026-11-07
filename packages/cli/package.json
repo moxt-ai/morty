@@ -1,0 +1,88 @@
+{
+    "name": "@morty-build/cli",
+    "version": "0.1.0",
+    "description": "Morty CLI for installing, pairing, and operating the Morty background service.",
+    "type": "module",
+    "bin": {
+        "morty": "dist/cli.js"
+    },
+    "exports": {
+        "./engine": {
+            "morty-source": "./src/exports/engine.ts",
+            "types": "./dist/exports/engine.d.ts",
+            "default": "./dist/engine.js"
+        }
+    },
+    "files": [
+        "dist",
+        "NOTICE",
+        "THIRD-PARTY-NOTICES.txt"
+    ],
+    "engines": {
+        "node": "^22.19.0 || ^24.20.0"
+    },
+    "publishConfig": {
+        "access": "public",
+        "exports": {
+            "./engine": {
+                "types": "./dist/exports/engine.d.ts",
+                "import": "./dist/engine.js",
+                "default": "./dist/engine.js"
+            }
+        }
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/moxt-ai/mobius-morty.git",
+        "directory": "packages/cli"
+    },
+    "scripts": {
+        "prebuild": "tsc --project src/engine/acp/harness/claude/upstream/tsconfig.json && tsc --project src/engine/acp/harness/pi/upstream/tsconfig.json",
+        "build": "node scripts/build.ts && tsc --project tsconfig.build.json",
+        "dev": "node --watch src/cli/entrypoint.ts",
+        "pretypecheck": "tsc --project src/engine/acp/harness/claude/upstream/tsconfig.json && tsc --project src/engine/acp/harness/pi/upstream/tsconfig.json",
+        "prepack": "pnpm build",
+        "start": "node dist/cli.js",
+        "typecheck": "tsc --project tsconfig.json && tsc --project tests/tsconfig.json",
+        "pretest:controlled": "pnpm build && pnpm pack:test",
+        "test:controlled": "vitest run tests/sessions tests/runtime",
+        "pretest:manual": "pnpm pretest:controlled",
+        "test:manual": "vitest run tests/manual",
+        "pretest:agents": "pnpm build && pnpm pack:test",
+        "test:agents": "vitest run tests/agents --maxWorkers=2",
+        "pretest:pressure": "tsc --project src/engine/acp/harness/claude/upstream/tsconfig.json && tsc --project src/engine/acp/harness/pi/upstream/tsconfig.json",
+        "test:pressure": "node tests/pressure/concurrent-sessions.mjs",
+        "pack:test": "node scripts/pack-test-release.ts"
+    },
+    "dependencies": {
+        "undici": "8.12.2"
+    },
+    "devDependencies": {
+        "@agentclientprotocol/sdk": "^1.4.0",
+        "@anthropic-ai/claude-agent-sdk": "0.3.257",
+        "@anthropic-ai/sdk": "0.122.0",
+        "@morty-build/client": "workspace:*",
+        "@morty-build/platform-test-support": "workspace:*",
+        "@types/node": "^24.13.5",
+        "@types/semver": "^7.8.0",
+        "@types/ws": "^8.18.1",
+        "commander": "15.0.0",
+        "drizzle-kit": "1.0.0-rc.4",
+        "drizzle-orm": "1.0.0-rc.4",
+        "esbuild": "0.28.2",
+        "semver": "^7.8.5",
+        "valibot": "1.5.0",
+        "ws": "^8.21.3",
+        "zod": "^4.6.7",
+        "@morty-build/local-state": "workspace:*",
+        "miniflare": "catalog:"
+    },
+    "keywords": [],
+    "author": "Moxt",
+    "license": "Apache-2.0",
+    "bugs": {
+        "url": "https://github.com/moxt-ai/mobius-morty/issues"
+    },
+    "homepage": "https://morty.build",
+    "private": false
+}

@@ -1,6 +1,6 @@
-import { MobiusOidcCredentialProvider, MobiusPlatformDeveloperClient } from "@moxt-ai/mobius-sdk/platform";
-import { FakeClerk } from "@moxt-ai/mobius-test/clerk";
-import { createTestMobiusPlatformBindings } from "@moxt-ai/mobius-test/cloudflare";
+import { MobiusAppCredentialProvider, MobiusPlatformAppClient } from "@morty-build/client/platform";
+import { createTestMobiusPlatformBindings } from "@morty-build/platform-test-support/cloudflare";
+import { seedMortyService } from "@morty-build/platform-test-support/service-fixture";
 import { type ControlledAgent, createControlledAgentRuntime } from "../../../../tests/support/fake-daemon/runtime.ts";
 import { mortyFiles, mortyReply } from "../../../../tests/support/fake-daemon/scenarios.ts";
 
@@ -13,24 +13,14 @@ export async function startTestPlatform(
     const runtimes: AsyncDisposable[] = [];
     const bindings = await createBindings(options.allowedOrigins);
     try {
-        const clerk = new FakeClerk();
         const app = { request: bindings.request };
-        const developerToken = clerk.session("developer-1", clerk.defaultOrganizationId);
-        const developer = new MobiusPlatformDeveloperClient({
+        const application = await seedMortyService(bindings.env.PLATFORM_DIRECTORY_DATABASE);
+        const credential = application.credential;
+        const service = new MobiusPlatformAppClient({
             endpoint: bindings.origin,
-            authenticationProviderId: "clerk",
-            credentialProvider: new MobiusOidcCredentialProvider(developerToken),
+            credentialProvider: new MobiusAppCredentialProvider(credential),
             transport: { fetch: bindings.request },
         });
-        const tenant = (await developer.listTenants(cancellation.signal))[0];
-        if (tenant === undefined) {
-            throw new Error("Missing test tenant");
-        }
-        const application = await developer.createApp(tenant.tenantId, "Test application", cancellation.signal);
-        const credential = application.defaultCredential?.credential;
-        if (credential === undefined) {
-            throw new Error("Missing default test application credential");
-        }
         const close = async (): Promise<void> => {
             cancellation.abort(new Error("Test Platform stopped"));
             try {
@@ -45,8 +35,7 @@ export async function startTestPlatform(
             appCredential: credential,
             attachments: bindings.env.R2_BUCKET_APAC,
             baseUrl: bindings.origin,
-            developer,
-            developerToken,
+            service,
             connectAgent: async (
                 projectId: string,
                 agents: readonly ControlledAgent[] = [{ id: "codex", label: "Codex" }],

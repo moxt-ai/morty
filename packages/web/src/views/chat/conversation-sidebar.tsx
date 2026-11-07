@@ -104,7 +104,7 @@ function NetworkLatencyIntro({ projectId }: { readonly projectId: string | null 
     return (
         <div className="text-14 leading-5 text-muted-foreground">
             <p>Round-trip latency for this browser and its connected Runtime.</p>
-            <p className="mt-1">Mobius location: {projectLocationLabel(projectId ?? "")}</p>
+            <p className="mt-1">Relay location: {projectLocationLabel(projectId ?? "")}</p>
         </div>
     );
 }
@@ -1021,10 +1021,10 @@ export function ConversationSidebar({
                                                                     )}
                                                                 >
                                                                     <dt>
-                                                                        <NetworkHopLabel from="Browser" to="Mobius" />
+                                                                        <NetworkHopLabel from="Browser" to="Relay" />
                                                                     </dt>
                                                                     <dd
-                                                                        aria-label="Browser to Mobius latency"
+                                                                        aria-label="Browser to relay latency"
                                                                         className="font-mono font-medium"
                                                                         role="status"
                                                                     >
@@ -1038,10 +1038,10 @@ export function ConversationSidebar({
                                                                     )}
                                                                 >
                                                                     <dt>
-                                                                        <NetworkHopLabel from="Morty" to="Mobius" />
+                                                                        <NetworkHopLabel from="Morty" to="Relay" />
                                                                     </dt>
                                                                     <dd
-                                                                        aria-label="Morty to Mobius latency"
+                                                                        aria-label="Morty to relay latency"
                                                                         className="font-mono font-medium"
                                                                         role="status"
                                                                     >
@@ -1055,10 +1055,10 @@ export function ConversationSidebar({
                                                                     )}
                                                                 >
                                                                     <dt>
-                                                                        <NetworkHopLabel from="Mobius" to="Daemon" />
+                                                                        <NetworkHopLabel from="Relay" to="Daemon" />
                                                                     </dt>
                                                                     <dd
-                                                                        aria-label="Mobius to daemon latency"
+                                                                        aria-label="Relay to daemon latency"
                                                                         className="font-mono font-medium"
                                                                         role="status"
                                                                     >

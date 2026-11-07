@@ -12,6 +12,7 @@ import { expect, onTestFinished, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
 import { openAgentModelPicker, sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp } from "./infra/test-app.tsx";
+import { TestClock } from "./infra/test-clock.ts";
 
 test("Given a new conversation, When I send its first prompt, Then its preview and native message render without a history skeleton or panel remount", {
     timeout: 30_000,
@@ -727,7 +728,9 @@ test("Given more saved messages than one history page, When live output arrives 
     timeout: 90_000,
 }, async () => {
     const prompts = Array.from({ length: 7 }, (_, index) => `many session events: Pagination message ${index + 1}`);
-    const app = await createTestApp({ connectAgent: true });
+    // Pagination does not advance application time; CI speed must not trigger a heartbeat deadline.
+    const clock = new TestClock("2026-11-07T00:00:00Z");
+    const app = await createTestApp({ connectAgent: true, clock });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
         (element) => element.getAttribute("data-connection-status") === "connected",
@@ -875,7 +878,9 @@ test("Given more saved messages than one history page, When older messages load,
     timeout: 90_000,
 }, async () => {
     const prompts = Array.from({ length: 7 }, (_, index) => `many session events: Skeleton message ${index + 1}`);
-    const app = await createTestApp({ connectAgent: true });
+    // Pagination does not advance application time; CI speed must not trigger a heartbeat deadline.
+    const clock = new TestClock("2026-11-07T00:00:00Z");
+    const app = await createTestApp({ connectAgent: true, clock });
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
         (element) => element.getAttribute("data-connection-status") === "connected",

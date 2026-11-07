@@ -1,4 +1,4 @@
-import type { MobiusClient, PromptAttachment } from "@moxt-ai/mobius-sdk";
+import type { MobiusClient, PromptAttachment } from "@morty-build/client";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 
 async function contentKey(bytes: Uint8Array): Promise<string> {

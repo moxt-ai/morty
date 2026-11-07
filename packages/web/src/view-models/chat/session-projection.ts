@@ -1,4 +1,4 @@
-import type { PromptMessageOutcome, SessionEvent, SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
+import type { PromptMessageOutcome, SessionEvent, SessionLiveEvent } from "@morty-build/client/protocol";
 import type { SessionPresentationEvent } from "./session-presentation.ts";
 import {
     appendSessionMessageEvent,

@@ -1,0 +1,67 @@
+import { RequestError } from "@agentclientprotocol/sdk";
+import { z } from "zod";
+import { isRecord, truncate } from "../../util/value-utils.ts";
+import { AcpExecutionError, AcpPromptExecutionError } from "../acp-error.ts";
+import { type AcpEndpointTermination, acpEndpointTerminationError } from "../agent/in-process-endpoint.ts";
+
+const promptFailureIdentitySchema = z.object({ messageId: z.string().min(1).max(2_048) });
+
+function requestErrorMessage(error: RequestError): string {
+    const fallback = truncate(error.message, 500);
+    if (error.message !== "Internal error" || !isRecord(error.data)) {
+        return fallback;
+    }
+    const agentError = error.data["error"];
+    if (isRecord(agentError)) {
+        const message = agentError["message"];
+        if (typeof message === "string" && message.length > 0) {
+            return truncate(message, 500);
+        }
+    }
+    const details = error.data["details"];
+    return typeof details === "string" && details.length > 0 ? truncate(details, 500) : fallback;
+}
+
+/** Observes an already-started operation even when cancellation wins before entry. */
+export async function raceAgentOperation<T>(
+    operation: Promise<T>,
+    termination: Promise<AcpEndpointTermination>,
+    exitMessage: string,
+    signal: AbortSignal,
+): Promise<T> {
+    let removeAbortListener = (): void => {};
+    const aborted = new Promise<never>((_resolve, reject) => {
+        const rejectAbort = (): void => {
+            reject(signal.reason ?? new Error("ACP request was cancelled"));
+        };
+        signal.addEventListener("abort", rejectAbort, { once: true });
+        removeAbortListener = (): void => signal.removeEventListener("abort", rejectAbort);
+        if (signal.aborted) {
+            rejectAbort();
+        }
+    });
+    try {
+        return await Promise.race([
+            aborted,
+            operation,
+            termination.then((result) => {
+                const cause = acpEndpointTerminationError(result);
+                throw new AcpExecutionError(exitMessage, { cause }, cause.code);
+            }),
+        ]);
+    } catch (error) {
+        signal.throwIfAborted();
+        if (error instanceof RequestError) {
+            const code = error.code === -32_000 ? "authentication_required" : "acp_agent_error";
+            const message = error.code === -32_000 ? "Agent authentication is required" : requestErrorMessage(error);
+            const identity = promptFailureIdentitySchema.safeParse(error.data);
+            if (identity.success) {
+                throw new AcpPromptExecutionError(identity.data.messageId, message, { cause: error }, code);
+            }
+            throw new AcpExecutionError(message, { cause: error }, code);
+        }
+        throw error;
+    } finally {
+        removeAbortListener();
+    }
+}

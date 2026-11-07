@@ -1,4 +1,4 @@
-import { externalContentPath, type MobiusExternalContentBlock } from "@moxt-ai/mobius-sdk";
+import { externalContentPath, type MobiusExternalContentBlock } from "@morty-build/client";
 import { type ReactNode, useMemo } from "react";
 import { dataTestId } from "../../data-testid.ts";
 import { cn } from "../../lib/utils.ts";

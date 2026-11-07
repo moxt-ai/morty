@@ -7,7 +7,7 @@ import {
     SESSION_CLOSE_NOTICE_KIND,
     type SessionCloseNoticeEvent,
     type SessionStatusChangedEvent,
-} from "@moxt-ai/mobius-sdk/protocol";
+} from "@morty-build/client/protocol";
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import { PlatformProjectError } from "../../management/entity/platform-project.ts";
 import type { IdentityStorage } from "../../management/storage/identity-storage.ts";
@@ -383,7 +383,7 @@ export class ChatService {
                     if (typeof event.data !== "string") {
                         throw new PlatformProjectError(
                             "PLATFORM_INVALID_RESPONSE",
-                            "Platform returned an invalid Session status event.",
+                            "Morty returned an invalid Session status event.",
                             502,
                         );
                     }
@@ -408,7 +408,7 @@ export class ChatService {
                             ? cause
                             : new PlatformProjectError(
                                   "PLATFORM_INVALID_RESPONSE",
-                                  "Platform returned an invalid Session status event.",
+                                  "Morty returned an invalid Session status event.",
                                   502,
                                   { cause },
                               ),

@@ -10,8 +10,8 @@ import {
     type PromptAttachment,
     SESSION_CLOSED_ERROR_CODE,
     type SessionConfigOption,
-} from "@moxt-ai/mobius-sdk";
-import type { PromptMessageOutcome, SessionEvent, SessionLiveEvent } from "@moxt-ai/mobius-sdk/protocol";
+} from "@morty-build/client";
+import type { PromptMessageOutcome, SessionEvent, SessionLiveEvent } from "@morty-build/client/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { registerMortyDebugSession } from "../../debug-bridge.ts";

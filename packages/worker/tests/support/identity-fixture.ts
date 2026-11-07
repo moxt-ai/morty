@@ -1,7 +1,10 @@
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
-import { miniflareDurableObjects, prepareTestMobiusPlatformBindings } from "@moxt-ai/mobius-test/cloudflare";
-import { createResponseLossProxy } from "@moxt-ai/mobius-test/response-loss-proxy";
+import {
+    miniflareDurableObjects,
+    prepareTestMobiusPlatformBindings,
+} from "@morty-build/platform-test-support/cloudflare";
+import { createResponseLossProxy } from "@morty-build/platform-test-support/response-loss-proxy";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as v from "valibot";

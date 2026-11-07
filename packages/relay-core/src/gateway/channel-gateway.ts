@@ -1,0 +1,25 @@
+import type { RuntimeAccessContext } from "../entity/authentication/project-authentication.ts";
+import type {
+    ChannelHostCredential,
+    ProjectCredentialHostAccess,
+    VerifiedChannelAccess,
+} from "../entity/pairing/pairing.ts";
+import type { RuntimeStatus } from "../service/channel/channel.ts";
+export interface ChannelGateway {
+    readonly acceptDaemon: (access: RuntimeAccessContext, request: Request, signal: AbortSignal) => Promise<Response>;
+    readonly acceptHost: (
+        access: ChannelHostCredential | ProjectCredentialHostAccess,
+        request: Request,
+        signal: AbortSignal,
+    ) => Promise<Response>;
+    readonly disconnectHost: (access: ChannelHostCredential, signal: AbortSignal) => Promise<void>;
+    readonly disconnectRuntime: (access: VerifiedChannelAccess, signal: AbortSignal) => Promise<void>;
+    /** Closes the Runtime's live Session views opened with a Session credential issued no later than `revokedThrough`. */
+    readonly disconnectSessionViewers: (
+        projectId: string,
+        runtimeId: string,
+        revokedThrough: number,
+        signal: AbortSignal,
+    ) => Promise<void>;
+    readonly readRuntimeStatus: (access: VerifiedChannelAccess, signal: AbortSignal) => Promise<RuntimeStatus>;
+}

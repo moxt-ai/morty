@@ -60,11 +60,11 @@ export function SetupPromptDetails({ prompt }: { readonly prompt: string }) {
                         className="list-disc space-y-1 py-2 pr-3 pl-7 text-morty-text-3 marker:text-morty-text-4 [&_code]:whitespace-nowrap"
                     >
                         <li>
-                            Installs the Mobius CLI (<code>@moxt-ai/mobius</code>) from npm. It updates itself after 30
-                            idle minutes.
+                            Installs the Morty CLI (<code>@morty-build/cli</code>) from npm. Use{" "}
+                            <code>morty update</code> to install updates.
                         </li>
                         <li>
-                            Runs a background connection until restart or <code>mobius quit</code>.
+                            Runs a background connection until restart or <code>morty stop</code>.
                         </li>
                         <li>Keeps this computer's Morty identity in your user data folder.</li>
                         <li>Asks before replacing a missing connection, which ends earlier shared access.</li>

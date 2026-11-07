@@ -1,4 +1,4 @@
-import type { SessionElicitationField } from "@moxt-ai/mobius-sdk";
+import type { SessionElicitationField } from "@morty-build/client";
 import {
     ChevronRight,
     CircleAlert,
@@ -1038,7 +1038,7 @@ function AlertGallery() {
                 <MortyAlert>
                     The live session event stream could not recover. Cause: The live session event stream disconnected
                 </MortyAlert>
-                <MortyAlert description="Mobius is reconnecting…">
+                <MortyAlert description="Morty is reconnecting…">
                     The live session event stream could not recover. Cause: The live session event stream disconnected
                 </MortyAlert>
             </Specimen>
@@ -1056,7 +1056,7 @@ function AlertGallery() {
                 </MortyAlert>
             </Specimen>
             <Specimen layout="stack" title="Neutral">
-                <MortyAlert tone="neutral">Mobius is reconnecting…</MortyAlert>
+                <MortyAlert tone="neutral">Morty is reconnecting…</MortyAlert>
             </Specimen>
         </div>
     );
@@ -1735,7 +1735,7 @@ const pendingPermission: PermissionInteraction = {
             { path: "packages/web/src/styles.css" },
         ],
         rawInput: {
-            command: "pnpm --filter @moxt-ai/morty-web test -- --run tests/session-interactions.integration.test.tsx",
+            command: "pnpm --filter @morty-build/web test -- --run tests/session-interactions.integration.test.tsx",
             description: "Run the session interaction integration tests",
         },
     },

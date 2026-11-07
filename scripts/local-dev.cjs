@@ -31,18 +31,13 @@ const REPO_ROOT = path.resolve(__dirname, "..");
 const WRANGLER = path.join(REPO_ROOT, "node_modules", ".bin", "wrangler");
 const PLATFORM_CONFIG = "packages/e2e/fixtures/wrangler.platform.jsonc";
 const CHAT_CONFIG = "packages/e2e/fixtures/wrangler.chat.jsonc";
-const MOBIUS_ROOT = path.join(REPO_ROOT, "third-party", "mobius");
-const MOBIUS_LOCKFILE = path.join(MOBIUS_ROOT, "pnpm-lock.yaml");
-const MOBIUS_INSTALLED_LOCKFILE = path.join(MOBIUS_ROOT, "node_modules", ".pnpm", "lock.yaml");
+const MORTY_ROOT = REPO_ROOT;
+const MORTY_LOCKFILE = path.join(MORTY_ROOT, "pnpm-lock.yaml");
+const MORTY_INSTALLED_LOCKFILE = path.join(MORTY_ROOT, "node_modules", ".pnpm", "lock.yaml");
 const SETUP_BUNDLE = "packages/setup/dist/setup.mjs";
 const CHAT_ATTACHMENTS_BUCKET = "morty-local-e2e-attachments";
 /** An identifier the setup bundle and Platform accept for a harness or native session. */
 const HARNESS_IDENTIFIER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u;
-const PLATFORM_AUTH_HEADERS = {
-    "content-type": "application/json",
-    authorization: "Bearer morty-local-e2e",
-    "x-mobius-oidc-provider": "e2e",
-};
 
 async function availablePort() {
     return await new Promise((resolve, reject) => {
@@ -59,7 +54,6 @@ async function availablePort() {
         });
     });
 }
-const DEFAULT_STAGING_PLATFORM = "https://mobius.moxt.ws";
 
 function log(message) {
     process.stderr.write(`[local-dev] ${message}\n`);
@@ -85,27 +79,9 @@ function parseArguments(argv) {
             options.mode = token;
             continue;
         }
-        const equals = token.indexOf("=");
-        if (equals > 0 && (token.startsWith("--app-id") || token.startsWith("--app-secret"))) {
-            const name = token.slice(0, equals);
-            const value = token.slice(equals + 1);
-            if (value.length === 0) {
-                fail(`${name} requires a value`);
-            }
-            options[name === "--app-id" ? "appId" : "appSecret"] = value;
-            continue;
-        }
         switch (token) {
             case "--state-dir":
                 options.stateDir = path.resolve(requireValue(index, token));
-                index += 1;
-                break;
-            case "--app-id":
-                options.appId = requireValue(index, token);
-                index += 1;
-                break;
-            case "--app-secret":
-                options.appSecret = requireValue(index, token);
                 index += 1;
                 break;
             case "--platform-port":
@@ -164,7 +140,7 @@ function parseArguments(argv) {
 
 async function localLaunch(command, args) {
     const { executableLaunch, findExecutableOnPath, resolveExecutablePath } = await import(
-        pathToFileURL(path.join(MOBIUS_ROOT, "packages/cli/src/engine/util/process/executable.ts")).href
+        pathToFileURL(path.join(MORTY_ROOT, "packages/cli/src/engine/util/process/executable.ts")).href
     );
     const executable = path.isAbsolute(command)
         ? await resolveExecutablePath(command)
@@ -196,7 +172,7 @@ async function runOwnedCommand(command, args, options) {
     options.signal?.throwIfAborted();
     const launch = await localLaunch(command, args);
     const { stopProcessTree, platformSpawnOptions, ProcessExecutionError } = await import(
-        pathToFileURL(path.join(MOBIUS_ROOT, "packages/cli/src/engine/util/process/executable.ts")).href
+        pathToFileURL(path.join(MORTY_ROOT, "packages/cli/src/engine/util/process/executable.ts")).href
     );
     options.signal?.throwIfAborted();
     const environment = { ...process.env, ...options.env };
@@ -385,62 +361,17 @@ async function waitForHttp(url, accept, timeoutMilliseconds, description, proces
     throw new Error(`Timed out waiting for ${description}: ${last}`);
 }
 
-/**
- * The Mobius packages Morty's workspace also lists. Both workspaces link these packages' dependencies, each to its own
- * store; whichever installs last decides which copy of a shared library, such as the ACP SDK, they load.
- */
-function sharedMobiusPackages() {
-    return fs
-        .readFileSync(path.join(REPO_ROOT, "pnpm-workspace.yaml"), "utf8")
-        .split("\n")
-        .map((line) => /^\s*-\s*["']?(third-party\/mobius\/[^"'\s]+)["']?\s*$/u.exec(line)?.[1])
-        .filter((entry) => entry !== undefined)
-        .map((entry) => path.join(REPO_ROOT, entry));
-}
-
-/** Whether a package's dependencies resolve into the submodule's own store rather than Morty's. */
-function linkedToSubmoduleStore(packageDirectory) {
-    const modules = path.join(packageDirectory, "node_modules");
-    const submoduleStore = path.join(MOBIUS_ROOT, "node_modules") + path.sep;
-    const entries = fs.existsSync(modules) ? fs.readdirSync(modules, { withFileTypes: true }) : [];
-    const links = entries.flatMap((entry) =>
-        entry.name.startsWith("@") && entry.isDirectory()
-            ? fs.readdirSync(path.join(modules, entry.name)).map((name) => path.join(modules, entry.name, name))
-            : entry.isSymbolicLink()
-              ? [path.join(modules, entry.name)]
-              : [],
-    );
-    return links.some((link) => {
-        try {
-            return fs.realpathSync(link).startsWith(submoduleStore);
-        } catch {
-            return false;
-        }
-    });
-}
-
-async function ensureMobiusDependencies() {
+async function ensureMortyDependencies() {
     const installed =
-        fs.existsSync(MOBIUS_INSTALLED_LOCKFILE) &&
-        fs.readFileSync(MOBIUS_LOCKFILE).equals(fs.readFileSync(MOBIUS_INSTALLED_LOCKFILE));
+        fs.existsSync(MORTY_INSTALLED_LOCKFILE) &&
+        fs.readFileSync(MORTY_LOCKFILE).equals(fs.readFileSync(MORTY_INSTALLED_LOCKFILE));
     if (!installed) {
-        log("installing Mobius submodule dependencies from the lockfile");
-        await run("pnpm", ["install", "--frozen-lockfile"], { cwd: MOBIUS_ROOT });
+        log("installing Morty workspace dependencies from the lockfile");
+        await run("pnpm", ["install", "--frozen-lockfile"], { cwd: REPO_ROOT });
     }
-    // A submodule install relinks the packages Morty shares with it, so Chat code and the Runtime code it loads would
-    // each get their own copy of the same libraries. Give those packages back to Morty, as CI's install order does.
-    const relinked = sharedMobiusPackages().filter(linkedToSubmoduleStore);
-    if (relinked.length === 0) {
-        return;
-    }
-    log("restoring Morty's dependency links for the Mobius packages it shares");
-    for (const packageDirectory of relinked) {
-        fs.rmSync(path.join(packageDirectory, "node_modules"), { recursive: true, force: true });
-    }
-    await run("pnpm", ["install", "--frozen-lockfile"], { cwd: REPO_ROOT });
 }
 
-async function httpJson(url, options = {}) {
+async function _httpJson(url, options = {}) {
     const response = await fetch(url, {
         method: options.method ?? (options.body === undefined ? "GET" : "POST"),
         headers: options.headers,
@@ -474,34 +405,6 @@ function writeStack(stack) {
     });
 }
 
-async function prepareWeb(options) {
-    const chatPort = options.chatPort ?? (await availablePort());
-    const stateDir = options.stateDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "chat-local-web-dev-"));
-    fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-    const chatOrigin = `http://localhost:${chatPort}`;
-    const logPath = path.join(stateDir, "web.log");
-    const appId = options.appId;
-    const appSecret = options.appSecret;
-    if (appId === undefined || appId.length === 0 || appSecret === undefined || appSecret.length === 0) {
-        throw new Error("web mode requires --app-id and --app-secret");
-    }
-    const pid = await startProcess(
-        "web",
-        ["exec", "vite", "--host", "localhost", "--port", String(chatPort)],
-        logPath,
-        "pnpm",
-        {
-            VITE_MOBIUS_BASE_URL: process.env.MORTY_LOCAL_PLATFORM_URL ?? DEFAULT_STAGING_PLATFORM,
-            VITE_MOBIUS_APP_ID: appId,
-        },
-    );
-    await waitForHttp(chatOrigin, (response) => response.ok, 90_000, "local web app");
-    const stack = { mode: options.mode, appId, chatOrigin, chatLog: logPath, chatPid: pid, stateDir, ready: true };
-    writeStack(stack);
-    process.stdout.write(`${JSON.stringify(stack)}\n`);
-    await keepAlive(stack, options);
-}
-
 async function keepAlive(stack, options) {
     if (options.background === true) {
         return;
@@ -517,12 +420,9 @@ async function keepAlive(stack, options) {
 }
 
 async function prepare(options) {
-    const validModes = new Set(["web", "web-server", "web-server-mobius-cli"]);
+    const validModes = new Set(["web-server", "web-server-morty-cli"]);
     if (!validModes.has(options.mode)) {
-        throw new Error(`Unknown mode ${options.mode}; use web, web-server, or web-server-mobius-cli`);
-    }
-    if (options.mode === "web") {
-        return prepareWeb(options);
+        throw new Error(`Unknown mode ${options.mode}; use web-server or web-server-morty-cli`);
     }
     const platformPort = options.platformPort ?? (await availablePort());
     const chatPort = options.chatPort ?? (await availablePort());
@@ -546,7 +446,6 @@ async function prepare(options) {
     const platformLog = path.join(stateDir, "platform.log");
     const chatOrigin = `http://localhost:${chatPort}`;
     const platformOrigin = `http://127.0.0.1:${platformPort}`;
-    const sessionWebhookSecretEncryptionKey = crypto.randomBytes(32).toString("base64");
     let stack = {
         mode: options.mode,
         chatLog,
@@ -562,7 +461,7 @@ async function prepare(options) {
     writeStack(stack);
 
     try {
-        await ensureMobiusDependencies();
+        await ensureMortyDependencies();
         log("applying Platform migrations");
         await wrangler([
             "d1",
@@ -591,8 +490,6 @@ async function prepare(options) {
                 "0",
                 "--persist-to",
                 platformPersist,
-                "--var",
-                `MOBIUS_SESSION_WEBHOOK_SECRET_ENCRYPTION_KEY:${sessionWebhookSecretEncryptionKey}`,
             ],
             platformLog,
         );
@@ -606,35 +503,13 @@ async function prepare(options) {
             { pid: platformPid, logPath: platformLog },
         );
 
-        let appId = options.appId;
-        let appSecret = options.appSecret;
-        if (appId === undefined || appId.length === 0 || appSecret === undefined || appSecret.length === 0) {
-            log("provisioning local Platform application");
-            const inventory = await httpJson(`${platformOrigin}/mobius/api/dashboard/v1/platform/tenants`, {
-                headers: PLATFORM_AUTH_HEADERS,
-            });
-            const tenantId = inventory.tenants?.[0]?.tenantId;
-            if (typeof tenantId !== "string") {
-                throw new Error("The local Platform did not return a tenant");
-            }
-            const application = await httpJson(`${platformOrigin}/mobius/api/dashboard/v1/apps`, {
-                headers: PLATFORM_AUTH_HEADERS,
-                body: {
-                    displayName: `Morty local dev ${path.basename(stateDir)}`,
-                    tenantId,
-                },
-            });
-            appId = application.appId;
-            appSecret = application.defaultCredential?.credential;
-        }
-        if (
-            typeof appId !== "string" ||
-            appId.length === 0 ||
-            typeof appSecret !== "string" ||
-            appSecret.length === 0
-        ) {
-            throw new Error("Set --app-id and --app-secret, or allow local app provisioning");
-        }
+        log("provisioning local Morty service");
+        const { provisionLocalService } = await import("./provision-local-service.ts");
+        const { appId, appSecret } = await provisionLocalService(
+            path.resolve(REPO_ROOT, PLATFORM_CONFIG),
+            platformPersist,
+            AbortSignal.timeout(60_000),
+        );
 
         if (options.build !== false) {
             log("building Chat Worker and setup bundle");
@@ -694,12 +569,12 @@ async function prepare(options) {
         });
 
         let cliLog;
-        if (options.mode === "web-server-mobius-cli") {
+        if (options.mode === "web-server-morty-cli") {
             cliLog = path.join(stateDir, "cli.log");
-            log("checking local Mobius CLI");
-            await run("pnpm", ["--dir", "third-party/mobius", "mobius", "agents"], {
+            log("checking local Morty CLI");
+            await run("pnpm", ["--filter", "@morty-build/cli", "start", "agents"], {
                 cwd: REPO_ROOT,
-                env: { MOBIUS_STATE_DIRECTORY: path.join(stateDir, "mobius") },
+                env: { MORTY_STATE_DIRECTORY: path.join(stateDir, "morty") },
             }).then(({ stdout, stderr }) => fs.writeFileSync(cliLog, `${stdout}${stderr}`, { mode: 0o600 }));
         }
 
@@ -708,7 +583,7 @@ async function prepare(options) {
             appId,
             mode: options.mode,
             cliCommand:
-                options.mode === "web-server-mobius-cli" ? "pnpm --dir third-party/mobius mobius agents" : undefined,
+                options.mode === "web-server-morty-cli" ? "pnpm --filter @morty-build/cli start agents" : undefined,
             ...(cliLog === undefined ? {} : { cliLog }),
             chatConfig: CHAT_CONFIG,
             chatLog,
@@ -737,14 +612,14 @@ async function prepare(options) {
 const SETUP_READY_TIMEOUT_MILLISECONDS = 300_000;
 
 async function installLocalCli(stack) {
-    const cliDirectory = path.join(MOBIUS_ROOT, "packages/cli");
+    const cliDirectory = path.join(MORTY_ROOT, "packages/cli");
     const manifest = JSON.parse(fs.readFileSync(path.join(cliDirectory, "package.json"), "utf8"));
     if (
-        manifest.name !== "@moxt-ai/mobius" ||
+        manifest.name !== "@morty-build/cli" ||
         typeof manifest.version !== "string" ||
         !/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?$/u.test(manifest.version)
     ) {
-        fail("the checkout's CLI package must have a valid Mobius name and version");
+        fail("the checkout's CLI package must have a valid Morty name and version");
     }
     const packageDirectory = fs.mkdtempSync(path.join(stack.stateDir, "cli-package-"));
     const controller = new AbortController();
@@ -756,10 +631,10 @@ async function installLocalCli(stack) {
         timeout: SETUP_READY_TIMEOUT_MILLISECONDS,
     };
     try {
-        log(`building and packing the checkout's Mobius CLI ${manifest.version}`);
+        log(`building and packing the checkout's Morty CLI ${manifest.version}`);
         await run("pnpm", ["pack", "--pack-destination", packageDirectory], { ...options, cwd: cliDirectory });
         controller.signal.throwIfAborted();
-        const tarball = path.join(packageDirectory, `moxt-ai-mobius-${manifest.version}.tgz`);
+        const tarball = path.join(packageDirectory, `morty-build-cli-${manifest.version}.tgz`);
         const prefix = path.join(stack.stateDir, "local-cli", manifest.version);
         log(`installing the local CLI into ${prefix}`);
         await run(
@@ -779,7 +654,12 @@ async function installLocalCli(stack) {
             options,
         );
         controller.signal.throwIfAborted();
-        return path.join(prefix, "node_modules", "@moxt-ai", "mobius", "dist", "cli.js");
+        const entry = path.join(prefix, "node_modules", "@morty-build", "cli", "dist", "cli.js");
+        await run(process.execPath, [entry, "install", "--archive", tarball], {
+            ...options,
+            env: { ...process.env, MORTY_STATE_DIRECTORY: path.join(stack.stateDir, "morty") },
+        });
+        return entry;
     } finally {
         process.removeListener("SIGINT", cancel);
         process.removeListener("SIGTERM", cancel);
@@ -805,7 +685,7 @@ function readSetupRecord(line) {
 /**
  * Runs the Chat-served setup bundle's `setup` flow with Morty's writable
  * location isolated under the stack's state directory. `morty/` isolates
- * Morty's saved setup state, `mobius/` isolates its CLI manager and connection
+ * Morty's saved setup state, CLI manager and connection
  * state, and `workspace/` is the default working directory. On success prints
  * one JSON record whose `handoffUrl` continues the setup identity in the
  * browser.
@@ -833,9 +713,9 @@ async function setup(options) {
         fail("the stack's Chat Worker is not running; run prepare first");
     }
     const mortyStateDirectory = path.join(stack.stateDir, "morty");
-    const mobiusStateDirectory = path.join(stack.stateDir, "mobius");
+    const runtimeStateDirectory = mortyStateDirectory;
     const workspace = path.resolve(options.workspace ?? path.join(stack.stateDir, "workspace"));
-    for (const directory of [mortyStateDirectory, mobiusStateDirectory, workspace]) {
+    for (const directory of [mortyStateDirectory, workspace]) {
         fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     }
     const localCli = await installLocalCli(stack);
@@ -870,8 +750,7 @@ async function setup(options) {
         process.execPath,
         {
             MORTY_STATE_DIRECTORY: mortyStateDirectory,
-            MOBIUS_STATE_DIRECTORY: mobiusStateDirectory,
-            MORTY_LOCAL_MOBIUS_CLI: localCli,
+            MORTY_LOCAL_CLI: localCli,
         },
         workspace,
     );
@@ -934,16 +813,16 @@ async function setup(options) {
             await run(
                 process.execPath,
                 [
-                    path.join(MOBIUS_ROOT, "packages/cli/src/cli/entrypoint.ts"),
+                    path.join(MORTY_ROOT, "packages/cli/src/cli/entrypoint.ts"),
                     "pair",
                     "list",
                     `--output-json=${pairList}`,
                 ],
-                { env: { MOBIUS_STATE_DIRECTORY: mobiusStateDirectory } },
+                { env: { MORTY_STATE_DIRECTORY: runtimeStateDirectory } },
             );
             const listed = JSON.parse(fs.readFileSync(pairList, "utf8"));
             if (!Array.isArray(listed)) {
-                fail("Mobius returned an invalid connection list");
+                fail("Morty returned an invalid connection list");
             }
             const connection = listed.find(
                 (item) =>
@@ -957,7 +836,7 @@ async function setup(options) {
                 typeof connection.connection_id !== "string" ||
                 !/^mcn_[a-f0-9]{32}$/u.test(connection.connection_id)
             ) {
-                fail("Mobius did not report the setup connection");
+                fail("Morty did not report the setup connection");
             }
             connectionId = connection.connection_id;
         } finally {
@@ -971,7 +850,7 @@ async function setup(options) {
         handoffUrl,
         mortyStateDirectory,
         harness,
-        mobiusStateDirectory,
+        runtimeStateDirectory,
         runtimePid,
         sessionId,
         setupLog,
@@ -992,7 +871,7 @@ async function reload(options) {
     if (stack === null) {
         throw new Error("pass --state-dir for a stack created by prepare");
     }
-    if (!["web", "web-server", "web-server-mobius-cli"].includes(stack.mode)) {
+    if (!["web-server", "web-server-morty-cli"].includes(stack.mode)) {
         throw new Error("unsupported stack mode; run prepare first");
     }
     const origin = new URL(stack.chatOrigin);
@@ -1001,7 +880,7 @@ async function reload(options) {
     }
     const stateDir = fs.realpathSync(options.stateDir);
     const chatPersist = path.join(stateDir, "chat");
-    if (stack.mode !== "web" && fs.realpathSync(chatPersist) !== chatPersist) {
+    if (fs.realpathSync(chatPersist) !== chatPersist) {
         throw new Error("Chat persistence must resolve inside the selected state directory");
     }
     if (!isAlive(stack.chatPid)) {
@@ -1013,34 +892,28 @@ async function reload(options) {
     process.once("SIGTERM", cancel);
     const operation = { signal: controller.signal, timeout: SETUP_READY_TIMEOUT_MILLISECONDS };
     try {
-        if (stack.mode === "web") {
-            log("Vite already hot-reloads web source changes; checking health");
-        } else {
-            log("rebuilding web/Chat; Platform and paired runtimes will stay running");
-            // Do not delete the entrypoint/assets while the live Wrangler watcher reads them.
-            await run("pnpm", ["build", "--emptyOutDir", "false"], operation);
-            controller.signal.throwIfAborted();
-            log("refreshing the local setup bundle");
-            await run(
-                WRANGLER,
-                [
-                    "r2",
-                    "object",
-                    "put",
-                    `${CHAT_ATTACHMENTS_BUCKET}/artifacts/setup.mjs`,
-                    "--file",
-                    SETUP_BUNDLE,
-                    "--local",
-                    "--persist-to",
-                    chatPersist,
-                    "--config",
-                    CHAT_CONFIG,
-                ],
-                operation,
-            );
-            // Wrangler watches the built Worker entrypoint and serves assets from disk.
-            // Keep its process (and in-memory credentials) rather than reprovisioning the stack.
-        }
+        log("rebuilding web/Chat; Platform and paired runtimes will stay running");
+        // Do not delete the entrypoint/assets while the live Wrangler watcher reads them.
+        await run("pnpm", ["build", "--emptyOutDir", "false"], operation);
+        controller.signal.throwIfAborted();
+        log("refreshing the local setup bundle");
+        await run(
+            WRANGLER,
+            [
+                "r2",
+                "object",
+                "put",
+                `${CHAT_ATTACHMENTS_BUCKET}/artifacts/setup.mjs`,
+                "--file",
+                SETUP_BUNDLE,
+                "--local",
+                "--persist-to",
+                chatPersist,
+                "--config",
+                CHAT_CONFIG,
+            ],
+            operation,
+        );
         await waitForHttp(
             stack.chatOrigin,
             (response) => response.ok,
@@ -1162,25 +1035,24 @@ async function logs(options) {
 }
 
 async function stopRecorded(stack) {
+    const runtimeStateDirectory = path.join(stack.stateDir, "morty");
     for (const runtime of Array.isArray(stack.runtimes) ? stack.runtimes : []) {
         if (typeof runtime.connectionId === "string" && /^mcn_[a-f0-9]{32}$/u.test(runtime.connectionId)) {
             log(`stopping paired connection ${runtime.connectionId}`);
             try {
-                const mobiusStateDirectory = path.join(stack.stateDir, "mobius");
-                const environment =
-                    runtime.mobiusStateDirectory === mobiusStateDirectory
-                        ? { MOBIUS_STATE_DIRECTORY: mobiusStateDirectory }
-                        : {};
+                if (runtime.runtimeStateDirectory !== runtimeStateDirectory) {
+                    throw new Error("The recorded Runtime does not belong to this local stack");
+                }
                 await run(
                     process.execPath,
                     [
-                        path.join(MOBIUS_ROOT, "packages/cli/src/cli/entrypoint.ts"),
+                        path.join(MORTY_ROOT, "packages/cli/src/cli/entrypoint.ts"),
                         "pair",
                         "stop",
                         "--connection",
                         runtime.connectionId,
                     ],
-                    { env: environment },
+                    { env: { MORTY_STATE_DIRECTORY: runtimeStateDirectory } },
                 );
             } catch (cause) {
                 log(`could not stop paired connection: ${cause instanceof Error ? cause.message : String(cause)}`);
@@ -1188,15 +1060,14 @@ async function stopRecorded(stack) {
         }
         await stopProcess(runtime.runtimePid);
     }
-    const mobiusStateDirectory = path.join(stack.stateDir, "mobius");
-    if (fs.existsSync(mobiusStateDirectory)) {
-        log(`stopping the Mobius manager at ${mobiusStateDirectory}`);
+    if (fs.existsSync(runtimeStateDirectory)) {
+        log(`stopping the Morty manager at ${runtimeStateDirectory}`);
         try {
-            await run(process.execPath, [path.join(MOBIUS_ROOT, "packages/cli/src/cli/entrypoint.ts"), "quit"], {
-                env: { MOBIUS_STATE_DIRECTORY: mobiusStateDirectory },
+            await run(process.execPath, [path.join(MORTY_ROOT, "packages/cli/src/cli/entrypoint.ts"), "quit"], {
+                env: { MORTY_STATE_DIRECTORY: runtimeStateDirectory },
             });
         } catch (cause) {
-            log(`could not stop the Mobius manager: ${cause instanceof Error ? cause.message : String(cause)}`);
+            log(`could not stop the Morty manager: ${cause instanceof Error ? cause.message : String(cause)}`);
         }
     }
     if (stack.chatPid !== undefined) {
@@ -1235,7 +1106,7 @@ function usage(stream = process.stdout) {
     stream.write(
         [
             "Usage:",
-            "  node scripts/local-dev.cjs prepare <web|web-server|web-server-mobius-cli> [--state-dir DIR] [--platform-port N] [--chat-port N] [--app-id ID --app-secret SECRET] [--force] [--no-build] [--background]",
+            "  node scripts/local-dev.cjs prepare <web-server|web-server-morty-cli> [--state-dir DIR] [--platform-port N] [--chat-port N] [--force] [--no-build] [--background]",
             "  node scripts/local-dev.cjs setup  --state-dir DIR --harness ID --session-id ID [--workspace DIR]",
             "  node scripts/local-dev.cjs status --state-dir DIR",
             "  node scripts/local-dev.cjs reload <web|chat> --state-dir DIR",
@@ -1243,7 +1114,6 @@ function usage(stream = process.stdout) {
             "  node scripts/local-dev.cjs remove --state-dir DIR [--keep-state]",
             "",
             "reload rebuilds web/Chat and refreshes setup.mjs without restarting Platform or runtimes.",
-            "In web mode, Vite already hot-reloads source changes; reload checks health only.",
             "",
         ].join("\n"),
     );

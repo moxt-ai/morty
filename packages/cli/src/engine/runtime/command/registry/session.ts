@@ -1,0 +1,497 @@
+import type {
+    SessionConfigReadCommand,
+    SessionConfigureCommand,
+    SessionPrepareCommand,
+    SessionReadyEvent,
+    SessionRenameCommand,
+    SessionRestoreCommand,
+    WorkspaceListCommand,
+} from "@morty-build/client/protocol";
+import {
+    SESSION_CONFIG_READ_KIND,
+    SESSION_CONFIG_READ_RESULT_KIND,
+    SESSION_CONFIGURE_KIND,
+    SESSION_PREPARE_KIND,
+    SESSION_RENAME_KIND,
+    SESSION_RESTORE_KIND,
+    WORKSPACE_LIST_KIND,
+} from "@morty-build/client/protocol";
+import type { WebSocket } from "undici";
+import { operationErrorCode } from "../../../infra/operation-error.ts";
+import { AccumulatingOperationMetrics } from "../../../infra/operation-metrics.ts";
+import type { ResolveAgent, SessionRecovery } from "../../../session/api/session-api.ts";
+import { SessionError } from "../../../session/api/session-error.ts";
+import type { ClosedSessionHandling, SessionManager } from "../../../session/manager/session-manager.ts";
+import type { NativeSessionService } from "../../../session/native/native-session-browser.ts";
+import { resolveSessionDirectories } from "../../../session/workspace/resolve-session-directories.ts";
+import type { WorkspaceDirectoryService } from "../../../session/workspace/workspace-directory.ts";
+import type { RuntimeConfig } from "../../config.ts";
+import type { RelayConnectionDiagnostics } from "../../relay/diagnostics.ts";
+import type { RuntimeCommand } from "../definition.ts";
+import { reportOperationFailure, send } from "../transport.ts";
+
+async function prepareSession(
+    command: SessionPrepareCommand,
+    recovery: SessionRecovery,
+    closed: ClosedSessionHandling,
+    config: RuntimeConfig,
+    resolveAgent: ResolveAgent,
+    directories: WorkspaceDirectoryService,
+    sessions: SessionManager,
+    metrics: AccumulatingOperationMetrics,
+    signal: AbortSignal,
+): Promise<SessionReadyEvent> {
+    return await metrics.measure("prepare-total", async () => {
+        const resolved = await metrics.measure(
+            "workspace-resolve",
+            async () =>
+                await resolveSessionDirectories(
+                    directories,
+                    config.bindingId,
+                    command.directoryId,
+                    command.additionalDirectoryIds,
+                    signal,
+                ),
+        );
+        const resolvedAgent = await resolveAgent(command.agentId, signal, command.sessionId);
+        const preparation = {
+            additionalDirectories: resolved.additionalDirectories,
+            ...resolvedAgent,
+            cwd: resolved.cwd,
+            sessionId: command.sessionId,
+            signal,
+        };
+        const prepared =
+            command.transient === true
+                ? await sessions.inspectSession(preparation, metrics)
+                : recovery.kind === "history-required"
+                  ? await sessions.restoreSession(preparation, metrics, closed)
+                  : await sessions.prepareSession(preparation, metrics, closed);
+        const configuration = command.configuration;
+        const snapshot =
+            configuration === undefined
+                ? prepared
+                : await metrics.measure(
+                      "configuration",
+                      async () =>
+                          await sessions.applySessionConfiguration({
+                              ...preparation,
+                              booleanValue: configuration.booleanValue,
+                              configId: configuration.configId,
+                              requestId: command.requestId,
+                              value: configuration.value,
+                              valueType: configuration.valueType,
+                          }),
+                  );
+        return {
+            additionalDirectories: resolved.additionalDirectoryEntries,
+            agentId: command.agentId,
+            agentName: prepared.agentName,
+            agentVersion: prepared.agentVersion,
+            capabilities: prepared.capabilities,
+            commands: prepared.commands,
+            configOptions: snapshot.configOptions,
+            configurationRevision: snapshot.configurationRevision,
+            directoryId: command.directoryId,
+            directoryLabel: resolved.directoryLabel,
+            kind: "session.ready",
+            requestId: command.requestId,
+            restored: prepared.restored,
+            sessionId: command.sessionId,
+        };
+    });
+}
+
+async function executeWorkspaceList(
+    socket: WebSocket,
+    command: WorkspaceListCommand,
+    directories: WorkspaceDirectoryService,
+    signal: AbortSignal,
+): Promise<void> {
+    try {
+        const listing =
+            command.view === "metadata"
+                ? await directories.describe(command.bindingId, command.directoryId, signal).then((directory) => ({
+                      directoryId: command.directoryId,
+                      directoryLabel: directory.label,
+                      entries: [],
+                      parentDirectoryId: directory.parentDirectoryId,
+                  }))
+                : await directories.list(command.bindingId, command.directoryId, signal);
+        send(socket, {
+            bindingId: command.bindingId,
+            directoryId: listing.directoryId,
+            directoryLabel: listing.directoryLabel,
+            entries: listing.entries,
+            kind: "workspace.entries",
+            parentDirectoryId: listing.parentDirectoryId,
+            requestId: command.requestId,
+        });
+    } catch (error) {
+        reportOperationFailure(socket, command.requestId, "", error);
+    }
+}
+
+async function executeSessionPrepare(
+    socket: WebSocket,
+    command: SessionPrepareCommand,
+    config: RuntimeConfig,
+    resolveAgent: ResolveAgent,
+    directories: WorkspaceDirectoryService,
+    sessions: SessionManager,
+    diagnostics: RelayConnectionDiagnostics,
+    signal: AbortSignal,
+): Promise<void> {
+    const metrics = new AccumulatingOperationMetrics();
+    try {
+        const readyEvent = await prepareSession(
+            command,
+            { kind: "interactive-only" },
+            "reopen",
+            config,
+            resolveAgent,
+            directories,
+            sessions,
+            metrics,
+            signal,
+        );
+        send(socket, {
+            ...readyEvent,
+            runtimeTimings: metrics.snapshot(),
+        });
+    } catch (error) {
+        diagnostics.daemonDiagnostic(
+            "session_prepare_failed",
+            command.requestId,
+            {
+                agentId: command.agentId,
+                code: operationErrorCode(error),
+                sessionId: command.sessionId,
+            },
+            error,
+        );
+        reportOperationFailure(socket, command.requestId, command.sessionId, error, metrics.snapshot());
+    }
+}
+
+async function executeSessionRestore(
+    socket: WebSocket,
+    command: SessionRestoreCommand,
+    config: RuntimeConfig,
+    resolveAgent: ResolveAgent,
+    directories: WorkspaceDirectoryService,
+    sessions: SessionManager,
+    nativeSessions: NativeSessionService,
+    diagnostics: RelayConnectionDiagnostics,
+    signal: AbortSignal,
+): Promise<void> {
+    const metrics = new AccumulatingOperationMetrics();
+    try {
+        const entry = await metrics.measure("session-lookup", async () => {
+            const [found] = await nativeSessions.querySessions([command.sessionId], signal);
+            if (found === undefined) {
+                throw new SessionError("session_not_found", "The Session was not found");
+            }
+            return found;
+        });
+        const ready = await prepareSession(
+            {
+                additionalDirectoryIds: entry.additionalDirectories.map((directory) => directory.directoryId),
+                agentId: entry.agentId,
+                bindingId: config.bindingId,
+                directoryId: entry.directoryId,
+                kind: "session.prepare",
+                requestId: command.requestId,
+                sessionId: command.sessionId,
+                sessionState: "provisioned",
+            },
+            { kind: "history-required" },
+            "reopen",
+            config,
+            resolveAgent,
+            directories,
+            sessions,
+            metrics,
+            signal,
+        );
+        send(socket, {
+            entry,
+            kind: "session.restored",
+            ready: { ...ready, runtimeTimings: metrics.snapshot() },
+            requestId: command.requestId,
+        });
+    } catch (error) {
+        diagnostics.daemonDiagnostic(
+            "session_restore_failed",
+            command.requestId,
+            {
+                code: operationErrorCode(error),
+                sessionId: command.sessionId,
+            },
+            error,
+        );
+        reportOperationFailure(socket, command.requestId, command.sessionId, error, metrics.snapshot());
+    }
+}
+
+async function executeSessionRename(
+    socket: WebSocket,
+    command: SessionRenameCommand,
+    config: RuntimeConfig,
+    resolveAgent: ResolveAgent,
+    directories: WorkspaceDirectoryService,
+    sessions: SessionManager,
+    nativeSessions: NativeSessionService,
+    signal: AbortSignal,
+): Promise<void> {
+    try {
+        const [entry] = await nativeSessions.querySessions([command.sessionId], signal);
+        if (entry === undefined) {
+            throw new SessionError("session_not_found", "The Session was not found");
+        }
+        const resolved = await resolveSessionDirectories(
+            directories,
+            config.bindingId,
+            entry.directoryId,
+            entry.additionalDirectories.map((directory) => directory.directoryId),
+            signal,
+        );
+        const renamed = await sessions.renameSession(
+            {
+                additionalDirectories: resolved.additionalDirectories,
+                ...(await resolveAgent(entry.agentId, signal, command.sessionId)),
+                cwd: resolved.cwd,
+                sessionId: command.sessionId,
+                signal,
+            },
+            command.title,
+        );
+        send(socket, {
+            kind: "session.renamed",
+            requestId: command.requestId,
+            sessionId: command.sessionId,
+            title: renamed.title,
+            updatedAt: renamed.updatedAt,
+        });
+    } catch (error) {
+        if (signal.aborted) {
+            signal.throwIfAborted();
+        }
+        reportOperationFailure(socket, command.requestId, command.sessionId, error);
+    }
+}
+
+async function executeSessionConfigure(
+    socket: WebSocket,
+    command: SessionConfigureCommand,
+    config: RuntimeConfig,
+    resolveAgent: ResolveAgent,
+    directories: WorkspaceDirectoryService,
+    sessions: SessionManager,
+    signal: AbortSignal,
+): Promise<void> {
+    try {
+        const resolved = await resolveSessionDirectories(
+            directories,
+            config.bindingId,
+            command.directoryId,
+            command.additionalDirectoryIds,
+            signal,
+        );
+        const snapshot = await sessions.configureSession({
+            additionalDirectories: resolved.additionalDirectories,
+            ...(await resolveAgent(command.agentId, signal, command.sessionId)),
+            booleanValue: command.booleanValue,
+            configId: command.configId,
+            expectedConfigurationRevision: command.expectedConfigurationRevision,
+            cwd: resolved.cwd,
+            requestId: command.requestId,
+            sessionId: command.sessionId,
+            signal,
+            value: command.value,
+            valueType: command.valueType,
+        });
+        send(socket, {
+            ...snapshot,
+            kind: "session.config.updated",
+            requestId: command.requestId,
+            sessionId: command.sessionId,
+        });
+    } catch (error) {
+        if (signal.aborted) {
+            signal.throwIfAborted();
+        }
+        reportOperationFailure(socket, command.requestId, command.sessionId, error);
+    }
+}
+
+export const workspaceListCommand: RuntimeCommand = {
+    kind: WORKSPACE_LIST_KIND,
+    handle: (context, message): void => {
+        if (message.kind !== WORKSPACE_LIST_KIND) {
+            throw new Error("Command kind mismatch");
+        }
+        void executeWorkspaceList(context.socket, message, context.directories, context.signal);
+    },
+};
+
+export const sessionPrepareCommand: RuntimeCommand = {
+    kind: SESSION_PREPARE_KIND,
+    handle: (context, message): void => {
+        if (message.kind !== SESSION_PREPARE_KIND) {
+            throw new Error("Command kind mismatch");
+        }
+        void executeSessionPrepare(
+            context.socket,
+            message,
+            context.config,
+            context.resolveAgent,
+            context.directories,
+            context.sessions,
+            context.diagnostics,
+            context.signal,
+        );
+    },
+};
+
+export const sessionConfigureCommand: RuntimeCommand = {
+    kind: SESSION_CONFIGURE_KIND,
+    handle: (context, message): void => {
+        if (message.kind !== SESSION_CONFIGURE_KIND) {
+            throw new Error("Command kind mismatch");
+        }
+        void executeSessionConfigure(
+            context.socket,
+            message,
+            context.config,
+            context.resolveAgent,
+            context.directories,
+            context.sessions,
+            context.signal,
+        );
+    },
+};
+
+export const sessionRestoreCommand: RuntimeCommand = {
+    kind: SESSION_RESTORE_KIND,
+    handle: (context, message): void => {
+        if (message.kind !== SESSION_RESTORE_KIND) {
+            throw new Error("Command kind mismatch");
+        }
+        void executeSessionRestore(
+            context.socket,
+            message,
+            context.config,
+            context.resolveAgent,
+            context.directories,
+            context.sessions,
+            context.nativeSessions,
+            context.diagnostics,
+            context.signal,
+        );
+    },
+};
+
+export const sessionRenameCommand: RuntimeCommand = {
+    kind: SESSION_RENAME_KIND,
+    handle: (context, message): void => {
+        if (message.kind !== SESSION_RENAME_KIND) {
+            throw new Error("Command kind mismatch");
+        }
+        void executeSessionRename(
+            context.socket,
+            message,
+            context.config,
+            context.resolveAgent,
+            context.directories,
+            context.sessions,
+            context.nativeSessions,
+            context.signal,
+        );
+    },
+};
+
+async function executeSessionConfigRead(
+    socket: WebSocket,
+    command: SessionConfigReadCommand,
+    config: RuntimeConfig,
+    resolveAgent: ResolveAgent,
+    directories: WorkspaceDirectoryService,
+    sessions: SessionManager,
+    nativeSessions: NativeSessionService,
+    diagnostics: RelayConnectionDiagnostics,
+    signal: AbortSignal,
+): Promise<void> {
+    const metrics = new AccumulatingOperationMetrics();
+    try {
+        const entry = await metrics.measure("session-lookup", async () => {
+            const [found] = await nativeSessions.querySessions([command.sessionId], signal);
+            if (found === undefined) {
+                throw new SessionError("session_not_found", "The Session was not found");
+            }
+            return found;
+        });
+        const ready = await prepareSession(
+            {
+                additionalDirectoryIds: entry.additionalDirectories.map((directory) => directory.directoryId),
+                agentId: entry.agentId,
+                bindingId: config.bindingId,
+                directoryId: entry.directoryId,
+                kind: "session.prepare",
+                requestId: command.requestId,
+                sessionId: command.sessionId,
+                sessionState: "provisioned",
+            },
+            // A settings read must not force history loading: Agents without
+            // load support would fail even with a live process whose config is
+            // already readable, and prepare reuses the current configuration.
+            { kind: "interactive-only" },
+            // Reading settings must not reopen a Session that a client closed.
+            "keep-closed",
+            config,
+            resolveAgent,
+            directories,
+            sessions,
+            metrics,
+            signal,
+        );
+        send(socket, {
+            configOptions: ready.configOptions,
+            configurationRevision: ready.configurationRevision,
+            kind: SESSION_CONFIG_READ_RESULT_KIND,
+            requestId: command.requestId,
+            sessionId: command.sessionId,
+        });
+    } catch (error) {
+        diagnostics.daemonDiagnostic(
+            "session_config_read_failed",
+            command.requestId,
+            {
+                code: operationErrorCode(error),
+                sessionId: command.sessionId,
+            },
+            error,
+        );
+        reportOperationFailure(socket, command.requestId, command.sessionId, error, metrics.snapshot());
+    }
+}
+
+export const sessionConfigReadCommand: RuntimeCommand = {
+    kind: SESSION_CONFIG_READ_KIND,
+    handle: (context, message): void => {
+        if (message.kind !== SESSION_CONFIG_READ_KIND) {
+            throw new Error("Command kind mismatch");
+        }
+        void executeSessionConfigRead(
+            context.socket,
+            message,
+            context.config,
+            context.resolveAgent,
+            context.directories,
+            context.sessions,
+            context.nativeSessions,
+            context.diagnostics,
+            context.signal,
+        );
+    },
+};

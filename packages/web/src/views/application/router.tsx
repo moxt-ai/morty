@@ -1,4 +1,4 @@
-import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
+import { isIdentifier } from "@morty-build/client/protocol";
 import { createRootRoute, createRoute, createRouter, Outlet, useRouter } from "@tanstack/react-router";
 import type { ComponentType, ReactNode } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";

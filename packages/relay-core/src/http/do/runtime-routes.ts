@@ -1,0 +1,127 @@
+import { isIdentifier } from "@morty-build/client/protocol";
+import { Hono } from "hono";
+import { ProjectScope } from "../../entity/do/session.ts";
+import type { HostCredential } from "../../entity/pairing/pairing.ts";
+import type { RuntimeAdmission, RuntimeService } from "../../service/channel/runtime-service.ts";
+
+function unauthorized(message: string): Response {
+    return Response.json({ error: { code: "unauthorized", message } }, { status: 401 });
+}
+
+/** A Worker that predates credential kinds forwards only stored Channel host credentials. */
+function hostCredential(credentialId: string | null, kind: string | null): HostCredential | null {
+    if (credentialId === null) {
+        return null;
+    }
+    switch (kind) {
+        case null:
+        case "channel":
+            return { kind: "channel", credentialId };
+        case "project":
+            return { kind: "project", credentialId };
+        default:
+            return null;
+    }
+}
+
+export function createRuntimeRoutes(runtime: RuntimeService) {
+    return new Hono().all("/projects/:projectId/*", async (c) => {
+        const request = c.req.raw;
+        if (request.method === "DELETE" && new URL(request.url).pathname.endsWith("/session-viewers/revoke")) {
+            const revokedThrough = Number(request.headers.get("x-mobius-session-access-revoked-through"));
+            if (!Number.isSafeInteger(revokedThrough)) {
+                return unauthorized("A verified Session access revocation is required");
+            }
+            runtime.revokeSessionViewers(new ProjectScope(c.req.param("projectId")), revokedThrough);
+            return new Response(null, { status: 204 });
+        }
+        const channelId = request.headers.get("x-mobius-channel-id");
+        const runtimeId = request.headers.get("x-mobius-runtime-id");
+        const projectId = c.req.param("projectId");
+        if (channelId === null || runtimeId === null || projectId === null) {
+            return unauthorized("Verified channel access is required");
+        }
+        const scope = new ProjectScope(projectId);
+        const url = new URL(request.url);
+        const credentialId = request.headers.get("x-mobius-host-credential-id");
+        if (request.method === "DELETE" && url.pathname.endsWith("/runtime/revoke")) {
+            await runtime.revokeRuntime(channelId, runtimeId, scope, request.signal);
+            return new Response(null, { status: 204 });
+        }
+        if (request.method === "DELETE" && url.pathname.endsWith("/host-credentials/revoke")) {
+            if (credentialId === null) {
+                return unauthorized("Verified host credential access is required");
+            }
+            runtime.revokeHost(channelId, credentialId, runtimeId, scope);
+            return new Response(null, { status: 204 });
+        }
+        if (request.method === "GET" && url.pathname.endsWith("/runtime-status")) {
+            await runtime.expireSilentDaemons();
+            return Response.json({ online: runtime.isOnline(runtimeId) });
+        }
+        const revoked = () =>
+            Response.json(
+                { error: { code: "runtime_revoked", message: "The Runtime has been revoked" } },
+                { status: 401 },
+            );
+        const admitted = (result: RuntimeAdmission) => (result.kind === "accepted" ? result.response : revoked());
+        if (request.headers.get("Upgrade") !== "websocket") {
+            return new Response("WebSocket upgrade required", { status: 426 });
+        }
+        if (url.pathname.endsWith("/daemon")) {
+            const result = await runtime.acceptDaemon(runtimeId, scope, request.signal);
+            switch (result.kind) {
+                case "accepted":
+                    return result.response;
+                case "revoked":
+                    return revoked();
+                case "conflict":
+                    return Response.json(
+                        {
+                            error: {
+                                code: "runtime_identity_conflict",
+                                message: "The Channel is already assigned to another Runtime",
+                            },
+                        },
+                        { status: 409 },
+                    );
+            }
+            const unreachable: never = result;
+            return unreachable;
+        }
+        if (url.pathname.endsWith("/host")) {
+            const credential = hostCredential(credentialId, request.headers.get("x-mobius-host-credential-kind"));
+            if (credential === null) {
+                return unauthorized("Verified host credential access is required");
+            }
+            const nativeRequestId = url.searchParams.get("nativeRequestId");
+            if (nativeRequestId !== null && (nativeRequestId.length === 0 || nativeRequestId.length > 128)) {
+                return new Response("A bounded native request identifier is required", { status: 400 });
+            }
+            const sessionFilter = url.searchParams.get("sessionId");
+            if (sessionFilter !== null && !isIdentifier(sessionFilter)) {
+                return new Response("A valid Session identifier is required", { status: 400 });
+            }
+            return admitted(
+                await runtime.acceptHost(
+                    {
+                        role: "host",
+                        channelId,
+                        credential,
+                        runtimeId,
+                        projectId,
+                        ...(nativeRequestId === null ? {} : { nativeRequestId }),
+                        ...(sessionFilter === null ? {} : { sessionFilter }),
+                    },
+                    request.signal,
+                ),
+            );
+        }
+        if (url.pathname.endsWith("/live-history")) {
+            return admitted(
+                await runtime.acceptHost({ role: "relay", channelId, runtimeId, projectId }, request.signal),
+            );
+        }
+        return new Response(null, { status: 404 });
+    });
+}

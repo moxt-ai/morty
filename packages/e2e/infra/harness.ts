@@ -11,7 +11,7 @@ import {
     findExecutableOnPath,
     resolveExecutablePath,
     stopProcessTree,
-} from "../../../third-party/mobius/packages/cli/src/engine/util/process/executable.ts";
+} from "../../../packages/cli/src/engine/util/process/executable.ts";
 
 interface ErrorRecord {
     readonly message: string;

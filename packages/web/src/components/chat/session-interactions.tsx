@@ -1,5 +1,5 @@
-import type { SessionElicitationField } from "@moxt-ai/mobius-sdk";
-import type { ElicitationResponseRequest } from "@moxt-ai/mobius-sdk/channel";
+import type { SessionElicitationField } from "@morty-build/client";
+import type { ElicitationResponseRequest } from "@morty-build/client/channel";
 import { ArrowUpRight, ChevronDown, HelpCircle, ShieldCheck } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { ButtonGroup } from "@/components/ui/button-group";

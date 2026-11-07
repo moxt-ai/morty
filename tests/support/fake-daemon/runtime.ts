@@ -2,20 +2,17 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { MobiusClient, StaticMobiusCredentialProvider } from "@moxt-ai/mobius-sdk/server";
+import { MobiusClient, StaticMobiusCredentialProvider } from "@morty-build/client/server";
 import {
     createFakeDaemon,
     type FakeAgentHarnessOptions,
     type HarnessReplyPlan,
-} from "@moxt-ai/mobius-test-support/fake-daemon";
+} from "@morty-build/runtime-test-support/fake-daemon";
 import * as v from "valibot";
-import { AcpAgentDefinition } from "../../../third-party/mobius/packages/cli/src/engine/acp/agent/agent-definition.ts";
-import { RuntimeAgentDependencies } from "../../../third-party/mobius/packages/cli/src/engine/agent/runtime-agents.ts";
-import {
-    createRuntimeConfig,
-    RuntimeLocalContext,
-} from "../../../third-party/mobius/packages/cli/src/engine/runtime/config.ts";
-import { RuntimeLoop } from "../../../third-party/mobius/packages/cli/src/engine/runtime/runtime-loop.ts";
+import { AcpAgentDefinition } from "../../../packages/cli/src/engine/acp/agent/agent-definition.ts";
+import { RuntimeAgentDependencies } from "../../../packages/cli/src/engine/agent/runtime-agents.ts";
+import { createRuntimeConfig, RuntimeLocalContext } from "../../../packages/cli/src/engine/runtime/config.ts";
+import { RuntimeLoop } from "../../../packages/cli/src/engine/runtime/runtime-loop.ts";
 import { createInteractionAgent } from "./interaction-agent.ts";
 import { createSettingsAgent, createUnavailableAgent } from "./settings-agent.ts";
 import { createToolLifecycleAgent } from "./tool-lifecycle-agent.ts";

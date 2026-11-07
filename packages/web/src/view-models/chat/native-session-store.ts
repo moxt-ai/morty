@@ -1,4 +1,4 @@
-import type { NativeSessionEntry, NativeSessionResult } from "@moxt-ai/mobius-sdk/channel";
+import type { NativeSessionEntry, NativeSessionResult } from "@morty-build/client/channel";
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ChatRuntime, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import { formatError } from "../format-error.ts";
@@ -259,8 +259,13 @@ export const createNativeSessionStore = (
             void get().load(lifetime.signal);
         },
         select: async (entry, lifetimeSignal) => {
-            const { directory, operation } = get();
+            const { directory, operation, preview } = get();
             if (directory.kind !== "ready" || operation !== "idle") {
+                return;
+            }
+            // Selecting the auto-selected entry again must retain its in-flight native read.
+            // Cancelling and restarting it races the Runtime's operation ownership.
+            if ((preview.kind === "loading" || preview.kind === "ready") && preview.entry.entryId === entry.entryId) {
                 return;
             }
             selection?.abort();

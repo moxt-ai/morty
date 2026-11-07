@@ -1,0 +1,29 @@
+{
+    "$schema": "../../node_modules/wrangler/config-schema.json",
+    "name": "morty-recording-local",
+    "main": "src/worker.ts",
+    "compatibility_date": "2026-09-03",
+    "compatibility_flags": ["enable_request_signal"],
+    "durable_objects": {
+        "bindings": [
+            {
+                "name": "SESSION_RECORDING",
+                "class_name": "SessionRecordingDurableObject"
+            },
+            {
+                "name": "RECORDING_DIRECTORY",
+                "class_name": "RecordingDirectoryDurableObject"
+            }
+        ]
+    },
+    "migrations": [
+        {
+            "tag": "recording-initial",
+            "new_sqlite_classes": ["SessionRecordingDurableObject", "RecordingDirectoryDurableObject"]
+        }
+    ],
+    "observability": {
+        "enabled": true
+    },
+    "account_id": "b903018a1c3d9d9a4bd68a11eb03e764"
+}

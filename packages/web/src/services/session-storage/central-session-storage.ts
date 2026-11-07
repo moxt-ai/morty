@@ -1,4 +1,4 @@
-import { isDirectoryIdentifier, isIdentifier, MAX_PROMPT_ATTACHMENT_BYTES } from "@moxt-ai/mobius-sdk/protocol";
+import { isDirectoryIdentifier, isIdentifier, MAX_PROMPT_ATTACHMENT_BYTES } from "@morty-build/client/protocol";
 import * as v from "valibot";
 
 /**

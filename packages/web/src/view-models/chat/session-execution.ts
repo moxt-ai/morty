@@ -1,4 +1,4 @@
-import type { MobiusClient } from "@moxt-ai/mobius-sdk";
+import type { MobiusClient } from "@morty-build/client";
 import { acceptedTurn, type CurrentTurn, type TurnFailure, transitionCurrentTurn } from "./session-current-turn.ts";
 import {
     type DelegationStage,

@@ -297,7 +297,7 @@ test("Given an offline Runtime and a dropped bridge, When the bridge recovers an
     // offers the ordinary retry surface.
     await app.daemon?.disconnect();
     await app.waitForView(() =>
-        expect(getByRole(document.body, "alert").textContent).toContain("Your Mobius is disconnected"),
+        expect(getByRole(document.body, "alert").textContent).toContain("Your Morty Runtime is disconnected"),
     );
 
     // The bridge drops and returns while the Runtime is still offline. The

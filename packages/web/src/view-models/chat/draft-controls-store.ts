@@ -1,4 +1,4 @@
-import type { SessionConfigOption, WorkspaceEntriesEvent } from "@moxt-ai/mobius-sdk/protocol";
+import type { SessionConfigOption, WorkspaceEntriesEvent } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import {
     type BotChatApi,

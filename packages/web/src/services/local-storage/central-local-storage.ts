@@ -1,4 +1,4 @@
-import { isDirectoryIdentifier, isIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@moxt-ai/mobius-sdk/protocol";
+import { isDirectoryIdentifier, isIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import { identityScopeSchema } from "../identity/identity-scope-url.ts";
 

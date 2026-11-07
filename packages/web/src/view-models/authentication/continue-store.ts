@@ -1,4 +1,4 @@
-import { isIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@moxt-ai/mobius-sdk/protocol";
+import { isIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import { BotChatApi } from "@/services/chat/bot-chat-api";
 import { saveLastCwdPreference, saveRecentCwdPreference } from "@/services/chat/last-cwd-preference";

@@ -4,7 +4,7 @@ import {
     type MobiusClient,
     MobiusError,
     type PromptAttachment,
-} from "@moxt-ai/mobius-sdk";
+} from "@morty-build/client";
 import { createStore } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";

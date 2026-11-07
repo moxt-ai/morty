@@ -5,5 +5,11 @@
         "lib": ["es2024", "dom", "dom.iterable"],
         "jsx": "react-jsx"
     },
-    "include": ["scripts/**/*.ts", "*.config.ts", "drizzle/**/*.ts", "worker-configuration.d.ts"]
+    "include": [
+        "deployment/provision-service.ts",
+        "scripts/**/*.ts",
+        "*.config.ts",
+        "drizzle/**/*.ts",
+        "worker-configuration.d.ts"
+    ]
 }

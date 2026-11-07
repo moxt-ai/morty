@@ -84,7 +84,7 @@ test("Given a rejected Platform credential, When a user tries to pair their Mach
         );
         expect(response.status).toBe(401);
         expect(await response.json()).toMatchObject({
-            error: { message: "Platform could not complete Runtime setup." },
+            error: { message: "Morty could not complete Runtime setup." },
         });
     } finally {
         await fixture.changePlatformCredential(original);

@@ -57,7 +57,7 @@ test.describe("answer request spacing", () => {
         const permission = page.getByRole("alertdialog", { name: "Agent permission request" });
         await expect(permission).toContainText("long-directory-");
         await expect(permission).toBeVisible();
-        const scroller = permission.locator("xpath=ancestor::div[contains(@class, 'overflow-y-auto')][1]");
+        const scroller = page.getByRole("region", { name: "Pending Agent requests" });
         const box = await scroller.boundingBox();
         if (box === null) {
             throw new Error("Expected the visible interaction scroller");

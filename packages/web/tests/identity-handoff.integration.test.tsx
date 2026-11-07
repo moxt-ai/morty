@@ -198,7 +198,7 @@ test("Given the Morty access was redeemed and opening the original session faile
 
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
     expect(alert.textContent).toContain("The native session was not found");
-    expect(getByRole(document.body, "heading", { name: "Platform could not complete Runtime setup" })).toBeInstanceOf(
+    expect(getByRole(document.body, "heading", { name: "Morty could not complete Runtime setup" })).toBeInstanceOf(
         HTMLElement,
     );
     expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
@@ -280,8 +280,8 @@ test("Given a native session handoff whose Runtime went offline, When the page l
     });
 
     const alert = await app.waitForView(() => getByRole(document.body, "alert"));
-    expect(alert.textContent).toContain("Your Mobius is disconnected");
-    expect(alert.textContent).toContain("Start your Mobius");
+    expect(alert.textContent).toContain("Your Morty Runtime is disconnected");
+    expect(alert.textContent).toContain("Start your Morty Runtime");
     expect(alert.textContent?.toLowerCase()).not.toContain("transfer link");
     expect(getByRole(document.body, "button", { name: "Try again" })).toBeInstanceOf(HTMLButtonElement);
 });
@@ -309,15 +309,15 @@ test("Given connected shared Morty access, When the user refreshes Network laten
 
     const dialog = getByRole(document.body, "dialog", { name: "Network latency" });
     await app.waitForView(() => {
-        expect(dialog.textContent).toContain("Mobius location: Western North America");
+        expect(dialog.textContent).toContain("Relay location: Western North America");
         expect(dialog.textContent).toContain("Browser ↔ Morty");
-        expect(dialog.textContent).toContain("Browser ↔ Mobius");
-        expect(dialog.textContent).toContain("Morty ↔ Mobius");
-        expect(dialog.textContent).toContain("Mobius ↔ Daemon");
+        expect(dialog.textContent).toContain("Browser ↔ Relay");
+        expect(dialog.textContent).toContain("Morty ↔ Relay");
+        expect(dialog.textContent).toContain("Relay ↔ Daemon");
         expect(getByRole(dialog, "status", { name: "Browser to Morty latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Browser to Mobius latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Morty to Mobius latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Mobius to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Browser to relay latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Morty to relay latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Relay to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
     });
 
     await app.user.click(getByRole(dialog, "button", { name: "Refresh network latency" }));
@@ -325,9 +325,9 @@ test("Given connected shared Morty access, When the user refreshes Network laten
     expect(getByRole(dialog, "status", { name: "Measuring network latency" })).toBeInstanceOf(HTMLElement);
     await app.waitForView(() => {
         expect(getByRole(dialog, "status", { name: "Browser to Morty latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Browser to Mobius latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Morty to Mobius latency" }).textContent).toMatch(/^\d+ ms$/u);
-        expect(getByRole(dialog, "status", { name: "Mobius to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Browser to relay latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Morty to relay latency" }).textContent).toMatch(/^\d+ ms$/u);
+        expect(getByRole(dialog, "status", { name: "Relay to daemon latency" }).textContent).toMatch(/^\d+ ms$/u);
     });
 });
 

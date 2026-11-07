@@ -2,20 +2,8 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-APP_ID=${MORTY_LOCAL_APP_ID:-}
-APP_SECRET=${MORTY_LOCAL_APP_SECRET:-}
-
 case "${1:-}" in
-    web)
-        [ -n "$APP_ID" ] && [ -n "$APP_SECRET" ] || {
-            echo "MORTY_LOCAL_APP_ID and MORTY_LOCAL_APP_SECRET are required" >&2
-            exit 2
-        }
-        MODE=$1
-        shift
-        exec node "$ROOT/scripts/local-dev.cjs" prepare "$MODE" --app-id "$APP_ID" --app-secret "$APP_SECRET" "$@"
-        ;;
-    web-server|web-server-mobius-cli)
+    web-server|web-server-morty-cli)
         MODE=$1
         shift
         exec node "$ROOT/scripts/local-dev.cjs" prepare "$MODE" "$@"

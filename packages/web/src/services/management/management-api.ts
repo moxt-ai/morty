@@ -1,4 +1,4 @@
-import { decodeIdentifier, type Identifier, isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
+import { decodeIdentifier, type Identifier, isIdentifier } from "@morty-build/client/protocol";
 import * as v from "valibot";
 
 const identifier = v.custom<Identifier>(isIdentifier);

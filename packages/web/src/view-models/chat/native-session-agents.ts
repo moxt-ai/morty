@@ -1,4 +1,4 @@
-import { decodeIdentifier, type Identifier } from "@moxt-ai/mobius-sdk/protocol";
+import { decodeIdentifier, type Identifier } from "@morty-build/client/protocol";
 import {
     type ChatAgentSelection,
     type ChatRuntime,

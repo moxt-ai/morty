@@ -1,4 +1,4 @@
-import { isIdentifier } from "@moxt-ai/mobius-sdk/protocol";
+import { isIdentifier } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import type {
