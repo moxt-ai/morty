@@ -340,7 +340,10 @@ test("Given conversations updated across recent dates, When the directory loads,
                         .some((element) => element.textContent?.includes(conversation.title) === true),
                 ).toBe(true),
             );
-            await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+            await app.waitForView(() => {
+                const current = getByRole(document.body, "button", { current: "page" });
+                expect(queryByTestId(current, dataTestId.sessionStatus)).toBeNull();
+            });
         }
 
         vi.setSystemTime(new Date("2026-10-10T12:00:00+08:00"));
