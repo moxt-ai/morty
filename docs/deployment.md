@@ -11,7 +11,10 @@ metadata:
 Morty owns one workspace and one public npm distribution, `@morty-build/cli`.
 Internal client, Runtime, relay, and storage packages are not separately published.
 Production and benchmark have separate service identities, credentials, and
-Cloudflare resources. Moxt credentials and release channels must not be used.
+Cloudflare resources. They intentionally share the Morty Cloudflare account and
+its account-level deployment authority. This is not an authorization boundary
+between production and benchmark. Moxt credentials and release channels must not
+be used.
 
 ## Cloud deployment
 

@@ -41,8 +41,9 @@ destruction of production business data, or changes to Agent-owned history.
 
 Morty and Moxt must have independent package publication, installation, state,
 credentials, process control, and update lifecycles. Verify non-interference with
-a real released Moxt/Mobius installation. Production and benchmark must also have
-independent authentication and deployment authority.
+a real released Moxt/Mobius installation. Production and benchmark keep independent service authentication and resources.
+The maintainer explicitly permits their shared Morty Cloudflare account and
+account-level deployment authority; neither may depend on the old Moxt account.
 
 Publish the new Morty npm package only after the complete acceptance gates in
 issue #6 pass for the exact archive. Keep the existing production installer in
