@@ -49,10 +49,12 @@ can leave gaps; catch-up depends on native Agent history. Morty does not enable
 cloud recording. Agent-owned history stays in the Agent's directories; Morty
 uninstall must never remove it.
 
-Morty's state directory is `~/Library/Application Support/Morty/v1` on macOS,
-`%LOCALAPPDATA%\Morty\v1` on Windows, and `$XDG_STATE_HOME/morty/v1` (or
-`~/.local/state/morty/v1`) on Linux. An absolute `MORTY_STATE_DIRECTORY` overrides
-it. Use a fresh empty directory; existing unmarked data is not adopted.
+Morty's state directory is `~/Library/Application Support/Morty/v2` on macOS,
+`%LOCALAPPDATA%\Morty\v2` on Windows, and `$XDG_STATE_HOME/morty/v2` (or
+`~/.local/state/morty/v2`) on Linux. An absolute `MORTY_STATE_DIRECTORY` overrides
+it. Use a fresh empty directory; existing unmarked data and earlier installation
+generations are not adopted. This pre-launch reset requires new installation
+and pairing; earlier Morty clients, credentials and browser state are unsupported.
 
 The `@morty-build/cli` npm command is a launcher for the persistent installed
 release. Use `npx --yes @morty-build/cli` followed by `status`, `doctor`, `stop`,

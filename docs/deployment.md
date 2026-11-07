@@ -64,6 +64,14 @@ workflow and environment, and the archived release records its source revision a
 checksums. Do not describe that release record as a public provenance attestation.
 
 Keep the previous production setup available until the new package is published
-and its replacement verified. Existing Morty users reinstall and pair again;
-there is no old-installation takeover or legacy forwarding fallback. Preserve
-Moxt and Agent-owned data throughout the cutover.
+and its replacement verified. The authorized pre-launch reset supports only the
+current Morty protocol and installation generation. Activate the matching cloud
+and CLI release together, then verify fresh installation, pairing, conversation,
+attachments and reconnect. Earlier Morty credentials, local state and browser
+links are unsupported; no legacy reader or forwarding service is required.
+
+Preserve release archives and retained data for recovery. Do not roll a new
+installation back into an earlier state generation or replay old writers against
+new schemas. Recovery restores an accepted matching cloud/CLI release and uses
+fresh pairing when generations differ. Moxt services and Agent-owned data remain
+outside this cutover. Subsequent releases follow the normal compatibility policy.

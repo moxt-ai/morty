@@ -50,8 +50,24 @@ Publish the new Morty npm package only after the complete acceptance gates in
 issue #6 pass for the exact archive. Keep the existing production installer in
 service until the new package is available and its replacement is verified.
 
-The compatibility rules below continue to apply outside this explicitly
-maintainer-authorized cutover.
+### Pre-launch contract reset
+
+On 2026-11-07 the maintainer confirmed that Morty is a new product with no users
+and explicitly authorized completing the remaining work without preserving any
+old Morty compatibility. The launch release may replace Morty protocol names,
+credential representations, browser persistence and local installation state;
+remove retired Morty adapters rather than maintaining dual paths. Earlier
+Morty builds and saved state are unsupported and require fresh installation and
+pairing. Verify the complete current release through real product boundaries.
+
+This authorization is specific to this pre-launch reset. It does not authorize
+changes to Moxt, deletion of Agent-owned history, weakened authentication or
+rewriting committed database migration history. Preserve retained production
+records and snapshots; leaving historical data in storage does not require an
+active legacy reader. Record release identity, coordinated cloud/CLI activation,
+and recovery consequences before publishing. After launch, the compatibility
+rules below apply to subsequent independently deployed releases unless a
+maintainer explicitly authorizes another break.
 
 ## State Modeling
 

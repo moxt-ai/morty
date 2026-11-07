@@ -70,12 +70,12 @@ running it. Read it yourself before you paste the prompt.
   it, and the browser shows no history until it reconnects
   ([#907](https://github.com/moxt-ai/morty/issues/907)).
 
-## Reinstalling the independent Morty release
+## Installing the launch release
 
-Previous Morty installations must install and pair again. The new release does not
-adopt the old `.mobius` state or stop an existing Moxt/Mobius service. Agent-owned
-conversation history remains on the machine. Run the setup prompt above to create
-the new Morty identity, then use its new browser link.
+The launch release uses a fresh Morty installation and identity. Earlier test
+releases, local state and browser links are unsupported; install and pair again
+using the setup prompt above. Morty does not adopt `.mobius` state or operate
+Moxt services. Agent-owned conversation history remains on the machine.
 
 `npx --yes @morty-build/cli uninstall` stops Morty and removes its managed executables;
 it retains local identity, pairings, workspaces, and Agent history.

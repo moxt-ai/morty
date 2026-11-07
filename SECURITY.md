@@ -1,3 +1,11 @@
+---
+metadata:
+  change-policy: >-
+    Do not modify this Markdown file together with source code or other non-Markdown
+    files. Submit changes in a separate documentation-only pull request for review
+    and approval. The recommended reviewer is taowen-paraflow.
+---
+
 # Security Policy
 
 Morty gives a browser a window into a coding Agent running on someone's own
@@ -9,16 +17,16 @@ an incident.
 
 **Please do not open a public issue for a security problem.**
 
-Use GitHub private vulnerability reporting:
-[**Report a vulnerability**](https://github.com/moxt-ai/morty/security/advisories/new).
-The report stays private between you and the maintainers until a fix ships.
+Send a private report to [acmerfight@gmail.com](mailto:acmerfight@gmail.com).
+This source repository is private, so GitHub public-repository vulnerability
+reporting is not available. Do not post a report in the retired product repository.
 
 Helpful things to include:
 
 - what an attacker can do, and what they need in order to do it
 - the smallest reproduction you have, including the Agent (Codex, Claude Code, or Pi)
   and whether the connected machine was online
-- affected versions or commit, and the `@moxt-ai/mobius` CLI version if setup is involved
+- affected versions or commit, and the `@morty-build/cli` CLI version if setup is involved
 - any sharing link, pairing, or revocation step that is part of the path
 
 Please do not include live credentials, pairing tickets, or customer data in a
@@ -40,8 +48,8 @@ In scope:
 - pairing, sharing links, access revocation, and session authorization
 - the setup path served at `morty.build/setup.md` and `morty.build/setup.mjs`
 
-Report issues in the SDK, relay, or local daemon to
-[Mobius](https://github.com/moxt-ai/mobius/security/advisories/new) instead.
+The internal client library, relay, recording service and local Runtime are part
+of this product and use the same reporting channel.
 
 Generally out of scope:
 
