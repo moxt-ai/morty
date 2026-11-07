@@ -37,9 +37,8 @@ storage. Nothing in this workflow deploys or changes Cloudflare accounts.
    and Agent-owned history. Never use a global process-name kill.
 
 Use `node scripts/local-dev.cjs logs --state-dir <stateDir> --worker all --follow`
-for logs. `web` mode can target the independent Morty benchmark relay with explicit
-owner-provided `MORTY_LOCAL_APP_ID` and `MORTY_LOCAL_APP_SECRET`; prefer a fully local
-stack for routine work. It must never default to a Moxt service.
+for logs. Development uses a fully local stack with its own generated service
+identity. It does not require cloud service credentials.
 
 Run `pnpm lint`, `pnpm typecheck`, and related integration tests. Test installation
 through the packed archive. Follow issue #6's complete acceptance gates before
