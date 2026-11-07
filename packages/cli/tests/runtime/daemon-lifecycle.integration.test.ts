@@ -357,9 +357,8 @@ async function runCli(
     arguments_: readonly string[],
     environment: Readonly<NodeJS.ProcessEnv>,
     signal: AbortSignal,
-    cliPath = resolve(import.meta.dirname, "../../src/cli/entrypoint.ts"),
 ): Promise<{ readonly code: number | null; readonly stderr: string; readonly stdout: string }> {
-    const child = spawn(process.execPath, [cliPath, ...arguments_], {
+    const child = spawn(process.execPath, [resolve(import.meta.dirname, "../../dist/cli.js"), ...arguments_], {
         env: workspaceDaemonEnvironment(environment),
         signal,
         stdio: ["ignore", "pipe", "pipe"],
