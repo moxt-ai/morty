@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { access, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 
@@ -21,6 +21,7 @@ async function findEntry(scope, name) {
 }
 const mortyEntry = process.env.MORTY_RELEASE_ENTRY ?? (await findEntry("@morty-build", "cli"));
 const moxtEntry = process.env.MOXT_RELEASE_ENTRY ?? (await findEntry("@moxt-ai", "mobius"));
+const releaseVersion = JSON.parse(await readFile(join(dirname(mortyEntry), "../package.json"), "utf8")).version;
 const archive = process.env.MORTY_RELEASE_ARCHIVE;
 assert.ok(archive, "MORTY_RELEASE_ARCHIVE is required");
 
@@ -47,7 +48,7 @@ test("Given released Moxt and packed Morty on one machine, each product's lifecy
         await morty("start");
         for (const args of [["restart"], ["upgrade"], ["stop"], ["start"]]) {
             await moxt(...args);
-            assert.match((await morty("status")).stdout, /Daemon: 0\.1\.0/);
+            assert.ok((await morty("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
             assert.equal(await readFile(join(mortyRoot, "user-data"), "utf8"), "Morty keeps this");
         }
     } finally {
