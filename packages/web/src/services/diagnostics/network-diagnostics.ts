@@ -29,7 +29,7 @@ export interface NetworkDiagnostics {
     readonly measurements: {
         readonly browserMorty: NetworkMeasurement;
         readonly browserRelay: NetworkMeasurement;
-        readonly mortyMorty: NetworkMeasurement;
+        readonly mortyRelay: NetworkMeasurement;
         readonly relayRuntime: NetworkMeasurement;
     };
 }

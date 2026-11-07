@@ -102,7 +102,7 @@ export async function collectNetworkDiagnostics(
         measurements: {
             browserMorty: latency(browserMorty),
             browserRelay: latency(browserRelay),
-            mortyMorty:
+            mortyRelay:
                 hops.kind === "available"
                     ? latency({ kind: "available", value: hops.value.mortyRelayLatencyMs })
                     : hops,
