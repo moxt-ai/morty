@@ -29,8 +29,9 @@ Morty is one product. Cloud Relay and Recording are internal Morty services, not
 a public developer platform. Retire the separate platform dashboard, app
 registration, Clerk login, organization/invite management, and Clerk proxy.
 Preserve Morty device, recovery, pairing and service authorization, production
-business records, and immutable migration history. Production and benchmark use
-independent service credentials. Removing a login provider never authorizes
+business records, and immutable migration history. Production and isolated local
+development are the only supported environments; issue #12 retires hosted
+staging and benchmark resources. Removing a login provider never authorizes
 anonymous access to privileged operations.
 
 Issue #6 records the maintainer-authorized fresh-install cutover to an independent
@@ -41,9 +42,9 @@ destruction of production business data, or changes to Agent-owned history.
 
 Morty and Moxt must have independent package publication, installation, state,
 credentials, process control, and update lifecycles. Verify non-interference with
-a real released Moxt/Mobius installation. Production and benchmark keep independent service authentication and resources.
-The maintainer explicitly permits their shared Morty Cloudflare account and
-account-level deployment authority; neither may depend on the old Moxt account.
+a real released Moxt/Mobius installation. Production uses Morty-owned resources
+and service credentials. Local development must work without production secrets
+or remote test environments, and must never fall back to Moxt services.
 
 Publish the new Morty npm package only after the complete acceptance gates in
 issue #6 pass for the exact archive. Keep the existing production installer in

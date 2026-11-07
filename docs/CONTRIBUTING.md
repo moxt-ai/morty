@@ -57,12 +57,12 @@ Runtime configuration is described in [deployment](deployment.md).
 
 ### Web asset CDN
 
-Production and benchmark builds load content-addressed JavaScript and CSS from
-separate append-only R2 buckets. Deployments upload new assets before activating
+Production builds load content-addressed JavaScript and CSS from an
+append-only R2 bucket. Deployments upload new assets before activating
 Workers so an open page can still load its original chunks. Never delete these
 objects during ordinary deployment. Provision resources using the independent
-Morty targets. Production and benchmark use separate resources and service
-credentials while sharing the approved Morty account-level deployment authority.
+Morty production target. Local development uses isolated local resources without
+production credentials. Hosted staging and benchmark environments are retired.
 
 ### Setup download
 
