@@ -1,0 +1,80 @@
+name: Investigate Windows lifecycle
+
+# INVESTIGATION ONLY: reproduce the intermittent Windows installed-release failures.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:cli
+      - run: node scripts/pack-release.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: investigation-release
+          path: .release/
+          include-hidden-files: true
+
+  reproduce:
+    needs: archive
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+        runner: [1, 2, 3, 4, 5, 6, 7, 8]
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: investigation-release
+          path: .release
+      - name: Repeat the installed lifecycle suite
+        shell: bash
+        run: |
+          prefix="$RUNNER_TEMP/morty-launcher"
+          archive="$(node -p "require('path').resolve('.release', require('./.release/release.json').archive)")"
+          npm install --prefix "$prefix" --no-audit --no-fund --ignore-scripts "$archive"
+          failures=0
+          for iteration in 1 2 3 4 5; do
+            log="$RUNNER_TEMP/evidence/iteration-$iteration"
+            mkdir -p "$log"
+            if ! MORTY_INVESTIGATION_LOG="$log" MORTY_RELEASE_ARCHIVE="$archive" \
+                MORTY_RELEASE_ENTRY="$prefix/node_modules/@morty-build/cli/dist/cli.js" \
+                NODE_OPTIONS="--trace-exit --trace-uncaught" \
+                node --test packages/cli/tests/release/independent-product.test.mjs > "$log/test-output.txt" 2>&1; then
+              failures=$((failures + 1))
+              echo "::error::iteration $iteration failed"
+              tail -60 "$log/test-output.txt"
+              cp -r "$TEMP"/morty-* "$log/" 2>/dev/null || true
+            fi
+          done
+          echo "failures=$failures"
+          test "$failures" = 0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: evidence-${{ matrix.node }}-${{ matrix.runner }}
+          path: |
+            ${{ runner.temp }}/evidence
+            !${{ runner.temp }}/evidence/**/node_modules/**
+          if-no-files-found: ignore

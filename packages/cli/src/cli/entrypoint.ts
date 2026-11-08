@@ -2,6 +2,11 @@
 
 import { satisfies } from "semver";
 import packageMetadata from "../../package.json" with { type: "json" };
+import { investigate } from "../investigation.ts";
+
+investigate("start");
+process.on("exit", (code) => investigate("exit", { code, exitCode: process.exitCode }));
+process.on("uncaughtExceptionMonitor", (error) => investigate("uncaught", { error: String(error?.stack ?? error) }));
 
 // Morty never passes another product's Runtime credentials or configuration to child processes.
 for (const key of Object.keys(process.env)) {

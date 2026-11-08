@@ -69,6 +69,7 @@ export async function runDaemon(version: string, signal: AbortSignal): Promise<v
         invoked === undefined ||
         (await realpath(invoked)) !== (await realpath(releaseEntry(installed)))
     ) {
+        (await import("../../investigation.ts")).investigate("daemon_release_mismatch", { installed, version, invoked });
         throw new Error("Morty release changed during startup; retry start using the selected installation");
     }
     // Install before any await: an unhandled rejection during startup itself
@@ -79,6 +80,7 @@ export async function runDaemon(version: string, signal: AbortSignal): Promise<v
     try {
         await runDaemonRuntime(version, combined, shutdown, rejectionGuard);
     } catch (cause) {
+        (await import("../../investigation.ts")).investigate("daemon_failed", { error: String((cause as Error)?.stack ?? cause) });
         const control = await openMortyControlInstallation(AbortSignal.timeout(5_000), process.env);
         new BoundedLineLog(logDirectory(control.stateDirectory), WORKER_LIFECYCLE_LOG_FILENAME, 512 * 1024).record(
             JSON.stringify({
@@ -102,8 +104,10 @@ async function runDaemonRuntime(
     const control = await openMortyControlInstallation(combined, process.env);
     const releaseDaemon = await acquireDaemonLock(control.stateDirectory, "manager.lock");
     if (releaseDaemon === null) {
+        (await import("../../investigation.ts")).investigate("daemon_lock_busy");
         return;
     }
+    (await import("../../investigation.ts")).investigate("daemon_lock_acquired");
     const lifecycleLog = new BoundedLineLog(
         logDirectory(control.stateDirectory),
         WORKER_LIFECYCLE_LOG_FILENAME,

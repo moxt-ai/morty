@@ -44,7 +44,7 @@ test("Given an existing Mobius state root, Morty help identifies its own product
         assert.doesNotMatch(result.stdout, /\bmobius\b/i);
         assert.deepEqual(await readdir(existing), ["owned-by-moxt"]);
     } finally {
-        await rm(morty, { recursive: true, force: true });
+        if (!process.env.MORTY_INVESTIGATION_LOG) await rm(morty, { recursive: true, force: true });
         await rm(existing, { recursive: true, force: true });
     }
 });
@@ -60,7 +60,7 @@ test("Given a packed Morty release, version-selected installation and daemon lif
         await writeFile(join(existing, "owned-by-moxt"), "preserve this installation\n");
         await run("install", "--version", releaseVersion, "--archive", archive);
         await Promise.all([run("start"), run("start"), run("start")]);
-        assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
+        assert.match((await run("status")).stdout, new RegExp(`^Daemon: ${releaseVersion.replaceAll(".", "\\.")}$`, "m"));
         const control = join(morty, "installations", "build.morty.cli");
         const pointer = JSON.parse(await readFile(join(control, "current.json"), "utf8"));
         const installation = join(control, pointer.installationId);
@@ -74,7 +74,7 @@ test("Given a packed Morty release, version-selected installation and daemon lif
         const closed = once(probe, "close");
         probe.destroy();
         await closed;
-        assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
+        assert.match((await run("status")).stdout, new RegExp(`^Daemon: ${releaseVersion.replaceAll(".", "\\.")}$`, "m"));
         const unauthorized = createConnection(endpoint);
         try {
             await once(unauthorized, "connect");
@@ -85,10 +85,10 @@ test("Given a packed Morty release, version-selected installation and daemon lif
         } finally {
             unauthorized.destroy();
         }
-        assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
+        assert.match((await run("status")).stdout, new RegExp(`^Daemon: ${releaseVersion.replaceAll(".", "\\.")}$`, "m"));
         await run("restart");
         await assert.rejects(run("update", "--version", releaseVersion, "--archive", join(morty, "missing.tgz")));
-        assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
+        assert.match((await run("status")).stdout, new RegExp(`^Daemon: ${releaseVersion.replaceAll(".", "\\.")}$`, "m"));
         await run("stop");
         assert.match((await run("status")).stdout, /Daemon: not running/);
         await writeFile(join(morty, "user-data"), "keep this file");
@@ -98,7 +98,7 @@ test("Given a packed Morty release, version-selected installation and daemon lif
         assert.deepEqual(await readdir(existing), ["owned-by-moxt"]);
     } finally {
         await run("stop").catch(() => undefined);
-        await rm(morty, { recursive: true, force: true });
+        if (!process.env.MORTY_INVESTIGATION_LOG) await rm(morty, { recursive: true, force: true });
         await rm(existing, { recursive: true, force: true });
     }
 });
@@ -136,14 +136,14 @@ test("Given a running Morty installation, When an update process is interrupted 
         await interrupted;
         const outcome = await exited;
         assert.ok(outcome.signal !== null || outcome.code !== 0);
-        assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
+        assert.match((await run("status")).stdout, new RegExp(`^Daemon: ${releaseVersion.replaceAll(".", "\\.")}$`, "m"));
         assert.match((await run("doctor")).stdout, /preparing/);
         await run("update", "--archive", archive);
         assert.match((await run("doctor")).stdout, /complete/);
-        assert.ok((await run("status")).stdout.includes(`Daemon: ${releaseVersion}\n`));
+        assert.match((await run("status")).stdout, new RegExp(`^Daemon: ${releaseVersion.replaceAll(".", "\\.")}$`, "m"));
     } finally {
         updater?.kill();
         await run("stop").catch(() => undefined);
-        await rm(root, { recursive: true, force: true });
+        if (!process.env.MORTY_INVESTIGATION_LOG) await rm(root, { recursive: true, force: true });
     }
 });

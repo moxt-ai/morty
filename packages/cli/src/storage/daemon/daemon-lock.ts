@@ -69,6 +69,7 @@ export async function daemonLockExists(
         throw cause;
     }
     const release = holdDaemonOwnership(path);
+    (await import("../../investigation.ts")).investigate("lock_probe", { filename, held: release === null });
     if (release === null) {
         return true;
     }

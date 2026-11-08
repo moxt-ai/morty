@@ -49,6 +49,8 @@ export async function runCLI(): Promise<void> {
             await createProgram(context).parseAsync(process.argv);
         }
     } catch (error) {
+        const { investigate } = await import("../investigation.ts");
+        investigate("cli_error", { aborted: shutdown.signal.aborted, error: String((error as Error)?.stack ?? error), cause: String(((error as Error)?.cause as Error)?.stack ?? "") });
         if (error instanceof CommanderError) {
             process.exitCode = error.exitCode;
         } else if (error instanceof StateRootError) {
