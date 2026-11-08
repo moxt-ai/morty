@@ -298,8 +298,7 @@ async function exercise(count) {
         await check(() => connectionStates.includes("online"), "Runtime online");
         const hostUrl = new URL(`${origin}/morty/api${base}/runtimes/${claimed.runtimeId}/host`);
         hostUrl.protocol = "ws:";
-        hostUrl.searchParams.set("token", credential);
-        host = new WebSocket(hostUrl);
+        host = new WebSocket(hostUrl, { headers: { authorization: `Bearer ${credential}` } });
         const live = new Map();
         const terminals = new Map();
         const pongs = new Map();
@@ -379,7 +378,7 @@ async function exercise(count) {
                 sessions.slice(offset, offset + 8).map(async (id) => {
                     const endpoint = new URL(hostUrl);
                     endpoint.searchParams.set("sessionId", id);
-                    const socket = new WebSocket(endpoint);
+                    const socket = new WebSocket(endpoint, { headers: { authorization: `Bearer ${credential}` } });
                     const viewer = { socket, events: 0, digest: createHash("sha256") };
                     sessionViewers.set(id, viewer);
                     socket.on("message", (bytes) => {

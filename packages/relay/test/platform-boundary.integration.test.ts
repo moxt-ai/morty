@@ -469,9 +469,9 @@ describe.sequential("Platform Session-only boundary", () => {
         );
         const hostResponse = await worker.fetch(
             new Request(
-                `${relayOrigin}${MORTY_API_PREFIX}/v1/projects/${projectId}/runtimes/${runtimeId}/host?token=${appCredential}&nativeRequestId=viewer-must-stay-live`,
+                `${relayOrigin}${MORTY_API_PREFIX}/v1/projects/${projectId}/runtimes/${runtimeId}/host?nativeRequestId=viewer-must-stay-live`,
                 {
-                    headers: { Upgrade: "websocket" },
+                    headers: { authorization: `Bearer ${appCredential}`, Upgrade: "websocket" },
                 },
             ),
             environment,
@@ -2626,8 +2626,8 @@ describe.sequential("Platform Turn submission", () => {
         const openHost = async (credential: string) =>
             await worker.fetch(
                 new Request(
-                    `${relayOrigin}${MORTY_API_PREFIX}/v1/projects/${runtime.projectId}/runtimes/${runtime.runtimeId}/host?token=${credential}`,
-                    { headers: { Upgrade: "websocket" } },
+                    `${relayOrigin}${MORTY_API_PREFIX}/v1/projects/${runtime.projectId}/runtimes/${runtime.runtimeId}/host`,
+                    { headers: { authorization: `Bearer ${credential}`, Upgrade: "websocket" } },
                 ),
                 environment,
             );

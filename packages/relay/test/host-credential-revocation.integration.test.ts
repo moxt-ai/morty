@@ -97,14 +97,21 @@ it("Given a quiet /host connection opened with an AppCredential, When the AppCre
     daemon.accept();
     expect(await daemonInbox.next()).toEqual({ kind: "runtime.liveness.ready" });
 
-    // The App's host, through the public route with its AppCredential.
-    const opened = await worker.fetch(
+    // A credential in the URL is refused: URLs reach logs and traces that request headers do not.
+    const inUrl = await worker.fetch(
         new Request(
             `${origin}/v1/projects/${projectId}/runtimes/${runtimeId}/host?token=${defaultCredential.credential}`,
-            {
-                headers: { Upgrade: "websocket" },
-            },
+            { headers: { Upgrade: "websocket" } },
         ),
+        env,
+    );
+    expect(inUrl.status).toBe(401);
+
+    // The App's host, through the public route with its AppCredential.
+    const opened = await worker.fetch(
+        new Request(`${origin}/v1/projects/${projectId}/runtimes/${runtimeId}/host`, {
+            headers: { authorization: `Bearer ${defaultCredential.credential}`, Upgrade: "websocket" },
+        }),
         env,
     );
     expect(opened.status).toBe(101);

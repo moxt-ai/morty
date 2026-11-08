@@ -25,9 +25,8 @@ export function runtimeRequestTarget(
     if (parts[1] !== "sessions" || parts.length < 4 || parts[3] === "access-credentials") {
         return null;
     }
-    const credential =
-        (request.headers.get("authorization") ?? "").match(/^Bearer ([^\s]+)$/u)?.[1] ?? url.searchParams.get("token");
-    if (credential === null) {
+    const credential = (request.headers.get("authorization") ?? "").match(/^Bearer ([^\s]+)$/u)?.[1];
+    if (credential === undefined) {
         return null;
     }
     try {
