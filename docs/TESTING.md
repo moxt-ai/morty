@@ -66,3 +66,4 @@ Exercise interrupted installation and update through the supported installation
 boundary. Verify local IPC authentication, resolved-path ownership, and rejected
 cross-environment credentials. Publication is gated on the complete acceptance
 record for the exact archive; publishing a candidate is not an acceptance test.
+
