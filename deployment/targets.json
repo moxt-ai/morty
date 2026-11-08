@@ -1,6 +1,5 @@
 {
     "account_id": "b903018a1c3d9d9a4bd68a11eb03e764",
-    "workers_subdomain": "mobius-b90",
     "environments": {
         "production": {
             "d1_id": "41b0bb37-d19f-4376-a694-b32e08de9fc8",
@@ -18,12 +17,7 @@
             },
             "asset_origin": "https://assets.morty.build",
             "app_id": "app_NtHgrttun_lpHHvLxCfZKPan",
-            "allowed_origins": [
-                "https://morty.build",
-                "https://relay.mobius.host",
-                "https://morty-production.mobius-b90.workers.dev",
-                "https://morty-platform-production.mobius-b90.workers.dev"
-            ]
+            "allowed_origins": ["https://morty.build", "https://relay.mobius.host"]
         }
     }
 }
