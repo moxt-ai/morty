@@ -415,6 +415,9 @@ importers:
       '@morty-build/client':
         specifier: workspace:*
         version: link:../client
+      '@morty-build/relay-core':
+        specifier: workspace:*
+        version: link:../relay-core
       '@noble/hashes':
         specifier: 2.0.1
         version: 2.0.1
@@ -634,6 +637,9 @@ importers:
       '@morty-build/client':
         specifier: workspace:*
         version: link:../client
+      '@morty-build/relay-core':
+        specifier: workspace:*
+        version: link:../relay-core
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@cloudflare/workers-types@5.20261028.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.4.1)
@@ -650,9 +656,6 @@ importers:
       '@morty-build/platform-test-support':
         specifier: workspace:*
         version: link:../platform-test-support
-      drizzle-kit:
-        specifier: 'catalog:'
-        version: 0.31.8(@cloudflare/workers-types@5.20261028.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.4.1)(supports-color@10.2.2)
       esbuild:
         specifier: 'catalog:'
         version: 0.28.2

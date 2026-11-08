@@ -36,8 +36,7 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
                     additionalDirectoryIds: [],
                     attachments: [],
                     prompt: `Question ${turn}: answer without using tools`,
-                    disposition: SessionPromptDisposition.Reject,
-                    targetCommandId: "",
+                    disposition: SessionPromptDisposition.Append,
                 }),
             );
             for (;;) {
@@ -155,8 +154,7 @@ test("Given real Codex saved more than 32 MiB of answers, When a user forks thro
                 commandId: continuedId,
                 prompt: "Continue this fork without using tools",
                 attachments: [],
-                disposition: SessionPromptDisposition.Reject,
-                targetCommandId: "",
+                disposition: SessionPromptDisposition.Append,
             }),
         );
         for (;;) {

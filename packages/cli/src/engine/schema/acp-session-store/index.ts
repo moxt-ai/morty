@@ -1,4 +1,4 @@
 export { acpSession } from "./acp-session.ts";
-export { executionIdentity } from "./execution-identity.ts";
-export { executionReceipt } from "./execution-receipt.ts";
+export { command } from "./command.ts";
+export { commandOutcome } from "./command-outcome.ts";
 export { sessionLiveEventPositionAllocation } from "./session-live-event-position-allocation.ts";

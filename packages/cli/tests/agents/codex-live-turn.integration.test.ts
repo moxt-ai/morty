@@ -138,12 +138,11 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                 bindingId: config.bindingId,
                 commandId,
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Reject,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "Use a shell tool successfully, then reply using the configured model",
                 sessionId,
-                targetCommandId: "",
             });
             socket.send(originalPrompt);
             let started = false;
@@ -267,12 +266,11 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                                 bindingId: config.bindingId,
                                 commandId: queuedCommandId,
                                 directoryId: "default",
-                                disposition: SessionPromptDisposition.Queue,
+                                disposition: SessionPromptDisposition.Append,
                                 attachments: [],
                                 kind: "session.prompt",
                                 prompt: "This queued prompt should not run",
                                 sessionId,
-                                targetCommandId: commandId,
                             }),
                         );
                     } else if (

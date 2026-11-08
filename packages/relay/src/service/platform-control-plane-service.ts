@@ -515,7 +515,7 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
         actorRef: string,
         action: string,
         subjectId: string,
-        outcome: string,
+        outcome: PlatformAuditRecord["outcome"],
         details: Readonly<Record<string, unknown>>,
         now: number,
     ): PlatformAuditRecord => ({

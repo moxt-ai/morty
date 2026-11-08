@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, type SQL, sql } from "drizzle-orm";
 import {
     type AppRow,
     AppRowSchema,
@@ -17,13 +17,64 @@ import {
     platformApp,
     platformAppCredential,
     platformAppCredentialScope,
+    platformDashboardAuditEvent,
     platformProject,
     platformProjectSessionAccessRevocation,
+    platformTenant,
 } from "../schema/d1/index.ts";
 import { waitForD1 } from "./d1-operation.ts";
 import { decodeOptionalStorageRecord } from "./decode-storage-record.ts";
 import { platformDrizzle } from "./platform-drizzle-database.ts";
 import { appActive, projectServed } from "./platform-lifecycle.ts";
+
+// Row selections keep the SQL column names that the entity schemas decode.
+const tenantRow = {
+    tenant_id: platformTenant.tenantId,
+    display_name: platformTenant.displayName,
+    quotas_json: platformTenant.quotasJson,
+    created_at: platformTenant.createdAt,
+    updated_at: platformTenant.updatedAt,
+};
+
+const appRow = {
+    app_id: platformApp.appId,
+    tenant_id: platformApp.tenantId,
+    display_name: platformApp.displayName,
+    lifecycle: platformApp.lifecycle,
+    default_credential_id: platformApp.initialCredentialId,
+    created_at: platformApp.createdAt,
+    updated_at: platformApp.updatedAt,
+    deleted_at: platformApp.deletedAt,
+};
+
+const projectRow = {
+    project_id: platformProject.projectId,
+    app_id: platformProject.appId,
+    tenant_id: platformApp.tenantId,
+    display_name: platformProject.displayName,
+    client_reference: platformProject.clientReference,
+    idempotency_key: platformProject.idempotencyKey,
+    request_digest: platformProject.requestDigest,
+    lifecycle: platformProject.lifecycle,
+    location_hint: platformProject.locationHint,
+    created_at: platformProject.createdAt,
+    updated_at: platformProject.updatedAt,
+    deleted_at: platformProject.deletedAt,
+};
+
+const credentialRow = {
+    credential_id: platformAppCredential.credentialId,
+    public_credential_id: platformAppCredential.publicCredentialId,
+    app_id: platformAppCredential.appId,
+    tenant_id: platformApp.tenantId,
+    secret_digest: platformAppCredential.secretDigest,
+    permissions_json: platformAppCredential.permissionsJson,
+    all_projects: platformAppCredential.allProjects,
+    issued_at: platformAppCredential.issuedAt,
+    overlap_ends_at: platformAppCredential.overlapEndsAt,
+    replaced_by_credential_id: platformAppCredential.replacedByCredentialId,
+    revoked_at: platformAppCredential.revokedAt,
+};
 
 export class PlatformControlPlaneStorage {
     readonly #database: D1Database;
@@ -34,24 +85,31 @@ export class PlatformControlPlaneStorage {
         this.#projects = projects;
     }
 
-    readonly readTenant = async (tenantId: string, signal: AbortSignal): Promise<TenantRow | null> =>
-        decodeOptionalStorageRecord(
-            TenantRowSchema,
-            await waitForD1(
-                () =>
-                    this.#database.prepare("SELECT * FROM platform_tenants WHERE tenant_id = ?").bind(tenantId).first(),
-                signal,
-            ),
+    readonly readTenant = async (tenantId: string, signal: AbortSignal): Promise<TenantRow | null> => {
+        const rows = await waitForD1(
+            () =>
+                platformDrizzle(this.#database)
+                    .select(tenantRow)
+                    .from(platformTenant)
+                    .where(eq(platformTenant.tenantId, tenantId))
+                    .limit(1),
+            signal,
         );
+        return decodeOptionalStorageRecord(TenantRowSchema, rows[0] ?? null);
+    };
 
-    readonly readApp = async (appId: string, signal: AbortSignal): Promise<AppRow | null> =>
-        decodeOptionalStorageRecord(
-            AppRowSchema,
-            await waitForD1(
-                () => this.#database.prepare("SELECT * FROM platform_apps WHERE app_id = ?").bind(appId).first(),
-                signal,
-            ),
+    readonly readApp = async (appId: string, signal: AbortSignal): Promise<AppRow | null> => {
+        const rows = await waitForD1(
+            () =>
+                platformDrizzle(this.#database)
+                    .select(appRow)
+                    .from(platformApp)
+                    .where(eq(platformApp.appId, appId))
+                    .limit(1),
+            signal,
         );
+        return decodeOptionalStorageRecord(AppRowSchema, rows[0] ?? null);
+    };
 
     /**
      * The single writer that ends an App. One batch records the App, each of its Projects and each of its
@@ -98,22 +156,19 @@ export class PlatformControlPlaneStorage {
         appId: string,
         idempotencyKey: string,
         signal: AbortSignal,
-    ): Promise<ProjectRow | null> =>
-        decodeOptionalStorageRecord(
-            ProjectRowSchema,
-            await waitForD1(
-                () =>
-                    this.#database
-                        .prepare(
-                            `SELECT projects.*, apps.tenant_id
-                               FROM platform_projects AS projects JOIN platform_apps AS apps ON apps.app_id = projects.app_id
-                              WHERE projects.app_id = ? AND projects.idempotency_key = ?`,
-                        )
-                        .bind(appId, idempotencyKey)
-                        .first(),
-                signal,
-            ),
+    ): Promise<ProjectRow | null> => {
+        const rows = await waitForD1(
+            () =>
+                platformDrizzle(this.#database)
+                    .select(projectRow)
+                    .from(platformProject)
+                    .innerJoin(platformApp, eq(platformApp.appId, platformProject.appId))
+                    .where(and(eq(platformProject.appId, appId), eq(platformProject.idempotencyKey, idempotencyKey)))
+                    .limit(1),
+            signal,
         );
+        return decodeOptionalStorageRecord(ProjectRowSchema, rows[0] ?? null);
+    };
 
     readonly readActiveProjectScope = async (
         projectId: string,
@@ -228,40 +283,24 @@ export class PlatformControlPlaneStorage {
         publicCredentialId: string,
         signal: AbortSignal,
     ): Promise<CredentialRow | null> =>
-        decodeOptionalStorageRecord(
-            CredentialRowSchema,
-            await waitForD1(
-                () =>
-                    this.#database
-                        .prepare(
-                            `SELECT credentials.*, apps.tenant_id
-                               FROM platform_app_credentials AS credentials
-                               JOIN platform_apps AS apps ON apps.app_id = credentials.app_id
-                              WHERE credentials.public_credential_id = ?`,
-                        )
-                        .bind(publicCredentialId)
-                        .first(),
-                signal,
-            ),
-        );
+        await this.readCredential(eq(platformAppCredential.publicCredentialId, publicCredentialId), signal);
 
     readonly readCredentialById = async (credentialId: string, signal: AbortSignal): Promise<CredentialRow | null> =>
-        decodeOptionalStorageRecord(
-            CredentialRowSchema,
-            await waitForD1(
-                () =>
-                    this.#database
-                        .prepare(
-                            `SELECT credentials.*, apps.tenant_id
-                               FROM platform_app_credentials AS credentials
-                               JOIN platform_apps AS apps ON apps.app_id = credentials.app_id
-                              WHERE credentials.credential_id = ?`,
-                        )
-                        .bind(credentialId)
-                        .first(),
-                signal,
-            ),
+        await this.readCredential(eq(platformAppCredential.credentialId, credentialId), signal);
+
+    private readonly readCredential = async (match: SQL, signal: AbortSignal): Promise<CredentialRow | null> => {
+        const rows = await waitForD1(
+            () =>
+                platformDrizzle(this.#database)
+                    .select(credentialRow)
+                    .from(platformAppCredential)
+                    .innerJoin(platformApp, eq(platformApp.appId, platformAppCredential.appId))
+                    .where(match)
+                    .limit(1),
+            signal,
         );
+        return decodeOptionalStorageRecord(CredentialRowSchema, rows[0] ?? null);
+    };
 
     readonly listActiveProjectIds = async (appId: string, signal: AbortSignal): Promise<readonly string[]> => {
         const rows = await waitForD1(
@@ -277,7 +316,16 @@ export class PlatformControlPlaneStorage {
 
     readonly recordAudit = async (audit: PlatformAuditRecord, signal: AbortSignal): Promise<boolean> => {
         if (audit.projectId === "") {
-            const result = await waitForD1(() => this.dashboardAuditStatement(audit).run(), signal);
+            const auditId = audit.action === "project.created" ? `pae_created_${audit.projectId}` : audit.auditId;
+            const result = await waitForD1(
+                () =>
+                    platformDrizzle(this.#database)
+                        .insert(platformDashboardAuditEvent)
+                        .values({ ...dashboardAudit(audit), auditId })
+                        .onConflictDoNothing()
+                        .run(),
+                signal,
+            );
             return result.success;
         }
         await this.#projects.forProject(audit.projectId).recordAudit(audit, signal);
@@ -335,55 +383,53 @@ export class PlatformControlPlaneStorage {
         );
     };
 
-    private readonly dashboardAuditStatement = (audit: PlatformAuditRecord): D1PreparedStatement =>
-        this.#database
-            .prepare(
-                `INSERT INTO platform_dashboard_audit_events (
-                   audit_id, tenant_id, app_id, project_id, actor_kind, actor_id,
-                   actor_ref, action, subject_id, outcome, details_json, recorded_at
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                 ON CONFLICT(audit_id) DO NOTHING`,
-            )
-            .bind(
-                audit.action === "project.created" ? `pae_created_${audit.projectId}` : audit.auditId,
-                audit.tenantId,
-                audit.appId,
-                audit.projectId,
-                audit.actorKind,
-                audit.actorId,
-                audit.actorRef,
-                audit.action,
-                audit.subjectId,
-                audit.outcome,
-                audit.detailsJson,
-                audit.recordedAt,
-            );
-
     /**
      * Records the change made by the statement immediately before it in the same batch, and only if that statement
      * changed a row: an audit event is a historical fact, so a write that took no effect leaves none.
      */
-    private readonly auditOfPreviousChange = (audit: PlatformAuditRecord): D1PreparedStatement =>
-        this.#database
-            .prepare(
-                `INSERT INTO platform_dashboard_audit_events (
-                   audit_id, tenant_id, app_id, project_id, actor_kind, actor_id,
-                   actor_ref, action, subject_id, outcome, details_json, recorded_at
-                 ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE changes() = 1
-                 ON CONFLICT(audit_id) DO NOTHING`,
-            )
-            .bind(
-                audit.auditId,
-                audit.tenantId,
-                audit.appId,
-                audit.projectId,
-                audit.actorKind,
-                audit.actorId,
-                audit.actorRef,
-                audit.action,
-                audit.subjectId,
-                audit.outcome,
-                audit.detailsJson,
-                audit.recordedAt,
-            );
+    private readonly auditOfPreviousChange = (audit: PlatformAuditRecord): D1PreparedStatement => {
+        const database = platformDrizzle(this.#database);
+        const event = dashboardAudit(audit);
+        return this.statement(
+            database
+                .insert(platformDashboardAuditEvent)
+                .select(
+                    database
+                        .select({
+                            auditId: sql<string>`${event.auditId}`.as("audit_id"),
+                            tenantId: sql<string>`${event.tenantId}`.as("tenant_id"),
+                            appId: sql<string>`${event.appId}`.as("app_id"),
+                            projectId: sql<string>`${event.projectId}`.as("project_id"),
+                            actorKind: sql<string>`${event.actorKind}`.as("actor_kind"),
+                            actorId: sql<string>`${event.actorId}`.as("actor_id"),
+                            actorRef: sql<string>`${event.actorRef}`.as("actor_ref"),
+                            action: sql<string>`${event.action}`.as("action"),
+                            subjectId: sql<string>`${event.subjectId}`.as("subject_id"),
+                            outcome: sql<PlatformAuditRecord["outcome"]>`${event.outcome}`.as("outcome"),
+                            detailsJson: sql<string>`${event.detailsJson}`.as("details_json"),
+                            recordedAt: sql<number>`${event.recordedAt}`.as("recorded_at"),
+                        })
+                        .from(sql`(select 1)`)
+                        .where(sql`changes() = 1`),
+                )
+                .onConflictDoNothing(),
+        );
+    };
+}
+
+function dashboardAudit(audit: PlatformAuditRecord): typeof platformDashboardAuditEvent.$inferInsert {
+    return {
+        auditId: audit.auditId,
+        tenantId: audit.tenantId,
+        appId: audit.appId,
+        projectId: audit.projectId,
+        actorKind: audit.actorKind,
+        actorId: audit.actorId,
+        actorRef: audit.actorRef,
+        action: audit.action,
+        subjectId: audit.subjectId,
+        outcome: audit.outcome,
+        detailsJson: audit.detailsJson,
+        recordedAt: audit.recordedAt,
+    };
 }

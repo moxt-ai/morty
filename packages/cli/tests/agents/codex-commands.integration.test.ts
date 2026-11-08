@@ -28,8 +28,7 @@ test("Given a real Codex conversation, When the user sends slash-prefixed text o
                     additionalDirectoryIds: [],
                     attachments: [],
                     prompt,
-                    disposition: SessionPromptDisposition.Reject,
-                    targetCommandId: "",
+                    disposition: SessionPromptDisposition.Append,
                 }),
             );
             let text = "";
@@ -79,8 +78,7 @@ test("Given a real Codex conversation with content, When the user sends /compact
                     additionalDirectoryIds: [],
                     attachments: [],
                     prompt,
-                    disposition: SessionPromptDisposition.Reject,
-                    targetCommandId: "",
+                    disposition: SessionPromptDisposition.Append,
                 }),
             );
         };
@@ -147,8 +145,7 @@ test("Given a real Codex conversation with content, When the manual /compact's s
                     additionalDirectoryIds: [],
                     attachments: [],
                     prompt,
-                    disposition: SessionPromptDisposition.Reject,
-                    targetCommandId: "",
+                    disposition: SessionPromptDisposition.Append,
                 }),
             );
         };

@@ -325,12 +325,11 @@ async function startRuntime() {
                     bindingId: config.bindingId,
                     commandId: `command-${sessionId}`,
                     directoryId: "default",
-                    disposition: "reject",
+                    disposition: "append",
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "Finish the reply while the network is disconnected",
                     sessionId,
-                    targetCommandId: "",
                 }),
             );
             return await producer.nextTurn();

@@ -1,37 +1,37 @@
-import type { DoSqlDatabase } from "./do-sql-database.ts";
-
+/** A committed migration of one Durable Object SQLite target, copied verbatim from its generated `.sql` file. */
 export interface DurableObjectMigration {
     readonly name: string;
     readonly sql: string;
 }
 
+// The runner's own ledger; every application table comes from the target's committed migrations.
+const LEDGER = "_durable_object_migrations";
+
+/**
+ * Brings a Durable Object's storage to its target schema. Each committed migration the ledger does not record is
+ * applied in order and commits atomically with its ledger entry, so an interrupted upgrade resumes where it stopped.
+ */
 export function applyDurableObjectMigrations(
-    database: DoSqlDatabase,
-    namespace: string,
+    storage: DurableObjectStorage,
     migrations: readonly DurableObjectMigration[],
 ): void {
-    database.run(`CREATE TABLE IF NOT EXISTS _morty_do_schema_migrations (
-        namespace TEXT NOT NULL,
-        name TEXT NOT NULL,
-        applied_at INTEGER NOT NULL,
-        PRIMARY KEY (namespace, name)
-    ) STRICT;`);
-
+    storage.sql.exec(`CREATE TABLE IF NOT EXISTS ${LEDGER} (
+        name TEXT PRIMARY KEY NOT NULL,
+        applied_at INTEGER NOT NULL
+    ) STRICT`);
+    const applied = new Set(
+        storage.sql
+            .exec(`SELECT name FROM ${LEDGER}`)
+            .toArray()
+            .map((row) => row["name"]),
+    );
     for (const migration of migrations) {
-        const applied = database.query(
-            "SELECT 1 AS present FROM _morty_do_schema_migrations WHERE namespace = ? AND name = ?",
-            [namespace, migration.name],
-        )[0];
-        if (applied !== undefined) {
+        if (applied.has(migration.name)) {
             continue;
         }
-        database.transaction(() => {
-            database.run(migration.sql);
-            database.run("INSERT INTO _morty_do_schema_migrations (namespace, name, applied_at) VALUES (?, ?, ?)", [
-                namespace,
-                migration.name,
-                Date.now(),
-            ]);
+        storage.transactionSync(() => {
+            storage.sql.exec(migration.sql);
+            storage.sql.exec(`INSERT INTO ${LEDGER} (name, applied_at) VALUES (?, ?)`, migration.name, Date.now());
         });
     }
 }

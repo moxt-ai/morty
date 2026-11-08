@@ -1,0 +1,230 @@
+name: Morty pipeline
+
+# Every source check, the release archive and its acceptance, defined once for
+# pull requests (morty-ci.yml) and the main release chain (morty-cli.yml).
+# Independent jobs run in parallel; publication stays gated on all of them.
+on:
+  workflow_call:
+    inputs:
+      markdown-only:
+        description: The change touches only Markdown, so only static checks and the security scan apply.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  security:
+    uses: ./.github/workflows/security.yml
+
+  static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:cli
+      - run: pnpm lint
+      - run: pnpm typecheck
+
+  services:
+    if: ${{ !inputs.markdown-only }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:cli
+      - run: pnpm test:client
+      - run: pnpm test:relay
+      - run: pnpm test:recording
+      - run: pnpm test:worker
+
+  runtime:
+    if: ${{ !inputs.markdown-only }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:cli
+      - run: pnpm test:runtime --shard=${{ matrix.shard }}/2
+
+  web:
+    if: ${{ !inputs.markdown-only }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:cli
+      - run: pnpm test:web --shard=${{ matrix.shard }}/4
+
+  browser:
+    if: ${{ !inputs.markdown-only }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:cli
+      - name: Install the accepted real Codex boundary dependency
+        run: npm install --global @openai/codex@0.166.0
+      - run: pnpm --filter @morty-build/e2e exec playwright install --with-deps chromium webkit
+      - run: pnpm test:e2e --shard=${{ matrix.shard }}/8
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: failure()
+        with:
+          name: browser-failure-${{ matrix.shard }}
+          path: packages/e2e/test-results
+          if-no-files-found: ignore
+
+  # Packing does not depend on test results, so the archive is built and accepted
+  # while the source checks run. Only publication requires every job to pass.
+  package:
+    if: ${{ !inputs.markdown-only }}
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Reuse immutable artifacts when retrying this run
+        id: archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/restore-release.mjs
+      - run: corepack enable
+        if: steps.archive.outputs.restored != 'true'
+      - run: pnpm install --frozen-lockfile
+        if: steps.archive.outputs.restored != 'true'
+      - name: Assign the stable version
+        if: steps.archive.outputs.restored != 'true'
+        run: node scripts/prepare-release.mjs
+      - run: pnpm build:cli
+        if: steps.archive.outputs.restored != 'true'
+      - name: Pack once and record source and integrity
+        if: steps.archive.outputs.restored != 'true'
+        run: node scripts/pack-release.mjs
+      - name: Build and verify the matching cloud artifact
+        if: steps.archive.outputs.restored != 'true'
+        env:
+          EXPECTED_REVISION: ${{ github.sha }}
+          MORTY_CLI_RELEASE_MANIFEST: .release/release.json
+        run: |
+          python3 deployment/build.py production
+          mv .deployment-output/production .release/cloud
+          python3 deployment/deploy.py production --release .release/cloud --verify-release-only
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.archive.outputs.restored != 'true'
+        with:
+          name: morty-release
+          path: .release/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
+
+  installed:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['22.19.0', '24.20.0', '22', '24']
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: morty-release
+          path: .release
+      - name: Install and verify the exact archive beside released Moxt
+        run: node scripts/test-installed-release.mjs
+
+  acceptance:
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: morty-release
+          path: .release
+      - name: Install the accepted real Claude boundary dependency
+        run: npm install --global @anthropic-ai/claude-code@2.1.273
+      - run: pnpm --filter @morty-build/e2e exec playwright install --with-deps chromium
+      - name: Verify setup, pairing, image conversation and restart with the exact archive
+        run: node scripts/test-release-journey.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: release-acceptance-${{ github.run_attempt }}
+          path: |
+            .release/acceptance/*-verification.json
+            .release/acceptance/*.png
+          include-hidden-files: true
+          if-no-files-found: ignore

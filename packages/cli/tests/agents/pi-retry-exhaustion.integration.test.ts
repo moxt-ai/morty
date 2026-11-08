@@ -31,12 +31,11 @@ test("Given real pi exhausts its automatic model retries, When the last attempt 
                     bindingId: peer.bindingId,
                     commandId,
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
                     sessionId: peer.sessionId,
-                    targetCommandId: "",
                 }),
             );
             return commandId;
@@ -133,12 +132,11 @@ test("Given a pi turn's first model call fails retryably, When pi's automatic re
                 bindingId: peer.bindingId,
                 commandId,
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Reject,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "RETRY_RECOVERY_PROBE Controlled same-turn recovery verification.",
                 sessionId: peer.sessionId,
-                targetCommandId: "",
             }),
         );
 

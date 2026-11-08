@@ -26,11 +26,10 @@ const submit = (peer: RealDaemonPeer, sessionId: string, commandId: string, prom
             bindingId: peer.bindingId,
             commandId,
             directoryId: "default",
-            disposition: "reject",
+            disposition: "append",
             kind: "session.prompt",
             prompt,
             sessionId,
-            targetCommandId: "",
         }),
     );
 

@@ -4,13 +4,8 @@ import {
     type SessionPromptCommand,
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";
-import { ActiveRuntimeTurn, type RecordedSessionEvent } from "./active-turn.ts";
+import { ActiveRuntimeTurn, type PromptDispatch, type RecordedSessionEvent } from "./active-turn.ts";
 import type { ExecutionReceipts } from "./execution-receipts.ts";
-
-export type SessionAdmission =
-    | { readonly kind: "available"; readonly disposition: string }
-    | { readonly kind: "busy" }
-    | { readonly kind: "queue-target-unavailable" };
 
 const waitForTurnCompletion = (turn: ActiveRuntimeTurn, waitSignal: AbortSignal): Promise<void> => {
     waitSignal.throwIfAborted();
@@ -100,43 +95,33 @@ export class SessionExecutionState {
         await Promise.all(turns.map((turn) => turn.completion));
     };
 
+    /**
+     * Admits the turn in arrival order. A steering prompt joins the running turn it names. An appended prompt runs
+     * when no earlier turn owns an execution, and otherwise waits in the queue until every earlier one ended or the
+     * user promotes it to steer the turn it waits behind. Admission never refuses an appended prompt.
+     */
     readonly admitAndWait = async (
         turn: ActiveRuntimeTurn,
         waitSignal: AbortSignal,
         onQueued: () => void,
-    ): Promise<SessionAdmission> => {
+    ): Promise<PromptDispatch> => {
         const command = turn.command;
         waitSignal.throwIfAborted();
-        // The Session is busy while an earlier turn owns an execution. A promoted prompt steers
-        // instead, so its effective disposition, not the submitted one, decides.
+        if (command.disposition === SessionPromptDisposition.Steer) {
+            return turn.admit({ kind: "steer", targetCommandId: command.targetCommandId });
+        }
+        // The earliest turn that owns an execution: a promoted prompt steers instead and holds no place.
         const head = (): ActiveRuntimeTurn | undefined =>
-            [...this.#turnsByCommandId.values()].find(
-                (turn) => turn.effectiveDisposition() !== SessionPromptDisposition.Steer,
-            );
-        // The target guards admission only. Accepted work belongs to the Session
-        // FIFO and must survive the original target finishing or being cancelled.
-        if (command.disposition === SessionPromptDisposition.Queue) {
-            const target = head();
-            if (
-                (target === turn || target?.command.commandId !== command.targetCommandId) &&
-                !this.#operations.isTerminalExecution(command.targetCommandId, this.#sessionId)
-            ) {
-                return { kind: "queue-target-unavailable" };
-            }
+            [...this.#turnsByCommandId.values()].find((candidate) => !candidate.isSteering());
+        if (head() !== turn) {
             turn.enqueue();
             onQueued();
-        }
-        if (turn.effectiveDisposition() === SessionPromptDisposition.Steer) {
-            return { disposition: turn.admit(), kind: "available" };
         }
         for (;;) {
             waitSignal.throwIfAborted();
             const first = head();
             if (first === undefined || first === turn) {
-                return { disposition: turn.admit(), kind: "available" };
-            }
-            if (command.disposition !== SessionPromptDisposition.Queue) {
-                return { kind: "busy" };
+                return turn.admit({ kind: "own" });
             }
             const promotion = turn.queuePromotion();
             if (promotion === null) {
@@ -147,7 +132,7 @@ export class SessionExecutionState {
                 promotion.then(() => "promoted" as const),
             ]);
             if (decision === "promoted") {
-                return { disposition: turn.admit(), kind: "available" };
+                return turn.admit({ kind: "steer", targetCommandId: first.command.commandId });
             }
         }
     };

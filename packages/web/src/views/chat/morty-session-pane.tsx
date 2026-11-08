@@ -71,6 +71,7 @@ import {
     sessionExecutionStates,
     sessionTextValue,
 } from "../../view-models/chat/session-presentation.ts";
+import { sessionProjectionTimeline } from "../../view-models/chat/session-projection.ts";
 import { createSessionResourceStore } from "../../view-models/chat/session-resource-store.ts";
 import { sessionTitle } from "../../view-models/chat/session-titles-store.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
@@ -803,15 +804,17 @@ function MortySessionPaneBody({
     const home = useStore(workspace.home);
     const runtimeConfiguration = home.runtimeConfiguration;
     const model = useStore(pane.store);
+    const composer = useStore(pane.composer);
+    const timeline = sessionProjectionTimeline(model.projection);
     const rename = useStore(pane.rename);
-    const titleEdit = sessionTitleEdit(model.titleDraft, rename.rename);
+    const titleEdit = sessionTitleEdit(composer.titleDraft, rename.rename);
     const title = useStore(workspace.titles, (state) =>
         sessionTitle(state.titles, pane.session.result.ready.sessionId),
     );
     const attachmentModel = useStore(pane.composerAttachments);
     const interactionModel = useStore(pane.interactions);
     const settingsModel = useStore(pane.settings);
-    const interactions = sessionInteractionPresentation(interactionModel, model.messages);
+    const interactions = sessionInteractionPresentation(interactionModel, timeline.messages);
     const preview = useStore(pane.filePreview);
     const delivery = useStore(pane.delivery);
     const messageQueue = useStore(pane.messageQueue);
@@ -839,6 +842,7 @@ function MortySessionPaneBody({
     const executionContext = sessionExecutionContext(pane.session, home, model.connection);
     const presentation = sessionPanePresentation(
         model,
+        composer,
         rename,
         delivery,
         taskControls,
@@ -847,12 +851,10 @@ function MortySessionPaneBody({
         interactionModel,
         executionContext.available,
     );
-    // An answer to an Agent's question goes out as the composer's message would: now, or queued behind the turn.
+    // An answer to an Agent's question goes out as the composer's message would, which the Runtime runs or queues.
     const answer = (messageId: string): void =>
         runAndFollow(async () => {
-            await (presentation.shouldQueueOnSubmit
-                ? pane.store.getState().queueAnswer(messageId)
-                : pane.store.getState().sendAnswer(messageId));
+            await pane.store.getState().sendAnswer(messageId);
         });
     // The composer notice floats over the log only while nothing stands between
     // the log and the composer. With a queue or interaction card present it joins
@@ -885,30 +887,30 @@ function MortySessionPaneBody({
               );
     const slotErrorMessage = composerErrorMessage(presentation.composerError, attachmentModel.state);
     const slotStatusMessage =
-        executionContext.feedback.kind === "hidden" && model.filesRestoreNotice
+        executionContext.feedback.kind === "hidden" && composer.filesRestoreNotice
             ? "Files attached to this message could not be restored here. Add them again if it had any."
             : undefined;
     // Mirrors the slot's own visibility rule: when the notice heads the stack, the
     // interaction card drops its top margin so the slot's 8px is the whole gap.
     const stackNoticeVisible =
         slotErrorMessage.length > 0 || slotConnectionNotice !== undefined || slotStatusMessage !== undefined;
-    const renderItems = sessionRenderItems(model.messages);
+    const renderItems = sessionRenderItems(timeline.messages);
     const renderGroups = sessionRenderGroups(renderItems);
-    const executionStates = sessionExecutionStates(model.messages, presentation.activity.kind === "working");
+    const executionStates = sessionExecutionStates(timeline.messages, presentation.activity.kind === "working");
     const executionStateByItemId = new Map(
-        model.messages.flatMap((message, index) => {
+        timeline.messages.flatMap((message, index) => {
             const state = executionStates[index];
             return state === undefined ? [] : [[message.firstEvent.eventId, state] as const];
         }),
     );
     const replyMessagesByRenderGroupId = new Map(
-        agentReplyMessageGroups(model.messages).map((group) => [group.id, group.messages] as const),
+        agentReplyMessageGroups(timeline.messages).map((group) => [group.id, group.messages] as const),
     );
     const lastRenderItemIndex = renderItems.length - 1;
     const generationActive = presentation.workingIndicator !== null && presentation.activity.kind === "working";
     const sessionMessagesLoading =
         model.connection.kind === "first-loading" &&
-        model.messages.length === 0 &&
+        timeline.messages.length === 0 &&
         presentation.awaitingMessage === null;
     const initialMessage = presentation.awaitingMessage;
     const configure = (option: SessionConfigOption, value: string, booleanValue: boolean) =>
@@ -967,15 +969,15 @@ function MortySessionPaneBody({
                             aria-label="Messages"
                             className={chatSessionMessageScrollClassName}
                             loadOlder={{
-                                hasMore: model.hasOlderHistory,
+                                hasMore: timeline.hasOlderHistory,
                                 loading: presentation.historyLoading,
                                 onLoadMore: (signal) => pane.store.getState().loadOlderMessages(signal),
-                                revision: model.historyRevision,
+                                revision: timeline.revision,
                             }}
                         >
                             {sessionMessagesLoading && <SessionMessageListSkeleton />}
                             {!sessionMessagesLoading &&
-                                model.messages.length === 0 &&
+                                timeline.messages.length === 0 &&
                                 model.connection.kind === "failed" && (
                                     <div
                                         className={`${chatSessionMessageColumnClassName} flex min-h-full items-center justify-center`}
@@ -991,7 +993,7 @@ function MortySessionPaneBody({
                             {!sessionMessagesLoading &&
                                 initialMessage === null &&
                                 presentation.confirmedMessages.length === 0 &&
-                                model.messages.length === 0 &&
+                                timeline.messages.length === 0 &&
                                 model.connection.kind === "ready" &&
                                 presentation.activity.kind === "idle" &&
                                 !presentation.historyLoading && (
@@ -1036,7 +1038,7 @@ function MortySessionPaneBody({
                                                     >
                                                         <SessionRenderItemContent
                                                             active={active}
-                                                            answerChoices={model.answerChoices}
+                                                            answerChoices={composer.answerChoices}
                                                             item={item}
                                                             machineName={executionContext.machine}
                                                             onAnswer={answer}
@@ -1066,7 +1068,7 @@ function MortySessionPaneBody({
                                                     <div className={spacingClassName} key={sessionRenderItemId(item)}>
                                                         <SessionRenderItemContent
                                                             active={active}
-                                                            answerChoices={model.answerChoices}
+                                                            answerChoices={composer.answerChoices}
                                                             item={item}
                                                             machineName={executionContext.machine}
                                                             onAnswer={answer}
@@ -1334,20 +1336,14 @@ function MortySessionPaneBody({
                             canAttach={canAddAttachments(attachmentModel)}
                             attachmentSignal={pane.attachmentSignal}
                             disabled={presentation.composerInputDisabled}
-                            draft={model.draft}
+                            draft={composer.draft}
                             error={slotErrorMessage}
                             connectionNotice={slotConnectionNotice}
                             statusMessage={slotStatusMessage}
                             noticePlacement={noticePlacement}
                             onDraftChange={pane.store.getState().setDraft}
                             onStop={() => run(pane.store.getState().stop)}
-                            onSubmit={() =>
-                                runAndFollow(
-                                    presentation.shouldQueueOnSubmit
-                                        ? pane.store.getState().queueDraft
-                                        : pane.store.getState().send,
-                                )
-                            }
+                            onSubmit={() => runAndFollow(pane.store.getState().send)}
                             outputState={presentation.outputState}
                             stopDisabled={presentation.stopDisabled}
                             submitDisabled={presentation.submitDisabled}

@@ -12,12 +12,11 @@ const prompt = {
     bindingId: "binding-1",
     commandId: "command-1",
     directoryId: "directory-1",
-    disposition: SessionPromptDisposition.Reject,
+    disposition: SessionPromptDisposition.Append,
     attachments: [],
     kind: "session.prompt" as const,
     prompt: "continue",
     sessionId: "session-1",
-    targetCommandId: "",
 };
 
 describe("Session prompt history policy", () => {
@@ -32,7 +31,7 @@ describe("Session prompt history policy", () => {
         });
     });
 
-    it.each(["historyPolicy", "targetCommandId", "disposition"])(
+    it.each(["historyPolicy", "disposition"])(
         "Given a prompt missing %s, When it crosses the command boundary, Then the retired format is rejected",
         (field) => {
             const wire: Record<string, unknown> = { ...prompt, historyPolicy: SessionHistoryPolicy.Eager };

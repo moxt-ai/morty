@@ -204,8 +204,7 @@ test("Given Claude is answering a background notification, When it absorbs a new
                         directoryId: "default",
                         additionalDirectoryIds: [],
                         attachments: [],
-                        disposition: "reject",
-                        targetCommandId: "",
+                        disposition: "append",
                     }),
                 );
             const next = async () => {

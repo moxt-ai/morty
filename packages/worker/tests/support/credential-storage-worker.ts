@@ -40,6 +40,18 @@ export class ProjectDurableObject extends Project {
             );
             return new Response(null, { status: 204 });
         }
+        if (request.url === "https://project.internal/stored-state") {
+            // Read-only: reports what this object persisted, without opening its database.
+            return Response.json({
+                keys: [...(await this.ctx.storage.list()).keys()],
+                tables: this.ctx.storage.sql
+                    .exec<{ name: string }>(
+                        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE '\\_cf\\_%' ESCAPE '\\' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'",
+                    )
+                    .toArray()
+                    .map((row) => row.name),
+            });
+        }
         if (request.url === "https://project.internal/credential-kinds") {
             if (request.method === "DELETE") {
                 this.ctx.storage.sql.exec("UPDATE anonymous_credential SET kind = NULL");

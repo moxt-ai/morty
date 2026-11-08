@@ -181,12 +181,11 @@ describe("daemon narration delivery", () => {
                 bindingId: config.bindingId,
                 commandId: "narration_turn",
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Reject,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "stream verbose activity",
                 sessionId: "narration_conversation",
-                targetCommandId: "",
             };
             sendText(socket, encodeSessionPromptCommand(prompt));
 

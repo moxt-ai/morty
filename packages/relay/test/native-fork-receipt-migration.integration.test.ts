@@ -1,10 +1,10 @@
 import { abortAllDurableObjects, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { DurableObjectSqlDatabase } from "@morty-build/relay-core";
+import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { runtimeConnectionDurableObjectMigrations } from "../../relay-core/src/generated/runtime-connection-do-migrations.ts";
 import { NativeSessionForkStorage } from "../../relay-core/src/storage/native-session-fork-storage.ts";
-import { RuntimeConnectionStorage } from "../../relay-core/src/storage/runtime-connection-storage.ts";
 
 afterEach(() => vi.useRealTimers());
 afterAll(async () => await abortAllDurableObjects());
@@ -13,27 +13,15 @@ it("Given pre-recovery Fork receipts, When upgraded and written by either deploy
     vi.useFakeTimers({ now: new Date("2026-10-28T02:00:00Z"), toFake: ["Date"] });
     await runInDurableObject(
         env.RUNTIME_RELAY.getByName(`fork-migration-${crypto.randomUUID()}`),
-        (_instance, state) => {
+        async (_instance, state) => {
             // Retained 7110e99 schema and read/write contract, independent of the current Drizzle model.
-            state.storage.sql.exec("DROP TABLE native_session_forks");
-            const legacySchema = runtimeConnectionDurableObjectMigrations.find(
+            await state.storage.deleteAll();
+            const retained = runtimeConnectionDurableObjectMigrations.findIndex(
                 (migration) => migration.name === "0005_glamorous_stick.sql",
             );
-            if (legacySchema === undefined) {
-                throw new Error("Missing retained schema");
-            }
-            state.storage.sql.exec(legacySchema.sql);
-            // The 0005 schema still had the Runtime revocation table that a later migration drops.
-            const revocations = runtimeConnectionDurableObjectMigrations
-                .find((migration) => migration.name === "0000_nebulous_molten_man.sql")
-                ?.sql.split("--> statement-breakpoint")
-                .find((statement) => statement.includes("CREATE TABLE `runtime_revocations`"));
-            if (revocations === undefined) {
-                throw new Error("Missing retained Runtime revocation schema");
-            }
-            state.storage.sql.exec(revocations);
-            state.storage.sql.exec(
-                "DELETE FROM _morty_do_schema_migrations WHERE namespace = 'runtime-connection-do' AND name > '0005_glamorous_stick.sql'",
+            applyDurableObjectMigrations(
+                state.storage,
+                runtimeConnectionDurableObjectMigrations.slice(0, retained + 1),
             );
             const oldWrite = (id: string, result: string | null) =>
                 state.storage.sql.exec(
@@ -54,9 +42,8 @@ it("Given pre-recovery Fork receipts, When upgraded and written by either deploy
             const completed = JSON.stringify({ source: "original source", result: "original result" });
             oldWrite("old-completed", completed);
             oldWrite("old-unknown", null);
-            const database = new DurableObjectSqlDatabase(state.storage);
-            new RuntimeConnectionStorage(database);
-            const receipts = new NativeSessionForkStorage(database);
+            applyDurableObjectMigrations(state.storage, runtimeConnectionDurableObjectMigrations);
+            const receipts = new NativeSessionForkStorage(new DurableObjectSqlDatabase(state.storage));
             expect(receipts.read("project", "old-completed")).toEqual({
                 requestHash: "hash",
                 resultJson: completed,

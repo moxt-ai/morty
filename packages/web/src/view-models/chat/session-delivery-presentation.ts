@@ -39,7 +39,7 @@ function currentMessage(state: DeliveryState): LocalMessage | null {
 export function sessionDeliveryPresentation(
     messages: readonly SessionExecutionMessage[],
     queued: readonly QueuedCommand[],
-    delivery: Pick<SessionDeliveryStore, "state" | "acceptedMessages">,
+    delivery: Pick<SessionDeliveryStore, "state" | "accepted">,
     queue: Pick<SessionMessageQueueStore, "requests">,
 ) {
     const historyIds = new Set(sessionUserCommandIds(messages));
@@ -51,7 +51,7 @@ export function sessionDeliveryPresentation(
     const current = currentMessage(delivery.state);
     const candidates: readonly LocalMessage[] = [
         ...(current === null ? [] : [current]),
-        ...delivery.acceptedMessages.map((message): LocalMessage => ({ kind: "accepted", message })),
+        ...delivery.accepted.map(({ message }): LocalMessage => ({ kind: "accepted", message })),
     ];
     const local = candidates.filter(({ message }) => {
         if (claimed.has(message.commandId)) {
@@ -62,7 +62,7 @@ export function sessionDeliveryPresentation(
     });
     const pendingQueue = local.filter(
         (entry) =>
-            entry.message.target.disposition === "queue" &&
+            entry.message.placement === "queue" &&
             (entry.kind === "accepted" || (entry.kind === "pending" && entry.error === null)),
     );
     const timeline = local.filter((entry) => !pendingQueue.includes(entry));

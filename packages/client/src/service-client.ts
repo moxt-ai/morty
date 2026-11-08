@@ -1505,9 +1505,8 @@ export class MortyTurnResources {
             ),
             {
                 ...request,
-                disposition: request.disposition ?? "reject",
+                disposition: request.disposition ?? SessionPromptDisposition.Append,
                 sessionConfigurations: request.sessionConfigurations ?? [],
-                targetCommandId: request.targetCommandId ?? "",
             },
             signal,
         );

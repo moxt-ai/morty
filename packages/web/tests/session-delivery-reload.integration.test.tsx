@@ -127,7 +127,7 @@ for (const target of ["immediate", "queued"] as const) {
     }
 }
 
-test("Given an unconfirmed new-turn message after a reload, When another device runs a turn, Then retry waits until the Session is idle and resends the original request once", {
+test("Given an unconfirmed message after a reload, When another device runs a turn, Then retry resends the original request once and the message runs after that turn", {
     timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
@@ -162,28 +162,25 @@ test("Given an unconfirmed new-turn message after a reload, When another device 
         ).toBe(false),
     );
     await daemon.submitTurn(sessionId, "wait for steering");
-    await reloaded.waitForView(() => {
-        expect(reloaded.optionalElementByTestId(dataTestId.workingIndicator)).not.toBeNull();
-        expect(
-            getByRole(document.body, "button", { name: "Retry message with unknown delivery" }).hasAttribute(
-                "disabled",
-            ),
-        ).toBe(true);
-    });
-    expect(network.submissions).toHaveLength(submissions);
-    await daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
+    await reloaded.waitForView(() =>
+        expect(reloaded.optionalElementByTestId(dataTestId.workingIndicator)).not.toBeNull(),
+    );
+    // The retry need not wait for the other turn: the Runtime queues the message behind it.
     const retry = await reloaded.waitForView(() => {
         const button = getByRole(document.body, "button", { name: "Retry message with unknown delivery" });
         expect(button.hasAttribute("disabled")).toBe(false);
         return button;
     });
     await reloaded.user.click(retry);
-    await reloaded.waitForView(() => {
-        expect(queryByRole(document.body, "button", { name: "Retry message with unknown delivery" })).toBeNull();
-        expect(reloaded.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain(
-            "Keep the original submission",
-        );
-    });
+    await reloaded.waitForView(() =>
+        expect(queryByRole(document.body, "button", { name: "Retry message with unknown delivery" })).toBeNull(),
+    );
     expect(network.submissions).toHaveLength(submissions + 1);
     expect(JSON.parse(network.submissions.at(-1) ?? "{}")).toEqual(original);
+    await daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
+    await reloaded.waitForView(() =>
+        expect(reloaded.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain(
+            "Keep the original submission",
+        ),
+    );
 });

@@ -137,11 +137,10 @@ function sendPrompt(peer: RealDaemonPeer, prompt: string): string {
             bindingId: peer.bindingId,
             commandId,
             directoryId: "default",
-            disposition: SessionPromptDisposition.Reject,
+            disposition: SessionPromptDisposition.Append,
             kind: "session.prompt",
             prompt,
             sessionId: peer.sessionId,
-            targetCommandId: "",
         }),
     );
     return commandId;

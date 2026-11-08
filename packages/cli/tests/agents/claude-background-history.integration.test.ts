@@ -225,8 +225,7 @@ test("Given Claude is running a background command, When two idle hours pass and
                             additionalDirectoryIds: [],
                             attachments: [],
                             prompt,
-                            disposition: SessionPromptDisposition.Reject,
-                            targetCommandId: "",
+                            disposition: SessionPromptDisposition.Append,
                         }),
                     );
                     for (;;) {

@@ -57,12 +57,11 @@ test("Given native Claude is installed outside PATH, When two prompts execute th
                     bindingId: peer.bindingId,
                     commandId,
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
                     sessionId: peer.sessionId,
-                    targetCommandId: "",
                 }),
             );
             let text = "";
@@ -133,12 +132,11 @@ test.skipIf(process.platform !== "darwin")(
                     bindingId: peer.bindingId,
                     commandId,
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "Recover after a transient overload",
                     sessionId: peer.sessionId,
-                    targetCommandId: "",
                 }),
             );
             let text = "";

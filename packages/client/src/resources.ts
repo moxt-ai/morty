@@ -8,6 +8,7 @@ import {
     type SessionCapabilities,
     type SessionConfigurationSelection,
     type SessionHistoryPolicy,
+    type SessionPromptDisposition,
     type TurnRequest,
 } from "@morty-build/client/protocol";
 
@@ -118,15 +119,24 @@ export interface MortySessionBinding {
     readonly directoryId?: string;
 }
 
-export interface SubmitMortyTurnRequest extends MortySessionBinding {
+interface SubmitMortyTurnContent extends MortySessionBinding {
     readonly attachments: readonly PromptAttachment[];
     readonly content: string;
-    readonly disposition?: string;
     readonly idempotencyKey: string;
     readonly historyPolicy?: SessionHistoryPolicy;
     readonly sessionConfigurations?: readonly SessionConfigurationSelection[];
-    readonly targetCommandId?: string;
 }
+
+/**
+ * A Turn submission. Without a disposition the message is appended: the Runtime runs it now or queues it behind the
+ * Session's earlier work and answers which. A steering submission joins the running Turn it names, and is refused,
+ * leaving its idempotency key unused, when that Turn is not running.
+ */
+export type SubmitMortyTurnRequest = SubmitMortyTurnContent &
+    (
+        | { readonly disposition?: typeof SessionPromptDisposition.Append }
+        | { readonly disposition: typeof SessionPromptDisposition.Steer; readonly targetCommandId: string }
+    );
 
 /** How a cancelled Turn ended: `cancelled`, or the Agent's stop reason when the Turn finished first. */
 export interface MortyTurnCancellation {

@@ -74,7 +74,7 @@ test("Given a real Codex native Session, When the active prompt is cancelled wit
     try {
         await withRealDaemon(new CodexAgentSpecification(), agent.environment, async (peer) => {
             const nativeId = await prepareNewRealSession(peer, "codex");
-            const sendPrompt = (commandId: string, targetCommandId = ""): void =>
+            const sendPrompt = (commandId: string): void =>
                 peer.send(
                     encodeSessionPromptCommand({
                         historyPolicy: "eager",
@@ -87,11 +87,7 @@ test("Given a real Codex native Session, When the active prompt is cancelled wit
                         additionalDirectoryIds: [],
                         attachments: [],
                         prompt: "Reply with a short greeting, without using tools",
-                        disposition:
-                            targetCommandId.length > 0
-                                ? SessionPromptDisposition.Queue
-                                : SessionPromptDisposition.Reject,
-                        targetCommandId,
+                        disposition: SessionPromptDisposition.Append,
                     }),
                 );
             const finish = async (commandId: string, reason: string): Promise<string> => {
@@ -140,7 +136,7 @@ test("Given a real Codex native Session, When the active prompt is cancelled wit
                 });
             });
             const queued = randomUUID();
-            sendPrompt(queued, active);
+            sendPrompt(queued);
             for (;;) {
                 const message = await peer.nextMessage();
                 if (

@@ -105,13 +105,12 @@ test("execution-only prompt propagation keeps the run path out of eager recovery
         bindingId: "binding-1",
         commandId: "command-1",
         directoryId: "default",
-        disposition: "reject",
+        disposition: "append",
         historyPolicy: SessionHistoryPolicy.ExecutionOnly,
         attachments: [],
         kind: "session.prompt" as const,
         prompt: "continue",
         sessionId: "session-1",
-        targetCommandId: "",
     };
 
     await executePrompt({
@@ -137,7 +136,7 @@ test("execution-only prompt propagation keeps the run path out of eager recovery
         },
         attemptId: "attempt-1",
         epoch: "epoch-1",
-        waitForSessionAvailability: async () => ({ kind: "available", disposition: "reject" }),
+        waitForSessionAdmission: async () => ({ kind: "own" }),
         signal: new AbortController().signal,
         cancellationRequested: () => false,
     } as never);

@@ -11,7 +11,8 @@ import { CloudApiError } from "../../services/management/management-api.ts";
 import { formatError } from "../format-error.ts";
 
 type SubmitRequest = Parameters<MortyClient["turns"]["submit"]>[1];
-type AcceptedTurn = { readonly turnId: string };
+/** The service took the message: it runs now, or the Runtime queued it behind the Session's earlier work. */
+type AcceptedTurn = { readonly turnId: string; readonly queued: boolean };
 export type SubmitTurn = (request: SubmitRequest, signal: AbortSignal) => Promise<AcceptedTurn>;
 /**
  * How one attempt reaches the Session through the request access it started with. Preparation uploads the message's
@@ -27,12 +28,15 @@ type SubmissionOutcome =
     | { readonly kind: "delivered" }
     | { readonly kind: "rejected" }
     | { readonly kind: "delivery-unknown" };
-export type DeliveryTarget =
-    | { readonly disposition: "reject"; readonly targetCommandId: "" }
-    | { readonly disposition: "queue"; readonly targetCommandId: string };
+/**
+ * Where this page shows a message: as the Session's next turn, or in its queue. Sending decides it from whether a
+ * turn runs; once the service answers, the Runtime's admission decides it. It never changes what is submitted: the
+ * Runtime alone admits a message, running it now or queueing it.
+ */
+export type DeliveryPlacement = "turn" | "queue";
 
 export interface SubmittedMessage {
-    readonly target: DeliveryTarget;
+    readonly placement: DeliveryPlacement;
     readonly attachments:
         | { readonly kind: "local"; readonly values: readonly ComposerAttachment[] }
         | { readonly kind: "uploaded"; readonly values: readonly PromptAttachment[] };
@@ -43,10 +47,10 @@ export type Journal = {
     /** Original local files are kept only in memory; the request already owns uploaded references. */
     readonly attachments: readonly ComposerAttachment[] | null;
     readonly commandId: string;
+    readonly placement: DeliveryPlacement;
     /** Chat states the Session's whole binding, so a saved request stays complete for any Relay it is resent to. */
-    readonly request: Omit<SubmitRequest, "idempotencyKey" | "disposition" | "targetCommandId"> &
-        Required<Pick<SubmitRequest, "additionalDirectoryIds">> &
-        DeliveryTarget;
+    readonly request: Omit<SubmitRequest, "idempotencyKey" | "disposition"> &
+        Required<Pick<SubmitRequest, "additionalDirectoryIds">>;
 };
 export function journalMessage(journal: Journal): SubmittedMessage {
     return {
@@ -56,10 +60,7 @@ export function journalMessage(journal: Journal): SubmittedMessage {
             journal.attachments === null
                 ? { kind: "uploaded", values: journal.request.attachments }
                 : { kind: "local", values: journal.attachments },
-        target:
-            journal.request.disposition === "queue"
-                ? { disposition: "queue", targetCommandId: journal.request.targetCommandId }
-                : { disposition: "reject", targetCommandId: "" },
+        placement: journal.placement,
     };
 }
 
@@ -127,22 +128,74 @@ export function awaitingMessage(state: DeliveryState): SubmittedMessage | null {
     return state.kind === "awaiting-connection" ? state.message : null;
 }
 
+/**
+ * A message the service accepted. The page keeps it, with its original files, only until the Runtime's own account
+ * shows it; `acceptance` orders it among this page's acceptances, so a queue read can tell which messages it covers.
+ */
+export interface AcceptedMessage {
+    readonly message: SubmittedMessage;
+    readonly acceptance: number;
+}
+
+/**
+ * What the Runtime has shown about the Session's commands, as the pane observes it. It is the only evidence delivery
+ * acts on: it confirms submissions the Runtime has and retires the accepted messages its account now covers.
+ */
+export interface RuntimeCommandFacts {
+    /** Commands the Runtime has shown it holds: listed, running, recorded in history, or confirmed by its receipt. */
+    readonly known: ReadonlySet<string>;
+    /** Commands whose own user message the timeline shows, which displays them from now on. */
+    readonly shown: ReadonlySet<string>;
+    /** The command the Runtime runs; a queued message that started no longer needs its files for editing. */
+    readonly running: string | null;
+    /**
+     * The Runtime's queue as one read listed it. A read can only describe messages accepted before it began, the
+     * acceptances numbered below `acceptedBefore`; a later acceptance may legitimately be missing from it.
+     */
+    readonly listing: { readonly queued: ReadonlySet<string>; readonly acceptedBefore: number } | null;
+    /**
+     * A history read the timeline adopted, which shows every message accepted to run before it began, the acceptances
+     * numbered below `acceptedBefore`. The pages of a running turn do not name its command, so only the read's timing
+     * tells that the timeline shows it.
+     */
+    readonly historyRead: { readonly acceptedBefore: number } | null;
+}
+
+/** Whether the Runtime's account now covers an accepted message, so the page no longer needs its own copy. */
+function covered(accepted: AcceptedMessage, facts: RuntimeCommandFacts): boolean {
+    const { commandId, placement } = accepted.message;
+    if (facts.shown.has(commandId)) {
+        return true;
+    }
+    if (placement === "turn") {
+        return facts.historyRead !== null && accepted.acceptance < facts.historyRead.acceptedBefore;
+    }
+    // A message shown in the queue keeps its files there until it starts or leaves the queue.
+    return (
+        facts.running === commandId ||
+        (facts.listing !== null &&
+            accepted.acceptance < facts.listing.acceptedBefore &&
+            !facts.listing.queued.has(commandId))
+    );
+}
+
 /** The submitted intent and files have one owner through preparation, admission and queueing. */
 export function deliveryMessages(
-    delivery: Pick<SessionDeliveryStore, "state" | "acceptedMessages">,
+    delivery: Pick<SessionDeliveryStore, "state" | "accepted">,
 ): readonly SubmittedMessage[] {
+    const accepted = delivery.accepted.map((entry) => entry.message);
     const state = delivery.state;
     switch (state.kind) {
         case "idle":
-            return delivery.acceptedMessages;
+            return accepted;
         case "awaiting-connection":
         case "preparing":
         case "preparation-failed":
-            return [...delivery.acceptedMessages, state.message];
+            return [...accepted, state.message];
         case "submitting":
         case "delivery-unknown":
         case "failed":
-            return [...delivery.acceptedMessages, journalMessage(state.journal)];
+            return [...accepted, journalMessage(state.journal)];
         default:
             return state satisfies never;
     }
@@ -150,15 +203,21 @@ export function deliveryMessages(
 
 export interface SessionDeliveryStore {
     readonly state: DeliveryState;
-    /** Accepted input retained until history owns its display and the queue no longer needs its local files. */
-    readonly acceptedMessages: readonly SubmittedMessage[];
+    /** Accepted messages the Runtime's account does not cover yet: shown locally, with their files for editing. */
+    readonly accepted: readonly AcceptedMessage[];
+    /** How many messages the service has accepted on this page; the next acceptance is numbered with it. */
+    readonly acceptances: number;
     readonly discardUnknown: () => void;
     /** Takes a new Session's first message, which a pane submits once it connects. */
     readonly awaitConnection: (message: SubmittedMessage) => void;
     readonly takeFailedMessage: () => SubmittedMessage | null;
-    readonly reconcile: (commandIds: readonly string[]) => void;
-    /** Releases original input once history owns it or the Runtime confirms its withdrawal. */
-    readonly releaseMessages: (commandIds: readonly string[]) => void;
+    /**
+     * Applies what the Runtime has shown: a submission it holds is delivered, and accepted messages its account now
+     * covers are retired. This is the only way the Runtime's account changes delivery.
+     */
+    readonly observe: (facts: RuntimeCommandFacts) => void;
+    /** The user withdrew an accepted message from the Runtime's queue, which confirmed it. */
+    readonly withdraw: (commandId: string) => void;
     /**
      * Prepares and submits a message on the Session's lifetime: the pane that started the attempt may stop before it
      * settles, and the next pane shows where it is. The message is `preparing` as soon as this is called.
@@ -215,15 +274,27 @@ export const createSessionDeliveryStore = (options: {
     /** Persists the unsent message's text, or clears it with null. */
     readonly unsentMessageChanged: (content: string | null) => void;
 }) => {
-    type Update = { readonly state: DeliveryState; readonly acceptedMessages?: readonly SubmittedMessage[] };
-    const confirm = (journal: Journal, set: (update: Update) => void, get: () => SessionDeliveryStore): void => {
-        set({
-            state: { kind: "idle" },
-            acceptedMessages: [
-                ...get().acceptedMessages.filter((message) => message.commandId !== journal.commandId),
-                journalMessage(journal),
-            ],
-        });
+    type Update = {
+        readonly state: DeliveryState;
+        readonly accepted?: readonly AcceptedMessage[];
+        readonly acceptances?: number;
+    };
+    /** The service accepted the journal's message, which the page keeps until the Runtime's account covers it. */
+    const accept = (journal: Journal, placement: DeliveryPlacement, current: SessionDeliveryStore): Update => ({
+        state: { kind: "idle" },
+        accepted: [
+            ...current.accepted.filter((entry) => entry.message.commandId !== journal.commandId),
+            { message: { ...journalMessage(journal), placement }, acceptance: current.acceptances },
+        ],
+        acceptances: current.acceptances + 1,
+    });
+    const confirm = (
+        journal: Journal,
+        placement: DeliveryPlacement,
+        set: (update: Update) => void,
+        get: () => SessionDeliveryStore,
+    ): void => {
+        set(accept(journal, placement, get()));
     };
     const send = async (
         journal: Journal,
@@ -242,7 +313,7 @@ export const createSessionDeliveryStore = (options: {
                 signal,
             );
             signal.throwIfAborted();
-            confirm(journal, set, get);
+            confirm(journal, accepted.queued ? "queue" : "turn", set, get);
             return { kind: "accepted", turn: accepted };
         } catch (cause) {
             if (signal.aborted || cause instanceof MortyCancellationError) {
@@ -250,8 +321,8 @@ export const createSessionDeliveryStore = (options: {
                 // its submitted intent: what the service confirmed stays, the rest is unknown for the next page.
                 const state = get().state;
                 if (state.kind === "submitting" && state.confirmation === "delivered") {
-                    if (journal.request.disposition === "queue") {
-                        confirm(journal, set, get);
+                    if (journal.placement === "queue") {
+                        confirm(journal, journal.placement, set, get);
                     } else {
                         set({ state: { kind: "idle" } });
                     }
@@ -268,7 +339,7 @@ export const createSessionDeliveryStore = (options: {
             }
             const state = get().state;
             if (state.kind === "submitting" && state.confirmation === "delivered") {
-                confirm(journal, set, get);
+                confirm(journal, journal.placement, set, get);
                 return { kind: "delivered" };
             }
             set({ state: { kind: "delivery-unknown", journal } });
@@ -280,7 +351,11 @@ export const createSessionDeliveryStore = (options: {
             const state = update.state;
             options.pendingSubmissionChanged(
                 state.kind === "submitting" || state.kind === "delivery-unknown"
-                    ? { commandId: state.journal.commandId, request: state.journal.request }
+                    ? {
+                          commandId: state.journal.commandId,
+                          placement: state.journal.placement,
+                          request: state.journal.request,
+                      }
                     : null,
             );
             options.unsentMessageChanged(unsentContent(state));
@@ -291,7 +366,8 @@ export const createSessionDeliveryStore = (options: {
                 options.pendingSubmission === null
                     ? { kind: "idle" }
                     : { kind: "delivery-unknown", journal: { ...options.pendingSubmission, attachments: null } },
-            acceptedMessages: [],
+            accepted: [],
+            acceptances: 0,
             discardUnknown: () => {
                 if (get().state.kind === "delivery-unknown") {
                     set({ state: { kind: "idle" } });
@@ -305,28 +381,28 @@ export const createSessionDeliveryStore = (options: {
                 }
                 return failed?.message ?? null;
             },
-            releaseMessages: (commandIds) => {
-                setState({
-                    acceptedMessages: get().acceptedMessages.filter(
-                        (message) => !commandIds.includes(message.commandId),
-                    ),
-                });
-            },
-            reconcile: (commandIds) => {
-                const state = get().state;
+            observe: (facts) => {
+                const current = get();
+                const state = current.state;
                 // Confirmation belongs to the submitted message, independently of the next editable draft.
-                if (state.kind === "submitting" && commandIds.includes(state.journal.commandId)) {
-                    set({ state: { ...state, confirmation: "delivered" } });
+                const confirmed: Update =
+                    state.kind === "submitting" && facts.known.has(state.journal.commandId)
+                        ? { state: { ...state, confirmation: "delivered" } }
+                        : state.kind === "delivery-unknown" && facts.known.has(state.journal.commandId)
+                          ? // A recovered message to run is shown by the Runtime's account; a queued one keeps its
+                            // files for editing while it waits.
+                            state.journal.placement === "queue"
+                              ? accept(state.journal, state.journal.placement, current)
+                              : { state: { kind: "idle" } }
+                          : { state };
+                const accepted = (confirmed.accepted ?? current.accepted).filter((entry) => !covered(entry, facts));
+                if (confirmed.state === state && accepted.length === current.accepted.length) {
+                    return;
                 }
-                if (state.kind === "delivery-unknown" && commandIds.includes(state.journal.commandId)) {
-                    // Recovered history from released Runtimes may omit command identities. As before, their
-                    // execution receipt owns a recovered immediate message; queue inputs still retain local files.
-                    if (state.journal.request.disposition === "queue") {
-                        confirm(state.journal, set, get);
-                    } else {
-                        set({ state: { kind: "idle" } });
-                    }
-                }
+                set({ ...confirmed, accepted });
+            },
+            withdraw: (commandId) => {
+                setState({ accepted: get().accepted.filter((entry) => entry.message.commandId !== commandId) });
             },
             send: async (message, attempt) => {
                 const signal = options.lifetime;
@@ -349,6 +425,7 @@ export const createSessionDeliveryStore = (options: {
                 // Freezing the request moves the message from unsent to possibly delivered under its identity.
                 const journal: Journal = {
                     commandId: message.commandId,
+                    placement: message.placement,
                     request,
                     attachments: message.attachments.kind === "local" ? message.attachments.values : null,
                 };

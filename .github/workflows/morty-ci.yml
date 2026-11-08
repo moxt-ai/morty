@@ -1,0 +1,66 @@
+name: Morty CI
+
+on:
+  pull_request:
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+# A newer push supersedes the checks of the previous one. Each merge group has
+# its own ref, so queued groups never cancel each other.
+concurrency:
+  group: morty-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Markdown cannot change tests or the release archive's behavior. The policy in
+  # markdown-policy.yml keeps Markdown changes in their own pull requests, and the
+  # main release chain always runs the complete pipeline.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      markdown-only: ${{ steps.classify.outputs.markdown-only }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Classify the changed files
+        id: classify
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+        run: |
+          # Without rename detection a rename lists both paths. An empty diff runs everything.
+          changed="$(git diff --no-renames --name-only "$BASE...$HEAD")"
+          if [ -n "$changed" ] && ! printf '%s\n' "$changed" | grep -qviE '\.(md|markdown|mdx)$'; then
+            echo "markdown-only=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "markdown-only=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  pipeline:
+    needs: changes
+    uses: ./.github/workflows/morty-pipeline.yml
+    with:
+      markdown-only: ${{ needs.changes.outputs.markdown-only == 'true' }}
+    permissions:
+      contents: read
+      actions: read
+
+  # The single required check. It fails unless the classification and every
+  # applicable pipeline job succeeded, including when either was cancelled.
+  ci-ok:
+    needs: [changes, pipeline]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require the complete pipeline to pass
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          PIPELINE: ${{ needs.pipeline.result }}
+        run: test "$CHANGES" = success && test "$PIPELINE" = success
