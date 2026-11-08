@@ -2,8 +2,14 @@ import { type ChildProcess, execFile } from "node:child_process";
 import { readFile, realpath } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { ProcessExecutionError } from "../process-error.ts";
-import type { ProcessLaunch, ProcessPlatformSupport, ProcessTableEntry, ProcessTreeIdentity } from "./contracts.ts";
-import { parseProcessTable, processExists } from "./posix.ts";
+import type {
+    ProcessLaunch,
+    ProcessPlatformSupport,
+    ProcessTableEntry,
+    ProcessTreeIdentity,
+    SpawnedProcess,
+} from "./contracts.ts";
+import { processExists } from "./posix.ts";
 
 function environmentValue(environment: Readonly<NodeJS.ProcessEnv>, name: string): string | undefined {
     return Object.entries(environment).find(([key]) => key.toUpperCase() === name.toUpperCase())?.[1];
@@ -76,7 +82,38 @@ function executableLaunch(command: string, args: readonly string[]): ProcessLaun
     return { command, arguments: args };
 }
 
-function readProcessTable(): Promise<readonly ProcessTableEntry[]> {
+/** A running process; `createdAt` is its creation time in milliseconds since the Unix epoch. */
+interface WindowsProcess {
+    readonly processId: number;
+    readonly parentProcessId: number;
+    readonly createdAt: number;
+}
+
+function parseWindowsProcesses(output: string): readonly WindowsProcess[] {
+    const processes: WindowsProcess[] = [];
+    for (const line of output.split("\n")) {
+        const groups = /^\s*(?<pid>\d+)\s+(?<ppid>\d+)\s+(?<created>\d+)\s*$/.exec(line)?.groups;
+        if (groups === undefined) {
+            continue;
+        }
+        const processId = Number(groups["pid"]);
+        const parentProcessId = Number(groups["ppid"]);
+        const createdAt = Number(groups["created"]);
+        if (
+            !Number.isSafeInteger(processId) ||
+            processId <= 0 ||
+            !Number.isSafeInteger(parentProcessId) ||
+            parentProcessId < 0 ||
+            !Number.isSafeInteger(createdAt)
+        ) {
+            continue;
+        }
+        processes.push({ processId, parentProcessId, createdAt });
+    }
+    return processes;
+}
+
+function readWindowsProcesses(): Promise<readonly WindowsProcess[]> {
     const systemRoot = environmentValue(process.env, "SystemRoot");
     if (systemRoot === undefined) {
         return Promise.resolve([]);
@@ -89,7 +126,8 @@ function readProcessTable(): Promise<readonly ProcessTableEntry[]> {
                 "-NoProfile",
                 "-NonInteractive",
                 "-Command",
-                "Get-CimInstance Win32_Process | ForEach-Object { '{0} {1} {0}' -f $_.ProcessId, $_.ParentProcessId }",
+                // Processes without a creation time, such as the System process, are never part of a spawned tree.
+                "Get-CimInstance Win32_Process | Where-Object { $_.CreationDate } | ForEach-Object { '{0} {1} {2}' -f $_.ProcessId, $_.ParentProcessId, ([DateTimeOffset]$_.CreationDate.ToUniversalTime()).ToUnixTimeMilliseconds() }",
             ],
             {
                 encoding: "utf8",
@@ -98,9 +136,60 @@ function readProcessTable(): Promise<readonly ProcessTableEntry[]> {
                 signal: AbortSignal.timeout(10000),
                 maxBuffer: 1024 * 1024,
             },
-            (error, stdout) => resolveTable(error === null ? parseProcessTable(stdout) : []),
+            (error, stdout) => resolveTable(error === null ? parseWindowsProcesses(stdout) : []),
         );
     });
+}
+
+async function readProcessTable(): Promise<readonly ProcessTableEntry[]> {
+    return (await readWindowsProcesses()).map(({ processId, parentProcessId }) => ({
+        processId,
+        parentProcessId,
+        processGroupId: processId,
+    }));
+}
+
+/**
+ * Windows reuses a process ID as soon as its process is gone and never updates a recorded parent ID, so a parent ID
+ * alone can name an unrelated process. A process belongs to the most recent process with its parent's ID that was
+ * created no later than itself. The running root is the child itself because its owner holds its handle, which keeps
+ * its ID from being reused. A child of an exited root must have been created during the root's lifetime.
+ */
+function selectWindowsProcessTree(
+    processes: readonly WindowsProcess[],
+    root: SpawnedProcess,
+): readonly ProcessTreeIdentity[] {
+    const running = new Map(processes.map((entry) => [entry.processId, entry]));
+    const members = new Set<number>();
+    if (root.state === "running" && running.has(root.processId)) {
+        members.add(root.processId);
+    }
+    const belongsToTree = (entry: WindowsProcess): boolean => {
+        const parent = running.get(entry.parentProcessId);
+        if (parent !== undefined && parent.createdAt <= entry.createdAt) {
+            return members.has(parent.processId);
+        }
+        return (
+            root.state === "exited" &&
+            entry.parentProcessId === root.processId &&
+            root.spawnedAt <= entry.createdAt &&
+            entry.createdAt <= root.exitedAt
+        );
+    };
+    let previousSize = -1;
+    while (previousSize !== members.size) {
+        previousSize = members.size;
+        for (const entry of processes) {
+            if (!members.has(entry.processId) && belongsToTree(entry)) {
+                members.add(entry.processId);
+            }
+        }
+    }
+    return [...members].map((processId) => ({ processGroupId: processId, processId }));
+}
+
+async function captureProcessTree(root: SpawnedProcess): Promise<readonly ProcessTreeIdentity[]> {
+    return selectWindowsProcessTree(await readWindowsProcesses(), root);
 }
 
 function signalCapturedProcesses(
@@ -134,6 +223,6 @@ export const windowsProcessPlatform: ProcessPlatformSupport = {
     signalCapturedProcesses,
     terminateProcess,
     readProcessTable,
-    readProcessTableSynchronously: () => [],
+    captureProcessTree,
     processExists,
 };
