@@ -253,6 +253,27 @@
             "when": 1794145491408,
             "tag": "0047_require_credential_kind",
             "breakpoints": true
+        },
+        {
+            "idx": 48,
+            "version": "6",
+            "when": 1794154060851,
+            "tag": "0048_browser_device_lifecycle",
+            "breakpoints": true
+        },
+        {
+            "idx": 49,
+            "version": "6",
+            "when": 1794154062334,
+            "tag": "0049_end_browser_access_by_device",
+            "breakpoints": true
+        },
+        {
+            "idx": 50,
+            "version": "6",
+            "when": 1794154107671,
+            "tag": "0050_browser_credential_lifecycle_constraints",
+            "breakpoints": true
         }
     ]
 }

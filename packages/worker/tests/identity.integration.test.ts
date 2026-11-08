@@ -861,3 +861,66 @@ test("Given two devices that joined through links, When one disconnects the othe
         { id: expect.not.stringMatching(laptopId), joinedAt: expect.any(String), label: "macOS · Chrome" },
     ]);
 });
+
+test("Given a browser whose credential a later link replaced, When a stale tab opens a link with the replaced credential and another device later ends that browser's device, Then the browser stays one device until then and rejoins only as a new one", async () => {
+    const environment = fixture.environment();
+    const owner = await fixture.createAnonymousUser();
+    const request = (path: string, token: string, init: RequestInit = {}) =>
+        worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}${path}`, {
+                ...init,
+                headers: { authorization: `Bearer ${token}`, ...init.headers },
+            }),
+            environment,
+        );
+    const join = async (device: string, replaces?: string) => {
+        const shared = await request("/identity/transfers", owner.token, { method: "POST" });
+        const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
+        const opened = await worker.fetch(
+            new Request(`${APP_ORIGIN}/morty/api/identity/transfers/redeem`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ code, device, ...(replaces === undefined ? {} : { replaces }) }),
+            }),
+            environment,
+        );
+        expect(opened.status).toBe(200);
+        return v.parse(v.object({ token: v.string() }), await opened.json()).token;
+    };
+    const devices = async (token: string) =>
+        v.parse(
+            v.object({ devices: v.array(v.object({ id: v.string(), label: v.nullable(v.string()) })) }),
+            await (await request("/identity/devices", token)).json(),
+        ).devices;
+    const refusedAsEnded = async (token: string) => {
+        const response = await request("/session", token);
+        expect(response.status).toBe(401);
+        expect(await response.json()).toEqual({
+            error: { code: "UNAUTHENTICATED", message: "Access to this computer has ended.", reason: "ACCESS_REVOKED" },
+        });
+    };
+    const phone = await join("iPhone · Safari");
+    const first = await join("macOS · Chrome");
+    const laptopId = (await devices(phone)).find((device) => device.label === "macOS · Chrome")?.id ?? "";
+    const later = await join("macOS · Chrome", first);
+
+    // A tab that still holds the replaced credential opens another link: the device still holds access, so the
+    // browser stays the same device.
+    const stale = await join("macOS · Chrome", first);
+
+    await refusedAsEnded(first);
+    for (const token of [later, stale]) {
+        expect((await request("/session", token)).status).toBe(200);
+    }
+    expect(await devices(phone)).toEqual([{ id: laptopId, label: "macOS · Chrome" }]);
+
+    expect((await request(`/identity/v1/devices/${laptopId}`, phone, { method: "DELETE" })).status).toBe(200);
+
+    for (const token of [first, later, stale]) {
+        await refusedAsEnded(token);
+    }
+    expect(await devices(phone)).toEqual([]);
+    const rejoined = await join("macOS · Chrome", first);
+    expect((await request("/session", rejoined)).status).toBe(200);
+    expect(await devices(phone)).toEqual([{ id: expect.not.stringMatching(laptopId), label: "macOS · Chrome" }]);
+});

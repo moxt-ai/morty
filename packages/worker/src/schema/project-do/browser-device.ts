@@ -1,8 +1,9 @@
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /**
- * A browser that joined the user's computer through a link, described by that first joining. Its credentials carry
- * its access; a browser that opens another link gets a new credential and stays the same device.
+ * A browser that joined the user's computer through a link, described by that first joining. The device owns its
+ * access: it holds access until its term unless it was ended first. A browser that opens another link gets a new
+ * credential and stays the same device while that device still holds access.
  */
 export const browserDevice = sqliteTable(
     "browser_device",
@@ -18,8 +19,10 @@ export const browserDevice = sqliteTable(
          */
         joinedCity: text("joined_city"),
         joinedCountry: text("joined_country"),
-        /** The link it first joined through, which names who added it. */
+        /** The link that added the device, which names who added it. */
         joinedThroughTransferId: text("joined_through_transfer_id").notNull(),
+        /** When the device's access was ended; null while it was not. Ended access never resumes. */
+        endedAt: integer("ended_at"),
     },
     (table) => [index("browser_device_user_idx").on(table.userId)],
 );
