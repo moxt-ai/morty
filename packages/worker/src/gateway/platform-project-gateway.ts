@@ -6,7 +6,7 @@ import {
     MortyPlatformAppClient,
     MortyTimeoutError,
 } from "@morty-build/client/platform";
-import { decodeRuntimeDiagnosticsResult } from "@morty-build/client/protocol";
+import { decodeRuntimeDiagnosticsResult, type SessionReadyEvent } from "@morty-build/client/protocol";
 import { MortyClient, MortyRuntimePairingRequest } from "@morty-build/client/server";
 import * as v from "valibot";
 import {
@@ -38,28 +38,26 @@ function runtimeSetupMessage(code: string): string {
     }
 }
 
-export type ChatConversationInput =
-    | {
-          readonly kind: "existing";
-          readonly conversationId: string;
-          readonly runtimeId: string;
-          readonly agentRef: string;
-          readonly workspaceRef: string;
-          readonly additionalDirectoryIds: readonly string[];
-      }
-    | {
-          readonly kind: "new";
-          readonly conversationKey: string;
-          readonly runtimeId: string;
-          readonly agentRef: string;
-          readonly configurations: readonly {
-              readonly booleanValue: boolean;
-              readonly configId: string;
-              readonly value: string;
-              readonly valueType: "select" | "boolean";
-          }[];
-          readonly workspaceRef: string;
-      };
+/** A Chat Session as the Runtime hosts it: which Runtime, Agent and directory serve it. */
+type ChatSessionTarget = {
+    readonly sessionId: string;
+    readonly runtimeId: string;
+    readonly agentRef: string;
+    readonly workspaceRef: string;
+};
+
+export type NewChatSessionInput = ChatSessionTarget & {
+    readonly configurations: readonly {
+        readonly booleanValue: boolean;
+        readonly configId: string;
+        readonly value: string;
+        readonly valueType: "select" | "boolean";
+    }[];
+};
+
+export type ExistingChatSessionInput = ChatSessionTarget & {
+    readonly additionalDirectoryIds: readonly string[];
+};
 
 const discoveredRuntimeSchema = v.object({
     agents: v.array(
@@ -357,9 +355,53 @@ export class PlatformProjectGateway {
             120000,
         );
 
+    /**
+     * Creates a new Session with its settings applied by the Runtime's create operation. A refusal (4xx) means the
+     * Runtime created nothing; any other failure leaves it unknown whether the Session exists. Creating the same Session
+     * again converges on it.
+     */
+    readonly createChatSession = async (projectId: string, input: NewChatSessionInput, signal: AbortSignal) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) =>
+                this.#expectSession(
+                    await client.sessions.create(
+                        {
+                            additionalDirectoryIds: [],
+                            agentId: input.agentRef,
+                            configurations: input.configurations,
+                            directoryId: input.workspaceRef,
+                            runtimeId: input.runtimeId,
+                            sessionId: input.sessionId,
+                        },
+                        signal,
+                    ),
+                    input.sessionId,
+                ),
+            120000,
+        );
+
+    /** Grants access to a Session the Runtime has just created and reported ready. */
+    readonly createdChatSessionAccess = async (
+        projectId: string,
+        session: ChatSessionTarget,
+        ready: SessionReadyEvent,
+        credentialLifetimeSeconds: number,
+        signal: AbortSignal,
+    ) =>
+        await this.#withProject(
+            projectId,
+            signal,
+            async (client) =>
+                await this.#sessionAccess(client, projectId, session, ready, credentialLifetimeSeconds, signal),
+            120000,
+        );
+
+    /** Loads an existing Session in the Runtime and grants access to it. */
     readonly openChatSession = async (
         projectId: string,
-        input: ChatConversationInput,
+        input: ExistingChatSessionInput,
         credentialLifetimeSeconds: number,
         signal: AbortSignal,
     ) =>
@@ -367,59 +409,56 @@ export class PlatformProjectGateway {
             projectId,
             signal,
             async (client) => {
-                const sessionId = input.kind === "existing" ? input.conversationId : input.conversationKey;
-                const additionalDirectoryIds = input.kind === "existing" ? input.additionalDirectoryIds : [];
-                // A new Session starts with its settings applied by the Runtime's create operation, which refuses
-                // settings it cannot apply without leaving a Session behind; the same start retried converges.
-                const ready =
-                    input.kind === "new"
-                        ? await client.sessions.create(
-                              {
-                                  additionalDirectoryIds,
-                                  agentId: input.agentRef,
-                                  configurations: input.configurations,
-                                  directoryId: input.workspaceRef,
-                                  runtimeId: input.runtimeId,
-                                  sessionId,
-                              },
-                              signal,
-                          )
-                        : await client.sessions.load(
-                              input.runtimeId,
-                              sessionId,
-                              {
-                                  additionalDirectoryIds,
-                                  agentId: input.agentRef,
-                                  directoryId: input.workspaceRef,
-                              },
-                              signal,
-                          );
-                if (ready.sessionId !== sessionId) {
-                    throw new PlatformProjectError(
-                        "PLATFORM_INVALID_RESPONSE",
-                        "Morty returned an unexpected Session.",
-                        502,
-                    );
-                }
-                const access = await client.sessions.createAccess(
-                    input.runtimeId,
-                    sessionId,
-                    credentialLifetimeSeconds,
-                    signal,
+                const ready = this.#expectSession(
+                    await client.sessions.load(
+                        input.runtimeId,
+                        input.sessionId,
+                        {
+                            additionalDirectoryIds: input.additionalDirectoryIds,
+                            agentId: input.agentRef,
+                            directoryId: input.workspaceRef,
+                        },
+                        signal,
+                    ),
+                    input.sessionId,
                 );
-                return {
-                    endpoint: this.configuration().origin,
-                    projectId,
-                    sessionId,
-                    credential: access.credential,
-                    expiresAt: access.expiresAt,
-                    ready,
-                    agentRef: input.agentRef,
-                    workspaceRef: input.workspaceRef,
-                };
+                return await this.#sessionAccess(client, projectId, input, ready, credentialLifetimeSeconds, signal);
             },
             120000,
         );
+
+    readonly #expectSession = (ready: SessionReadyEvent, sessionId: string): SessionReadyEvent => {
+        if (ready.sessionId !== sessionId) {
+            throw new PlatformProjectError("PLATFORM_INVALID_RESPONSE", "Morty returned an unexpected Session.", 502);
+        }
+        return ready;
+    };
+
+    readonly #sessionAccess = async (
+        client: MortyClient,
+        projectId: string,
+        session: ChatSessionTarget,
+        ready: SessionReadyEvent,
+        credentialLifetimeSeconds: number,
+        signal: AbortSignal,
+    ) => {
+        const access = await client.sessions.createAccess(
+            session.runtimeId,
+            session.sessionId,
+            credentialLifetimeSeconds,
+            signal,
+        );
+        return {
+            endpoint: this.configuration().origin,
+            projectId,
+            sessionId: session.sessionId,
+            credential: access.credential,
+            expiresAt: access.expiresAt,
+            ready,
+            agentRef: session.agentRef,
+            workspaceRef: session.workspaceRef,
+        };
+    };
 
     readonly queryChatSessions = async (
         projectId: string,

@@ -18,6 +18,8 @@ const test = baseTest.extend<{ readonly cloud: Awaited<ReturnType<typeof createI
         // biome-ignore lint/correctness/noEmptyPattern: Vitest fixtures declare their dependencies by destructuring.
         async ({}, use) => {
             const cloud = await createIdentityFixture({
+                // Requests reach the Relay through a real proxy that can lose an answer the Relay sent.
+                loseTurnResponses: true,
                 workerEntryPoint: fileURLToPath(new URL("./support/credential-storage-worker.ts", import.meta.url)),
             });
             try {
@@ -280,6 +282,40 @@ for (const { reason, ...configuration } of [
         });
     });
 }
+
+test("Given the answer to a new conversation's Session creation is lost, When its owner retries the start, Then the conversation is owned and listed once and the retry opens the created Session", async ({
+    cloud,
+}) => {
+    await using fixture = await createChatFixture(cloud);
+    expect(
+        (
+            await fixture.request(`chat/bots/${fixture.botId}/setup`, {
+                runtimeId: fixture.runtime.runtimeId,
+                agentRef: "codex",
+            })
+        ).status,
+    ).toBe(202);
+    if (cloud.network === null) {
+        throw new Error("The scenario requires a real response-loss proxy");
+    }
+    const input = { agentRef: "codex", conversationKey: "lost-creation", workspaceRef: "default", configurations: [] };
+    const lost = cloud.network.interruptNextSessionCreation();
+    const failed = await fixture.request(`chat/bots/${fixture.botId}/access`, input);
+    expect(await lost).toBeLessThan(300);
+    expect(failed.status).toBeGreaterThanOrEqual(500);
+    const listed = async () =>
+        v.parse(
+            v.object({ sessions: v.array(v.object({ id: v.string() })) }),
+            await (await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {})).json(),
+        ).sessions;
+    const [owned, ...others] = await listed();
+    expect(others).toEqual([]);
+
+    const retried = await fixture.request(`chat/bots/${fixture.botId}/access`, input);
+    expect(retried.status).toBe(200);
+    expect(await retried.json()).toMatchObject({ sessionId: owned?.id });
+    expect(await listed()).toEqual([expect.objectContaining({ id: owned?.id })]);
+});
 
 test("Given an Agent whose model decides its effort levels, When Chat starts a conversation that lists the effort before the model, Then the new Session holds both selections", async ({
     cloud,

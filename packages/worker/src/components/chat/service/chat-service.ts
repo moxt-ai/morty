@@ -251,14 +251,22 @@ export class ChatService {
         sessionId: string,
         notOwned: () => Result,
         operation: (session: OwnedManagedSession) => Promise<Result>,
+    ): Promise<Result> =>
+        this.#runSessionOperation(sessionId, scope.signal, async () => {
+            const session = await OwnedManagedSession.find(this.#chatSessions, scope, sessionId);
+            return session === null ? notOwned() : await operation(session);
+        });
+
+    /** Runs an operation on a Session after every earlier one on that Session has finished. */
+    readonly #runSessionOperation = <Result>(
+        sessionId: string,
+        signal: AbortSignal,
+        operation: () => Promise<Result>,
     ): Promise<Result> => {
         if (this.#sessionOperations === undefined) {
             throw new PlatformProjectError("PROJECT_OBJECT_UNAVAILABLE", "Morty storage is unavailable.", 503);
         }
-        return this.#sessionOperations.run(sessionId, scope.signal, async () => {
-            const session = await OwnedManagedSession.find(this.#chatSessions, scope, sessionId);
-            return session === null ? notOwned() : await operation(session);
-        });
+        return this.#sessionOperations.run(sessionId, signal, operation);
     };
 
     readonly #nativeSessionRuntime = async (scope: ChatScope, requestedRuntimeId: string) => {
@@ -471,27 +479,55 @@ export class ChatService {
         return { ...access, instructions: bot.instructions };
     };
 
+    /**
+     * Starts a conversation. Its owner record is written first, so a Session the Runtime creates always has an owner;
+     * the conversation key names the Session, so a retried start converges on the same record and Session. A Runtime
+     * refusal (4xx) created nothing and removes the record; any other failure keeps it, because the Session may exist.
+     */
     readonly #openNewChat = async (scope: ChatScope, runtimeId: string, input: NewChatInput) => {
         await this.#requireRuntimeAgent(scope, runtimeId, input.agentRef);
-        const access = await this.#platform.openChatSession(
+        const session = {
+            sessionId: await chatSessionId(scope.botId, input.conversationKey),
+            runtimeId,
+            agentRef: input.agentRef,
+            workspaceRef: input.workspaceRef,
+        };
+        // Starting the same conversation twice runs in turn, so one start's refusal cannot remove the owner of a
+        // Session the other created.
+        const ready = await this.#runSessionOperation(session.sessionId, scope.signal, async () => {
+            await this.#chatSessions.save(
+                scope.projectId,
+                scope.userId,
+                scope.botId,
+                { id: session.sessionId },
+                scope.signal,
+            );
+            try {
+                return await this.#platform.createChatSession(
+                    scope.projectId,
+                    { ...session, configurations: input.configurations },
+                    scope.signal,
+                );
+            } catch (cause) {
+                if (cause instanceof PlatformProjectError && cause.status < 500) {
+                    await this.#chatSessions.archive(
+                        scope.projectId,
+                        scope.userId,
+                        scope.botId,
+                        session.sessionId,
+                        scope.signal,
+                    );
+                }
+                throw cause;
+            }
+        });
+        return await this.#platform.createdChatSessionAccess(
             scope.projectId,
-            {
-                ...input,
-                kind: "new",
-                runtimeId,
-                conversationKey: await chatSessionId(scope.botId, input.conversationKey),
-            },
+            session,
+            ready,
             sessionCredentialLifetime(OPENED_SESSION_CREDENTIAL_SECONDS, scope.accessExpiresAt),
             scope.signal,
         );
-        await this.#chatSessions.save(
-            scope.projectId,
-            scope.userId,
-            scope.botId,
-            { id: access.sessionId },
-            scope.signal,
-        );
-        return access;
     };
 
     readonly #reopenManagedSession = async ({ scope, sessionId }: OwnedManagedSession, runtimeId: string) => {
@@ -504,8 +540,7 @@ export class ChatService {
         return await this.#platform.openChatSession(
             scope.projectId,
             {
-                kind: "existing",
-                conversationId: sessionId,
+                sessionId,
                 runtimeId,
                 agentRef: metadata.agentId,
                 workspaceRef: metadata.directoryId,
