@@ -40,7 +40,7 @@ describe("Session Event V2 contracts", () => {
         }
     });
 
-    it("Given lifecycle metadata, When decoded as history or live traffic, Then only the live boundary accepts it", () => {
+    it("Given a turn's lifecycle metadata, When decoded as history or live traffic, Then both keep it and only live traffic carries a position", () => {
         const { position, ...history } = {
             ...sharedEvent,
             type: "lifecycle-metadata" as const,
@@ -48,7 +48,7 @@ describe("Session Event V2 contracts", () => {
             position: "1",
         };
 
-        expect(() => decodeSessionEvent(history)).toThrow();
+        expect(decodeSessionEvent(history)).toEqual(history);
         expect(decodeSessionLiveEvent({ ...history, position })).toEqual({ ...history, position });
     });
 

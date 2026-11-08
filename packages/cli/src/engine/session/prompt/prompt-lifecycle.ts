@@ -1,7 +1,6 @@
 import type {
     ContentBlock,
     PromptExecutionContext,
-    PromptMessageOutcome,
     QueuedPromptRequestEventLog,
     SessionCancelCommand,
     SessionEventPayload,
@@ -61,10 +60,7 @@ function promptContent(command: SessionPromptCommand): readonly ContentBlock[] {
 }
 
 /** Whether a command started or settled, as its execution receipt records it. */
-type ExecutionProgress = Pick<
-    ExecutionReceipts,
-    "findUnsettledAttemptId" | "hasStarted" | "isTerminalExecution" | "promptOutcomes"
->;
+type ExecutionProgress = Pick<ExecutionReceipts, "findUnsettledAttemptId" | "hasStarted" | "isTerminalExecution">;
 
 export class PromptLifecycle {
     readonly #sink: SessionEventSink;
@@ -264,10 +260,6 @@ export class PromptLifecycle {
                 : { kind: "prompt.failed-before-start", commandId, code, message },
         });
     };
-
-    /** The recorded terminal events of the Session's settled prompts that name the user message they recorded. */
-    readonly promptOutcomes = (sessionId: string): readonly PromptMessageOutcome[] =>
-        this.#executions.promptOutcomes(sessionId);
 
     readonly promptRequestRecovery = (sessionId: string): PromptRequestRecovery => ({
         queuedPromptRequests: [...this.#queued.values()]

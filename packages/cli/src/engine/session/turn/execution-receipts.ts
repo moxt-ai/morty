@@ -4,7 +4,7 @@ import {
     decodeKnownSessionEventPayload,
     isPromptTerminal,
     type LastTurnOutcome,
-    type PromptMessageOutcome,
+    type LifecycleMetadata,
     promptCompletion,
     type SessionEventPayload,
     type SessionLiveEvent,
@@ -50,6 +50,20 @@ export type RecoveredOutcome =
 export interface RestatedOutcome {
     readonly event: SessionEventPayload;
     readonly recordedAt: string | undefined;
+}
+
+/**
+ * A settled turn whose Agent reported the user message the turn recorded, as the ledger keeps it. A replayed history
+ * places the turn's lifecycle around that message.
+ */
+export interface SettledTurn {
+    readonly attemptId: string;
+    readonly outcome: Extract<LifecycleMetadata, { readonly kind: "prompt.completed" | "prompt.failed" }> & {
+        readonly messageId: string;
+    };
+    /** When the turn started, when the ledger kept it, else when it ended. */
+    readonly startedAt: string;
+    readonly recordedAt: string;
 }
 
 /** A transition the ledger records for a command: it started, or it settled. */
@@ -347,26 +361,29 @@ export class ExecutionReceipts {
         const command = this.#read(commandId);
         return command?.sessionId === sessionId && command.fate.kind === "started" ? command.fate.startedAt : undefined;
     };
-    /**
-     * The recorded terminal events of the Session's settled prompts whose Agent reported the user message they
-     * recorded, while the ledger keeps their outcomes.
-     */
-    readonly promptOutcomes = (sessionId: string): readonly PromptMessageOutcome[] => {
-        const outcomes: PromptMessageOutcome[] = [];
-        for (const command of this.#ledger.session(sessionId)) {
+    /** The Session's settled turns, in admission order, whose outcomes the ledger keeps with their user message. */
+    readonly settledTurns = (sessionId: string): readonly SettledTurn[] =>
+        this.#ledger.session(sessionId).flatMap((command): SettledTurn[] => {
             const outcome = this.restatedOutcome(command.commandId);
             const event = outcome?.event;
             if (
-                outcome?.recordedAt !== undefined &&
-                event?.type === "lifecycle-metadata" &&
-                (event.payload.kind === "prompt.completed" || event.payload.kind === "prompt.failed") &&
-                event.payload.messageId !== undefined
+                outcome?.recordedAt === undefined ||
+                event?.type !== "lifecycle-metadata" ||
+                (event.payload.kind !== "prompt.completed" && event.payload.kind !== "prompt.failed") ||
+                event.payload.messageId === undefined
             ) {
-                outcomes.push({ payload: event.payload, recordedAt: outcome.recordedAt });
+                return [];
             }
-        }
-        return outcomes;
-    };
+            const fate = this.#withShutdownSettlement(command).fate;
+            return [
+                {
+                    attemptId: command.attemptId,
+                    outcome: { ...event.payload, messageId: event.payload.messageId },
+                    recordedAt: outcome.recordedAt,
+                    startedAt: fate.kind === "settled-after-start" ? fate.startedAt : outcome.recordedAt,
+                },
+            ];
+        });
     /** A command that started stays started after its outcome is no longer kept. */
     readonly hasStarted = (commandId: string, sessionId: string): boolean => {
         const standing = this.#standing(commandId, sessionId);

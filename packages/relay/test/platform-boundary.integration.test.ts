@@ -997,7 +997,6 @@ describe.sequential("Platform Session-only boundary", () => {
             const historyPage = JSON.stringify({
                 events: {
                     events: {
-                        promptOutcomes: [],
                         sessionGenerationId: "session-generation-1",
                         events: [futureEvent, historicalEvent],
                         nextCursor: null,
@@ -1014,7 +1013,6 @@ describe.sequential("Platform Session-only boundary", () => {
             });
             daemon.send(historyPage);
             expect(await responseJson(await historyResponse, 200)).toEqual({
-                promptOutcomes: [],
                 sessionGenerationId: "session-generation-1",
                 events: [futureEvent, historicalEvent],
                 nextCursor: null,
@@ -1042,7 +1040,6 @@ describe.sequential("Platform Session-only boundary", () => {
             const previewHistoryPage = encodeSessionPreviewHistoryPageLoaded({
                 events: {
                     events: {
-                        promptOutcomes: [],
                         sessionGenerationId: "native-session-generation-1",
                         events: [rawEvent],
                         nextCursor: null,
@@ -1060,7 +1057,6 @@ describe.sequential("Platform Session-only boundary", () => {
             daemon.send(previewHistoryPage);
             expect(await responseJson(await previewHistoryResponse, 200)).toEqual({
                 events: {
-                    promptOutcomes: [],
                     sessionGenerationId: "native-session-generation-1",
                     events: [historicalEvent],
                     nextCursor: null,
@@ -2384,7 +2380,6 @@ describe.sequential("Platform Turn submission", () => {
                 tailCursor: "tail-event",
                 throughPosition: "3",
                 truncated: true,
-                promptOutcomes: [],
                 version: 2 as const,
             };
             runtime.daemon.send(

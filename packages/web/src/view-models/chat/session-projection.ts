@@ -1,4 +1,4 @@
-import type { PromptMessageOutcome, SessionEvent, SessionLiveEvent } from "@morty-build/client/protocol";
+import type { SessionEvent, SessionLiveEvent } from "@morty-build/client/protocol";
 import type { SessionPresentationEvent } from "./session-presentation.ts";
 import {
     appendSessionMessageEvent,
@@ -15,8 +15,6 @@ export interface SessionEventHistory {
     readonly events: readonly SessionEvent[];
     readonly nextCursor: string | null;
     readonly sessionGenerationId: string;
-    /** How the prompts whose user messages these events hold ended, as the Runtime recorded it. */
-    readonly promptOutcomes: readonly PromptMessageOutcome[];
 }
 
 interface PendingEvents {
@@ -140,11 +138,7 @@ function adoptGeneration(
         kind: "established",
         pagination: { nextCursor: history.nextCursor, older: { kind: "idle" } },
         pending: null,
-        reduction: createSessionMessageReduction({
-            events,
-            nextCursor: history.nextCursor,
-            promptOutcomes: history.promptOutcomes,
-        }),
+        reduction: createSessionMessageReduction({ events, nextCursor: history.nextCursor }),
         revision: state.revision + 1,
     };
 }

@@ -13,7 +13,7 @@ import type { NativeSessionOrigin } from "../../acp/protocol/native-session.ts";
 import { unsupportedSessionCapabilities } from "../../acp/protocol/session-capabilities.ts";
 import { type OperationMetrics, unmeasuredOperationMetrics } from "../../infra/operation-metrics.ts";
 import type { Timer } from "../../util/timer.ts";
-import { AgentSession } from "../live/agent-session.ts";
+import { AgentSession, type SessionExecutionRecord } from "../live/agent-session.ts";
 import { replaySessionConfigurations, storedSessionConfiguration } from "../live/session-configurations.ts";
 import { isNativeChatSessionId } from "../native/native-chat-agent.ts";
 import { nativeSessionQuery } from "../native/native-query.ts";
@@ -27,6 +27,7 @@ import {
 } from "../record/session-store.ts";
 import { isModelOption } from "../settings/configuration-dependencies.ts";
 import { ActiveExecutions } from "../turn/active-executions.ts";
+import type { SettledTurn } from "../turn/execution-receipts.ts";
 import { RuntimeOperations, waitForSharedOperation } from "./operation-drain.ts";
 
 const SESSION_CONTROL_TIMEOUT_MILLISECONDS = 30_000;
@@ -66,6 +67,11 @@ export class SessionManager {
         changed: () => this.#processes.notifyChanged(),
     });
     readonly #executions: ActiveExecutions;
+    readonly #settledTurns: (sessionId: string) => readonly SettledTurn[];
+    readonly #executionRecord: SessionExecutionRecord = {
+        agentCommand: (sessionId) => this.#executions.agentCommand(sessionId),
+        settledTurns: (sessionId) => this.#settledTurns(sessionId),
+    };
     readonly #lastTurn: (sessionId: string) => LastTurnOutcome | undefined;
     readonly #agentSettingsObserver = new NullSessionObserver();
     readonly #nativeOperations = new Set<string>();
@@ -87,6 +93,7 @@ export class SessionManager {
         onSessionStatusChanged,
         onSessionClosed = () => undefined,
         lastTurn = () => undefined,
+        settledTurns = () => [],
         timer,
     }: {
         readonly observer: SessionObserver;
@@ -98,6 +105,8 @@ export class SessionManager {
         readonly onSessionClosed?: (event: SessionCloseNoticeEvent) => void;
         /** How the Session's most recent started command ended, as the execution receipts retain it. */
         readonly lastTurn?: (sessionId: string) => LastTurnOutcome | undefined;
+        /** The Session's settled turns the execution receipts retain, which a replayed history places. */
+        readonly settledTurns?: (sessionId: string) => readonly SettledTurn[];
         readonly timer: Timer;
     }) {
         this.#observer = observer;
@@ -105,6 +114,7 @@ export class SessionManager {
         this.#store = store;
         this.#sessionIdentity = sessionIdentity;
         this.#lastTurn = lastTurn;
+        this.#settledTurns = settledTurns;
         this.#executions = new ActiveExecutions((sessionId, status) =>
             onSessionStatusChanged({
                 kind: "session.status.changed",
@@ -248,7 +258,7 @@ export class SessionManager {
                         effectiveOptions,
                         recovery,
                         () => this.#observer,
-                        this.#executions.agentCommand,
+                        this.#executionRecord,
                         this.#store,
                         metrics,
                         options.adapter,
@@ -278,7 +288,7 @@ export class SessionManager {
                         options,
                         recovery,
                         () => this.#observer,
-                        this.#executions.agentCommand,
+                        this.#executionRecord,
                         this.#store,
                         metrics,
                         options.adapter,
@@ -300,7 +310,7 @@ export class SessionManager {
                         options,
                         recovery,
                         () => this.#observer,
-                        this.#executions.agentCommand,
+                        this.#executionRecord,
                         this.#store,
                         unmeasuredOperationMetrics,
                         options.adapter,
@@ -365,7 +375,7 @@ export class SessionManager {
                         options,
                         recovery,
                         () => this.#observer,
-                        this.#executions.agentCommand,
+                        this.#executionRecord,
                         this.#store,
                         unmeasuredOperationMetrics,
                         options.adapter,
@@ -511,7 +521,7 @@ export class SessionManager {
                         },
                         { kind: "interactive-only" },
                         () => this.#agentSettingsObserver,
-                        () => undefined,
+                        { agentCommand: () => undefined, settledTurns: () => [] },
                         new MemorySessionStore(),
                         unmeasuredOperationMetrics,
                         options.adapter,

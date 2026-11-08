@@ -512,9 +512,21 @@ const sharedSessionEventFields = {
     sessionId: identifier,
 };
 const sessionLiveEventFields = { ...sharedSessionEventFields, position: positionSchema };
-const sessionEventSchema = z
-    .object({ ...sharedSessionEventFields, payload: acpSessionUpdateSchema, type: z.literal("acp") })
-    .readonly();
+/**
+ * A Session history entry: the Agent's events, and the lifecycle of each turn the Runtime ran, in the order they
+ * happened. A history page is read in the same order as the live stream, so its reader needs no other record to tell
+ * which command a message belongs to or where its turn ended.
+ */
+const sessionEventSchema = z.discriminatedUnion("type", [
+    z.object({ ...sharedSessionEventFields, payload: acpSessionUpdateSchema, type: z.literal("acp") }).readonly(),
+    z
+        .object({
+            ...sharedSessionEventFields,
+            payload: lifecycleMetadataSchema,
+            type: z.literal("lifecycle-metadata"),
+        })
+        .readonly(),
+]);
 export type SessionEvent = z.infer<typeof sessionEventSchema>;
 export const sessionLiveEventSchema = z.discriminatedUnion("type", [
     z.object({ ...sessionLiveEventFields, payload: acpSessionUpdateSchema, type: z.literal("acp") }).readonly(),
@@ -591,24 +603,10 @@ export const sessionEventEnvelopeSchema = z
     .object({ events: sessionLiveEventBatchSchema, kind: z.literal(SESSION_EVENT_KIND) })
     .readonly();
 export type SessionEventEnvelope = z.infer<typeof sessionEventEnvelopeSchema>;
-/**
- * A settled prompt's terminal lifecycle event as the Runtime recorded it, which names the user message the prompt
- * recorded. History pages hold the Agent's events only, so a client attributes a reloaded user message to its command,
- * and shows how that turn ended, from these.
- */
-const promptMessageOutcomeSchema = z
-    .object({
-        payload: z.discriminatedUnion("kind", [promptCompletedSchema, promptFailedSchema]),
-        recordedAt: z.iso.datetime({ offset: true }),
-    })
-    .readonly();
-export type PromptMessageOutcome = z.infer<typeof promptMessageOutcomeSchema>;
 const sessionEventLogPageSchema = z
     .object({
         events: z.array(sessionEventSchema).max(MAX_EVENT_COUNT).readonly(),
         nextCursor: z.string().min(1).max(512).nullable(),
-        // Retained settled prompts whose user message is on this page; empty outside Session history.
-        promptOutcomes: z.array(promptMessageOutcomeSchema).max(MAX_EVENT_COUNT).readonly(),
         sessionGenerationId: identifier,
         tailCursor: z.string().max(512),
         // The generation-scoped live position covered by this snapshot, including
@@ -697,7 +695,6 @@ function sanitizeConsumableSessionEventLogPage(value: unknown): unknown {
         ? {
               ...input,
               events: decodedEntries(input["events"], sessionEventSchema, MAX_EVENT_COUNT),
-              promptOutcomes: decodedEntries(input["promptOutcomes"], promptMessageOutcomeSchema, MAX_EVENT_COUNT),
           }
         : input;
 }

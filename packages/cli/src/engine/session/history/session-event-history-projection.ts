@@ -31,9 +31,11 @@ function boundReasoning(payload: Reasoning): Reasoning {
     };
 }
 
+type LifecycleSessionEvent = Extract<SessionEvent, { readonly type: "lifecycle-metadata" }>;
+
 export type SessionEventHistoryProjectionMutation =
     | { readonly kind: "skip" }
-    | { readonly events: readonly AcpSessionEvent[]; readonly kind: "append" }
+    | { readonly events: readonly SessionEvent[]; readonly kind: "append" }
     | { readonly event: SessionEvent; readonly kind: "replace"; readonly replacedEventId: string };
 
 /**
@@ -52,6 +54,13 @@ function projectNewEvent(
         return { ...event, eventId, payload: boundReasoning(event.payload) };
     }
     return { ...event, eventId };
+}
+
+function projectLifecycleEvent(
+    liveEvent: Extract<SessionLiveEvent, { readonly type: "lifecycle-metadata" }>,
+): LifecycleSessionEvent {
+    const { position: _position, ...event } = liveEvent;
+    return event;
 }
 
 function replaceAcpPayload(event: AcpSessionEvent, payload: AcpSessionUpdate): AcpSessionEvent {
@@ -175,6 +184,8 @@ function mergeTextChunk(previous: AcpSessionUpdate, incoming: AcpSessionUpdate):
 
 export class SessionEventHistoryProjection {
     readonly #toolCallEventIds = new Map<string, string>();
+    /** The turns this history holds: open until their ending is recorded, where the turn ended. */
+    readonly #turns = new Map<string, "open" | "ended">();
     #latestEvent: SessionEvent | null = null;
 
     readonly apply = (
@@ -183,8 +194,7 @@ export class SessionEventHistoryProjection {
     ): SessionEventHistoryProjectionMutation => {
         if (liveEvent.type === "lifecycle-metadata") {
             this.#latestEvent = null;
-            // User content arrives as explicit ACP chunks after prompt.requested.
-            return { kind: "skip" };
+            return this.#turnLifecycle(liveEvent);
         }
         if (liveEvent.type === "acp" && liveEvent.payload.sessionUpdate === "tool_call_update") {
             const targetEventId = this.#toolCallEventIds.get(liveEvent.payload.toolCallId);
@@ -233,6 +243,43 @@ export class SessionEventHistoryProjection {
             return event.payload;
         }
         return undefined;
+    };
+
+    /**
+     * Keeps the lifecycle that delimits each turn, where it happened. A turn's ending is history only once, after its
+     * start: an ending restated for a client, or one for a turn this history does not hold, has no place in it.
+     * Interaction and queue changes are current state, not history.
+     */
+    readonly #turnLifecycle = (
+        liveEvent: Extract<SessionLiveEvent, { readonly type: "lifecycle-metadata" }>,
+    ): SessionEventHistoryProjectionMutation => {
+        const payload = liveEvent.payload;
+        switch (payload.kind) {
+            case "prompt.requested":
+            case "prompt.started":
+            case "prompt.delegated":
+                if (this.#turns.get(payload.commandId) === "ended") {
+                    return { kind: "skip" };
+                }
+                this.#turns.set(payload.commandId, "open");
+                return { events: [projectLifecycleEvent(liveEvent)], kind: "append" };
+            case "prompt.completed":
+            case "prompt.failed":
+            case "prompt.failed-before-start":
+                if (this.#turns.get(payload.commandId) !== "open") {
+                    return { kind: "skip" };
+                }
+                this.#turns.set(payload.commandId, "ended");
+                return { events: [projectLifecycleEvent(liveEvent)], kind: "append" };
+            case "session.queue.changed":
+            case "session.permission.requested":
+            case "session.permission.resolved":
+            case "session.elicitation.requested":
+            case "session.elicitation.resolved":
+                return { kind: "skip" };
+            default:
+                return payload satisfies never;
+        }
     };
 
     readonly #replace = (current: SessionEvent, replacement: SessionEvent): SessionEventHistoryProjectionMutation => {

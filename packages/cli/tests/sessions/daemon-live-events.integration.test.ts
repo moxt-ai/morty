@@ -419,6 +419,14 @@ async function cancel(fixture: Fixture, command: SessionPromptCommand): Promise<
         }
     }
 }
+/** The turn lifecycle a history page holds, in page order. */
+const turnLifecycle = (events: readonly SessionEvent[]): readonly string[] =>
+    events.flatMap((event) =>
+        event.type === "lifecycle-metadata" && "commandId" in event.payload
+            ? [`${event.payload.kind} ${event.payload.commandId}`]
+            : [],
+    );
+
 async function history(
     fixture: Fixture,
     command: SessionPromptCommand,
@@ -713,7 +721,7 @@ describe("daemon V2 live delivery", () => {
         }
     });
 
-    it("Given a running turn with a queued follow-up, When another prompt steers the turn, Then history retains executed user messages once and omits queue lifecycle metadata", async () => {
+    it("Given a running turn with a queued follow-up, When another prompt steers the turn, Then history retains executed user messages once with their turns' lifecycle and omits queue lifecycle metadata", async () => {
         const fixture = await startControlledDaemon();
         try {
             const running = prompt(fixture, "wait for steering");
@@ -742,7 +750,10 @@ describe("daemon V2 live delivery", () => {
                 }
             }
             const pending = await history(fixture, running);
-            expect(pending.events.every((event) => event.type === "acp")).toBe(true);
+            expect(turnLifecycle(pending.events)).toEqual([
+                `prompt.requested ${running.commandId}`,
+                `prompt.started ${running.commandId}`,
+            ]);
             expect(
                 pending.events.flatMap((event) =>
                     event.type === "acp" && event.payload.sessionUpdate === "user_message_chunk"
@@ -771,7 +782,13 @@ describe("daemon V2 live delivery", () => {
             }
             expect(completed).toEqual(new Set([running.commandId, steering.commandId, queued.commandId]));
             const page = await history(fixture, running);
-            expect(page.events.every((event) => event.type === "acp")).toBe(true);
+            expect(turnLifecycle(page.events)).toEqual(
+                expect.arrayContaining([
+                    `prompt.completed ${running.commandId}`,
+                    `prompt.completed ${steering.commandId}`,
+                    `prompt.completed ${queued.commandId}`,
+                ]),
+            );
             expect(
                 page.events.flatMap((event) =>
                     event.type === "acp" && event.payload.sessionUpdate === "user_message_chunk" ? [event.payload] : [],
@@ -790,7 +807,7 @@ describe("daemon V2 live delivery", () => {
     });
 
     it.each(["text-only", "with attachment"])(
-        "Given a %s prompt publishes lifecycle metadata, When a viewer reads history after completion, Then the prompt appears once as ACP content while lifecycle events remain live-only",
+        "Given a %s prompt publishes lifecycle metadata, When a viewer reads history after completion, Then the prompt appears once as ACP content inside its turn's lifecycle",
         async (scenario) => {
             const fixture = await startControlledDaemon();
             try {
@@ -821,7 +838,11 @@ describe("daemon V2 live delivery", () => {
 
                 const page = await history(fixture, command);
                 expect(page.events.length).toBeGreaterThan(0);
-                expect(page.events.every((event) => event.type === "acp")).toBe(true);
+                expect(turnLifecycle(page.events)).toEqual([
+                    `prompt.requested ${command.commandId}`,
+                    `prompt.started ${command.commandId}`,
+                    `prompt.completed ${command.commandId}`,
+                ]);
                 const userMessages = page.events.flatMap((event) =>
                     event.type === "acp" && event.payload.sessionUpdate === "user_message_chunk" ? [event] : [],
                 );

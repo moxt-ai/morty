@@ -48,21 +48,41 @@ it("Given Agent settings without the inspected directory, When a client decodes 
     ).toThrow();
 });
 
-it("Given history without prompt outcomes, When a client decodes it, Then it rejects the retired page", () => {
+it("Given history holding a turn's lifecycle, When a client decodes it, Then the lifecycle stays in page order", () => {
+    const fields = {
+        recordedAt: "2026-11-08T00:00:00.000Z",
+        sessionGenerationId: "generation-1",
+        sessionId: "session-1",
+    };
     const page = {
-        events: [],
+        events: [
+            {
+                ...fields,
+                eventId: "started",
+                payload: { attemptId: "attempt-1", commandId: "command-1", epoch: "attempt-1", kind: "prompt.started" },
+                type: "lifecycle-metadata",
+            },
+            {
+                ...fields,
+                eventId: "message",
+                payload: { content: { text: "Hello", type: "text" }, sessionUpdate: "user_message_chunk" },
+                type: "acp",
+            },
+            {
+                ...fields,
+                eventId: "completed",
+                payload: { commandId: "command-1", kind: "prompt.completed", stopReason: "end_turn" },
+                type: "lifecycle-metadata",
+            },
+        ],
         nextCursor: null,
         sessionGenerationId: "generation-1",
-        tailCursor: "",
-        throughPosition: "0",
+        tailCursor: "completed",
+        throughPosition: "3",
         truncated: false,
         version: 2,
     };
-    expect(() => decodeSessionEventLogPage(JSON.stringify(page))).toThrow();
-    expect(decodeSessionEventLogPage(JSON.stringify({ ...page, promptOutcomes: [] }))).toEqual({
-        ...page,
-        promptOutcomes: [],
-    });
+    expect(decodeSessionEventLogPage(JSON.stringify(page))).toEqual(page);
 });
 it("Given a session list entry without status, When a client decodes it, Then it rejects the retired entry", () => {
     const entry = {

@@ -49,6 +49,7 @@ import { HistoryReplayCapture } from "../history/session-history.ts";
 import { SessionInteractions } from "../interaction/session-interactions.ts";
 import { waitForSharedOperation } from "../manager/operation-drain.ts";
 import { type SessionStore, StoredSession } from "../record/session-store.ts";
+import type { SettledTurn } from "../turn/execution-receipts.ts";
 import type { AgentSessionRestore } from "./agent-session-restore.ts";
 import { configurationRevision } from "./configuration-revision.ts";
 import { SessionConfigurations } from "./session-configurations.ts";
@@ -57,8 +58,13 @@ import { restoreSession } from "./session-restore.ts";
 /** Attributes Agent requests that arrive while the Agent holds no prompt of this Session. */
 const SESSION_CONTROL_COMMAND_ID = "session-control";
 
-/** Reads, from the Session's execution authority, the command whose prompt the Session's Agent holds. */
-export type AgentCommand = (sessionId: string) => string | undefined;
+/** What the Session's execution authority tells its Agent session. */
+export interface SessionExecutionRecord {
+    /** The command whose prompt the Session's Agent holds. */
+    readonly agentCommand: (sessionId: string) => string | undefined;
+    /** The Session's settled turns, which a replayed history places among the Agent's own events. */
+    readonly settledTurns: (sessionId: string) => readonly SettledTurn[];
+}
 
 type SessionLoadState =
     | { readonly kind: "not-requested" }
@@ -138,6 +144,7 @@ export class AgentSession implements AgentSessionRestore {
     readonly #environment: Readonly<Record<string, string>>;
     readonly #getObserver: () => SessionObserver;
     readonly #agentCommand: () => string | undefined;
+    readonly #settledTurns: () => readonly SettledTurn[];
     readonly #interactions: SessionInteractions;
     #mortySessionId: string;
     readonly #metrics: OperationMetrics;
@@ -164,13 +171,14 @@ export class AgentSession implements AgentSessionRestore {
         additionalDirectories: readonly string[],
         mortySessionId: string,
         getObserver: () => SessionObserver,
-        agentCommand: AgentCommand,
+        execution: SessionExecutionRecord,
         store: SessionStore,
         metrics: OperationMetrics,
         adapter: Adapter,
         externalize: SessionPrepareOptions["externalizeSessionUpdate"],
     ) {
-        this.#agentCommand = () => agentCommand(this.#mortySessionId);
+        this.#agentCommand = () => execution.agentCommand(this.#mortySessionId);
+        this.#settledTurns = () => execution.settledTurns(this.#mortySessionId);
         this.#additionalDirectories = [...additionalDirectories];
         this.#adapter = adapter;
         this.#agentId = agent.id;
@@ -237,7 +245,7 @@ export class AgentSession implements AgentSessionRestore {
     static async #start(
         options: SessionPrepareOptions,
         getObserver: () => SessionObserver,
-        agentCommand: AgentCommand,
+        execution: SessionExecutionRecord,
         store: SessionStore,
         initialize: (runtime: AgentSession) => Promise<void>,
         metrics: OperationMetrics,
@@ -257,7 +265,7 @@ export class AgentSession implements AgentSessionRestore {
                         options.additionalDirectories,
                         options.sessionId,
                         getObserver,
-                        agentCommand,
+                        execution,
                         store,
                         metrics,
                         adapter,
@@ -289,7 +297,7 @@ export class AgentSession implements AgentSessionRestore {
         options: SessionPrepareOptions,
         recovery: SessionRecovery,
         getObserver: () => SessionObserver,
-        agentCommand: AgentCommand,
+        execution: SessionExecutionRecord,
         store: SessionStore,
         metrics: OperationMetrics,
         adapter: Adapter,
@@ -298,7 +306,7 @@ export class AgentSession implements AgentSessionRestore {
         await AgentSession.#start(
             options,
             getObserver,
-            agentCommand,
+            execution,
             store,
             async (runtime) => {
                 runtime.#capabilities = capabilities;
@@ -497,7 +505,7 @@ export class AgentSession implements AgentSessionRestore {
             return await waitForSharedOperation(this.#sessionLoad.completion, signal);
         }
         this.#store.events.reset(this.#mortySessionId);
-        const history = new HistoryReplayCapture(this.#store.events, this.#mortySessionId);
+        const history = new HistoryReplayCapture(this.#store.events, this.#mortySessionId, this.#settledTurns());
         const completion = Promise.resolve().then(async (): Promise<LoadedSession> => {
             try {
                 const opened = await this.#writeNativeHistory(
@@ -509,6 +517,7 @@ export class AgentSession implements AgentSessionRestore {
                 );
                 signal.throwIfAborted();
                 this.#capabilities = opened.capabilities;
+                history.finishReplay();
                 const loaded = { history, kind: "loaded", opened } satisfies LoadedSession;
                 this.#sessionLoad = loaded;
                 return loaded;
@@ -980,7 +989,7 @@ export class AgentSession implements AgentSessionRestore {
             this.#captureSelectedConfigurationValues();
         }
         if (this.#sessionLoad.kind === "capturing") {
-            await this.#sessionLoad.history.record(event.payload);
+            this.#sessionLoad.history.replay(event.payload);
         } else if (this.#sessionLoad.kind === "loaded" || this.#sessionLoad.kind === "execution-only") {
             await this.#sessionLoad.history.record(event.payload, async (liveEvent) => {
                 await this.#getObserver().onSessionEvent?.(liveEvent);

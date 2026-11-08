@@ -4,7 +4,6 @@ import {
     type AgentQuestion,
     type ContentBlock,
     type PromptCompletion,
-    type PromptMessageOutcome,
     promptCompletion,
     type SessionEvent,
     type SessionLiveEvent,
@@ -21,16 +20,7 @@ const BOT_INSTRUCTIONS_URI = "morty://bot/instructions";
 
 export const COMPACTION_CHARACTER_LIMIT = 16 * 1024;
 
-/**
- * A prompt's ending that a history page restates from the Runtime's record. History holds the Agent's events only, so
- * the ending is placed after its turn's events; it has no live position.
- */
-type RestatedOutcomeEvent = Omit<
-    Extract<SessionLiveEvent, { readonly type: "lifecycle-metadata" }>,
-    "position" | "payload"
-> & { readonly payload: PromptMessageOutcome["payload"] };
-
-export type SessionPresentationEvent = SessionEvent | SessionLiveEvent | RestatedOutcomeEvent;
+export type SessionPresentationEvent = SessionEvent | SessionLiveEvent;
 
 export type SessionText =
     | {
@@ -516,8 +506,6 @@ type ReducedSessionEntry =
     | { readonly kind: "turn-started"; readonly commandId: string }
     | { readonly kind: "execution-idle" }
     | { readonly kind: "queued-command"; readonly commandId: string }
-    /** A turn's ending the Runtime restated with its user message; rendered where the turn ends. */
-    | { readonly kind: "turn-outcome"; readonly commandId: string; readonly event: RestatedOutcomeEvent }
     | {
           readonly kind: "execution-owner";
           readonly commandId: string;
@@ -746,170 +734,23 @@ function applySessionEvent(
     }
 }
 
-/** The restatement of `outcome`, in the Session generation of the history page that named it. */
-function restatedOutcomeEvent(outcome: PromptMessageOutcome, page: SessionPresentationEvent): RestatedOutcomeEvent {
-    return {
-        eventId: `restated-outcome:${outcome.payload.commandId}`,
-        mortyMetadata: { restated: true },
-        payload: outcome.payload,
-        recordedAt: outcome.recordedAt,
-        sessionGenerationId: page.sessionGenerationId,
-        sessionId: page.sessionId,
-        type: "lifecycle-metadata",
-    };
-}
-
-/**
- * Reduces a page of events. A history page omits lifecycle events, so the outcomes it names restate them: a user
- * message whose prompt is known starts that command's turn, as its start would live, and records the turn's ending
- * beside it; the messages place that ending where the turn ends (`placeTurnOutcomes`). Lifecycle events are the
- * record: an outcome restates only a command that no event here, nor any in `known`, names.
- */
+/** Reduces a page of events, which holds each turn's lifecycle where it happened, exactly as the live stream does. */
 function reduceSessionEvents(
     events: readonly SessionPresentationEvent[],
     leadingEvent: "known" | "possibly-before-page",
-    outcomes: readonly PromptMessageOutcome[] = [],
-    known: ReadonlySet<string> = new Set(),
 ): SessionMessageReduction {
-    const named = new Set([...known, ...sessionEventCommandIds(events)]);
-    const byMessage = new Map(
-        outcomes.flatMap((outcome) =>
-            outcome.payload.messageId === undefined || named.has(outcome.payload.commandId)
-                ? []
-                : [[outcome.payload.messageId, outcome] as const],
-        ),
-    );
     let entries: readonly ReducedSessionEntry[] = [];
-    // The command whose turn the latest user message started, when an outcome named it.
-    let turnCommand: string | null = null;
     for (const event of events) {
-        const result = consumeSessionEvent(entries, event, leadingEvent);
-        const messageId =
-            result.kind === "constructed" &&
-            result.message.role === "user" &&
-            event.type === "acp" &&
-            event.payload.sessionUpdate === "user_message_chunk"
-                ? event.payload.messageId
-                : null;
-        const outcome = messageId == null ? undefined : byMessage.get(messageId);
-        if (outcome === undefined) {
-            if (messageId != null) {
-                turnCommand = null;
-            }
-            entries = applySessionEvent(entries, event, result);
-            continue;
-        }
-        const { commandId } = outcome.payload;
-        if (outcome.payload.kind === "prompt.completed" && promptCompletion(outcome.payload).kind === "steered") {
-            // Steering added this message to the running turn, as its start would live; the turn's ending stays
-            // where that turn ends. Steering into a turn no outcome named keeps the message as it is.
-            entries =
-                turnCommand === null
-                    ? applySessionEvent(entries, event, result)
-                    : applySessionEvent(
-                          [
-                              ...entries,
-                              {
-                                  kind: "execution-owner",
-                                  commandId,
-                                  executionCommandId: turnCommand,
-                                  execution: "steers",
-                              },
-                              { kind: "turn-started", commandId },
-                          ],
-                          event,
-                          result,
-                      );
-            continue;
-        }
-        turnCommand = commandId;
-        entries = [
-            ...applySessionEvent(
-                [
-                    ...entries,
-                    { kind: "execution-owner", commandId, executionCommandId: commandId, execution: "starts" },
-                    { kind: "turn-started", commandId },
-                ],
-                event,
-                result,
-            ),
-            { kind: "turn-outcome", commandId, event: restatedOutcomeEvent(outcome, event) },
-        ];
+        entries = applySessionEvent(entries, event, consumeSessionEvent(entries, event, leadingEvent));
     }
     return { entries };
-}
-
-/**
- * Places each restated ending where its turn ends: after the turn's events, before the next user message that does not
- * steer into it or another command's execution, or after the last loaded entry. The place follows from the loaded
- * entries alone, however many pages they arrived in. A turn whose ending a loaded lifecycle event reports keeps that
- * one.
- */
-function placeTurnOutcomes(entries: readonly ReducedSessionEntry[]): readonly ReducedSessionEntry[] {
-    const reported = new Set(
-        entries.flatMap((entry) =>
-            entry.kind === "message" &&
-            entry.message.firstEvent.type === "lifecycle-metadata" &&
-            entry.message.commandId !== null
-                ? [entry.message.commandId]
-                : [],
-        ),
-    );
-    const placed: ReducedSessionEntry[] = [];
-    let open: Extract<ReducedSessionEntry, { readonly kind: "turn-outcome" }> | null = null;
-    // The execution each command belongs to: its own, or the turn it steered.
-    const executions = new Map<string, string>();
-    // The turn the next user message joins as steering, if it was steered into one.
-    let joining: string | null = null;
-    const end = () => {
-        if (open !== null) {
-            placed.push({
-                kind: "message",
-                message: turnEnding(open.event, open.event.payload),
-                provenance: "known",
-                unresolvedEvents: [],
-            });
-            open = null;
-        }
-    };
-    for (const entry of entries) {
-        if (entry.kind === "turn-outcome") {
-            end();
-            open = reported.has(entry.commandId) ? null : entry;
-            continue;
-        }
-        if (entry.kind === "execution-owner") {
-            executions.set(entry.commandId, entry.executionCommandId);
-            joining = entry.execution === "steers" ? entry.executionCommandId : null;
-        }
-        const userMessage =
-            entry.kind === "message" && entry.message.role === "user" && entry.message.firstEvent.type === "acp";
-        const startsAnotherTurn =
-            (userMessage && joining !== open?.commandId) ||
-            (entry.kind === "execution-owner" && entry.executionCommandId !== open?.commandId) ||
-            (entry.kind === "turn-started" && (executions.get(entry.commandId) ?? entry.commandId) !== open?.commandId);
-        if (startsAnotherTurn) {
-            end();
-        }
-        if (userMessage) {
-            joining = null;
-        }
-        placed.push(entry);
-    }
-    end();
-    return placed;
 }
 
 export function createSessionMessageReduction(history: {
     readonly events: readonly SessionPresentationEvent[];
     readonly nextCursor: string | null;
-    readonly promptOutcomes?: readonly PromptMessageOutcome[];
 }): SessionMessageReduction {
-    return reduceSessionEvents(
-        history.events,
-        history.nextCursor === null ? "known" : "possibly-before-page",
-        history.promptOutcomes,
-    );
+    return reduceSessionEvents(history.events, history.nextCursor === null ? "known" : "possibly-before-page");
 }
 
 function mergeSessionEventSequences(
@@ -937,7 +778,6 @@ export function prependSessionMessageEvents(
     history: {
         readonly events: readonly SessionPresentationEvent[];
         readonly nextCursor: string | null;
-        readonly promptOutcomes?: readonly PromptMessageOutcome[];
     },
 ): SessionMessageReduction {
     const unresolvedEvents = reduction.entries.flatMap((entry) =>
@@ -946,8 +786,6 @@ export function prependSessionMessageEvents(
     const older = reduceSessionEvents(
         mergeSessionEventSequences(history.events, unresolvedEvents),
         history.nextCursor === null ? "known" : "possibly-before-page",
-        history.promptOutcomes,
-        reductionCommandIds(reduction),
     );
     // Entries with retained events were replayed into the older reduction, where
     // their ids merge under one entity with the start events this page lacked;
@@ -959,22 +797,6 @@ export function prependSessionMessageEvents(
             ...reduction.entries.filter((entry) => entry.kind !== "message" || entry.provenance === "known"),
         ],
     };
-}
-
-/** The commands a reduction already accounts for. */
-function reductionCommandIds(reduction: SessionMessageReduction): ReadonlySet<string> {
-    return new Set(
-        reduction.entries.flatMap((entry) => {
-            switch (entry.kind) {
-                case "message":
-                    return entry.message.commandId === null ? [] : [entry.message.commandId];
-                case "execution-idle":
-                    return [];
-                default:
-                    return [entry.commandId];
-            }
-        }),
-    );
 }
 
 export function sessionReductionExecutionOwner(reduction: SessionMessageReduction, commandId: string): string | null {
@@ -1009,8 +831,8 @@ export function sessionReductionMessages(reduction: SessionMessageReduction): re
             }
         }
     };
-    for (const entry of placeTurnOutcomes(reduction.entries)) {
-        if (entry.kind === "queued-command" || entry.kind === "turn-outcome") {
+    for (const entry of reduction.entries) {
+        if (entry.kind === "queued-command") {
             continue;
         }
         if (entry.kind === "execution-owner") {
