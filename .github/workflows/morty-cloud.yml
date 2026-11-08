@@ -143,5 +143,6 @@ jobs:
           path: |
             deployment-evidence.json
             account-token-evidence.json
+            session-access-evidence.json
           if-no-files-found: ignore
           retention-days: 90

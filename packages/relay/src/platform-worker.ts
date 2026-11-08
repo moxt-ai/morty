@@ -676,6 +676,7 @@ export function createPlatformApplication(
                 context.req.param("sessionId"),
                 {
                     credentialId: target.credentialId,
+                    signingKeyId: target.signingKeyId,
                     issuedAt: target.issuedAtEpochMilliseconds,
                     expiresAt: target.expiresAtEpochMilliseconds,
                 },

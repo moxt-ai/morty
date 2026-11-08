@@ -43,6 +43,7 @@ import {
 } from "../../platform-test-support/src/service-fixture.ts";
 import { createDurableObjectDependencies } from "../../relay-core/src/di/create-durable-object-dependencies.ts";
 import { createPlatformDurableObjectContext } from "../src/durable-objects/platform-durable-object-context.ts";
+import { RuntimeRelay as PlatformRuntimeRelay } from "../src/durable-objects/runtime-relay.ts";
 import { platformProjectRecordingPolicy } from "../src/schema/d1/index.ts";
 import { platformDrizzle } from "../src/storage/platform-drizzle-database.ts";
 import {
@@ -158,23 +159,28 @@ const storedDigestSigner: CredentialSigner = async (_publicCredentialId, appCred
     );
 };
 
-/** The Relay's key, derived independently from its configured signing secret. */
-const relaySigner: CredentialSigner = async (publicCredentialId) => {
+/** RFC 5869 extract/expand written independently of the Relay's Web Crypto HKDF implementation. */
+async function relaySigningKey(publicCredentialId: string, signingSecret: string): Promise<CryptoKey> {
     const hmac = { hash: "SHA-256", name: "HMAC" } as const;
-    const secret = await crypto.subtle.importKey(
+    const salt = await crypto.subtle.importKey(
         "raw",
-        new TextEncoder().encode(env.MORTY_SESSION_SIGNING_SECRET),
+        new TextEncoder().encode("morty.session-access.v1:"),
         hmac,
         false,
         ["sign"],
     );
+    const extracted = await crypto.subtle.sign("HMAC", salt, new TextEncoder().encode(signingSecret));
+    const expansionKey = await crypto.subtle.importKey("raw", extracted, hmac, false, ["sign"]);
     const derived = await crypto.subtle.sign(
         "HMAC",
-        secret,
-        new TextEncoder().encode(`morty.session-access.v1:${publicCredentialId}`),
+        expansionKey,
+        new Uint8Array([...new TextEncoder().encode(publicCredentialId), 1]),
     );
     return await crypto.subtle.importKey("raw", derived, hmac, false, ["sign"]);
-};
+}
+
+const relaySigner: CredentialSigner = async (publicCredentialId) =>
+    await relaySigningKey(publicCredentialId, env.MORTY_SESSION_SIGNING_SECRET);
 
 function credentialHeaders(credential: string): Headers {
     return new Headers({ authorization: `Bearer ${credential}`, "content-type": "application/json" });
@@ -3010,6 +3016,51 @@ describe.sequential("Platform Turn submission", () => {
                 await responseJson(await runtime.submitRuntimeTurn("stored-digest", () => forged), 401),
             ).toMatchObject({ error: { code: "project_credential_invalid" } });
         } finally {
+            runtime.daemon.close(1000, "Test complete");
+        }
+    });
+    it("Given an open Session view, When the Relay signing secret rotates, Then the connection check closes the old view and only new credentials reconnect", async () => {
+        const runtime = await connectRuntimeDaemon("signing-key-rotation");
+        const response = await runtime.subscribe();
+        const view = response.webSocket;
+        if (view === null) {
+            throw new Error("Expected the live Session view");
+        }
+        const closed = new Promise<CloseEvent>((resolve) => view.addEventListener("close", resolve, { once: true }));
+        view.accept();
+        try {
+            const signingSecret = "rotated-test-only-session-signing-secret";
+            const reissued = await runtime.resignCredential(
+                async (publicCredentialId) => await relaySigningKey(publicCredentialId, signingSecret),
+            );
+            const statuses = await runInDurableObject(
+                env.RUNTIME_RELAY.getByName(runtime.runtimeId),
+                async (_instance, state) => {
+                    // Reconstruct the production object with the same persisted sockets and a newly deployed binding.
+                    const rotated = new PlatformRuntimeRelay(state, {
+                        ...bindings(),
+                        MORTY_ALLOWED_ORIGINS: '["*"]',
+                        MORTY_SESSION_SIGNING_SECRET: signingSecret,
+                    });
+                    await rotated.alarm();
+                    const connect = async (credential: string) =>
+                        await rotated.fetch(
+                            new Request(
+                                `${relayOrigin}${MORTY_API_PREFIX}/v1/projects/${runtime.projectId}/sessions/${runtime.sessionId}/events-v2`,
+                                { headers: { authorization: `Bearer ${credential}`, Upgrade: "websocket" } },
+                            ),
+                        );
+                    const rejected = await connect(runtime.credential);
+                    const accepted = await connect(reissued);
+                    accepted.webSocket?.accept();
+                    accepted.webSocket?.close(1000, "Test complete");
+                    return { old: rejected.status, current: accepted.status };
+                },
+            );
+            expect(statuses).toEqual({ old: 401, current: 101 });
+            expect(await closed).toMatchObject({ code: 1008, reason: "Session signing key rotated" });
+        } finally {
+            view.close(1000, "Test complete");
             runtime.daemon.close(1000, "Test complete");
         }
     });

@@ -6,7 +6,7 @@ import {
 import { ProjectAuthenticationError } from "@morty-build/relay-core";
 
 const SIGNING_SECRET_MINIMUM_LENGTH = 32;
-// Domain-separates the per-AppCredential keys derived from the Relay's signing secret.
+// HKDF binds each key to the protocol purpose and the authenticated AppCredential identity.
 const KEY_DERIVATION_LABEL = "morty.session-access.v1:";
 const MAXIMUM_LIFETIME_MILLISECONDS = 15 * 60 * 1_000;
 const MAXIMUM_ISSUANCE_CLOCK_SKEW_MILLISECONDS = 30_000;
@@ -36,8 +36,25 @@ export class SessionAccessSigner {
     readonly #secret: string;
 
     constructor(secret: string) {
+        if (typeof secret !== "string" || secret.length < SIGNING_SECRET_MINIMUM_LENGTH) {
+            throw new ProjectAuthenticationError(
+                "relay_configuration_invalid",
+                "The Session credential signing secret is invalid",
+            );
+        }
         this.#secret = secret;
     }
+
+    /** Non-secret generation fingerprint for invalidating persisted live views after key rotation. Never a signing key. */
+    readonly keyId = async (): Promise<string> =>
+        encodeBase64Url(
+            new Uint8Array(
+                await crypto.subtle.digest(
+                    "SHA-256",
+                    new TextEncoder().encode(`morty.session-access.key-id.v1:${this.#secret}`),
+                ),
+            ),
+        );
 
     readonly issue = async (publicCredentialId: string, claims: SessionAccessClaims): Promise<string> => {
         const lifetimeMilliseconds = claims.expiresAtEpochMilliseconds - claims.issuedAtEpochMilliseconds;
@@ -89,26 +106,22 @@ export class SessionAccessSigner {
         return decoded.claims;
     };
 
-    /** The AppCredential's key: HMAC-SHA-256 of its public identifier under the Relay's signing secret. */
+    /** RFC 5869 HKDF-SHA-256, with protocol salt and per-credential context, produces a 256-bit HMAC key. */
     readonly #key = async (publicCredentialId: string): Promise<CryptoKey> => {
-        if (this.#secret.length < SIGNING_SECRET_MINIMUM_LENGTH) {
-            throw new ProjectAuthenticationError(
-                "relay_configuration_invalid",
-                "The Session credential signing secret is invalid",
-            );
-        }
-        const secret = await crypto.subtle.importKey(
-            "raw",
-            new TextEncoder().encode(this.#secret),
-            HMAC_SHA_256,
-            false,
-            ["sign"],
-        );
-        const derived = await crypto.subtle.sign(
-            "HMAC",
+        const secret = await crypto.subtle.importKey("raw", new TextEncoder().encode(this.#secret), "HKDF", false, [
+            "deriveKey",
+        ]);
+        return await crypto.subtle.deriveKey(
+            {
+                name: "HKDF",
+                hash: "SHA-256",
+                salt: new TextEncoder().encode(KEY_DERIVATION_LABEL),
+                info: new TextEncoder().encode(publicCredentialId),
+            },
             secret,
-            new TextEncoder().encode(`${KEY_DERIVATION_LABEL}${publicCredentialId}`),
+            { ...HMAC_SHA_256, length: 256 },
+            false,
+            ["sign", "verify"],
         );
-        return await crypto.subtle.importKey("raw", derived, HMAC_SHA_256, false, ["sign", "verify"]);
     };
 }

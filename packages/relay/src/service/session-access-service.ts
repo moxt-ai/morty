@@ -10,6 +10,7 @@ export type SessionAccessTarget =
 
 /** A verified Session credential: the Session it selects, and the authorization of each operation on it. */
 export interface SessionAccess {
+    readonly signingKeyId: string;
     /** The AppCredential that issued the Session credential. */
     readonly credentialId: string;
     readonly issuedAtEpochMilliseconds: number;
@@ -207,6 +208,7 @@ export class SessionAccessService {
         }
         const projectId = target.projectId;
         return {
+            signingKeyId: await this.#signer.keyId(),
             credentialId: application.credential_id,
             issuedAtEpochMilliseconds: claims.issuedAtEpochMilliseconds,
             expiresAtEpochMilliseconds: claims.expiresAtEpochMilliseconds,

@@ -13,6 +13,7 @@ import {
     standardWebSocketHost,
     WebSocketUploadBudget,
 } from "@morty-build/relay-core";
+import { SessionAccessSigner } from "../entity/session-access-credential.ts";
 import { runtimeRequestTarget } from "../gateway/runtime-session-routing.ts";
 import { authorizeSessionContentUpload } from "../http/session-content-upload.ts";
 import {
@@ -133,9 +134,15 @@ export class RuntimeRelay extends DurableObject<ConfiguredPlatformRelayBindings>
     };
 
     override async alarm(): Promise<void> {
-        for (const viewer of this.#context.gateways.peers.viewers()) {
-            if (viewer.expiresAt <= Date.now()) {
-                viewer.socket.close(1000, "Session access expired");
+        const signingKeyId = await new SessionAccessSigner(this.#environment.MORTY_SESSION_SIGNING_SECRET).keyId();
+        for (const { socket, identity } of this.#context.gateways.peers.sockets()) {
+            if (identity.role !== "viewer") {
+                continue;
+            }
+            if (identity.credential?.signingKeyId !== signingKeyId) {
+                socket.close(1008, "Session signing key rotated");
+            } else if (identity.expiresAt <= Date.now()) {
+                socket.close(1000, "Session access expired");
             }
         }
         try {

@@ -44,7 +44,12 @@ export interface LocalSessionOperations extends SessionRuntimeOperations {
         scope: Scope,
         runtimeId: string,
         sessionId: string,
-        credential: { readonly credentialId: string; readonly issuedAt: number; readonly expiresAt: number },
+        credential: {
+            readonly credentialId: string;
+            readonly signingKeyId: string;
+            readonly issuedAt: number;
+            readonly expiresAt: number;
+        },
         signal: AbortSignal,
     ) => Promise<Response>;
 }
@@ -169,7 +174,11 @@ export function createLocalSessionOperations(
                 runtimeId,
                 sessionFilter: sessionId,
                 expiresAt: credential.expiresAt,
-                credential: { credentialId: credential.credentialId, issuedAt: credential.issuedAt },
+                credential: {
+                    credentialId: credential.credentialId,
+                    signingKeyId: credential.signingKeyId,
+                    issuedAt: credential.issuedAt,
+                },
             }).response;
         },
         requestProjectScopeControl,
