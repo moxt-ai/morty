@@ -218,7 +218,7 @@ export const threadItemSchema = z.discriminatedUnion("type", [
     }),
 ]);
 
-export const turnSchema = z.object({
+const turnSchema = z.object({
     durationMs: z.number().nullish(),
     error: z.object({ message: boundedText(4_096) }).nullish(),
     id: boundedText(256),
@@ -226,6 +226,16 @@ export const turnSchema = z.object({
 });
 
 export const turnSteerResponseSchema = z.object({ turnId: boundedText(256) });
+
+export const turnStartResponseSchema = z.object({ turn: turnSchema });
+
+export const threadNameUpdatedSchema = z.object({ threadName: z.string().min(1) });
+
+// Plan steps are rendered leniently: each is shown by its `step` text when it has one.
+export const turnPlanUpdatedSchema = z.object({ plan: z.array(z.unknown()) });
+
+// The item an `item/started` or `item/completed` notification carries; `decodeThreadItem` validates it.
+export const itemNotificationSchema = z.object({ item: z.unknown() });
 
 // The thread a thread-scoped notification names. One app-server connection carries every thread
 // it has loaded, including the child threads Codex runs its subagents in.

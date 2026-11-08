@@ -128,16 +128,14 @@
         {
             "path": "./config/lint/no-type-assertions.grit",
             "includes": [
-                "packages/web/**",
-                "packages/worker/**",
-                "packages/setup/**",
-                "packages/e2e/**",
-                "packages/local-state/**",
-                "packages/cli/src/installation/**",
-                "packages/cli/src/cli/**",
-                "packages/cli/src/daemon/**",
-                "packages/cli/src/storage/**",
-                "scripts/**"
+                "**/packages/*/src/**",
+                "**/packages/web/**",
+                "**/packages/worker/**",
+                "**/packages/setup/**",
+                "**/packages/e2e/**",
+                "**/packages/local-state/**",
+                "**/scripts/**",
+                "!**/packages/cli/src/engine/acp/harness/*/upstream/**"
             ]
         }
     ]

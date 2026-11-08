@@ -66,9 +66,10 @@ export const parseSessionRecordingTurnItemCursor = (
     if (matched === null) {
         return null;
     }
+    const direction = matched[1];
     const sequence = Number(matched[2]);
-    return Number.isSafeInteger(sequence)
-        ? { direction: matched[1] as SessionRecordingTurnItemCursorDirection, sequence }
+    return (direction === "before" || direction === "after") && Number.isSafeInteger(sequence)
+        ? { direction, sequence }
         : null;
 };
 
@@ -409,17 +410,25 @@ function decodeSanitized<T>(encoded: string, sanitize: (value: unknown) => unkno
 
 type JsonRecord = Record<string, unknown>;
 
-function record(value: unknown): JsonRecord | null {
-    return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as JsonRecord) : null;
+function isJsonRecord(value: unknown): value is JsonRecord {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function decodedEntries<T>(value: unknown, schema: z.ZodType<T>, maximum: number): unknown {
-    return Array.isArray(value) && value.length <= maximum
-        ? value.flatMap((entry) => {
+function record(value: unknown): JsonRecord | null {
+    return isJsonRecord(value) ? value : null;
+}
+
+function decodedArray<T>(values: readonly unknown[], schema: z.ZodType<T>, maximum: number): readonly unknown[] {
+    return values.length <= maximum
+        ? values.flatMap((entry) => {
               const decoded = schema.safeParse(entry);
               return decoded.success ? [decoded.data] : [];
           })
-        : value;
+        : values;
+}
+
+function decodedEntries<T>(value: unknown, schema: z.ZodType<T>, maximum: number): unknown {
+    return Array.isArray(value) ? decodedArray(value, schema, maximum) : value;
 }
 
 function sanitizedEntries(value: unknown, sanitize: (entry: unknown) => unknown | null, maximum: number): unknown {
@@ -448,10 +457,11 @@ function sanitizeTurnItem(value: unknown): unknown | null {
 
 function sanitizePrompt(value: unknown): unknown {
     const prompt = record(value);
-    if (prompt === null || !Array.isArray(prompt["content"])) {
+    const promptContent = prompt?.["content"];
+    if (prompt === null || !Array.isArray(promptContent)) {
         return value;
     }
-    const content = decodedEntries(prompt["content"], contentBlockSchema, 100) as readonly unknown[];
+    const content = decodedArray(promptContent, contentBlockSchema, 100);
     if (content.length === 0) {
         return null;
     }

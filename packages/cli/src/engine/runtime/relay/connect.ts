@@ -61,34 +61,42 @@ export function connectRelay(
             }
         };
         const dispatcher = environmentProxyDispatcher.compose((dispatch) => (options, handler) => {
-            const trackedHandler = Object.create(handler) as Dispatcher.DispatchHandler;
-            trackedHandler.onRequestStart = (controller, context): void => {
-                releaseTransport = (reason) => controller.abort(reason);
-                handler.onRequestStart?.(controller, context);
-            };
-            trackedHandler.onResponseError = (controller, failure) => {
-                observeFailure(failure, "request");
-                handler.onResponseError?.(controller, failure);
-            };
-            trackedHandler.onResponseStart = (controller, statusCode, responseHeaders, statusMessage) => {
-                observeHandshake(statusCode, 101);
-                handler.onResponseStart?.(controller, statusCode, responseHeaders, statusMessage);
-            };
-            trackedHandler.onRequestUpgrade = (controller, statusCode, responseHeaders, transport) => {
-                observeHandshake(statusCode, Reflect.get(transport, "session") == null ? 101 : 200);
-                // An upgraded connection no longer belongs to the HTTP request controller.
-                // Its owner must release the socket even when the peer never acknowledges close.
-                releaseTransport = (reason) => transport.destroy(reason);
-                // The public WebSocket error event discards the original TCP/TLS error.
-                // Observe this connection's upgraded stream, never a process-global channel.
-                const onTransportError = (failure: Error): void => observeFailure(failure, "socket");
-                removeTransportObserver = (): void => {
-                    transport.off("error", onTransportError);
-                    transport.off("close", removeTransportObserver);
-                };
-                transport.on("error", onTransportError);
-                transport.once("close", removeTransportObserver);
-                return handler.onRequestUpgrade?.(controller, statusCode, responseHeaders, transport);
+            // Observes the handshake and the upgraded transport, and forwards every callback to undici's handler.
+            const trackedHandler: Dispatcher.DispatchHandler = {
+                onRequestStart: (controller, context): void => {
+                    releaseTransport = (reason) => controller.abort(reason);
+                    handler.onRequestStart?.(controller, context);
+                },
+                onRequestUpgrade: (controller, statusCode, responseHeaders, transport): void => {
+                    observeHandshake(statusCode, Reflect.get(transport, "session") == null ? 101 : 200);
+                    // An upgraded connection no longer belongs to the HTTP request controller.
+                    // Its owner must release the socket even when the peer never acknowledges close.
+                    releaseTransport = (reason) => transport.destroy(reason);
+                    // The public WebSocket error event discards the original TCP/TLS error.
+                    // Observe this connection's upgraded stream, never a process-global channel.
+                    const onTransportError = (failure: Error): void => observeFailure(failure, "socket");
+                    removeTransportObserver = (): void => {
+                        transport.off("error", onTransportError);
+                        transport.off("close", removeTransportObserver);
+                    };
+                    transport.on("error", onTransportError);
+                    transport.once("close", removeTransportObserver);
+                    handler.onRequestUpgrade?.(controller, statusCode, responseHeaders, transport);
+                },
+                onResponseStart: (controller, statusCode, responseHeaders, statusMessage): void => {
+                    observeHandshake(statusCode, 101);
+                    handler.onResponseStart?.(controller, statusCode, responseHeaders, statusMessage);
+                },
+                onResponseData: (controller, chunk): void => {
+                    handler.onResponseData?.(controller, chunk);
+                },
+                onResponseEnd: (controller, trailers): void => {
+                    handler.onResponseEnd?.(controller, trailers);
+                },
+                onResponseError: (controller, failure): void => {
+                    observeFailure(failure, "request");
+                    handler.onResponseError?.(controller, failure);
+                },
             };
             return dispatch(options, trackedHandler);
         });

@@ -2,6 +2,10 @@ import type { AcpSessionUpdate, SessionEvent, SessionLiveEvent } from "@morty-bu
 
 type AcpSessionEvent = Extract<SessionEvent, { readonly type: "acp" }>;
 type ToolCall = Extract<AcpSessionUpdate, { readonly sessionUpdate: "tool_call" | "tool_call_update" }>;
+/** A tool call's merged fields: patched fields are never null, and an announcement adds the title it requires. */
+type ToolCallFields = Omit<Extract<ToolCall, { readonly sessionUpdate: "tool_call" }>, "sessionUpdate" | "title"> & {
+    readonly title?: string;
+};
 type Reasoning = Extract<AcpSessionUpdate, { readonly sessionUpdate: "agent_thought_chunk" }>;
 
 const MAXIMUM_PROJECTED_REASONING_BYTES = 24 * 1024;
@@ -60,8 +64,9 @@ function replaceAcpPayload(event: AcpSessionEvent, payload: AcpSessionUpdate): A
  * clear a field once it has a value, so an update only contributes fields
  * it actually carries.
  */
-function patchToolCallFields<T extends ToolCall>(previous: T, incoming: ToolCall): T {
+function patchToolCallFields(previous: ToolCall, incoming: ToolCall): ToolCallFields {
     const {
+        sessionUpdate: _previousKind,
         content: previousContent,
         kind: previousKind,
         locations: previousLocations,
@@ -71,7 +76,18 @@ function patchToolCallFields<T extends ToolCall>(previous: T, incoming: ToolCall
         title: previousTitle,
         ...previousFields
     } = previous;
-    const { content, kind, locations, rawInput, rawOutput, status, title, ...incomingFields } = incoming;
+    const {
+        sessionUpdate: _incomingKind,
+        content,
+        kind,
+        locations,
+        rawInput,
+        rawOutput,
+        status,
+        title,
+        ...incomingFields
+    } = incoming;
+    const mergedTitle = title ?? previousTitle ?? undefined;
     return {
         ...previousFields,
         ...incomingFields,
@@ -105,11 +121,10 @@ function patchToolCallFields<T extends ToolCall>(previous: T, incoming: ToolCall
                 ? {}
                 : { status: previousStatus }
             : { status }),
-        // A tool call always carries a title in the session event log, so the
-        // merged form keeps the announced one when an update omits it.
-        title: title ?? previousTitle,
+        // An update that omits the title keeps the one already reported.
+        ...(mergedTitle === undefined ? {} : { title: mergedTitle }),
         toolCallId: previous.toolCallId,
-    } as T;
+    };
 }
 
 function mergeToolCall(previous: ToolCall, incoming: ToolCall): ToolCall {
@@ -119,10 +134,10 @@ function mergeToolCall(previous: ToolCall, incoming: ToolCall): ToolCall {
             sessionUpdate: "tool_call_update",
         };
     }
-    return {
-        ...patchToolCallFields(previous, incoming),
-        sessionUpdate: "tool_call",
-    };
+    const fields = patchToolCallFields(previous, incoming);
+    // A tool call always carries a title in the session event log, so the
+    // merged form keeps the announced one when an update omits it.
+    return { ...fields, sessionUpdate: "tool_call", title: fields.title ?? previous.title };
 }
 
 function mergeTextChunk(previous: AcpSessionUpdate, incoming: AcpSessionUpdate): AcpSessionUpdate | null {

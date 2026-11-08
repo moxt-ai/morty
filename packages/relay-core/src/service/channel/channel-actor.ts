@@ -113,7 +113,10 @@ function copyBinaryFrame(value: unknown): ArrayBuffer {
         return value.slice(0);
     }
     if (ArrayBuffer.isView(value)) {
-        return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
+        // Copy the view's bytes: its buffer may be shared or larger than the view.
+        const copy = new ArrayBuffer(value.byteLength);
+        new Uint8Array(copy).set(new Uint8Array(value.buffer, value.byteOffset, value.byteLength));
+        return copy;
     }
     throw new ProtocolMessageError("Content chunk must be binary");
 }
