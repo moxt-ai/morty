@@ -1,0 +1,224 @@
+import { and, asc, desc, eq, inArray, lt, max } from "drizzle-orm";
+import { z } from "zod";
+import { command, commandOutcome } from "../../schema/acp-session-store/index.ts";
+import type { LocalSqliteDatabase } from "../sqlite/local-sqlite-database.ts";
+
+/** How many settled outcomes each Session keeps; older ones are dropped, never the fate of a command that ran. */
+const OUTCOMES_PER_SESSION = 1_024;
+
+/**
+ * What became of a command. A settled command's outcome is the content-free terminal event it recorded, or null once
+ * retention dropped it; a command that settled before it started without being cancelled is forgotten with its outcome.
+ */
+export type CommandFate =
+    | { readonly kind: "pending" }
+    | { readonly kind: "started"; readonly startedAt: string }
+    | { readonly kind: "cancelled"; readonly outcome: string | null }
+    | { readonly kind: "settled-before-start"; readonly outcome: string }
+    | { readonly kind: "settled-after-start"; readonly startedAt: string; readonly outcome: string | null };
+
+export type SettledFate = Extract<CommandFate, { readonly outcome: unknown }>["kind"];
+
+export type LedgerCommand = Readonly<{
+    commandId: string;
+    sessionId: string;
+    commandHash: string;
+    attemptId: string;
+    admissionOrder: number;
+    fate: CommandFate;
+}>;
+
+export type CommandIdentity = Readonly<{
+    commandId: string;
+    sessionId: string;
+    commandHash: string;
+    attemptId: string;
+}>;
+
+const rowSchema = z
+    .object({
+        commandId: z.string(),
+        sessionId: z.string(),
+        commandHash: z.string(),
+        attemptId: z.string(),
+        admissionOrder: z.number().int().positive().safe(),
+        fate: z.enum(["pending", "started", "cancelled", "settled-before-start", "settled-after-start"]),
+        startedAt: z.string().nullable(),
+        outcome: z.string().nullable(),
+    })
+    .readonly();
+
+function ledgerCommand({ fate, startedAt, outcome, ...identity }: z.infer<typeof rowSchema>): LedgerCommand {
+    const invalid = (): never => {
+        throw new Error("The command ledger holds an invalid row", { cause: { commandId: identity.commandId, fate } });
+    };
+    switch (fate) {
+        case "pending":
+            return outcome === null ? { ...identity, fate: { kind: fate } } : invalid();
+        case "started":
+            return startedAt !== null && outcome === null
+                ? { ...identity, fate: { kind: fate, startedAt } }
+                : invalid();
+        case "cancelled":
+            return { ...identity, fate: { kind: fate, outcome } };
+        case "settled-before-start":
+            return outcome === null ? invalid() : { ...identity, fate: { kind: fate, outcome } };
+        case "settled-after-start":
+            return startedAt === null ? invalid() : { ...identity, fate: { kind: fate, startedAt, outcome } };
+        default:
+            return fate satisfies never;
+    }
+}
+
+/**
+ * Owns the command ledger: one row per admitted command, and the outcomes kept for each Session's latest settled
+ * commands. Every transition is one transaction, so a command's identity, order, fate and outcome never disagree.
+ */
+export class CommandLedgerTable {
+    readonly #database: LocalSqliteDatabase;
+
+    constructor(database: LocalSqliteDatabase) {
+        this.#database = database;
+    }
+
+    readonly #select = () =>
+        this.#database.orm
+            .select({
+                commandId: command.commandId,
+                sessionId: command.sessionId,
+                commandHash: command.commandHash,
+                attemptId: command.attemptId,
+                admissionOrder: command.admissionOrder,
+                fate: command.fate,
+                startedAt: command.startedAt,
+                outcome: commandOutcome.outcome,
+            })
+            .from(command)
+            .leftJoin(commandOutcome, eq(commandOutcome.commandId, command.commandId));
+
+    readonly read = (commandId: string): LedgerCommand | undefined => {
+        const row = this.#select().where(eq(command.commandId, commandId)).get();
+        return row === undefined ? undefined : ledgerCommand(rowSchema.parse(row));
+    };
+
+    /** The Session's commands in admission order. */
+    readonly session = (sessionId: string): readonly LedgerCommand[] =>
+        this.#select()
+            .where(eq(command.sessionId, sessionId))
+            .orderBy(asc(command.admissionOrder))
+            .all()
+            .map((row) => ledgerCommand(rowSchema.parse(row)));
+
+    /** Every command in admission order. */
+    readonly all = (): readonly LedgerCommand[] =>
+        this.#select()
+            .orderBy(asc(command.admissionOrder))
+            .all()
+            .map((row) => ledgerCommand(rowSchema.parse(row)));
+
+    /** The commands that have not settled. */
+    readonly unsettled = (): readonly string[] =>
+        this.#database.orm
+            .select({ commandId: command.commandId })
+            .from(command)
+            .where(inArray(command.fate, ["pending", "started"]))
+            .all()
+            .map((row) => row.commandId);
+
+    /**
+     * Admits a command after every other. An earlier admission of the identifier that settled before it started is
+     * replaced; any other earlier admission makes this one fail.
+     */
+    readonly admit = (identity: CommandIdentity): void => {
+        this.#database.transaction(() => {
+            const replaced = this.#database.orm
+                .delete(command)
+                .where(and(eq(command.commandId, identity.commandId), eq(command.fate, "settled-before-start")))
+                .returning({ commandId: command.commandId })
+                .get();
+            if (replaced !== undefined) {
+                this.#database.orm.delete(commandOutcome).where(eq(commandOutcome.commandId, replaced.commandId)).run();
+            }
+            this.#database.orm
+                .insert(command)
+                .values({ ...identity, admissionOrder: this.#nextAdmissionOrder(), fate: "pending" })
+                .run();
+        });
+    };
+
+    /** Records that a pending command was handed to its Agent. */
+    readonly start = (commandId: string, startedAt: string): void => {
+        this.#database.orm
+            .update(command)
+            .set({ fate: "started", startedAt })
+            .where(and(eq(command.commandId, commandId), eq(command.fate, "pending")))
+            .run();
+    };
+
+    /**
+     * Settles an unsettled command with its outcome and drops the outcomes the Session no longer keeps. Returns the
+     * commands whose outcome was dropped.
+     */
+    readonly settle = (commandId: string, fate: SettledFate, outcome: string): readonly string[] =>
+        this.#database.transaction(() => {
+            const settled = this.#database.orm
+                .update(command)
+                .set(fate === "settled-after-start" ? { fate } : { fate, startedAt: null })
+                .where(and(eq(command.commandId, commandId), inArray(command.fate, ["pending", "started"])))
+                .returning({ sessionId: command.sessionId })
+                .get();
+            if (settled === undefined) {
+                return [];
+            }
+            this.#database.orm.insert(commandOutcome).values({ commandId, outcome }).run();
+            return this.#dropOutcomes(settled.sessionId);
+        });
+
+    /** Admits an unseen command as already cancelled, so the identifier can never run. */
+    readonly admitCancelled = (identity: CommandIdentity, outcome: string): readonly string[] =>
+        this.#database.transaction(() => {
+            this.#database.orm
+                .insert(command)
+                .values({ ...identity, admissionOrder: this.#nextAdmissionOrder(), fate: "cancelled" })
+                .run();
+            this.#database.orm.insert(commandOutcome).values({ commandId: identity.commandId, outcome }).run();
+            return this.#dropOutcomes(identity.sessionId);
+        });
+
+    readonly #nextAdmissionOrder = (): number =>
+        (this.#database.orm
+            .select({ latest: max(command.admissionOrder) })
+            .from(command)
+            .get()?.latest ?? 0) + 1;
+
+    /** Keeps the outcomes of the Session's latest settled commands; a command that never started goes with its outcome. */
+    readonly #dropOutcomes = (sessionId: string): readonly string[] => {
+        const boundary = this.#database.orm
+            .select({ admissionOrder: command.admissionOrder })
+            .from(command)
+            .innerJoin(commandOutcome, eq(commandOutcome.commandId, command.commandId))
+            .where(eq(command.sessionId, sessionId))
+            .orderBy(desc(command.admissionOrder))
+            .limit(1)
+            .offset(OUTCOMES_PER_SESSION - 1)
+            .get();
+        if (boundary === undefined) {
+            return [];
+        }
+        const dropped = this.#database.orm
+            .select({ commandId: command.commandId, fate: command.fate })
+            .from(command)
+            .innerJoin(commandOutcome, eq(commandOutcome.commandId, command.commandId))
+            .where(and(eq(command.sessionId, sessionId), lt(command.admissionOrder, boundary.admissionOrder)))
+            .all();
+        const commandIds = dropped.map((row) => row.commandId);
+        if (commandIds.length > 0) {
+            this.#database.orm.delete(commandOutcome).where(inArray(commandOutcome.commandId, commandIds)).run();
+            this.#database.orm
+                .delete(command)
+                .where(and(inArray(command.commandId, commandIds), eq(command.fate, "settled-before-start")))
+                .run();
+        }
+        return commandIds;
+    };
+}
