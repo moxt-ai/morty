@@ -1,7 +1,15 @@
 import { execFileSync } from "node:child_process";
 import { appendFile } from "node:fs/promises";
 
-const repository = "moxt-ai/mobius-morty";
+// A rename must not change which repository owns accepted release history.
+const repositoryId = 1446677406;
+const resolvedRepository = JSON.parse(
+    execFileSync("gh", ["api", `repositories/${repositoryId}`], { encoding: "utf8", timeout: 60000 }),
+);
+if (resolvedRepository.id !== repositoryId || !/^[^/]+\/[^/]+$/.test(resolvedRepository.full_name ?? "")) {
+    throw new Error("Cannot resolve the Morty release repository");
+}
+const repository = resolvedRepository.full_name;
 const runId = process.env.ARCHIVE_RUN_ID;
 if (!/^\d+$/.test(runId ?? "")) {
     throw new Error("A numeric successful archive run is required");
@@ -11,7 +19,7 @@ const api = (path) =>
 const authorized = (run) =>
     run.conclusion === "success" &&
     run.head_branch === "main" &&
-    run.head_repository?.full_name === repository &&
+    run.head_repository?.id === repositoryId &&
     ["push", "workflow_dispatch"].includes(run.event);
 const completed = (run, names) => {
     const result = api(`actions/runs/${run.id}/jobs?per_page=100`);

@@ -31,7 +31,7 @@ jobs:
 
   release:
     needs: security
-    if: github.repository == 'moxt-ai/mobius-morty'
+    if: github.repository_id == '1446677406'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     environment: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (inputs.operation == 'restore' || inputs.operation == 'provision-service')) && 'morty-production' || 'build-only' }}
