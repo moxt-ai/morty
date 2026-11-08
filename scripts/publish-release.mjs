@@ -44,6 +44,25 @@ async function registryContainsAcceptedRelease() {
     return true;
 }
 
+// A queued or retried old commit must never move npm latest backwards.
+const latestResponse = await fetch(`https://registry.npmjs.org/${encodeURIComponent(release.name)}/latest`, {
+    signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+});
+if (!latestResponse.ok) {
+    await latestResponse.body?.cancel();
+    throw new Error("Cannot verify the current published release");
+}
+const latest = (await latestResponse.json()).version;
+if (!/^\d+\.\d+\.\d+$/.test(latest)) {
+    throw new Error("Unexpected latest version");
+}
+const currentParts = latest.split(".").map(Number);
+const nextParts = release.version.split(".").map(Number);
+const difference = currentParts.map((part, index) => part - nextParts[index]).find((part) => part !== 0) ?? 0;
+if (difference > 0) {
+    throw new Error("A newer release is already published; refusing a stale run");
+}
+
 if (await registryContainsAcceptedRelease()) {
     console.log("The accepted archive is already published; verifying this retry without republishing.");
 } else {
