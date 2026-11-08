@@ -28,6 +28,36 @@ function errorProperty(error: object, key: string): unknown {
     }
 }
 
+/** A schema validation failure, recognized by shape so that every bundled valibot copy is covered. */
+function validationIssues(error: object): readonly unknown[] | null {
+    const issues = errorProperty(error, "issues");
+    return errorProperty(error, "name") === "ValiError" && Array.isArray(issues) ? issues : null;
+}
+
+/** Where and how values failed validation. Issue messages quote the rejected input, which may be a credential. */
+function validationSummary(issues: readonly unknown[]): string {
+    const described = issues.slice(0, 8).map((issue) => {
+        if (typeof issue !== "object" || issue === null) {
+            return "value: invalid";
+        }
+        const type = errorProperty(issue, "type");
+        const expected = errorProperty(issue, "expected");
+        const path = errorProperty(issue, "path");
+        const keys = Array.isArray(path)
+            ? path
+                  .map((item: unknown) =>
+                      typeof item === "object" && item !== null ? errorProperty(item, "key") : undefined,
+                  )
+                  .filter((key) => typeof key === "string" || typeof key === "number")
+                  .join(".")
+            : "";
+        return `${keys === "" ? "value" : keys}: ${typeof type === "string" ? type : "invalid"}${
+            typeof expected === "string" ? ` (expected ${expected})` : ""
+        }`;
+    });
+    return diagnosticText(`Invalid input: ${described.join("; ")}`);
+}
+
 function serializeCause(error: unknown, seen: Set<object>, depth: number): unknown {
     if (depth >= MAX_ERROR_DEPTH) {
         return "[Truncated cause]";
@@ -51,6 +81,17 @@ function serializeCause(error: unknown, seen: Set<object>, depth: number): unkno
         const value = errorProperty(error, key);
         if (typeof value === "string") {
             result[key] = diagnosticText(value, maximumLength);
+        }
+    }
+    const issues = validationIssues(error);
+    if (issues !== null) {
+        // The message and the stack's first line quote the rejected input; keep only its location and the frames.
+        const summary = validationSummary(issues);
+        result["message"] = summary;
+        const stack = errorProperty(error, "stack");
+        if (typeof stack === "string") {
+            const frames = stack.split("\n").slice(1).join("\n");
+            result["stack"] = diagnosticText(`ValiError: ${summary}\n${frames}`, 4_096);
         }
     }
     // Copy diagnostic fields explicitly: arbitrary error properties can contain credentials or payloads.
