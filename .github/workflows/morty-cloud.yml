@@ -1,18 +1,18 @@
 name: Morty Cloud
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
     inputs:
       operation:
-        description: Build only, deploy, or restore a successful archived release
+        description: Build, restore a completed release, or provision service authority
         type: choice
         default: build
-        options: [build, deploy, restore, provision-service]
+        options: [build, restore, provision-service]
       artifact_run_id:
-        description: Successful Morty Cloud run to restore
+        description: Successful automatic Morty CLI or accepted legacy Morty Cloud run
         type: string
         required: false
 
@@ -21,8 +21,9 @@ permissions:
   actions: read
 
 concurrency:
-  group: morty-cloud-production-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'release' }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation != 'build' && 'morty-production-release' || format('morty-cloud-build-{0}', github.ref) }}
+  queue: max
+  cancel-in-progress: false
 
 jobs:
   security:
@@ -33,7 +34,7 @@ jobs:
     if: github.repository == 'moxt-ai/mobius-morty'
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    environment: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (inputs.operation == 'deploy' || inputs.operation == 'restore' || inputs.operation == 'provision-service' || (github.event_name == 'push' && vars.AUTO_DEPLOY_PRODUCTION == 'true'))) && 'morty-production' || 'build-only' }}
+    environment: ${{ (github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (inputs.operation == 'restore' || inputs.operation == 'provision-service')) && 'morty-production' || 'build-only' }}
     env:
       TARGET_ENVIRONMENT: production
       OPERATION: ${{ inputs.operation || 'build' }}
@@ -56,8 +57,7 @@ jobs:
       - name: Verify account-owned deployment authority
         if: >-
           github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
-          (env.OPERATION == 'deploy' || env.OPERATION == 'restore' || env.OPERATION == 'provision-service' ||
-          (github.event_name == 'push' && vars.AUTO_DEPLOY_PRODUCTION == 'true'))
+          (env.OPERATION == 'restore' || env.OPERATION == 'provision-service')
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: python3 deployment/verify-account-token.py
@@ -99,36 +99,42 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ARCHIVE_RUN_ID: ${{ inputs.artifact_run_id }}
-        run: |
-          python3 - <<'PY'
-          import json, os, re, subprocess
-          run_id = os.environ['ARCHIVE_RUN_ID']
-          if not re.fullmatch(r'[0-9]+', run_id):
-              raise SystemExit('A numeric successful archive run is required')
-          run = json.loads(subprocess.check_output(['gh', 'api', f'repos/moxt-ai/mobius-morty/actions/runs/{run_id}']))
-          if run['conclusion'] != 'success' or run['head_branch'] != 'main' or run['head_repository']['full_name'] != 'moxt-ai/mobius-morty' or run['path'] != '.github/workflows/morty-cloud.yml' or run['event'] not in ['push', 'workflow_dispatch']:
-              raise SystemExit('Archive run is not an authorized successful release')
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write('revision=' + run['head_sha'] + '\n')
-          PY
+        run: node scripts/verify-recovery.mjs
       - name: Download the exact archived release
-        if: env.OPERATION == 'restore'
+        if: env.OPERATION == 'restore' && steps.archive.outputs.legacy != 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release-${{ env.TARGET_ENVIRONMENT }}
-          path: .deployment-output/${{ env.TARGET_ENVIRONMENT }}
+          name: morty-release
+          path: .release
           run-id: ${{ inputs.artifact_run_id }}
+          github-token: ${{ github.token }}
+      - name: Download the accepted legacy cloud archive
+        if: env.OPERATION == 'restore' && steps.archive.outputs.legacy == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-production
+          path: .release/cloud
+          run-id: ${{ inputs.artifact_run_id }}
+          github-token: ${{ github.token }}
+      - name: Download its successfully published CLI archive
+        if: env.OPERATION == 'restore' && steps.archive.outputs.legacy == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: morty-cli
+          path: .release
+          run-id: ${{ steps.archive.outputs.cli_run }}
           github-token: ${{ github.token }}
       - name: Publish to the independent account and verify health
         if: >-
           github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
-          (env.OPERATION == 'deploy' || env.OPERATION == 'restore' ||
-          (github.event_name == 'push' && vars.AUTO_DEPLOY_PRODUCTION == 'true'))
+          env.OPERATION == 'restore'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           MORTY_SERVICE_SECRET: ${{ secrets.MORTY_SERVICE_SECRET }}
-          EXPECTED_REVISION: ${{ steps.archive.outputs.revision || github.sha }}
-        run: python3 deployment/deploy.py "$TARGET_ENVIRONMENT" --release ".deployment-output/$TARGET_ENVIRONMENT"
+          MORTY_SESSION_SIGNING_SECRET: ${{ secrets.MORTY_SESSION_SIGNING_SECRET }}
+          EXPECTED_REVISION: ${{ steps.archive.outputs.revision }}
+          MORTY_ALLOW_RESTORE: 'true'
+        run: python3 deployment/deploy.py "$TARGET_ENVIRONMENT" --release .release/cloud --cli-release .release/release.json
       - name: Archive deployment evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -137,5 +143,6 @@ jobs:
           path: |
             deployment-evidence.json
             account-token-evidence.json
+            session-access-evidence.json
           if-no-files-found: ignore
           retention-days: 90

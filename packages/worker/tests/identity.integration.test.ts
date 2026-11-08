@@ -278,10 +278,11 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
     );
     expect(identity.projectId).toBe(project.projectId);
     expect(identity.token).toMatch(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u);
+    // A Project that was never created is not found, whichever credential asks for it.
     expect(
         (await worker.fetch(accountRequest(identity.token, `prj_wn_01_${"z".repeat(24)}`), fixture.environment()))
             .status,
-    ).toBe(401);
+    ).toBe(404);
 });
 
 test("Given a user with a draft Bot on a Project-scoped Platform, When setup lists Runtimes, Then the available Runtime options are returned", async () => {

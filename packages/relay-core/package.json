@@ -9,6 +9,7 @@
         "./contracts": "./src/contracts.ts",
         "./gateway": "./src/gateway/index.ts",
         "./database": "./src/infra/sql-database.ts",
+        "./durable-object-migrations": "./src/infra/durable-object-migrations.ts",
         "./logging": "./src/infra/logger.ts",
         "./project-store": "./src/storage/sqlite-project-store.ts",
         "./schema/project-do": "./src/schema/project-do/index.ts"

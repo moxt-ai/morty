@@ -2,17 +2,7 @@ import { z } from "zod";
 import { identifierStringSchema } from "../../shared/identifier.ts";
 import { ProtocolMessageError } from "../../shared/message-codec.ts";
 
-const APP_CREDENTIAL_PATTERN = /^mapp_([A-Za-z0-9_-]{22})_[A-Za-z0-9_-]{43}$/u;
 const SESSION_ACCESS_PATTERN = /^msession_([A-Za-z0-9_-]{22})_([A-Za-z0-9_-]+)_([A-Za-z0-9_-]{43})$/u;
-const MAXIMUM_LIFETIME_MILLISECONDS = 15 * 60 * 1_000;
-const MAXIMUM_ISSUANCE_CLOCK_SKEW_MILLISECONDS = 30_000;
-
-export class SessionAccessCredentialExpiredError extends ProtocolMessageError {
-    constructor(expiredByMilliseconds: number) {
-        super(`The Session credential expired ${expiredByMilliseconds} milliseconds ago`);
-        this.name = "SessionAccessCredentialExpiredError";
-    }
-}
 
 const claimsSchema = z
     .object({
@@ -34,14 +24,6 @@ export interface SessionAccessCredential {
     readonly signedValue: string;
 }
 
-function encodeBase64Url(value: Uint8Array): string {
-    let binary = "";
-    for (const byte of value) {
-        binary += String.fromCharCode(byte);
-    }
-    return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
-}
-
 function decodeBase64Url(value: string): Uint8Array {
     try {
         const padded = `${value.replaceAll("-", "+").replaceAll("_", "/")}${"=".repeat((4 - (value.length % 4)) % 4)}`;
@@ -56,60 +38,6 @@ function exactBuffer(value: Uint8Array): ArrayBuffer {
     const buffer = new ArrayBuffer(value.byteLength);
     new Uint8Array(buffer).set(value);
     return buffer;
-}
-
-async function signingKey(secretDigest: string): Promise<CryptoKey> {
-    if (!/^[a-f0-9]{64}$/u.test(secretDigest)) {
-        throw new Error("The Session credential signing key is invalid");
-    }
-    return await crypto.subtle.importKey(
-        "raw",
-        new TextEncoder().encode(secretDigest),
-        { hash: "SHA-256", name: "HMAC" },
-        false,
-        ["sign", "verify"],
-    );
-}
-
-async function digestCredential(credential: string): Promise<string> {
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(credential));
-    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-/**
- * Signs a Session credential locally with the AppCredential's secret. Signing consults no Platform state: a credential
- * issued at or shortly after the Project's latest Session access revocation (`revokeAccess`) is refused for its whole
- * lifetime, and so is one whose AppCredential is revoked or rotated out. To have the Platform issue a credential that
- * a revocation it just recorded does not cover, use a Session resource's `createAccess`.
- */
-export async function issueSessionAccessCredential(
-    appCredential: string,
-    claims: SessionAccessClaims,
-): Promise<string> {
-    const match = APP_CREDENTIAL_PATTERN.exec(appCredential);
-    if (match === null) {
-        throw new ProtocolMessageError("The App credential is invalid");
-    }
-    const validatedClaims = claimsSchema.parse(claims);
-    if (
-        validatedClaims.expiresAtEpochMilliseconds <= validatedClaims.issuedAtEpochMilliseconds ||
-        validatedClaims.expiresAtEpochMilliseconds - validatedClaims.issuedAtEpochMilliseconds >
-            MAXIMUM_LIFETIME_MILLISECONDS
-    ) {
-        throw new ProtocolMessageError("The Session credential lifetime is invalid");
-    }
-    const publicCredentialId = match[1];
-    if (publicCredentialId === undefined) {
-        throw new ProtocolMessageError("The App credential is invalid");
-    }
-    const payload = encodeBase64Url(new TextEncoder().encode(JSON.stringify(validatedClaims)));
-    const signedValue = `msession_${publicCredentialId}_${payload}`;
-    const signature = await crypto.subtle.sign(
-        "HMAC",
-        await signingKey(await digestCredential(appCredential)),
-        new TextEncoder().encode(signedValue),
-    );
-    return `${signedValue}_${encodeBase64Url(new Uint8Array(signature))}`;
 }
 
 export function decodeSessionAccessCredential(credential: string): SessionAccessCredential {
@@ -136,39 +64,4 @@ export function decodeSessionAccessCredential(credential: string): SessionAccess
         signature: exactBuffer(decodeBase64Url(encodedSignature)),
         signedValue: `msession_${publicCredentialId}_${payload}`,
     };
-}
-
-export async function verifySessionAccessCredential(
-    credential: string,
-    secretDigest: string,
-    nowEpochMilliseconds: number,
-): Promise<SessionAccessClaims> {
-    if (!Number.isSafeInteger(nowEpochMilliseconds) || nowEpochMilliseconds < 0) {
-        throw new RangeError("The Session credential verification time is invalid");
-    }
-    const decoded = decodeSessionAccessCredential(credential);
-    const valid = await crypto.subtle.verify(
-        "HMAC",
-        await signingKey(secretDigest),
-        decoded.signature,
-        new TextEncoder().encode(decoded.signedValue),
-    );
-    if (!valid) {
-        throw new ProtocolMessageError("The Session credential signature is invalid");
-    }
-    const lifetimeMilliseconds = decoded.claims.expiresAtEpochMilliseconds - decoded.claims.issuedAtEpochMilliseconds;
-    if (lifetimeMilliseconds <= 0 || lifetimeMilliseconds > MAXIMUM_LIFETIME_MILLISECONDS) {
-        throw new ProtocolMessageError("The Session credential lifetime is invalid");
-    }
-    const issuedAheadMilliseconds = decoded.claims.issuedAtEpochMilliseconds - nowEpochMilliseconds;
-    // ProjectDO issues credentials that RuntimeRelay verifies using an independent Worker clock.
-    if (issuedAheadMilliseconds > MAXIMUM_ISSUANCE_CLOCK_SKEW_MILLISECONDS) {
-        throw new ProtocolMessageError(
-            `The Session credential was issued ${issuedAheadMilliseconds} milliseconds ahead of the verifier`,
-        );
-    }
-    if (decoded.claims.expiresAtEpochMilliseconds <= nowEpochMilliseconds) {
-        throw new SessionAccessCredentialExpiredError(nowEpochMilliseconds - decoded.claims.expiresAtEpochMilliseconds);
-    }
-    return decoded.claims;
 }

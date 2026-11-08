@@ -5,6 +5,7 @@ import {
     type SessionWireEnvelope,
     type SessionWireEvent,
 } from "@morty-build/client/protocol";
+import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
 import { and, asc, desc, eq, gt, gte, lt, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 import {
@@ -21,7 +22,6 @@ import {
     recordedSessionEvent,
     recordingMetadata,
 } from "../schema/session-recording-do/index.ts";
-import { applyDurableObjectMigrations } from "./durable-object-migrations.ts";
 
 class RetiredRecordingStateError extends Error {
     readonly code = "retired_recording_state";

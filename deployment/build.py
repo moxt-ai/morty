@@ -70,6 +70,7 @@ def main():
     platform['r2_buckets'] = [{'binding': 'R2_BUCKET_APAC', 'bucket_name': spec['buckets']['platform_apac']}, {'binding': 'R2_BUCKET_WNAM', 'bucket_name': spec['buckets']['platform_wnam']}]
     platform['services'] = [{'binding': 'RECORDING', 'service': spec['recording']}]
     platform['vars'] = {'RECORDING_PROVIDER_ID': spec['recording'], 'MORTY_ALLOWED_ORIGINS': json.dumps(spec['allowed_origins'])}
+    platform['secrets'] = {'required': ['MORTY_SESSION_SIGNING_SECRET']}
     platform.pop('assets', None)
     for label, config in [('recording', recording), ('platform', platform)]:
         write(generated / (label + '.json'), config)
@@ -96,8 +97,13 @@ def main():
         assert config['account_id'] == ACCOUNT and config['name'] == spec[label] and not config.get('routes')
         assert '95af7a3d67be8c49b1619544e3ce53c0' not in json.dumps(config)
     # Artifact files contain public configuration and compiled code only; secrets are supplied at deploy time.
+    cli_release = None
+    if os.environ.get('MORTY_CLI_RELEASE_MANIFEST'):
+        cli_release = read(ROOT / os.environ['MORTY_CLI_RELEASE_MANIFEST'])
+        if cli_release['revision'] != env['MORTY_SETUP_REVISION'] or cli_release['version'] != read(ROOT / 'packages/cli/package.json')['version']:
+            raise ValueError('Cloud and CLI release identities differ')
     files = {p.relative_to(release).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(release.rglob('*')) if p.is_file() and p.name != 'release.json'}
-    write(release / 'release.json', {'format': 'morty-cloud-release-v2', 'account_id': ACCOUNT, 'environment': environment, 'revision': env['MORTY_SETUP_REVISION'], 'cliVersion': read(ROOT / 'packages/cli/package.json')['version'], 'configs': configs, 'target': spec, 'files': files})
+    write(release / 'release.json', {'format': 'morty-cloud-release-v2', 'account_id': ACCOUNT, 'environment': environment, 'revision': env['MORTY_SETUP_REVISION'], 'cliVersion': read(ROOT / 'packages/cli/package.json')['version'], 'cliRelease': cli_release, 'configs': configs, 'target': spec, 'files': files})
     print(json.dumps({'release': str(release), 'environment': environment, 'files': len(files)}))
 
 

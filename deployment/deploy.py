@@ -1,5 +1,6 @@
 """Deploy an intact release only to its pinned Morty resources, without DNS changes."""
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -34,7 +35,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('environment', choices=['production'])
     parser.add_argument('--release', type=Path, required=True)
+    parser.add_argument('--cli-release', type=Path, help='Accepted CLI manifest and adjacent archive, including for legacy cloud releases')
     parser.add_argument('--verify-release-only', action='store_true', help='Verify artifact provenance and configuration without cloud access or deployment')
+    parser.add_argument('--preflight-only', action='store_true', help='Verify deployment credentials and resources before npm publication, without writes')
     args = parser.parse_args()
     release = args.release.resolve()
     manifest = read(release / 'release.json')
@@ -54,6 +57,8 @@ def main():
         if config['account_id'] != ACCOUNT or config['name'] != expected[component] or config.get('routes'):
             raise ValueError('Deployment escaped the independent target')
     platform, morty = read(configs['platform']), read(configs['morty'])
+    if 'MORTY_SESSION_SIGNING_SECRET' not in platform.get('secrets', {}).get('required', []) or 'MORTY_SESSION_SIGNING_SECRET' in platform.get('vars', {}):
+        raise ValueError('Release must use a dedicated Session signing secret; rebuild older archives before restoring')
     retirement = {'tag': 'morty-retire-migration-control-20261106', 'deleted_classes': ['MigrationControl']}
     if retirement not in platform.get('migrations', []) or any(binding['name'] == 'MIGRATION_CONTROL' for binding in platform.get('durable_objects', {}).get('bindings', [])):
         raise ValueError('Release must retire migration control; rebuild older archives before restoring')
@@ -67,16 +72,38 @@ def main():
     if args.verify_release_only:
         print(json.dumps({'releaseVerified': True, 'appId': expected['app_id'], 'origin': expected['morty_origin'], 'deploymentAttempted': False}))
         return
-    # Production setup may name a release only after that exact package is available.
+    # Production setup may name a release only after the accepted bytes are available.
     if args.environment == 'production':
         version = manifest['cliVersion']
         import re
         if not isinstance(version, str) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
             raise ValueError('Invalid CLI release version')
-        with urllib.request.urlopen('https://registry.npmjs.org/@morty-build%2fcli/' + version, timeout=30) as response:
-            package = json.load(response)
-        if package.get('name') != '@morty-build/cli' or package.get('version') != version or package.get('bin', {}).get('morty') != 'dist/cli.js':
-            raise ValueError('The exact Morty CLI release is unavailable')
+        accepted = manifest.get('cliRelease')
+        if args.cli_release:
+            supplied = read(args.cli_release)
+            if accepted is not None and accepted != supplied:
+                raise ValueError('Cloud and CLI acceptance records differ')
+            accepted = supplied
+        if not isinstance(accepted, dict) or accepted.get('name') != '@morty-build/cli' or accepted.get('version') != version or accepted.get('revision') != manifest['revision'] or not re.fullmatch(r'sha512-[A-Za-z0-9+/]{86}==', accepted.get('integrity', '')):
+            raise ValueError('Deployment requires the accepted CLI integrity record')
+        if not args.cli_release or accepted.get('archive') != 'morty-build-cli-' + version + '.tgz':
+            raise ValueError('The accepted CLI archive is required')
+        archive = args.cli_release.parent / accepted['archive']
+        cli_bytes = archive.read_bytes()
+        if archive.is_symlink() or hashlib.sha256(cli_bytes).hexdigest() != accepted.get('sha256') or 'sha512-' + base64.b64encode(hashlib.sha512(cli_bytes).digest()).decode() != accepted['integrity']:
+            raise ValueError('CLI archive checksum differs from the acceptance record')
+        if not args.preflight_only:
+            with urllib.request.urlopen(urllib.request.Request('https://registry.npmjs.org/@morty-build%2fcli/' + version, headers={'Cache-Control': 'no-cache'}), timeout=30) as response:
+                package = json.load(response)
+            if package.get('name') != '@morty-build/cli' or package.get('version') != version or package.get('bin', {}).get('morty') != 'dist/cli.js':
+                raise ValueError('The exact Morty CLI release is unavailable')
+            if package.get('dist', {}).get('integrity') != accepted['integrity']:
+                raise ValueError('Published CLI bytes differ from the accepted release')
+            if os.environ.get('MORTY_ALLOW_RESTORE') != 'true':
+                with urllib.request.urlopen(urllib.request.Request('https://registry.npmjs.org/@morty-build%2fcli/latest', headers={'Cache-Control': 'no-cache'}), timeout=30) as response:
+                    latest = json.load(response)['version']
+                if latest != version:
+                    raise ValueError('A superseded release cannot automatically replace production')
     # Check lifecycle history before uploading assets, applying D1 migrations,
     # or activating any component. Wrangler otherwise replays all migrations
     # when an archive omits the tag already provisioned on the service.
@@ -86,7 +113,9 @@ def main():
             raise ValueError('Release omits an existing Durable Object migration: ' + component)
     # Validate the migrated identity and its deploy-time secret before any R2,
     # D1 migration, or Worker write. A successful health page is not sufficient.
-    secrets_by_component = {'platform': {}, 'morty': {'MORTY_SERVICE_SECRET': os.environ['MORTY_SERVICE_SECRET']}}
+    secrets_by_component = {'platform': {'MORTY_SESSION_SIGNING_SECRET': os.environ['MORTY_SESSION_SIGNING_SECRET']}, 'morty': {'MORTY_SERVICE_SECRET': os.environ['MORTY_SERVICE_SECRET']}}
+    if len(secrets_by_component['platform']['MORTY_SESSION_SIGNING_SECRET']) < 32:
+        raise ValueError('The Session credential signing secret must be at least 32 characters')
     app_secret = secrets_by_component['morty'].get('MORTY_SERVICE_SECRET')
     if not isinstance(app_secret, str) or not app_secret:
         raise ValueError('Missing production application credential')
@@ -96,6 +125,9 @@ def main():
     digest = hashlib.sha256(app_secret.encode()).hexdigest()
     if not any(row['secret_digest'] == digest for item in credentials for row in item['results']):
         raise ValueError('Deployment secret does not match the migrated application')
+    if args.preflight_only:
+        print(json.dumps({'preflightPassed': True, 'revision': manifest['revision'], 'deploymentAttempted': False}))
+        return
     env = dict(os.environ, WRANGLER_SEND_METRICS='false')
     for key in ['CLOUDFLARE_ENV', 'CF_ACCOUNT_ID', 'CF_API_TOKEN']:
         env.pop(key, None)
@@ -135,6 +167,8 @@ def main():
                 body = response.read()
                 if response.status != 200 or content and content not in body.decode():
                     raise ValueError('Post-deployment health verification failed')
+                if url.endswith('/setup.mjs') and hashlib.sha256(body).hexdigest() != manifest['files']['setup.mjs']:
+                    raise ValueError('Hosted setup differs from the accepted cloud release')
                 checks.append({'url': url, 'status': response.status, 'sha256': hashlib.sha256(body).hexdigest()})
         for extension in ['.js', '.css', '.woff2']:
             entry = groups[extension][0]
@@ -156,8 +190,14 @@ def main():
             deployment = cloud('/workers/scripts/' + expected[component] + '/deployments')['deployments'][0]
             if len(deployment['versions']) != 1 or deployment['versions'][0]['percentage'] != 100:
                 raise ValueError('Unexpected gradual deployment')
+            if deployment.get('annotations', {}).get('workers/message') != 'morty ' + manifest['revision']:
+                raise ValueError('Active Worker deployment does not match the accepted source')
             deployed[component] = deployment
-    evidence = {'passed': True, 'environment': args.environment, 'revision': manifest['revision'], 'account': ACCOUNT, 'previous': previous, 'deployed': deployed, 'checks': checks, 'dnsChanged': False}
+        platform_secrets = cloud('/workers/scripts/' + expected['platform'] + '/secrets')
+        if 'MORTY_SESSION_SIGNING_SECRET' not in {item['name'] for item in platform_secrets}:
+            raise ValueError('The deployed Session signing secret binding is missing')
+        run(['python3', str(ROOT / 'deployment/verify-session-access.py')], env)
+    evidence = {'passed': True, 'environment': args.environment, 'revision': manifest['revision'], 'cliVersion': manifest['cliVersion'], 'cliIntegrity': accepted['integrity'], 'account': ACCOUNT, 'previous': previous, 'deployed': deployed, 'checks': checks, 'dnsChanged': False}
     (ROOT / 'deployment-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
     print(json.dumps({'passed': True, 'environment': args.environment, 'revision': manifest['revision']}))
 

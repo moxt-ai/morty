@@ -1,12 +1,12 @@
 import { type ChildProcess, execFile } from "node:child_process";
 import { constants } from "node:fs";
 import { access, realpath } from "node:fs/promises";
-import type { ProcessPlatformSupport, ProcessTableEntry, ProcessTreeIdentity } from "./contracts.ts";
+import type { ProcessPlatformSupport, ProcessTableEntry, ProcessTreeIdentity, SpawnedProcess } from "./contracts.ts";
 
 const PROCESS_TABLE_TIMEOUT_MILLISECONDS = 1_000;
 const PROCESS_TABLE_OUTPUT_LIMIT_BYTES = 1024 * 1024;
 
-export function parseProcessTable(output: string): readonly ProcessTableEntry[] {
+function parseProcessTable(output: string): readonly ProcessTableEntry[] {
     const entries: ProcessTableEntry[] = [];
     for (const line of output.split("\n")) {
         const groups = /^\s*(?<pid>\d+)\s+(?<ppid>\d+)\s+(?<pgid>\d+)\s*$/.exec(line)?.groups;
@@ -47,6 +47,47 @@ export function readProcessTableWithPs(executable: string): Promise<readonly Pro
             },
         );
     });
+}
+
+/**
+ * POSIX reparents orphans and keeps a process group's ID reserved while the group has members, so the root's
+ * process group and parent links identify its tree.
+ */
+function selectPosixProcessTree(
+    entries: readonly ProcessTableEntry[],
+    rootProcessId: number,
+): readonly ProcessTreeIdentity[] {
+    const processIds = new Set([rootProcessId]);
+    for (const entry of entries) {
+        if (entry.processGroupId === rootProcessId) {
+            processIds.add(entry.processId);
+        }
+    }
+    let previousSize = 0;
+    while (previousSize !== processIds.size) {
+        previousSize = processIds.size;
+        for (const entry of entries) {
+            if (processIds.has(entry.parentProcessId)) {
+                processIds.add(entry.processId);
+            }
+        }
+    }
+    return entries
+        .filter((entry) => processIds.has(entry.processId))
+        .map((entry) => ({
+            processGroupId: entry.processGroupId,
+            processId: entry.processId,
+        }));
+}
+
+export function posixProcessTreeCapture(
+    readSynchronously: () => readonly ProcessTableEntry[],
+    read: () => Promise<readonly ProcessTableEntry[]>,
+): (root: SpawnedProcess) => Promise<readonly ProcessTreeIdentity[]> {
+    return async (root) => {
+        const entries = readSynchronously();
+        return selectPosixProcessTree(entries.length > 0 ? entries : await read(), root.processId);
+    };
 }
 
 export function processExists(processId: number): boolean {

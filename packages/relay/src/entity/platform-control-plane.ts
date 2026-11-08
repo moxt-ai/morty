@@ -43,10 +43,12 @@ export class PlatformAuthenticationConfiguration {
 
 export class PlatformAppCredentialAccess {
     readonly appId: string;
+    readonly publicCredentialId: string;
     readonly project: ProjectAccessContext;
 
-    constructor(appId: string, project: ProjectAccessContext) {
+    constructor(appId: string, publicCredentialId: string, project: ProjectAccessContext) {
         this.appId = appId;
+        this.publicCredentialId = publicCredentialId;
         this.project = project;
     }
 }

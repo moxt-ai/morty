@@ -36,10 +36,13 @@ export type RuntimeSocketIdentity =
           readonly role: "viewer";
           readonly expiresAt: number;
           /**
-           * The Session credential that opened this view: the AppCredential that issued it and when. Null for a view a
-           * Relay opened before it recorded them, which ends only when its credential expires.
+           * The verified Session credential's authority and signing generation. A missing identity is revoked.
            */
-          readonly credential: { readonly credentialId: string; readonly issuedAt: number } | null;
+          readonly credential: {
+              readonly credentialId: string;
+              readonly signingKeyId: string;
+              readonly issuedAt: number;
+          } | null;
           readonly projectId: string;
           readonly runtimeId: string;
           readonly sessionFilter: string;

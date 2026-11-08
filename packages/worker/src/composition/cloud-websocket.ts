@@ -169,6 +169,10 @@ export function createCloudWebSocketHandlers(dependencies: CloudWebSocketDepende
                     if (fingerprint === null) {
                         observer.ready(response, body);
                     }
+                    if (response.status === 401 || response.status === 403) {
+                        // Repeating a refused request cannot succeed; the client reads again once it can authorize.
+                        return;
+                    }
                     fingerprint = next;
                 } catch (cause) {
                     signal.throwIfAborted();

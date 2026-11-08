@@ -987,6 +987,8 @@ export class WebSocketApiTransport {
         }
         if (frame.kind === "subscription.end") {
             this.#settleEventStream(frame.subscriptionId)?.resolve();
+            // A watch the bridge ended is read again, which reports why it ended.
+            this.#settleWatch(frame.subscriptionId)?.resolve();
             return;
         }
         if (frame.requestId === null) {
@@ -995,7 +997,9 @@ export class WebSocketApiTransport {
         const pending = this.#pending.get(frame.requestId);
         if (pending === undefined) {
             if (frame.kind === "error") {
-                this.#settleEventStream(frame.requestId)?.reject(new Error(`${frame.code}: ${frame.message}`));
+                const error = new Error(`${frame.code}: ${frame.message}`);
+                this.#settleEventStream(frame.requestId)?.reject(error);
+                this.#settleWatch(frame.requestId)?.reject(error);
             }
             return;
         }

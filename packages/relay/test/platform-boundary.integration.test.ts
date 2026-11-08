@@ -43,6 +43,7 @@ import {
 } from "../../platform-test-support/src/service-fixture.ts";
 import { createDurableObjectDependencies } from "../../relay-core/src/di/create-durable-object-dependencies.ts";
 import { createPlatformDurableObjectContext } from "../src/durable-objects/platform-durable-object-context.ts";
+import { RuntimeRelay as PlatformRuntimeRelay } from "../src/durable-objects/runtime-relay.ts";
 import { platformProjectRecordingPolicy } from "../src/schema/d1/index.ts";
 import { platformDrizzle } from "../src/storage/platform-drizzle-database.ts";
 import {
@@ -129,6 +130,7 @@ function bindings(): PlatformRelayBindings {
         R2_BUCKET_APAC: env.R2_BUCKET_APAC,
         R2_BUCKET_WNAM: env.R2_BUCKET_WNAM,
         RUNTIME_RELAY: env.RUNTIME_RELAY,
+        MORTY_SESSION_SIGNING_SECRET: env.MORTY_SESSION_SIGNING_SECRET,
     };
 }
 
@@ -140,6 +142,45 @@ function recordingBindings(): PlatformRelayBindings {
     }
     return { ...bindings(), RECORDING: env.RECORDING, RECORDING_PROVIDER_ID: providerId };
 }
+
+/** Derives the HMAC key a Session credential of `publicCredentialId` is signed with. */
+type CredentialSigner = (publicCredentialId: string, appCredential: string) => Promise<CryptoKey>;
+
+/** The key anyone who reads an App credential's stored digest from the Platform database can derive. */
+const storedDigestSigner: CredentialSigner = async (_publicCredentialId, appCredential) => {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(appCredential));
+    const secretDigest = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(secretDigest),
+        { hash: "SHA-256", name: "HMAC" },
+        false,
+        ["sign"],
+    );
+};
+
+/** RFC 5869 extract/expand written independently of the Relay's Web Crypto HKDF implementation. */
+async function relaySigningKey(publicCredentialId: string, signingSecret: string): Promise<CryptoKey> {
+    const hmac = { hash: "SHA-256", name: "HMAC" } as const;
+    const salt = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode("morty.session-access.v1:"),
+        hmac,
+        false,
+        ["sign"],
+    );
+    const extracted = await crypto.subtle.sign("HMAC", salt, new TextEncoder().encode(signingSecret));
+    const expansionKey = await crypto.subtle.importKey("raw", extracted, hmac, false, ["sign"]);
+    const derived = await crypto.subtle.sign(
+        "HMAC",
+        expansionKey,
+        new Uint8Array([...new TextEncoder().encode(publicCredentialId), 1]),
+    );
+    return await crypto.subtle.importKey("raw", derived, hmac, false, ["sign"]);
+}
+
+const relaySigner: CredentialSigner = async (publicCredentialId) =>
+    await relaySigningKey(publicCredentialId, env.MORTY_SESSION_SIGNING_SECRET);
 
 function credentialHeaders(credential: string): Headers {
     return new Headers({ authorization: `Bearer ${credential}`, "content-type": "application/json" });
@@ -1795,13 +1836,17 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
         issueAppCredential: async (permissions: readonly string[]) =>
             (await seedMortyCredential(env.PLATFORM_DIRECTORY_DATABASE, app.appId, permissions, [projectId]))
                 .credential,
-        rewriteCredentialLifetime: async (lifetimeMilliseconds: number) => {
-            // Sign adversarial claims outside the SDK issuer, which refuses invalid lifetimes.
+        /** Signs the issued claims again, optionally with another lifetime, under the key `signer` derives. */
+        resignCredential: async (signer: CredentialSigner, lifetimeMilliseconds?: number) => {
+            // Sign adversarial claims outside the Relay issuer, which refuses invalid lifetimes.
             const decoded = decodeSessionAccessCredential(text(sessionAccess, "credential"));
-            const claims = {
-                ...decoded.claims,
-                expiresAtEpochMilliseconds: decoded.claims.issuedAtEpochMilliseconds + lifetimeMilliseconds,
-            };
+            const claims =
+                lifetimeMilliseconds === undefined
+                    ? decoded.claims
+                    : {
+                          ...decoded.claims,
+                          expiresAtEpochMilliseconds: decoded.claims.issuedAtEpochMilliseconds + lifetimeMilliseconds,
+                      };
             const encode = (bytes: Uint8Array) =>
                 btoa(String.fromCharCode(...bytes))
                     .replaceAll("+", "-")
@@ -1809,17 +1854,7 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                     .replace(/=+$/u, "");
             const payload = encode(new TextEncoder().encode(JSON.stringify(claims)));
             const signedValue = `msession_${decoded.publicCredentialId}_${payload}`;
-            const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(appCredential));
-            const secretDigest = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(
-                "",
-            );
-            const key = await crypto.subtle.importKey(
-                "raw",
-                new TextEncoder().encode(secretDigest),
-                { hash: "SHA-256", name: "HMAC" },
-                false,
-                ["sign"],
-            );
+            const key = await signer(decoded.publicCredentialId, appCredential);
             const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(signedValue));
             return `${signedValue}_${encode(new Uint8Array(signature))}`;
         },
@@ -2902,7 +2937,7 @@ describe.sequential("Platform Turn submission", () => {
     it.each([0, -1, 900_001])("refuses a signed credential with lifetime %i", async (lifetime) => {
         const runtime = await connectRuntimeDaemon(`invalid-lifetime-${Math.abs(lifetime)}`);
         try {
-            const credential = await runtime.rewriteCredentialLifetime(lifetime);
+            const credential = await runtime.resignCredential(relaySigner, lifetime);
             vi.setSystemTime(Date.now() - 900);
             expect(
                 await responseJson(await runtime.submitRuntimeTurn("invalid-lifetime", () => credential), 401),
@@ -2970,6 +3005,62 @@ describe.sequential("Platform Turn submission", () => {
                 error: { code: "credential_expired" },
             });
         } finally {
+            runtime.daemon.close(1000, "Test complete");
+        }
+    });
+    it("Given an App credential's digest read from the Platform database, When a Session credential is signed with it, Then direct Runtime HTTP rejects it before execution", async () => {
+        const runtime = await connectRuntimeDaemon("stored-digest-forgery");
+        try {
+            const forged = await runtime.resignCredential(storedDigestSigner);
+            expect(
+                await responseJson(await runtime.submitRuntimeTurn("stored-digest", () => forged), 401),
+            ).toMatchObject({ error: { code: "project_credential_invalid" } });
+        } finally {
+            runtime.daemon.close(1000, "Test complete");
+        }
+    });
+    it("Given an open Session view, When the Relay signing secret rotates, Then the connection check closes the old view and only new credentials reconnect", async () => {
+        const runtime = await connectRuntimeDaemon("signing-key-rotation");
+        const response = await runtime.subscribe();
+        const view = response.webSocket;
+        if (view === null) {
+            throw new Error("Expected the live Session view");
+        }
+        const closed = new Promise<CloseEvent>((resolve) => view.addEventListener("close", resolve, { once: true }));
+        view.accept();
+        try {
+            const signingSecret = "rotated-test-only-session-signing-secret";
+            const reissued = await runtime.resignCredential(
+                async (publicCredentialId) => await relaySigningKey(publicCredentialId, signingSecret),
+            );
+            const statuses = await runInDurableObject(
+                env.RUNTIME_RELAY.getByName(runtime.runtimeId),
+                async (_instance, state) => {
+                    // Reconstruct the production object with the same persisted sockets and a newly deployed binding.
+                    const rotated = new PlatformRuntimeRelay(state, {
+                        ...bindings(),
+                        MORTY_ALLOWED_ORIGINS: '["*"]',
+                        MORTY_SESSION_SIGNING_SECRET: signingSecret,
+                    });
+                    await rotated.alarm();
+                    const connect = async (credential: string) =>
+                        await rotated.fetch(
+                            new Request(
+                                `${relayOrigin}${MORTY_API_PREFIX}/v1/projects/${runtime.projectId}/sessions/${runtime.sessionId}/events-v2`,
+                                { headers: { authorization: `Bearer ${credential}`, Upgrade: "websocket" } },
+                            ),
+                        );
+                    const rejected = await connect(runtime.credential);
+                    const accepted = await connect(reissued);
+                    accepted.webSocket?.accept();
+                    accepted.webSocket?.close(1000, "Test complete");
+                    return { old: rejected.status, current: accepted.status };
+                },
+            );
+            expect(statuses).toEqual({ old: 401, current: 101 });
+            expect(await closed).toMatchObject({ code: 1008, reason: "Session signing key rotated" });
+        } finally {
+            view.close(1000, "Test complete");
             runtime.daemon.close(1000, "Test complete");
         }
     });

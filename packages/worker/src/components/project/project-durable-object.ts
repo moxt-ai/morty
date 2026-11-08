@@ -9,14 +9,13 @@ import { ManagedSessionOperations } from "../chat/infra/managed-session-operatio
 import { platformIdentifier } from "../management/entity/platform-project.ts";
 import { projectBootstrap } from "../management/entity/project-bootstrap.ts";
 
+/**
+ * One Project's storage. Only the Project's bootstrap binds the object and creates its schema; a request for a Project
+ * the object does not hold leaves no storage behind.
+ */
 export class ProjectDurableObject extends DurableObject<CloudBindings> {
-    readonly #database: DurableObjectDatabase;
+    #database: DurableObjectDatabase | undefined;
     readonly #sessionOperations = new ManagedSessionOperations();
-
-    constructor(state: DurableObjectState, environment: CloudBindings) {
-        super(state, environment);
-        this.#database = new DurableObjectDatabase(state.storage);
-    }
 
     override async fetch(request: Request): Promise<Response> {
         const url = new URL(request.url);
@@ -28,7 +27,13 @@ export class ProjectDurableObject extends DurableObject<CloudBindings> {
             return json({ error: { code: "PROJECT_REQUIRED", message: "Morty context is required." } }, 400);
         }
         const validatedProjectId = v.parse(platformIdentifier, projectId);
-        await this.#bindProject(validatedProjectId);
+        const bound: unknown = await this.ctx.storage.get("project-id");
+        if (bound === undefined) {
+            return json({ error: { code: "PROJECT_NOT_FOUND", message: "The Morty project does not exist." } }, 404);
+        }
+        if (bound !== validatedProjectId) {
+            throw new Error("Durable Object project identity does not match the request.");
+        }
         return await application.fetch(request, this.#bindings(validatedProjectId));
     }
 
@@ -84,11 +89,14 @@ export class ProjectDurableObject extends DurableObject<CloudBindings> {
         }
     };
 
-    readonly #bindings = (projectId: string): CloudBindings => ({
-        ...this.env,
-        CHAT_PROJECT_ID: projectId,
-        CHAT_SESSION_OPERATIONS: this.#sessionOperations,
-        CHAT_CREDENTIAL_KEY: this.#credentialKey,
-        DATABASE: this.#database,
-    });
+    readonly #bindings = (projectId: string): CloudBindings => {
+        this.#database ??= new DurableObjectDatabase(this.ctx.storage);
+        return {
+            ...this.env,
+            CHAT_PROJECT_ID: projectId,
+            CHAT_SESSION_OPERATIONS: this.#sessionOperations,
+            CHAT_CREDENTIAL_KEY: this.#credentialKey,
+            DATABASE: this.#database,
+        };
+    };
 }

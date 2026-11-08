@@ -1,14 +1,17 @@
 import type { ProcessPlatformSupport } from "./contracts.ts";
 import { linuxProcessPlatform } from "./linux.ts";
 import { macosProcessPlatform } from "./macos.ts";
-import { posixOperations, processExists, readProcessTableWithPs } from "./posix.ts";
+import { posixOperations, posixProcessTreeCapture, processExists, readProcessTableWithPs } from "./posix.ts";
 import { windowsProcessPlatform } from "./windows.ts";
 
 // Preserve the existing fallback for other POSIX hosts.
 const fallbackPlatform: ProcessPlatformSupport = {
     ...posixOperations,
     readProcessTable: () => readProcessTableWithPs("/usr/bin/ps"),
-    readProcessTableSynchronously: () => [],
+    captureProcessTree: posixProcessTreeCapture(
+        () => [],
+        () => readProcessTableWithPs("/usr/bin/ps"),
+    ),
     processExists,
 };
 const platforms: ReadonlyMap<NodeJS.Platform, ProcessPlatformSupport> = new Map([

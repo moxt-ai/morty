@@ -171,12 +171,12 @@ async function run(command, args, options = {}) {
 async function runOwnedCommand(command, args, options) {
     options.signal?.throwIfAborted();
     const launch = await localLaunch(command, args);
-    const { stopProcessTree, platformSpawnOptions, ProcessExecutionError } = await import(
+    const { stopProcessTree, spawnProcess, platformSpawnOptions, ProcessExecutionError } = await import(
         pathToFileURL(path.join(MORTY_ROOT, "packages/cli/src/engine/util/process/executable.ts")).href
     );
     options.signal?.throwIfAborted();
     const environment = { ...process.env, ...options.env };
-    const child = spawn(launch.command, launch.arguments, {
+    const child = spawnProcess(launch.command, launch.arguments, {
         ...platformSpawnOptions,
         cwd: options.cwd ?? REPO_ROOT,
         env: environment,

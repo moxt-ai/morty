@@ -219,3 +219,18 @@ test("Given a retained credential with no recorded kind, When it is presented to
     const retained = await storage.fetch(new Request("https://project.internal/credential-kinds"));
     expect(await retained.json()).toEqual([null]);
 });
+
+test("Given a well-formed Project identifier that was never created, When an unauthenticated request reaches it, Then it is not found and its Durable Object stores nothing", async () => {
+    const projectId = `prj_ap_01_${"N".repeat(24)}`;
+    const response = await fetchPublicApplication(
+        new Request(`${APP_ORIGIN}/morty/api/projects/${projectId}/session`),
+        fixture.environment(),
+    );
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: "PROJECT_NOT_FOUND" } });
+    const namespace = fixture.environment().CHAT_PROJECTS;
+    const stored = await namespace
+        .get(namespace.idFromName(projectId))
+        .fetch(new Request("https://project.internal/stored-state"));
+    expect(await stored.json()).toEqual({ keys: [], tables: [] });
+});

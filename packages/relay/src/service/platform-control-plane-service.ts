@@ -451,7 +451,7 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
             actorReference(actorRef),
             signal,
         );
-        return new PlatformAppCredentialAccess(row.app_id, project);
+        return new PlatformAppCredentialAccess(row.app_id, row.public_credential_id, project);
     };
     private readonly authorizeCredentialForProject = async (
         row: CredentialRow,
@@ -515,7 +515,7 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
         actorRef: string,
         action: string,
         subjectId: string,
-        outcome: string,
+        outcome: PlatformAuditRecord["outcome"],
         details: Readonly<Record<string, unknown>>,
         now: number,
     ): PlatformAuditRecord => ({

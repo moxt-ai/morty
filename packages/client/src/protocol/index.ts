@@ -78,12 +78,7 @@ export type {
     SessionAccessCredential,
 } from "./session/access/index.ts";
 
-export {
-    decodeSessionAccessCredential,
-    issueSessionAccessCredential,
-    SessionAccessCredentialExpiredError,
-    verifySessionAccessCredential,
-} from "./session/access/index.ts";
+export { decodeSessionAccessCredential } from "./session/access/index.ts";
 
 export type {
     AgentCatalogDiscoverCommand,

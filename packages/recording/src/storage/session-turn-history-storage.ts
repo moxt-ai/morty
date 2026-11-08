@@ -1,3 +1,4 @@
+import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or, type SQL, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 import {
@@ -30,7 +31,6 @@ import {
     recordedTurnItem,
     recordingProjection,
 } from "../schema/session-recording-do/index.ts";
-import { applyDurableObjectMigrations } from "./durable-object-migrations.ts";
 
 // Each identity binds two parameters, within Durable Object SQLite's 100-parameter limit.
 const eventIdentityChunk = 50;
