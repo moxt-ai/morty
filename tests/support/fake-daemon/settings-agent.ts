@@ -175,6 +175,15 @@ export function createSettingsAgent(
                     ) {
                         return { ...option, currentValue: "test-small" };
                     }
+                    // Its effort levels belong to the selected model, so choosing a model resets the effort.
+                    if (
+                        profile === "dependent" &&
+                        configId === "model" &&
+                        option.id === "effort" &&
+                        option.type === "select"
+                    ) {
+                        return { ...option, currentValue: "high" };
+                    }
                     if (option.id !== configId) {
                         return option;
                     }

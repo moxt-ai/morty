@@ -454,6 +454,40 @@ export class SessionManager {
         closed: ClosedSessionHandling = "reopen",
     ): Promise<PreparedSession> => await this.#prepareSession(options, { kind: "interactive-only" }, closed, metrics);
 
+    /**
+     * Creates a Session with the initial settings `configure` applies, and answers with the configured snapshot. A
+     * Session this call created that cannot take its settings is discarded, so a refused creation leaves nothing
+     * behind. A Session that already existed, such as one whose creation answer was lost, is configured again and kept.
+     */
+    readonly createSession = async (
+        options: SessionPrepareOptions,
+        configure: (prepared: PreparedSession) => Promise<void>,
+        metrics: OperationMetrics = unmeasuredOperationMetrics,
+        closed: ClosedSessionHandling = "reopen",
+    ): Promise<PreparedSession> => {
+        const created = !this.#isKnownSession(options.sessionId);
+        try {
+            await configure(await this.prepareSession(options, metrics, closed));
+            return await this.prepareSession(options, metrics, closed);
+        } catch (error) {
+            if (created) {
+                await this.#discardCreatedSession(options.sessionId);
+            }
+            throw error;
+        }
+    };
+
+    async #discardCreatedSession(sessionId: string): Promise<void> {
+        const runtime = this.#executionProcesses.get(sessionId);
+        try {
+            if (runtime !== undefined) {
+                await this.#retireSessionProcess(sessionId, runtime, async () => await runtime.close());
+            }
+        } finally {
+            this.#store.remove(sessionId);
+        }
+    }
+
     readonly restoreSession = async (
         options: SessionPrepareOptions,
         metrics: OperationMetrics = unmeasuredOperationMetrics,

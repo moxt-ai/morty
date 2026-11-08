@@ -94,6 +94,7 @@ export async function executePrompt({
                 sessions,
                 prepared.configOptions,
                 sessionConfigurations ?? [],
+                "ignore",
                 executionAgent,
                 adapter,
                 resolved.cwd,

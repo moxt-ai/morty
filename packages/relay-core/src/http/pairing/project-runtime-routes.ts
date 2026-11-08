@@ -45,9 +45,10 @@ const sessionBindingSchema = v.strictObject(sessionBindingEntries);
 const createSessionSchema = v.strictObject({
     ...sessionIdentitySchema.entries,
     bindingId: v.optional(identifier),
+    // The Runtime validates each selection; the Relay only bounds the request.
+    configurations: v.pipe(v.array(v.unknown()), v.maxLength(100)),
     runtimeId: identifier,
     sessionId: identifier,
-    title: v.optional(v.pipe(v.string(), v.maxLength(512))),
 });
 const nativeEventsSchema = v.strictObject({
     ...sessionBindingSchema.entries,
@@ -224,6 +225,7 @@ export function createProjectRuntimeRoutes() {
                         additionalDirectoryIds: body.additionalDirectoryIds,
                         agentId: body.agentId,
                         bindingId: RUNTIME_WORKSPACE_BINDING_ID,
+                        configurations: body.configurations,
                         directoryId: body.directoryId,
                         kind: "session.prepare",
                         requestId: crypto.randomUUID(),

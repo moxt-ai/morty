@@ -102,7 +102,6 @@ test("Given an owned Machine, When its owner requests access to an unmanaged ses
         agentRef: "codex",
         configurations: [],
         conversationKey: "security-audit-owned",
-        title: "Owned session",
         workspaceRef: "default",
     });
     expect(opened.status).toBe(200);
@@ -188,7 +187,6 @@ test("Given a draft Bot, When its owner configures and opens it, Then setup list
         agentRef: setup.agentRef,
         configurations: [],
         conversationKey: "first-draft",
-        title: "New chat",
         workspaceRef: "default",
     });
     expect(opened.status).toBe(200);
@@ -242,7 +240,6 @@ for (const { reason, ...configuration } of [
         const input = {
             agentRef: "configuration-test",
             conversationKey: "configuration-retry",
-            title: "New chat",
             workspaceRef: "default",
         };
         const rejected = await fixture.request(`chat/bots/${fixture.botId}/access`, {
@@ -284,6 +281,38 @@ for (const { reason, ...configuration } of [
     });
 }
 
+test("Given an Agent whose model decides its effort levels, When Chat starts a conversation that lists the effort before the model, Then the new Session holds both selections", async ({
+    cloud,
+}) => {
+    await using fixture = await createChatFixture(cloud, [{ id: "dependent-settings-test", label: "Settings Agent" }]);
+    expect(
+        (
+            await fixture.request(`chat/bots/${fixture.botId}/setup`, {
+                runtimeId: fixture.runtime.runtimeId,
+                agentRef: "dependent-settings-test",
+            })
+        ).status,
+    ).toBe(202);
+    const opened = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+        agentRef: "dependent-settings-test",
+        conversationKey: "effort-before-model",
+        workspaceRef: "default",
+        configurations: [
+            { configId: "effort", valueType: "select", value: "low", booleanValue: false },
+            { configId: "model", valueType: "select", value: "test-large", booleanValue: false },
+        ],
+    });
+    expect(opened.status).toBe(200);
+    expect(await opened.json()).toMatchObject({
+        ready: {
+            configOptions: expect.arrayContaining([
+                expect.objectContaining({ id: "model", currentValue: "test-large" }),
+                expect.objectContaining({ id: "effort", currentValue: "low" }),
+            ]),
+        },
+    });
+});
+
 test("Given dependent Agent settings, When applying a later selection changes an earlier one, Then Chat rejects creation instead of returning partially configured access", async ({
     cloud,
 }) => {
@@ -299,7 +328,6 @@ test("Given dependent Agent settings, When applying a later selection changes an
     const response = await fixture.request(`chat/bots/${fixture.botId}/access`, {
         agentRef: "dependent-settings-test",
         conversationKey: "dependent-settings",
-        title: "New chat",
         workspaceRef: "default",
         configurations: [
             { configId: "model", valueType: "select", value: "test-large", booleanValue: false },
@@ -387,7 +415,6 @@ test("Given a Bot connected through one Agent, When a Session uses another Agent
         agentRef: "claude-code",
         configurations: [],
         conversationKey: "unavailable-agent",
-        title: "New chat",
         workspaceRef: "default",
     });
     expect(unavailable.status).toBe(409);
@@ -397,7 +424,6 @@ test("Given a Bot connected through one Agent, When a Session uses another Agent
         agentRef: "pi",
         configurations: [],
         conversationKey: "agent-mismatch",
-        title: "New chat",
         workspaceRef: "default",
     });
     expect(opened.status).toBe(200);
@@ -467,7 +493,6 @@ test("Given a managed Chat session is still running, When its owner archives it,
         agentRef: "codex",
         configurations: [],
         conversationKey: "busy-archive",
-        title: "New chat",
         workspaceRef: "default",
     });
     const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
@@ -505,7 +530,6 @@ test("Given an idle managed Chat session, When its owner archives it, Then Chat 
         agentRef: "codex",
         configurations: [],
         conversationKey: "idle-archive",
-        title: "New chat",
         workspaceRef: "default",
     });
     const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
@@ -546,7 +570,6 @@ test("Given two Bots on the same Runtime, When a conversation ID is opened throu
         agentRef: "codex",
         configurations: [],
         conversationKey: "owned-conversation",
-        title: "New chat",
         workspaceRef: "default",
     });
     expect(opened.status).toBe(200);
@@ -576,7 +599,6 @@ for (const operation of ["access", "managed-session"]) {
             agentRef: "codex",
             configurations: [],
             conversationKey: "concurrent-archive",
-            title: "New chat",
             workspaceRef: "default",
         });
         const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
@@ -614,7 +636,6 @@ test("Given a Runtime cannot complete Session close, When its owner archives a m
         agentRef: "codex",
         configurations: [],
         conversationKey: "unavailable-close-archive",
-        title: "New chat",
         workspaceRef: "default",
     });
     const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
@@ -647,7 +668,6 @@ test("Given a chat opened with a Session credential, When the machine's owner re
         agentRef: "codex",
         configurations: [],
         conversationKey: "revoked-while-open",
-        title: "Open while revoked",
         workspaceRef: "default",
     });
     expect(opened.status).toBe(200);
@@ -698,7 +718,6 @@ test("Given a browser following its chats' statuses, When the machine's owner re
         agentRef: "codex",
         configurations: [],
         conversationKey: "followed-while-revoked",
-        title: "Followed while revoked",
         workspaceRef: "default",
     });
     const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await opened.json());
@@ -798,7 +817,6 @@ test("Given two browsers joined through links, When one disconnects the other br
         agentRef: "codex",
         configurations: [],
         conversationKey: "other-browser-window",
-        title: "Other browser window",
         workspaceRef: "default",
     });
     expect(opened.status).toBe(200);

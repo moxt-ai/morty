@@ -86,7 +86,6 @@ type NewChatInput = {
         readonly value: string;
         readonly valueType: "select" | "boolean";
     }[];
-    readonly title: string;
     readonly workspaceRef: string;
 };
 type OpenChatInput = { readonly conversationId: string } | NewChatInput;

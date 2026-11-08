@@ -21,6 +21,7 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
             {
                 additionalDirectoryIds: [],
                 agentId: "claude",
+                configurations: [],
                 directoryId: "default",
                 runtimeId: runtime.runtimeId,
                 sessionId,

@@ -6,12 +6,7 @@ import {
     MortyPlatformAppClient,
     MortyTimeoutError,
 } from "@morty-build/client/platform";
-import {
-    decodeRuntimeDiagnosticsResult,
-    type SessionConfigOption,
-    type SessionConfigurationSelection,
-    type SessionReadyEvent,
-} from "@morty-build/client/protocol";
+import { decodeRuntimeDiagnosticsResult } from "@morty-build/client/protocol";
 import { MortyClient, MortyRuntimePairingRequest } from "@morty-build/client/server";
 import * as v from "valibot";
 import {
@@ -36,6 +31,8 @@ function runtimeSetupMessage(code: string): string {
             return "Morty could not complete Runtime setup. Cause: The session was not found.";
         case "local_authorization_failed":
             return "Morty could not complete Runtime setup. Cause: This directory is missing or unavailable, or the Runtime denied access to the selected session.";
+        case "session_configuration_conflict":
+            return "The selected Agent settings could not all be applied. Review the settings and try again.";
         default:
             return "Morty could not complete Runtime setup.";
     }
@@ -61,7 +58,6 @@ export type ChatConversationInput =
               readonly value: string;
               readonly valueType: "select" | "boolean";
           }[];
-          readonly title: string;
           readonly workspaceRef: string;
       };
 
@@ -79,19 +75,6 @@ const discoveredRuntimeSchema = v.object({
 const runtimeLatencySchema = v.strictObject({
     latencyMs: v.pipe(v.number(), v.safeInteger(), v.minValue(0)),
 });
-
-function configurationMatches(
-    option: SessionConfigOption | undefined,
-    selection: SessionConfigurationSelection,
-): boolean {
-    return (
-        option !== undefined &&
-        option.type === selection.valueType &&
-        (option.type === "boolean"
-            ? option.booleanValue === selection.booleanValue
-            : option.currentValue === selection.value)
-    );
-}
 
 export class PlatformProjectGateway {
     readonly #bindings: CloudBindings;
@@ -386,12 +369,15 @@ export class PlatformProjectGateway {
             async (client) => {
                 const sessionId = input.kind === "existing" ? input.conversationId : input.conversationKey;
                 const additionalDirectoryIds = input.kind === "existing" ? input.additionalDirectoryIds : [];
+                // A new Session starts with its settings applied by the Runtime's create operation, which refuses
+                // settings it cannot apply without leaving a Session behind; the same start retried converges.
                 const ready =
                     input.kind === "new"
                         ? await client.sessions.create(
                               {
                                   additionalDirectoryIds,
                                   agentId: input.agentRef,
+                                  configurations: input.configurations,
                                   directoryId: input.workspaceRef,
                                   runtimeId: input.runtimeId,
                                   sessionId,
@@ -415,54 +401,6 @@ export class PlatformProjectGateway {
                         502,
                     );
                 }
-                let configuration: Pick<SessionReadyEvent, "configOptions" | "configurationRevision"> = ready;
-                if (input.kind === "new") {
-                    for (const selection of input.configurations) {
-                        const option = configuration.configOptions.find(
-                            (candidate) => candidate.id === selection.configId,
-                        );
-                        if (
-                            option === undefined ||
-                            option.type !== selection.valueType ||
-                            (option.type === "select" &&
-                                !option.values.some((value) => value.value === selection.value))
-                        ) {
-                            throw new PlatformProjectError(
-                                "session_configuration_conflict",
-                                `The selected Agent setting "${selection.configId}" is no longer available. Refresh the settings and try again.`,
-                                409,
-                            );
-                        }
-                        if (configurationMatches(option, selection)) {
-                            continue;
-                        }
-                        configuration = await client.sessions.updateConfiguration(
-                            input.runtimeId,
-                            sessionId,
-                            {
-                                ...selection,
-                                agentId: input.agentRef,
-                                directoryId: input.workspaceRef,
-                                additionalDirectoryIds,
-                                expectedConfigurationRevision: configuration.configurationRevision,
-                            },
-                            signal,
-                        );
-                    }
-                    // A later setting can change an earlier one. Access is ready only when all selections still match.
-                    for (const selection of input.configurations) {
-                        const option = configuration.configOptions.find(
-                            (candidate) => candidate.id === selection.configId,
-                        );
-                        if (!configurationMatches(option, selection)) {
-                            throw new PlatformProjectError(
-                                "session_configuration_conflict",
-                                `The Agent did not retain the selected setting "${selection.configId}". Review the settings and try again.`,
-                                409,
-                            );
-                        }
-                    }
-                }
                 const access = await client.sessions.createAccess(
                     input.runtimeId,
                     sessionId,
@@ -475,11 +413,7 @@ export class PlatformProjectGateway {
                     sessionId,
                     credential: access.credential,
                     expiresAt: access.expiresAt,
-                    ready: {
-                        ...ready,
-                        configOptions: configuration.configOptions,
-                        configurationRevision: configuration.configurationRevision,
-                    },
+                    ready,
                     agentRef: input.agentRef,
                     workspaceRef: input.workspaceRef,
                 };

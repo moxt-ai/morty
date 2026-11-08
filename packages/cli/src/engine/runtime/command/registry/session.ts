@@ -19,10 +19,11 @@ import {
 import type { WebSocket } from "undici";
 import { operationErrorCode } from "../../../infra/operation-error.ts";
 import { AccumulatingOperationMetrics } from "../../../infra/operation-metrics.ts";
-import type { ResolveAgent, SessionRecovery } from "../../../session/api/session-api.ts";
+import type { PreparedSession, ResolveAgent, SessionRecovery } from "../../../session/api/session-api.ts";
 import { SessionError } from "../../../session/api/session-error.ts";
 import type { ClosedSessionHandling, SessionManager } from "../../../session/manager/session-manager.ts";
 import type { NativeSessionService } from "../../../session/native/native-session-browser.ts";
+import { applyCompleteSessionConfiguration } from "../../../session/prompt/apply-session-configuration.ts";
 import { resolveSessionDirectories } from "../../../session/workspace/resolve-session-directories.ts";
 import type { WorkspaceDirectoryService } from "../../../session/workspace/workspace-directory.ts";
 import type { RuntimeConfig } from "../../config.ts";
@@ -61,28 +62,43 @@ async function prepareSession(
             sessionId: command.sessionId,
             signal,
         };
-        const prepared =
-            command.transient === true
-                ? await sessions.inspectSession(preparation, metrics)
-                : recovery.kind === "history-required"
-                  ? await sessions.restoreSession(preparation, metrics, closed)
-                  : await sessions.prepareSession(preparation, metrics, closed);
-        const configuration = command.configuration;
-        const snapshot =
-            configuration === undefined
-                ? prepared
-                : await metrics.measure(
-                      "configuration",
-                      async () =>
-                          await sessions.applySessionConfiguration({
-                              ...preparation,
-                              booleanValue: configuration.booleanValue,
-                              configId: configuration.configId,
-                              requestId: command.requestId,
-                              value: configuration.value,
-                              valueType: configuration.valueType,
-                          }),
-                  );
+        const prepare = async (): Promise<PreparedSession> => {
+            if (command.transient === true) {
+                return await sessions.inspectSession(preparation, metrics);
+            }
+            if (recovery.kind === "history-required") {
+                return await sessions.restoreSession(preparation, metrics, closed);
+            }
+            const configurations = command.configurations;
+            if (configurations === undefined) {
+                return await sessions.prepareSession(preparation, metrics, closed);
+            }
+            // A Session being created starts with exactly the settings it states, by the rule a Turn's settings use.
+            return await sessions.createSession(
+                preparation,
+                async (created) =>
+                    await metrics.measure(
+                        "configuration",
+                        async () =>
+                            await applyCompleteSessionConfiguration(
+                                sessions,
+                                created.configOptions,
+                                configurations,
+                                "refuse",
+                                resolvedAgent.agent,
+                                resolvedAgent.adapter,
+                                resolved.cwd,
+                                resolved.additionalDirectories,
+                                command.requestId,
+                                command.sessionId,
+                                signal,
+                            ),
+                    ),
+                metrics,
+                closed,
+            );
+        };
+        const prepared = await prepare();
         return {
             additionalDirectories: resolved.additionalDirectoryEntries,
             agentId: command.agentId,
@@ -90,8 +106,8 @@ async function prepareSession(
             agentVersion: prepared.agentVersion,
             capabilities: prepared.capabilities,
             commands: prepared.commands,
-            configOptions: snapshot.configOptions,
-            configurationRevision: snapshot.configurationRevision,
+            configOptions: prepared.configOptions,
+            configurationRevision: prepared.configurationRevision,
             directoryId: command.directoryId,
             directoryLabel: resolved.directoryLabel,
             kind: "session.ready",

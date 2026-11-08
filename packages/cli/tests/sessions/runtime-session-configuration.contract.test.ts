@@ -22,6 +22,7 @@ it("Given two clients holding one configuration revision, When they edit concurr
             {
                 additionalDirectoryIds: [],
                 agentId: "claude",
+                configurations: [],
                 directoryId: "default",
                 runtimeId: runtime.runtimeId,
                 sessionId,

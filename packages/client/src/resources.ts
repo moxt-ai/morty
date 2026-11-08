@@ -100,9 +100,15 @@ export class MortySessionAccessRevocation {
     }
 }
 
+/**
+ * Creates a Session with the settings it starts with. The Runtime applies `configurations` as part of creating the
+ * Session, so a created Session holds every selection, and a refused one leaves nothing behind. Creating the same
+ * `sessionId` again is safe: it returns that Session with the stated settings applied.
+ */
 export interface CreateMortySessionRequest {
     readonly additionalDirectoryIds: readonly string[];
     readonly agentId: string;
+    readonly configurations: readonly SessionConfigurationSelection[];
     readonly directoryId: string;
     readonly runtimeId: string;
     readonly sessionId: string;
