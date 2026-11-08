@@ -44,6 +44,7 @@ function createCloudflareRuntime(script: string, allowedOrigins: ReadonlySet<str
             r2Buckets: ["R2_BUCKET_APAC", "R2_BUCKET_WNAM"],
             bindings: {
                 MORTY_ALLOWED_ORIGINS: JSON.stringify([...allowedOrigins]),
+                MORTY_SESSION_SIGNING_SECRET: "local-development-only-session-signing-secret",
             },
             durableObjects: miniflareDurableObjects(new NodeURL("wrangler.jsonc", packageDirectory)),
         }),

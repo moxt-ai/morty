@@ -5,7 +5,6 @@ export {
     AGENT_PERMISSION_MODES,
     DEFAULT_AGENT_EXECUTION_CONFIGURATION,
     decodeAgentExecutionConfiguration,
-    issueSessionAccessCredential,
 } from "@morty-build/client/protocol";
 export * from "./errors.ts";
 export * from "./resources.ts";

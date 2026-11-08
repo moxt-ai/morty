@@ -127,6 +127,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           MORTY_SERVICE_SECRET: ${{ secrets.MORTY_SERVICE_SECRET }}
+          MORTY_SESSION_SIGNING_SECRET: ${{ secrets.MORTY_SESSION_SIGNING_SECRET }}
           EXPECTED_REVISION: ${{ steps.archive.outputs.revision || github.sha }}
         run: python3 deployment/deploy.py "$TARGET_ENVIRONMENT" --release ".deployment-output/$TARGET_ENVIRONMENT"
       - name: Archive deployment evidence

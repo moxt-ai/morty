@@ -451,7 +451,7 @@ export class PlatformControlPlaneService implements ProjectAccessAuthorizer {
             actorReference(actorRef),
             signal,
         );
-        return new PlatformAppCredentialAccess(row.app_id, project);
+        return new PlatformAppCredentialAccess(row.app_id, row.public_credential_id, project);
     };
     private readonly authorizeCredentialForProject = async (
         row: CredentialRow,

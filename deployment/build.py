@@ -70,6 +70,7 @@ def main():
     platform['r2_buckets'] = [{'binding': 'R2_BUCKET_APAC', 'bucket_name': spec['buckets']['platform_apac']}, {'binding': 'R2_BUCKET_WNAM', 'bucket_name': spec['buckets']['platform_wnam']}]
     platform['services'] = [{'binding': 'RECORDING', 'service': spec['recording']}]
     platform['vars'] = {'RECORDING_PROVIDER_ID': spec['recording'], 'MORTY_ALLOWED_ORIGINS': json.dumps(spec['allowed_origins'])}
+    platform['secrets'] = {'required': ['MORTY_SESSION_SIGNING_SECRET']}
     platform.pop('assets', None)
     for label, config in [('recording', recording), ('platform', platform)]:
         write(generated / (label + '.json'), config)

@@ -1154,8 +1154,8 @@ export class MortySessionResources {
         );
 
     /**
-     * Has the Platform issue a Session credential. Issued after a Session access revocation, it is never covered by
-     * that revocation, unlike one signed locally with `issueSessionAccessCredential`.
+     * Has the Platform issue a Session credential, signed with a key only the Relay holds. Issued after a Session access
+     * revocation, it is never covered by that revocation.
      */
     readonly createAccess = async (
         runtimeId: string,

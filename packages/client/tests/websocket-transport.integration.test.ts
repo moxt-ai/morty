@@ -3,16 +3,22 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { MortyClient, MortyConnectionError, StaticMortyCredentialProvider } from "../src/index.ts";
 import { type MortyWebSocketConnector, WsTransport } from "../src/platform.ts";
-import { issueSessionAccessCredential } from "../src/protocol/index.ts";
 
-const sessionCredential = await issueSessionAccessCredential(`mapp_${"a".repeat(22)}_${"b".repeat(43)}`, {
-    issuedAtEpochMilliseconds: 0,
-    expiresAtEpochMilliseconds: 900000,
-    purpose: "session-access",
-    projectId: "project-1",
-    runtimeId: "runtime-1",
-    sessionId: "session-1",
-});
+// The transport routes by the claims it decodes; only the Relay verifies the signature.
+const sessionClaims = btoa(
+    JSON.stringify({
+        issuedAtEpochMilliseconds: 0,
+        expiresAtEpochMilliseconds: 900000,
+        purpose: "session-access",
+        projectId: "project-1",
+        runtimeId: "runtime-1",
+        sessionId: "session-1",
+    }),
+)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/u, "");
+const sessionCredential = `msession_${"a".repeat(22)}_${sessionClaims}_${"A".repeat(43)}`;
 
 function runtimeRequest(address: string, init?: RequestInit): Request {
     const url = new URL(address);

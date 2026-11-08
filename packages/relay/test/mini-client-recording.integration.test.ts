@@ -35,6 +35,7 @@ function bindings(): PlatformRelayBindings {
         RECORDING: env.RECORDING,
         RECORDING_PROVIDER_ID: env.RECORDING_PROVIDER_ID,
         RUNTIME_RELAY: env.RUNTIME_RELAY,
+        MORTY_SESSION_SIGNING_SECRET: env.MORTY_SESSION_SIGNING_SECRET,
     };
 }
 

@@ -86,7 +86,9 @@ def main():
             raise ValueError('Release omits an existing Durable Object migration: ' + component)
     # Validate the migrated identity and its deploy-time secret before any R2,
     # D1 migration, or Worker write. A successful health page is not sufficient.
-    secrets_by_component = {'platform': {}, 'morty': {'MORTY_SERVICE_SECRET': os.environ['MORTY_SERVICE_SECRET']}}
+    secrets_by_component = {'platform': {'MORTY_SESSION_SIGNING_SECRET': os.environ['MORTY_SESSION_SIGNING_SECRET']}, 'morty': {'MORTY_SERVICE_SECRET': os.environ['MORTY_SERVICE_SECRET']}}
+    if len(secrets_by_component['platform']['MORTY_SESSION_SIGNING_SECRET']) < 32:
+        raise ValueError('The Session credential signing secret must be at least 32 characters')
     app_secret = secrets_by_component['morty'].get('MORTY_SERVICE_SECRET')
     if not isinstance(app_secret, str) or not app_secret:
         raise ValueError('Missing production application credential')
