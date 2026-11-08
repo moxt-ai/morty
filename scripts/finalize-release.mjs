@@ -45,6 +45,7 @@ if (
     throw new Error("Production no longer serves this release's setup artifact");
 }
 const currentNpm = await fetch("https://registry.npmjs.org/@morty-build%2fcli/latest", {
+    headers: { "cache-control": "no-cache" },
     signal: AbortSignal.timeout(30_000),
 });
 if (!currentNpm.ok) {

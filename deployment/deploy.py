@@ -89,14 +89,14 @@ def main():
         cli_bytes = archive.read_bytes()
         if archive.is_symlink() or hashlib.sha256(cli_bytes).hexdigest() != accepted.get('sha256') or 'sha512-' + base64.b64encode(hashlib.sha512(cli_bytes).digest()).decode() != accepted['integrity']:
             raise ValueError('CLI archive checksum differs from the acceptance record')
-        with urllib.request.urlopen('https://registry.npmjs.org/@morty-build%2fcli/' + version, timeout=30) as response:
+        with urllib.request.urlopen(urllib.request.Request('https://registry.npmjs.org/@morty-build%2fcli/' + version, headers={'Cache-Control': 'no-cache'}), timeout=30) as response:
             package = json.load(response)
         if package.get('name') != '@morty-build/cli' or package.get('version') != version or package.get('bin', {}).get('morty') != 'dist/cli.js':
             raise ValueError('The exact Morty CLI release is unavailable')
         if package.get('dist', {}).get('integrity') != accepted['integrity']:
             raise ValueError('Published CLI bytes differ from the accepted release')
         if os.environ.get('MORTY_ALLOW_RESTORE') != 'true':
-            with urllib.request.urlopen('https://registry.npmjs.org/@morty-build%2fcli/latest', timeout=30) as response:
+            with urllib.request.urlopen(urllib.request.Request('https://registry.npmjs.org/@morty-build%2fcli/latest', headers={'Cache-Control': 'no-cache'}), timeout=30) as response:
                 latest = json.load(response)['version']
             if latest != version:
                 raise ValueError('A superseded release cannot automatically replace production')

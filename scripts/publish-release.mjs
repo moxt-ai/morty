@@ -45,23 +45,31 @@ async function registryContainsAcceptedRelease() {
 }
 
 // A queued or retried old commit must never move npm latest backwards.
-const latestResponse = await fetch(`https://registry.npmjs.org/${encodeURIComponent(release.name)}/latest`, {
-    signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
-});
-if (!latestResponse.ok) {
-    await latestResponse.body?.cancel();
-    throw new Error("Cannot verify the current published release");
+async function registryLatestIsAcceptedRelease() {
+    const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(release.name)}/latest`, {
+        headers: { "cache-control": "no-cache" },
+        signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+    });
+    if (!response.ok) {
+        await response.body?.cancel();
+        throw new Error("Cannot verify the current published release");
+    }
+    const published = await response.json();
+    if (!/^\d+\.\d+\.\d+$/.test(published.version)) {
+        throw new Error("Unexpected latest version");
+    }
+    const currentParts = published.version.split(".").map(Number);
+    const nextParts = release.version.split(".").map(Number);
+    const difference = currentParts.map((part, index) => part - nextParts[index]).find((part) => part !== 0) ?? 0;
+    if (difference > 0) {
+        throw new Error("A newer release is already published; refusing a stale run");
+    }
+    if (difference === 0 && (published.name !== release.name || published.dist?.integrity !== release.integrity)) {
+        throw new Error("Latest release integrity differs from the tested archive");
+    }
+    return difference === 0;
 }
-const latest = (await latestResponse.json()).version;
-if (!/^\d+\.\d+\.\d+$/.test(latest)) {
-    throw new Error("Unexpected latest version");
-}
-const currentParts = latest.split(".").map(Number);
-const nextParts = release.version.split(".").map(Number);
-const difference = currentParts.map((part, index) => part - nextParts[index]).find((part) => part !== 0) ?? 0;
-if (difference > 0) {
-    throw new Error("A newer release is already published; refusing a stale run");
-}
+await registryLatestIsAcceptedRelease();
 
 if (await registryContainsAcceptedRelease()) {
     console.log("The accepted archive is already published; verifying this retry without republishing.");
@@ -78,5 +86,10 @@ if (await registryContainsAcceptedRelease()) {
         console.log("npm accepted the publication; waiting for public registry verification.");
         await delay(5000, undefined, { signal });
     }
+}
+// Exact-version and dist-tag metadata can become visible at different times.
+while (!(await registryLatestIsAcceptedRelease())) {
+    console.log("Waiting for npm latest to identify the accepted release before deployment.");
+    await delay(5000, undefined, { signal });
 }
 console.log(`Verified ${release.name}@${release.version} from ${release.revision}`);
