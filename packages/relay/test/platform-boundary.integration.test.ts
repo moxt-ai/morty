@@ -23,10 +23,11 @@ import {
     encodeSessionInfoUpdatedEvent,
     encodeSessionOperationFailedEvent,
     encodeSessionPreviewHistoryPageLoaded,
+    encodeSessionPromptAcceptedEvent,
     encodeSessionPromptCommand,
     encodeSessionRenamedEvent,
     encodeSessionStatusChangedEvent,
-    type LifecycleMetadata,
+    encodeSessionTurnStoppedEvent,
     MORTY_API_PREFIX,
     RUNTIME_HEARTBEAT_ACK_MESSAGE,
     RUNTIME_HEARTBEAT_MESSAGE,
@@ -1877,7 +1878,8 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                     200,
                 )
             )["online"],
-        startTurn: (commandId: string, position: string) =>
+        /** Starts the submitted Turn: the Runtime records its start and answers the submission as running. */
+        startTurn: (commandId: string, position: string) => {
             daemon.send(
                 encodeSessionEventEnvelope({
                     kind: "session.event.v2",
@@ -1898,7 +1900,16 @@ async function connectRuntimeDaemon(slug: string, options: { readonly anchorCloc
                         },
                     ],
                 }),
-            ),
+            );
+            daemon.send(
+                encodeSessionPromptAcceptedEvent({
+                    kind: "session.prompt.accepted",
+                    requestId: commandId,
+                    sessionId,
+                    state: "running",
+                }),
+            );
+        },
         runtimeId,
         issueRuntimeCredential: async (targetRuntimeId: string, issuer = appCredential) =>
             text(
@@ -2196,25 +2207,23 @@ describe.sequential("Platform Turn submission", () => {
                         access === "app"
                             ? runtime.appSessionRequest(path, { method: "POST", body })
                             : runtime.sessionControlRequest(path, body, sessionCredential);
-                    expect(JSON.parse(await runtime.daemonMessages.next())).toEqual({
+                    const cancellation = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
+                    expect(cancellation).toEqual({
                         commandId: turnId,
                         kind: "session.cancel",
+                        requestId: expect.any(String),
                         sessionId: runtime.sessionId,
                     });
+                    if (cancellation.kind !== "session.cancel") {
+                        throw new Error("Expected a cancellation");
+                    }
                     runtime.daemon.send(
-                        encodeSessionEventEnvelope({
-                            kind: "session.event.v2",
-                            events: [
-                                {
-                                    eventId: `legacy-${stopReason}`,
-                                    position: stopReason === "cancelled" ? "1" : "2",
-                                    recordedAt: "2026-10-29T00:00:00.000Z",
-                                    sessionGenerationId: "legacy-generation",
-                                    sessionId: runtime.sessionId,
-                                    type: "lifecycle-metadata",
-                                    payload: { kind: "prompt.completed", commandId: turnId, stopReason },
-                                },
-                            ],
+                        encodeSessionTurnStoppedEvent({
+                            commandId: turnId,
+                            kind: "session.turn.stopped",
+                            requestId: cancellation.requestId,
+                            sessionId: runtime.sessionId,
+                            stopReason,
                         }),
                     );
                     expect(await responseJson(await response, 200)).toEqual({ turnId, stopReason });
@@ -2225,15 +2234,10 @@ describe.sequential("Platform Turn submission", () => {
         },
     );
 
-    it.each([
-        { access: "app", outcome: "completed" },
-        { access: "session", outcome: "completed" },
-        { access: "app", outcome: "refused" },
-        { access: "session", outcome: "refused" },
-    ] as const)(
-        "Given $access access withdraws a queued message, When a Runtime reports $outcome prior execution, Then the conditional endpoint rejects the edit",
-        async ({ access, outcome }) => {
-            const runtime = await connectRuntimeDaemon(`conditional-queue-cancel-${access}-${outcome}`);
+    it.each(["app", "session"] as const)(
+        "Given %s access withdraws a queued message, When the Runtime refuses because it already started, Then the conditional endpoint rejects the edit",
+        async (access) => {
+            const runtime = await connectRuntimeDaemon(`conditional-queue-cancel-${access}`);
             try {
                 const body = {};
                 const path = "/turns/queued-command/cancel-before-start";
@@ -2241,38 +2245,24 @@ describe.sequential("Platform Turn submission", () => {
                     access === "app"
                         ? runtime.appSessionRequest(path, { method: "POST", body })
                         : runtime.sessionControlRequest(path, body);
-                expect(JSON.parse(await runtime.daemonMessages.next())).toEqual({
+                const withdrawal = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
+                expect(withdrawal).toEqual({
                     commandId: "queued-command",
                     kind: "session.cancel-before-start",
+                    requestId: expect.any(String),
                     sessionId: runtime.sessionId,
                 });
+                if (withdrawal.kind !== "session.cancel-before-start") {
+                    throw new Error("Expected a withdrawal");
+                }
                 runtime.daemon.send(
-                    outcome === "refused"
-                        ? encodeSessionOperationFailedEvent({
-                              kind: "session.operation.failed",
-                              requestId: "queued-command",
-                              sessionId: runtime.sessionId,
-                              code: "turn_already_started",
-                              message: "The message already started and could not be withdrawn",
-                          })
-                        : encodeSessionEventEnvelope({
-                              kind: "session.event.v2",
-                              events: [
-                                  {
-                                      eventId: "already-executed",
-                                      position: "1",
-                                      recordedAt: "2026-10-29T00:00:00.000Z",
-                                      sessionGenerationId: "conditional-generation",
-                                      sessionId: runtime.sessionId,
-                                      type: "lifecycle-metadata",
-                                      payload: {
-                                          kind: "prompt.completed",
-                                          commandId: "queued-command",
-                                          stopReason: "end_turn",
-                                      },
-                                  },
-                              ],
-                          }),
+                    encodeSessionOperationFailedEvent({
+                        kind: "session.operation.failed",
+                        requestId: withdrawal.requestId,
+                        sessionId: runtime.sessionId,
+                        code: "turn_already_started",
+                        message: "The message already started and could not be withdrawn",
+                    }),
                 );
                 expect(await responseJson(await response, 409)).toMatchObject({
                     error: { code: "turn_already_started" },
@@ -2291,7 +2281,7 @@ describe.sequential("Platform Turn submission", () => {
             method: "POST",
             body: {},
             command: { commandId: "app-command", kind: "session.cancel" },
-            payload: { commandId: "app-command", kind: "prompt.completed", stopReason: "cancelled" },
+            reply: { commandId: "app-command", kind: "session.turn.stopped", stopReason: "cancelled" },
             expected: { turnId: "app-command", stopReason: "cancelled" },
         },
         {
@@ -2300,7 +2290,7 @@ describe.sequential("Platform Turn submission", () => {
             method: "POST",
             body: {},
             command: { commandId: "app-command", kind: "session.cancel-before-start" },
-            payload: { commandId: "app-command", kind: "prompt.completed", stopReason: "cancelled" },
+            reply: { commandId: "app-command", kind: "session.turn.withdrawn" },
             expected: { turnId: "app-command" },
         },
         {
@@ -2309,7 +2299,7 @@ describe.sequential("Platform Turn submission", () => {
             method: "PUT",
             body: { disposition: "steer" },
             command: { commandId: "app-command", disposition: "steer", kind: "session.prompt.disposition" },
-            payload: { commandId: "app-command", attemptId: "app-attempt", epoch: "app-epoch", kind: "prompt.started" },
+            reply: { commandId: "app-command", kind: "session.prompt.steered" },
             expected: { turnId: "app-command" },
         },
         {
@@ -2323,16 +2313,7 @@ describe.sequential("Platform Turn submission", () => {
                 outcome: "selected",
                 optionId: "allow_once",
             },
-            payload: {
-                kind: "session.permission.resolved",
-                event: {
-                    interactionId: "app-interaction",
-                    kind: "session.permission.resolved",
-                    outcome: "selected",
-                    optionId: "allow_once",
-                    sessionId: "SESSION",
-                },
-            },
+            reply: { interactionId: "app-interaction", kind: "session.interaction.answered" },
             expected: { accepted: true },
         },
         {
@@ -2346,15 +2327,7 @@ describe.sequential("Platform Turn submission", () => {
                 action: "accept",
                 content: '{"answer":"continue"}',
             },
-            payload: {
-                kind: "session.elicitation.resolved",
-                event: {
-                    interactionId: "app-interaction",
-                    kind: "session.elicitation.resolved",
-                    action: "accept",
-                    sessionId: "SESSION",
-                },
-            },
+            reply: { interactionId: "app-interaction", kind: "session.interaction.answered" },
             expected: { accepted: true },
         },
     ] as const)("App access $label", async (operation) => {
@@ -2366,37 +2339,13 @@ describe.sequential("Platform Turn submission", () => {
                 response.then((result) => ({ kind: "response", message: String(result.status) })),
             ]);
             expect(first).toMatchObject({ kind: "command" });
-            expect(decodeServiceToDaemonMessage(first.message)).toMatchObject({
-                ...operation.command,
-                sessionId: runtime.sessionId,
-            });
-            const payload: LifecycleMetadata =
-                operation.payload.kind === "session.permission.resolved"
-                    ? {
-                          kind: operation.payload.kind,
-                          event: { ...operation.payload.event, sessionId: runtime.sessionId },
-                      }
-                    : operation.payload.kind === "session.elicitation.resolved"
-                      ? {
-                            kind: operation.payload.kind,
-                            event: { ...operation.payload.event, sessionId: runtime.sessionId },
-                        }
-                      : operation.payload;
+            const command = decodeServiceToDaemonMessage(first.message);
+            expect(command).toMatchObject({ ...operation.command, sessionId: runtime.sessionId });
+            if (!("requestId" in command)) {
+                throw new Error("Expected the command to name its own request");
+            }
             runtime.daemon.send(
-                encodeSessionEventEnvelope({
-                    kind: "session.event.v2",
-                    events: [
-                        {
-                            eventId: "app-operation-resolved",
-                            position: "1",
-                            recordedAt: new Date().toISOString(),
-                            sessionGenerationId: "session-generation-1",
-                            sessionId: runtime.sessionId,
-                            type: "lifecycle-metadata",
-                            payload,
-                        },
-                    ],
-                }),
+                JSON.stringify({ ...operation.reply, requestId: command.requestId, sessionId: runtime.sessionId }),
             );
             expect(await responseJson(await response, 200)).toMatchObject(operation.expected);
         } finally {
@@ -3228,24 +3177,11 @@ describe.sequential("Platform Turn submission", () => {
             }
             expect(delivered.prompt).toBe(longPrompt);
             daemon.send(
-                encodeSessionEventEnvelope({
-                    kind: "session.event.v2",
-                    events: [
-                        {
-                            eventId: "long-first-started",
-                            position: "1",
-                            recordedAt: "2026-09-18T00:00:00.000Z",
-                            sessionGenerationId: "session-generation-1",
-                            sessionId,
-                            type: "lifecycle-metadata",
-                            payload: {
-                                attemptId: "long-first-attempt",
-                                commandId: delivered.commandId,
-                                epoch: "long-prompt-epoch",
-                                kind: "prompt.started",
-                            },
-                        },
-                    ],
+                encodeSessionPromptAcceptedEvent({
+                    kind: "session.prompt.accepted",
+                    requestId: delivered.commandId,
+                    sessionId,
+                    state: "running",
                 }),
             );
             expect(await responseJson(await longTurn, 200)).toMatchObject({
@@ -3253,8 +3189,8 @@ describe.sequential("Platform Turn submission", () => {
                 turnId: "long-first-turn",
             });
 
-            // A pending cancellation waits for the whole Turn, so an unrelated
-            // Turn's failure broadcast must not disturb it.
+            // A cancellation is answered only by the reply naming its own request: a failure naming the Turn it
+            // cancels, or another Turn's lifecycle, leaves it waiting.
             const cancelTurn = worker.fetch(
                 new Request(
                     `${relayOrigin}${MORTY_API_PREFIX}/v1/projects/${projectId}/sessions/${sessionId}/turns/long-first-turn/cancel`,
@@ -3266,27 +3202,18 @@ describe.sequential("Platform Turn submission", () => {
                 ),
                 environment,
             );
-            expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("session.cancel");
+            const cancellation = decodeServiceToDaemonMessage(await daemonMessages.next());
+            if (cancellation.kind !== "session.cancel") {
+                throw new Error("Expected the cancellation to reach the Runtime");
+            }
+            expect(cancellation.requestId).not.toBe(cancellation.commandId);
             daemon.send(
-                encodeSessionEventEnvelope({
-                    kind: "session.event.v2",
-                    events: [
-                        {
-                            eventId: "unrelated-turn-failed",
-                            position: "2",
-                            recordedAt: "2026-09-18T00:00:01.000Z",
-                            sessionGenerationId: "session-generation-1",
-                            sessionId,
-                            type: "lifecycle-metadata",
-                            payload: {
-                                attemptId: "unrelated-attempt",
-                                code: "agent_execution_failed",
-                                commandId: "unrelated-turn",
-                                kind: "prompt.failed",
-                                message: "The local agent could not complete the request",
-                            },
-                        },
-                    ],
+                encodeSessionOperationFailedEvent({
+                    code: "agent_execution_failed",
+                    kind: "session.operation.failed",
+                    message: "The local agent could not complete the request",
+                    requestId: "long-first-turn",
+                    sessionId,
                 }),
             );
             daemon.send(
@@ -3309,13 +3236,21 @@ describe.sequential("Platform Turn submission", () => {
                     ],
                 }),
             );
+            daemon.send(
+                encodeSessionTurnStoppedEvent({
+                    commandId: "long-first-turn",
+                    kind: "session.turn.stopped",
+                    requestId: cancellation.requestId,
+                    sessionId,
+                    stopReason: "cancelled",
+                }),
+            );
             expect(await responseJson(await cancelTurn, 200)).toEqual({
                 stopReason: "cancelled",
                 turnId: "long-first-turn",
             });
 
-            // An appended Turn the Runtime queues is acknowledged by the V2 queue change naming it, which the
-            // daemon records as the prompt enters its queue.
+            // An appended Turn the Runtime queues is answered as queued.
             const queuedTurn = worker.fetch(
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/projects/${projectId}/sessions/${sessionId}/turns`, {
                     body: JSON.stringify({
@@ -3333,86 +3268,16 @@ describe.sequential("Platform Turn submission", () => {
             );
             expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("session.prompt");
             daemon.send(
-                encodeSessionEventEnvelope({
-                    kind: "session.event.v2",
-                    events: [
-                        {
-                            eventId: "queued-follow-up-admitted",
-                            position: "4",
-                            recordedAt: "2026-09-18T00:00:03.000Z",
-                            sessionGenerationId: "session-generation-1",
-                            sessionId,
-                            type: "lifecycle-metadata",
-                            payload: { changedByCommandId: "queued-follow-up", kind: "session.queue.changed" },
-                        },
-                    ],
+                encodeSessionPromptAcceptedEvent({
+                    kind: "session.prompt.accepted",
+                    requestId: "queued-follow-up",
+                    sessionId,
+                    state: "queued",
                 }),
             );
             expect(await responseJson(await queuedTurn, 200)).toMatchObject({
                 state: { kind: "queued" },
                 turnId: "queued-follow-up",
-            });
-
-            // A queue change on another Session of the same Runtime must not
-            // acknowledge the submission: without Session scoping this Turn
-            // would settle as queued from the foreign event instead of waiting
-            // for its own prompt.started.
-            const crossSessionTurn = worker.fetch(
-                new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/projects/${projectId}/sessions/${sessionId}/turns`, {
-                    body: JSON.stringify({
-                        additionalDirectoryIds: [],
-                        agentId: "codex",
-                        content: "queue behind the foreign queue change",
-                        directoryId: "root",
-                        idempotencyKey: "cross-session-queued",
-                        attachments: [],
-                    }),
-                    headers: credentialHeaders(text(sessionAccess, "credential")),
-                    method: "POST",
-                }),
-                environment,
-            );
-            expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("session.prompt");
-            daemon.send(
-                encodeSessionEventEnvelope({
-                    kind: "session.event.v2",
-                    events: [
-                        {
-                            eventId: "foreign-session-queue-change",
-                            position: "1",
-                            recordedAt: "2026-09-18T00:00:04.000Z",
-                            sessionGenerationId: "session-generation-1",
-                            sessionId: "another-session",
-                            type: "lifecycle-metadata",
-                            payload: { changedByCommandId: "cross-session-queued", kind: "session.queue.changed" },
-                        },
-                    ],
-                }),
-            );
-            daemon.send(
-                encodeSessionEventEnvelope({
-                    kind: "session.event.v2",
-                    events: [
-                        {
-                            eventId: "cross-session-queued-started",
-                            position: "5",
-                            recordedAt: "2026-09-18T00:00:05.000Z",
-                            sessionGenerationId: "session-generation-1",
-                            sessionId,
-                            type: "lifecycle-metadata",
-                            payload: {
-                                attemptId: "cross-session-attempt",
-                                commandId: "cross-session-queued",
-                                epoch: "cross-session-epoch",
-                                kind: "prompt.started",
-                            },
-                        },
-                    ],
-                }),
-            );
-            expect(await responseJson(await crossSessionTurn, 200)).toMatchObject({
-                state: { kind: "running" },
-                turnId: "cross-session-queued",
             });
 
             expect(
@@ -3597,12 +3462,15 @@ describe.sequential("Platform Turn submission", () => {
             );
             const forwarded = decodeServiceToDaemonMessage(await daemonMessages.next());
             expect(forwarded).toMatchObject({ kind: "session.prompt.disposition", sessionId });
+            if (forwarded.kind !== "session.prompt.disposition") {
+                throw new Error("Expected the steer to reach the Runtime");
+            }
             daemon.send(
                 encodeSessionOperationFailedEvent({
                     code: "steering_unsupported",
                     kind: "session.operation.failed",
                     message: "The selected agent does not support mid-turn steering",
-                    requestId: "some-active-turn",
+                    requestId: forwarded.requestId,
                     sessionId,
                 }),
             );
@@ -4164,7 +4032,7 @@ describe("Runtime prompt acknowledgements", () => {
             ],
         });
 
-    it("Given a queued submission, When a queue change names another command, Then only the change naming it acknowledges it", async () => {
+    it("Given pending submissions, When the Runtime answers another request, Then only the reply naming each submission answers it", async () => {
         const runtime = await connectRuntimeDaemon("named-queue-change");
         try {
             const credential = await runtime.issueRuntimeCredential(runtime.runtimeId);
@@ -4191,19 +4059,31 @@ describe("Runtime prompt acknowledgements", () => {
             expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 commandId: "rejected-command",
             });
-            // Another command leaving the queue does not answer this submission; its own rejection does.
+            // Another request's answer, or this command's own lifecycle, does not answer this submission; the
+            // Runtime's reply naming it does.
             runtime.daemon.send(
-                lifecycleFrame(runtime.sessionId, "other-left-queue", "1", {
-                    changedByCommandId: "other-command",
-                    kind: "session.queue.changed",
+                encodeSessionPromptAcceptedEvent({
+                    kind: "session.prompt.accepted",
+                    requestId: "other-command",
+                    sessionId: runtime.sessionId,
+                    state: "queued",
                 }),
             );
             runtime.daemon.send(
-                lifecycleFrame(runtime.sessionId, "rejected-failed", "2", {
+                lifecycleFrame(runtime.sessionId, "rejected-failed", "1", {
                     code: "agent_unavailable",
                     commandId: "rejected-command",
                     kind: "prompt.failed-before-start",
                     message: "The Agent is unavailable",
+                }),
+            );
+            runtime.daemon.send(
+                encodeSessionOperationFailedEvent({
+                    code: "agent_unavailable",
+                    kind: "session.operation.failed",
+                    message: "The Agent is unavailable",
+                    requestId: "rejected-command",
+                    sessionId: runtime.sessionId,
                 }),
             );
             const failure = await rejected;
@@ -4215,9 +4095,11 @@ describe("Runtime prompt acknowledgements", () => {
                 commandId: "admitted-command",
             });
             runtime.daemon.send(
-                lifecycleFrame(runtime.sessionId, "admitted-queue", "3", {
-                    changedByCommandId: "admitted-command",
-                    kind: "session.queue.changed",
+                encodeSessionPromptAcceptedEvent({
+                    kind: "session.prompt.accepted",
+                    requestId: "admitted-command",
+                    sessionId: runtime.sessionId,
+                    state: "queued",
                 }),
             );
             expect(await responseJson(await admitted, 200)).toMatchObject({
@@ -4302,16 +4184,27 @@ describe("Runtime prompt acknowledgements", () => {
                 kind: "session.prompt",
             });
             const cancel = runtime.sessionControlRequest("/turns/preparing-command/cancel", {});
-            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
-                commandId: "preparing-command",
-                kind: "session.cancel",
-            });
-            // A command cancelled before it starts records only its completion, never prompt.started.
+            const cancellation = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
+            if (cancellation.kind !== "session.cancel") {
+                throw new Error("Expected the cancellation to reach the Runtime");
+            }
+            expect(cancellation.commandId).toBe("preparing-command");
+            // A command cancelled before it starts answers its submission as settled, and the cancellation with
+            // how it stopped.
             runtime.daemon.send(
-                lifecycleFrame(runtime.sessionId, "preparing-cancelled", "1", {
+                encodeSessionPromptAcceptedEvent({
+                    kind: "session.prompt.accepted",
+                    requestId: "preparing-command",
+                    sessionId: runtime.sessionId,
+                    state: "settled",
+                }),
+            );
+            runtime.daemon.send(
+                encodeSessionTurnStoppedEvent({
                     commandId: "preparing-command",
-                    execution: "not-started",
-                    kind: "prompt.completed",
+                    kind: "session.turn.stopped",
+                    requestId: cancellation.requestId,
+                    sessionId: runtime.sessionId,
                     stopReason: "cancelled",
                 }),
             );

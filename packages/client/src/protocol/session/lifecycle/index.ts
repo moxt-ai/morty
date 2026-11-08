@@ -262,8 +262,9 @@ const sessionOperationFailedEventSchema = z
 export type SessionOperationFailedEvent = z.infer<typeof sessionOperationFailedEventSchema>;
 
 /**
- * Answers a prompt whose command the Runtime had already accepted: a retry records no lifecycle event of its own,
- * so this states where the original command stands. `requestId` is the command's identifier.
+ * Answers a prompt: it entered the Session's queue, started running, or had already settled before it started (for
+ * example when it was withdrawn, or when a retry finds it settled). A prompt is its own request, so `requestId` is
+ * the prompt's command identifier. A prompt that failed before it started is answered by `session.operation.failed`.
  */
 const sessionPromptAcceptedEventSchema = z
     .object({

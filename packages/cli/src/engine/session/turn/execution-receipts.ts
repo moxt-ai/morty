@@ -2,7 +2,6 @@ import { createHash, randomUUID } from "node:crypto";
 import {
     type CommandDelivery,
     decodeKnownSessionEventPayload,
-    encodeSessionCancelBeforeStartCommand,
     isPromptTerminal,
     type LastTurnOutcome,
     type PromptMessageOutcome,
@@ -52,6 +51,9 @@ export interface RestatedOutcome {
     readonly event: SessionEventPayload;
     readonly recordedAt: string | undefined;
 }
+
+/** A transition the ledger records for a command: it started, or it settled. */
+export type CommandProgress = "started" | "settled";
 
 /** What a cancellation before admission found: a cancellation it recorded, or an outcome recorded earlier. */
 export type CancellationBeforeAdmission =
@@ -160,6 +162,8 @@ export class ExecutionReceipts {
      * ledger keeps the commands unsettled and the next process reports that the restart interrupted them.
      */
     readonly #shutdownSettlements = new Map<string, CommandFate>();
+    /** Requests waiting for a command's next transition; each listener hears every transition until removed. */
+    readonly #watchers = new Map<string, Set<(progress: CommandProgress) => void>>();
     #closing = false;
 
     constructor(ledger: CommandLedgerTable, onCount: (count: number) => void = () => undefined) {
@@ -184,6 +188,11 @@ export class ExecutionReceipts {
         }
         return this.#agentOutcomes.get(commandId) ?? fate.outcome;
     };
+    readonly #notify = (commandId: string, progress: CommandProgress): void => {
+        for (const listener of [...(this.#watchers.get(commandId) ?? [])]) {
+            listener(progress);
+        }
+    };
     readonly #publishCount = (): void => {
         this.#onCount(this.#ledger.unsettled().filter((commandId) => !this.#shutdownSettlements.has(commandId)).length);
     };
@@ -201,10 +210,60 @@ export class ExecutionReceipts {
             }
         }
         this.#publishCount();
+        this.#notify(commandId, "settled");
     };
 
     readonly beginShutdown = (): void => {
         this.#closing = true;
+    };
+    /** Waits for the first transition of the command that `accepts`; the waiter is released when `signal` aborts. */
+    readonly #transition = (
+        commandId: string,
+        accepts: (progress: CommandProgress) => boolean,
+        signal: AbortSignal,
+    ): Promise<CommandProgress> =>
+        new Promise<CommandProgress>((resolve, reject) => {
+            if (signal.aborted) {
+                reject(signal.reason);
+                return;
+            }
+            const watchers = this.#watchers.get(commandId) ?? new Set();
+            const release = (): void => {
+                signal.removeEventListener("abort", aborted);
+                watchers.delete(listener);
+                if (watchers.size === 0) {
+                    this.#watchers.delete(commandId);
+                }
+            };
+            const listener = (progress: CommandProgress): void => {
+                if (accepts(progress)) {
+                    release();
+                    resolve(progress);
+                }
+            };
+            const aborted = (): void => {
+                release();
+                reject(signal.reason);
+            };
+            watchers.add(listener);
+            this.#watchers.set(commandId, watchers);
+            signal.addEventListener("abort", aborted, { once: true });
+        });
+    /** Where the command stands now, or its next transition: `started` once it started, `settled` once it has ended. */
+    readonly progress = async (commandId: string, sessionId: string, signal: AbortSignal): Promise<CommandProgress> => {
+        if (this.isTerminalExecution(commandId, sessionId)) {
+            return "settled";
+        }
+        if (this.hasStarted(commandId, sessionId)) {
+            return "started";
+        }
+        return await this.#transition(commandId, () => true, signal);
+    };
+    /** Resolves once the command has ended. */
+    readonly settlement = async (commandId: string, sessionId: string, signal: AbortSignal): Promise<void> => {
+        if (!this.isTerminalExecution(commandId, sessionId)) {
+            await this.#transition(commandId, (progress) => progress === "settled", signal);
+        }
     };
     readonly outcome = (commandId: string): SessionEventPayload | undefined => this.restatedOutcome(commandId)?.event;
     /** The outcome the ledger keeps for the command, with the time it was recorded. */
@@ -359,13 +418,7 @@ export class ExecutionReceipts {
         const outcome = cancelledBeforeStartOutcome(commandId);
         // The identifier belongs to the cancellation, so a later prompt conflicts rather than executing.
         const commandHash = createHash("sha256")
-            .update(
-                encodeSessionCancelBeforeStartCommand({
-                    commandId,
-                    kind: "session.cancel-before-start",
-                    sessionId,
-                }),
-            )
+            .update(JSON.stringify({ commandId, kind: "session.cancel-before-start", sessionId }))
             .digest("hex");
         for (const dropped of this.#ledger.admitCancelled(
             { attemptId: randomUUID(), commandHash, commandId, sessionId },
@@ -388,6 +441,7 @@ export class ExecutionReceipts {
         if (payload.kind === "prompt.started") {
             // A start reported after settlement does not reopen the execution.
             this.#ledger.start(payload.commandId, event.recordedAt);
+            this.#notify(payload.commandId, "started");
             return;
         }
         if (!isPromptTerminal(payload)) {
@@ -503,6 +557,7 @@ export class ExecutionReceipts {
     };
 
     readonly close = (): void => {
+        this.#watchers.clear();
         this.#agentOutcomes.clear();
         this.#shutdownSettlements.clear();
     };

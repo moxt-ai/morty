@@ -246,6 +246,7 @@ async function finish(peer: RealDaemonPeer, decision: "allow_once" | "reject_onc
             peer.send(
                 encodeSessionPermissionRespondCommand({
                     kind: "session.permission.respond",
+                    requestId: crypto.randomUUID(),
                     sessionId: event.sessionId,
                     interactionId: permission.interactionId,
                     optionId: choice.optionId,

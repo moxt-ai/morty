@@ -406,6 +406,7 @@ async function cancel(fixture: Fixture, command: SessionPromptCommand): Promise<
         fixture.socket,
         encodeSessionCancelCommand({
             kind: "session.cancel",
+            requestId: crypto.randomUUID(),
             commandId: command.commandId,
             sessionId: command.sessionId,
         }),

@@ -101,7 +101,14 @@ test.each(["foreground", "background"] as const)(
                     await providerEntered.promise;
                 }
                 hold = false;
-                peer.send(encodeSessionCancelCommand({ kind: "session.cancel", commandId, sessionId: peer.sessionId }));
+                peer.send(
+                    encodeSessionCancelCommand({
+                        kind: "session.cancel",
+                        requestId: crypto.randomUUID(),
+                        commandId,
+                        sessionId: peer.sessionId,
+                    }),
+                );
                 for (;;) {
                     const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));
                     if (event.type !== "lifecycle-metadata") {

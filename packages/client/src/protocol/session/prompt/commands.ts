@@ -1,8 +1,11 @@
 import { z } from "zod";
 
+import { identifierStringSchema as IDENTIFIER } from "../../shared/identifier.ts";
 import {
     assertKind,
+    decodeZodMessage,
     decodeZodValue,
+    encodeZodMessage,
     ProtocolMessageError,
     parseJson,
     readDirectoryIdentifier,
@@ -17,6 +20,9 @@ export const SESSION_PROMPT_KIND = "session.prompt";
 export const SESSION_PROMPT_DISPOSITION_KIND = "session.prompt.disposition";
 export const SESSION_CANCEL_KIND = "session.cancel";
 export const SESSION_CANCEL_BEFORE_START_KIND = "session.cancel-before-start";
+export const SESSION_PROMPT_STEERED_KIND = "session.prompt.steered";
+export const SESSION_TURN_STOPPED_KIND = "session.turn.stopped";
+export const SESSION_TURN_WITHDRAWN_KIND = "session.turn.withdrawn";
 
 /**
  * How a prompt joins its Session. An appended prompt runs when nothing earlier is waiting or running, and otherwise
@@ -57,16 +63,28 @@ export type SessionPromptCommand = {
     readonly sessionId: string;
 } & SessionPromptPlacement;
 
+/*
+ * A prompt is its own request: its `commandId` names the Turn it creates and the reply that answers it, so a retry of
+ * the same command is the same request. Every other request names the Turn it acts on in `commandId` and its own reply
+ * address in `requestId`, so its answer can never be mistaken for the answer to the prompt or to another request.
+ */
+
+/** Stops the Turn; answered by `session.turn.stopped` once the Turn has ended, with the reason it ended. */
 export interface SessionCancelCommand {
     readonly commandId: string;
     readonly kind: typeof SESSION_CANCEL_KIND;
+    readonly requestId: string;
     readonly sessionId: string;
 }
 
-/** Cancels only work that has not started; it must never degrade into cancellation of running work. */
+/**
+ * Cancels only work that has not started; it must never degrade into cancellation of running work. Answered by
+ * `session.turn.withdrawn`, or by a `turn_already_started` failure.
+ */
 export interface SessionCancelBeforeStartCommand {
     readonly commandId: string;
     readonly kind: typeof SESSION_CANCEL_BEFORE_START_KIND;
+    readonly requestId: string;
     readonly sessionId: string;
 }
 
@@ -76,6 +94,7 @@ export function decodeSessionCancelBeforeStartCommand(encoded: string): SessionC
     return {
         commandId: readIdentifier(value, "commandId"),
         kind: SESSION_CANCEL_BEFORE_START_KIND,
+        requestId: readIdentifier(value, "requestId"),
         sessionId: readIdentifier(value, "sessionId"),
     };
 }
@@ -83,10 +102,12 @@ export function decodeSessionCancelBeforeStartCommand(encoded: string): SessionC
 export const encodeSessionCancelBeforeStartCommand = (message: SessionCancelBeforeStartCommand): string =>
     JSON.stringify(decodeSessionCancelBeforeStartCommand(JSON.stringify(message)));
 
+/** Steers a queued prompt into the running Turn; answered by `session.prompt.steered` once it has started. */
 export interface SessionPromptDispositionCommand {
     readonly commandId: string;
     readonly disposition: typeof SessionPromptDisposition.Steer;
     readonly kind: typeof SESSION_PROMPT_DISPOSITION_KIND;
+    readonly requestId: string;
     readonly sessionId: string;
 }
 
@@ -180,6 +201,7 @@ export function decodeSessionCancelCommand(encoded: string): SessionCancelComman
     return {
         commandId: readIdentifier(value, "commandId"),
         kind: SESSION_CANCEL_KIND,
+        requestId: readIdentifier(value, "requestId"),
         sessionId: readIdentifier(value, "sessionId"),
     };
 }
@@ -194,6 +216,7 @@ export function decodeSessionPromptDispositionCommand(encoded: string): SessionP
         commandId: readIdentifier(value, "commandId"),
         disposition: SessionPromptDisposition.Steer,
         kind: SESSION_PROMPT_DISPOSITION_KIND,
+        requestId: readIdentifier(value, "requestId"),
         sessionId: readIdentifier(value, "sessionId"),
     };
 }
@@ -209,3 +232,40 @@ export function encodeSessionCancelCommand(message: SessionCancelCommand): strin
 export function encodeSessionPromptDispositionCommand(message: SessionPromptDispositionCommand): string {
     return JSON.stringify(decodeSessionPromptDispositionCommand(JSON.stringify(message)));
 }
+
+const turnReplyFields = {
+    commandId: IDENTIFIER,
+    requestId: IDENTIFIER,
+    sessionId: IDENTIFIER,
+} as const;
+
+const sessionPromptSteeredEventSchema = z
+    .object({ ...turnReplyFields, kind: z.literal(SESSION_PROMPT_STEERED_KIND) })
+    .readonly();
+
+export type SessionPromptSteeredEvent = z.infer<typeof sessionPromptSteeredEventSchema>;
+
+const sessionTurnStoppedEventSchema = z
+    .object({ ...turnReplyFields, kind: z.literal(SESSION_TURN_STOPPED_KIND), stopReason: z.string().min(1).max(128) })
+    .readonly();
+
+export type SessionTurnStoppedEvent = z.infer<typeof sessionTurnStoppedEventSchema>;
+
+const sessionTurnWithdrawnEventSchema = z
+    .object({ ...turnReplyFields, kind: z.literal(SESSION_TURN_WITHDRAWN_KIND) })
+    .readonly();
+
+export type SessionTurnWithdrawnEvent = z.infer<typeof sessionTurnWithdrawnEventSchema>;
+
+export const decodeSessionPromptSteeredEvent = (encoded: string): SessionPromptSteeredEvent =>
+    decodeZodMessage(encoded, sessionPromptSteeredEventSchema);
+export const encodeSessionPromptSteeredEvent = (message: SessionPromptSteeredEvent): string =>
+    encodeZodMessage(message, sessionPromptSteeredEventSchema);
+export const decodeSessionTurnStoppedEvent = (encoded: string): SessionTurnStoppedEvent =>
+    decodeZodMessage(encoded, sessionTurnStoppedEventSchema);
+export const encodeSessionTurnStoppedEvent = (message: SessionTurnStoppedEvent): string =>
+    encodeZodMessage(message, sessionTurnStoppedEventSchema);
+export const decodeSessionTurnWithdrawnEvent = (encoded: string): SessionTurnWithdrawnEvent =>
+    decodeZodMessage(encoded, sessionTurnWithdrawnEventSchema);
+export const encodeSessionTurnWithdrawnEvent = (message: SessionTurnWithdrawnEvent): string =>
+    encodeZodMessage(message, sessionTurnWithdrawnEventSchema);

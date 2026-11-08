@@ -194,6 +194,7 @@ test("Given a completed foreground turn, When its Agent requests background perm
                 sessionId,
                 interactionId: requested.payload.event.interactionId,
                 kind: "session.permission.respond",
+                requestId: crypto.randomUUID(),
                 optionId: "allow-once",
                 outcome: "selected",
             }),

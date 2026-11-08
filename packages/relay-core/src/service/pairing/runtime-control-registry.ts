@@ -9,18 +9,19 @@ import {
     decodeSessionClosedEvent,
     decodeSessionConfigReadResult,
     decodeSessionConfigUpdatedEvent,
-    decodeSessionElicitationResolvedEvent,
     decodeSessionHistoryWirePageLoaded,
-    decodeSessionPermissionResolvedEvent,
+    decodeSessionInteractionAnsweredEvent,
     decodeSessionPreviewHistoryWirePageLoaded,
     decodeSessionPromptAcceptedEvent,
+    decodeSessionPromptSteeredEvent,
     decodeSessionReadyEvent,
     decodeSessionRenamedEvent,
     decodeSessionRestoredEvent,
     decodeSessionsListedEvent,
     decodeSessionsQueriedEvent,
+    decodeSessionTurnStoppedEvent,
+    decodeSessionTurnWithdrawnEvent,
     FILE_READ_KIND,
-    type LifecycleMetadata,
     NATIVE_SESSION_CANCEL_KIND,
     NATIVE_SESSION_REQUEST_KIND,
     type NativeSessionRequest,
@@ -49,39 +50,22 @@ import {
 import { ProjectPermission } from "../../entity/authentication/project-authentication.ts";
 import type { RuntimeControlCommand, RuntimeControlResult } from "./runtime-control-request.ts";
 
-type DirectResult = Extract<RuntimeControlResult, { readonly requestId: string } | { readonly interactionId: string }>;
-
-interface DirectReply {
-    readonly kind: "direct";
-    readonly eventKind: DirectResult["kind"];
-    readonly decode: (data: string) => DirectResult;
+/** The Runtime's reply to one control command, which names the command's own request identifier. */
+interface RuntimeControlReply {
+    readonly eventKind: RuntimeControlResult["kind"];
+    readonly decode: (data: string) => RuntimeControlResult;
 }
-
-type RuntimeControlReply =
-    | DirectReply
-    | {
-          readonly kind: "lifecycle";
-          readonly resolveOn: readonly LifecycleMetadata["kind"][];
-          readonly direct: DirectReply | null;
-      };
 
 interface RuntimeControlDefinition {
     readonly permission: ProjectPermission | ((command: RuntimeControlCommand) => ProjectPermission);
     readonly reply: RuntimeControlReply;
 }
 
-function directReply<K extends DirectResult["kind"]>(
+function directReply<K extends RuntimeControlResult["kind"]>(
     eventKind: K,
-    decode: (data: string) => Extract<DirectResult, { readonly kind: NoInfer<K> }>,
+    decode: (data: string) => Extract<RuntimeControlResult, { readonly kind: NoInfer<K> }>,
 ) {
-    return { kind: "direct", eventKind, decode } satisfies RuntimeControlReply;
-}
-
-function lifecycleReply(
-    resolveOn: readonly LifecycleMetadata["kind"][],
-    direct: DirectReply | null = null,
-): Extract<RuntimeControlReply, { readonly kind: "lifecycle" }> {
-    return { kind: "lifecycle", resolveOn, direct };
+    return { eventKind, decode } satisfies RuntimeControlReply;
 }
 
 /** Code-owned command policy; callers must still authorize the selected permission. */
@@ -123,24 +107,19 @@ export const runtimeControlRegistry = {
     },
     "session.cancel-before-start": {
         permission: ProjectPermission.SessionWrite,
-        reply: lifecycleReply(["prompt.completed"]),
+        reply: directReply("session.turn.withdrawn", decodeSessionTurnWithdrawnEvent),
     },
     "session.cancel": {
         permission: ProjectPermission.SessionWrite,
-        reply: lifecycleReply(["prompt.completed"]),
+        reply: directReply("session.turn.stopped", decodeSessionTurnStoppedEvent),
     },
     "session.prompt.disposition": {
         permission: ProjectPermission.SessionWrite,
-        reply: lifecycleReply(["prompt.started"]),
+        reply: directReply("session.prompt.steered", decodeSessionPromptSteeredEvent),
     },
     "session.prompt": {
         permission: ProjectPermission.SessionWrite,
-        // A first submission is answered by its own lifecycle events: it starts, or it ends without starting when it
-        // is cancelled first. A retried command records none, so the Runtime answers it directly.
-        reply: lifecycleReply(
-            ["prompt.started", "prompt.completed"],
-            directReply("session.prompt.accepted", decodeSessionPromptAcceptedEvent),
-        ),
+        reply: directReply("session.prompt.accepted", decodeSessionPromptAcceptedEvent),
     },
     "session.preview-history.page.load": {
         permission: ProjectPermission.RuntimeRead,
@@ -152,17 +131,11 @@ export const runtimeControlRegistry = {
     },
     "session.elicitation.respond": {
         permission: ProjectPermission.SessionWrite,
-        reply: lifecycleReply(
-            ["session.elicitation.resolved"],
-            directReply("session.elicitation.resolved", decodeSessionElicitationResolvedEvent),
-        ),
+        reply: directReply("session.interaction.answered", decodeSessionInteractionAnsweredEvent),
     },
     "session.permission.respond": {
         permission: ProjectPermission.SessionWrite,
-        reply: lifecycleReply(
-            ["session.permission.resolved"],
-            directReply("session.permission.resolved", decodeSessionPermissionResolvedEvent),
-        ),
+        reply: directReply("session.interaction.answered", decodeSessionInteractionAnsweredEvent),
     },
     "session.list": {
         permission: ProjectPermission.RuntimeRead,

@@ -76,6 +76,7 @@ test.each(["pi", "claude", "codex"] as const)(
                         peer.send(
                             JSON.stringify({
                                 kind: "session.permission.respond",
+                                requestId: crypto.randomUUID(),
                                 sessionId: peer.sessionId,
                                 interactionId: request.interactionId,
                                 outcome: "selected",
@@ -107,7 +108,12 @@ test.each(["pi", "claude", "codex"] as const)(
                 }
             }
             peer.send(
-                JSON.stringify({ kind: "session.cancel-before-start", commandId: queued, sessionId: peer.sessionId }),
+                JSON.stringify({
+                    kind: "session.cancel-before-start",
+                    requestId: crypto.randomUUID(),
+                    commandId: queued,
+                    sessionId: peer.sessionId,
+                }),
             );
             while (!completed.has(queued)) {
                 await next();

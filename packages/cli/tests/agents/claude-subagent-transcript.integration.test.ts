@@ -101,6 +101,7 @@ async function observeTurn(peer: RealDaemonPeer, commandId: string): Promise<Obs
                     encodeSessionPermissionRespondCommand({
                         interactionId: event.payload.event.interactionId,
                         kind: "session.permission.respond",
+                        requestId: crypto.randomUUID(),
                         optionId: option.optionId,
                         outcome: "selected",
                         sessionId: peer.sessionId,

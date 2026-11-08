@@ -218,6 +218,7 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
             encodeSessionPermissionRespondCommand({
                 interactionId: permission.interactionId,
                 kind: "session.permission.respond",
+                requestId: crypto.randomUUID(),
                 optionId: "allow-once",
                 outcome: "selected",
                 sessionId,
@@ -242,6 +243,7 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
                 content: JSON.stringify({ branch: "main" }),
                 interactionId: elicitation.interactionId,
                 kind: "session.elicitation.respond",
+                requestId: crypto.randomUUID(),
                 sessionId,
             }),
         );
@@ -355,6 +357,7 @@ test("Given an Agent announced a tool call with its input, When it requests perm
             encodeSessionPermissionRespondCommand({
                 interactionId: permission.interactionId,
                 kind: "session.permission.respond",
+                requestId: crypto.randomUUID(),
                 optionId: "allow-once",
                 outcome: "selected",
                 sessionId,
@@ -464,6 +467,7 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
             encodeSessionPermissionRespondCommand({
                 interactionId: permission.interactionId,
                 kind: "session.permission.respond",
+                requestId: crypto.randomUUID(),
                 optionId: "allow-once",
                 outcome: "selected",
                 sessionId,
@@ -573,6 +577,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
             encodeSessionPermissionRespondCommand({
                 interactionId: permission.interactionId,
                 kind: "session.permission.respond",
+                requestId: crypto.randomUUID(),
                 optionId: "allow-once",
                 outcome: "selected",
                 sessionId,

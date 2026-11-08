@@ -201,6 +201,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
                             encodeSessionCancelCommand({
                                 commandId: queuedCommandId,
                                 kind: SESSION_CANCEL_KIND,
+                                requestId: crypto.randomUUID(),
                                 sessionId,
                             }),
                         );

@@ -83,9 +83,6 @@ export class RuntimeSessionEventPublisher implements SessionEventSink {
         }
     };
 
-    readonly publishOperationFailure = (sessionId: string, requestId: string, code: string, message: string): void => {
-        this.#send({ kind: "session.operation.failed", sessionId, requestId, code, message });
-    };
     readonly publishStatus = (event: SessionStatusChangedEvent): void => this.#send(event);
     readonly publishInfo = (event: SessionInfoUpdatedEvent): void => this.#send(event);
     readonly publishClosed = (event: SessionCloseNoticeEvent): void => {

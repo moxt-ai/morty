@@ -258,6 +258,7 @@ test("Given Claude is running a background command, When two idle hours pass and
                             peer.send(
                                 encodeSessionPermissionRespondCommand({
                                     kind: "session.permission.respond",
+                                    requestId: crypto.randomUUID(),
                                     interactionId: request.interactionId,
                                     optionId: option.optionId,
                                     sessionId: request.sessionId,

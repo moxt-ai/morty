@@ -29,6 +29,9 @@ function sessionRuntimeErrorStatus(code: string): number {
     if (code === "invalid_cursor" || code === "invalid_request") {
         return 400;
     }
+    if (code === "unsupported_operation") {
+        return 501;
+    }
     return 503;
 }
 

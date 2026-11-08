@@ -112,7 +112,14 @@ test("Given a real pi native Session, When the active prompt is cancelled with a
                     break;
                 }
             }
-            peer.send(encodeSessionCancelCommand({ kind: "session.cancel", commandId: active, sessionId: nativeId }));
+            peer.send(
+                encodeSessionCancelCommand({
+                    kind: "session.cancel",
+                    requestId: crypto.randomUUID(),
+                    commandId: active,
+                    sessionId: nativeId,
+                }),
+            );
             await finish(active, "cancelled");
             holdResponse = false;
             release.resolve();

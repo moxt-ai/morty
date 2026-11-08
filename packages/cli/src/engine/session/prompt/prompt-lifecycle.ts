@@ -8,7 +8,7 @@ import type {
     SessionLiveEvent,
     SessionPromptCommand,
 } from "@morty-build/client/protocol";
-import { isPromptTerminal, SESSION_CLOSED_ERROR_CODE, SessionPromptDisposition } from "@morty-build/client/protocol";
+import { isPromptTerminal, SessionPromptDisposition } from "@morty-build/client/protocol";
 import type { SessionEventSink } from "../api/session-api.ts";
 import { SessionError } from "../api/session-error.ts";
 import type { PromptDispatch } from "../turn/active-turn.ts";
@@ -75,11 +75,11 @@ export class PromptLifecycle {
     readonly #recordActiveTurn: (event: SessionLiveEvent) => void;
     readonly #executions: ExecutionProgress;
 
-    readonly #recordLifecycle: (sessionId: string, event: SessionEventPayload) => Promise<boolean>;
+    readonly #recordLifecycle: (sessionId: string, event: SessionEventPayload) => Promise<void>;
     readonly #append: (sessionId: string, event: SessionEventPayload, recordedAt?: string) => SessionLiveEvent;
     constructor(
         sink: SessionEventSink,
-        recordLifecycle: (sessionId: string, event: SessionEventPayload) => Promise<boolean>,
+        recordLifecycle: (sessionId: string, event: SessionEventPayload) => Promise<void>,
         append: (sessionId: string, event: SessionEventPayload, recordedAt?: string) => SessionLiveEvent,
         recordActiveTurn: (event: SessionLiveEvent) => void,
         executions: ExecutionProgress,
@@ -231,7 +231,7 @@ export class PromptLifecycle {
         if (request?.sessionId !== sessionId || this.#executions.isTerminalExecution(commandId, sessionId)) {
             return;
         }
-        const recorded = await this.#recordLifecycle(sessionId, {
+        await this.#recordLifecycle(sessionId, {
             type: "lifecycle-metadata",
             payload: {
                 kind: "prompt.completed",
@@ -240,14 +240,6 @@ export class PromptLifecycle {
                 ...(this.#executions.hasStarted(commandId, sessionId) ? {} : { execution: "not-started" as const }),
             },
         });
-        if (!recorded) {
-            this.#sink.publishOperationFailure(
-                sessionId,
-                commandId,
-                "cancelled",
-                "The prompt was cancelled before execution",
-            );
-        }
     };
 
     /**
@@ -265,15 +257,12 @@ export class PromptLifecycle {
         if (this.#executions.findUnsettledAttemptId(commandId, sessionId) === null) {
             return;
         }
-        const recorded = await this.#recordLifecycle(sessionId, {
+        await this.#recordLifecycle(sessionId, {
             type: "lifecycle-metadata",
             payload: this.#executions.hasStarted(commandId, sessionId)
                 ? { kind: "prompt.failed", attemptId, commandId, code, message }
                 : { kind: "prompt.failed-before-start", commandId, code, message },
         });
-        if (!recorded || code === SESSION_CLOSED_ERROR_CODE) {
-            this.#sink.publishOperationFailure(sessionId, commandId, code, message);
-        }
     };
 
     /** The recorded terminal events of the Session's settled prompts that name the user message they recorded. */

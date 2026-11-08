@@ -119,29 +119,33 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
                 }
 
                 const cancelExpired = async () => {
+                    const cancellation = randomUUID();
                     peer.send(
                         encodeSessionCancelCommand({
                             kind: "session.cancel",
+                            requestId: cancellation,
                             commandId: original.commandId,
                             sessionId: peer.sessionId,
                         }),
                     );
-                    const cancelled = await observe(peer, [original.commandId]);
-                    expect(cancelled.outcomes.get(original.commandId)).toEqual({
+                    const cancelled = await observe(peer, [cancellation]);
+                    expect(cancelled.outcomes.get(cancellation)).toEqual({
                         kind: "failed",
                         code: "command_result_expired",
                     });
                     expect(cancelled.completedCommandIds).not.toContain(original.commandId);
                     expect(cancelled.restatedCommandIds).not.toContain(original.commandId);
                     expect(cancelled.unstartedCommandIds).not.toContain(original.commandId);
+                    const withdrawal = randomUUID();
                     peer.send(
                         JSON.stringify({
                             kind: "session.cancel-before-start",
+                            requestId: withdrawal,
                             commandId: original.commandId,
                             sessionId: peer.sessionId,
                         }),
                     );
-                    expect((await observe(peer, [original.commandId])).outcomes.get(original.commandId)).toEqual({
+                    expect((await observe(peer, [withdrawal])).outcomes.get(withdrawal)).toEqual({
                         kind: "failed",
                         code: "turn_already_started",
                     });

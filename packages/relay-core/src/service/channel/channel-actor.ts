@@ -157,7 +157,6 @@ export interface ChannelPeers {
         readonly socket: ChannelSocket;
         readonly requestId: string;
         readonly sessionId: string;
-        readonly queueAcknowledgement: boolean;
     }[];
     readonly daemons: () => readonly ChannelSocket[];
     readonly hosts: () => readonly ChannelSocket[];
@@ -557,15 +556,15 @@ export class ChannelActor {
             }
             case SESSION_CANCEL_BEFORE_START_KIND: {
                 const command = decodeSessionCancelBeforeStartCommand(message);
-                return { message: command, requestId: command.commandId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
             }
             case SESSION_CANCEL_KIND: {
                 const command = decodeSessionCancelCommand(message);
-                return { message: command, requestId: command.commandId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
             }
             case SESSION_PROMPT_DISPOSITION_KIND: {
                 const command = decodeSessionPromptDispositionCommand(message);
-                return { message: command, requestId: command.commandId, sessionId: command.sessionId };
+                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
             }
             case WORKSPACE_LIST_KIND: {
                 const command = decodeWorkspaceListCommand(message);
@@ -605,19 +604,11 @@ export class ChannelActor {
             }
             case SESSION_PERMISSION_RESPOND_KIND: {
                 const command = decodeSessionPermissionRespondCommand(message);
-                return {
-                    message: command,
-                    requestId: command.interactionId,
-                    sessionId: command.sessionId,
-                };
+                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
             }
             case SESSION_ELICITATION_RESPOND_KIND: {
                 const command = decodeSessionElicitationRespondCommand(message);
-                return {
-                    message: command,
-                    requestId: command.interactionId,
-                    sessionId: command.sessionId,
-                };
+                return { message: command, requestId: command.requestId, sessionId: command.sessionId };
             }
             case FILE_READ_KIND: {
                 const command = decodeFileReadCommand(message);

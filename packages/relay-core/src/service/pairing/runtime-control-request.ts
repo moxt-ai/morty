@@ -16,7 +16,6 @@ import {
     decodeFileFailedEvent,
     decodeMessageKind,
     decodeRuntimeStatusEvent,
-    decodeSessionEventEnvelope,
     decodeSessionOperationFailedEvent,
     decodeWorkspaceEntriesEvent,
     encodeContentChunkFrame,
@@ -26,14 +25,12 @@ import {
     FILE_END_KIND,
     FILE_FAILED_KIND,
     type FileReadCommand,
-    type LifecycleMetadata,
     type NativeSessionRequest,
     type NativeSessionResult,
     type RuntimeDiagnosticsRequest,
     type RuntimeDiagnosticsResult,
     type RuntimePingCommand,
     type RuntimePongEvent,
-    SESSION_EVENT_KIND,
     type SessionCancelBeforeStartCommand,
     type SessionCancelCommand,
     type SessionCloseCommand,
@@ -42,20 +39,19 @@ import {
     type SessionConfigReadResult,
     type SessionConfigUpdatedEvent,
     type SessionConfigureCommand,
-    type SessionElicitationResolvedEvent,
     type SessionElicitationRespondCommand,
     type SessionHistoryPageLoad,
     type SessionHistoryWirePageLoaded,
+    type SessionInteractionAnsweredEvent,
     type SessionListCommand,
-    type SessionPermissionResolvedEvent,
     type SessionPermissionRespondCommand,
     type SessionPrepareCommand,
     type SessionPreviewHistoryPageLoad,
     type SessionPreviewHistoryWirePageLoaded,
     type SessionPromptAcceptedEvent,
     type SessionPromptCommand,
-    SessionPromptDisposition,
     type SessionPromptDispositionCommand,
+    type SessionPromptSteeredEvent,
     type SessionQueryCommand,
     type SessionReadyEvent,
     type SessionRenameCommand,
@@ -64,6 +60,8 @@ import {
     type SessionRestoredEvent,
     type SessionsListedEvent,
     type SessionsQueriedEvent,
+    type SessionTurnStoppedEvent,
+    type SessionTurnWithdrawnEvent,
     type WorkspaceEntriesEvent,
     type WorkspaceListCommand,
 } from "@morty-build/client/protocol";
@@ -100,30 +98,6 @@ export type RuntimeControlCommand =
     | SessionQueryCommand
     | SessionRestoreCommand;
 
-/** A Turn attempt started executing on the Runtime. */
-interface TurnStarted {
-    readonly attemptId: string;
-    readonly commandId: string;
-    readonly epoch: string;
-    readonly kind: "turn.started";
-    readonly sessionId: string;
-}
-
-/** A Turn was admitted to the Runtime queue without starting yet. */
-interface TurnQueued {
-    readonly commandId: string;
-    readonly kind: "turn.queued";
-    readonly sessionId: string;
-}
-
-/** A Turn attempt finished executing on the Runtime. */
-interface TurnCompleted {
-    readonly commandId: string;
-    readonly kind: "turn.completed";
-    readonly sessionId: string;
-    readonly stopReason: string;
-}
-
 export type RuntimeControlResult =
     | RuntimeDiagnosticsResult
     | RuntimePongEvent
@@ -133,108 +107,23 @@ export type RuntimeControlResult =
     | SessionConfigReadResult
     | SessionRenamedEvent
     | SessionClosedEvent
-    | TurnCompleted
-    | TurnStarted
-    | TurnQueued
     | SessionPromptAcceptedEvent
+    | SessionPromptSteeredEvent
+    | SessionTurnStoppedEvent
+    | SessionTurnWithdrawnEvent
     | SessionPreviewHistoryWirePageLoaded
     | SessionHistoryWirePageLoaded
-    | SessionElicitationResolvedEvent
-    | SessionPermissionResolvedEvent
+    | SessionInteractionAnsweredEvent
     | SessionsListedEvent
     | SessionsQueriedEvent
     | SessionRestoredEvent;
 
-interface LifecycleExpectation {
-    /** Resolve as soon as any of these V2 lifecycle kinds appears. */
-    readonly resolveOn: readonly LifecycleMetadata["kind"][];
-}
-
-type LifecycleReply =
-    | { readonly kind: "resolve"; readonly result: RuntimeControlResult }
-    | { readonly kind: "reject"; readonly error: SessionRuntimeError }
-    | { readonly kind: "ignore" };
-
-/** Maps one V2 lifecycle payload to the reply for the pending control command. */
-function lifecycleReply(
-    command: RuntimeControlCommand,
-    expectation: LifecycleExpectation,
-    requestId: string,
-    sessionId: string,
-    payload: LifecycleMetadata,
-): LifecycleReply {
-    // V2 envelopes are broadcast to every host socket, so only events carrying
-    // this command's own identifiers answer it; other Turns' failures and
-    // starts must leave the pending request waiting.
-    if (payload.kind === "prompt.failed" || payload.kind === "prompt.failed-before-start") {
-        if (payload.commandId !== requestId) {
-            return { kind: "ignore" };
-        }
-        return { kind: "reject", error: new SessionRuntimeError(payload.code, payload.message) };
-    }
-    if (command.kind === "session.prompt" && payload.kind === "session.queue.changed") {
-        // The Runtime records a queue change naming an appended prompt as it enters the queue, which acknowledges it
-        // as queued; an appended prompt that runs at once is acknowledged by its own prompt.started instead. A change
-        // naming another command answers nothing.
-        if (
-            command.disposition !== SessionPromptDisposition.Append ||
-            sessionId !== command.sessionId ||
-            payload.changedByCommandId !== requestId
-        ) {
-            return { kind: "ignore" };
-        }
-        return {
-            kind: "resolve",
-            result: {
-                commandId: requestId,
-                kind: "turn.queued",
-                sessionId,
-            },
-        };
-    }
-    if (!expectation.resolveOn.includes(payload.kind)) {
-        return { kind: "ignore" };
-    }
-    if (payload.kind === "prompt.started") {
-        if (payload.commandId !== requestId) {
-            return { kind: "ignore" };
-        }
-        return {
-            kind: "resolve",
-            result: {
-                attemptId: payload.attemptId,
-                commandId: payload.commandId,
-                epoch: payload.epoch,
-                kind: "turn.started",
-                sessionId,
-            },
-        };
-    }
-    if (payload.kind === "prompt.completed") {
-        if (payload.commandId !== requestId) {
-            return { kind: "ignore" };
-        }
-        return {
-            kind: "resolve",
-            result: {
-                commandId: payload.commandId,
-                kind: "turn.completed",
-                sessionId,
-                stopReason: payload.stopReason,
-            },
-        };
-    }
-    if (payload.kind === "session.permission.resolved") {
-        return payload.event.interactionId === requestId
-            ? { kind: "resolve", result: payload.event }
-            : { kind: "ignore" };
-    }
-    if (payload.kind === "session.elicitation.resolved") {
-        return payload.event.interactionId === requestId
-            ? { kind: "resolve", result: payload.event }
-            : { kind: "ignore" };
-    }
-    return { kind: "ignore" };
+/**
+ * The identifier the Runtime answers a control command under. A prompt is its own request, named by the Turn it
+ * creates; every other command names its own request.
+ */
+export function runtimeControlRequestId(command: RuntimeControlCommand): string {
+    return command.kind === "session.prompt" ? command.commandId : command.requestId;
 }
 
 export interface RuntimeFileStream {
@@ -614,15 +503,7 @@ export async function requestRuntimeControl(
         120_000,
     );
     const deadline = AbortSignal.any([signal, timeout.signal]);
-    const requestId =
-        command.kind === "session.prompt" ||
-        command.kind === "session.prompt.disposition" ||
-        command.kind === "session.cancel" ||
-        command.kind === "session.cancel-before-start"
-            ? command.commandId
-            : command.kind === "session.permission.respond" || command.kind === "session.elicitation.respond"
-              ? command.interactionId
-              : command.requestId;
+    const requestId = runtimeControlRequestId(command);
     let cleanup = () => {};
     try {
         deadline.throwIfAborted();
@@ -649,32 +530,6 @@ export async function requestRuntimeControl(
                         return;
                     }
                     const kind = decodeMessageKind(event.data);
-                    if (kind === SESSION_EVENT_KIND) {
-                        if (reply.kind !== "lifecycle") {
-                            return;
-                        }
-                        for (const lifecycleEvent of decodeSessionEventEnvelope(event.data).events) {
-                            if (lifecycleEvent.type !== "lifecycle-metadata") {
-                                continue;
-                            }
-                            const lifecycle = lifecycleReply(
-                                command,
-                                reply,
-                                requestId,
-                                lifecycleEvent.sessionId,
-                                lifecycleEvent.payload,
-                            );
-                            if (lifecycle.kind === "reject") {
-                                reject(lifecycle.error);
-                                return;
-                            }
-                            if (lifecycle.kind === "resolve") {
-                                resolve(lifecycle.result);
-                                return;
-                            }
-                        }
-                        return;
-                    }
                     if (kind === "runtime.status") {
                         if (!decodeRuntimeStatusEvent(event.data).online) {
                             reject(new SessionRuntimeError("runtime_offline", "The Runtime connection closed"));
@@ -692,15 +547,11 @@ export async function requestRuntimeControl(
                         }
                         return;
                     }
-                    const direct = reply.kind === "direct" ? reply : reply.direct;
-                    if (direct === null || kind !== direct.eventKind) {
+                    if (kind !== reply.eventKind) {
                         return;
                     }
-                    const resolved = direct.decode(event.data);
-                    if (
-                        ("requestId" in resolved && resolved.requestId === requestId) ||
-                        ("interactionId" in resolved && resolved.interactionId === requestId)
-                    ) {
+                    const resolved = reply.decode(event.data);
+                    if (resolved.requestId === requestId) {
                         resolve(resolved);
                     }
                 } catch (cause) {

@@ -95,6 +95,7 @@ export async function verifyImageDelivery(
                     peer.send(
                         encodeSessionPermissionRespondCommand({
                             kind: "session.permission.respond",
+                            requestId: crypto.randomUUID(),
                             interactionId: event.payload.event.interactionId,
                             sessionId: peer.sessionId,
                             optionId: option.optionId,

@@ -1,5 +1,6 @@
 import {
     decodeKnownServiceToDaemonMessage,
+    isIdentifier,
     RUNTIME_HEARTBEAT_ACK_KIND,
     RUNTIME_LIVENESS_READY_KIND,
     type RuntimeUpgradeResult,
@@ -16,6 +17,7 @@ import type { WorkspaceDirectoryService } from "../../session/workspace/workspac
 import type { Timer } from "../../util/timer.ts";
 import { createRuntimeCommandDispatcher } from "../command/dispatcher.ts";
 import { send } from "../command/transport.ts";
+import { replyFailure } from "../command/turn-replies.ts";
 import type { RuntimeConfig } from "../config.ts";
 import { connectRelay } from "./connect.ts";
 import type { RelayConnectionDiagnostics } from "./diagnostics.ts";
@@ -227,6 +229,7 @@ export async function runRelayConnection({
                         diagnostics.daemonDiagnostic("protocol_message_discarded", "unknown", {
                             reason: "unsupported_message",
                         });
+                        refuseUnsupportedRequest(socket, encoded);
                         return;
                     }
                     const kind = message.kind;
@@ -268,4 +271,32 @@ export async function runRelayConnection({
         await commands.settle();
         relay.release(new Error("Relay connection released"));
     }
+}
+
+/**
+ * Answers a request this Runtime cannot run, as sent, so its sender learns at once that nothing was executed instead of
+ * waiting out its deadline. Only a message naming its own `requestId` can be answered.
+ */
+function refuseUnsupportedRequest(socket: WebSocket, encoded: string): void {
+    let value: unknown;
+    try {
+        value = JSON.parse(encoded);
+    } catch {
+        return;
+    }
+    if (typeof value !== "object" || value === null) {
+        return;
+    }
+    const requestId: unknown = Reflect.get(value, "requestId");
+    const sessionId: unknown = Reflect.get(value, "sessionId");
+    if (!isIdentifier(requestId)) {
+        return;
+    }
+    replyFailure(
+        socket,
+        requestId,
+        isIdentifier(sessionId) ? sessionId : "",
+        "unsupported_operation",
+        "This Morty Runtime does not support the requested operation.",
+    );
 }

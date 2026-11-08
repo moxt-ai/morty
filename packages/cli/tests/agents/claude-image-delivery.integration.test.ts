@@ -89,6 +89,7 @@ test("Given real Claude reads an image, When its reply streams and native histor
                             peer.send(
                                 encodeSessionPermissionRespondCommand({
                                     kind: "session.permission.respond",
+                                    requestId: crypto.randomUUID(),
                                     sessionId: peer.sessionId,
                                     interactionId: event.payload.event.interactionId,
                                     optionId: option.optionId,

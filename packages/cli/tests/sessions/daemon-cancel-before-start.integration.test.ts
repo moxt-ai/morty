@@ -8,6 +8,7 @@ import {
     decodeSessionEventEnvelope,
     decodeSessionLiveEvent,
     decodeSessionOperationFailedEvent,
+    decodeSessionTurnWithdrawnEvent,
     encodeSessionCancelCommand,
     encodeSessionPromptCommand,
     SESSION_EVENT_KIND,
@@ -54,13 +55,19 @@ test("Given a command already completed, When a delayed queue edit cancels it be
                         break;
                     }
                 }
+                const withdrawal = randomUUID();
                 peer.send(
-                    JSON.stringify({ commandId, kind: "session.cancel-before-start", sessionId: peer.sessionId }),
+                    JSON.stringify({
+                        commandId,
+                        kind: "session.cancel-before-start",
+                        requestId: withdrawal,
+                        sessionId: peer.sessionId,
+                    }),
                 );
                 const reply = await peer.nextMessage();
                 expect(decodeMessageKind(reply)).toBe("session.operation.failed");
                 expect(decodeSessionOperationFailedEvent(reply)).toMatchObject({
-                    requestId: commandId,
+                    requestId: withdrawal,
                     code: "turn_already_started",
                 });
             },
@@ -119,10 +126,12 @@ test("Given running and queued work, When cancellation permits only unstarted wo
                         break;
                     }
                 }
+                const runningWithdrawal = randomUUID();
                 peer.send(
                     JSON.stringify({
                         commandId: running,
                         kind: "session.cancel-before-start",
+                        requestId: runningWithdrawal,
                         sessionId: peer.sessionId,
                     }),
                 );
@@ -130,6 +139,7 @@ test("Given running and queued work, When cancellation permits only unstarted wo
                     JSON.stringify({
                         commandId: queued,
                         kind: "session.cancel-before-start",
+                        requestId: crypto.randomUUID(),
                         sessionId: peer.sessionId,
                     }),
                 );
@@ -137,6 +147,7 @@ test("Given running and queued work, When cancellation permits only unstarted wo
                     encodeSessionCancelCommand({
                         commandId: running,
                         kind: "session.cancel",
+                        requestId: crypto.randomUUID(),
                         sessionId: peer.sessionId,
                     }),
                 );
@@ -147,7 +158,7 @@ test("Given running and queued work, When cancellation permits only unstarted wo
                     const raw = await peer.nextMessage();
                     if (decodeMessageKind(raw) === "session.operation.failed") {
                         const failure = decodeSessionOperationFailedEvent(raw);
-                        if (failure.requestId === running) {
+                        if (failure.requestId === runningWithdrawal) {
                             runningRefusal = failure.code;
                         }
                         continue;
@@ -212,24 +223,33 @@ test("Given an unacknowledged command, When Stop arrives before its prompt, Then
             },
             async (peer) => {
                 const stopped = randomUUID();
+                const withdrawal = randomUUID();
                 peer.send(
                     JSON.stringify({
                         commandId: stopped,
                         kind: "session.cancel-before-start",
+                        requestId: withdrawal,
                         sessionId: peer.sessionId,
                     }),
                 );
                 let cancelled = false;
-                while (!cancelled) {
+                let withdrawn = false;
+                while (!cancelled || !withdrawn) {
                     const raw = await peer.nextMessage();
                     if (decodeMessageKind(raw) === "session.operation.failed") {
-                        const failure = decodeSessionOperationFailedEvent(raw);
-                        expect(failure.requestId).not.toBe(stopped);
+                        expect(decodeSessionOperationFailedEvent(raw).requestId).not.toBe(withdrawal);
+                    }
+                    if (decodeMessageKind(raw) === "session.turn.withdrawn") {
+                        expect(decodeSessionTurnWithdrawnEvent(raw)).toMatchObject({
+                            commandId: stopped,
+                            requestId: withdrawal,
+                        });
+                        withdrawn = true;
                     }
                     if (decodeMessageKind(raw) !== SESSION_EVENT_KIND) {
                         continue;
                     }
-                    cancelled = decodeSessionEventEnvelope(raw).events.some(
+                    cancelled ||= decodeSessionEventEnvelope(raw).events.some(
                         (event) =>
                             event.type === "lifecycle-metadata" &&
                             event.payload.kind === "prompt.completed" &&
@@ -348,10 +368,12 @@ test("Given a prompt still loading its conversation's saved history, When the cl
                 peer.send(prompt(withdrawn, "This request is withdrawn before it starts"));
                 await loading;
 
+                const withdrawal = randomUUID();
                 peer.send(
                     JSON.stringify({
                         commandId: withdrawn,
                         kind: "session.cancel-before-start",
+                        requestId: withdrawal,
                         sessionId: peer.sessionId,
                     }),
                 );
@@ -361,7 +383,7 @@ test("Given a prompt still loading its conversation's saved history, When the cl
                 while (!settled) {
                     const raw = await peer.nextMessage();
                     if (decodeMessageKind(raw) === "session.operation.failed") {
-                        expect(decodeSessionOperationFailedEvent(raw).requestId).not.toBe(withdrawn);
+                        expect(decodeSessionOperationFailedEvent(raw).requestId).not.toBe(withdrawal);
                     }
                     if (decodeMessageKind(raw) !== SESSION_EVENT_KIND) {
                         continue;
