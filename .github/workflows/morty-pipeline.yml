@@ -33,6 +33,7 @@ jobs:
       - run: pnpm build:cli
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm knip
 
   services:
     if: ${{ !inputs.markdown-only }}
@@ -49,6 +50,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:cli
       - run: pnpm test:client
+      - run: pnpm test:platform
       - run: pnpm test:relay
       - run: pnpm test:recording
       - run: pnpm test:worker

@@ -49,6 +49,7 @@ beforeAll(async () => {
             r2Buckets: ["R2_BUCKET_APAC", "R2_BUCKET_WNAM"],
             bindings: {
                 MORTY_ALLOWED_ORIGINS: '["*"]',
+                MORTY_SESSION_SIGNING_SECRET: "local-development-only-session-signing-secret",
             },
             handleStructuredLogs: (log) => {
                 const value: unknown = JSON.parse(log.message);
@@ -297,7 +298,7 @@ it("identifies a Project database overload through the public project creation A
         `/dashboard/v1/apps/${app.appId}/projects`,
         {
             method: "POST",
-            headers: { "x-test-project-failure": "1" },
+            headers: { authorization: `Bearer ${app.appCredential}`, "x-test-project-failure": "1" },
             body: JSON.stringify({
                 displayName: "PROJECT_BODY_CANARY",
                 idempotencyKey: "failed-project",
@@ -330,6 +331,7 @@ it("keeps ordinary Host closes quiet after the real platform close callback comp
             "x-morty-runtime-id": runtimeId,
             "x-morty-channel-id": channelId,
             "x-morty-host-credential-id": "ctl_HOST_CREDENTIAL_CANARY",
+            "x-morty-host-credential-kind": "channel",
         },
     });
     expect(response.status).toBe(101);

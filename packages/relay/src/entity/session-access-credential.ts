@@ -3,7 +3,7 @@ import {
     ProtocolMessageError,
     type SessionAccessClaims,
 } from "@morty-build/client/protocol";
-import { ProjectAuthenticationError } from "@morty-build/relay-core";
+import { ProjectAuthenticationError } from "@morty-build/relay-core/contracts";
 
 const SIGNING_SECRET_MINIMUM_LENGTH = 32;
 // HKDF binds each key to the protocol purpose and the authenticated AppCredential identity.
