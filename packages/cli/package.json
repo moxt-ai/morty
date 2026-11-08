@@ -34,7 +34,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/moxt-ai/mobius-morty.git",
+        "url": "git+https://github.com/moxt-ai/morty.git",
         "directory": "packages/cli"
     },
     "scripts": {
@@ -82,7 +82,7 @@
     "author": "Moxt",
     "license": "Apache-2.0",
     "bugs": {
-        "url": "https://github.com/moxt-ai/mobius-morty/issues"
+        "url": "https://github.com/moxt-ai/morty/issues"
     },
     "homepage": "https://morty.build",
     "private": false

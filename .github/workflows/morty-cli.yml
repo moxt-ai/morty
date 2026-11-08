@@ -22,7 +22,7 @@ jobs:
       actions: read
 
   deployment-preflight:
-    if: github.repository == 'moxt-ai/mobius-morty' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: github.repository_id == '1446677406' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: pipeline
     runs-on: ubuntu-latest
     environment: morty-production
@@ -46,7 +46,7 @@ jobs:
           python3 deployment/deploy.py production --release .release/cloud --cli-release .release/release.json --preflight-only
 
   publish:
-    if: github.repository == 'moxt-ai/mobius-morty' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: github.repository_id == '1446677406' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: [pipeline, deployment-preflight]
     runs-on: ubuntu-latest
     environment: morty-npm
