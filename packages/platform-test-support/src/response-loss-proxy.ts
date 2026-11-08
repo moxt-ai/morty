@@ -2,9 +2,17 @@ import { createServer, request } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import { listen, port } from "./websocket.ts";
 
-/** A real network proxy: forwards requests unchanged, then loses one turn admission response or delays one request. */
+/**
+ * A real network proxy: forwards requests unchanged, then loses one request's response, one turn admission response,
+ * or delays one request.
+ */
 export async function createResponseLossProxy(upstream: string) {
-    let forkResponse: ((status: number) => void) | null = null;
+    // The next response to lose: the service handles the request, but the caller never receives its answer.
+    let lostResponse: { readonly path: RegExp; readonly lost: (status: number) => void } | null = null;
+    const loseNextResponse = (path: RegExp) =>
+        new Promise<number>((resolve) => {
+            lostResponse = { path, lost: resolve };
+        });
     const server = createServer((incoming, outgoing) => {
         const forwarded = request(
             new URL(incoming.url ?? "/", upstream),
@@ -13,13 +21,9 @@ export async function createResponseLossProxy(upstream: string) {
                 headers: { ...incoming.headers, host: new URL(upstream).host },
             },
             (response) => {
-                if (
-                    forkResponse !== null &&
-                    incoming.method === "POST" &&
-                    incoming.url?.includes("/native-session-forks/")
-                ) {
-                    const lost = forkResponse;
-                    forkResponse = null;
+                if (lostResponse !== null && incoming.method === "POST" && lostResponse.path.test(incoming.url ?? "")) {
+                    const { lost } = lostResponse;
+                    lostResponse = null;
                     response.resume();
                     response.on("end", () => {
                         lost(response.statusCode ?? 502);
@@ -149,10 +153,9 @@ export async function createResponseLossProxy(upstream: string) {
     return {
         origin: `http://127.0.0.1:${port(server)}`,
         submissions,
-        interruptNextFork: () =>
-            new Promise<number>((resolve) => {
-                forkResponse = resolve;
-            }),
+        interruptNextFork: () => loseNextResponse(/\/native-session-forks\//u),
+        /** Loses the answer to the next Session creation; resolves with the status the service returned. */
+        interruptNextSessionCreation: () => loseNextResponse(/\/runtimes\/[^/]+\/sessions(?:\?|$)/u),
         interruptNextTurn: (delivery: "before-acceptance" | "after-acceptance") => {
             armed = delivery;
         },
