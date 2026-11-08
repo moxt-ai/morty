@@ -54,6 +54,15 @@ const terminal = (commandId: string) => (event: SessionLiveEvent) =>
     (event.payload.kind === "prompt.completed" || event.payload.kind === "prompt.failed") &&
     event.payload.commandId === commandId;
 
+/** The history page's user messages and turn lifecycle, in page order. */
+const timeline = (page: NativeSessionEvents): readonly string[] =>
+    page.events.events.flatMap((event) => {
+        if (event.type === "acp") {
+            return event.payload.sessionUpdate === "user_message_chunk" ? [`user ${event.payload.messageId}`] : [];
+        }
+        return "commandId" in event.payload ? [`${event.payload.kind} ${event.payload.commandId}`] : [];
+    });
+
 async function historyPage(peer: RealDaemonPeer, sessionId: string): Promise<NativeSessionEvents> {
     const requestId = randomUUID();
     peer.send(
@@ -80,7 +89,7 @@ async function historyPage(peer: RealDaemonPeer, sessionId: string): Promise<Nat
     }
 }
 
-test("Given a failed turn and a completed turn, When a client reads the Session history, Then each user message is named with its command and how that command ended", async () => {
+test("Given a failed turn and a completed turn, When a client reads the replayed Session history, Then each turn's start and ending surround its own user message", async () => {
     const directory = await mkdtemp(join(tmpdir(), "history-outcomes-"));
     try {
         const executableDirectory = await writeControlledAcpExecutable(directory, { loadSession: true });
@@ -100,36 +109,29 @@ test("Given a failed turn and a completed turn, When a client reads the Session 
 
                 const page = await historyPage(peer, sessionId);
 
-                const userMessages = page.events.events.flatMap((event) =>
-                    event.type === "acp" && event.payload.sessionUpdate === "user_message_chunk"
-                        ? [event.payload.messageId]
-                        : [],
+                // The replayed history holds each turn's lifecycle around the user message its Agent recorded, and
+                // each ending where its turn ended.
+                expect(timeline(page)).toEqual([
+                    `prompt.requested ${failed}`,
+                    `prompt.started ${failed}`,
+                    "user user-1",
+                    `prompt.failed ${failed}`,
+                    `prompt.requested ${completed}`,
+                    `prompt.started ${completed}`,
+                    "user user-2",
+                    `prompt.completed ${completed}`,
+                ]);
+                expect(page.events.events).toContainEqual(
+                    expect.objectContaining({
+                        payload: expect.objectContaining({
+                            code: "acp_agent_error",
+                            commandId: failed,
+                            kind: "prompt.failed",
+                            message: "Internal error: Model unavailable: controlled/test-model",
+                        }),
+                        type: "lifecycle-metadata",
+                    }),
                 );
-                expect(userMessages).toEqual(["user-1", "user-2"]);
-                expect(page.events.promptOutcomes).toEqual(
-                    expect.arrayContaining([
-                        {
-                            payload: expect.objectContaining({
-                                code: "acp_agent_error",
-                                commandId: failed,
-                                kind: "prompt.failed",
-                                message: "Internal error: Model unavailable: controlled/test-model",
-                                messageId: "user-1",
-                            }),
-                            recordedAt: expect.any(String),
-                        },
-                        {
-                            payload: {
-                                commandId: completed,
-                                kind: "prompt.completed",
-                                messageId: "user-2",
-                                stopReason: "end_turn",
-                            },
-                            recordedAt: expect.any(String),
-                        },
-                    ]),
-                );
-                expect(page.events.promptOutcomes).toHaveLength(2);
             },
         );
     } finally {
@@ -137,7 +139,7 @@ test("Given a failed turn and a completed turn, When a client reads the Session 
     }
 }, 120_000);
 
-test("Given a turn steered by a queued prompt, When a client reads the Session history, Then the steering's outcome names the user message it added to that turn", async () => {
+test("Given a turn steered by a queued prompt, When a client reads the Session history, Then the steering sits inside the turn it joined", async () => {
     const directory = await mkdtemp(join(tmpdir(), "history-steered-"));
     try {
         const executableDirectory = await writeControlledAcpExecutable(directory, { loadSession: true });
@@ -183,25 +185,17 @@ test("Given a turn steered by a queued prompt, When a client reads the Session h
 
                 const page = await historyPage(peer, sessionId);
 
-                const userMessages = page.events.events.flatMap((event) =>
-                    event.type === "acp" && event.payload.sessionUpdate === "user_message_chunk"
-                        ? [event.payload.messageId]
-                        : [],
-                );
-                expect(userMessages).toHaveLength(2);
-                expect(page.events.promptOutcomes).toEqual(
-                    expect.arrayContaining([
-                        {
-                            payload: {
-                                commandId: steering,
-                                kind: "prompt.completed",
-                                messageId: userMessages[1],
-                                stopReason: "steered",
-                            },
-                            recordedAt: expect.any(String),
-                        },
-                    ]),
-                );
+                // The steering joins the running turn: its lifecycle follows the turn's start, and the turn ends last.
+                const order = timeline(page);
+                const position = (entry: string) => {
+                    const index = order.indexOf(entry);
+                    expect(index, entry).toBeGreaterThanOrEqual(0);
+                    return index;
+                };
+                expect(order.filter((entry) => entry.startsWith("user "))).toHaveLength(2);
+                expect(position(`prompt.started ${turn}`)).toBeLessThan(position(`prompt.started ${steering}`));
+                expect(position(`prompt.completed ${steering}`)).toBeLessThan(position(`prompt.completed ${turn}`));
+                expect(order.at(-1)).toBe(`prompt.completed ${turn}`);
             },
         );
     } finally {

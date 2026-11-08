@@ -11,7 +11,7 @@ import {
     SESSION_CLOSED_ERROR_CODE,
     type SessionConfigOption,
 } from "@morty-build/client";
-import type { PromptMessageOutcome, SessionEvent, SessionLiveEvent } from "@morty-build/client/protocol";
+import type { SessionEvent, SessionLiveEvent } from "@morty-build/client/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
@@ -392,7 +392,6 @@ async function readSessionHistory(
     loadedRange: { readonly generation: string; readonly firstEventId: string | null } | null = null,
 ): Promise<SessionEventHistory> {
     let events: readonly SessionEvent[] = newerEvents;
-    let promptOutcomes: readonly PromptMessageOutcome[] = [];
     let nextCursor = initialCursor;
     // Loading the newest page can itself restore native history and replace the
     // generation announced by a preceding live event. That page owns the baseline;
@@ -420,11 +419,8 @@ async function readSessionHistory(
         }
         sessionGenerationId = page.sessionGenerationId;
         events = mergeSessionEvents(page.events, events);
-        promptOutcomes = [...page.promptOutcomes, ...promptOutcomes];
         nextCursor = page.nextCursor;
-        renderableMessages = sessionReductionMessages(
-            createSessionMessageReduction({ events, nextCursor, promptOutcomes }),
-        );
+        renderableMessages = sessionReductionMessages(createSessionMessageReduction({ events, nextCursor }));
     } while (
         nextCursor !== null &&
         (renderableMessages.length < HISTORY_MESSAGE_TARGET ||
@@ -436,7 +432,7 @@ async function readSessionHistory(
     if (sessionGenerationId === null || throughPosition === null) {
         throw new Error("The Runtime returned no Session history generation.");
     }
-    return { events, nextCursor, sessionGenerationId, throughPosition, promptOutcomes };
+    return { events, nextCursor, sessionGenerationId, throughPosition };
 }
 
 /** The history a projection already shows, which a reload reads at least back to. */
@@ -788,15 +784,14 @@ export function createSessionPaneModel(options: {
         /**
          * Tells the Session's delivery what the Runtime has now shown about its commands, from the timeline, the
          * current turn and the queue this pane holds. The evidence adds what the observation itself shows: commands it
-         * confirms, and the queue or history read it came from with the acceptances that read covers. Delivery learns
-         * of the Runtime only here.
+         * confirms, and the queue read it came from with the acceptances that read covers. Delivery learns of the
+         * Runtime only here.
          */
         const deliveryObserved = (evidence: {
             readonly delivered?: readonly string[];
             readonly listing?: RuntimeCommandFacts["listing"];
-            readonly historyRead?: RuntimeCommandFacts["historyRead"];
         }): void => {
-            const { delivered = [], listing = null, historyRead = null } = evidence;
+            const { delivered = [], listing = null } = evidence;
             const { projection, queued, turn } = get();
             const shown = new Set(sessionUserCommandIds(sessionProjectionTimeline(projection).messages));
             const running = acceptedTurn(turn)?.commandId ?? null;
@@ -810,7 +805,6 @@ export function createSessionPaneModel(options: {
                 shown,
                 running,
                 listing,
-                historyRead,
             });
         };
         /**
@@ -897,8 +891,6 @@ export function createSessionPaneModel(options: {
             const controller = new AbortController();
             historyLoadController = controller;
             const revision = get().projection.revision;
-            // The read shows every message accepted to run before it began, even where its pages omit the command.
-            const acceptedBefore = delivery.getState().acceptances;
             const deadline = new AbortController();
             const signal = AbortSignal.any([parentSignal, controller.signal, deadline.signal]);
             void clock.sleep(45_000, signal).then(
@@ -922,7 +914,7 @@ export function createSessionPaneModel(options: {
                 }
                 const effects = commitProjection(
                     { history, kind: "history-loaded", revision },
-                    { delivered: sessionEventCommandIds(history.events), historyRead: { acceptedBefore } },
+                    { delivered: sessionEventCommandIds(history.events) },
                 );
                 if (effects.some((loaded) => loaded.kind === "read-settings")) {
                     settings

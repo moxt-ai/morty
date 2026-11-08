@@ -613,6 +613,14 @@ describe("ACP conversation sessions", () => {
             ).toEqual([
                 {
                     payload: {
+                        commandId: "command-1",
+                        content: [{ text: "cached prompt", type: "text" }],
+                        kind: "prompt.requested",
+                    },
+                    type: "lifecycle-metadata",
+                },
+                {
+                    payload: {
                         content: { text: "cached prompt", type: "text" },
                         messageId: requested.eventId,
                         sessionUpdate: "user_message_chunk",

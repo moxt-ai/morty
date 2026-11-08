@@ -182,7 +182,6 @@ export type {
     NativeSessionEvents,
     PromptCompletion,
     PromptExecutionContext,
-    PromptMessageOutcome,
     PromptTerminalLifecycle,
     QueuedPromptRequestEventLog,
     SessionEvent,

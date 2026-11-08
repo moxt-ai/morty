@@ -153,12 +153,6 @@ export interface RuntimeCommandFacts {
      * acceptances numbered below `acceptedBefore`; a later acceptance may legitimately be missing from it.
      */
     readonly listing: { readonly queued: ReadonlySet<string>; readonly acceptedBefore: number } | null;
-    /**
-     * A history read the timeline adopted, which shows every message accepted to run before it began, the acceptances
-     * numbered below `acceptedBefore`. The pages of a running turn do not name its command, so only the read's timing
-     * tells that the timeline shows it.
-     */
-    readonly historyRead: { readonly acceptedBefore: number } | null;
 }
 
 /** Whether the Runtime's account now covers an accepted message, so the page no longer needs its own copy. */
@@ -167,8 +161,9 @@ function covered(accepted: AcceptedMessage, facts: RuntimeCommandFacts): boolean
     if (facts.shown.has(commandId)) {
         return true;
     }
+    // A message that runs as a turn is covered once the timeline shows it; history names each turn's command.
     if (placement === "turn") {
-        return facts.historyRead !== null && accepted.acceptance < facts.historyRead.acceptedBefore;
+        return false;
     }
     // A message shown in the queue keeps its files there until it starts or leaves the queue.
     return (
