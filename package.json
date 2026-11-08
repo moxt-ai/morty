@@ -52,7 +52,8 @@
         "test:relay": "pnpm --filter @morty-build/relay test:integration",
         "test:recording": "pnpm --filter @morty-build/recording test:integration",
         "check:runtime-architecture": "node scripts/check-runtime-architecture.ts",
-        "test:client": "vitest run packages/client/tests"
+        "test:client": "vitest run packages/client/tests",
+        "test:platform": "vitest run packages/platform-test-support/tests"
     },
     "simple-git-hooks": {
         "pre-commit": "pnpm typecheck && pnpm check:no-chinese && pnpm check:view-hooks && pnpm biome check --error-on-warnings --staged --files-ignore-unknown=true --no-errors-on-unmatched && pnpm check:architecture"
