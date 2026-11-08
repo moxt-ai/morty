@@ -144,7 +144,14 @@ test("Given a running prompt, When clients append messages and steer a turn that
                     state: "running",
                 });
 
-                peer.send(JSON.stringify({ kind: "session.cancel", commandId: running, sessionId: peer.sessionId }));
+                peer.send(
+                    JSON.stringify({
+                        kind: "session.cancel",
+                        requestId: crypto.randomUUID(),
+                        commandId: running,
+                        sessionId: peer.sessionId,
+                    }),
+                );
                 const order: string[] = [];
                 while (order.length < 3) {
                     const started = await next(peer, seen, lifecycle("prompt.started"));

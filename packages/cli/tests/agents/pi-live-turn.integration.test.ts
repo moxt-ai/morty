@@ -206,6 +206,7 @@ test("Given real Pi has an active SDK turn, When the user steers it, Then Pi con
                     commandId: steeringCommandId,
                     disposition: SessionPromptDisposition.Steer,
                     kind: "session.prompt.disposition",
+                    requestId: crypto.randomUUID(),
                     sessionId: peer.sessionId,
                 }),
             );
@@ -342,6 +343,7 @@ test("Given real Pi without an external ACP adapter, When Bash executes through 
                     peer.send(
                         encodeSessionPermissionRespondCommand({
                             kind: "session.permission.respond",
+                            requestId: crypto.randomUUID(),
                             sessionId: peer.sessionId,
                             interactionId: event.payload.event.interactionId,
                             optionId: option.optionId,

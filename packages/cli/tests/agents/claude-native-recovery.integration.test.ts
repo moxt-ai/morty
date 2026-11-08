@@ -109,7 +109,14 @@ test("Given a real claude native Session, When the active prompt is cancelled wi
                     break;
                 }
             }
-            peer.send(encodeSessionCancelCommand({ kind: "session.cancel", commandId: active, sessionId: nativeId }));
+            peer.send(
+                encodeSessionCancelCommand({
+                    kind: "session.cancel",
+                    requestId: crypto.randomUUID(),
+                    commandId: active,
+                    sessionId: nativeId,
+                }),
+            );
             await finish(active, "cancelled");
             holdResponse = false;
             release.resolve();

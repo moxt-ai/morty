@@ -267,29 +267,37 @@ test("Given a closed Session, When a client answers a permission request or an e
     await withClosableDaemon(specification, async (peer) => {
         const sessionId = await closedSession(peer, "Plan the release");
 
-        const permissionId = crypto.randomUUID();
+        const permissionAnswer = crypto.randomUUID();
         peer.send(
             encodeSessionPermissionRespondCommand({
-                interactionId: permissionId,
+                interactionId: crypto.randomUUID(),
                 kind: "session.permission.respond",
                 optionId: "allow",
                 outcome: "selected",
+                requestId: permissionAnswer,
                 sessionId,
             }),
         );
-        expect(await nextFailure(peer, permissionId)).toMatchObject({ code: SESSION_CLOSED_ERROR_CODE, sessionId });
+        expect(await nextFailure(peer, permissionAnswer)).toMatchObject({
+            code: SESSION_CLOSED_ERROR_CODE,
+            sessionId,
+        });
 
-        const elicitationId = crypto.randomUUID();
+        const elicitationAnswer = crypto.randomUUID();
         peer.send(
             encodeSessionElicitationRespondCommand({
                 action: "accept",
                 content: "{}",
-                interactionId: elicitationId,
+                interactionId: crypto.randomUUID(),
                 kind: "session.elicitation.respond",
+                requestId: elicitationAnswer,
                 sessionId,
             }),
         );
-        expect(await nextFailure(peer, elicitationId)).toMatchObject({ code: SESSION_CLOSED_ERROR_CODE, sessionId });
+        expect(await nextFailure(peer, elicitationAnswer)).toMatchObject({
+            code: SESSION_CLOSED_ERROR_CODE,
+            sessionId,
+        });
     });
 });
 

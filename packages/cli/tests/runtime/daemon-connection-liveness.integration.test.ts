@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
     decodeMessageKind,
     decodeSessionEventEnvelope,
+    decodeSessionOperationFailedEvent,
     encodeRuntimeLivenessReadyEvent,
     encodeSessionPromptCommand,
     encodeWorkspaceListCommand,
@@ -654,8 +655,13 @@ describe("daemon relay connection liveness", () => {
                     requestId: "after-twenty-minutes",
                 }),
             );
-            // The unrecognized kind is skipped; the known command behind it still
+            // The unrecognized request is refused at once, naming it, and the known command behind it still
             // completes on the same connection.
+            expect(decodeSessionOperationFailedEvent((await frames.next()).text)).toMatchObject({
+                code: "unsupported_operation",
+                requestId: "future-changed-request",
+                sessionId: "session-1",
+            });
             expect(decodeMessageKind((await frames.next()).text)).toBe(WORKSPACE_ENTRIES_KIND);
 
             expect({ catalogRequestCount, connectionCount, requestedUrls }).toEqual({

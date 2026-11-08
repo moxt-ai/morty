@@ -81,6 +81,7 @@ test("Given real Codex has accepted a steering prompt, When V2 recovery reloads 
                     commandId: steeringCommandId,
                     disposition: SessionPromptDisposition.Steer,
                     kind: "session.prompt.disposition",
+                    requestId: crypto.randomUUID(),
                     sessionId: peer.sessionId,
                 }),
             );
@@ -391,7 +392,12 @@ test("Given real Codex with an active turn, When three follow-ups are accepted a
                 break;
             }
             peer.send(
-                encodeSessionCancelCommand({ kind: "session.cancel", sessionId: peer.sessionId, commandId: cancelled }),
+                encodeSessionCancelCommand({
+                    kind: "session.cancel",
+                    requestId: crypto.randomUUID(),
+                    sessionId: peer.sessionId,
+                    commandId: cancelled,
+                }),
             );
             for (;;) {
                 const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));

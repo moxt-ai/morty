@@ -76,6 +76,7 @@ test("Given native Claude is installed outside PATH, When two prompts execute th
                     peer.send(
                         encodeSessionPermissionRespondCommand({
                             kind: "session.permission.respond",
+                            requestId: crypto.randomUUID(),
                             sessionId: peer.sessionId,
                             interactionId: event.payload.event.interactionId,
                             optionId: option.optionId,

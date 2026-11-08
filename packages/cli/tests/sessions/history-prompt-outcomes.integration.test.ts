@@ -166,6 +166,7 @@ test("Given a turn steered by a queued prompt, When a client reads the Session h
                         commandId: steering,
                         disposition: "steer",
                         kind: SESSION_PROMPT_DISPOSITION_KIND,
+                        requestId: crypto.randomUUID(),
                         sessionId,
                     }),
                 );

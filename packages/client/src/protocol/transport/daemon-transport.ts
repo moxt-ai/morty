@@ -101,10 +101,13 @@ import {
 } from "../session/files/index.ts";
 import {
     decodeSessionElicitationRespondCommand,
+    decodeSessionInteractionAnsweredEvent,
     decodeSessionPermissionRespondCommand,
     encodeSessionElicitationRespondCommand,
+    encodeSessionInteractionAnsweredEvent,
     encodeSessionPermissionRespondCommand,
     SESSION_ELICITATION_RESPOND_KIND,
+    SESSION_INTERACTION_ANSWERED_KIND,
     SESSION_PERMISSION_RESPOND_KIND,
 } from "../session/interactions/index.ts";
 import {
@@ -188,14 +191,23 @@ import {
     decodeSessionCancelCommand,
     decodeSessionPromptCommand,
     decodeSessionPromptDispositionCommand,
+    decodeSessionPromptSteeredEvent,
+    decodeSessionTurnStoppedEvent,
+    decodeSessionTurnWithdrawnEvent,
     encodeSessionCancelBeforeStartCommand,
     encodeSessionCancelCommand,
     encodeSessionPromptCommand,
     encodeSessionPromptDispositionCommand,
+    encodeSessionPromptSteeredEvent,
+    encodeSessionTurnStoppedEvent,
+    encodeSessionTurnWithdrawnEvent,
     SESSION_CANCEL_BEFORE_START_KIND,
     SESSION_CANCEL_KIND,
     SESSION_PROMPT_DISPOSITION_KIND,
     SESSION_PROMPT_KIND,
+    SESSION_PROMPT_STEERED_KIND,
+    SESSION_TURN_STOPPED_KIND,
+    SESSION_TURN_WITHDRAWN_KIND,
 } from "../session/prompt/commands.ts";
 import {
     decodeWorkspaceEntriesEvent,
@@ -513,6 +525,26 @@ const daemonToServiceSignatures = {
         SESSION_PROMPT_ACCEPTED_KIND,
         encodeSessionPromptAcceptedEvent,
         decodeSessionPromptAcceptedEvent,
+    ),
+    [SESSION_PROMPT_STEERED_KIND]: defineMessageSignature(
+        SESSION_PROMPT_STEERED_KIND,
+        encodeSessionPromptSteeredEvent,
+        decodeSessionPromptSteeredEvent,
+    ),
+    [SESSION_TURN_STOPPED_KIND]: defineMessageSignature(
+        SESSION_TURN_STOPPED_KIND,
+        encodeSessionTurnStoppedEvent,
+        decodeSessionTurnStoppedEvent,
+    ),
+    [SESSION_TURN_WITHDRAWN_KIND]: defineMessageSignature(
+        SESSION_TURN_WITHDRAWN_KIND,
+        encodeSessionTurnWithdrawnEvent,
+        decodeSessionTurnWithdrawnEvent,
+    ),
+    [SESSION_INTERACTION_ANSWERED_KIND]: defineMessageSignature(
+        SESSION_INTERACTION_ANSWERED_KIND,
+        encodeSessionInteractionAnsweredEvent,
+        decodeSessionInteractionAnsweredEvent,
     ),
     [SESSION_HISTORY_PAGE_LOADED_KIND]: defineMessageSignature(
         SESSION_HISTORY_PAGE_LOADED_KIND,

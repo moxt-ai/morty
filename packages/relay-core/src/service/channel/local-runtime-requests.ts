@@ -84,11 +84,10 @@ export class LocalRuntimeRequests {
     readonly open = (
         requestId: string,
         sessionId: string,
-        queueAcknowledgement: boolean,
         dispatch: (socket: ChannelSocket, message: unknown) => Promise<void>,
     ) => {
         const connection = new LocalRuntimeRequest(dispatch, () => this.#routes.delete(route));
-        const route = { socket: connection.server, requestId, sessionId, queueAcknowledgement };
+        const route = { socket: connection.server, requestId, sessionId };
         this.#routes.add(route);
         return connection;
     };

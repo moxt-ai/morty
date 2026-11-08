@@ -11,6 +11,7 @@ export const SESSION_PERMISSION_RESOLVED_KIND = "session.permission.resolved";
 export const SESSION_ELICITATION_REQUESTED_KIND = "session.elicitation.requested";
 export const SESSION_ELICITATION_RESPOND_KIND = "session.elicitation.respond";
 export const SESSION_ELICITATION_RESOLVED_KIND = "session.elicitation.resolved";
+export const SESSION_INTERACTION_ANSWERED_KIND = "session.interaction.answered";
 
 export const permissionOptionSchema = z
     .object({
@@ -84,6 +85,7 @@ const sessionPermissionRespondCommandSchema = z
         kind: z.literal(SESSION_PERMISSION_RESPOND_KIND),
         optionId: z.string().max(255),
         outcome: z.enum(["cancelled", "selected"]),
+        requestId: IDENTIFIER,
         sessionId: IDENTIFIER,
     })
     .readonly();
@@ -125,6 +127,7 @@ const sessionElicitationRespondCommandSchema = z
         content: z.string().max(100_000),
         interactionId: IDENTIFIER,
         kind: z.literal(SESSION_ELICITATION_RESPOND_KIND),
+        requestId: IDENTIFIER,
         sessionId: IDENTIFIER,
     })
     .readonly();
@@ -141,6 +144,18 @@ export const sessionElicitationResolvedEventSchema = z
     .readonly();
 
 export type SessionElicitationResolvedEvent = z.infer<typeof sessionElicitationResolvedEventSchema>;
+
+/** Answers one permission or elicitation response request: the Agent received the user's answer. */
+const sessionInteractionAnsweredEventSchema = z
+    .object({
+        interactionId: IDENTIFIER,
+        kind: z.literal(SESSION_INTERACTION_ANSWERED_KIND),
+        requestId: IDENTIFIER,
+        sessionId: IDENTIFIER,
+    })
+    .readonly();
+
+export type SessionInteractionAnsweredEvent = z.infer<typeof sessionInteractionAnsweredEventSchema>;
 
 export const decodeSessionPermissionRequestedEvent = (encoded: string): SessionPermissionRequestedEvent =>
     decode(encoded, sessionPermissionRequestedEventSchema);
@@ -166,3 +181,7 @@ export const decodeSessionElicitationResolvedEvent = (encoded: string): SessionE
     decode(encoded, sessionElicitationResolvedEventSchema);
 export const encodeSessionElicitationResolvedEvent = (message: SessionElicitationResolvedEvent): string =>
     encode(message, sessionElicitationResolvedEventSchema);
+export const decodeSessionInteractionAnsweredEvent = (encoded: string): SessionInteractionAnsweredEvent =>
+    decode(encoded, sessionInteractionAnsweredEventSchema);
+export const encodeSessionInteractionAnsweredEvent = (message: SessionInteractionAnsweredEvent): string =>
+    encode(message, sessionInteractionAnsweredEventSchema);

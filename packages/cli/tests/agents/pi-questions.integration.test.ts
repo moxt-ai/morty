@@ -112,6 +112,7 @@ test.each(["new", "imported"] as const)(
                                 content: requests >= 7 ? "" : JSON.stringify({ [field.name]: answers[requests] }),
                                 interactionId: request.interactionId,
                                 kind: "session.elicitation.respond",
+                                requestId: crypto.randomUUID(),
                                 sessionId,
                             }),
                         );
@@ -306,7 +307,14 @@ for (const ending of ["stop", "timeout"] as const) {
                         }
                     }
                     if (ending === "stop") {
-                        peer.send(encodeSessionCancelCommand({ commandId, kind: "session.cancel", sessionId }));
+                        peer.send(
+                            encodeSessionCancelCommand({
+                                commandId,
+                                kind: "session.cancel",
+                                requestId: crypto.randomUUID(),
+                                sessionId,
+                            }),
+                        );
                     } else {
                         await vi.advanceTimersByTimeAsync(5000);
                     }
@@ -351,6 +359,7 @@ for (const ending of ["stop", "timeout"] as const) {
                             content: '{"value":"STALE_ANSWER"}',
                             interactionId,
                             kind: "session.elicitation.respond",
+                            requestId: crypto.randomUUID(),
                             sessionId,
                         }),
                     );
@@ -466,6 +475,7 @@ test("Given real Pi asks a question before a daemon disconnect, When the daemon 
                 content: '{"value":"STALE_ANSWER"}',
                 interactionId,
                 kind: "session.elicitation.respond",
+                requestId: crypto.randomUUID(),
                 sessionId: peer.sessionId,
             }),
         );
@@ -634,6 +644,7 @@ test("Given real Pi asks dialogs with empty titles or confirmation bodies, When 
                             content: JSON.stringify({ value: answers[requests] }),
                             interactionId: request.interactionId,
                             kind: "session.elicitation.respond",
+                            requestId: crypto.randomUUID(),
                             sessionId: peer.sessionId,
                         }),
                     );
@@ -701,6 +712,7 @@ test.each(["answer", "stop"] as const)(
                                 encodeSessionCancelCommand({
                                     commandId,
                                     kind: "session.cancel",
+                                    requestId: crypto.randomUUID(),
                                     sessionId: peer.sessionId,
                                 }),
                             );
@@ -711,6 +723,7 @@ test.each(["answer", "stop"] as const)(
                                     content: JSON.stringify({ value: requests === 0 ? "yes" : "Detailed" }),
                                     interactionId: request.interactionId,
                                     kind: "session.elicitation.respond",
+                                    requestId: crypto.randomUUID(),
                                     sessionId: peer.sessionId,
                                 }),
                             );
@@ -751,6 +764,7 @@ test.each(["answer", "stop"] as const)(
                         content: '{"value":"yes"}',
                         interactionId,
                         kind: "session.elicitation.respond",
+                        requestId: crypto.randomUUID(),
                         sessionId: peer.sessionId,
                     }),
                 );

@@ -13,7 +13,6 @@ import {
     decodeSessionQueryCommand,
     decodeSessionRenameCommand,
     ProtocolMessageError,
-    promptCompletion,
     RUNTIME_WORKSPACE_BINDING_ID,
     type SessionPromptCommand,
 } from "@morty-build/client/protocol";
@@ -129,71 +128,66 @@ export class SessionControl {
             throw error;
         }
         const result = await this.#control(command, permission);
-        if (result.kind === "session.prompt.accepted" && result.requestId === command.commandId) {
-            // A retried command is answered with where the original command stands.
-            return { commandId: result.requestId, state: result.state };
-        }
-        if (result.kind === "turn.completed" && result.commandId === command.commandId) {
-            // The command ended before it started, for example when it was cancelled while the Agent was starting.
-            return { commandId: result.commandId, state: "settled" };
-        }
-        if (
-            (result.kind !== "turn.started" && result.kind !== "turn.queued") ||
-            result.commandId !== command.commandId
-        ) {
+        if (result.kind !== "session.prompt.accepted" || result.requestId !== command.commandId) {
             throw new PairingDirectoryError("invalid_request", "The Runtime returned an invalid Turn");
         }
-        return { commandId: result.commandId, state: result.kind === "turn.queued" ? "queued" : "running" };
+        return { commandId: result.requestId, state: result.state };
     };
 
     readonly cancelTurn = async (turnId: string): Promise<{ readonly stopReason: string }> => {
-        const completed = await this.#run(
+        const stopped = await this.#run(
             decodeSessionCancelCommand(
-                JSON.stringify({ commandId: turnId, kind: "session.cancel", sessionId: this.#sessionId }),
+                JSON.stringify({
+                    commandId: turnId,
+                    kind: "session.cancel",
+                    requestId: crypto.randomUUID(),
+                    sessionId: this.#sessionId,
+                }),
             ),
         );
-        if (completed.kind !== "turn.completed" || completed.commandId !== turnId) {
+        if (stopped.kind !== "session.turn.stopped" || stopped.commandId !== turnId) {
             throw new PairingDirectoryError("invalid_request", "The Runtime returned an invalid cancellation");
         }
-        return { stopReason: completed.stopReason };
+        return { stopReason: stopped.stopReason };
     };
 
     /** Withdraws a Turn that has not started; one that already started cannot be withdrawn. */
     readonly withdrawTurn = async (turnId: string): Promise<void> => {
-        const completed = await this.#run(
+        const withdrawn = await this.#run(
             decodeSessionCancelBeforeStartCommand(
-                JSON.stringify({ commandId: turnId, kind: "session.cancel-before-start", sessionId: this.#sessionId }),
+                JSON.stringify({
+                    commandId: turnId,
+                    kind: "session.cancel-before-start",
+                    requestId: crypto.randomUUID(),
+                    sessionId: this.#sessionId,
+                }),
             ),
         );
-        if (completed.kind !== "turn.completed" || completed.commandId !== turnId) {
+        if (withdrawn.kind !== "session.turn.withdrawn" || withdrawn.commandId !== turnId) {
             throw new PairingDirectoryError("invalid_request", "The Runtime returned an invalid cancellation");
-        }
-        if (promptCompletion(completed).kind !== "cancelled") {
-            throw new PairingDirectoryError(
-                "turn_already_started",
-                "The message already executed and could not be withdrawn",
-            );
         }
     };
 
     readonly steerTurn = async (turnId: string): Promise<void> => {
-        const started = await this.#run(
+        const steered = await this.#run(
             decodeSessionPromptDispositionCommand(
                 JSON.stringify({
                     commandId: turnId,
                     disposition: "steer",
                     kind: "session.prompt.disposition",
+                    requestId: crypto.randomUUID(),
                     sessionId: this.#sessionId,
                 }),
             ),
         );
-        if (started.kind !== "turn.started" || started.commandId !== turnId) {
+        if (steered.kind !== "session.prompt.steered" || steered.commandId !== turnId) {
             throw new PairingDirectoryError("invalid_request", "The Runtime returned an invalid steered Turn");
         }
     };
 
     readonly respond = async (interactionId: string, response: InteractionResponse): Promise<void> => {
-        await this.#run(
+        const requestId = crypto.randomUUID();
+        const answered = await this.#run(
             response.kind === "permission"
                 ? decodeSessionPermissionRespondCommand(
                       JSON.stringify({
@@ -201,6 +195,7 @@ export class SessionControl {
                           kind: "session.permission.respond",
                           optionId: response.optionId,
                           outcome: response.outcome,
+                          requestId,
                           sessionId: this.#sessionId,
                       }),
                   )
@@ -210,10 +205,14 @@ export class SessionControl {
                           content: response.content,
                           interactionId,
                           kind: "session.elicitation.respond",
+                          requestId,
                           sessionId: this.#sessionId,
                       }),
                   ),
         );
+        if (answered.kind !== "session.interaction.answered" || answered.interactionId !== interactionId) {
+            throw new PairingDirectoryError("invalid_request", "The Runtime returned an invalid answer");
+        }
     };
 
     readonly readConfiguration = async () => {

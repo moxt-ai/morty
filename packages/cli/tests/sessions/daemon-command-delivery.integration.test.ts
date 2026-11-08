@@ -339,6 +339,7 @@ test.each([
                             commandId: steering,
                             disposition: SessionPromptDisposition.Steer,
                             kind: SESSION_PROMPT_DISPOSITION_KIND,
+                            requestId: crypto.randomUUID(),
                             sessionId: peer.sessionId,
                         }),
                     );

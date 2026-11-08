@@ -66,6 +66,7 @@ test("Given real Pi receives a file attachment, When the Agent reads its local l
                 peer.send(
                     encodeSessionPermissionRespondCommand({
                         kind: "session.permission.respond",
+                        requestId: crypto.randomUUID(),
                         interactionId: event.payload.event.interactionId,
                         optionId: option.optionId,
                         outcome: "selected",

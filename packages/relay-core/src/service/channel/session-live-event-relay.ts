@@ -70,34 +70,6 @@ export class SessionLiveEventRelay {
                 viewer.socket.close(1013, "Session subscription backpressure");
             }
         }
-        for (const route of this.#peers.operations()) {
-            const events = envelope.events.filter((event) => {
-                if (event.type !== "lifecycle-metadata" || event.sessionId !== route.sessionId) {
-                    return false;
-                }
-                const payload = event.payload;
-                if ("commandId" in payload) {
-                    return payload.commandId === route.requestId;
-                }
-                if (payload.kind === "session.permission.resolved" || payload.kind === "session.elicitation.resolved") {
-                    const interaction = payload["event"];
-                    return (
-                        typeof interaction === "object" &&
-                        interaction !== null &&
-                        "interactionId" in interaction &&
-                        interaction.interactionId === route.requestId
-                    );
-                }
-                return route.queueAcknowledgement && payload.kind === "session.queue.changed";
-            });
-            if (events.length > 0) {
-                try {
-                    route.socket.send(encodeSessionWireEnvelope({ ...envelope, events }));
-                } catch {
-                    route.socket.close(1013, "Runtime request backpressure");
-                }
-            }
-        }
         // Both consumers observe live events, including when no browsers are watching. A restated outcome is not a new
         // fact, so it is never notified again. Recording alone knows whether it holds the outcome a restatement
         // repeats, and may have missed it, so it receives the restatements that repeat an outcome the Runtime recorded.

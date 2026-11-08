@@ -114,12 +114,11 @@ export function buildSessionLayer(options: SessionLayerOptions) {
         sink,
         async (sessionId, event) => {
             if (await manager.recordLifecycleEvent(sessionId, event)) {
-                return true;
+                return;
             }
             const recorded = events.append(sessionId, event);
             operations.record(recorded);
             eventProjection.record(recorded);
-            return true;
         },
         (sessionId, event, recordedAt) => events.append(sessionId, event, recordedAt),
         activeSessions.recordSessionEvent,

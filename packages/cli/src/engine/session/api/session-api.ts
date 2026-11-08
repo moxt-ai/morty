@@ -209,6 +209,5 @@ export interface SessionEventSink {
     readonly publish: (event: SessionLiveEvent) => void;
     readonly publishClosed: (event: SessionCloseNoticeEvent) => void;
     readonly publishInfo: (event: SessionInfoUpdatedEvent) => void;
-    readonly publishOperationFailure: (sessionId: string, requestId: string, code: string, message: string) => void;
     readonly publishStatus: (event: SessionStatusChangedEvent) => void;
 }

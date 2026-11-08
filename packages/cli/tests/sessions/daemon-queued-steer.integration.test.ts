@@ -38,18 +38,25 @@ const submit = (peer: RealDaemonPeer, prompt: string) => {
     return commandId;
 };
 
-const steer = (peer: RealDaemonPeer, commandId: string, sessionId = peer.sessionId) =>
+/** Sends a steer and returns the identifier its reply names. */
+const steer = (peer: RealDaemonPeer, commandId: string, sessionId = peer.sessionId): string => {
+    const requestId = randomUUID();
     peer.send(
         encodeSessionPromptDispositionCommand({
             kind: SESSION_PROMPT_DISPOSITION_KIND,
+            requestId,
             commandId,
             sessionId,
             disposition: SessionPromptDisposition.Steer,
         }),
     );
+    return requestId;
+};
 
 const cancel = (peer: RealDaemonPeer, commandId: string) =>
-    peer.send(JSON.stringify({ kind: "session.cancel", commandId, sessionId: peer.sessionId }));
+    peer.send(
+        JSON.stringify({ kind: "session.cancel", requestId: randomUUID(), commandId, sessionId: peer.sessionId }),
+    );
 
 const observe = (peer: RealDaemonPeer) => {
     const events: SessionLiveEvent[] = [];
@@ -118,21 +125,21 @@ test("Given queued work has started or completed, When a client sends a late ste
         await observed.lifecycle("session.queue.changed");
         cancel(peer, running);
         await observed.lifecycle("prompt.started", queued);
-        steer(peer, queued);
+        const lateSteer = steer(peer, queued);
         await observed.until(() => observed.failures.length === 1);
         expect(observed.failures[0]).toMatchObject({
-            requestId: queued,
+            requestId: lateSteer,
             sessionId: peer.sessionId,
             code: "turn_already_started",
         });
         cancel(peer, queued);
         await observed.lifecycle("prompt.completed", queued);
-        steer(peer, queued);
-        steer(peer, queued, "another-session");
+        const settledSteer = steer(peer, queued);
+        const foreignSteer = steer(peer, queued, "another-session");
         await observed.until(() => observed.failures.length === 3);
         expect(observed.failures.slice(1)).toMatchObject([
-            { requestId: queued, sessionId: peer.sessionId, code: "turn_already_started" },
-            { requestId: queued, sessionId: "another-session", code: "turn_not_active" },
+            { requestId: settledSteer, sessionId: peer.sessionId, code: "turn_already_started" },
+            { requestId: foreignSteer, sessionId: "another-session", code: "turn_not_active" },
         ]);
         expect(
             observed.events.filter(

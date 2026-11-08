@@ -107,6 +107,7 @@ test("Given Claude awaits a background subagent, When the user steers and the su
                             peer.send(
                                 JSON.stringify({
                                     kind: "session.permission.respond",
+                                    requestId: crypto.randomUUID(),
                                     sessionId: peer.sessionId,
                                     interactionId: request.interactionId,
                                     optionId: option.optionId,

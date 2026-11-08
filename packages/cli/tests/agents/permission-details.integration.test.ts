@@ -108,6 +108,7 @@ test.each(["allow_once", "reject_once"] as const)(
                     peer.send(
                         encodeSessionPermissionRespondCommand({
                             kind: "session.permission.respond",
+                            requestId: crypto.randomUUID(),
                             sessionId: peer.sessionId,
                             interactionId: permission.interactionId,
                             optionId: option.optionId,
@@ -228,6 +229,7 @@ test.each(["allow_once", "reject_once"] as const)(
                         peer.send(
                             encodeSessionPermissionRespondCommand({
                                 kind: "session.permission.respond",
+                                requestId: crypto.randomUUID(),
                                 sessionId: peer.sessionId,
                                 interactionId: permission.interactionId,
                                 optionId: option.optionId,

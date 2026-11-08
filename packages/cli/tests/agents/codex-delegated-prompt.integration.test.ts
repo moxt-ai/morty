@@ -85,7 +85,12 @@ test("Given the Codex app owns a thread whose last turn it interrupted, When a m
                 queue.parse(await owner.request("thread/queue/list", { threadId: thread.id }, peer.signal)).data,
             ).toHaveLength(1);
             peer.send(
-                encodeSessionCancelCommand({ kind: "session.cancel", commandId: withdrawn, sessionId: peer.sessionId }),
+                encodeSessionCancelCommand({
+                    kind: "session.cancel",
+                    requestId: crypto.randomUUID(),
+                    commandId: withdrawn,
+                    sessionId: peer.sessionId,
+                }),
             );
             await nextEvent(
                 peer,

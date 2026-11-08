@@ -5,7 +5,7 @@ import type {
     WorkspaceEntriesEvent,
     WorkspaceListCommand,
 } from "@morty-build/client/protocol";
-import { decodeNativeSessionCancel, SessionPromptDisposition } from "@morty-build/client/protocol";
+import { decodeNativeSessionCancel } from "@morty-build/client/protocol";
 import type { DurableObjectContext } from "../../di/create-durable-object-dependencies.ts";
 import type { ProjectScope as Scope } from "../../entity/do/session.ts";
 import { ProjectScope } from "../../entity/do/session.ts";
@@ -17,6 +17,7 @@ import {
     requestRuntimeControl,
     requestRuntimeFile,
     requestRuntimeWorkspace,
+    runtimeControlRequestId,
 } from "../pairing/runtime-control-request.ts";
 import type { NativeSessionForks } from "./native-session-forks.ts";
 
@@ -69,15 +70,10 @@ export function createLocalSessionOperations(
             throw new PairingDirectoryError("runtime_access_denied", "The selected Runtime is unavailable");
         }
     };
-    const connect = async (
-        requestId: string,
-        sessionId: string,
-        queueAcknowledgement: boolean,
-        signal: AbortSignal,
-    ) => {
+    const connect = async (requestId: string, sessionId: string, signal: AbortSignal) => {
         signal.throwIfAborted();
         await cx.services.runtime.expireSilentDaemons();
-        return cx.gateways.requests.open(requestId, sessionId, queueAcknowledgement, async (socket, message) => {
+        return cx.gateways.requests.open(requestId, sessionId, async (socket, message) => {
             if (!signal.aborted) {
                 await cx.services.runtime.receiveOperation(
                     new ProjectScope(projectId),
@@ -121,19 +117,8 @@ export function createLocalSessionOperations(
         signal,
     ) => {
         checkTarget(scope.projectId, requestedRuntime);
-        const id =
-            "commandId" in command
-                ? command.commandId
-                : "interactionId" in command
-                  ? command.interactionId
-                  : command.requestId;
         const sessionId = "sessionId" in command ? command.sessionId : "";
-        const socket = await connect(
-            id,
-            sessionId,
-            command.kind === "session.prompt" && command.disposition === SessionPromptDisposition.Append,
-            signal,
-        );
+        const socket = await connect(runtimeControlRequestId(command), sessionId, signal);
         return await requestRuntimeControl(socket, command, signal);
     };
     return {
@@ -150,15 +135,11 @@ export function createLocalSessionOperations(
         },
         requestWorkspace: async (scope, requestedRuntime, command, signal) => {
             checkTarget(scope.projectId, requestedRuntime);
-            return await requestRuntimeWorkspace(await connect(command.requestId, "", false, signal), command, signal);
+            return await requestRuntimeWorkspace(await connect(command.requestId, "", signal), command, signal);
         },
         requestAgentSettings: async (scope, requestedRuntime, command, signal) => {
             checkTarget(scope.projectId, requestedRuntime);
-            return await requestRuntimeAgentSettings(
-                await connect(command.requestId, "", false, signal),
-                command,
-                signal,
-            );
+            return await requestRuntimeAgentSettings(await connect(command.requestId, "", signal), command, signal);
         },
         openPublicSessionEvents: async (scope, requestedRuntime, sessionId, credential, signal) => {
             checkTarget(scope.projectId, requestedRuntime);
@@ -184,7 +165,7 @@ export function createLocalSessionOperations(
         requestProjectScopeControl,
         readProjectSessionFile: async (scope, requestedRuntime, command, signal) => {
             checkTarget(scope.projectId, requestedRuntime);
-            const socket = await connect(command.requestId, command.sessionId, false, signal);
+            const socket = await connect(command.requestId, command.sessionId, signal);
             try {
                 const stream = await requestRuntimeFile(socket, command, signal);
                 cx.utilities.waitUntil(stream.finished);
@@ -196,7 +177,7 @@ export function createLocalSessionOperations(
         },
         writeProjectSessionContent: async (scope, requestedRuntime, command, body, signal) => {
             checkTarget(scope.projectId, requestedRuntime);
-            const socket = await connect(command.requestId, command.sessionId, false, signal);
+            const socket = await connect(command.requestId, command.sessionId, signal);
             try {
                 return await requestRuntimeContentWrite(socket, command, body, signal);
             } catch (cause) {

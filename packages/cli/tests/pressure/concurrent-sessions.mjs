@@ -636,7 +636,14 @@ async function exercise(count) {
         const stopped = performance.now();
         stage("stopping during output");
         for (const id of sessions) {
-            host.send(JSON.stringify({ kind: "session.cancel", commandId: `first-${id}`, sessionId: id }));
+            host.send(
+                JSON.stringify({
+                    kind: "session.cancel",
+                    requestId: crypto.randomUUID(),
+                    commandId: `first-${id}`,
+                    sessionId: id,
+                }),
+            );
         }
         await check(() => sessions.every((id) => terminals.has(`first-${id}`)), "all stop requests settled");
         result.stopMaximumMilliseconds = Math.max(...sessions.map((id) => terminals.get(`first-${id}`).at - stopped));

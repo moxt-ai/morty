@@ -123,7 +123,14 @@ test("Given a borrowed Codex conversation with queued input, When the user stops
             expect(
                 queue.parse(await native.request("thread/queue/list", { threadId: thread.id }, peer.signal)).data,
             ).toHaveLength(1);
-            peer.send(encodeSessionCancelCommand({ kind: "session.cancel", commandId, sessionId: peer.sessionId }));
+            peer.send(
+                encodeSessionCancelCommand({
+                    kind: "session.cancel",
+                    requestId: crypto.randomUUID(),
+                    commandId,
+                    sessionId: peer.sessionId,
+                }),
+            );
             for (;;) {
                 const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));
                 if (event.type !== "lifecycle-metadata") {

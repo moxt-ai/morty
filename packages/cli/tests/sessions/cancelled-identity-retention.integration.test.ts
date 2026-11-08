@@ -110,7 +110,14 @@ const promptCommand = (peer: RealDaemonPeer, commandId: string, prompt: string) 
     });
 
 const cancelBeforeStart = (peer: RealDaemonPeer, commandId: string) =>
-    peer.send(JSON.stringify({ kind: "session.cancel-before-start", sessionId: peer.sessionId, commandId }));
+    peer.send(
+        JSON.stringify({
+            kind: "session.cancel-before-start",
+            requestId: crypto.randomUUID(),
+            sessionId: peer.sessionId,
+            commandId,
+        }),
+    );
 
 test("Given an executed command and a command cancelled before start, When later commands evict both receipts without a restart, Then the cancelled command reads as cancelled rather than expired and cannot execute", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -177,6 +184,7 @@ for (const admission of ["before-admission", "queued"] as const) {
                         peer.send(
                             JSON.stringify({
                                 kind: "session.cancel-before-start",
+                                requestId: crypto.randomUUID(),
                                 sessionId: peer.sessionId,
                                 commandId: id,
                             }),
@@ -236,6 +244,7 @@ for (const admission of ["before-admission", "queued"] as const) {
                         peer.send(
                             JSON.stringify({
                                 kind: "session.cancel",
+                                requestId: crypto.randomUUID(),
                                 sessionId: peer.sessionId,
                                 commandId: "running-hold",
                             }),
