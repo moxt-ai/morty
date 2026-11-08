@@ -48,8 +48,7 @@ test("Given a real Codex model that asks the user a question while it keeps work
                 additionalDirectoryIds: [],
                 attachments: [],
                 prompt,
-                disposition: SessionPromptDisposition.Reject,
-                targetCommandId: "",
+                disposition: SessionPromptDisposition.Append,
             }),
         );
         const live: SessionEventPayload[] = [];

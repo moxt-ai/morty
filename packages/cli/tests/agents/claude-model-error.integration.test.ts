@@ -45,12 +45,11 @@ test("Given Claude receives a model-not-found response, When I send a prompt, Th
                     bindingId: peer.bindingId,
                     commandId,
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "Answer this request",
                     sessionId: peer.sessionId,
-                    targetCommandId: "",
                 }),
             );
             for (;;) {

@@ -25,6 +25,12 @@ export type RecordedSessionEvent =
     | SessionPermissionResolvedEvent;
 
 /**
+ * How an admitted prompt executes: as its own turn, or by steering the running turn of `targetCommandId`. An appended
+ * prompt promoted out of the queue steers the turn it waited behind, which admission names when it admits it.
+ */
+export type PromptDispatch = { readonly kind: "own" } | { readonly kind: "steer"; readonly targetCommandId: string };
+
+/**
  * Where a prompt stands in its Session's admission. Whether it started belongs to its execution receipt: the turn
  * reads that fact instead of keeping a copy of it.
  */
@@ -32,7 +38,7 @@ type TurnAdmission =
     | { readonly kind: "waiting" }
     | { readonly kind: "queued"; readonly promotion: PromiseWithResolvers<void> }
     | { readonly kind: "promoted" }
-    | { readonly kind: "admitted"; readonly disposition: string };
+    | { readonly kind: "admitted"; readonly dispatch: PromptDispatch; readonly fromQueue: boolean };
 
 export type TurnCancellation =
     | { readonly kind: "already-requested" }
@@ -81,11 +87,15 @@ export class ActiveRuntimeTurn {
 
     /** Whether the prompt was admitted to its Session's queue, whatever happened to it afterwards. */
     readonly enteredQueue = (): boolean =>
-        this.command.disposition === SessionPromptDisposition.Queue && this.#admission.kind !== "waiting";
+        this.#admission.kind === "queued" ||
+        this.#admission.kind === "promoted" ||
+        (this.#admission.kind === "admitted" && this.#admission.fromQueue);
 
     readonly isQueued = (): boolean =>
         (this.#admission.kind === "queued" ||
-            (this.#admission.kind === "admitted" && this.#admission.disposition === SessionPromptDisposition.Queue)) &&
+            (this.#admission.kind === "admitted" &&
+                this.#admission.fromQueue &&
+                this.#admission.dispatch.kind === "own")) &&
         !this.#started() &&
         !this.#controller.signal.aborted;
 
@@ -117,18 +127,20 @@ export class ActiveRuntimeTurn {
             case "promoted":
                 return "accepted";
             case "admitted":
-                return this.#admission.disposition === SessionPromptDisposition.Steer ? "accepted" : "already-started";
+                return this.#admission.dispatch.kind === "steer" ? "accepted" : "already-started";
             case "waiting":
                 return "unavailable";
         }
     };
 
-    readonly admit = (): string => {
-        const disposition = this.effectiveDisposition();
-        // Claim the dispatch before asynchronous Agent preparation so a late promotion
-        // cannot change a disposition that execution has already selected.
-        this.#admission = { kind: "admitted", disposition };
-        return disposition;
+    /**
+     * Fixes how the prompt executes before asynchronous Agent preparation, so a late promotion cannot change a dispatch
+     * that execution has already selected.
+     */
+    readonly admit = (dispatch: PromptDispatch): PromptDispatch => {
+        const fromQueue = this.enteredQueue();
+        this.#admission = { kind: "admitted", dispatch, fromQueue };
+        return dispatch;
     };
 
     readonly queuePromotion = (): Promise<void> | null => {
@@ -138,22 +150,24 @@ export class ActiveRuntimeTurn {
         return this.#admission.kind === "promoted" ? Promise.resolve() : null;
     };
 
-    readonly effectiveDisposition = (): string => {
+    /** Whether the prompt joins another turn's execution instead of owning one, so it holds no place in the queue. */
+    readonly isSteering = (): boolean => {
         switch (this.#admission.kind) {
             case "waiting":
+                return this.command.disposition === SessionPromptDisposition.Steer;
             case "queued":
-                return this.command.disposition;
+                return false;
             case "promoted":
-                return SessionPromptDisposition.Steer;
+                return true;
             case "admitted":
-                return this.#admission.disposition;
+                return this.#admission.dispatch.kind === "steer";
         }
     };
 
     /** A steering prompt joins the execution of the turn it steers; every other prompt owns its execution. */
     readonly execution = (): string =>
-        this.effectiveDisposition() === SessionPromptDisposition.Steer
-            ? this.command.targetCommandId
+        this.#admission.kind === "admitted" && this.#admission.dispatch.kind === "steer"
+            ? this.#admission.dispatch.targetCommandId
             : this.command.commandId;
 
     readonly recordEvent = (event: RecordedSessionEvent): RecordedSessionEvent => {

@@ -118,12 +118,11 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
                 bindingId: config.bindingId,
                 commandId,
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Reject,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
                 prompt,
                 sessionId,
-                targetCommandId: "",
             }),
         );
 

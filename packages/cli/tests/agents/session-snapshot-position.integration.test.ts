@@ -95,8 +95,7 @@ for (const agentId of ["codex", "claude", "pi"] as const) {
                         additionalDirectoryIds: [],
                         prompt: "Reply with the requested answer.",
                         attachments: [],
-                        disposition: SessionPromptDisposition.Reject,
-                        targetCommandId: "",
+                        disposition: SessionPromptDisposition.Append,
                     }),
                 );
                 await entered.promise;

@@ -186,9 +186,9 @@ function submittingCommandId(turn: CurrentTurn, delivery: DeliveryState): string
         return null;
     }
     const commandId =
-        delivery.kind === "preparing" && delivery.message.target.disposition === "reject"
+        delivery.kind === "preparing" && delivery.message.placement === "turn"
             ? delivery.message.commandId
-            : delivery.kind === "submitting" && delivery.journal.request.disposition === "reject"
+            : delivery.kind === "submitting" && delivery.journal.placement === "turn"
               ? delivery.journal.commandId
               : null;
     return commandId === turn.lastEndedCommandId ? null : commandId;
@@ -208,7 +208,7 @@ export function sessionActivity(turn: CurrentTurn, delivery: DeliveryState): Ses
     if (submitting !== null) {
         return { kind: "working", commandId: submitting };
     }
-    if (delivery.kind === "preparation-failed" && delivery.message.target.disposition === "reject") {
+    if (delivery.kind === "preparation-failed" && delivery.message.placement === "turn") {
         return { kind: "failed", commandId: delivery.message.commandId, ...delivery.failure };
     }
     return turn.failure === null ? { kind: "idle" } : { kind: "failed", ...turn.failure };

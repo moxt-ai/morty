@@ -37,8 +37,7 @@ async function journey(peer: RealDaemonPeer, agentId: string, reply: string): Pr
                 sessionId,
                 attachments: [],
                 prompt: text,
-                disposition: SessionPromptDisposition.Reject,
-                targetCommandId: "",
+                disposition: SessionPromptDisposition.Append,
             }),
         );
         let output = "";
@@ -184,8 +183,7 @@ async function interruptedJourney(
                     sessionId,
                     attachments: [],
                     prompt,
-                    disposition: SessionPromptDisposition.Reject,
-                    targetCommandId: "",
+                    disposition: SessionPromptDisposition.Append,
                 }),
             );
         sendPrompt(commandId, interruptedPrompt);

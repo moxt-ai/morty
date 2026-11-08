@@ -31,12 +31,11 @@ test("Given real Claude has expired OAuth credentials, When I send a message and
                     bindingId: peer.bindingId,
                     commandId,
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "Reply with a greeting",
                     sessionId,
-                    targetCommandId: "",
                 }),
             );
             const output: string[] = [];
@@ -137,12 +136,11 @@ test("Given a real Claude answer quotes login diagnostics, When it completes, Th
                 bindingId: peer.bindingId,
                 commandId,
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Reject,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "Explain a login diagnostic without running tools",
                 sessionId: peer.sessionId,
-                targetCommandId: "",
             }),
         );
         let output = "";

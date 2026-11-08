@@ -1,12 +1,9 @@
-import {
-    SessionHistoryPolicy,
-    type SessionPromptCommand,
-    SessionPromptDisposition,
-} from "@morty-build/client/protocol";
+import { SessionHistoryPolicy, type SessionPromptCommand } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../../acp/acp-error.ts";
 import { operationErrorCode, operationErrorMessage } from "../../infra/operation-error.ts";
 import type { ReportFailure, ResolveAgent } from "../api/session-api.ts";
 import type { SessionManager } from "../manager/session-manager.ts";
+import type { PromptDispatch } from "../turn/active-turn.ts";
 import { resolveSessionDirectories } from "../workspace/resolve-session-directories.ts";
 import type { WorkspaceDirectoryService } from "../workspace/workspace-directory.ts";
 import { agentForSessionConfiguration, applyCompleteSessionConfiguration } from "./apply-session-configuration.ts";
@@ -23,13 +20,8 @@ export interface ExecutePromptOptions {
     readonly sessions: SessionManager;
     readonly attemptId: string;
     readonly epoch: string;
-    readonly waitForSessionAvailability: (
-        signal: AbortSignal,
-    ) => Promise<
-        | { readonly kind: "available"; readonly disposition: string }
-        | { readonly kind: "busy" }
-        | { readonly kind: "queue-target-unavailable" }
-    >;
+    /** Waits for the Session to admit the prompt, and answers how it executes. */
+    readonly waitForSessionAdmission: (signal: AbortSignal) => Promise<PromptDispatch>;
     readonly signal: AbortSignal;
     readonly cancellationRequested: () => boolean;
 }
@@ -49,7 +41,7 @@ export async function executePrompt({
     sessions,
     attemptId,
     epoch,
-    waitForSessionAvailability,
+    waitForSessionAdmission,
     signal,
     cancellationRequested,
 }: ExecutePromptOptions): Promise<void> {
@@ -66,24 +58,11 @@ export async function executePrompt({
             signal,
             command.sessionId,
         );
-        const availability = await waitForSessionAvailability(signal);
-        if (availability.kind === "busy") {
-            throw new AcpExecutionError("Another prompt is already running in this conversation", {}, "session_busy");
-        }
-        if (availability.kind === "queue-target-unavailable") {
-            throw new AcpExecutionError(
-                "The queued prompt target is unavailable",
-                {},
-                "prompt_queue_target_unavailable",
-            );
-        }
+        const dispatch = await waitForSessionAdmission(signal);
         // A steering prompt joins an execution the Agent already holds. Check before preparing, so a steer can never
         // replace or reconfigure the process an admitted prompt is still preparing.
-        if (
-            availability.disposition === SessionPromptDisposition.Steer &&
-            !sessions.acceptsSteering(command.sessionId, command.targetCommandId)
-        ) {
-            throw new AcpExecutionError("The steering target is unavailable", {}, "prompt_queue_target_unavailable");
+        if (dispatch.kind === "steer" && !sessions.acceptsSteering(command.sessionId, dispatch.targetCommandId)) {
+            throw new AcpExecutionError("The steering target is unavailable", {}, "steering_target_unavailable");
         }
         const appliedSettings =
             command.sessionConfigurations === undefined
@@ -110,10 +89,7 @@ export async function executePrompt({
         // applied and must not gate the prompt. A member who changes a setting while a Turn runs
         // sends their follow-up with the newer snapshot, and steering folds that follow-up into
         // the Turn still running on the older settings; rejecting it loses the member's message.
-        if (
-            command.sessionConfigurations !== undefined &&
-            availability.disposition !== SessionPromptDisposition.Steer
-        ) {
+        if (command.sessionConfigurations !== undefined && dispatch.kind !== "steer") {
             await applyCompleteSessionConfiguration(
                 sessions,
                 prepared.configOptions,
@@ -129,13 +105,7 @@ export async function executePrompt({
             prepared = await sessions.prepareExecutionSession(preparation);
         }
         signal.throwIfAborted();
-        const lifecycle = eventProjection.lifecycle(
-            command.sessionId,
-            command.commandId,
-            attemptId,
-            epoch,
-            availability.disposition,
-        );
+        const lifecycle = eventProjection.lifecycle(command.sessionId, command.commandId, attemptId, epoch, dispatch);
         const attachments = await resolvePromptArtifacts(readArtifact, command.attachments, signal);
         const skipped = command.attachments.length - attachments.images.length - attachments.resources.length;
         if (skipped > 0) {
@@ -149,7 +119,7 @@ export async function executePrompt({
             throw new PromptArtifactError("prompt_attachments_unsupported", "No supported prompt content remains");
         }
         let stopReason: string;
-        if (availability.disposition === SessionPromptDisposition.Steer) {
+        if (dispatch.kind === "steer") {
             await sessions.steerPrompt({
                 adapter,
                 ...(externalizeSessionUpdate === undefined ? {} : { externalizeSessionUpdate }),
@@ -163,7 +133,7 @@ export async function executePrompt({
                 resources: attachments.resources,
                 sessionId: command.sessionId,
                 signal,
-                targetCommandId: command.targetCommandId,
+                targetCommandId: dispatch.targetCommandId,
             });
             stopReason = "steered";
         } else {
@@ -175,14 +145,12 @@ export async function executePrompt({
                 agent: executionAgent,
                 commandId: command.commandId,
                 cwd: resolved.cwd,
-                disposition: availability.disposition,
                 images: attachments.images,
                 lifecycle,
                 prompt: command.prompt,
                 resources: attachments.resources,
                 sessionId: command.sessionId,
                 signal,
-                targetCommandId: command.targetCommandId,
                 recovery,
             });
             stopReason = result.stopReason;

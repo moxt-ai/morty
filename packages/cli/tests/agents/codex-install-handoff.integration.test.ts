@@ -112,8 +112,7 @@ test("Given setup runs in a real Codex exec conversation, When its native sessio
                 additionalDirectoryIds: [],
                 attachments: [],
                 prompt: "Continue this conversation after installation",
-                disposition: SessionPromptDisposition.Reject,
-                targetCommandId: "",
+                disposition: SessionPromptDisposition.Append,
             }),
         );
         let reply = "";

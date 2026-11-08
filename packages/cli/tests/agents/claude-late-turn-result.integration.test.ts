@@ -135,12 +135,11 @@ test("Given Claude's Stop hook outlasts the result watchdog, When I send the nex
                         bindingId: peer.bindingId,
                         commandId,
                         directoryId: "default",
-                        disposition: SessionPromptDisposition.Reject,
+                        disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",
                         prompt,
                         sessionId: peer.sessionId,
-                        targetCommandId: "",
                     }),
                 );
             let answers = "";

@@ -8,9 +8,10 @@ import type {
     SessionLiveEvent,
     SessionPromptCommand,
 } from "@morty-build/client/protocol";
-import { isPromptTerminal, SESSION_CLOSED_ERROR_CODE } from "@morty-build/client/protocol";
+import { isPromptTerminal, SESSION_CLOSED_ERROR_CODE, SessionPromptDisposition } from "@morty-build/client/protocol";
 import type { SessionEventSink } from "../api/session-api.ts";
 import { SessionError } from "../api/session-error.ts";
+import type { PromptDispatch } from "../turn/active-turn.ts";
 import type { ExecutionReceipts, RestatedOutcome } from "../turn/execution-receipts.ts";
 import { isTextPromptResourceMediaType } from "./prompt-artifacts.ts";
 
@@ -94,14 +95,16 @@ export class PromptLifecycle {
         this.#queued.set(command.commandId, {
             commandId: command.commandId,
             content: promptContent(command),
-            ...(command.disposition === undefined ? {} : { disposition: command.disposition }),
+            disposition: command.disposition,
             context: {
                 agentId: command.agentId,
                 directoryId: command.directoryId,
                 additionalDirectoryIds: command.additionalDirectoryIds,
             },
             sessionId: command.sessionId,
-            ...(command.targetCommandId.length === 0 ? {} : { targetCommandId: command.targetCommandId }),
+            ...(command.disposition === SessionPromptDisposition.Steer
+                ? { targetCommandId: command.targetCommandId }
+                : {}),
         });
     };
 
@@ -111,7 +114,7 @@ export class PromptLifecycle {
         commandId: string,
         attemptId: string,
         epoch: string,
-        disposition: string,
+        dispatch: PromptDispatch,
     ): {
         readonly attemptId: string;
         readonly content: readonly ContentBlock[];
@@ -125,10 +128,11 @@ export class PromptLifecycle {
             return {
                 attemptId,
                 content: request.content,
-                disposition,
                 epoch,
                 context: request.context,
-                ...(request.targetCommandId === undefined ? {} : { targetCommandId: request.targetCommandId }),
+                ...(dispatch.kind === "steer"
+                    ? { disposition: SessionPromptDisposition.Steer, targetCommandId: dispatch.targetCommandId }
+                    : { disposition: SessionPromptDisposition.Append }),
             };
         }
         throw new Error("The executing prompt was not registered in the V2 queue");

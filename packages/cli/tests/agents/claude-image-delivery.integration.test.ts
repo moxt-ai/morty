@@ -58,12 +58,11 @@ test("Given real Claude reads an image, When its reply streams and native histor
                     bindingId: peer.bindingId,
                     commandId,
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
                     sessionId: peer.sessionId,
-                    targetCommandId: "",
                 }),
             );
         const finish = async (): Promise<readonly SessionLiveEvent[]> => {

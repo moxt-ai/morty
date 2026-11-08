@@ -32,11 +32,10 @@ const submit = (peer: RealDaemonPeer, commandId: string, prompt: string): void =
             ...identity(peer),
             attachments: [],
             commandId,
-            disposition: SessionPromptDisposition.Reject,
+            disposition: SessionPromptDisposition.Append,
             kind: "session.prompt",
             prompt,
             sessionId: peer.sessionId,
-            targetCommandId: "",
         }),
     );
 
@@ -153,11 +152,10 @@ test("Given a running turn and a later queued command, When the clock moves back
                         ...identity(peer),
                         attachments: [],
                         commandId: queued,
-                        disposition: SessionPromptDisposition.Queue,
+                        disposition: SessionPromptDisposition.Append,
                         kind: "session.prompt",
                         prompt: "Continue with the queued request",
                         sessionId: peer.sessionId,
-                        targetCommandId: running,
                     }),
                 );
                 for (;;) {
@@ -324,11 +322,10 @@ test.each([
                             ...identity(peer),
                             attachments: [],
                             commandId: steering,
-                            disposition: SessionPromptDisposition.Queue,
+                            disposition: SessionPromptDisposition.Append,
                             kind: "session.prompt",
                             prompt: instruction,
                             sessionId: peer.sessionId,
-                            targetCommandId: turn,
                         }),
                     );
                     for (;;) {

@@ -207,12 +207,11 @@ test("Given saved Codex image generation, When the real daemon reopens it throug
                     bindingId: peer.bindingId,
                     commandId,
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
                     sessionId: managedSessionId,
-                    targetCommandId: "",
                 }),
             );
         const finish = async (): Promise<readonly SessionLiveEvent[]> => {

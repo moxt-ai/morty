@@ -111,12 +111,11 @@ test("Given a borrowed Codex conversation with queued input, When the user stops
                     bindingId: peer.bindingId,
                     commandId,
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "This queued instruction must be withdrawn",
                     sessionId: peer.sessionId,
-                    targetCommandId: "",
                 }),
             );
             await queued.promise;

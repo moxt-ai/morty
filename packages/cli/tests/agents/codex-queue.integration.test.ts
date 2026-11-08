@@ -41,12 +41,11 @@ test("Given real Codex has accepted a steering prompt, When V2 recovery reloads 
                     bindingId: peer.bindingId,
                     commandId: activeCommandId,
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt: fakeProviderPrompts.twoTools,
                     sessionId: peer.sessionId,
-                    targetCommandId: "",
                 }),
             );
             await activeEntered.promise;
@@ -58,12 +57,11 @@ test("Given real Codex has accepted a steering prompt, When V2 recovery reloads 
                     bindingId: peer.bindingId,
                     commandId: steeringCommandId,
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Queue,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt: steeringPrompt,
                     sessionId: peer.sessionId,
-                    targetCommandId: activeCommandId,
                 }),
             );
             for (;;) {
@@ -189,12 +187,7 @@ test("Given real Codex advances between repeated prompts, When V2 recovery pagin
             const active = randomUUID();
             const queued = randomUUID();
             const repeatedPrompt = fakeProviderPrompts.twoTools;
-            const prompt = (
-                commandId: string,
-                disposition: "queue" | "reject",
-                targetCommandId: string,
-                text = `Reply to ${commandId}`,
-            ): void =>
+            const prompt = (commandId: string, text = `Reply to ${commandId}`): void =>
                 peer.send(
                     encodeSessionPromptCommand({
                         historyPolicy: "eager",
@@ -203,18 +196,17 @@ test("Given real Codex advances between repeated prompts, When V2 recovery pagin
                         bindingId: peer.bindingId,
                         commandId,
                         directoryId: "default",
-                        disposition,
+                        disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",
                         prompt: text,
                         sessionId: peer.sessionId,
-                        targetCommandId,
                     }),
                 );
 
-            prompt(active, SessionPromptDisposition.Reject, "", repeatedPrompt);
+            prompt(active, repeatedPrompt);
             await activeEntered.promise;
-            prompt(queued, SessionPromptDisposition.Queue, active, repeatedPrompt);
+            prompt(queued, repeatedPrompt);
             for (;;) {
                 const message = await peer.nextMessage();
                 if (
@@ -338,7 +330,7 @@ test("Given real Codex with an active turn, When three follow-ups are accepted a
             const first = randomUUID();
             const cancelled = randomUUID();
             const last = randomUUID();
-            const sendPrompt = (commandId: string, queued: boolean, target = active): void =>
+            const sendPrompt = (commandId: string): void =>
                 peer.send(
                     encodeSessionPromptCommand({
                         historyPolicy: "eager",
@@ -351,17 +343,16 @@ test("Given real Codex with an active turn, When three follow-ups are accepted a
                         additionalDirectoryIds: [],
                         attachments: [],
                         prompt: `Reply to ${commandId}`,
-                        disposition: queued ? SessionPromptDisposition.Queue : SessionPromptDisposition.Reject,
-                        targetCommandId: queued ? target : "",
+                        disposition: SessionPromptDisposition.Append,
                     }),
                 );
-            sendPrompt(active, false);
+            sendPrompt(active);
             await entered.promise;
             // While the target Turn holds the Session, each queued submission is
             // admitted in submission order and acknowledged by its own V2 queue
             // change before the next one enters the queue.
             for (const id of [first, cancelled, last]) {
-                sendPrompt(id, true);
+                sendPrompt(id);
                 for (;;) {
                     const message = await peer.nextMessage();
                     if (decodeMessageKind(message) !== SESSION_EVENT_KIND) {
@@ -448,32 +439,9 @@ test("Given real Codex with an active turn, When three follow-ups are accepted a
             for (const id of completed) {
                 expect(replies.get(id)).toContain("FIFO_REPLY");
             }
-            const invalid = randomUUID();
-            sendPrompt(invalid, true, invalid);
-            for (;;) {
-                const message = await peer.nextMessage();
-                if (decodeMessageKind(message) !== "session.event.v2") {
-                    continue;
-                }
-                const failure = decodeSessionEventEnvelope(message).events.find(
-                    (event) =>
-                        event.type === "lifecycle-metadata" &&
-                        (event.payload.kind === "prompt.failed" || event.payload.kind === "prompt.failed-before-start"),
-                );
-                if (
-                    failure?.type === "lifecycle-metadata" &&
-                    (failure.payload.kind === "prompt.failed" || failure.payload.kind === "prompt.failed-before-start")
-                ) {
-                    expect(failure.payload.commandId).toBe(invalid);
-                    expect(failure.payload.code).toBe("prompt_queue_target_unavailable");
-                    break;
-                }
-            }
+            // With nothing left running, a later message runs at once instead of entering the queue.
             const late = randomUUID();
-            sendPrompt(late, true);
-            // The queued Turn is acknowledged before it completes: its admission
-            // queue change must arrive ahead of its own terminal event.
-            let acknowledged = false;
+            sendPrompt(late);
             for (;;) {
                 const message = await peer.nextMessage();
                 if (decodeMessageKind(message) !== "session.event.v2") {
@@ -488,21 +456,12 @@ test("Given real Codex with an active turn, When three follow-ups are accepted a
                 if (failure !== undefined) {
                     throw new Error(JSON.stringify(failure));
                 }
-                if (
-                    events.some(
-                        (event) =>
-                            event.type === "lifecycle-metadata" && event.payload.kind === "session.queue.changed",
-                    )
-                ) {
-                    acknowledged = true;
-                }
                 const completion = events.find(
                     (event) => event.type === "lifecycle-metadata" && event.payload.kind === "prompt.completed",
                 );
                 if (completion?.type === "lifecycle-metadata" && completion.payload.kind === "prompt.completed") {
                     expect(completion.payload.commandId).toBe(late);
                     expect(completion.payload.stopReason).toBe("end_turn");
-                    expect(acknowledged).toBe(true);
                     break;
                 }
             }

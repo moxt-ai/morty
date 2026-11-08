@@ -70,12 +70,11 @@ test.each(["new", "imported"] as const)(
                     bindingId: peer.bindingId,
                     commandId,
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "Ask all the native questions",
                     sessionId,
-                    targetCommandId: "",
                 }),
             );
             const answers = [forest, "yes", "no", unicodeName, "", editedDraft, ""];
@@ -235,12 +234,11 @@ function sendQuestionPrompt(peer: RealDaemonPeer, sessionId: string, prompt: str
             bindingId: peer.bindingId,
             commandId,
             directoryId: "default",
-            disposition: SessionPromptDisposition.Reject,
+            disposition: SessionPromptDisposition.Append,
             attachments: [],
             kind: "session.prompt",
             prompt,
             sessionId,
-            targetCommandId: "",
         }),
     );
     return commandId;

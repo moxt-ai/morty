@@ -18,7 +18,7 @@ import { ControlledAcpAgentSpecification } from "../support/agents/controlled-ac
 import { type RealDaemonPeer, withControlledDaemon } from "../support/agents/real-daemon.ts";
 import { writeControlledAcpExecutable } from "../support/controlled-acp-executable.ts";
 
-const submit = (peer: RealDaemonPeer, prompt: string, targetCommandId = "") => {
+const submit = (peer: RealDaemonPeer, prompt: string) => {
     const commandId = randomUUID();
     peer.send(
         encodeSessionPromptCommand({
@@ -29,11 +29,10 @@ const submit = (peer: RealDaemonPeer, prompt: string, targetCommandId = "") => {
             bindingId: peer.bindingId,
             commandId,
             directoryId: "default",
-            disposition: targetCommandId === "" ? "reject" : "queue",
+            disposition: "append",
             kind: "session.prompt",
             prompt,
             sessionId: peer.sessionId,
-            targetCommandId,
         }),
     );
     return commandId;
@@ -115,7 +114,7 @@ test("Given queued work has started or completed, When a client sends a late ste
         const observed = observe(peer);
         const running = submit(peer, "hold after first delta");
         await observed.lifecycle("prompt.started", running);
-        const queued = submit(peer, "hold after first delta", running);
+        const queued = submit(peer, "hold after first delta");
         await observed.lifecycle("session.queue.changed");
         cancel(peer, running);
         await observed.lifecycle("prompt.started", queued);
@@ -160,7 +159,7 @@ test("Given a queued instruction, When two clients request steering together, Th
             ),
         );
         const instruction = "Apply the queued instruction once";
-        const queued = submit(peer, instruction, running);
+        const queued = submit(peer, instruction);
         await observed.lifecycle("session.queue.changed");
         steer(peer, queued);
         steer(peer, queued);

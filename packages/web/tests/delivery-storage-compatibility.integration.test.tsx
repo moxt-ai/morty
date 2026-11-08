@@ -34,7 +34,7 @@ test("Given legacy drafts beside a versioned request journal, When the browser r
     );
     window.sessionStorage.setItem(
         `morty:pending-submission:v1:${encodeURIComponent(app.botId)}:${encodeURIComponent(sessionId)}`,
-        JSON.stringify({ commandId: idempotencyKey, request }),
+        JSON.stringify({ commandId: idempotencyKey, placement: "turn", request }),
     );
     const submissions = network.submissions.length;
     const restored = await app.reload();

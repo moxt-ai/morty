@@ -36,12 +36,11 @@ test("Given a command already completed, When a delayed queue edit cancels it be
                         bindingId: peer.bindingId,
                         commandId,
                         directoryId: "default",
-                        disposition: "reject",
+                        disposition: "append",
                         attachments: [],
                         kind: "session.prompt",
                         prompt: "Complete before the edit reaches the Runtime",
                         sessionId: peer.sessionId,
-                        targetCommandId: "",
                     }),
                 );
                 for (;;) {
@@ -88,12 +87,7 @@ test("Given running and queued work, When cancellation permits only unstarted wo
             async (peer) => {
                 const running = randomUUID();
                 const queued = randomUUID();
-                const prompt = (
-                    commandId: string,
-                    disposition: "reject" | "queue",
-                    targetCommandId: string,
-                    text: string,
-                ) =>
+                const prompt = (commandId: string, text: string) =>
                     encodeSessionPromptCommand({
                         historyPolicy: "eager",
                         additionalDirectoryIds: [],
@@ -101,14 +95,13 @@ test("Given running and queued work, When cancellation permits only unstarted wo
                         bindingId: peer.bindingId,
                         commandId,
                         directoryId: "default",
-                        disposition,
+                        disposition: "append",
                         attachments: [],
                         kind: "session.prompt",
                         prompt: text,
                         sessionId: peer.sessionId,
-                        targetCommandId,
                     });
-                peer.send(prompt(running, "reject", "", "hold after first delta"));
+                peer.send(prompt(running, "hold after first delta"));
                 for (;;) {
                     const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));
                     if (
@@ -119,7 +112,7 @@ test("Given running and queued work, When cancellation permits only unstarted wo
                         break;
                     }
                 }
-                peer.send(prompt(queued, "queue", running, "This queued instruction must never execute"));
+                peer.send(prompt(queued, "This queued instruction must never execute"));
                 for (;;) {
                     const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));
                     if (event.type === "lifecycle-metadata" && event.payload.kind === "session.queue.changed") {
@@ -184,7 +177,7 @@ test("Given running and queued work, When cancellation permits only unstarted wo
                 expect(completed.get(queued)).toBe("cancelled");
                 expect(runningRefusal).toBe("turn_already_started");
                 const next = randomUUID();
-                peer.send(prompt(next, "reject", "", "The next request completes"));
+                peer.send(prompt(next, "The next request completes"));
                 for (;;) {
                     const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));
                     if (
@@ -252,12 +245,11 @@ test("Given an unacknowledged command, When Stop arrives before its prompt, Then
                         bindingId: peer.bindingId,
                         commandId,
                         directoryId: "default",
-                        disposition: "reject",
+                        disposition: "append",
                         attachments: [],
                         kind: "session.prompt",
                         prompt: "This request completes normally",
                         sessionId: peer.sessionId,
-                        targetCommandId: "",
                     });
                 peer.send(prompt(stopped));
                 const next = randomUUID();
@@ -326,12 +318,11 @@ test("Given a prompt still loading its conversation's saved history, When the cl
                         bindingId: peer.bindingId,
                         commandId,
                         directoryId: "default",
-                        disposition: "reject",
+                        disposition: "append",
                         attachments: [],
                         kind: "session.prompt",
                         prompt: text,
                         sessionId: peer.sessionId,
-                        targetCommandId: "",
                     });
                 const completed = async (commandId: string): Promise<void> => {
                     for (;;) {

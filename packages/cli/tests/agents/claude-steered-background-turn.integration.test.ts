@@ -63,7 +63,7 @@ test("Given Claude awaits a background subagent, When the user steers and the su
             const completed = new Map<string, string>();
             let results = 0;
             let text = "";
-            const sendPrompt = (commandId: string, prompt: string, disposition: "reject" | "steer" = "reject") =>
+            const sendPrompt = (commandId: string, prompt: string, steering = false) =>
                 peer.send(
                     encodeSessionPromptCommand({
                         historyPolicy: "eager",
@@ -75,8 +75,9 @@ test("Given Claude awaits a background subagent, When the user steers and the su
                         directoryId: "default",
                         additionalDirectoryIds: [],
                         attachments: [],
-                        disposition,
-                        targetCommandId: disposition === "steer" ? main : "",
+                        ...(steering
+                            ? { disposition: "steer" as const, targetCommandId: main }
+                            : { disposition: "append" as const }),
                         prompt,
                     }),
                 );
@@ -167,7 +168,7 @@ test("Given Claude awaits a background subagent, When the user steers and the su
             }
             await Promise.race([subagentEntered.promise, stopped.promise]);
             expect(completed.has(main)).toBe(false);
-            sendPrompt(steer, "Include the updated instruction in your answer", "steer");
+            sendPrompt(steer, "Include the updated instruction in your answer", true);
             while (completed.get(steer) !== "steered") {
                 await next();
             }

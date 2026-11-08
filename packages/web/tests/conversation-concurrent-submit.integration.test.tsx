@@ -5,7 +5,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 
-test("Given two idle viewers with drafts and attachments, When both submit before receiving live updates, Then the rejected message can be explicitly edited and queued", {
+test("Given two idle viewers with drafts and attachments, When both submit before receiving live updates, Then the Runtime runs both messages with their attachments and refuses neither", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -27,8 +27,8 @@ test("Given two idle viewers with drafts and attachments, When both submit befor
         readonly prompt: string;
     }[] = [];
     for (const [current, prompt, fileName] of [
-        [app, "hold after first delta", "first.json"],
-        [viewer, "wait for steering", "second.json"],
+        [app, "First viewer follow-up", "first.json"],
+        [viewer, "Second viewer follow-up", "second.json"],
     ] as const) {
         const composer = await current.queryElementByTestId(
             dataTestId.messageComposer,
@@ -48,8 +48,6 @@ test("Given two idle viewers with drafts and attachments, When both submit befor
         await current.waitForView(() =>
             expect(getByRole(form, "list", { name: "Attachments" }).textContent).toContain(fileName),
         );
-        // Draft editing is available while the live subscription is still loading.
-        // Both devices must be able to send before exercising simultaneous submissions.
         await current.waitForView(() => {
             const send = getByRole(form, "button", { name: "Send message" });
             expect(send instanceof HTMLButtonElement && !send.disabled).toBe(true);
@@ -57,56 +55,36 @@ test("Given two idle viewers with drafts and attachments, When both submit befor
         participants.push({ app: current, composer, fileName, form, prompt });
     }
     // Submit both visible forms in the same browser event turn, before either
-    // viewer can observe the daemon's new active turn.
+    // viewer can observe the other's message.
     act(() => {
         for (const participant of participants) {
             fireEvent.submit(participant.form);
         }
     });
-    const rejected = await app.waitForView(() => {
-        const participant = participants.find(({ app: viewer }) =>
-            viewer
-                .elementsByTestId(dataTestId.queuedMessage)
-                .some((element) => element.textContent?.includes("Another prompt is already running")),
-        );
-        if (participant === undefined) {
-            throw new Error("Waiting for the authoritative concurrent submission rejection");
+    // Whichever message arrives second waits behind the first; both run, on every viewer.
+    for (const participant of participants) {
+        for (const { prompt } of participants) {
+            await participant.app.waitForView(() =>
+                expect(
+                    participant.app
+                        .elementsByTestId(dataTestId.agentResponse)
+                        .some((message) => message.textContent?.includes(prompt)),
+                ).toBe(true),
+            );
         }
-        return participant;
-    });
-    await rejected.app.waitForView(() => expect(rejected.composer.disabled).toBe(false));
-    expect(rejected.composer.value).toBe("");
-    const rejectedMessage = rejected.app
-        .elementsByTestId(dataTestId.queuedMessage)
-        .find((element) => element.textContent?.includes("Another prompt is already running"));
-    if (rejectedMessage === undefined) {
-        throw new Error("Expected the retained rejected message");
-    }
-    await rejected.app.user.click(getByRole(rejectedMessage, "button", { name: "Edit failed message" }));
-    expect(rejected.composer.value).toBe(rejected.prompt);
-    expect(getByRole(rejected.form, "list", { name: "Attachments" }).textContent).toContain(rejected.fileName);
-    for (const participant of participants) {
-        await participant.app.queryElementByTestId(dataTestId.sessionStatus);
-    }
-    await rejected.app.user.clear(rejected.composer);
-    await rejected.app.user.paste("Keep the recovered follow-up");
-    await rejected.app.user.click(getByRole(rejected.form, "button", { name: "Send message" }));
-    for (const participant of participants) {
-        await participant.app.queryElementByTestId(
-            dataTestId.queuedMessage,
-            (element) => element.textContent?.includes("Keep the recovered follow-up") === true,
-        );
-    }
-    expect(rejected.composer.value).toBe("");
-    expect(queryByRole(rejected.form, "list", { name: "Attachments" })).toBeNull();
-    await rejected.app.user.click(getByRole(rejected.form, "button", { name: "Stop agent output" }));
-    for (const participant of participants) {
         await participant.app.waitForView(() =>
+            expect(participant.app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull(),
+        );
+        expect(participant.composer.value).toBe("");
+        expect(queryByRole(participant.form, "list", { name: "Attachments" })).toBeNull();
+        expect(participant.app.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull();
+    }
+    for (const { prompt, fileName } of participants) {
+        await app.waitForView(() =>
             expect(
-                participant.app
-                    .elementsByTestId(dataTestId.agentResponse)
-                    .some((message) => message.textContent?.includes("Keep the recovered follow-up")),
-            ).toBe(true),
+                app.elementsByTestId(dataTestId.userMessage).find((message) => message.textContent?.includes(prompt))
+                    ?.textContent,
+            ).toContain(fileName),
         );
     }
 });
