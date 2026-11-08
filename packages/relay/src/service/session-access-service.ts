@@ -1,12 +1,6 @@
-import {
-    decodeSessionAccessCredential,
-    isIdentifier,
-    issueSessionAccessCredential,
-    ProtocolMessageError,
-    SessionAccessCredentialExpiredError,
-    verifySessionAccessCredential,
-} from "@morty-build/client/protocol";
+import { decodeSessionAccessCredential, isIdentifier, ProtocolMessageError } from "@morty-build/client/protocol";
 import { ProjectAuthenticationError, ProjectPermission } from "@morty-build/relay-core";
+import { SessionAccessCredentialExpiredError, type SessionAccessSigner } from "../entity/session-access-credential.ts";
 import type { AppCredentialAuthenticationService } from "./app-credential-authentication-service.ts";
 import type { PlatformControlPlaneService } from "./platform-control-plane-service.ts";
 
@@ -16,6 +10,7 @@ export type SessionAccessTarget =
 
 /** A verified Session credential: the Session it selects, and the authorization of each operation on it. */
 export interface SessionAccess {
+    readonly signingKeyId: string;
     /** The AppCredential that issued the Session credential. */
     readonly credentialId: string;
     readonly issuedAtEpochMilliseconds: number;
@@ -58,10 +53,16 @@ function sessionScopedPermission(permission: ProjectPermission): ProjectPermissi
 export class SessionAccessService {
     readonly #applications: AppCredentialAuthenticationService;
     readonly #control: PlatformControlPlaneService;
+    readonly #signer: SessionAccessSigner;
 
-    constructor(applications: AppCredentialAuthenticationService, control: PlatformControlPlaneService) {
+    constructor(
+        applications: AppCredentialAuthenticationService,
+        control: PlatformControlPlaneService,
+        signer: SessionAccessSigner,
+    ) {
         this.#applications = applications;
         this.#control = control;
+        this.#signer = signer;
     }
 
     readonly issue = async (
@@ -86,7 +87,7 @@ export class SessionAccessService {
         if (!Number.isSafeInteger(expiresInSeconds) || expiresInSeconds < 60 || expiresInSeconds > 900) {
             throw new ProjectAuthenticationError("invalid_request", "The Session credential lifetime is invalid");
         }
-        await this.#control.authorizePlatformCredential(
+        const access = await this.#control.authorizePlatformCredential(
             target.projectId,
             appCredential,
             ProjectPermission.SessionWrite,
@@ -102,7 +103,7 @@ export class SessionAccessService {
         }
         const issuedAtEpochMilliseconds = Date.now();
         const expiresAtEpochMilliseconds = issuedAtEpochMilliseconds + expiresInSeconds * 1_000;
-        const credential = await issueSessionAccessCredential(appCredential, {
+        const credential = await this.#signer.issue(access.publicCredentialId, {
             expiresAtEpochMilliseconds,
             issuedAtEpochMilliseconds,
             projectId: target.projectId,
@@ -179,9 +180,9 @@ export class SessionAccessService {
             });
         }
         const application = await this.#applications.readActiveCredentialByPublicId(decoded.publicCredentialId, signal);
-        let claims: Awaited<ReturnType<typeof verifySessionAccessCredential>>;
+        let claims: Awaited<ReturnType<SessionAccessSigner["verify"]>>;
         try {
-            claims = await verifySessionAccessCredential(credentialValue, application.secret_digest, Date.now());
+            claims = await this.#signer.verify(credentialValue, Date.now());
         } catch (cause) {
             if (cause instanceof SessionAccessCredentialExpiredError) {
                 throw new ProjectAuthenticationError("credential_expired", "The Session credential has expired", {
@@ -207,6 +208,7 @@ export class SessionAccessService {
         }
         const projectId = target.projectId;
         return {
+            signingKeyId: await this.#signer.keyId(),
             credentialId: application.credential_id,
             issuedAtEpochMilliseconds: claims.issuedAtEpochMilliseconds,
             expiresAtEpochMilliseconds: claims.expiresAtEpochMilliseconds,

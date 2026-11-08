@@ -40,6 +40,7 @@ import {
 } from "./composition/platform-authentication-environment.ts";
 import { RuntimeRelay } from "./durable-objects/runtime-relay.ts";
 import type { PlatformAuthenticationConfiguration } from "./entity/platform-control-plane.ts";
+import { SessionAccessSigner } from "./entity/session-access-credential.ts";
 import {
     type ProjectDurableObjectExecutionBindings,
     type ProjectWorkerRoutingBindings,
@@ -75,6 +76,8 @@ export interface PlatformRelayBindings extends PlatformStorageBindings, ProjectW
     readonly RECORDING?: Fetcher;
     readonly RECORDING_PROVIDER_ID?: string;
     readonly RUNTIME_RELAY: DurableObjectNamespace<RuntimeRelay>;
+    /** Worker secret from which the Relay derives the keys that sign Session credentials. */
+    readonly MORTY_SESSION_SIGNING_SECRET: string;
 }
 
 export interface ProjectPlatformRelayBindings extends PlatformRelayBindings, ProjectDurableObjectExecutionBindings {}
@@ -211,7 +214,11 @@ export function createPlatformAccessServices(environment: PlatformApplicationBin
         identityStores,
         control,
         appAuthentication,
-        sessionAccess: new SessionAccessService(appAuthentication, control),
+        sessionAccess: new SessionAccessService(
+            appAuthentication,
+            control,
+            new SessionAccessSigner(environment.MORTY_SESSION_SIGNING_SECRET),
+        ),
         projects: new PlatformProjectStorageDirectory(storageRegistry, controlStorage),
     };
 }
@@ -669,6 +676,7 @@ export function createPlatformApplication(
                 context.req.param("sessionId"),
                 {
                     credentialId: target.credentialId,
+                    signingKeyId: target.signingKeyId,
                     issuedAt: target.issuedAtEpochMilliseconds,
                     expiresAt: target.expiresAtEpochMilliseconds,
                 },

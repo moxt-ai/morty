@@ -196,6 +196,7 @@ async function exercise(count) {
                     bindings: {
                         RECORDING_PROVIDER_ID: "recording-local",
                         MORTY_ALLOWED_ORIGINS: '["*"]',
+                        MORTY_SESSION_SIGNING_SECRET: "local-development-only-session-signing-secret",
                     },
                 },
                 {
