@@ -1,4 +1,4 @@
-import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { type ChildProcess, execFile } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -10,6 +10,7 @@ import {
     executableLaunch,
     findExecutableOnPath,
     resolveExecutablePath,
+    spawnProcess,
     stopProcessTree,
 } from "../../../packages/cli/src/engine/util/process/executable.ts";
 
@@ -170,7 +171,7 @@ export class E2EHarness {
         const launch = await localLaunch(command, args);
         const logPath = join(this.artifactDirectory, `${name}.log`);
         const output = openSync(logPath, "a", 0o600);
-        const child = spawn(launch.command, launch.arguments, {
+        const child = spawnProcess(launch.command, launch.arguments, {
             cwd: options.cwd ?? fileURLToPath(new URL("../../..", import.meta.url)),
             detached: true,
             env: { ...process.env, ...options.env },
