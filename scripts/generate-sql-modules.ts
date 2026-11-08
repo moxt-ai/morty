@@ -59,11 +59,6 @@ const recording = join(root, "packages/recording");
 const worker = join(root, "packages/worker");
 
 await writeMigrationModule(
-    join(cli, "src/engine/generated/command-cancellation-migrations.ts"),
-    "commandCancellationMigrations",
-    await sqlFiles(join(cli, "migrations/command-cancellation")),
-);
-await writeMigrationModule(
     join(cli, "src/engine/generated/acp-session-store-migrations.ts"),
     "acpSessionStoreMigrations",
     await sqlFiles(join(cli, "migrations/acp-session-store")),
