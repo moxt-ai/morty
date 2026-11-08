@@ -39,7 +39,7 @@ test.each(["pi", "claude", "codex"] as const)(
             const completed = new Map<string, string>();
             const userText: string[] = [];
             let replies = "";
-            const prompt = (commandId: string, text: string, disposition: "reject" | "queue") =>
+            const prompt = (commandId: string, text: string) =>
                 peer.send(
                     encodeSessionPromptCommand({
                         historyPolicy: "eager",
@@ -51,8 +51,7 @@ test.each(["pi", "claude", "codex"] as const)(
                         directoryId: "default",
                         additionalDirectoryIds: [],
                         attachments: [],
-                        disposition,
-                        targetCommandId: disposition === "queue" ? active : "",
+                        disposition: "append",
                         prompt: text,
                     }),
                 );
@@ -98,9 +97,9 @@ test.each(["pi", "claude", "codex"] as const)(
                 }
                 return event;
             };
-            prompt(active, "Start the original reply", "reject");
+            prompt(active, "Start the original reply");
             await entered.promise;
-            prompt(queued, "OLD_QUEUED_INSTRUCTION", "queue");
+            prompt(queued, "OLD_QUEUED_INSTRUCTION");
             for (;;) {
                 const event = await next();
                 if (event.type === "lifecycle-metadata" && event.payload.kind === "session.queue.changed") {
@@ -115,7 +114,7 @@ test.each(["pi", "claude", "codex"] as const)(
             }
             expect(completed.get(queued)).toBe("cancelled");
             expect(completed.has(active)).toBe(false);
-            prompt(revised, "REVISED_QUEUED_INSTRUCTION", "queue");
+            prompt(revised, "REVISED_QUEUED_INSTRUCTION");
             release.resolve();
             while (!completed.has(revised)) {
                 await next();

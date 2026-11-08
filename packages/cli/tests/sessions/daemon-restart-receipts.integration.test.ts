@@ -39,8 +39,7 @@ test("Given running and queued prompts, When the daemon restarts, Then it report
                     historyPolicy: "eager",
                     ...identity,
                     commandId: running,
-                    disposition: SessionPromptDisposition.Reject,
-                    targetCommandId: "",
+                    disposition: SessionPromptDisposition.Append,
                     prompt: "hold after first delta",
                 });
                 peer.send(original);
@@ -54,16 +53,14 @@ test("Given running and queued prompts, When the daemon restarts, Then it report
                         break;
                     }
                 }
-                const followup = (target: string) =>
-                    encodeSessionPromptCommand({
-                        historyPolicy: "eager",
-                        ...identity,
-                        commandId: queued,
-                        disposition: SessionPromptDisposition.Queue,
-                        targetCommandId: target,
-                        prompt: "Finish the queued follow-up",
-                    });
-                peer.send(followup(running));
+                const followup = encodeSessionPromptCommand({
+                    historyPolicy: "eager",
+                    ...identity,
+                    commandId: queued,
+                    disposition: SessionPromptDisposition.Append,
+                    prompt: "Finish the queued follow-up",
+                });
+                peer.send(followup);
                 for (;;) {
                     const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));
                     if (event.type === "lifecycle-metadata" && event.payload.kind === "session.queue.changed") {
@@ -91,12 +88,11 @@ test("Given running and queued prompts, When the daemon restarts, Then it report
                         historyPolicy: "eager",
                         ...identity,
                         commandId: continuation,
-                        disposition: SessionPromptDisposition.Reject,
-                        targetCommandId: "",
+                        disposition: SessionPromptDisposition.Append,
                         prompt: "Continue unfinished work",
                     }),
                 );
-                peer.send(followup(continuation));
+                peer.send(followup);
                 const completed: string[] = [];
                 while (completed.length < 2) {
                     const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));

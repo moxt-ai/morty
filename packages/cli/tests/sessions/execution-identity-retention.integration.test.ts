@@ -85,11 +85,10 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
                     bindingId: peer.bindingId,
                     commandId: "a-original-execution",
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     kind: "session.prompt",
                     prompt: "Original operation",
                     sessionId: peer.sessionId,
-                    targetCommandId: "",
                 };
                 const send = (command: SessionPromptCommand) => peer.send(encodeSessionPromptCommand(command));
                 send(original);

@@ -847,12 +847,10 @@ function MortySessionPaneBody({
         interactionModel,
         executionContext.available,
     );
-    // An answer to an Agent's question goes out as the composer's message would: now, or queued behind the turn.
+    // An answer to an Agent's question goes out as the composer's message would, which the Runtime runs or queues.
     const answer = (messageId: string): void =>
         runAndFollow(async () => {
-            await (presentation.shouldQueueOnSubmit
-                ? pane.store.getState().queueAnswer(messageId)
-                : pane.store.getState().sendAnswer(messageId));
+            await pane.store.getState().sendAnswer(messageId);
         });
     // The composer notice floats over the log only while nothing stands between
     // the log and the composer. With a queue or interaction card present it joins
@@ -1341,13 +1339,7 @@ function MortySessionPaneBody({
                             noticePlacement={noticePlacement}
                             onDraftChange={pane.store.getState().setDraft}
                             onStop={() => run(pane.store.getState().stop)}
-                            onSubmit={() =>
-                                runAndFollow(
-                                    presentation.shouldQueueOnSubmit
-                                        ? pane.store.getState().queueDraft
-                                        : pane.store.getState().send,
-                                )
-                            }
+                            onSubmit={() => runAndFollow(pane.store.getState().send)}
                             outputState={presentation.outputState}
                             stopDisabled={presentation.stopDisabled}
                             submitDisabled={presentation.submitDisabled}

@@ -20,10 +20,11 @@ export const sessionBindingEntries = {
 export const turnSubmissionEntries = {
     ...sessionBindingEntries,
     content: v.pipe(v.string(), v.maxLength(100_000)),
-    disposition: v.optional(v.picklist(["reject", "queue", "steer"]), "reject"),
+    disposition: v.optional(v.picklist(["append", "steer"]), "append"),
     idempotencyKey: identifier,
     sessionConfigurations: v.optional(v.pipe(v.array(v.unknown()), v.maxLength(100)), []),
-    targetCommandId: v.optional(v.string(), ""),
+    // Only a steering submission names the Turn it joins; the Runtime protocol refuses a target on an appended one.
+    targetCommandId: v.optional(identifier),
 };
 
 export const turnAttachmentsSchema = v.pipe(v.array(v.unknown()), v.maxLength(16));

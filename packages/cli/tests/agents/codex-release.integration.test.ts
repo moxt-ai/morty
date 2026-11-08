@@ -25,8 +25,7 @@ async function promptFromMorty(peer: RealDaemonPeer, sessionId: string, prompt: 
             additionalDirectoryIds: [],
             attachments: [],
             prompt,
-            disposition: SessionPromptDisposition.Reject,
-            targetCommandId: "",
+            disposition: SessionPromptDisposition.Append,
         }),
     );
     for (;;) {

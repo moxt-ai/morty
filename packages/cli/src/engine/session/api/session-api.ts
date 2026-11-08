@@ -82,8 +82,6 @@ interface PromptContentOptions {
 export interface SessionTurnOptions extends SessionPrepareOptions, PromptContentOptions {
     readonly cancellationRequested?: () => boolean;
     readonly commandId: string;
-    readonly disposition?: string;
-    readonly targetCommandId?: string;
 }
 
 export interface SessionSteerOptions extends SessionPrepareOptions, PromptContentOptions {

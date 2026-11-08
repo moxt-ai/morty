@@ -54,12 +54,11 @@ test("Given a deeply nested multibyte workspace, When real Codex runs a tool thr
                         bindingId: peer.bindingId,
                         commandId: randomUUID(),
                         directoryId,
-                        disposition: SessionPromptDisposition.Reject,
+                        disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",
                         prompt,
                         sessionId: peer.sessionId,
-                        targetCommandId: "",
                     }),
                 );
                 let response = "";

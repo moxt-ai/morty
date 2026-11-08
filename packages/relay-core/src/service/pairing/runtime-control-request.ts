@@ -54,6 +54,7 @@ import {
     type SessionPreviewHistoryWirePageLoaded,
     type SessionPromptAcceptedEvent,
     type SessionPromptCommand,
+    SessionPromptDisposition,
     type SessionPromptDispositionCommand,
     type SessionQueryCommand,
     type SessionReadyEvent,
@@ -172,15 +173,13 @@ function lifecycleReply(
         return { kind: "reject", error: new SessionRuntimeError(payload.code, payload.message) };
     }
     if (command.kind === "session.prompt" && payload.kind === "session.queue.changed") {
-        // The daemon records a queue change naming the prompt as it enters the queue, which acknowledges a
-        // queue-disposition Turn; every other disposition keeps waiting for its own prompt.started. A change naming
-        // another command answers nothing. Runtimes before the change named its command record an unnamed one, which
-        // can only be matched to the Session: it may acknowledge a newer submission early, so the response state is
-        // advisory while the Turn's own lifecycle events remain authoritative for its outcome.
+        // The Runtime records a queue change naming an appended prompt as it enters the queue, which acknowledges it
+        // as queued; an appended prompt that runs at once is acknowledged by its own prompt.started instead. A change
+        // naming another command answers nothing.
         if (
-            command.disposition !== "queue" ||
+            command.disposition !== SessionPromptDisposition.Append ||
             sessionId !== command.sessionId ||
-            (payload.changedByCommandId !== undefined && payload.changedByCommandId !== requestId)
+            payload.changedByCommandId !== requestId
         ) {
             return { kind: "ignore" };
         }

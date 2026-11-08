@@ -66,8 +66,7 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                                 commandId: crypto.randomUUID(),
                                 prompt: "Keep these source settings",
                                 attachments: [],
-                                disposition: SessionPromptDisposition.Reject,
-                                targetCommandId: "",
+                                disposition: SessionPromptDisposition.Append,
                                 sessionConfigurations,
                             }),
                         );

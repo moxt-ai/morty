@@ -6,7 +6,7 @@
     "type": "module",
     "scripts": {
         "db:codegen": "node ../../scripts/generate-sql-modules.ts",
-        "pretest": "pnpm db:codegen",
+        "pretest": "pnpm db:codegen && pnpm --filter @morty-build/cli build && pnpm --filter @morty-build/cli pack:test",
         "pretypecheck": "pnpm db:codegen",
         "pretypecheck:tests": "pnpm db:codegen",
         "typecheck": "tsc --project tsconfig.json",

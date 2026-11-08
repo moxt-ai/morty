@@ -1,7 +1,6 @@
-import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
-test("Given two devices share an idle conversation, When both send a draft, Then each message can run without losing text or attachments", async ({
+test("Given two devices share an idle conversation, When both send a draft, Then both messages run without losing text or attachments", async ({
     runtime,
 }, testInfo) => {
     const { page } = runtime;
@@ -34,44 +33,7 @@ test("Given two devices share an idle conversation, When both send a draft, Then
                 await participant.page.getByRole("button", { name: "Send message" }).click();
             }),
         );
-        const outcome = await Promise.race([
-            ...participants.map(async (participant) => {
-                // History also shows "Response failed" on both devices;
-                // the composer rejection belongs to this device's draft.
-                await participant.page
-                    .getByRole("alert")
-                    .filter({ hasText: /^Another prompt is already running/u })
-                    .waitFor();
-                return { kind: "rejected" as const, participant };
-            }),
-            page
-                .getByLabel("Queued messages", { exact: true })
-                .waitFor()
-                .then(() => ({ kind: "queued" as const })),
-        ]);
-        if (outcome.kind === "rejected") {
-            const { participant } = outcome;
-            // Send again only once this device sees the other device's turn running, so the message queues behind
-            // it instead of being refused again.
-            await expect(participant.page.getByRole("button", { name: "Stop agent output" })).toBeVisible();
-            // The rejected message stays in the conversation; editing it returns its text and attachment.
-            const composer = participant.page.getByRole("textbox", { name: "Message" });
-            await expect(composer).toHaveValue("");
-            await participant.page
-                .getByTestId(dataTestId.queuedMessage)
-                .filter({ hasText: "Another prompt is already running" })
-                .getByRole("button", { name: "Edit failed message" })
-                .click();
-            await expect(composer).toHaveValue(participant.prompt);
-            await expect(participant.page.getByRole("list", { name: "Attachments" })).toContainText(
-                participant.fileName,
-            );
-            await participant.page.screenshot({
-                animations: "disabled",
-                path: testInfo.outputPath("preserved-concurrent-draft.png"),
-            });
-            await participant.page.getByRole("button", { name: "Send message" }).click();
-        }
+        // The Runtime runs whichever message arrives first and queues the other behind it.
         const queue = page.getByLabel("Queued messages", { exact: true });
         await expect(queue).toBeVisible();
         for (const participant of participants) {

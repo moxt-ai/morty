@@ -343,8 +343,7 @@ describe("Recording Turn history", () => {
             lifecycle({
                 commandId: "queued-command",
                 content: [{ type: "text", text: "A private queued prompt" }],
-                disposition: "queue",
-                targetCommandId: "running-command",
+                disposition: "append",
                 kind: "prompt.requested",
             }),
         ]);

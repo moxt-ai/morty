@@ -141,8 +141,7 @@ async function prompt(peer: RealDaemonPeer, agentId: string, sessionId: string, 
             additionalDirectoryIds: [],
             attachments: [],
             prompt: text,
-            disposition: SessionPromptDisposition.Reject,
-            targetCommandId: "",
+            disposition: SessionPromptDisposition.Append,
         }),
     );
     let output = "";

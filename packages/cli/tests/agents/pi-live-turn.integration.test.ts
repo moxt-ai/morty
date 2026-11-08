@@ -34,12 +34,11 @@ test("Given a reused real Pi session, When local commands reply consecutively, T
                     bindingId: peer.bindingId,
                     commandId,
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
                     sessionId: peer.sessionId,
-                    targetCommandId: "",
                 }),
             );
             const messageIds = new Set<string>();
@@ -112,12 +111,11 @@ test("Given real Pi transforms user input, When a prompt runs through the daemon
                 bindingId: peer.bindingId,
                 commandId,
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Reject,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "Original request before native transformation",
                 sessionId: peer.sessionId,
-                targetCommandId: "",
             }),
         );
         const userContent: unknown[] = [];
@@ -170,12 +168,7 @@ test("Given real Pi has an active SDK turn, When the user steers it, Then Pi con
         await withRealDaemon(new PiAgentSpecification(), agent.environment, async (peer) => {
             const activeCommandId = randomUUID();
             const steeringCommandId = randomUUID();
-            const sendPrompt = (
-                commandId: string,
-                prompt: string,
-                disposition: "queue" | "reject",
-                targetCommandId: string,
-            ): void =>
+            const sendPrompt = (commandId: string, prompt: string): void =>
                 peer.send(
                     encodeSessionPromptCommand({
                         historyPolicy: "eager",
@@ -184,28 +177,17 @@ test("Given real Pi has an active SDK turn, When the user steers it, Then Pi con
                         bindingId: peer.bindingId,
                         commandId,
                         directoryId: "default",
-                        disposition,
+                        disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",
                         prompt,
                         sessionId: peer.sessionId,
-                        targetCommandId,
                     }),
                 );
 
-            sendPrompt(
-                activeCommandId,
-                "Start the task and wait for updated instructions",
-                SessionPromptDisposition.Reject,
-                "",
-            );
+            sendPrompt(activeCommandId, "Start the task and wait for updated instructions");
             await activeEntered.promise;
-            sendPrompt(
-                steeringCommandId,
-                "Use the steering requirement in the same turn",
-                SessionPromptDisposition.Queue,
-                activeCommandId,
-            );
+            sendPrompt(steeringCommandId, "Use the steering requirement in the same turn");
             let steeringCompleted = false;
             for (;;) {
                 const message = await peer.nextMessage();
@@ -338,12 +320,11 @@ test("Given real Pi without an external ACP adapter, When Bash executes through 
                     bindingId: peer.bindingId,
                     commandId,
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
                     sessionId: peer.sessionId,
-                    targetCommandId: "",
                 }),
             );
             let text = "";

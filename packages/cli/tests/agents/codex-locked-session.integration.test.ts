@@ -126,8 +126,7 @@ test("Given desktop Codex owns the Session, When Morty imports it and receives s
                     commandId,
                     prompt: "Queued from Morty",
                     attachments: [],
-                    disposition: SessionPromptDisposition.Reject,
-                    targetCommandId: "",
+                    disposition: SessionPromptDisposition.Append,
                 }),
             );
             // The public prompt-started event establishes that the daemon accepted the remote turn.

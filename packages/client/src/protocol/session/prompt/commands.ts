@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-import { isIdentifier } from "../../shared/identifier.ts";
 import {
     assertKind,
     decodeZodValue,
@@ -19,9 +18,13 @@ export const SESSION_PROMPT_DISPOSITION_KIND = "session.prompt.disposition";
 export const SESSION_CANCEL_KIND = "session.cancel";
 export const SESSION_CANCEL_BEFORE_START_KIND = "session.cancel-before-start";
 
+/**
+ * How a prompt joins its Session. An appended prompt runs when nothing earlier is waiting or running, and otherwise
+ * waits at the end of the Session's queue; the Runtime alone decides which. A steering prompt joins the running command
+ * it names, and is refused without being admitted when that command is not running.
+ */
 export const SessionPromptDisposition = Object.freeze({
-    Queue: "queue",
-    Reject: "reject",
+    Append: "append",
     Steer: "steer",
 });
 
@@ -36,21 +39,23 @@ export type SessionHistoryPolicy = (typeof SessionHistoryPolicy)[keyof typeof Se
 const MAX_PROMPT_LENGTH = 100_000;
 export const MAX_PROMPT_ATTACHMENT_BYTES = 32 * 1024 * 1024;
 
-export interface SessionPromptCommand {
+type SessionPromptPlacement =
+    | { readonly disposition: typeof SessionPromptDisposition.Append }
+    | { readonly disposition: typeof SessionPromptDisposition.Steer; readonly targetCommandId: string };
+
+export type SessionPromptCommand = {
     readonly additionalDirectoryIds: readonly string[];
     readonly agentId: string;
     readonly bindingId: string;
     readonly commandId: string;
     readonly directoryId: string;
-    readonly disposition: string;
     readonly attachments: readonly PromptAttachment[];
     readonly historyPolicy: SessionHistoryPolicy;
     readonly kind: typeof SESSION_PROMPT_KIND;
     readonly prompt: string;
     readonly sessionConfigurations?: readonly SessionConfigurationSelection[];
     readonly sessionId: string;
-    readonly targetCommandId: string;
-}
+} & SessionPromptPlacement;
 
 export interface SessionCancelCommand {
     readonly commandId: string;
@@ -103,18 +108,21 @@ export const decodePromptAttachment = (value: unknown): PromptAttachment =>
 export const decodePromptAttachmentsValue = (value: unknown): readonly PromptAttachment[] =>
     decodeZodValue(value, z.array(promptAttachmentSchema).max(16).readonly());
 
-function readPromptDisposition(value: Readonly<Record<string, unknown>>): string {
-    const field = value["disposition"];
-    if (field === SessionPromptDisposition.Reject) {
-        return SessionPromptDisposition.Reject;
+function readPromptPlacement(value: Readonly<Record<string, unknown>>): SessionPromptPlacement {
+    switch (value["disposition"]) {
+        case SessionPromptDisposition.Append:
+            if (Object.hasOwn(value, "targetCommandId")) {
+                throw new ProtocolMessageError("An appended prompt names no target command");
+            }
+            return { disposition: SessionPromptDisposition.Append };
+        case SessionPromptDisposition.Steer:
+            return {
+                disposition: SessionPromptDisposition.Steer,
+                targetCommandId: readIdentifier(value, "targetCommandId"),
+            };
+        default:
+            throw new ProtocolMessageError("Invalid value field: disposition");
     }
-    if (field === SessionPromptDisposition.Queue) {
-        return SessionPromptDisposition.Queue;
-    }
-    if (field === SessionPromptDisposition.Steer) {
-        return SessionPromptDisposition.Steer;
-    }
-    throw new ProtocolMessageError("Invalid value field: disposition");
 }
 
 export function decodeSessionPromptCommand(encoded: string): SessionPromptCommand {
@@ -132,14 +140,7 @@ export function decodeSessionPromptCommand(encoded: string): SessionPromptComman
         throw new ProtocolMessageError("Prompt must contain content");
     }
 
-    const disposition = readPromptDisposition(value);
-    const targetCommandId = readText(value, "targetCommandId", 128);
-    if (
-        (disposition === SessionPromptDisposition.Reject && targetCommandId.length > 0) ||
-        (disposition !== SessionPromptDisposition.Reject && !isIdentifier(targetCommandId))
-    ) {
-        throw new ProtocolMessageError("Prompt disposition has an invalid target command");
-    }
+    const placement = readPromptPlacement(value);
 
     const sessionConfigurations = hasSessionConfigurations
         ? decodeSessionConfigurationSelections(value["sessionConfigurations"])
@@ -154,14 +155,13 @@ export function decodeSessionPromptCommand(encoded: string): SessionPromptComman
         bindingId: readIdentifier(value, "bindingId"),
         commandId: readIdentifier(value, "commandId"),
         directoryId: readDirectoryIdentifier(value, "directoryId"),
-        disposition,
         attachments,
         historyPolicy: readHistoryPolicy(value),
         kind: SESSION_PROMPT_KIND,
         prompt,
         ...(hasSessionConfigurations ? { sessionConfigurations } : {}),
         sessionId: readIdentifier(value, "sessionId"),
-        targetCommandId,
+        ...placement,
     };
 }
 
@@ -187,7 +187,7 @@ export function decodeSessionCancelCommand(encoded: string): SessionCancelComman
 export function decodeSessionPromptDispositionCommand(encoded: string): SessionPromptDispositionCommand {
     const value = parseJson(encoded);
     assertKind(value, SESSION_PROMPT_DISPOSITION_KIND);
-    if (readPromptDisposition(value) !== SessionPromptDisposition.Steer) {
+    if (value["disposition"] !== SessionPromptDisposition.Steer) {
         throw new ProtocolMessageError("Only queued prompts can be steered");
     }
     return {

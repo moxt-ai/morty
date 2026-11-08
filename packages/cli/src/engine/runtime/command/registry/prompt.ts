@@ -1,4 +1,8 @@
-import { encodeSessionPromptCommand, SESSION_PROMPT_KIND } from "@morty-build/client/protocol";
+import {
+    encodeSessionPromptCommand,
+    SESSION_PROMPT_KIND,
+    SessionPromptDisposition,
+} from "@morty-build/client/protocol";
 import { executePrompt } from "../../../session/prompt/execute-prompt.ts";
 import type { RuntimeCommand } from "../definition.ts";
 import { send } from "../transport.ts";
@@ -19,11 +23,26 @@ export const sessionPromptCommand: RuntimeCommand = {
             });
             return;
         }
+        // A steer joins a running turn, so the Session admits it only while the Agent runs the turn it names. An
+        // appended prompt is always admitted: the Session runs or queues it.
         const receipt = context.operations.claimExecution(
             message.commandId,
             message.sessionId,
             encodeSessionPromptCommand(message),
+            () =>
+                message.disposition === SessionPromptDisposition.Append ||
+                context.sessions.acceptsSteering(message.sessionId, message.targetCommandId),
         );
+        if (receipt.kind === "refused") {
+            send(context.socket, {
+                code: "steering_target_unavailable",
+                requestId: message.commandId,
+                kind: "session.operation.failed",
+                message: "The turn to steer is not running.",
+                sessionId: message.sessionId,
+            });
+            return;
+        }
         if (receipt.kind === "conflict") {
             send(context.socket, {
                 code: "command_identity_conflict",
@@ -96,7 +115,7 @@ export const sessionPromptCommand: RuntimeCommand = {
             sessions: context.sessions,
             attemptId: receipt.attemptId,
             epoch: turn.epoch,
-            waitForSessionAvailability: (signal) =>
+            waitForSessionAdmission: (signal) =>
                 context.sessionTurns.admitAndWait(turn, signal, () => {
                     queueChanged();
                 }),

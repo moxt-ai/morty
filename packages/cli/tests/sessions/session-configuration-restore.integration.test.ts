@@ -104,11 +104,10 @@ async function prompt(peer: RealDaemonPeer, sessionId: string): Promise<void> {
             ...identity(peer),
             attachments: [],
             commandId: crypto.randomUUID(),
-            disposition: SessionPromptDisposition.Reject,
+            disposition: SessionPromptDisposition.Append,
             kind: "session.prompt",
             prompt: "Start the conversation",
             sessionId,
-            targetCommandId: "",
         }),
     );
     for (;;) {

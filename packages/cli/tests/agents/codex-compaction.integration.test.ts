@@ -31,12 +31,11 @@ test("Given Codex auto-compacts a conversation, When the daemon relays the turns
                     bindingId: peer.bindingId,
                     commandId: randomUUID(),
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
                     sessionId: peer.sessionId,
-                    targetCommandId: "",
                 }),
             );
             for (;;) {

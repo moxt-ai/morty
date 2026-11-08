@@ -44,12 +44,11 @@ test("Given real Pi receives a file attachment, When the Agent reads its local l
                 bindingId: peer.bindingId,
                 commandId,
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Reject,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [attachment],
                 kind: "session.prompt",
                 prompt: toolPrompt,
                 sessionId: peer.sessionId,
-                targetCommandId: "",
             }),
         );
         let text = "";
