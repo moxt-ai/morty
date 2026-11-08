@@ -2,11 +2,14 @@ name: Morty CI
 
 on:
   pull_request:
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read
 
-# A newer push supersedes the checks of the previous one.
+# A newer push supersedes the checks of the previous one. Each merge group has
+# its own ref, so queued groups never cancel each other.
 concurrency:
   group: morty-ci-${{ github.ref }}
   cancel-in-progress: true
