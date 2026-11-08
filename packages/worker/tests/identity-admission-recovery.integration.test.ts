@@ -159,12 +159,14 @@ test("Given setup and a lost creation response, When setup retries across tempor
         return { code, events };
     };
     const configuration = async () =>
-        v.parse(v.record(v.string(), v.unknown()), JSON.parse(await readFile(join(state, "config.json"), "utf8")));
+        v.parse(
+            v.object({ identity: v.record(v.string(), v.unknown()) }),
+            JSON.parse(await readFile(join(state, "config.json"), "utf8")),
+        ).identity;
     {
         expect((await run()).code).toBe(1);
         const pending = await configuration();
-        expect(pending["identity_creation_key"]).toMatch(/^[A-Za-z0-9_-]{43}$/u);
-        expect(pending).not.toHaveProperty("user_token");
+        expect(pending).toEqual({ kind: "creating", creation_key: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/u) });
         expect(original).toBeDefined();
         const limited = await run();
         expect(limited.code).toBe(1);
@@ -182,12 +184,12 @@ test("Given setup and a lost creation response, When setup retries across tempor
         const identity = v.parse(identitySchema, original);
         expect(completed.events.at(-1)).toMatchObject({ status: "ready", workspace, botId: identity.bot.botId });
         expect(await configuration()).toMatchObject({
+            kind: "ready",
             user_token: identity.token,
             user_id: identity.userId,
             project_id: identity.projectId,
         });
-        expect(await configuration()).not.toHaveProperty("identity_creation_key");
-        expect(new Set(creationKeys)).toEqual(new Set([pending["identity_creation_key"]]));
+        expect(new Set(creationKeys)).toEqual(new Set([pending["creation_key"]]));
         const session = await fetch(`${origin}/morty/api/projects/${identity.projectId}/session`, {
             headers: { authorization: `Bearer ${identity.token}` },
         });

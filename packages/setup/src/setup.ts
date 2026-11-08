@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
-import { decodeIdentifier } from "@morty-build/client/protocol";
+import { decodeIdentifier, isIdentifier } from "@morty-build/client/protocol";
 import { claimMortyState } from "@morty-build/local-state";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
@@ -62,18 +62,6 @@ const harnessSessionVariables: ReadonlyMap<string, string> = new Map([
     ["pi", "PI_SESSION_ID"],
 ]);
 
-interface Context {
-    readonly directory: string;
-    readonly base: string;
-    readonly config: Readonly<Record<string, unknown>>;
-    readonly replacement: ReplacementState;
-}
-
-/** A Context whose Project's Machine the Worker has named for this run. Setup never chooses or saves a Machine. */
-interface MachineContext extends Context {
-    readonly botId: string;
-}
-
 interface RetiringIdentity {
     readonly kind: "pending";
     readonly projectId: string;
@@ -88,10 +76,155 @@ type ReplacementState =
           readonly previous: RetiringIdentity | { readonly kind: "retired"; readonly projectId: string };
       };
 
+/** The identity that a bootstrap or replacement returned. */
+interface IssuedIdentity {
+    readonly userToken: string;
+    readonly userId: string;
+    readonly projectId: string;
+}
+
+/** The key naming an identity being created, saved before the request so a retried run resumes the same identity. */
+interface CreatingIdentity {
+    readonly kind: "creating";
+    readonly creationKey: string;
+}
+
+interface ReadyIdentity extends IssuedIdentity {
+    readonly kind: "ready";
+    /** A Runtime an earlier run paired for the still unbound Machine. The Worker's binding supersedes it. */
+    readonly unboundRuntimeId: string | null;
+    readonly replacement: ReplacementState;
+}
+
+/**
+ * What this computer's setup holds for the one Morty service its state directory belongs to. Only setup's intent is
+ * kept here; the Runtime owns its pairings and connections in its own state.
+ */
+type IdentityState = { readonly kind: "none" } | CreatingIdentity | ReadyIdentity;
+
+/** The saved setup state. The service origin is part of the identity, never a setting that selects another one. */
+interface SavedState {
+    readonly base: string;
+    readonly identity: CreatingIdentity | ReadyIdentity;
+}
+
+/** Version of the saved state's representation; any other representation is refused, never converted. */
+const SAVED_STATE_VERSION = 1;
+
+function createdIdentity(issued: IssuedIdentity): ReadyIdentity {
+    return { kind: "ready", ...issued, unboundRuntimeId: null, replacement: { kind: "unchanged" } };
+}
+
+function withUnboundRuntime(identity: ReadyIdentity, runtimeId: string): ReadyIdentity {
+    return { ...identity, unboundRuntimeId: runtimeId };
+}
+
+function withBoundMachine(identity: ReadyIdentity): ReadyIdentity {
+    return { ...identity, unboundRuntimeId: null };
+}
+
+/** Saved before the replacement request: a lost reply cannot prove that access was not revoked. */
+function withReplacementRequested(identity: ReadyIdentity): ReadyIdentity {
+    return { ...identity, replacement: { kind: "unknown" } };
+}
+
+/** The successor identity, keeping the replaced one until it is ended. */
+function replacedIdentity(previous: ReadyIdentity, successor: IssuedIdentity): ReadyIdentity {
+    return {
+        kind: "ready",
+        ...successor,
+        unboundRuntimeId: null,
+        replacement: {
+            kind: "revoked",
+            previous: { kind: "pending", projectId: previous.projectId, token: previous.userToken },
+        },
+    };
+}
+
+function withPreviousRetired(identity: ReadyIdentity, previous: RetiringIdentity): ReadyIdentity {
+    return {
+        ...identity,
+        replacement: { kind: "revoked", previous: { kind: "retired", projectId: previous.projectId } },
+    };
+}
+
+/** Cleared only after a finished setup reported the replacement. */
+function withReplacementReported(identity: ReadyIdentity): ReadyIdentity {
+    return { ...identity, replacement: { kind: "unchanged" } };
+}
+
+function encodeReplacement(replacement: ReplacementState) {
+    switch (replacement.kind) {
+        case "unchanged":
+        case "unknown":
+            return { kind: replacement.kind };
+        case "revoked":
+            return {
+                kind: "revoked",
+                previous:
+                    replacement.previous.kind === "pending"
+                        ? {
+                              kind: "pending",
+                              project_id: replacement.previous.projectId,
+                              user_token: replacement.previous.token,
+                          }
+                        : { kind: "retired", project_id: replacement.previous.projectId },
+            };
+        default: {
+            const exhaustive: never = replacement;
+            return exhaustive;
+        }
+    }
+}
+
+function encodeSavedState(state: SavedState) {
+    const identity = state.identity;
+    switch (identity.kind) {
+        case "creating":
+            return {
+                version: SAVED_STATE_VERSION,
+                base_url: state.base,
+                identity: { kind: "creating", creation_key: identity.creationKey },
+            };
+        case "ready":
+            return {
+                version: SAVED_STATE_VERSION,
+                base_url: state.base,
+                identity: {
+                    kind: "ready",
+                    user_id: identity.userId,
+                    user_token: identity.userToken,
+                    project_id: identity.projectId,
+                    unbound_runtime_id: identity.unboundRuntimeId,
+                    replacement: encodeReplacement(identity.replacement),
+                },
+            };
+        default: {
+            const exhaustive: never = identity;
+            return exhaustive;
+        }
+    }
+}
+
+/** Where setup keeps its state, and the one Morty service that state belongs to. */
+interface StateLocation {
+    readonly directory: string;
+    readonly base: string;
+}
+
+/** A run whose saved identity can authenticate with the service. */
+interface Context extends StateLocation {
+    readonly identity: ReadyIdentity;
+}
+
+/** A Context whose Project's Machine the Worker has named for this run. Setup never chooses or saves a Machine. */
+interface MachineContext extends Context {
+    readonly botId: string;
+}
+
 type RuntimeSelection =
     | {
           readonly kind: "existing";
-          readonly appId: string;
           readonly connectionId: string;
           readonly runtimeId: string;
           /** Whether the Worker binds the Machine to this Runtime. The Worker's binding is the only record of it. */
@@ -99,7 +232,6 @@ type RuntimeSelection =
       }
     | {
           readonly kind: "pairing";
-          readonly appId: string;
           readonly channelId: string;
           readonly pairingCode: string;
           readonly pairingId: string;
@@ -109,7 +241,6 @@ type RuntimeSelection =
       };
 
 interface ManagedConnection {
-    readonly appId: string;
     readonly connectionId: string;
     readonly runtimeId: string;
 }
@@ -173,6 +304,29 @@ class ProjectReplacementRequiredError extends Error {
             "Explain the access impact and ask the user whether to continue, unless they already explicitly approved this same replacement. " +
             `Only after explicit approval, rerun the same setup command with --replace-project ${this.projectId}. ` +
             "Do not remove local state or create another identity to bypass this confirmation.",
+    });
+}
+
+/** The state directory belongs to another Morty service. Its identity is never sent elsewhere or replaced. */
+class SavedIdentityOriginError extends Error {
+    readonly code = "SAVED_IDENTITY_ORIGIN_MISMATCH";
+    readonly savedBaseUrl: string;
+    readonly requestedBaseUrl: string;
+
+    constructor(savedBaseUrl: string, requestedBaseUrl: string) {
+        super(`This state directory holds the Morty identity for ${savedBaseUrl}, not ${requestedBaseUrl}.`);
+        this.name = "SavedIdentityOriginError";
+        this.savedBaseUrl = savedBaseUrl;
+        this.requestedBaseUrl = requestedBaseUrl;
+    }
+
+    readonly diagnostic = () => ({
+        savedBaseUrl: this.savedBaseUrl,
+        requestedBaseUrl: this.requestedBaseUrl,
+        nextStep:
+            `Setup changed nothing. To keep using the saved identity, rerun with --base-url ${this.savedBaseUrl}. ` +
+            `To set up ${this.requestedBaseUrl} as well, rerun with MORTY_STATE_DIRECTORY set to a separate empty directory. ` +
+            "Never remove or edit the saved state to bypass this: it holds the only credential for the saved identity.",
     });
 }
 
@@ -507,11 +661,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function readPrivateJson(path: string) {
-        await safeLocalPath(path, false, true);
-        return object(JSON.parse(await readFile(path, "utf8")));
-    }
-
     async function writePrivateFile(path: string, value: string | Uint8Array) {
         const file = await open(
             path,
@@ -527,132 +676,188 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function writePrivateJson(path: string, value: unknown) {
-        await writePrivateFile(path, JSON.stringify(value, null, 2));
-    }
-
-    /** Accept only fields written by this Setup. Unsupported state is never converted or rewritten. */
-    function savedIdentity(config: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> {
-        const {
-            base_url,
-            workspace: _workspace,
-            replacement_access: _replacement,
-            replaced_project_id: _replacedProject,
-            replaced_user_token: _replacedToken,
-            ...identity
-        } = config;
-        const fields = ["identity_creation_key", "user_token", "user_id", "project_id", "pairing_runtime_id"];
-        if (typeof base_url !== "string" || Object.keys(identity).some((key) => !fields.includes(key))) {
-            fail("INVALID_CONFIGURATION");
-        }
-        return identity;
-    }
-
-    async function loadConfiguration(directory: string, base: string): Promise<Context> {
-        let config: Readonly<Record<string, unknown>> = {};
-        try {
-            config = await readPrivateJson(join(directory, "config.json"));
-        } catch (cause) {
-            if (errorCode(cause) !== "ENOENT") {
-                throw cause;
+    /** Decodes exactly the representation this Setup writes. Any other state is refused, never converted or rewritten. */
+    function decodeSavedState(value: unknown): SavedState {
+        const invalid = (): never => fail("INVALID_CONFIGURATION");
+        const fieldsOf = (input: unknown): Readonly<Record<string, unknown>> => {
+            if (input === null || typeof input !== "object" || Array.isArray(input)) {
+                return invalid();
             }
-            return { directory, base, config, replacement: { kind: "unchanged" } };
-        }
-        const identity = savedIdentity(config);
-        if (config["base_url"] !== base) {
-            return { directory, base, config: {}, replacement: { kind: "unchanged" } };
-        }
-        return { directory, base, config: identity, replacement: readReplacementState(config) };
-    }
-
-    /** Decode the saved replacement once. Business operations never read or synchronize its overlapping keys. */
-    function readReplacementState(config: Readonly<Record<string, unknown>>): ReplacementState {
-        const retiring: RetiringIdentity | null =
-            config["replaced_project_id"] === undefined && config["replaced_user_token"] === undefined
-                ? null
-                : {
-                      kind: "pending",
-                      projectId: identifier(config["replaced_project_id"]),
-                      token: credential(config["replaced_user_token"]),
-                  };
-        const saved = config["replacement_access"];
-        if (saved !== undefined) {
-            const value = object(saved);
-            const previousProjectId = identifier(value["previousProjectId"]);
-            switch (value["kind"]) {
+            return Object.fromEntries(Object.entries(input));
+        };
+        const exactly = (input: unknown, keys: readonly string[]): Readonly<Record<string, unknown>> => {
+            const fields = fieldsOf(input);
+            const names = Object.keys(fields);
+            if (names.length !== keys.length || names.some((name) => !keys.includes(name))) {
+                invalid();
+            }
+            return fields;
+        };
+        const savedIdentifier = (input: unknown): string => (isIdentifier(input) ? input : invalid());
+        const savedCredential = (input: unknown): string =>
+            typeof input === "string" && /^morty_anon_v1_[A-Za-z0-9_-]{43}$/u.test(input) ? input : invalid();
+        const savedOrigin = (input: unknown): string => {
+            try {
+                if (origin(input) === input) {
+                    return input;
+                }
+            } catch {
+                // Reported as an invalid configuration below.
+            }
+            return invalid();
+        };
+        const replacement = (input: unknown): ReplacementState => {
+            switch (fieldsOf(input)["kind"]) {
+                case "unchanged":
+                    exactly(input, ["kind"]);
+                    return { kind: "unchanged" };
                 case "unknown":
-                    if (previousProjectId !== config["project_id"] || retiring !== null) {
-                        fail("INVALID_REPLACEMENT_STATE");
-                    }
+                    exactly(input, ["kind"]);
                     return { kind: "unknown" };
                 case "revoked": {
-                    const projectId = identifier(value["projectId"]);
-                    if (
-                        projectId !== config["project_id"] ||
-                        (retiring !== null && retiring.projectId !== previousProjectId)
-                    ) {
-                        fail("INVALID_REPLACEMENT_STATE");
+                    const previous = exactly(input, ["kind", "previous"])["previous"];
+                    switch (fieldsOf(previous)["kind"]) {
+                        case "pending": {
+                            const fields = exactly(previous, ["kind", "project_id", "user_token"]);
+                            return {
+                                kind: "revoked",
+                                previous: {
+                                    kind: "pending",
+                                    projectId: savedIdentifier(fields["project_id"]),
+                                    token: savedCredential(fields["user_token"]),
+                                },
+                            };
+                        }
+                        case "retired": {
+                            const fields = exactly(previous, ["kind", "project_id"]);
+                            return {
+                                kind: "revoked",
+                                previous: { kind: "retired", projectId: savedIdentifier(fields["project_id"]) },
+                            };
+                        }
+                        default:
+                            return invalid();
                     }
-                    return {
-                        kind: "revoked",
-                        previous: retiring ?? { kind: "retired", projectId: previousProjectId },
-                    };
                 }
                 default:
-                    fail("INVALID_REPLACEMENT_STATE");
+                    return invalid();
             }
+        };
+        const saved = exactly(value, ["version", "base_url", "identity"]);
+        if (saved["version"] !== SAVED_STATE_VERSION) {
+            invalid();
         }
-        if (retiring !== null) {
-            fail("INVALID_REPLACEMENT_STATE");
-        }
-        return { kind: "unchanged" };
-    }
-
-    /** Encode the replacement state so `readReplacementState` decodes it again on the next run. */
-    function replacementFields(replacement: ReplacementState, projectId: unknown): Readonly<Record<string, unknown>> {
-        switch (replacement.kind) {
-            case "unchanged":
-                return {};
-            case "unknown":
-                return { replacement_access: { kind: "unknown", previousProjectId: identifier(projectId) } };
-            case "revoked":
+        const base = savedOrigin(saved["base_url"]);
+        switch (fieldsOf(saved["identity"])["kind"]) {
+            case "creating": {
+                const creating = exactly(saved["identity"], ["kind", "creation_key"]);
+                const creationKey = creating["creation_key"];
+                if (typeof creationKey !== "string" || !/^[A-Za-z0-9_-]{43}$/u.test(creationKey)) {
+                    return invalid();
+                }
+                return { base, identity: { kind: "creating", creationKey } };
+            }
+            case "ready": {
+                const ready = exactly(saved["identity"], [
+                    "kind",
+                    "user_id",
+                    "user_token",
+                    "project_id",
+                    "unbound_runtime_id",
+                    "replacement",
+                ]);
                 return {
-                    replacement_access: {
-                        kind: "revoked",
-                        previousProjectId: replacement.previous.projectId,
-                        projectId: identifier(projectId),
+                    base,
+                    identity: {
+                        kind: "ready",
+                        userId: savedIdentifier(ready["user_id"]),
+                        userToken: savedCredential(ready["user_token"]),
+                        projectId: savedIdentifier(ready["project_id"]),
+                        unboundRuntimeId:
+                            ready["unbound_runtime_id"] === null ? null : savedIdentifier(ready["unbound_runtime_id"]),
+                        replacement: replacement(ready["replacement"]),
                     },
-                    ...(replacement.previous.kind === "retired"
-                        ? {}
-                        : {
-                              replaced_project_id: replacement.previous.projectId,
-                              replaced_user_token: replacement.previous.token,
-                          }),
                 };
-            default: {
-                const exhaustive: never = replacement;
-                return exhaustive;
             }
+            default:
+                return invalid();
         }
     }
 
-    function restoreReplacementAccess(context: Context): void {
-        switch (context.replacement.kind) {
+    /** The saved state, or null before this computer's first setup. */
+    async function readSavedState(directory: string): Promise<SavedState | null> {
+        const path = join(directory, "config.json");
+        let content: string;
+        try {
+            await safeLocalPath(path, false, true);
+            content = await readFile(path, "utf8");
+        } catch (cause) {
+            if (errorCode(cause) === "ENOENT") {
+                return null;
+            }
+            throw cause;
+        }
+        let value: unknown;
+        try {
+            value = JSON.parse(content);
+        } catch {
+            fail("INVALID_CONFIGURATION");
+        }
+        return decodeSavedState(value);
+    }
+
+    /** The identity saved for the requested service. A state that belongs to another service is refused unchanged. */
+    async function loadIdentity(directory: string, base: string): Promise<IdentityState> {
+        const saved = await readSavedState(directory);
+        if (saved === null) {
+            return { kind: "none" };
+        }
+        if (saved.base !== base) {
+            throw new SavedIdentityOriginError(saved.base, base);
+        }
+        return saved.identity;
+    }
+
+    /** Replaces the saved state atomically; every write follows an explicit identity transition. */
+    async function writeSavedState(location: StateLocation, identity: CreatingIdentity | ReadyIdentity) {
+        const temporary = join(location.directory, `.config-${crypto.randomUUID()}`);
+        try {
+            await writePrivateFile(
+                temporary,
+                JSON.stringify(encodeSavedState({ base: location.base, identity }), null, 2),
+            );
+            await rename(temporary, join(location.directory, "config.json"));
+        } finally {
+            await rm(temporary, { force: true });
+        }
+    }
+
+    async function commit<Saved extends Context>(context: Saved, identity: ReadyIdentity): Promise<Saved> {
+        await writeSavedState(context, identity);
+        return { ...context, identity };
+    }
+
+    function restoreReplacementAccess(identity: IdentityState): void {
+        if (identity.kind !== "ready") {
+            replacementAccess = { kind: "unchanged" };
+            return;
+        }
+        switch (identity.replacement.kind) {
             case "unchanged":
                 replacementAccess = { kind: "unchanged" };
                 return;
             case "unknown":
-                replacementAccess = { kind: "unknown", previousProjectId: identifier(context.config["project_id"]) };
+                replacementAccess = { kind: "unknown", previousProjectId: identity.projectId };
                 return;
             case "revoked":
                 replacementAccess = {
                     kind: "revoked",
-                    previousProjectId: context.replacement.previous.projectId,
-                    projectId: identifier(context.config["project_id"]),
+                    previousProjectId: identity.replacement.previous.projectId,
+                    projectId: identity.projectId,
                 };
                 return;
             default: {
-                const exhaustive: never = context.replacement;
+                const exhaustive: never = identity.replacement;
                 throw exhaustive;
             }
         }
@@ -678,39 +883,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         };
     }
 
-    async function saveConfiguration<Saved extends Context>(
-        context: Saved,
-        updates: Readonly<Record<string, unknown>>,
-    ): Promise<Saved> {
-        const config: Readonly<Record<string, unknown>> = { ...context.config, ...updates, base_url: context.base };
-        const temporary = join(context.directory, `.config-${crypto.randomUUID()}`);
-        try {
-            await writePrivateJson(temporary, {
-                ...config,
-                ...replacementFields(context.replacement, config["project_id"]),
-            });
-            await rename(temporary, join(context.directory, "config.json"));
-            return { ...context, config };
-        } finally {
-            await rm(temporary, { force: true });
-        }
-    }
-
-    async function request(context: Context, route: string, body?: unknown, authenticated = true) {
-        const headers: Record<string, string> = { "content-type": "application/json" };
-        if (authenticated) {
-            headers["authorization"] = `Bearer ${credential(context.config["user_token"])}`;
-        }
-        if (route === "/management/project/replacement") {
-            headers["x-morty-setup-run-id"] = runId;
-        }
-        const path =
-            authenticated && !route.startsWith("/chat/projects/")
-                ? `/projects/${identifier(context.config["project_id"])}${route}`
-                : route;
-        const response = await fetch(new URL(`/morty/api${path}`, context.base), {
+    async function send(base: string, path: string, headers: Readonly<Record<string, string>>, body?: unknown) {
+        const response = await fetch(new URL(`/morty/api${path}`, base), {
             method: body === undefined ? "GET" : "POST",
-            headers,
+            headers: { "content-type": "application/json", ...headers },
             redirect: "error",
             ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             signal: AbortSignal.any([signal, deadline(45000)]),
@@ -720,6 +896,16 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             remoteFailure(value, response.status);
         }
         return value;
+    }
+
+    /** Sends a request as the saved identity, to its Project unless the route names one. */
+    async function request(context: Context, route: string, body?: unknown) {
+        const headers: Record<string, string> = { authorization: `Bearer ${context.identity.userToken}` };
+        if (route === "/management/project/replacement") {
+            headers["x-morty-setup-run-id"] = runId;
+        }
+        const path = route.startsWith("/chat/projects/") ? route : `/projects/${context.identity.projectId}${route}`;
+        return await send(context.base, path, headers, body);
     }
 
     function remoteFailure(value: Readonly<Record<string, unknown>>, status: number): never {
@@ -736,16 +922,16 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
      * Project. Nothing else from that Project opens it: its replacement ended everything shared from it.
      */
     async function retireReplacedIdentity<Retiring extends Context>(context: Retiring): Promise<Retiring> {
-        const replacement = context.replacement;
+        const replacement = context.identity.replacement;
         if (replacement.kind !== "revoked" || replacement.previous.kind !== "pending") {
             return context;
         }
-        const { projectId, token } = replacement.previous;
+        const previous = replacement.previous;
         const response = await fetch(
-            new URL(`/morty/api/projects/${identifier(projectId)}/identity/v1/local-credential`, context.base),
+            new URL(`/morty/api/projects/${previous.projectId}/identity/v1/local-credential`, context.base),
             {
                 method: "DELETE",
-                headers: { authorization: `Bearer ${credential(token)}` },
+                headers: { authorization: `Bearer ${previous.token}` },
                 redirect: "error",
                 signal: AbortSignal.any([signal, AbortSignal.timeout(45000)]),
             },
@@ -754,10 +940,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (!response.ok && response.status !== 401) {
             remoteFailure(object(await response.json()), response.status);
         }
-        return await saveConfiguration(
-            { ...context, replacement: { kind: "revoked", previous: { kind: "retired", projectId } } },
-            {},
-        );
+        return await commit(context, withPreviousRetired(context.identity, previous));
     }
 
     function readSetupOptions(commandArgs: readonly string[]): SetupOptions {
@@ -835,54 +1018,56 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return { base: values["base-url"] === undefined ? undefined : origin(values["base-url"]) };
     }
 
-    async function prepareIdentity(context: Context): Promise<SetupIdentity> {
-        if (context.config["user_token"] !== undefined) {
+    async function prepareIdentity(location: StateLocation, saved: IdentityState): Promise<SetupIdentity> {
+        if (saved.kind === "ready") {
             progress("identity", "Reusing the saved identity.");
-            return { kind: "setup", context, project: "reused" };
+            return { kind: "setup", context: { ...location, identity: saved }, project: "reused" };
         }
         progress("identity", "Creating the standalone identity and Machine.");
         // Save the creation key before creating, so a setup retried after a lost reply resumes the same identity
         // instead of creating another.
-        const creating =
-            context.config["identity_creation_key"] === undefined
-                ? await saveConfiguration(context, {
-                      identity_creation_key: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString(
-                          "base64url",
-                      ),
-                  })
-                : context;
-        const identity = await request(
-            creating,
+        let creating: CreatingIdentity;
+        if (saved.kind === "creating") {
+            creating = saved;
+        } else {
+            creating = {
+                kind: "creating",
+                creationKey: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url"),
+            };
+            await writeSavedState(location, creating);
+        }
+        const created = await send(
+            location.base,
             "/identity/anonymous-users",
-            { creationKey: text(creating.config["identity_creation_key"], /^[A-Za-z0-9_-]{43}$/u) },
-            false,
-        );
-        const { identity_creation_key: _created, ...config } = creating.config;
-        const saved = await saveConfiguration(
-            { ...creating, config },
+            {},
             {
-                user_token: credential(identity["token"]),
-                user_id: identifier(identity["userId"]),
-                project_id: identifier(identity["projectId"]),
+                creationKey: creating.creationKey,
             },
         );
-        return { kind: "setup", context: saved, project: "created" };
+        const identity = createdIdentity({
+            userToken: credential(created["token"]),
+            userId: identifier(created["userId"]),
+            projectId: identifier(created["projectId"]),
+        });
+        await writeSavedState(location, identity);
+        return { kind: "setup", context: { ...location, identity }, project: "created" };
     }
 
     async function verifyIdentityAndBot(context: Context): Promise<VerifiedIdentity> {
         const session = await request(context, "/session");
-        const userId = identifier(session["userId"]);
+        if (identifier(session["userId"]) !== context.identity.userId) {
+            fail("IDENTITY_CONFLICT");
+        }
         // The Worker decides which Machine the user has, the same one every browser handoff opens.
         const bot = await request(context, "/management/bot");
-        const saved = await saveConfiguration(context, { user_id: userId });
         return {
-            context: { ...saved, botId: identifier(bot["botId"]) },
+            context: { ...context, botId: identifier(bot["botId"]) },
             expectedRuntimeId: bot["runtimeId"] === null ? null : identifier(bot["runtimeId"]),
         };
     }
 
     async function runMorty(
-        context: Context,
+        directory: string,
         args: readonly string[],
         cwd: string,
         operation = signal,
@@ -890,9 +1075,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     ) {
         operation.throwIfAborted();
         if (host.runtime !== undefined) {
-            return await host.runtime.run(context.directory, args, cwd, operation, input);
+            return await host.runtime.run(directory, args, cwd, operation, input);
         }
-        const logPath = join(context.directory, `runtime-${crypto.randomUUID()}.log`);
+        const logPath = join(directory, `runtime-${crypto.randomUUID()}.log`);
         const log = await open(
             logPath,
             constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
@@ -924,7 +1109,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 cwd,
                 stdio: [input === undefined ? "ignore" : "pipe", log.fd, log.fd],
                 windowsHide: true,
-                env: { ...process.env, MORTY_STATE_DIRECTORY: context.directory },
+                env: { ...process.env, MORTY_STATE_DIRECTORY: directory },
             });
             if (input !== undefined) {
                 // A Morty that exits before reading reports its own failure; the closed pipe adds nothing.
@@ -980,11 +1165,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function listManagedConnections(context: Context, cwd: string): Promise<readonly ManagedConnection[]> {
+    async function listManagedConnections(directory: string, cwd: string): Promise<readonly ManagedConnection[]> {
         const outputPath = join(tmpdir(), `morty-pair-list-${crypto.randomUUID()}.json`);
         await writePrivateFile(outputPath, "");
         try {
-            await runMorty(context, ["pair", "list", `--output-json=${outputPath}`], cwd);
+            await runMorty(directory, ["pair", "list", `--output-json=${outputPath}`], cwd);
             const value: unknown = JSON.parse(await readFile(outputPath, "utf8"));
             if (!Array.isArray(value)) {
                 fail("INVALID_PAIR_LIST");
@@ -992,7 +1177,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return value.map((item) => {
                 const connection = object(item);
                 return {
-                    appId: identifier(connection["app_id"]),
                     connectionId: identifier(connection["connection_id"]),
                     runtimeId: identifier(connection["runtime_id"]),
                 };
@@ -1002,13 +1186,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function createRuntimePairing(context: MachineContext, appId: string): Promise<RuntimeSelection> {
+    async function createRuntimePairing(context: MachineContext): Promise<RuntimeSelection> {
         const pairing = await request(context, "/management/runtime-pairings", {
             idempotencyKey: crypto.randomUUID(),
         });
         const selection: RuntimeSelection = {
             kind: "pairing",
-            appId: identifier(pairing["appId"]),
             channelId: identifier(pairing["channelId"]),
             pairingCode: text(pairing["pairingCode"], /^[A-Za-z0-9-]+$/u),
             pairingId: identifier(pairing["pairingId"]),
@@ -1016,7 +1199,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             relayUrl: origin(pairing["relayUrl"]),
             runtimeId: identifier(pairing["runtimeId"]),
         };
-        if (selection.appId !== appId || selection.projectId !== context.config["project_id"]) {
+        if (selection.projectId !== context.identity.projectId) {
             fail("PROJECT_CONFLICT");
         }
         emit({ status: "prepared", botId: context.botId });
@@ -1024,11 +1207,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function replaceProject(context: MachineContext): Promise<MachineContext> {
-        const previousProjectId = identifier(context.config["project_id"]);
-        const pending: ReplacementAccess = { kind: "unknown", previousProjectId };
+        const previousProjectId = context.identity.projectId;
         // Save before the request: a timeout or interrupted process cannot prove that access was not revoked.
-        const prepared = await saveConfiguration({ ...context, replacement: { kind: "unknown" } }, {});
-        replacementAccess = pending;
+        const prepared = await commit(context, withReplacementRequested(context.identity));
+        replacementAccess = { kind: "unknown", previousProjectId };
         progress("replacement", "Replacing the saved connection with approval. Earlier shared access will be revoked.");
         const replacement = await request(prepared, "/management/project/replacement", {});
         const projectId = identifier(replacement["projectId"]);
@@ -1041,28 +1223,16 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             message:
                 "Earlier sharing links and browser access have been revoked. The new connection is still being set up.",
         });
-        const saved = await saveConfiguration(
-            {
-                ...prepared,
-                // The successor Project's Machine, named by the Worker that bootstrapped it.
-                botId: identifier(object(replacement["bot"])["botId"]),
-                replacement: {
-                    kind: "revoked",
-                    previous: {
-                        kind: "pending",
-                        projectId: previousProjectId,
-                        token: credential(context.config["user_token"]),
-                    },
-                },
-            },
-            {
-                user_token: credential(replacement["token"]),
-                user_id: identifier(replacement["userId"]),
-                project_id: projectId,
-                pairing_runtime_id: undefined,
-            },
+        const saved = await commit(
+            // The successor Project's Machine, named by the Worker that bootstrapped it.
+            { ...prepared, botId: identifier(object(replacement["bot"])["botId"]) },
+            replacedIdentity(prepared.identity, {
+                userToken: credential(replacement["token"]),
+                userId: identifier(replacement["userId"]),
+                projectId,
+            }),
         );
-        emit({ status: "project_replaced", botId: saved.botId, projectId: saved.config["project_id"] });
+        emit({ status: "project_replaced", botId: saved.botId, projectId: saved.identity.projectId });
         return await retireReplacedIdentity(saved);
     }
 
@@ -1073,10 +1243,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         confirmedProjectId: string | null,
     ): Promise<{ readonly context: MachineContext; readonly runtime: RuntimeSelection }> {
         progress("pairing", "Preparing the Runtime connection.");
-        const project = await request(context, "/management/project");
-        const appId = identifier(project["appId"]);
         const replaceWithApproval = async (reason: ReplacementReason, managedConnectionCount: number | null) => {
-            const projectId = identifier(context.config["project_id"]);
+            const projectId = context.identity.projectId;
             emit({
                 status: "replacement_check",
                 reason,
@@ -1091,19 +1259,17 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             if (confirmedProjectId !== projectId) {
                 throw new ProjectReplacementRequiredError(projectId, reason);
             }
-            const replaced = await replaceProject(context);
-            return await pairRuntime(replaced, appId);
+            return await pairRuntime(await replaceProject(context));
         };
         // A restored local pairing cannot settle whether a previous request revoked shared access.
         // Finish that idempotent operation with its original approval before reporting setup ready.
-        if (context.replacement.kind === "unknown") {
+        if (context.identity.replacement.kind === "unknown") {
             return await replaceWithApproval("replacement_result_unknown", null);
         }
+        // Runtime IDs are unique, so the Runtime's own connection list names the connection that serves one.
         const reusable = async (runtimeId: string) => {
-            const connections = await listManagedConnections(context, cwd);
-            const existing = connections.find(
-                (connection) => connection.appId === appId && connection.runtimeId === runtimeId,
-            );
+            const connections = await listManagedConnections(context.directory, cwd);
+            const existing = connections.find((connection) => connection.runtimeId === runtimeId);
             if (existing !== undefined) {
                 emit({
                     status: "runtime_reused",
@@ -1123,14 +1289,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         // The Machine is unbound. A Runtime an earlier run paired for it still holds one of the Project's Runtime
         // slots, so continue on it while this machine still manages its connection.
-        const pairing = context.config["pairing_runtime_id"];
-        if (typeof pairing === "string") {
+        const pairing = context.identity.unboundRuntimeId;
+        if (pairing !== null) {
             const { existing } = await reusable(pairing);
             if (existing !== undefined) {
                 return { context, runtime: { kind: "existing", ...existing, bound: false } };
             }
         }
-        return await pairRuntime(context, appId);
+        return await pairRuntime(context);
     }
 
     /**
@@ -1139,10 +1305,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
      */
     async function pairRuntime(
         context: MachineContext,
-        appId: string,
     ): Promise<{ readonly context: MachineContext; readonly runtime: RuntimeSelection }> {
-        const runtime = await createRuntimePairing(context, appId);
-        return { context: await saveConfiguration(context, { pairing_runtime_id: runtime.runtimeId }), runtime };
+        const runtime = await createRuntimePairing(context);
+        return { context: await commit(context, withUnboundRuntime(context.identity, runtime.runtimeId)), runtime };
     }
 
     function runtimeCommand(
@@ -1174,7 +1339,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         runtime: RuntimeSelection,
         cwd: string,
         harness: string,
-    ): Promise<MachineContext> {
+    ): Promise<void> {
         const reuseOnline = async () => {
             if (runtime.kind !== "existing" || !(await runtimeIsOnline(context, runtime, harness))) {
                 return false;
@@ -1187,13 +1352,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         for (let attempt = 1; attempt <= maximumAttempts; attempt++) {
             signal.throwIfAborted();
             if (await reuseOnline()) {
-                return await saveConfiguration(context, { workspace: cwd });
+                return;
             }
             try {
                 const command = runtimeCommand(runtime, cwd);
-                const started = await runMorty(context, command.args, cwd, signal, command.input);
+                const started = await runMorty(context.directory, command.args, cwd, signal, command.input);
                 emit({ status: "runtime_started", ...started });
-                return await saveConfiguration(context, { workspace: cwd });
+                return;
             } catch (cause) {
                 signal.throwIfAborted();
                 if (!(cause instanceof RuntimeStartError)) {
@@ -1201,7 +1366,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 }
                 // A launcher may fail after the daemon has connected successfully.
                 if (await reuseOnline()) {
-                    return await saveConfiguration(context, { workspace: cwd });
+                    return;
                 }
                 if (attempt === maximumAttempts) {
                     throw cause;
@@ -1232,7 +1397,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         context: MachineContext,
         runtime: RuntimeSelection,
     ): Promise<readonly string[] | null> {
-        const botPath = `/chat/projects/${context.config["project_id"]}/bots/${context.botId}`;
+        const botPath = `/chat/projects/${context.identity.projectId}/bots/${context.botId}`;
         // A bound Machine's Runtime is read through the Machine; an unbound one is among the setup candidates.
         const alreadyConfigured = runtime.kind === "existing" && runtime.bound;
         const state = await request(context, `${botPath}/${alreadyConfigured ? "workspace" : "setup/runtimes"}`, {});
@@ -1278,7 +1443,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         try {
             await writePrivateFile(outputPath, "");
             await runMorty(
-                context,
+                context.directory,
                 ["agents", `--output-json=${outputPath}`],
                 cwd,
                 AbortSignal.any([signal, deadline(60_000)]),
@@ -1380,7 +1545,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const runtimeId = runtime.runtimeId;
         const agentRef = identifier(harness);
         try {
-            await request(context, `/chat/projects/${context.config["project_id"]}/bots/${context.botId}/setup`, {
+            await request(context, `/chat/projects/${context.identity.projectId}/bots/${context.botId}/setup`, {
                 runtimeId,
                 agentRef,
             });
@@ -1399,7 +1564,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             throw cause;
         }
         // The Machine now owns its Runtime, so the pairing record is no longer needed.
-        const saved = await saveConfiguration(context, { pairing_runtime_id: undefined });
+        const saved = await commit(context, withBoundMachine(context.identity));
         emit({ status: "binding_activated", botId: context.botId, harness });
         return saved;
     }
@@ -1412,7 +1577,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             signal.throwIfAborted();
             const configuration = await request(
                 context,
-                `/chat/projects/${context.config["project_id"]}/bots/${context.botId}/workspace`,
+                `/chat/projects/${context.identity.projectId}/bots/${context.botId}/workspace`,
                 {},
             );
             if (hasOnlineRuntimeAgent(object(configuration["runtime"]), runtime.runtimeId, agentRef)) {
@@ -1458,11 +1623,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         context: MachineContext,
         runtime: RuntimeSelection,
         options: SetupOptions,
+        workingDirectory: string,
         identity: SetupIdentity["project"],
     ) {
         await waitForReadiness(context, runtime, options.harness);
         const botId = context.botId;
-        const workingDirectory = text(context.config["workspace"]);
         const transfer = await request(
             context,
             "/identity/transfers",
@@ -1502,7 +1667,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 message: "The QR image is unavailable. Use the handoff link instead.",
             });
         }
-        const project: ProjectOutcome = context.replacement.kind === "revoked" ? "replaced" : identity;
+        const project: ProjectOutcome = context.identity.replacement.kind === "revoked" ? "replaced" : identity;
         emit({
             status: "ready",
             botId,
@@ -1520,35 +1685,21 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         setupReady = true;
         if (project === "replaced") {
             // Cleared only after ready reported it, so a run that stops earlier leaves the notice owed.
-            await saveConfiguration({ ...context, replacement: { kind: "unchanged" } }, {});
+            await commit(context, withReplacementReported(context.identity));
         }
     }
 
     async function revokeAllAccess(options: RevokeAllAccessOptions) {
         const directory = await prepareStateDirectory(resolveStateDirectory(host.state, signal));
-        let config: Readonly<Record<string, unknown>>;
-        try {
-            config = await readPrivateJson(join(directory, "config.json"));
-        } catch (cause) {
-            if (errorCode(cause) === "ENOENT") {
-                fail("LOCAL_IDENTITY_REQUIRED");
-            }
-            throw cause;
+        const saved = await readSavedState(directory);
+        if (saved === null || saved.identity.kind !== "ready") {
+            return fail("LOCAL_IDENTITY_REQUIRED");
         }
-        if (config["user_token"] === undefined || config["project_id"] === undefined) {
-            fail("LOCAL_IDENTITY_REQUIRED");
-        }
-        const base = origin(config["base_url"]);
         // Never send the saved identity to a different origin, even when explicitly requested.
-        if (options.base !== undefined && options.base !== base) {
-            fail("LOCAL_IDENTITY_REQUIRED");
+        if (options.base !== undefined && options.base !== saved.base) {
+            throw new SavedIdentityOriginError(saved.base, options.base);
         }
-        const context = await retireReplacedIdentity({
-            directory,
-            base,
-            config: savedIdentity(config),
-            replacement: readReplacementState(config),
-        });
+        const context = await retireReplacedIdentity({ directory, base: saved.base, identity: saved.identity });
         const revoked = await request(context, "/identity/revoke-all-access", {});
         if (revoked["status"] !== "access_revoked") {
             fail("INVALID_RESPONSE");
@@ -1559,7 +1710,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         emit({
             status: "access_revoked",
-            projectId: identifier(context.config["project_id"]),
+            projectId: context.identity.projectId,
             sessionAccess,
             message:
                 sessionAccess === "revoked"
@@ -1568,7 +1719,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         });
     }
 
-    async function preflightRuntime(context: Context, cwd: string) {
+    async function preflightRuntime(directory: string, cwd: string) {
         progress("preflight", "Installing and verifying the selected Morty release before creating an identity.");
         const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
         if (!((major === 22 && minor >= 19) || (major === 24 && minor >= 20))) {
@@ -1581,14 +1732,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             // selected by its launcher. A package's engines field is not proof it starts.
             if (host.runtime === undefined && process.env["MORTY_LOCAL_CLI"] === undefined) {
                 await runMorty(
-                    context,
+                    directory,
                     // runMorty already selects the exact package; install defaults to that CLI's version.
                     ["install"],
                     cwd,
                     AbortSignal.any([signal, deadline(180_000)]),
                 );
             }
-            await runMorty(context, ["--version"], cwd, AbortSignal.any([signal, deadline(120_000)]));
+            await runMorty(directory, ["--version"], cwd, AbortSignal.any([signal, deadline(120_000)]));
             if (host.runtime === undefined) {
                 const npm = await findExecutableOnPath("npm", process.env);
                 if (npm === null) {
@@ -1621,22 +1772,23 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function setup(options: SetupOptions) {
         const cwd = await resolveWorkingDirectory(options.cwd);
         const directory = await prepareStateDirectory(resolveStateDirectory(host.state, signal));
-        // A previous replacement must still be explained when this run fails its local startup checks.
-        restoreReplacementAccess(await loadConfiguration(directory, options.base));
-        await preflightRuntime({ directory, base: options.base, config: {}, replacement: { kind: "unchanged" } }, cwd);
-        let context = await loadConfiguration(directory, options.base);
-        restoreReplacementAccess(context);
-        context = await retireReplacedIdentity(context);
-        const identity = await prepareIdentity(context);
-        const verified = await verifyIdentityAndBot(identity.context);
+        const location: StateLocation = { directory, base: options.base };
+        // Refuses a state that belongs to another service before anything runs, and explains a previous replacement
+        // even when this run fails its local startup checks.
+        restoreReplacementAccess(await loadIdentity(directory, options.base));
+        await preflightRuntime(directory, cwd);
+        const saved = await loadIdentity(directory, options.base);
+        restoreReplacementAccess(saved);
+        const identity = await prepareIdentity(location, saved);
+        const verified = await verifyIdentityAndBot(await retireReplacedIdentity(identity.context));
         let machine = verified.context;
-        emit({ status: "identity_ready", userId: machine.config["user_id"], botId: machine.botId });
+        emit({ status: "identity_ready", userId: machine.identity.userId, botId: machine.botId });
         const prepared = await prepareRuntime(machine, cwd, verified.expectedRuntimeId, options.replaceProject);
         machine = prepared.context;
-        machine = await startRuntime(machine, prepared.runtime, cwd, options.harness);
+        await startRuntime(machine, prepared.runtime, cwd, options.harness);
         await waitForRuntime(machine, prepared.runtime, options.harness, cwd);
         machine = await bindAgent(machine, prepared.runtime, options.harness);
-        await finishSetup(machine, prepared.runtime, options, identity.project);
+        await finishSetup(machine, prepared.runtime, options, cwd, identity.project);
     }
 
     try {
@@ -1674,6 +1826,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 ...(cause instanceof AgentBindingError ? { binding: cause.diagnostic() } : {}),
                 ...(cause instanceof HarnessUnavailableError ? { harness: cause.diagnostic() } : {}),
                 ...(cause instanceof ProjectReplacementRequiredError ? { replacement: cause.diagnostic() } : {}),
+                ...(cause instanceof SavedIdentityOriginError ? { savedIdentity: cause.diagnostic() } : {}),
                 ...replacementFailure(replacementAccess),
             },
         });

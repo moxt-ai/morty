@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import * as v from "valibot";
 import { createDatabase, type Database } from "../../../schema/project-do/database.ts";
 import { platformProjectMapping } from "../../../schema/project-do/index.ts";
@@ -18,7 +18,7 @@ export class PlatformProjectStorage {
         return database;
     };
 
-    readonly read = async (userId: string, appId: string, signal: AbortSignal): Promise<PlatformProject | null> => {
+    readonly read = async (userId: string, signal: AbortSignal): Promise<PlatformProject | null> => {
         signal.throwIfAborted();
         try {
             const value = await this.#requireDatabase()
@@ -27,7 +27,7 @@ export class PlatformProjectStorage {
                     displayName: platformProjectMapping.displayName,
                 })
                 .from(platformProjectMapping)
-                .where(and(eq(platformProjectMapping.userId, userId), eq(platformProjectMapping.appId, appId)))
+                .where(eq(platformProjectMapping.userId, userId))
                 .get();
             signal.throwIfAborted();
             return v.parse(v.nullish(platformProjectSchema), value) ?? null;
@@ -39,12 +39,7 @@ export class PlatformProjectStorage {
         }
     };
 
-    readonly save = async (
-        userId: string,
-        appId: string,
-        project: PlatformProject,
-        signal: AbortSignal,
-    ): Promise<void> => {
+    readonly save = async (userId: string, project: PlatformProject, signal: AbortSignal): Promise<void> => {
         signal.throwIfAborted();
         try {
             const value = v.parse(platformProjectSchema, project);
@@ -52,7 +47,6 @@ export class PlatformProjectStorage {
                 .insert(platformProjectMapping)
                 .values({
                     userId,
-                    appId,
                     projectId: value.projectId,
                     displayName: value.displayName,
                     createdAt: Date.now(),

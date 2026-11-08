@@ -190,6 +190,14 @@ async function startIdentityFixture(
                 ASSETS: { fetch: () => Promise.resolve(new Response()) },
                 CHAT_PROJECTS: chatProjects,
             });
+            /** Restarts the Worker with the changed deployment settings, keeping its storage. */
+            const reconfigure = async () => {
+                await cloudflare.setOptions(
+                    convertV4MiniflareOptions({ ...runtimeOptions, bindings: baseConfiguration }),
+                );
+                cloudBindings = await cloudflare.getBindings();
+                projectObjects = await cloudflare.getDurableObjectNamespace("CHAT_PROJECTS");
+            };
             const createAnonymousUser = async () => {
                 const response = await worker.fetch(
                     new Request(`${APP_ORIGIN}/morty/api/identity/anonymous-users`, {
@@ -217,27 +225,19 @@ async function startIdentityFixture(
                 origin: ready.origin,
                 changeAppOrigin: async (origin: string) => {
                     baseConfiguration.APP_ORIGIN = origin;
-                    await cloudflare.setOptions(
-                        convertV4MiniflareOptions({ ...runtimeOptions, bindings: baseConfiguration }),
-                    );
-                    cloudBindings = await cloudflare.getBindings();
-                    projectObjects = await cloudflare.getDurableObjectNamespace("CHAT_PROJECTS");
+                    await reconfigure();
                 },
                 changePlatformCredential: async (credential: string) => {
                     baseConfiguration.MORTY_SERVICE_SECRET = credential;
-                    await cloudflare.setOptions(
-                        convertV4MiniflareOptions({ ...runtimeOptions, bindings: baseConfiguration }),
-                    );
-                    cloudBindings = await cloudflare.getBindings();
-                    projectObjects = await cloudflare.getDurableObjectNamespace("CHAT_PROJECTS");
+                    await reconfigure();
                 },
                 changePlatformOrigin: async (origin: string) => {
                     baseConfiguration.MORTY_RELAY_URL = origin;
-                    await cloudflare.setOptions(
-                        convertV4MiniflareOptions({ ...runtimeOptions, bindings: baseConfiguration }),
-                    );
-                    cloudBindings = await cloudflare.getBindings();
-                    projectObjects = await cloudflare.getDurableObjectNamespace("CHAT_PROJECTS");
+                    await reconfigure();
+                },
+                changeServiceId: async (serviceId: string) => {
+                    baseConfiguration.MORTY_SERVICE_ID = serviceId;
+                    await reconfigure();
                 },
                 close: async () => {
                     try {

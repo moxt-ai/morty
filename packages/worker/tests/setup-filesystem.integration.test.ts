@@ -72,6 +72,51 @@ if (!isSetupModule(setupModule)) {
 }
 const { runSetup } = setupModule;
 
+type SavedReplacement =
+    | { readonly kind: "unchanged" | "unknown" }
+    | {
+          readonly kind: "revoked";
+          readonly previous:
+              | { readonly kind: "pending"; readonly project_id: string; readonly user_token: string }
+              | { readonly kind: "retired"; readonly project_id: string };
+      };
+
+/** The saved setup state of a ready identity, in the representation setup writes. */
+function savedSetupState(
+    origin: string,
+    identity: { readonly userId: string; readonly token: string; readonly projectId: string },
+    replacement: SavedReplacement = { kind: "unchanged" },
+) {
+    return JSON.stringify({
+        version: 1,
+        base_url: origin,
+        identity: {
+            kind: "ready",
+            user_id: identity.userId,
+            user_token: identity.token,
+            project_id: identity.projectId,
+            unbound_runtime_id: null,
+            replacement,
+        },
+    });
+}
+
+/** The ready identity setup saved in a state directory. */
+async function savedIdentity(state: string) {
+    const saved = v.parse(
+        v.object({
+            identity: v.object({
+                kind: v.literal("ready"),
+                project_id: v.string(),
+                user_token: v.string(),
+                replacement: v.unknown(),
+            }),
+        }),
+        JSON.parse(await readFile(join(state, "config.json"), "utf8")),
+    );
+    return saved.identity;
+}
+
 test.each([
     { replacementState: "fresh", launcher: "npx" },
     { replacementState: "unknown", launcher: "npx" },
@@ -95,7 +140,7 @@ test.each([
                     replacementState === "unknown"
                         ? previous
                         : v.parse(
-                              v.object({ projectId: v.string(), token: v.string() }),
+                              v.object({ userId: v.string(), projectId: v.string(), token: v.string() }),
                               await (
                                   await worker.fetch(
                                       new Request(
@@ -109,19 +154,13 @@ test.each([
                 await claimMortyState(state, AbortSignal.timeout(10000));
                 await writeFile(
                     join(state, "config.json"),
-                    JSON.stringify({
-                        base_url: fixture.origin,
-                        project_id: current.projectId,
-                        user_token: current.token,
-                        replacement_access:
-                            replacementState === "unknown"
-                                ? { kind: "unknown", previousProjectId: previous.projectId }
-                                : {
-                                      kind: "revoked",
-                                      previousProjectId: previous.projectId,
-                                      projectId: current.projectId,
-                                  },
-                    }),
+                    savedSetupState(
+                        fixture.origin,
+                        current,
+                        replacementState === "unknown"
+                            ? { kind: "unknown" }
+                            : { kind: "revoked", previous: { kind: "retired", project_id: previous.projectId } },
+                    ),
                     { mode: 0o600 },
                 );
             }
@@ -346,7 +385,7 @@ process.exitCode = await runSetup(process.argv.slice(2), {
         const config: unknown = JSON.parse(await readFile(configPath, "utf8"));
         expect(config).toMatchObject({
             base_url: fixture.origin,
-            user_token: expect.stringMatching(/^morty_anon_v1_/u),
+            identity: { kind: "ready", user_token: expect.stringMatching(/^morty_anon_v1_/u) },
         });
         if (process.platform === "win32") {
             const execute = promisify(execFile);
@@ -536,17 +575,9 @@ for (const [failure, scenario] of starterFailures) {
                     runtime_id: runtime.runtimeId,
                     connection_id: "managed-test-connection",
                 };
-                await writeFile(
-                    join(state, "config.json"),
-                    JSON.stringify({
-                        base_url: fixture.origin,
-                        user_token: identity.token,
-                        user_id: identity.userId,
-                        project_id: identity.projectId,
-                        workspace: directory,
-                    }),
-                    { mode: 0o600 },
-                );
+                await writeFile(join(state, "config.json"), savedSetupState(fixture.origin, identity), {
+                    mode: 0o600,
+                });
                 await writeFile(join(directory, "connections.json"), JSON.stringify([connection]));
                 await writeFile(join(directory, "attempts.txt"), "0");
                 await writeNpxFixture(
@@ -984,10 +1015,8 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
     await withUpgradeMachine("unavailable", async (runtime, paths) => {
         const first = await setupMachine(runtime, paths);
         expect(first.code, JSON.stringify(first.events)).toBe(0);
-        const config = v.parse(
-            v.object({ project_id: v.string(), user_token: v.string() }),
-            JSON.parse(await readFile(join(paths.state, "config.json"), "utf8")),
-        );
+        const config = await savedIdentity(paths.state);
+        const saved = await readFile(join(paths.state, "config.json"), "utf8");
         const url = v.parse(v.string(), first.events.at(-1)?.["url"]);
         const redeem = async () =>
             await paths.dispatch(
@@ -1020,7 +1049,7 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
                 },
             });
             expect((await session()).status).toBe(200);
-            expect(JSON.parse(await readFile(join(paths.state, "config.json"), "utf8"))).toMatchObject(config);
+            expect(await readFile(join(paths.state, "config.json"), "utf8")).toBe(saved);
         }
 
         const approved = await setupMachine(runtime, paths, undefined, { replaceProject: config.project_id });
@@ -1036,10 +1065,7 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
         expect(retired.status).toBe(401);
         expect((await session()).status).toBe(401);
         expect((await redeem()).status).toBe(410);
-        const current = v.parse(
-            v.object({ project_id: v.string() }),
-            JSON.parse(await readFile(join(paths.state, "config.json"), "utf8")),
-        );
+        const current = await savedIdentity(paths.state);
         expect(current.project_id).not.toBe(config.project_id);
         const diagnostics = approved.events.filter((event) => event["status"] !== "ready");
         expect(JSON.stringify(diagnostics)).not.toContain(config.user_token);
@@ -1061,10 +1087,7 @@ test("Given an approved replacement request times out, When setup is retried wit
     await withUpgradeMachine("unavailable", async (runtime, paths) => {
         const first = await setupMachine(runtime, paths);
         expect(first.code).toBe(0);
-        const config = v.parse(
-            v.object({ project_id: v.string() }),
-            JSON.parse(await readFile(join(paths.state, "config.json"), "utf8")),
-        );
+        const config = await savedIdentity(paths.state);
         await runtime.forgetConnections();
         const uncertain = await setupMachine(runtime, paths, undefined, {
             replaceProject: config.project_id,
@@ -1092,15 +1115,15 @@ test("Given a saved uncertain replacement and a restored local pairing, When set
     await withUpgradeMachine("unavailable", async (runtime, paths) => {
         expect((await setupMachine(runtime, paths)).code).toBe(0);
         const configPath = join(paths.state, "config.json");
-        const config = v.parse(v.record(v.string(), v.unknown()), JSON.parse(await readFile(configPath, "utf8")));
-        const projectId = v.parse(v.string(), config["project_id"]);
+        const config = v.parse(
+            v.looseObject({ identity: v.record(v.string(), v.unknown()) }),
+            JSON.parse(await readFile(configPath, "utf8")),
+        );
+        const projectId = v.parse(v.string(), config.identity["project_id"]);
         // A previous run recorded its intent, but was interrupted before it could record the response.
         await writeFile(
             configPath,
-            JSON.stringify({
-                ...config,
-                replacement_access: { kind: "unknown", previousProjectId: projectId },
-            }),
+            JSON.stringify({ ...config, identity: { ...config.identity, replacement: { kind: "unknown" } } }),
             { mode: 0o600 },
         );
         const blocked = await setupMachine(runtime, paths);
@@ -1126,10 +1149,7 @@ test.each(["replacement_access_revoked", "project_replaced"])(
         await withUpgradeMachine("unavailable", async (runtime, paths) => {
             const first = await setupMachine(runtime, paths);
             expect(first.events.at(-1)).toMatchObject({ status: "ready", project: "created" });
-            const config = v.parse(
-                v.object({ project_id: v.string(), user_token: v.string() }),
-                JSON.parse(await readFile(join(paths.state, "config.json"), "utf8")),
-            );
+            const config = await savedIdentity(paths.state);
             await runtime.forgetConnections();
 
             const stopped = await setupMachine(runtime, paths, undefined, {
@@ -1144,21 +1164,14 @@ test.each(["replacement_access_revoked", "project_replaced"])(
                 },
             });
 
-            const saved = JSON.parse(await readFile(join(paths.state, "config.json"), "utf8"));
+            const saved = await savedIdentity(paths.state);
             if (interruptAt === "replacement_access_revoked") {
-                expect(saved).toMatchObject({
-                    project_id: config.project_id,
-                    replacement_access: { kind: "unknown", previousProjectId: config.project_id },
-                });
+                expect(saved).toMatchObject({ project_id: config.project_id, replacement: { kind: "unknown" } });
             } else {
-                expect(saved).toMatchObject({
-                    replaced_project_id: config.project_id,
-                    replaced_user_token: config.user_token,
-                    replacement_access: {
-                        kind: "revoked",
-                        previousProjectId: config.project_id,
-                        projectId: saved.project_id,
-                    },
+                expect(saved.project_id).not.toBe(config.project_id);
+                expect(saved.replacement).toEqual({
+                    kind: "revoked",
+                    previous: { kind: "pending", project_id: config.project_id, user_token: config.user_token },
                 });
             }
 
@@ -1168,10 +1181,7 @@ test.each(["replacement_access_revoked", "project_replaced"])(
 
             const again = await setupMachine(runtime, paths);
             expect(again.events.at(-1)).toMatchObject({ status: "ready", project: "reused" });
-            const completed = JSON.parse(await readFile(join(paths.state, "config.json"), "utf8"));
-            for (const key of ["replacement_access", "replaced_project_id", "replaced_user_token"]) {
-                expect(completed).not.toHaveProperty(key);
-            }
+            expect((await savedIdentity(paths.state)).replacement).toEqual({ kind: "unchanged" });
         });
     },
 );
@@ -1184,8 +1194,12 @@ test("Given a Machine bound by setup, When the user runs setup again, Then setup
         expect(first.code, JSON.stringify(first.events)).toBe(0);
         // The Worker's binding is the only record, so a reply lost after the Worker bound the Machine leaves the
         // local configuration exactly as a completed run does.
-        const configPath = join(paths.state, "config.json");
-        expect(JSON.parse(await readFile(configPath, "utf8"))).not.toHaveProperty("agent_ref");
+        const saved = v.parse(
+            v.object({ identity: v.record(v.string(), v.unknown()) }),
+            JSON.parse(await readFile(join(paths.state, "config.json"), "utf8")),
+        );
+        expect(saved.identity).toMatchObject({ unbound_runtime_id: null });
+        expect(saved.identity).not.toHaveProperty("agent_ref");
 
         const rerun = await setupMachine(runtime, paths);
         expect(rerun.code, JSON.stringify(rerun.events)).toBe(0);
@@ -1203,11 +1217,7 @@ test("Given two shared links and redeemed access, When the local owner revokes a
     try {
         const owner = await fixture.createAnonymousUser();
         const other = await fixture.createAnonymousUser();
-        const configuration = JSON.stringify({
-            base_url: fixture.origin,
-            user_token: owner.token,
-            project_id: owner.projectId,
-        });
+        const configuration = savedSetupState(fixture.origin, owner);
         await writeFile(join(configurationDirectory, "config.json"), configuration, { mode: 0o600 });
         const request = (projectId: string, path: string, token: string, method = "GET") =>
             fetch(`${fixture.origin}/morty/api/projects/${projectId}${path}`, {
@@ -1253,7 +1263,12 @@ test("Given two shared links and redeemed access, When the local owner revokes a
                 emit: (event) => mismatchEvents.push(event),
             }),
         ).toBe(1);
-        expect(mismatchEvents.at(-1)).toMatchObject({ error: { code: "LOCAL_IDENTITY_REQUIRED" } });
+        expect(mismatchEvents.at(-1)).toMatchObject({
+            error: {
+                code: "SAVED_IDENTITY_ORIGIN_MISMATCH",
+                savedIdentity: { savedBaseUrl: fixture.origin, requestedBaseUrl: "http://127.0.0.1:1" },
+            },
+        });
         const events: Readonly<Record<string, unknown>>[] = [];
         expect(
             await runSetup(["revoke-all-access"], {
@@ -1304,21 +1319,16 @@ test("Given setup replaced the Project but stopped before ending the previous id
             });
         const replaced = await request(previous.projectId, "/management/project/replacement", previous.token, "POST");
         expect(replaced.status).toBe(201);
-        const current = v.parse(v.object({ projectId: v.string(), token: v.string() }), await replaced.json());
+        const current = v.parse(
+            v.object({ userId: v.string(), projectId: v.string(), token: v.string() }),
+            await replaced.json(),
+        );
         // What setup saved before it stopped: the successor's identity, with the previous one still to end.
         await writeFile(
             join(configurationDirectory, "config.json"),
-            JSON.stringify({
-                base_url: fixture.origin,
-                user_token: current.token,
-                project_id: current.projectId,
-                replaced_project_id: previous.projectId,
-                replaced_user_token: previous.token,
-                replacement_access: {
-                    kind: "revoked",
-                    previousProjectId: previous.projectId,
-                    projectId: current.projectId,
-                },
+            savedSetupState(fixture.origin, current, {
+                kind: "revoked",
+                previous: { kind: "pending", project_id: previous.projectId, user_token: previous.token },
             }),
             { mode: 0o600 },
         );
@@ -1337,17 +1347,14 @@ test("Given setup replaced the Project but stopped before ending the previous id
         expect((await request(previous.projectId, "/session", previous.token)).status).toBe(401);
         expect((await request(previous.projectId, "/identity/transfers", previous.token, "POST")).status).toBe(401);
         expect((await request(current.projectId, "/session", current.token)).status).toBe(200);
-        const saved = JSON.parse(await readFile(join(configurationDirectory, "config.json"), "utf8"));
-        expect(saved).toEqual({
-            base_url: fixture.origin,
-            user_token: current.token,
-            project_id: current.projectId,
-            replacement_access: {
-                kind: "revoked",
-                previousProjectId: previous.projectId,
-                projectId: current.projectId,
-            },
-        });
+        expect(JSON.parse(await readFile(join(configurationDirectory, "config.json"), "utf8"))).toEqual(
+            JSON.parse(
+                savedSetupState(fixture.origin, current, {
+                    kind: "revoked",
+                    previous: { kind: "retired", project_id: previous.projectId },
+                }),
+            ),
+        );
     } finally {
         await fixture.close();
         await rm(directory, { recursive: true, force: true });
