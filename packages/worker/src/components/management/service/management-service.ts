@@ -45,8 +45,7 @@ export class ManagementService {
     ) => {
         const token = await bootstrapToken(this.#credentialKey, userId, project.projectId, origin, signal);
         const identity = await this.#authentication.createAnonymous(userId, project.projectId, signal, token);
-        const { appId } = this.#platform.configuration();
-        await this.#platformProjects.save(userId, appId, project, signal);
+        await this.#platformProjects.save(userId, project, signal);
         const { botId, displayName } = await this.#provisionUserBot(identity.userId, signal);
         return { ...identity, bot: { botId, displayName } };
     };
@@ -95,15 +94,12 @@ export class ManagementService {
         return { botId: bot.botId, runtimeId: bot.configuration?.runtimeId ?? null };
     };
 
-    readonly readProject = async (userId: string, signal: AbortSignal) => {
-        const { appId } = this.#platform.configuration();
-        return await this.#platformProjects.read(userId, appId, signal);
-    };
+    readonly readProject = async (userId: string, signal: AbortSignal) =>
+        await this.#platformProjects.read(userId, signal);
 
     /** Creates the successor Project for a user whose Project must be replaced, keeping the user. */
     readonly replaceProject = async (userId: string, signal: AbortSignal) => {
-        const { appId } = this.#platform.configuration();
-        const previous = await this.#platformProjects.read(userId, appId, signal);
+        const previous = await this.#platformProjects.read(userId, signal);
         if (previous === null) {
             throw new PlatformProjectError("PROJECT_REQUIRED", "Finish Morty setup before replacing.", 409);
         }

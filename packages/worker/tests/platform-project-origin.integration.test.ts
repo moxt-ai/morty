@@ -4,10 +4,11 @@ import * as v from "valibot";
 import { expect, test } from "vitest";
 import legacyMapping from "../migrations/project-do/0003_platform_project.sql?raw";
 import platformProjectIdentity from "../migrations/project-do/0033_platform_project_identity.sql?raw";
+import ownerKeyedMapping from "../migrations/project-do/0051_key_project_mapping_by_owner.sql?raw";
 import worker from "../src/application.ts";
 import { APP_ORIGIN, accountRequest, createIdentityFixture } from "./support/identity-fixture.ts";
 
-test("Given a Project mapping saved under an old origin, When its schema is migrated, Then the user's Project and its saved facts are preserved", () => {
+test("Given a Project mapping saved under an old origin and service setting, When its schema is migrated, Then its owner's Project and its saved facts are preserved", () => {
     using database = new DatabaseSync(":memory:");
     database.exec(legacyMapping);
     database
@@ -23,23 +24,47 @@ test("Given a Project mapping saved under an old origin, When its schema is migr
             1793059200000,
         );
 
-    database.exec("BEGIN");
-    database.exec(platformProjectIdentity);
-    database.exec("COMMIT");
+    for (const migration of [platformProjectIdentity, ownerKeyedMapping]) {
+        database.exec("BEGIN");
+        database.exec(migration);
+        database.exec("COMMIT");
+    }
 
-    expect(
-        database
-            .prepare(
-                "SELECT user_id, app_id, project_id, display_name, created_at FROM platform_project_mapping WHERE user_id = ? AND app_id = ?",
-            )
-            .get("usr_existing", "app_morty"),
-    ).toEqual({
+    // The deployment setting no longer names the mapping; its owner alone does.
+    expect(database.prepare("SELECT * FROM platform_project_mapping WHERE user_id = ?").get("usr_existing")).toEqual({
         user_id: "usr_existing",
-        app_id: "app_morty",
         project_id: "prj_existing",
         display_name: "Existing Project",
         created_at: 1793059200000,
     });
+});
+
+test("Given an existing Project, When the deployment's service setting changes, Then the user keeps their Project and can pair a Runtime for it", async () => {
+    const fixture = await createIdentityFixture();
+    try {
+        const identity = await fixture.createAnonymousUser();
+        const projectUrl = `${APP_ORIGIN}/morty/api/projects/${identity.projectId}/management`;
+        const headers = { authorization: `Bearer ${identity.token}` };
+
+        await fixture.changeServiceId("app_reconfigured_service");
+        const environment = fixture.environment();
+
+        const project = await worker.fetch(new Request(`${projectUrl}/project`, { headers }), environment);
+        expect(project.status).toBe(200);
+        expect(await project.json()).toMatchObject({ project: { projectId: identity.projectId } });
+        const pairing = await worker.fetch(
+            new Request(`${projectUrl}/runtime-pairings`, {
+                method: "POST",
+                headers: { ...headers, "content-type": "application/json" },
+                body: JSON.stringify({ idempotencyKey: "reconfigured-service-pairing" }),
+            }),
+            environment,
+        );
+        expect(pairing.status).toBe(201);
+        expect(await pairing.json()).toMatchObject({ projectId: identity.projectId });
+    } finally {
+        await fixture.close();
+    }
 });
 
 test("Given an existing Project and Machine, When the same Platform moves to another origin, Then the user keeps their Project and can pair and replace it", {

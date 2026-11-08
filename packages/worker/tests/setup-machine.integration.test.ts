@@ -11,8 +11,8 @@ import worker from "../src/application.ts";
 import { projectObject } from "../src/gateway/project-object-routing.ts";
 import { createIdentityFixture } from "./support/identity-fixture.ts";
 
-test.each(["current", "retired configuration", "ambiguous Machines"] as const)(
-    "Given %s state, When setup runs again, Then it uses the current Machine or rejects unsupported state without rewriting it",
+test.each(["current", "another service origin", "retired configuration", "ambiguous Machines"] as const)(
+    "Given %s, When setup runs again, Then it continues the saved identity's Machine or refuses without rewriting the saved state",
     {
         timeout: 60_000,
     },
@@ -34,13 +34,13 @@ test.each(["current", "retired configuration", "ambiguous Machines"] as const)(
         );
         cleanup.defer(() => runtime.disconnect());
         let time = Date.parse("2026-10-30T00:00:00Z");
-        const run = async (expectedCode = 0) => {
+        const run = async (expectedCode = 0, origin = fixture.origin) => {
             const events: Readonly<Record<string, unknown>>[] = [];
             const code = await runSetup(
                 [
                     "setup",
                     "--base-url",
-                    fixture.origin,
+                    origin,
                     "--cwd",
                     workspace,
                     "--harness",
@@ -70,12 +70,14 @@ test.each(["current", "retired configuration", "ambiguous Machines"] as const)(
             return v.parse(v.object({ status: v.literal("ready"), botId: v.string(), url: v.string() }), events.at(-1));
         };
         const configurationPath = join(state, "config.json");
-        const configuration = async () =>
-            v.parse(v.record(v.string(), v.unknown()), JSON.parse(await readFile(configurationPath, "utf8")));
+        const savedIdentity = v.object({
+            base_url: v.string(),
+            identity: v.object({ user_id: v.string(), user_token: v.string(), project_id: v.string() }),
+        });
 
         const first = v.parse(v.object({ botId: v.string() }), await run());
-        const saved = await configuration();
-        const identity = v.parse(v.object({ user_id: v.string(), project_id: v.string() }), saved);
+        const saved = v.parse(savedIdentity, JSON.parse(await readFile(configurationPath, "utf8")));
+        const identity = saved.identity;
         if (stateKind === "ambiguous Machines") {
             await projectObject(fixture.environment(fixture.origin), identity.project_id).fetch(
                 new Request("https://project.internal/additional-machine", {
@@ -85,16 +87,31 @@ test.each(["current", "retired configuration", "ambiguous Machines"] as const)(
             );
         }
         if (stateKind === "retired configuration") {
-            await writeFile(configurationPath, JSON.stringify({ ...saved, bot_id: first.botId }));
+            // The representation setup wrote before its saved state was versioned.
+            await writeFile(configurationPath, JSON.stringify({ base_url: saved.base_url, ...identity }));
         }
         if (stateKind !== "current") {
             const original = await readFile(configurationPath, "utf8");
-            const outcome = await run(1);
+            // The same service reached through another origin is still another service to the saved identity.
+            const requested = new URL(fixture.origin);
+            requested.hostname = "localhost";
+            const outcome = await run(1, stateKind === "another service origin" ? requested.origin : fixture.origin);
             expect(outcome).toMatchObject({
-                error: { code: stateKind === "retired configuration" ? "INVALID_CONFIGURATION" : "BOT_STATE_INVALID" },
+                error:
+                    stateKind === "another service origin"
+                        ? {
+                              code: "SAVED_IDENTITY_ORIGIN_MISMATCH",
+                              savedIdentity: { savedBaseUrl: fixture.origin, requestedBaseUrl: requested.origin },
+                          }
+                        : {
+                              code:
+                                  stateKind === "retired configuration" ? "INVALID_CONFIGURATION" : "BOT_STATE_INVALID",
+                          },
             });
             expect(await readFile(configurationPath, "utf8")).toBe(original);
-            return;
+            if (stateKind !== "another service origin") {
+                return;
+            }
         }
 
         const ready = v.parse(v.object({ botId: v.string(), url: v.string() }), await run());
@@ -110,6 +127,9 @@ test.each(["current", "retired configuration", "ambiguous Machines"] as const)(
         expect(ready.botId).toBe(first.botId);
         expect(redeemed.status).toBe(200);
         expect(await redeemed.json()).toMatchObject({ userId: identity.user_id, botId: first.botId });
-        expect(await configuration()).not.toHaveProperty("bot_id");
+        expect(v.parse(savedIdentity, JSON.parse(await readFile(configurationPath, "utf8")))).toMatchObject({
+            base_url: fixture.origin,
+            identity,
+        });
     },
 );

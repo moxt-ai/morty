@@ -87,7 +87,9 @@ approval is still required. Do not request a second approval for the same previo
 authorized replacement, and never carry approval over to a different Project.
 
 On failure, use `error.code` and the private Runtime log, and follow the `nextStep`
-in `error.runtime`, `error.harness` or `error.binding` when present. Fix installation or
+in `error.runtime`, `error.harness`, `error.binding` or `error.savedIdentity` when present.
+`SAVED_IDENTITY_ORIGIN_MISMATCH` means this computer's saved identity belongs to another
+Morty origin; setup changed nothing. Never delete or edit the saved state to get past it. Fix installation or
 authentication for the selected harness; do not silently choose another.
 Keep saved credentials private. Do not output tokens, pairing tickets, or private
 configuration; only the ready handoff URL is intended for the user.

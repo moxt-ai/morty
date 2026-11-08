@@ -93,8 +93,7 @@ test("Given a browser opened the saved Machine's link, When the user approves re
     );
 
     expect(connected.identity.projectId).not.toBe(original.identity.projectId);
-    expect(connected.configuration).not.toHaveProperty("replaced_project_id");
-    expect(connected.configuration).not.toHaveProperty("replaced_user_token");
+    expect(connected.configuration["replacement"]).toEqual({ kind: "unchanged" });
     const session = await page.request.get(
         `${runtime.origin}/morty/api/projects/${original.identity.projectId}/session`,
         { headers: { authorization: `Bearer ${String(previousToken)}` } },

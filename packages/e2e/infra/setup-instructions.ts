@@ -61,9 +61,12 @@ export async function followSetupInstructions(options: {
     assert.equal(exitCode, 0, JSON.stringify(events));
     const ready = events.find((event) => event["status"] === "ready");
     assert.ok(ready);
+    // The ready identity setup saved for this service.
     const configuration = object(
-        JSON.parse(await readFile(join(options.state, "config.json"), "utf8")),
-        "local configuration",
+        object(JSON.parse(await readFile(join(options.state, "config.json"), "utf8")), "local configuration")[
+            "identity"
+        ],
+        "saved identity",
     );
     return {
         configuration,

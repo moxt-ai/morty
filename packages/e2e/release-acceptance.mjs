@@ -125,7 +125,7 @@ try {
         ]);
     } finally {
         try {
-            identity = JSON.parse(await readFile(join(state, "config.json"), "utf8"));
+            identity = JSON.parse(await readFile(join(state, "config.json"), "utf8")).identity;
             receipt.projectId = identity.project_id;
             await writeFile(
                 join(output, `${label}-owned-project.json`),
