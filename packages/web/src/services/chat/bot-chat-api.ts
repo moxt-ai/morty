@@ -345,7 +345,6 @@ export class BotChatApi {
         conversationKey: string,
         settings: ChatDraftConfiguration,
         signal: AbortSignal,
-        title = "New chat",
     ): Promise<ChatAccess> =>
         v.parse(
             accessSchema,
@@ -356,7 +355,6 @@ export class BotChatApi {
                     agentRef: settings.agentRef,
                     configurations: settings.configurations,
                     conversationKey,
-                    title,
                     workspaceRef: settings.workspaceRef,
                 },
                 signal,

@@ -66,19 +66,35 @@ function sessionConfigurationMatches(option: SessionConfigOption, selection: Ses
         : option.currentValue === selection.value;
 }
 
+/**
+ * What a selection the Agent does not offer does. A Turn keeps the Agent's own value, since the member chose its
+ * settings against an older snapshot; a Session being created refuses, since it must start with exactly what was asked.
+ */
+export type UnavailableSelection = "ignore" | "refuse";
+
+function sessionConfigurationConflict(message: string): AcpExecutionError {
+    return new AcpExecutionError(message, {}, "session_configuration_conflict");
+}
+
 function assertAppliedSessionConfiguration(
     options: readonly SessionConfigOption[],
     selections: readonly SessionConfigurationSelection[],
+    unavailable: UnavailableSelection,
 ): void {
-    const selectionsById = new Map(selections.map((selection) => [selection.configId, selection]));
-    for (const option of options) {
-        const selection = selectionsById.get(option.id);
-        if (selection === undefined || !sessionConfigurationSelectionIsAvailable(option, selection)) {
+    for (const selection of selections) {
+        const option = options.find((candidate) => candidate.id === selection.configId);
+        const holds =
+            option !== undefined && sessionConfigurationSelectionIsAvailable(option, selection)
+                ? sessionConfigurationMatches(option, selection)
+                : unavailable === "ignore";
+        if (holds) {
             continue;
         }
-        if (!sessionConfigurationMatches(option, selection)) {
-            throw invalidSessionConfiguration(`The Turn configuration does not match Agent setting ${option.id}`);
-        }
+        throw unavailable === "refuse"
+            ? sessionConfigurationConflict(
+                  `The Agent did not retain the selected setting "${selection.configId}". Review the settings and try again.`,
+              )
+            : invalidSessionConfiguration(`The Turn configuration does not match Agent setting ${selection.configId}`);
     }
 }
 
@@ -92,10 +108,34 @@ function unavailableSessionConfigurationCategory(selection: SessionConfiguration
     return "unknown";
 }
 
+/** Why the Agent cannot take a selection as stated, or null when it can. */
+function unavailableReason(
+    option: SessionConfigOption | undefined,
+    selection: SessionConfigurationSelection,
+): "setting_unavailable" | "setting_schema_mismatch" | "selection_schema_mismatch" | "value_unavailable" | null {
+    if (option === undefined) {
+        return "setting_unavailable";
+    }
+    if (option.type !== selection.valueType) {
+        return "setting_schema_mismatch";
+    }
+    if (
+        (option.type === "boolean" && selection.value.length > 0) ||
+        (option.type === "select" && selection.booleanValue)
+    ) {
+        return "selection_schema_mismatch";
+    }
+    if (option.type === "select" && !option.values.some((value) => value.value === selection.value)) {
+        return "value_unavailable";
+    }
+    return null;
+}
+
 async function applySessionConfigurationSelection(
     sessions: SessionManager,
     options: readonly SessionConfigOption[],
     selection: SessionConfigurationSelection,
+    unavailable: UnavailableSelection,
     agent: AcpAgentDefinition,
     adapter: Adapter,
     cwd: string,
@@ -105,58 +145,25 @@ async function applySessionConfigurationSelection(
     signal: AbortSignal,
 ): Promise<readonly SessionConfigOption[]> {
     const option = options.find((candidate) => candidate.id === selection.configId);
-    if (option === undefined) {
+    const reason = unavailableReason(option, selection);
+    if (reason !== null) {
+        if (unavailable === "refuse") {
+            throw sessionConfigurationConflict(
+                `The selected Agent setting "${selection.configId}" is no longer available. Refresh the settings and try again.`,
+            );
+        }
         warnIgnoredSetting(
             "session_configuration_setting_ignored",
             commandId,
             sessionId,
             agent.id,
             selection,
-            unavailableSessionConfigurationCategory(selection),
-            "setting_unavailable",
+            option?.category ?? unavailableSessionConfigurationCategory(selection),
+            reason,
         );
         return options;
     }
-    if (option.type !== selection.valueType) {
-        warnIgnoredSetting(
-            "session_configuration_setting_ignored",
-            commandId,
-            sessionId,
-            agent.id,
-            selection,
-            option.category,
-            "setting_schema_mismatch",
-        );
-        return options;
-    }
-    if (
-        (option.type === "boolean" && selection.value.length > 0) ||
-        (option.type === "select" && selection.booleanValue)
-    ) {
-        warnIgnoredSetting(
-            "session_configuration_setting_ignored",
-            commandId,
-            sessionId,
-            agent.id,
-            selection,
-            option.category,
-            "selection_schema_mismatch",
-        );
-        return options;
-    }
-    if (option.type === "select" && !option.values.some((value) => value.value === selection.value)) {
-        warnIgnoredSetting(
-            "session_configuration_setting_ignored",
-            commandId,
-            sessionId,
-            agent.id,
-            selection,
-            option.category,
-            "value_unavailable",
-        );
-        return options;
-    }
-    if (sessionConfigurationMatches(option, selection)) {
+    if (option === undefined || sessionConfigurationMatches(option, selection)) {
         return options;
     }
     return (
@@ -176,10 +183,15 @@ async function applySessionConfigurationSelection(
     ).configOptions;
 }
 
+/**
+ * Applies a complete set of selections in dependency order, so a setting that decides another's choices comes first,
+ * then checks that every applied selection still holds, since a later setting can change an earlier one.
+ */
 export async function applyCompleteSessionConfiguration(
     sessions: SessionManager,
     initialOptions: readonly SessionConfigOption[],
     selections: readonly SessionConfigurationSelection[],
+    unavailable: UnavailableSelection,
     agent: AcpAgentDefinition,
     adapter: Adapter,
     cwd: string,
@@ -194,6 +206,7 @@ export async function applyCompleteSessionConfiguration(
             sessions,
             options,
             selection,
+            unavailable,
             agent,
             adapter,
             cwd,
@@ -203,7 +216,7 @@ export async function applyCompleteSessionConfiguration(
             signal,
         );
     }
-    assertAppliedSessionConfiguration(options, selections);
+    assertAppliedSessionConfiguration(options, selections, unavailable);
 }
 
 function warnIgnoredSetting(

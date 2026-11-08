@@ -899,7 +899,7 @@ export const createBotChatHomeStore = (
                         ...(current.creation.kind === "draft" ? { draft: "" } : {}),
                     }));
                     try {
-                        access = await requests.createConversation(botId, commandId, settings, signal, title);
+                        access = await requests.createConversation(botId, commandId, settings, signal);
                         signal.throwIfAborted();
                         set((state) => ({
                             creation: transitionConversationCreation(state.creation, {

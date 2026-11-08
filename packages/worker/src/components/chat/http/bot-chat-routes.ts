@@ -67,7 +67,6 @@ const accessInput = v.union([
         agentRef: platformIdentifier,
         conversationKey: platformIdentifier,
         configurations: sessionConfigurations,
-        title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(500)),
         workspaceRef: nativeDirectoryId,
     }),
 ]);

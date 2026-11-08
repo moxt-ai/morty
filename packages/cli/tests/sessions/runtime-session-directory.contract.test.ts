@@ -25,6 +25,7 @@ for (const client of ["SDK", "HTTP"] as const) {
             const request = {
                 additionalDirectoryIds: [],
                 agentId: "claude",
+                configurations: [],
                 directoryId: "default",
                 runtimeId: runtime.runtimeId,
                 sessionId,
@@ -147,6 +148,7 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
         await runtime.client.sessions.create(
             {
                 ...identity,
+                configurations: [],
                 runtimeId: runtime.runtimeId,
                 sessionId,
             },
@@ -210,6 +212,7 @@ it("Given a Session with an additional directory, When the App prompts it and re
             {
                 additionalDirectoryIds: [additionalDirectoryId],
                 agentId: "claude",
+                configurations: [],
                 directoryId: "default",
                 runtimeId: runtime.runtimeId,
                 sessionId,

@@ -3,7 +3,7 @@ import { MAX_WORKSPACE_PATH_LENGTH } from "../../shared/directory.ts";
 
 import { identifierStringSchema as IDENTIFIER } from "../../shared/identifier.ts";
 import { decodeZodMessage as decode, encodeZodMessage as encode } from "../../shared/message-codec.ts";
-import { sessionConfigOptionsSchema } from "../configuration/index.ts";
+import { sessionConfigOptionsSchema, sessionConfigurationSelectionsSchema } from "../configuration/index.ts";
 import {
     DIRECTORY_IDENTIFIER,
     sessionCapabilitiesSchema,
@@ -121,15 +121,11 @@ export type SessionCloseCommand = z.infer<typeof sessionCloseCommandSchema>;
 const sessionPrepareCommandSchema = z
     .object({
         ...sessionIdentityFields,
-        configuration: z
-            .object({
-                booleanValue: z.boolean(),
-                configId: z.string().min(1).max(128),
-                value: z.string().max(500),
-                valueType: z.enum(["boolean", "select"]),
-            })
-            .readonly()
-            .optional(),
+        /**
+         * The complete settings a new Session starts with. The Runtime applies them in dependency order as part of
+         * creating the Session: it answers only once every selection holds, and otherwise creates nothing.
+         */
+        configurations: sessionConfigurationSelectionsSchema.optional(),
         kind: z.literal(SESSION_PREPARE_KIND),
         requestId: IDENTIFIER,
         sessionState: z.literal("provisioned").optional(),
@@ -142,6 +138,16 @@ const sessionPrepareCommandSchema = z
                 code: "custom",
                 message: "A transient Session cannot already be provisioned",
                 path: ["sessionState"],
+            });
+        }
+        if (
+            command.configurations !== undefined &&
+            (command.transient === true || command.sessionState !== undefined)
+        ) {
+            context.addIssue({
+                code: "custom",
+                message: "Only a Session being created states its initial settings",
+                path: ["configurations"],
             });
         }
     })
