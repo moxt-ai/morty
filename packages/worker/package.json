@@ -5,7 +5,6 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "db:generate:project-do": "drizzle-kit generate --config ../../drizzle/drizzle.project-do.config.ts",
         "db:codegen": "node ../../scripts/generate-sql-modules.ts",
         "pretest": "pnpm db:codegen",
         "pretypecheck": "pnpm db:codegen",
@@ -19,12 +18,12 @@
     },
     "devDependencies": {
         "@morty-build/platform-test-support": "workspace:*",
-        "drizzle-kit": "catalog:",
         "esbuild": "catalog:",
         "miniflare": "catalog:"
     },
     "dependencies": {
         "@morty-build/client": "workspace:*",
+        "@morty-build/relay-core": "workspace:*",
         "drizzle-orm": "catalog:",
         "hono": "catalog:",
         "pino": "catalog:",

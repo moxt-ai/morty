@@ -2,6 +2,7 @@ import { abortAllDurableObjects, evictDurableObject, runInDurableObject } from "
 import { env } from "cloudflare:workers";
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { DurableObjectDatabaseAdapter, DurableObjectSqlDatabase } from "@morty-build/relay-core";
+import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
 import {
     channelAccessGrant,
     channelHostCredential,
@@ -19,8 +20,6 @@ import {
 } from "../../relay-core/src/entity/pairing/pairing.ts";
 import { RuntimeDirectoryStorage } from "../../relay-core/src/storage/runtime-directory-storage.ts";
 import { projectDurableObjectMigrations } from "../src/generated/project-do-migrations.ts";
-import { pairingChannel } from "../src/schema/legacy-project-do/pairing-channel.ts";
-import { initializeProjectDurableObjectSchema } from "../src/storage/project-durable-object-schema.ts";
 import { SqlitePlatformProjectStore } from "../src/storage/sqlite-platform-project-store.ts";
 import { createPlatformGateways, PlatformAuthenticationConfiguration } from "../src/worker.ts";
 
@@ -398,96 +397,6 @@ it("Given expired links and stored links shortened by an older revoker, When the
     });
 });
 
-interface LegacyPairing {
-    readonly pairing: Pairing;
-    readonly key: string;
-    readonly status: "pending" | "paired" | "expired" | "revoked";
-    readonly daemonToken: string | null;
-    readonly claimedAt: number | null;
-    readonly revokedAt: number | null;
-}
-
-async function legacyDatabase(storage: DurableObjectStorage): Promise<DurableObjectSqlDatabase> {
-    await storage.deleteAll();
-    const database = new DurableObjectSqlDatabase(storage);
-    database.run("CREATE TABLE project_schema_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL) STRICT");
-    for (const migration of projectDurableObjectMigrations) {
-        if (migration.name === "0004_add_runtime_pairing_records.sql") {
-            break;
-        }
-        database.run(migration.sql);
-        database.run("INSERT INTO project_schema_migrations (name, applied_at) VALUES (?, ?)", [
-            migration.name,
-            Date.now(),
-        ]);
-    }
-    return database;
-}
-
-async function insertLegacyPairing(
-    database: DurableObjectSqlDatabase,
-    row: LegacyPairing,
-    ownerId: string,
-    slot: number,
-) {
-    database.orm
-        .insert(pairingChannel)
-        .values({
-            pairingId: row.pairing.pairingId,
-            runtimeId: row.pairing.runtimeId,
-            channelId: row.pairing.channelId,
-            projectId: row.pairing.projectId,
-            pairingCodeHash: await hashSecret(row.pairing.pairingCode),
-            pollTokenHash: await hashSecret(row.pairing.pollToken),
-            status: row.status,
-            createdAt: Date.parse(row.pairing.expiresAt) - 600_000,
-            expiresAt: Date.parse(row.pairing.expiresAt),
-            creationIdempotencyKey: row.key,
-            createdByOwnerCredentialId: ownerId,
-            runtimeSlot: slot,
-            daemonTokenHash: row.daemonToken === null ? null : await hashSecret(row.daemonToken),
-            claimedAt: row.claimedAt,
-            revokedAt: row.revokedAt,
-            revokedByOwnerCredentialId: row.revokedAt === null ? null : ownerId,
-            machineName: row.claimedAt === null ? "" : "Legacy machine",
-            workspaceName: row.claimedAt === null ? "" : "Legacy workspace",
-            agentsJson: "[]",
-        })
-        .run();
-}
-
-it.each(["pending", "paired", "expired", "revoked"] as const)(
-    "Given retained %s pairing records, When current Morty initializes storage, Then it rejects the retired format without converting or deleting records",
-    async (status) => {
-        const app = await project();
-        const pairing = await app.pair("retired-state");
-        await app.storage(async (storage) => {
-            const database = await legacyDatabase(storage);
-            await insertLegacyPairing(
-                database,
-                {
-                    pairing,
-                    key: "retired-state",
-                    status,
-                    daemonToken: status === "paired" ? "D".repeat(43) : null,
-                    claimedAt: status === "paired" ? Date.now() : null,
-                    revokedAt: status === "revoked" ? Date.now() : null,
-                },
-                app.credentialId,
-                1,
-            );
-            const before = database.orm.select().from(pairingChannel).all();
-            for (let retry = 0; retry < 2; retry += 1) {
-                expect(() => initializeProjectDurableObjectSchema(database)).toThrowError(
-                    expect.objectContaining({ code: "retired_pairing_state" }),
-                );
-                expect(database.orm.select().from(pairingChannel).all()).toEqual(before);
-                expect(database.query("SELECT runtime_id FROM runtimes")).toEqual([]);
-            }
-        });
-    },
-);
-
 it("Given one available Runtime place, When distinct requests compete, Then exactly one reserves it and retries keep the same identity", async () => {
     const app = await project();
     await Promise.all(
@@ -561,20 +470,11 @@ it("Given stored Relay control host leases beside other Channel credentials, Whe
     const app = await project();
     const remaining = await app.storage(async (storage) => {
         await storage.deleteAll();
-        const database = new DurableObjectSqlDatabase(storage);
-        database.run(
-            "CREATE TABLE project_schema_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL) STRICT",
+        const upgrade = projectDurableObjectMigrations.findIndex(
+            (migration) => migration.name === "0008_remove_control_host_leases.sql",
         );
-        for (const migration of projectDurableObjectMigrations) {
-            if (migration.name === "0008_remove_control_host_leases.sql") {
-                break;
-            }
-            database.run(migration.sql);
-            database.run("INSERT INTO project_schema_migrations (name, applied_at) VALUES (?, ?)", [
-                migration.name,
-                Date.now(),
-            ]);
-        }
+        applyDurableObjectMigrations(storage, projectDurableObjectMigrations.slice(0, upgrade));
+        const database = new DurableObjectSqlDatabase(storage);
         const credential = (credentialId: string, authority: "owner" | "linked", sourceGrantId: string | null) =>
             database.run(
                 `INSERT INTO channel_host_credentials
@@ -585,7 +485,7 @@ it("Given stored Relay control host leases beside other Channel credentials, Whe
         credential("ctl_lease", "linked", null);
         credential("ctlX_owner", "owner", null);
         credential("lnk_device", "linked", "grant-device");
-        initializeProjectDurableObjectSchema(database);
+        applyDurableObjectMigrations(storage, projectDurableObjectMigrations);
         return database.query("SELECT credential_id FROM channel_host_credentials ORDER BY credential_id");
     });
     expect(remaining).toEqual([{ credential_id: "ctlX_owner" }, { credential_id: "lnk_device" }]);

@@ -2,7 +2,12 @@ import { and, desc, eq, exists, gt, isNull, sql } from "drizzle-orm";
 import type { AuthorizedChannelRow, LinkedDeviceRow } from "../entity/pairing/pairing-records.ts";
 import { relayDrizzle } from "../infra/drizzle-database.ts";
 import type { SqlDatabase } from "../infra/sql-database.ts";
-import { channelAccessGrant, channelHostCredential, runtimeIdentity } from "../schema/project-do/index.ts";
+import {
+    channelAccessGrant,
+    channelHostCredential,
+    projectBrowserCredential,
+    runtimeIdentity,
+} from "../schema/project-do/index.ts";
 import { hostCredentialValid } from "./host-credential-validity.ts";
 
 /** Host, access grant and browser credentials in the Project's own storage. */
@@ -50,7 +55,8 @@ export class PairingStorage {
         return touched.length === 1;
     };
 
-    readonly createGrant = (
+    /** Records a single-use access grant; false when it was not recorded. */
+    readonly createGrant = async (
         grantId: string,
         channelId: string,
         secretHash: string,
@@ -58,15 +64,16 @@ export class PairingStorage {
         now: number,
         expiresAt: number,
         signal: AbortSignal,
-    ) =>
-        this.#database
-            .prepare(`
-        INSERT INTO channel_access_grants (grant_id, channel_id, secret_hash, created_by_credential_id, created_at, expires_at)
-        VALUES (?, ?, ?, ?, ?, ?)`)
-            .bind(grantId, channelId, secretHash, credentialId, now, expiresAt)
-            .run(signal);
+    ): Promise<boolean> => {
+        const created = await relayDrizzle(this.#database, signal)
+            .insert(channelAccessGrant)
+            .values({ grantId, channelId, secretHash, createdByCredentialId: credentialId, createdAt: now, expiresAt })
+            .returning({ grantId: channelAccessGrant.grantId });
+        return created.length === 1;
+    };
 
-    readonly createBrowser = (
+    /** Records a browser credential issued by `ownerId`; false when it was not recorded. */
+    readonly createBrowser = async (
         credentialId: string,
         projectId: string,
         tokenHash: string,
@@ -74,13 +81,21 @@ export class PairingStorage {
         now: number,
         expiresAt: number,
         signal: AbortSignal,
-    ) =>
-        this.#database
-            .prepare(`
-        INSERT INTO project_browser_credentials (credential_id, project_id, token_hash,
-            created_by_credential_id, created_at, expires_at, last_used_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-            .bind(credentialId, projectId, tokenHash, ownerId, now, expiresAt, now)
-            .run(signal);
+    ): Promise<boolean> => {
+        const created = await relayDrizzle(this.#database, signal)
+            .insert(projectBrowserCredential)
+            .values({
+                credentialId,
+                projectId,
+                tokenHash,
+                createdByCredentialId: ownerId,
+                createdAt: now,
+                expiresAt,
+                lastUsedAt: now,
+            })
+            .returning({ credentialId: projectBrowserCredential.credentialId });
+        return created.length === 1;
+    };
 
     readonly listLinked = async (channelId: string, signal: AbortSignal): Promise<readonly LinkedDeviceRow[]> => {
         const database = relayDrizzle(this.#database, signal);
@@ -185,26 +200,61 @@ export class PairingStorage {
         return rows[0] ?? null;
     };
 
-    readonly revokeLinked = (channelId: string, credentialId: string, now: number, signal: AbortSignal) =>
-        this.#database
-            .prepare(`
-        UPDATE channel_host_credentials SET revoked_at = ? WHERE credential_id = ? AND channel_id = ?
-            AND authority = 'linked' AND revoked_at IS NULL`)
-            .bind(now, credentialId, channelId)
-            .run(signal);
+    /** Revokes an active linked device; false when no active linked device matched. */
+    readonly revokeLinked = async (
+        channelId: string,
+        credentialId: string,
+        now: number,
+        signal: AbortSignal,
+    ): Promise<boolean> => {
+        const revoked = await relayDrizzle(this.#database, signal)
+            .update(channelHostCredential)
+            .set({ revokedAt: now })
+            .where(
+                and(
+                    eq(channelHostCredential.credentialId, credentialId),
+                    eq(channelHostCredential.channelId, channelId),
+                    eq(channelHostCredential.authority, "linked"),
+                    isNull(channelHostCredential.revokedAt),
+                ),
+            )
+            .returning({ credentialId: channelHostCredential.credentialId });
+        return revoked.length === 1;
+    };
 
-    readonly readLinked = (channelId: string, credentialId: string, signal: AbortSignal) =>
-        this.#database
-            .prepare(`
-        SELECT credential_id FROM channel_host_credentials WHERE credential_id = ? AND channel_id = ? AND authority = 'linked'`)
-            .bind(credentialId, channelId)
-            .first<{ readonly credential_id: string }>(signal);
+    /** Whether the linked device exists, revoked or not. */
+    readonly hasLinked = async (channelId: string, credentialId: string, signal: AbortSignal): Promise<boolean> => {
+        const rows = await relayDrizzle(this.#database, signal)
+            .select({ credentialId: channelHostCredential.credentialId })
+            .from(channelHostCredential)
+            .where(
+                and(
+                    eq(channelHostCredential.credentialId, credentialId),
+                    eq(channelHostCredential.channelId, channelId),
+                    eq(channelHostCredential.authority, "linked"),
+                ),
+            )
+            .limit(1);
+        return rows.length === 1;
+    };
 
-    readonly revokeBrowser = (projectId: string, credentialId: string, now: number, signal: AbortSignal) =>
-        this.#database
-            .prepare(`
-        UPDATE project_browser_credentials SET revoked_at = COALESCE(revoked_at, ?)
-        WHERE credential_id = ? AND project_id = ?`)
-            .bind(now, credentialId, projectId)
-            .run(signal);
+    /** Revokes a browser credential of the Project, keeping its first revocation time; false when none matched. */
+    readonly revokeBrowser = async (
+        projectId: string,
+        credentialId: string,
+        now: number,
+        signal: AbortSignal,
+    ): Promise<boolean> => {
+        const revoked = await relayDrizzle(this.#database, signal)
+            .update(projectBrowserCredential)
+            .set({ revokedAt: sql`coalesce(${projectBrowserCredential.revokedAt}, ${now})` })
+            .where(
+                and(
+                    eq(projectBrowserCredential.credentialId, credentialId),
+                    eq(projectBrowserCredential.projectId, projectId),
+                ),
+            )
+            .returning({ credentialId: projectBrowserCredential.credentialId });
+        return revoked.length === 1;
+    };
 }

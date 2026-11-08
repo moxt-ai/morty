@@ -5,9 +5,9 @@ import {
     decodeSessionRecordingHistory,
     decodeSessionRecordingHistoryPage,
 } from "@morty-build/client/protocol";
+import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { recordingDirectoryDurableObjectMigrations } from "../src/generated/recording-directory-do-migrations.ts";
-import { applyDurableObjectMigrations } from "../src/storage/durable-object-migrations.ts";
 import { createRecordingWorker, RecordingDirectoryDurableObject } from "../src/worker.ts";
 
 let testNumber = 0;
@@ -249,8 +249,7 @@ it("Given a directory with a stale persisted status, When it upgrades, Then V2 p
     const stub = env.RECORDING_DIRECTORY.getByName(JSON.stringify([projectId, "runtime-live"]));
     const response = await runInDurableObject(stub, async (_instance, state) => {
         // Restore the deployed pre-removal schema with its original, immutable migrations.
-        state.storage.sql.exec("DROP TABLE recording_session_summaries");
-        state.storage.sql.exec("DELETE FROM recording_schema_migrations");
+        await state.storage.deleteAll();
         applyDurableObjectMigrations(state.storage, recordingDirectoryDurableObjectMigrations.slice(0, 3));
         state.storage.sql.exec(
             `INSERT INTO recording_session_summaries
