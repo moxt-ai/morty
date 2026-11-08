@@ -23,12 +23,11 @@ test("Given Claude Code compacts a conversation with content, When the daemon re
                     bindingId: peer.bindingId,
                     commandId: randomUUID(),
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
                     sessionId: peer.sessionId,
-                    targetCommandId: "",
                 }),
             );
         };

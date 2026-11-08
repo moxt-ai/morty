@@ -27,7 +27,9 @@ export type RuntimeExecutionReceipt =
           state: "settled" | "unsettled";
       }>
     | { readonly kind: "conflict" }
-    | { readonly kind: "expired" };
+    | { readonly kind: "expired" }
+    // The Session did not admit the new command; nothing is recorded, so its identifier stays unused.
+    | { readonly kind: "refused" };
 
 /**
  * An outcome a restart publishes: one the restart itself settles (a command it interrupted), or one the previous
@@ -445,7 +447,16 @@ export class ExecutionReceipts {
         return recovered;
     };
 
-    readonly claimExecution = (commandId: string, sessionId: string, commandJson: string): RuntimeExecutionReceipt => {
+    /**
+     * Claims a command's identifier for the Session. A known identifier is answered from the ledger; a new command is
+     * recorded only when `admits` accepts it in the same step, so a command the Session refuses leaves no record.
+     */
+    readonly claimExecution = (
+        commandId: string,
+        sessionId: string,
+        commandJson: string,
+        admits: () => boolean,
+    ): RuntimeExecutionReceipt => {
         const commandHash = createHash("sha256").update(commandJson).digest("hex");
         const standing = this.#standing(commandId, sessionId);
         switch (standing.kind) {
@@ -470,6 +481,9 @@ export class ExecutionReceipts {
                 break;
             default:
                 return standing satisfies never;
+        }
+        if (!admits()) {
+            return { kind: "refused" };
         }
         const attemptId = randomUUID();
         this.#ledger.admit({ attemptId, commandHash, commandId, sessionId });

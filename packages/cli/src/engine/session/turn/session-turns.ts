@@ -1,8 +1,7 @@
 import type { NativeSessionResult, SessionLiveEvent, SessionPromptCommand } from "@morty-build/client/protocol";
-import type { ActiveRuntimeTurn, RecordedSessionEvent } from "./active-turn.ts";
+import type { ActiveRuntimeTurn, PromptDispatch, RecordedSessionEvent } from "./active-turn.ts";
 import type { ExecutionReceipts } from "./execution-receipts.ts";
 import { RuntimeTurnActivity } from "./runtime-turn-activity.ts";
-import type { SessionAdmission } from "./session-execution.ts";
 import { SessionExecutionState } from "./session-execution.ts";
 
 type QueuedTurnSnapshot = Extract<NativeSessionResult, { readonly action: "active-turn" }>["queued"];
@@ -98,7 +97,7 @@ export class SessionTurns {
         turn: ActiveRuntimeTurn,
         waitSignal: AbortSignal,
         onQueued: () => void,
-    ): Promise<SessionAdmission> => this.session(turn.command.sessionId).admitAndWait(turn, waitSignal, onQueued);
+    ): Promise<PromptDispatch> => this.session(turn.command.sessionId).admitAndWait(turn, waitSignal, onQueued);
 
     /** Discards empty session states so the index does not grow unboundedly. */
     readonly sweep = (): void => {

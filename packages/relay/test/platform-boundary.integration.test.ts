@@ -768,12 +768,11 @@ describe.sequential("Platform Session-only boundary", () => {
                     bindingId: "workspace",
                     commandId: "local-codex-command",
                     directoryId: "root",
-                    disposition: "reject",
+                    disposition: "append",
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "show the local answer",
                     sessionId,
-                    targetCommandId: "",
                 }),
             );
             const prompt = decodeServiceToDaemonMessage(await daemonMessages.next());
@@ -2457,10 +2456,9 @@ describe.sequential("Platform Turn submission", () => {
                 body: {
                     attachments: [],
                     content: "Continue in the Session's own directory.",
-                    disposition: "reject",
+                    disposition: "append",
                     idempotencyKey: "binding-lookup-turn",
                     sessionConfigurations: [],
-                    targetCommandId: "",
                 },
             });
             const lookup = await Promise.race([
@@ -2633,12 +2631,11 @@ describe.sequential("Platform Turn submission", () => {
                             bindingId: "workspace",
                             commandId: "read-only-prompt",
                             directoryId: "root",
-                            disposition: "reject",
+                            disposition: "append",
                             kind: "session.prompt",
                             prompt: "Sent without Session write access",
                             sessionConfigurations: [],
                             sessionId: runtime.sessionId,
-                            targetCommandId: "",
                         }),
                     ),
                 ),
@@ -2660,10 +2657,10 @@ describe.sequential("Platform Turn submission", () => {
     // @no-uc: Compatibility; malformed control requests must be distinguishable from retryable server failures.
     it.each([
         {
-            label: "unsupported queue disposition",
+            label: "unsupported append disposition",
             path: "/turns/app-command/disposition",
             method: "PUT",
-            body: { disposition: "queue" },
+            body: { disposition: "append" },
         },
         {
             label: "invalid permission decision",
@@ -2774,11 +2771,10 @@ describe.sequential("Platform Turn submission", () => {
                     agentId: "codex",
                     content: "Describe the pasted screenshot.",
                     directoryId: "root",
-                    disposition: "reject",
+                    disposition: "append",
                     idempotencyKey,
                     attachments: [attachment],
                     sessionConfigurations: [],
-                    targetCommandId: "",
                 },
             });
             const first = await Promise.race([
@@ -3227,8 +3223,8 @@ describe.sequential("Platform Turn submission", () => {
                 turnId: "long-first-turn",
             });
 
-            // A queue-disposition Turn is acknowledged by the V2 queue change
-            // the daemon records as the prompt enters its queue.
+            // An appended Turn the Runtime queues is acknowledged by the V2 queue change naming it, which the
+            // daemon records as the prompt enters its queue.
             const queuedTurn = worker.fetch(
                 new Request(`${relayOrigin}${MORTY_API_PREFIX}/v1/projects/${projectId}/sessions/${sessionId}/turns`, {
                     body: JSON.stringify({
@@ -3236,10 +3232,8 @@ describe.sequential("Platform Turn submission", () => {
                         agentId: "codex",
                         content: "queue this follow-up",
                         directoryId: "root",
-                        disposition: "queue",
                         idempotencyKey: "queued-follow-up",
                         attachments: [],
-                        targetCommandId: "long-first-turn",
                     }),
                     headers: credentialHeaders(text(sessionAccess, "credential")),
                     method: "POST",
@@ -3258,7 +3252,7 @@ describe.sequential("Platform Turn submission", () => {
                             sessionGenerationId: "session-generation-1",
                             sessionId,
                             type: "lifecycle-metadata",
-                            payload: { kind: "session.queue.changed" },
+                            payload: { changedByCommandId: "queued-follow-up", kind: "session.queue.changed" },
                         },
                     ],
                 }),
@@ -3279,10 +3273,8 @@ describe.sequential("Platform Turn submission", () => {
                         agentId: "codex",
                         content: "queue behind the foreign queue change",
                         directoryId: "root",
-                        disposition: "queue",
                         idempotencyKey: "cross-session-queued",
                         attachments: [],
-                        targetCommandId: "long-first-turn",
                     }),
                     headers: credentialHeaders(text(sessionAccess, "credential")),
                     method: "POST",
@@ -3301,7 +3293,7 @@ describe.sequential("Platform Turn submission", () => {
                             sessionGenerationId: "session-generation-1",
                             sessionId: "another-session",
                             type: "lifecycle-metadata",
-                            payload: { kind: "session.queue.changed" },
+                            payload: { changedByCommandId: "cross-session-queued", kind: "session.queue.changed" },
                         },
                     ],
                 }),
@@ -3349,11 +3341,10 @@ describe.sequential("Platform Turn submission", () => {
                                     agentId: "codex",
                                     content: "describe this",
                                     directoryId: "root",
-                                    disposition: "reject",
+                                    disposition: "append",
                                     idempotencyKey: "invalid-runtime-turn",
                                     attachments: [{ kind: "image" }],
                                     sessionConfigurations: [],
-                                    targetCommandId: "",
                                 }),
                                 headers: credentialHeaders(appCredential),
                                 method: "POST",
@@ -4099,9 +4090,7 @@ describe("Runtime prompt acknowledgements", () => {
                                 attachments: [],
                                 content: `queued ${idempotencyKey}`,
                                 directoryId: "root",
-                                disposition: "queue",
                                 idempotencyKey,
-                                targetCommandId: "running-command",
                             }),
                         },
                     ),
@@ -4120,15 +4109,15 @@ describe("Runtime prompt acknowledgements", () => {
             );
             runtime.daemon.send(
                 lifecycleFrame(runtime.sessionId, "rejected-failed", "2", {
-                    code: "prompt_queue_target_unavailable",
+                    code: "agent_unavailable",
                     commandId: "rejected-command",
                     kind: "prompt.failed-before-start",
-                    message: "The queue target is unavailable",
+                    message: "The Agent is unavailable",
                 }),
             );
             const failure = await rejected;
             expect(failure.status).not.toBe(200);
-            expect(await failure.json()).toMatchObject({ error: { code: "prompt_queue_target_unavailable" } });
+            expect(await failure.json()).toMatchObject({ error: { code: "agent_unavailable" } });
 
             const admitted = queue("admitted-command");
             expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({

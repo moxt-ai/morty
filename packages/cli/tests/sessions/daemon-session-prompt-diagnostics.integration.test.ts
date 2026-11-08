@@ -59,12 +59,11 @@ test("Given an Agent rejects a turn, When the turn fails, Then the failure event
                         historyPolicy: "eager",
                         ...identity,
                         commandId,
-                        disposition: SessionPromptDisposition.Reject,
+                        disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",
                         prompt,
                         sessionId: peer.sessionId,
-                        targetCommandId: "",
                     }),
                 );
                 let failureMessage: string | undefined;

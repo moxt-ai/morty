@@ -74,12 +74,11 @@ test.each(["foreground", "background"] as const)(
                             bindingId: peer.bindingId,
                             commandId,
                             directoryId: "default",
-                            disposition: SessionPromptDisposition.Reject,
+                            disposition: SessionPromptDisposition.Append,
                             attachments: [],
                             kind: "session.prompt",
                             prompt: text,
                             sessionId: peer.sessionId,
-                            targetCommandId: "",
                             ...(text === "Start the gated command"
                                 ? {
                                       sessionConfigurations: [

@@ -24,8 +24,7 @@ test("Given an owned Codex session, When Codex changes collaboration mode during
                 additionalDirectoryIds: [],
                 attachments: [],
                 prompt: "Enter Plan mode",
-                disposition: SessionPromptDisposition.Reject,
-                targetCommandId: "",
+                disposition: SessionPromptDisposition.Append,
                 sessionConfigurations: [],
             }),
         );

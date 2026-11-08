@@ -41,12 +41,11 @@ test("Given Claude Code dispatches a subagent that runs tools, When the turn str
                 bindingId: peer.bindingId,
                 commandId,
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Reject,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
                 prompt: DISPATCH_PROMPT,
                 sessionId: peer.sessionId,
-                targetCommandId: "",
             }),
         );
         const observed = await observeTurn(peer, commandId);

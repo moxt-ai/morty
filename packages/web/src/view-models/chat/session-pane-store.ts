@@ -60,7 +60,7 @@ import { sessionDebugBlocks } from "./session-debug-blocks.ts";
 import { sessionDeliveryPresentation } from "./session-delivery-presentation.ts";
 import {
     awaitingMessage,
-    type DeliveryTarget,
+    type DeliveryPlacement,
     deliveryMessages,
     journalMessage,
     prependToDraft,
@@ -79,10 +79,9 @@ import { type SessionLifecycleFact, sessionInteractionRecovery, sessionLifecycle
 import { queuedMessages, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
 import {
     canChangeSettings,
-    canQueue,
     canRetryFailedMessage,
     canRetryUnknownDelivery,
-    canSendNow,
+    canSend,
     canSubmit,
     composerHasMessage,
     type SessionOperationFacts,
@@ -208,17 +207,15 @@ export interface SessionPaneStore {
     readonly chooseAnswer: (messageId: string, questionIndex: number, answer: string) => void;
     /**
      * Answers the questions a message asks with the picked answers, as a message of its own sent the way the
-     * composer sends: now, or queued behind the running turn. The composer's draft stays as it is.
+     * composer sends it. The composer's draft stays as it is.
      */
     readonly sendAnswer: (messageId: string) => Promise<void>;
-    readonly queueAnswer: (messageId: string) => Promise<void>;
     readonly removeUnknownDelivery: () => void;
     /** Retries on the Session's delivery: the attempt may outlive this pane. */
     readonly retryUnknownDelivery: () => Promise<void>;
     readonly retryFailedMessage: () => Promise<void>;
     readonly editFailedMessage: () => void;
     readonly discardFailedMessage: () => void;
-    readonly queueDraft: () => Promise<void>;
     readonly steerQueued: (commandId: string, signal: AbortSignal) => Promise<void>;
     readonly deleteQueued: (commandId: string, signal: AbortSignal) => Promise<void>;
     /** Takes a queued message out of the queue and back into the composer, ahead of any draft, for editing. */
@@ -268,7 +265,6 @@ function sessionOperationFacts(
     return {
         connectionAvailable,
         connection: model.connection.kind,
-        turn: model.turn,
         stopping: stopRequested(tasks, acceptedTurn(model.turn)),
         configuring: model.operation.kind === "configuring",
         delivery: delivery.state.kind,
@@ -291,8 +287,6 @@ export function sessionPanePresentation(
     // Which turn runs is the current turn's; the stop control only adds whether the user asked to stop it.
     const controlRunning = acceptedTurn(model.turn) !== null;
     const stopping = facts.stopping;
-    // While a turn runs, the composer queues behind it until the user asks to stop it.
-    const shouldQueueOnSubmit = controlRunning && !stopping;
     const composerInputDisabled =
         model.connection.kind === "closed" ||
         model.operation.kind === "configuring" ||
@@ -336,7 +330,8 @@ export function sessionPanePresentation(
             !connectionAvailable || model.connection.kind !== "ready" || stopping || ownerRunsTurn(model.turn),
         stopDisabled: !connectionAvailable || model.connection.kind !== "ready" || ownerRunsTurn(model.turn),
         canSuggestProgress:
-            canSendNow(facts) &&
+            !controlRunning &&
+            canSend(facts) &&
             model.draft.length === 0 &&
             attachments.attachments.length === 0 &&
             attachments.state.kind !== "reading",
@@ -377,15 +372,13 @@ export function sessionPanePresentation(
                       ? "running"
                       : "idle",
         workingIndicator: workingIndicator(model.turn, facts.waitingForInput),
-        shouldQueueOnSubmit,
-        retryFailedDisabled: pendingMessage === null || !canRetryFailedMessage(pendingMessage.target, facts),
-        retryUnknownDeliveryDisabled:
-            unknownDelivery === null || !canRetryUnknownDelivery(unknownDelivery.target, facts),
+        retryFailedDisabled: pendingMessage === null || !canRetryFailedMessage(facts),
+        retryUnknownDeliveryDisabled: unknownDelivery === null || !canRetryUnknownDelivery(facts),
         submitDisabled:
             !composerHasMessage(model.draft, attachments.attachments.length, attachments.state.kind === "reading") ||
-            !(shouldQueueOnSubmit ? canQueue(facts) : canSendNow(facts)),
+            !canSend(facts),
         // An answer to an Agent's question goes out as the composer's message would, whatever the draft holds.
-        answerDisabled: !(shouldQueueOnSubmit ? canQueue(facts) : canSendNow(facts)),
+        answerDisabled: !canSend(facts),
         ...deliveries,
     } as const;
 }
@@ -583,7 +576,8 @@ export function createSessionPaneModel(options: {
             if (connected === null) {
                 throw new Error("The Session is not connected.");
             }
-            return await connected.turns.submit(sessionId, request, signal);
+            const turn = await connected.turns.submit(sessionId, request, signal);
+            return { turnId: turn.turnId, queued: turn.state.kind === "queued" };
         });
     // The projection is the only source of the timeline; every change to it updates all three fields together.
     const projectedTimeline = (state: SessionProjection) => ({
@@ -769,21 +763,16 @@ export function createSessionPaneModel(options: {
             turnMoved(previous, turn);
         };
         /**
-         * Submits `commandId` through `connected`. A new turn becomes current as the service's acceptance arrives, dated
-         * by `startedAt`, when this browser sent it, until the Runtime reports its start; until then the turn is its
-         * delivery's.
+         * Submits `commandId` through `connected`. A message the Runtime runs at once becomes the current turn as the
+         * service's acceptance arrives, dated by `startedAt`, when this browser sent it, until the Runtime reports its
+         * start; until then the turn is its delivery's. A message the Runtime queued starts no turn yet.
          */
         const submitCommand =
-            (
-                connected: MortyClient | null,
-                commandId: string,
-                target: DeliveryTarget["disposition"],
-                startedAt: number,
-            ): SubmitTurn =>
+            (connected: MortyClient | null, commandId: string, startedAt: number): SubmitTurn =>
             async (request, signal) => {
                 const accepted = await submitTurn(connected)(request, signal);
                 signal.throwIfAborted();
-                if (target === "reject") {
+                if (!accepted.queued) {
                     updateTurn({
                         kind: "accepted",
                         commandId,
@@ -849,7 +838,7 @@ export function createSessionPaneModel(options: {
             // snapshot was in flight may legitimately be absent from it.
             const acceptedQueue = delivery
                 .getState()
-                .acceptedMessages.filter((message) => message.target.disposition === "queue");
+                .acceptedMessages.filter((message) => message.placement === "queue");
             const snapshot = await connected.sessions.readSessionExecution(
                 sessionId,
                 sessionIdentity,
@@ -903,7 +892,7 @@ export function createSessionPaneModel(options: {
             // omit its command identity there, as for a message accepted while no pane followed the Session.
             const acceptedBeforeRead = delivery
                 .getState()
-                .acceptedMessages.filter((message) => message.target.disposition === "reject")
+                .acceptedMessages.filter((message) => message.placement === "turn")
                 .map((message) => message.commandId);
             try {
                 const history = await readSessionHistory(
@@ -992,11 +981,17 @@ export function createSessionPaneModel(options: {
          * preparation, sending, and recovery, so the attempt outlives this pane; completion never writes to the next
          * draft.
          */
-        const submit = async (message: SubmittedMessage, source: SubmissionSource): Promise<void> => {
-            if (!canSubmit(message.target, operationFacts())) {
+        const submit = async (
+            submitted: Omit<SubmittedMessage, "placement">,
+            source: SubmissionSource,
+        ): Promise<void> => {
+            if (!canSubmit(operationFacts())) {
                 return;
             }
-            const { commandId, target } = message;
+            // Shown in the queue while a turn runs, otherwise as the next turn, until the Runtime says which it is.
+            const placement: DeliveryPlacement = get().turn.kind === "current" ? "queue" : "turn";
+            const message: SubmittedMessage = { ...submitted, placement };
+            const { commandId } = message;
             welcome.getState().dismiss();
             const sentAt = Date.now();
             const connected = client;
@@ -1019,7 +1014,6 @@ export function createSessionPaneModel(options: {
                         connected,
                         {
                             ...request,
-                            ...target,
                             agentId: session.agentRef,
                             directoryId: session.result.ready.directoryId,
                             attachments: uploadedAttachments,
@@ -1028,7 +1022,7 @@ export function createSessionPaneModel(options: {
                         attemptSignal,
                     );
                 },
-                submit: submitCommand(connected, commandId, target.disposition, sentAt),
+                submit: submitCommand(connected, commandId, sentAt),
             });
             // Only a message taken from the composer leaves it.
             if (source === "composer") {
@@ -1036,7 +1030,7 @@ export function createSessionPaneModel(options: {
                 composerAttachments.getState().clear();
                 set({ draft: "", filesRestoreNotice: false });
             }
-            if (target.disposition === "reject") {
+            if (placement === "turn") {
                 updateTurn({ kind: "new-turn-submitted" });
             }
             set({ followRevision: get().followRevision + 1 });
@@ -1051,12 +1045,13 @@ export function createSessionPaneModel(options: {
                 ? null
                 : agentQuestionAnswer(questions, get().answerChoices.get(messageId) ?? {});
         };
-        const sendNewTurn = async (
+        /** Sends a message the user wrote, which the Runtime runs now or queues behind the Session's earlier work. */
+        const sendMessage = async (
             content: string,
             attachments: readonly ComposerAttachment[],
             source: SubmissionSource,
         ): Promise<void> => {
-            if (!canSendNow(operationFacts())) {
+            if (!canSend(operationFacts())) {
                 return;
             }
             await submit(
@@ -1064,26 +1059,6 @@ export function createSessionPaneModel(options: {
                     commandId: crypto.randomUUID(),
                     content,
                     attachments: { kind: "local", values: attachments },
-                    target: { disposition: "reject", targetCommandId: "" },
-                },
-                source,
-            );
-        };
-        const queueBehindRunningTurn = async (
-            content: string,
-            attachments: readonly ComposerAttachment[],
-            source: SubmissionSource,
-        ): Promise<void> => {
-            const running = acceptedTurn(get().turn);
-            if (running === null || !canQueue(operationFacts())) {
-                return;
-            }
-            await submit(
-                {
-                    commandId: crypto.randomUUID(),
-                    content,
-                    attachments: { kind: "local", values: attachments },
-                    target: { disposition: "queue", targetCommandId: running.commandId },
                 },
                 source,
             );
@@ -1256,8 +1231,7 @@ export function createSessionPaneModel(options: {
                                 delivery
                                     .getState()
                                     .acceptedMessages.filter(
-                                        (message) =>
-                                            message.target.disposition === "queue" && message.commandId === running,
+                                        (message) => message.placement === "queue" && message.commandId === running,
                                     )
                                     .map((message) => message.commandId),
                             );
@@ -1535,7 +1509,7 @@ export function createSessionPaneModel(options: {
                 if (!composerHasMessage(draft, attachments.length, attachmentState.kind === "reading")) {
                     return;
                 }
-                await sendNewTurn(draft, attachments, "composer");
+                await sendMessage(draft, attachments, "composer");
             },
             chooseAnswer: (messageId, questionIndex, answer) => {
                 const open = openAgentQuestions(get().messages);
@@ -1551,13 +1525,7 @@ export function createSessionPaneModel(options: {
             sendAnswer: async (messageId) => {
                 const answer = pickedAnswer(messageId);
                 if (answer !== null) {
-                    await sendNewTurn(answer, [], "answer");
-                }
-            },
-            queueAnswer: async (messageId) => {
-                const answer = pickedAnswer(messageId);
-                if (answer !== null) {
-                    await queueBehindRunningTurn(answer, [], "answer");
+                    await sendMessage(answer, [], "answer");
                 }
             },
             removeUnknownDelivery: () => {
@@ -1565,18 +1533,15 @@ export function createSessionPaneModel(options: {
             },
             retryUnknownDelivery: async () => {
                 const state = delivery.getState().state;
-                if (
-                    state.kind !== "delivery-unknown" ||
-                    !canRetryUnknownDelivery(journalMessage(state.journal).target, operationFacts())
-                ) {
+                if (state.kind !== "delivery-unknown" || !canRetryUnknownDelivery(operationFacts())) {
                     return;
                 }
                 const pending = state.journal;
-                if (pending.request.disposition === "reject") {
+                if (pending.placement === "turn") {
                     updateTurn({ kind: "new-turn-submitted" });
                 }
                 // Without a record of when this browser sent it, the retry dates the command's work.
-                const retrying = submitCommand(client, pending.commandId, pending.request.disposition, Date.now());
+                const retrying = submitCommand(client, pending.commandId, Date.now());
                 await delivery.getState().retry(retrying);
                 delivery.getState().releaseMessages(sessionUserCommandIds(get().messages));
             },
@@ -1590,7 +1555,7 @@ export function createSessionPaneModel(options: {
                           ? // The Runtime definitively rejected this identity and will not run it again.
                             { ...journalMessage(state.journal), commandId: crypto.randomUUID() }
                           : null;
-                if (message === null || !canRetryFailedMessage(message.target, operationFacts())) {
+                if (message === null || !canRetryFailedMessage(operationFacts())) {
                     return;
                 }
                 await submit(message, "held");
@@ -1614,14 +1579,6 @@ export function createSessionPaneModel(options: {
             },
             discardFailedMessage: () => {
                 delivery.getState().takeFailedMessage();
-            },
-            queueDraft: async () => {
-                const { attachments, state: attachmentState } = composerAttachments.getState();
-                const draft = get().draft;
-                if (!composerHasMessage(draft, attachments.length, attachmentState.kind === "reading")) {
-                    return;
-                }
-                await queueBehindRunningTurn(draft, attachments, "composer");
             },
             steerQueued: async (commandId, signal) => {
                 const steered = await messageQueue

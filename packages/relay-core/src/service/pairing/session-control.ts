@@ -57,7 +57,7 @@ export interface TurnSubmission extends SessionBindingRequest {
     readonly content: string;
     readonly attachments: readonly unknown[];
     readonly disposition: string;
-    readonly targetCommandId: string;
+    readonly targetCommandId?: string | undefined;
     readonly sessionConfigurations: readonly unknown[];
     readonly historyPolicy?: "eager" | "execution-only" | undefined;
 }

@@ -18,7 +18,7 @@ import { ControlledAcpAgentSpecification } from "../support/agents/controlled-ac
 import { prepareNewRealSession, type RealDaemonPeer, withControlledDaemon } from "../support/agents/real-daemon.ts";
 import { writeControlledAcpExecutable } from "../support/controlled-acp-executable.ts";
 
-const submit = (peer: RealDaemonPeer, sessionId: string, commandId: string, prompt: string, targetCommandId?: string) =>
+const submit = (peer: RealDaemonPeer, sessionId: string, commandId: string, prompt: string) =>
     peer.send(
         encodeSessionPromptCommand({
             historyPolicy: "eager",
@@ -28,9 +28,7 @@ const submit = (peer: RealDaemonPeer, sessionId: string, commandId: string, prom
             bindingId: peer.bindingId,
             commandId,
             directoryId: "default",
-            ...(targetCommandId === undefined
-                ? { disposition: "reject", targetCommandId: "" }
-                : { disposition: "queue", targetCommandId }),
+            disposition: "append",
             kind: "session.prompt",
             prompt,
             sessionId,
@@ -158,7 +156,7 @@ test("Given a turn steered by a queued prompt, When a client reads the Session h
                         event.payload.kind === "prompt.started" &&
                         event.payload.commandId === turn,
                 );
-                submit(peer, sessionId, steering, "Apply the steering instruction", turn);
+                submit(peer, sessionId, steering, "Apply the steering instruction");
                 await liveUntil(
                     peer,
                     (event) => event.type === "lifecycle-metadata" && event.payload.kind === "session.queue.changed",

@@ -23,11 +23,10 @@ const submit = (peer: RealDaemonPeer, commandId: string) =>
             bindingId: peer.bindingId,
             commandId,
             directoryId: "default",
-            disposition: "reject",
+            disposition: "append",
             kind: "session.prompt",
             prompt: "The request completes",
             sessionId: peer.sessionId,
-            targetCommandId: "",
         }),
     );
 

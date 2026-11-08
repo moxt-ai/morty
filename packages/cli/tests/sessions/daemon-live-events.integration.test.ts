@@ -346,12 +346,11 @@ function prompt(fixture: Fixture, text: string): SessionPromptCommand {
         bindingId: fixture.config.bindingId,
         commandId: "test-turn",
         directoryId: "default",
-        disposition: SessionPromptDisposition.Reject,
+        disposition: SessionPromptDisposition.Append,
         attachments: [],
         kind: "session.prompt",
         prompt: text,
         sessionId: "test-session",
-        targetCommandId: "",
     };
 }
 async function nextLive(fixture: Fixture, allowPromptFailure = false): Promise<SessionLiveEvent> {
@@ -731,9 +730,8 @@ describe("daemon V2 live delivery", () => {
             const queued: SessionPromptCommand = {
                 ...running,
                 commandId: "queued-follow-up",
-                disposition: SessionPromptDisposition.Queue,
+                disposition: SessionPromptDisposition.Append,
                 prompt: "Execute the queued follow-up",
-                targetCommandId: running.commandId,
             };
             sendText(fixture.socket, encodeSessionPromptCommand(queued));
             for (;;) {

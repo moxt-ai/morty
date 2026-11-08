@@ -136,8 +136,7 @@ test.each(["owned", "borrowed"])(
                         additionalDirectoryIds: [],
                         attachments: [],
                         prompt: "Stream a concise proposed plan",
-                        disposition: SessionPromptDisposition.Reject,
-                        targetCommandId: "",
+                        disposition: SessionPromptDisposition.Append,
                         sessionConfigurations: [
                             { configId: "collaboration_mode", valueType: "select", value: "plan", booleanValue: false },
                         ],

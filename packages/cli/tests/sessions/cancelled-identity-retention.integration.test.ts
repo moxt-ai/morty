@@ -94,7 +94,7 @@ async function readDelivery(peer: RealDaemonPeer, commandId: string) {
     }
 }
 
-const promptCommand = (peer: RealDaemonPeer, commandId: string, prompt: string, targetCommandId = "") =>
+const promptCommand = (peer: RealDaemonPeer, commandId: string, prompt: string) =>
     encodeSessionPromptCommand({
         historyPolicy: "eager",
         additionalDirectoryIds: [],
@@ -103,11 +103,10 @@ const promptCommand = (peer: RealDaemonPeer, commandId: string, prompt: string, 
         bindingId: peer.bindingId,
         commandId,
         directoryId: "default",
-        disposition: targetCommandId === "" ? "reject" : "queue",
+        disposition: "append",
         kind: "session.prompt",
         prompt,
         sessionId: peer.sessionId,
-        targetCommandId,
     });
 
 const cancelBeforeStart = (peer: RealDaemonPeer, commandId: string) =>
@@ -182,12 +181,7 @@ for (const admission of ["before-admission", "queued"] as const) {
                                 commandId: id,
                             }),
                         );
-                    const prompt = (
-                        id: string,
-                        text: string,
-                        disposition: "reject" | "queue" = "reject",
-                        targetCommandId = "",
-                    ) =>
+                    const prompt = (id: string, text: string) =>
                         encodeSessionPromptCommand({
                             historyPolicy: "eager",
                             additionalDirectoryIds: [],
@@ -196,18 +190,12 @@ for (const admission of ["before-admission", "queued"] as const) {
                             bindingId: peer.bindingId,
                             commandId: id,
                             directoryId: "default",
-                            disposition,
+                            disposition: "append",
                             kind: "session.prompt",
                             prompt: text,
                             sessionId: peer.sessionId,
-                            targetCommandId,
                         });
-                    const original = prompt(
-                        commandId,
-                        "This command was already cancelled",
-                        admission === "queued" ? "queue" : "reject",
-                        admission === "queued" ? "running-hold" : "",
-                    );
+                    const original = prompt(commandId, "This command was already cancelled");
                     if (admission === "queued") {
                         peer.send(prompt("running-hold", "hold after first delta"));
                         for (;;) {

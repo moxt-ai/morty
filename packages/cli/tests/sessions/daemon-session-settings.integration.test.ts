@@ -831,7 +831,7 @@ describe("daemon session configuration boundary", () => {
                 bindingId: config.bindingId,
                 commandId: runningCommandId,
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Reject,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "wait for steering",
@@ -843,7 +843,6 @@ describe("daemon session configuration boundary", () => {
                     { booleanValue: false, configId: "mode", value: "code", valueType: "select" },
                 ],
                 sessionId,
-                targetCommandId: "",
             };
             sendText(socket, encodeSessionPromptCommand(runningPrompt));
             await readCommandActivity(frames, sessionId, runningCommandId);
@@ -955,7 +954,7 @@ describe("daemon session configuration boundary", () => {
                 bindingId: config.bindingId,
                 commandId: runningCommandId,
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Reject,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "wait for steering",
@@ -964,7 +963,6 @@ describe("daemon session configuration boundary", () => {
                     { booleanValue: false, configId: "reasoning_effort", value: "high", valueType: "select" },
                 ],
                 sessionId,
-                targetCommandId: "",
             };
             sendText(socket, encodeSessionPromptCommand(runningPrompt));
             await readCommandActivity(frames, sessionId, runningCommandId);

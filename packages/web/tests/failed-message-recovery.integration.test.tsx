@@ -1,25 +1,10 @@
-import { fireEvent, getByLabelText, getByRole, getByText, queryByRole } from "@testing-library/dom";
-import { act } from "@testing-library/react";
+import { getByLabelText, getByRole, getByText, queryByRole } from "@testing-library/dom";
 import { expect, onTestFinished, test } from "vitest";
-import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { dataTestId } from "../src/data-testid.ts";
-import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
-
-interface Participant {
-    readonly app: TestApp;
-    readonly composer: HTMLTextAreaElement;
-    readonly form: HTMLFormElement;
-}
 
 function answered(app: TestApp, text: string): boolean {
     return app.elementsByTestId(dataTestId.agentResponse).some((element) => element.textContent?.includes(text));
-}
-
-function failedMessage(app: TestApp): HTMLElement | undefined {
-    return app
-        .elementsByTestId(dataTestId.queuedMessage)
-        .find((element) => queryByRole(element, "alert")?.textContent?.includes("Another prompt is already running"));
 }
 
 async function editableComposer(app: TestApp): Promise<HTMLTextAreaElement> {
@@ -32,125 +17,6 @@ async function editableComposer(app: TestApp): Promise<HTMLTextAreaElement> {
     }
     return composer;
 }
-
-/** Two viewers send at once; the Runtime rejects one message, and the accepted turn is then stopped. */
-async function rejectConcurrentMessage(rejectedPrompt: string): Promise<Participant> {
-    const app = await createTestApp({
-        connectAgent: true,
-        agent: {
-            id: "concurrent-rejection-test",
-            label: "Concurrent rejection Agent",
-            // Hold whichever concurrent submission reaches the Agent first, then let the retry complete.
-            reply: (prompt, turnNumber, mode) =>
-                turnNumber === 2
-                    ? { outcome: "hold", output: [{ kind: "text", text: "The accepted turn is running." }] }
-                    : mortyReply(prompt, turnNumber, mode),
-        },
-    });
-    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Open a shared conversation");
-    await app.waitForView(() => expect(answered(app, "Open a shared conversation")).toBe(true));
-    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
-    const viewer = await app.openViewer();
-    const participants: Participant[] = [];
-    for (const current of [app, viewer]) {
-        const composer = await editableComposer(current);
-        if (composer.form === null) {
-            throw new Error("Expected the message composer form");
-        }
-        const form = composer.form;
-        await current.user.clear(composer);
-        await current.user.click(composer);
-        await current.user.paste(rejectedPrompt);
-        await current.waitForView(() =>
-            expect(getByRole(form, "button", { name: "Send message" })).toHaveProperty("disabled", false),
-        );
-        participants.push({ app: current, composer, form });
-    }
-    // Submit both forms before either viewer observes the other's turn.
-    act(() => {
-        for (const participant of participants) {
-            fireEvent.submit(participant.form);
-        }
-    });
-    const rejected = await app.waitForView(() => {
-        const participant = participants.find((candidate) => failedMessage(candidate.app) !== undefined);
-        if (participant === undefined) {
-            throw new Error("Waiting for the authoritative concurrent submission rejection");
-        }
-        return participant;
-    });
-    const accepted = participants.find((participant) => participant !== rejected);
-    if (accepted === undefined) {
-        throw new Error("Expected the accepted participant");
-    }
-    await accepted.app.user.click(
-        await accepted.app.waitForView(() => getByRole(accepted.form, "button", { name: "Stop agent output" })),
-    );
-    await rejected.app.waitForView(() =>
-        expect(rejected.app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull(),
-    );
-    return rejected;
-}
-
-test("Given a message the Runtime rejected while another prompt ran, When I retry it after that prompt stops, Then the Agent answers it and my next draft stays", {
-    timeout: 60_000,
-}, async () => {
-    const rejected = await rejectConcurrentMessage("Retry the rejected message");
-    await rejected.app.user.click(rejected.composer);
-    await rejected.app.user.paste("My next draft");
-    const failed = failedMessage(rejected.app);
-    if (failed === undefined) {
-        throw new Error("Expected the retained rejected message");
-    }
-    await rejected.app.user.click(
-        await rejected.app.waitForView(() => {
-            const retry = getByRole(failed, "button", { name: "Retry message" });
-            expect(retry).toHaveProperty("disabled", false);
-            return retry;
-        }),
-    );
-    await rejected.app.waitForView(() => expect(answered(rejected.app, "Retry the rejected message")).toBe(true));
-    expect(failedMessage(rejected.app)).toBeUndefined();
-    expect(rejected.composer.value).toBe("My next draft");
-});
-
-test("Given a message the Runtime rejected, When I discard it, Then it leaves the conversation and my next draft can be sent", {
-    timeout: 60_000,
-}, async () => {
-    const rejected = await rejectConcurrentMessage("Discard the rejected message");
-    await rejected.app.user.click(rejected.composer);
-    await rejected.app.user.paste("Send my next draft instead");
-    const failed = failedMessage(rejected.app);
-    if (failed === undefined) {
-        throw new Error("Expected the retained rejected message");
-    }
-    await rejected.app.user.click(getByRole(failed, "button", { name: "Discard failed message" }));
-    expect(failedMessage(rejected.app)).toBeUndefined();
-    const send = await rejected.app.waitForView(() => {
-        const button = getByRole(rejected.form, "button", { name: "Send message" });
-        expect(button).toHaveProperty("disabled", false);
-        return button;
-    });
-    await rejected.app.user.click(send);
-    await rejected.app.waitForView(() => expect(answered(rejected.app, "Send my next draft instead")).toBe(true));
-    expect(answered(rejected.app, "Discard the rejected message")).toBe(false);
-});
-
-test("Given a message the Runtime rejected and a next draft, When the page reloads, Then the rejected text returns to the composer ahead of the draft", {
-    timeout: 60_000,
-}, async () => {
-    const rejected = await rejectConcurrentMessage("Keep the rejected text");
-    await rejected.app.user.click(rejected.composer);
-    await rejected.app.user.paste("My next draft");
-    const reloaded = await rejected.app.reload();
-    await reloaded.waitForView(() =>
-        expect(reloaded.elementByTestId(dataTestId.messageComposer)).toHaveProperty(
-            "value",
-            "Keep the rejected text\n\nMy next draft",
-        ),
-    );
-    expect(failedMessage(reloaded)).toBeUndefined();
-});
 
 function heldSessionCreation() {
     let gate = Promise.withResolvers<void>();

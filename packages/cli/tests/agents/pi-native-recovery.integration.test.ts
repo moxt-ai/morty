@@ -37,7 +37,7 @@ test("Given a real pi native Session, When the active prompt is cancelled with a
     try {
         await withRealDaemon(new PiAgentSpecification(), agent.environment, async (peer) => {
             const nativeId = await prepareNewRealSession(peer, "pi");
-            const sendPrompt = (commandId: string, targetCommandId = ""): void =>
+            const sendPrompt = (commandId: string): void =>
                 peer.send(
                     encodeSessionPromptCommand({
                         historyPolicy: "eager",
@@ -50,11 +50,7 @@ test("Given a real pi native Session, When the active prompt is cancelled with a
                         additionalDirectoryIds: [],
                         attachments: [],
                         prompt: "Reply with a short greeting, without using tools",
-                        disposition:
-                            targetCommandId.length > 0
-                                ? SessionPromptDisposition.Queue
-                                : SessionPromptDisposition.Reject,
-                        targetCommandId,
+                        disposition: SessionPromptDisposition.Append,
                     }),
                 );
             const finish = async (commandId: string, reason: string): Promise<string> => {
@@ -103,7 +99,7 @@ test("Given a real pi native Session, When the active prompt is cancelled with a
                 });
             });
             const queued = randomUUID();
-            sendPrompt(queued, active);
+            sendPrompt(queued);
             for (;;) {
                 const message = await peer.nextMessage();
                 if (
@@ -145,8 +141,7 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
                 additionalDirectoryIds: [],
                 attachments: [],
                 prompt: "Reply with a short greeting, without using tools",
-                disposition: SessionPromptDisposition.Reject,
-                targetCommandId: "",
+                disposition: SessionPromptDisposition.Append,
             }),
         );
         for (;;) {
@@ -276,8 +271,7 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
                 additionalDirectoryIds: [],
                 attachments: [],
                 prompt: "Save this conversation so it can be forked",
-                disposition: SessionPromptDisposition.Reject,
-                targetCommandId: "",
+                disposition: SessionPromptDisposition.Append,
             }),
         );
         for (;;) {
@@ -411,8 +405,7 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
                 additionalDirectoryIds: [],
                 attachments: [],
                 prompt: "Continue in the independent fork",
-                disposition: SessionPromptDisposition.Reject,
-                targetCommandId: "",
+                disposition: SessionPromptDisposition.Append,
             }),
         );
         let reply = "";
