@@ -92,7 +92,8 @@ complete before a failure; use the recorded component versions and migration
 checks for recovery, never reverse database migrations automatically.
 
 Manual recovery accepts only an archived main-branch run that completed the full
-publication/deployment chain. It uses
+publication/deployment chain, or a legacy cloud archive with a successful CLI
+publication for the same source revision. It uses
 that run's exact cloud artifact and independently verifies the published CLI
 integrity. Recovery intentionally changes the deployed version; it does not
 republish npm or rewrite the existing GitHub Release. Release automation and
