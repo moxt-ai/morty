@@ -195,7 +195,7 @@ export class IdentityStorage {
 
     /**
      * Ends the access of every browser device except the one kept, and voids the links no device has used yet. The
-     * machine's own and recovery credentials belong to no device, so they stay, including unclassified legacy ones.
+     * machine's own and recovery credentials belong to no device, so they stay.
      */
     readonly endOtherBrowserAccess = async (
         userId: string,

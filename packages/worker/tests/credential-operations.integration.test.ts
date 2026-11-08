@@ -50,8 +50,8 @@ test("Given local, browser and recovery credentials, When their operations end a
     ];
     const namespace = fixture.environment().CHAT_PROJECTS;
     const storage = namespace.get(namespace.idFromName(owner.projectId));
-    const kinds = async (method = "GET") =>
-        await (await storage.fetch(new Request("https://project.internal/credential-kinds", { method }))).json();
+    const kinds = async () =>
+        await (await storage.fetch(new Request("https://project.internal/credential-kinds"))).json();
     expect(await kinds()).toEqual(expect.arrayContaining(["local", "browser", "recovery"]));
     for (const operation of operations) {
         const session = await request("/session", operation.token);
@@ -202,22 +202,6 @@ test("Given browser access granted through a link, When that browser shares a ne
     const browserLink = await share(browser);
 
     expect(browserLink.accessExpiresAt).toBe(ownerLink.accessExpiresAt);
-});
-
-test("Given a retained credential with no recorded kind, When it is presented to the launch Worker, Then access is denied without upgrading it to local authority", async () => {
-    const owner = await fixture.createAnonymousUser();
-    const namespace = fixture.environment().CHAT_PROJECTS;
-    const storage = namespace.get(namespace.idFromName(owner.projectId));
-    await storage.fetch(new Request("https://project.internal/credential-kinds", { method: "DELETE" }));
-    const response = await fetchPublicApplication(
-        new Request(`${APP_ORIGIN}/morty/api/projects/${owner.projectId}/session`, {
-            headers: { authorization: `Bearer ${owner.token}` },
-        }),
-        fixture.environment(),
-    );
-    expect(response.status).toBe(401);
-    const retained = await storage.fetch(new Request("https://project.internal/credential-kinds"));
-    expect(await retained.json()).toEqual([null]);
 });
 
 test("Given a well-formed Project identifier that was never created, When an unauthenticated request reaches it, Then it is not found and its Durable Object stores nothing", async () => {

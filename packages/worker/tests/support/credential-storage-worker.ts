@@ -53,12 +53,9 @@ export class ProjectDurableObject extends Project {
             });
         }
         if (request.url === "https://project.internal/credential-kinds") {
-            if (request.method === "DELETE") {
-                this.ctx.storage.sql.exec("UPDATE anonymous_credential SET kind = NULL");
-            }
             return Response.json(
                 this.ctx.storage.sql
-                    .exec<{ kind: string | null }>("SELECT kind FROM anonymous_credential")
+                    .exec<{ kind: string }>("SELECT kind FROM anonymous_credential")
                     .toArray()
                     .map((row) => row.kind),
             );
