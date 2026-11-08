@@ -8,18 +8,11 @@ import type {
 } from "../../services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope, type IdentityScope } from "../../services/identity/identity-scope-url.ts";
 import { rememberComputerName, rememberComputerVisit } from "../../services/identity/remembered-computers.ts";
-import {
-    centralSessionStorage,
-    SessionStorageWriteError,
-    sessionPendingSubmissionEntry,
-    sessionUnsentMessageEntry,
-} from "../../services/session-storage/central-session-storage.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import type { BugReportDialogStore } from "../bug-report-dialog-store.ts";
 import { reportApplicationError } from "../report-error.ts";
 import { type AccessExpiryStore, createAccessExpiryStore } from "./access-expiry-store.ts";
 import { type BotChatHomeStoreApi, createBotChatHomeStore, homeWaitsForRuntime } from "./bot-chat-home-store.ts";
-import { createComposerAttachmentStore } from "./composer-attachment-store.ts";
 import type { ComputerSwitcherModel } from "./computer-switcher-store.ts";
 import { connectionPresentation } from "./connection-presentation.ts";
 import { type ConversationDirectoryStore, createConversationDirectoryStore } from "./conversation-directory-store.ts";
@@ -34,10 +27,8 @@ import type { SelectedMortySession } from "./open-session.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
 import { createRuntimeRecovery } from "./runtime-recovery.ts";
 import { connectionWaitsForRuntime } from "./session-connection.ts";
-import { createSessionDeliveryStore, prependToDraft } from "./session-delivery-store.ts";
-import { createSessionMessageQueueStore } from "./session-message-queue-store.ts";
+import { createSessionPageState, type SessionPageState } from "./session-page-state.ts";
 import { createSessionPaneModel, type SessionPaneModel } from "./session-pane-store.ts";
-import { createSessionRenameStore } from "./session-rename-store.ts";
 import { createSessionTitlesStore, type SessionTitlesStore } from "./session-titles-store.ts";
 import { createSidebarDialogs, type SidebarDialogs } from "./sidebar-dialogs.ts";
 
@@ -205,7 +196,7 @@ export function createChatWorkspace(options: {
             startDirectoryLoad();
         },
         onDirectoryRefreshed: () => startDirectoryLoad(),
-        onFirstMessage: (sessionId, message) => sessionDelivery(sessionId).getState().awaitConnection(message),
+        onFirstMessage: (sessionId, message) => sessionState(sessionId).delivery.getState().awaitConnection(message),
         onSelectionReady: (selection) => {
             runtimeRecovery.working();
             replacePane(selection);
@@ -406,41 +397,16 @@ export function createChatWorkspace(options: {
     // ready selection: another target stops it, a re-read replaces it, and
     // the workspace tears it down.
     let paneEntry: ChatWorkspacePaneEntry | null = null;
-    // Drafts belong to their sessions, independently of pane and connection replacements.
-    const sessionAttachments = new Map<string, ReturnType<typeof createComposerAttachmentStore>>();
-    // Submitted intent belongs to the Session until confirmed or discarded, across pane replacements.
-    const sessionDeliveries = new Map<string, ReturnType<typeof createSessionDeliveryStore>>();
-    const sessionQueues = new Map<string, ReturnType<typeof createSessionMessageQueueStore>>();
-    // A confirmed title belongs to the Session until the Runtime takes it, across pane replacements.
-    const sessionRenames = new Map<string, ReturnType<typeof createSessionRenameStore>>();
-    /** The Session's delivery on this page, which persists what it holds for the next page to recover. */
-    const sessionDelivery = (sessionId: string): ReturnType<typeof createSessionDeliveryStore> => {
-        const existing = sessionDeliveries.get(sessionId);
+    // What the page holds for each Session, independently of pane and connection replacements.
+    const sessionStates = new Map<string, SessionPageState>();
+    const sessionState = (sessionId: string): SessionPageState => {
+        const existing = sessionStates.get(sessionId);
         if (existing !== undefined) {
             return existing;
         }
-        const unsentEntry = sessionUnsentMessageEntry(sessionId);
-        const pendingEntry = sessionPendingSubmissionEntry(botId, sessionId);
-        const delivery = createSessionDeliveryStore({
-            lifetime: operationsLifetime.signal,
-            pendingSubmission: centralSessionStorage.read(pendingEntry),
-            pendingSubmissionChanged: (journal) => {
-                if (journal === null) {
-                    centralSessionStorage.remove(pendingEntry);
-                } else if (!centralSessionStorage.write(pendingEntry, journal)) {
-                    throw new SessionStorageWriteError();
-                }
-            },
-            unsentMessageChanged: (content) => {
-                if (content === null) {
-                    centralSessionStorage.remove(unsentEntry);
-                } else {
-                    centralSessionStorage.write(unsentEntry, content);
-                }
-            },
-        });
-        sessionDeliveries.set(sessionId, delivery);
-        return delivery;
+        const state = createSessionPageState({ botId, sessionId, lifetime: operationsLifetime.signal });
+        sessionStates.set(sessionId, state);
+        return state;
     };
     const replacePane = (selection: Extract<ConversationSelectionState, { readonly kind: "ready" }>): void => {
         if (paneEntry !== null && paneEntry.session === selection.session) {
@@ -462,40 +428,16 @@ export function createChatWorkspace(options: {
             );
             rememberedSessionId = sessionId;
         }
-        let composerAttachments = sessionAttachments.get(sessionId);
-        let nextDraft: string | null = null;
-        if (composerAttachments === undefined) {
-            // Only the draft page that followed its first message here hands over the draft written meanwhile.
-            const handoff = home.getState().takeNextDraft(sessionId);
-            composerAttachments = handoff?.attachments ?? createComposerAttachmentStore();
-            nextDraft = handoff?.draft ?? null;
-            sessionAttachments.set(sessionId, composerAttachments);
-        }
-        let unsent: string | null = null;
-        if (!sessionDeliveries.has(sessionId)) {
-            // A message an earlier page left unsent returns to the composer; it is never delivered implicitly.
-            const unsentEntry = sessionUnsentMessageEntry(sessionId);
-            unsent = centralSessionStorage.read(unsentEntry);
-            centralSessionStorage.remove(unsentEntry);
-        }
-        const delivery = sessionDelivery(sessionId);
-        let messageQueue = sessionQueues.get(sessionId);
-        if (messageQueue === undefined) {
-            messageQueue = createSessionMessageQueueStore();
-            sessionQueues.set(sessionId, messageQueue);
-        }
-        let rename = sessionRenames.get(sessionId);
-        if (rename === undefined) {
-            rename = createSessionRenameStore();
-            sessionRenames.set(sessionId, rename);
+        const sessionPage = sessionState(sessionId);
+        // Only the draft page that followed its first message here hands over the draft written meanwhile.
+        const handoff = home.getState().takeNextDraft(sessionId);
+        if (handoff !== null) {
+            sessionPage.composer.getState().adoptHandoff(handoff.draft, handoff.attachments);
         }
         const model = createSessionPaneModel({
             clock: options.clock,
             session: selection.session,
-            composerAttachments,
-            delivery,
-            messageQueue,
-            rename,
+            sessionPage,
             attachmentSignal: operationsLifetime.signal,
             botId,
             requests,
@@ -505,10 +447,6 @@ export function createChatWorkspace(options: {
             onConnected: () => runtimeRecovery.working(),
             onWaitingForRuntime: () => runtimeRecovery.failed(),
         });
-        if (nextDraft !== null || unsent !== null) {
-            const draft = nextDraft ?? model.store.getState().draft;
-            model.store.getState().setDraft(unsent === null ? draft : prependToDraft(unsent, draft));
-        }
         paneEntry = { model, session: selection.session };
         model.start();
     };
@@ -602,18 +540,15 @@ export function createChatWorkspace(options: {
             sidebar.dialogs.getState().discardNativeDialog();
             sidebar.dialogs.getState().closeSharing();
             home.getState().composerAttachments.getState().clear();
-            for (const attachments of sessionAttachments.values()) {
-                attachments.getState().clear();
+            for (const state of sessionStates.values()) {
+                state.composer.getState().attachments.getState().clear();
             }
-            sessionAttachments.clear();
             paneEntry?.model.stop();
             chatLifetime.abort(new Error("The chat workspace was disposed."));
             directoryLifetime.abort(new Error("The chat workspace was disposed."));
             statusLifetime.abort(new Error("Conversation status lifetime ended."));
             operationsLifetime.abort(new Error("The chat workspace was disposed."));
-            sessionDeliveries.clear();
-            sessionQueues.clear();
-            sessionRenames.clear();
+            sessionStates.clear();
             statuses.getState().close();
         },
     };

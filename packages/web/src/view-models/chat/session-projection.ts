@@ -24,6 +24,15 @@ interface PendingEvents {
     readonly buffer: readonly SessionLiveEvent[];
 }
 
+/**
+ * Loading the page of history before the oldest message shown. It belongs to the baseline it extends: a new baseline
+ * starts idle, so no load of a replaced history can leave it loading. A failure lasts until the next load.
+ */
+export type OlderHistory =
+    | { readonly kind: "idle" }
+    | { readonly kind: "loading" }
+    | { readonly kind: "failed"; readonly message: string };
+
 export type SessionProjection =
     | { readonly kind: "pristine"; readonly pending: PendingEvents | null; readonly revision: number }
     | {
@@ -32,7 +41,7 @@ export type SessionProjection =
           readonly generation: string;
           readonly firstEventId: string | null;
           readonly throughPosition: string;
-          readonly pagination: { readonly nextCursor: string | null };
+          readonly pagination: { readonly nextCursor: string | null; readonly older: OlderHistory };
           readonly pending: PendingEvents | null;
           readonly reduction: SessionMessageReduction;
           readonly revision: number;
@@ -42,7 +51,11 @@ export type SessionProjectionInput =
     | { readonly event: SessionLiveEvent; readonly kind: "live-event" }
     | { readonly kind: "reconcile" }
     | { readonly history: SessionEventHistory; readonly kind: "history-loaded"; readonly revision: number }
-    | { readonly kind: "older-page"; readonly page: SessionEventHistory; readonly revision: number };
+    /** A load of the page before `revision`'s oldest message began. */
+    | { readonly kind: "older-page-requested"; readonly revision: number }
+    | { readonly kind: "older-page"; readonly page: SessionEventHistory; readonly revision: number }
+    /** The load of the page before `revision`'s oldest message failed, or ended without a page. */
+    | { readonly kind: "older-page-failed"; readonly revision: number; readonly message: string | null };
 
 export type SessionProjectionEffect =
     | { readonly generation: string | null; readonly kind: "load-history" }
@@ -125,7 +138,7 @@ function adoptGeneration(
         firstEventId: events.at(0)?.eventId ?? null,
         throughPosition: history.throughPosition,
         kind: "established",
-        pagination: { nextCursor: history.nextCursor },
+        pagination: { nextCursor: history.nextCursor, older: { kind: "idle" } },
         pending: null,
         reduction: createSessionMessageReduction({
             events,
@@ -209,6 +222,34 @@ export function transitionSessionProjection(
                 state: adoptGeneration(state, input.history, events),
             };
         }
+        case "older-page-requested": {
+            if (
+                state.kind !== "established" ||
+                input.revision !== state.revision ||
+                state.pagination.older.kind === "loading"
+            ) {
+                return { effects: [], state };
+            }
+            return {
+                effects: [],
+                state: { ...state, pagination: { ...state.pagination, older: { kind: "loading" } } },
+            };
+        }
+        case "older-page-failed": {
+            if (state.kind !== "established" || input.revision !== state.revision) {
+                return { effects: [], state };
+            }
+            return {
+                effects: [],
+                state: {
+                    ...state,
+                    pagination: {
+                        ...state.pagination,
+                        older: input.message === null ? { kind: "idle" } : { kind: "failed", message: input.message },
+                    },
+                },
+            };
+        }
         case "older-page": {
             if (
                 state.kind !== "established" ||
@@ -222,7 +263,7 @@ export function transitionSessionProjection(
                 effects: [],
                 state: {
                     ...state,
-                    pagination: { nextCursor: input.page.nextCursor },
+                    pagination: { nextCursor: input.page.nextCursor, older: { kind: "idle" } },
                     firstEventId: input.page.events.at(0)?.eventId ?? state.firstEventId,
                     eventIds: new Set([...input.page.events.map((event) => event.eventId), ...state.eventIds]),
                     reduction: prependSessionMessageEvents(state.reduction, input.page),
@@ -280,14 +321,47 @@ export function sessionProjectionExecutionOwner(state: SessionProjection, comman
     return state.kind === "established" ? sessionReductionExecutionOwner(state.reduction, commandId) : null;
 }
 
-export function sessionProjectionMessages(state: SessionProjection): readonly SessionExecutionMessage[] {
+function sessionProjectionMessages(state: SessionProjection): readonly SessionExecutionMessage[] {
     return state.kind === "established" ? sessionReductionMessages(state.reduction) : [];
 }
 
+/** The page before the oldest message shown, when one exists and can be loaded now. */
 export function sessionProjectionPagination(
     state: SessionProjection,
 ): { readonly generation: string; readonly nextCursor: string; readonly revision: number } | null {
-    return state.kind === "established" && state.pending === null && state.pagination.nextCursor !== null
+    return state.kind === "established" &&
+        state.pending === null &&
+        state.pagination.nextCursor !== null &&
+        state.pagination.older.kind !== "loading"
         ? { generation: state.generation, nextCursor: state.pagination.nextCursor, revision: state.revision }
         : null;
+}
+
+/** The loading of older history for the baseline shown; a projection without one loads none. */
+export function sessionProjectionOlderHistory(state: SessionProjection): OlderHistory {
+    return state.kind === "established" ? state.pagination.older : { kind: "idle" };
+}
+
+/**
+ * The timeline a projection shows: its messages, whether older history exists, and its revision. Each projection is
+ * immutable, so the timeline computed for one is reused for every reader of that same projection.
+ */
+export interface SessionTimeline {
+    readonly messages: readonly SessionExecutionMessage[];
+    readonly hasOlderHistory: boolean;
+    readonly revision: number;
+}
+const timelines = new WeakMap<SessionProjection, SessionTimeline>();
+export function sessionProjectionTimeline(state: SessionProjection): SessionTimeline {
+    const known = timelines.get(state);
+    if (known !== undefined) {
+        return known;
+    }
+    const timeline: SessionTimeline = {
+        messages: sessionProjectionMessages(state),
+        hasOlderHistory: state.kind === "established" && state.pending === null && state.pagination.nextCursor !== null,
+        revision: state.revision,
+    };
+    timelines.set(state, timeline);
+    return timeline;
 }
