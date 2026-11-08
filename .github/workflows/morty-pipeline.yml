@@ -5,6 +5,11 @@ name: Morty pipeline
 # Independent jobs run in parallel; publication stays gated on all of them.
 on:
   workflow_call:
+    inputs:
+      markdown-only:
+        description: The change touches only Markdown, so only static checks and the security scan apply.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -30,6 +35,7 @@ jobs:
       - run: pnpm typecheck
 
   services:
+    if: ${{ !inputs.markdown-only }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -48,6 +54,7 @@ jobs:
       - run: pnpm test:worker
 
   runtime:
+    if: ${{ !inputs.markdown-only }}
     strategy:
       fail-fast: false
       matrix:
@@ -67,6 +74,7 @@ jobs:
       - run: pnpm test:runtime --shard=${{ matrix.shard }}/2
 
   web:
+    if: ${{ !inputs.markdown-only }}
     strategy:
       fail-fast: false
       matrix:
@@ -86,6 +94,7 @@ jobs:
       - run: pnpm test:web --shard=${{ matrix.shard }}/4
 
   browser:
+    if: ${{ !inputs.markdown-only }}
     strategy:
       fail-fast: false
       matrix:
@@ -116,6 +125,7 @@ jobs:
   # Packing does not depend on test results, so the archive is built and accepted
   # while the source checks run. Only publication requires every job to pass.
   package:
+    if: ${{ !inputs.markdown-only }}
     permissions:
       contents: read
       actions: read
