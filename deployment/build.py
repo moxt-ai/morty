@@ -31,7 +31,8 @@ def overlay(file, environment):
     result.update(result.pop('env', {}).get(environment, {}))
     for field in ('$schema', 'routes', 'account_id'):
         result.pop(field, None)
-    result.update(account_id=ACCOUNT, workers_dev=True, preview_urls=False)
+    # Production Workers answer only on their custom domains, behind the zone's security and rate-limit rules.
+    result.update(account_id=ACCOUNT, workers_dev=False, preview_urls=False)
     result['main'] = str(file.parent / result['main'])
     return result
 
@@ -60,7 +61,7 @@ def main():
     run(['pnpm', 'build:setup'], env=env)
     run(['pnpm', 'exec', 'vite', 'build', '--outDir', str(release)], env=env)
     recording = overlay(ROOT / 'packages/recording/wrangler.jsonc', environment)
-    recording.update(name=spec['recording'], workers_dev=False)
+    recording.update(name=spec['recording'])
     platform = overlay(ROOT / 'packages/relay/wrangler.jsonc', environment)
     platform.update(name=spec['platform'], main=str(ROOT / 'deployment/platform-entry.mjs'))
     platform['migrations'].append({'tag': 'morty-production-migration-control-20261105', 'new_sqlite_classes': ['MigrationControl']})
