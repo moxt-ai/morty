@@ -210,11 +210,13 @@ try {
 } finally {
     stage("cleanup");
     await browser?.close().catch(() => {});
+    const cleanupSignal = AbortSignal.timeout(180_000);
+    const cleanupCli = (...args) => run(process.execPath, [entry, ...args], { signal: cleanupSignal });
     let localClean = !packageInstalled;
     if (packageInstalled) {
         try {
-            await cli("uninstall");
-            const status = (await cli("status")).stdout;
+            await cleanupCli("uninstall");
+            const status = (await cleanupCli("status")).stdout;
             localClean = status.includes("Installed: not installed") && status.includes("Daemon: not running");
         } catch {
             localClean = false;

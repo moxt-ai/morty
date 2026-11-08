@@ -181,6 +181,8 @@ def main():
             deployment = cloud('/workers/scripts/' + expected[component] + '/deployments')['deployments'][0]
             if len(deployment['versions']) != 1 or deployment['versions'][0]['percentage'] != 100:
                 raise ValueError('Unexpected gradual deployment')
+            if deployment.get('annotations', {}).get('workers/message') != 'morty ' + manifest['revision']:
+                raise ValueError('Active Worker deployment does not match the accepted source')
             deployed[component] = deployment
     evidence = {'passed': True, 'environment': args.environment, 'revision': manifest['revision'], 'cliVersion': manifest['cliVersion'], 'cliIntegrity': accepted['integrity'], 'account': ACCOUNT, 'previous': previous, 'deployed': deployed, 'checks': checks, 'dnsChanged': False}
     (ROOT / 'deployment-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')

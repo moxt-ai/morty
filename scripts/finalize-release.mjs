@@ -74,16 +74,48 @@ if (existing && !existingTag) {
         throw new Error("Draft release source mismatch");
     }
 }
-if (existing && !existing.draft) {
-    console.log(`Release ${tag} is already finalized at ${release.revision}`);
-    process.exit(0);
-}
 await mkdir(".release/assets", { recursive: true });
 await copyFile(release.archive, join(".release/assets", basename(release.archive)));
 await copyFile(".release/release.json", ".release/assets/cli-release.json");
 await copyFile(".release/cloud/release.json", ".release/assets/cloud-release.json");
 await writeFile(".release/assets/deployment-evidence.json", `${JSON.stringify(evidence, null, 2)}\n`);
-execFileSync("tar", ["-czf", ".release/assets/cloud.tar.gz", "-C", ".release/cloud", "."], { timeout: 120000 });
+// Canonical metadata makes retries produce the same archived cloud bytes.
+execFileSync(
+    "tar",
+    [
+        "--sort=name",
+        "--mtime=@0",
+        "--owner=0",
+        "--group=0",
+        "--numeric-owner",
+        "--format=gnu",
+        "-czf",
+        ".release/assets/cloud.tar.gz",
+        "-C",
+        ".release/cloud",
+        ".",
+    ],
+    { timeout: 120000 },
+);
+const verifyPublishedAssets = async (publishedRelease) => {
+    if (!publishedRelease.immutable || publishedRelease.draft) {
+        throw new Error("The final release must have repository-enforced immutability");
+    }
+    for (const name of [basename(release.archive), "cli-release.json", "cloud-release.json", "cloud.tar.gz"]) {
+        const digest = `sha256:${createHash("sha256")
+            .update(await readFile(join(".release/assets", name)))
+            .digest("hex")}`;
+        const asset = publishedRelease.assets.find((candidate) => candidate.name === name);
+        if (asset?.digest !== digest || asset.state !== "uploaded") {
+            throw new Error("Final release assets do not match the accepted artifacts");
+        }
+    }
+};
+if (existing && !existing.draft) {
+    await verifyPublishedAssets(existing);
+    console.log(`Release ${tag} is already finalized at ${release.revision}`);
+    process.exit(0);
+}
 await writeFile(
     ".release/notes.txt",
     `Source: ${release.revision}\n\nCLI: @morty-build/cli@${release.version}\nSHA-256: ${release.sha256}\n\nPublished with npm trusted publishing, verified against the accepted archive, and deployed to production before finalizing this release.\n\nAcceptance and deployment: https://github.com/${repository}/actions/runs/${process.env.GITHUB_RUN_ID}\n`,
@@ -106,4 +138,5 @@ if (!existing) {
 const assets = (await readdir(".release/assets")).map((name) => join(".release/assets", name));
 gh("release", "upload", tag, ...assets, "--clobber");
 gh("release", "edit", tag, "--draft=false", "--latest");
+await verifyPublishedAssets(JSON.parse(gh("api", `repos/${repository}/releases/tags/${tag}`)));
 console.log(`Finalized ${tag} from ${release.revision}`);

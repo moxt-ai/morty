@@ -48,4 +48,19 @@ if (run.path === ".github/workflows/morty-cli.yml") {
 } else {
     throw new Error("Unrecognized release workflow");
 }
+for (const [source, name] of legacy
+    ? [
+          [run, "release-production"],
+          [cliRun, "morty-cli"],
+      ]
+    : [[run, "morty-release"]]) {
+    const inventory = api(`actions/runs/${source.id}/artifacts?per_page=100`);
+    if (inventory.total_count > inventory.artifacts.length) {
+        throw new Error("Incomplete archive inventory");
+    }
+    const matching = inventory.artifacts.filter((artifact) => artifact.name === name && !artifact.expired);
+    if (matching.length !== 1) {
+        throw new Error("The original accepted archive is missing, expired or ambiguous");
+    }
+}
 await appendFile(process.env.GITHUB_OUTPUT, `revision=${run.head_sha}\nlegacy=${legacy}\ncli_run=${cliRun.id}\n`);
