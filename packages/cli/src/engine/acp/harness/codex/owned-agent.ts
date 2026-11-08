@@ -13,14 +13,17 @@ import type { CodexAppServerClient, CodexAppServerServerRequest } from "./app-se
 import {
     commandApprovalParamsSchema,
     fileChangeApprovalParamsSchema,
+    itemNotificationSchema,
     type McpElicitationParams,
     mcpElicitationParamsSchema,
     reasoningTextDeltaParamsSchema,
     requestUserInputParamsSchema,
+    threadNameUpdatedSchema,
     threadNotificationSchema,
     threadSettingsUpdatedSchema,
     turnNotificationSchema,
-    turnSchema,
+    turnPlanUpdatedSchema,
+    turnStartResponseSchema,
     turnSteerResponseSchema,
     type UserInputQuestion,
 } from "./app-server-protocol.ts";
@@ -445,10 +448,11 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
             return;
         }
         if (method === "thread/name/updated") {
-            const threadName = (params as { threadName?: unknown }).threadName;
-            if (typeof threadName === "string" && threadName.length > 0) {
+            const decoded = threadNameUpdatedSchema.safeParse(params);
+            if (decoded.success) {
+                const title = decoded.data.threadName;
                 await this.#enqueue(async () => {
-                    await this.#context.emit({ sessionUpdate: "session_info_update", title: threadName });
+                    await this.#context.emit({ sessionUpdate: "session_info_update", title });
                 });
             }
             return;
@@ -476,9 +480,9 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
             return;
         }
         if (method === "turn/plan/updated") {
-            const plan = (params as { plan?: unknown }).plan;
-            if (Array.isArray(plan)) {
-                const entries = plan.map((step) => ({
+            const decoded = turnPlanUpdatedSchema.safeParse(params);
+            if (decoded.success) {
+                const entries = decoded.data.plan.map((step) => ({
                     content:
                         typeof step === "object" && step !== null && "step" in step
                             ? String(Reflect.get(step, "step"))
@@ -534,7 +538,8 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
         if (method !== "item/started" && method !== "item/completed") {
             return;
         }
-        const item = decodeThreadItem((params as { item?: unknown }).item);
+        const notification = itemNotificationSchema.safeParse(params);
+        const item = notification.success ? decodeThreadItem(notification.data.item) : null;
         if (item === null) {
             return;
         }
@@ -846,19 +851,17 @@ export class CodexOwnedAcpAgent implements CodexSessionAgent {
             // The selection rides on the turn rather than the thread, so a choice made between turns
             // applies to the next one without restarting the conversation. Approval and sandboxing
             // travel as a pair: Codex resolves them together into the mode's single preset.
-            const started = turnSchema.parse(
-                (
-                    (await this.#appServer.request(
-                        "turn/start",
-                        {
-                            ...this.#settings.turnParameters(),
-                            input,
-                            clientUserMessageId: turn.clientId,
-                            threadId: this.#context.threadId(),
-                        },
-                        signal,
-                    )) as { turn?: unknown }
-                ).turn,
+            const { turn: started } = turnStartResponseSchema.parse(
+                await this.#appServer.request(
+                    "turn/start",
+                    {
+                        ...this.#settings.turnParameters(),
+                        input,
+                        clientUserMessageId: turn.clientId,
+                        threadId: this.#context.threadId(),
+                    },
+                    signal,
+                ),
             );
             if (this.#turn === turn) {
                 turn.turn.id = started.id;

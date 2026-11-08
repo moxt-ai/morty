@@ -648,7 +648,8 @@ function inputValue(value: unknown): unknown {
         return value;
     }
     try {
-        return JSON.parse(value) as unknown;
+        const parsed: unknown = JSON.parse(value);
+        return parsed;
     } catch (cause) {
         throw new ProtocolMessageError("Session Event Log V2 message is not valid JSON", { cause });
     }
