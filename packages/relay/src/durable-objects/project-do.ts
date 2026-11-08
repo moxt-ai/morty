@@ -5,23 +5,24 @@ import {
     type CreateAccessGrant,
     type CreateBrowserCredential,
     DurableObjectDatabaseAdapter,
-    DurableObjectSqlDatabase,
     type RedeemAccessGrant,
     type RequestRuntimePairing,
     type RevokeRuntime,
     type RuntimePairingRequest,
 } from "@morty-build/relay-core";
+import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
 import { logger } from "@morty-build/relay-core/logging";
 import { decodePlatformProjectPlacement } from "../entity/platform-project-id.ts";
 import type { PlatformAuditRecord, ProjectAuditRow } from "../entity/platform-records.ts";
 import { decodeProjectDurableObjectPath } from "../entity/project-durable-object-path.ts";
+import { projectDurableObjectMigrations } from "../generated/project-do-migrations.ts";
 import type { PlatformProjectStore } from "../infra/platform-project-store.ts";
 import {
     type ConfiguredPlatformRelayBindings,
     createPlatformWorker,
     type ProjectPlatformRelayBindings,
 } from "../platform-worker.ts";
-import { initializeProjectDurableObjectSchema } from "../storage/project-durable-object-schema.ts";
+import { ProjectObjectIdentityStorage } from "../storage/project-object-identity-storage.ts";
 import { SqlitePlatformProjectStore } from "../storage/sqlite-platform-project-store.ts";
 
 type Store = PlatformProjectStore;
@@ -37,7 +38,7 @@ const uncancelled = new AbortController().signal;
 export class ProjectDO extends DurableObject<ConfiguredPlatformRelayBindings> {
     readonly #application = createPlatformWorker();
     readonly #database: DurableObjectDatabaseAdapter;
-    readonly #sqlite: DurableObjectSqlDatabase;
+    readonly #identity: ProjectObjectIdentityStorage;
     readonly #environment: ConfiguredPlatformRelayBindings;
     readonly #durableObjectId: string;
     #store: Store | null = null;
@@ -47,8 +48,8 @@ export class ProjectDO extends DurableObject<ConfiguredPlatformRelayBindings> {
         this.#environment = environment;
         this.#durableObjectId = state.id.toString();
         try {
-            this.#sqlite = new DurableObjectSqlDatabase(state.storage);
-            initializeProjectDurableObjectSchema(this.#sqlite);
+            applyDurableObjectMigrations(state.storage, projectDurableObjectMigrations);
+            this.#identity = new ProjectObjectIdentityStorage(state.storage);
             this.#database = new DurableObjectDatabaseAdapter(state.storage);
         } catch (error) {
             logger.error(
@@ -66,10 +67,7 @@ export class ProjectDO extends DurableObject<ConfiguredPlatformRelayBindings> {
 
     /** The store of the Project this object holds; null when `projectId` names another Project. */
     #projectStore(projectId: string): Store | null {
-        const identity = this.#sqlite.query("SELECT project_id FROM project_object_identity WHERE singleton = 1")[0];
-        if (identity === undefined) {
-            this.#sqlite.run("INSERT INTO project_object_identity (singleton, project_id) VALUES (1, ?)", [projectId]);
-        } else if (identity["project_id"] !== projectId) {
+        if (!this.#identity.bind(projectId)) {
             return null;
         }
         this.#store ??= new SqlitePlatformProjectStore(projectId, this.#database);

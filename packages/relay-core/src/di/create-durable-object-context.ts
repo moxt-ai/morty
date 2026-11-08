@@ -1,6 +1,8 @@
 import { CloudflareChannelPeers } from "../gateway/cloudflare-channel-peers.ts";
 import type { ProjectCredentialAuthority } from "../gateway/project-access-authorizer.ts";
+import { runtimeConnectionDurableObjectMigrations } from "../generated/runtime-connection-do-migrations.ts";
 import type { DoSqlDatabase } from "../infra/do-sql-database.ts";
+import { applyDurableObjectMigrations } from "../infra/durable-object-migrations.ts";
 import { DurableObjectSqlDatabase } from "../infra/durable-object-sql-database.ts";
 import type { ProjectStorageDirectory } from "../infra/project-storage-directory.ts";
 import type { ProjectStoreResolver } from "../infra/project-store.ts";
@@ -19,6 +21,7 @@ export function createDurableObjectContext(
         readonly notifications?: SessionStatusNotifications;
     },
 ) {
+    applyDurableObjectMigrations(state.storage, runtimeConnectionDurableObjectMigrations);
     return createDurableObjectDependencies({
         doDatabase: options.doDatabase ?? new DurableObjectSqlDatabase(state.storage),
         storages: {

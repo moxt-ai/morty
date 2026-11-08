@@ -30,7 +30,7 @@ export class SqlitePlatformProjectStore extends SqliteProjectStore implements Pl
                 actorRef: audit.actorRef,
                 action: audit.action,
                 subjectId: audit.subjectId,
-                outcome: audit.outcome === "succeeded" ? "succeeded" : "denied",
+                outcome: audit.outcome,
                 detailsJson: audit.detailsJson,
                 recordedAt: audit.recordedAt,
             })

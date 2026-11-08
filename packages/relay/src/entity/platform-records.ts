@@ -59,7 +59,7 @@ export interface PlatformAuditRecord {
     readonly appId: string;
     readonly auditId: string;
     readonly detailsJson: string;
-    readonly outcome: string;
+    readonly outcome: "succeeded" | "denied";
     readonly projectId: string;
     readonly recordedAt: number;
     readonly subjectId: string;

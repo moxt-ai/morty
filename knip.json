@@ -12,7 +12,7 @@
             ]
         },
         "packages/e2e": {
-            "entry": ["*.e2e.test.ts", "fixtures/local-platform-worker.ts"]
+            "entry": ["*.e2e.test.ts", "fixtures/local-platform-worker.ts", "release-acceptance.mjs"]
         },
         "packages/web": {
             "entry": ["src/main.tsx", "tests/**/*.integration.test.tsx", "src/components/ui/*.tsx"]

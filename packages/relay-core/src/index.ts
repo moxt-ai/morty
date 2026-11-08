@@ -64,10 +64,6 @@ export {
 } from "./infra/bounded-request-body.ts";
 export { D1DatabaseAdapter } from "./infra/d1-database.ts";
 export type { DoSqlDatabase } from "./infra/do-sql-database.ts";
-export {
-    applyDurableObjectMigrations,
-    type DurableObjectMigration,
-} from "./infra/durable-object-migrations.ts";
 export { DurableObjectDatabaseAdapter, DurableObjectSqlDatabase } from "./infra/durable-object-sql-database.ts";
 export { logger } from "./infra/logger.ts";
 export type { ProjectApplicationResolver } from "./infra/project-application-resolver.ts";

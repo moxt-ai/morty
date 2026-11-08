@@ -56,6 +56,7 @@ const cli = join(root, "packages/cli");
 const relayCore = join(root, "packages/relay-core");
 const platform = join(root, "packages/relay");
 const recording = join(root, "packages/recording");
+const worker = join(root, "packages/worker");
 
 await writeMigrationModule(
     join(cli, "src/engine/generated/acp-session-store-migrations.ts"),
@@ -86,4 +87,9 @@ await writeMigrationModule(
     join(recording, "src/generated/recording-directory-do-migrations.ts"),
     "recordingDirectoryDurableObjectMigrations",
     await sqlFiles(join(recording, "migrations/recording-directory-do")),
+);
+await writeMigrationModule(
+    join(worker, "src/generated/project-do-migrations.ts"),
+    "projectDurableObjectMigrations",
+    await sqlFiles(join(worker, "migrations/project-do")),
 );
