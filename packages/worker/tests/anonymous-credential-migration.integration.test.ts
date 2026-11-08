@@ -6,7 +6,7 @@ import remoteAccess from "../migrations/project-do/0008_remote_access.sql?raw";
 import credentialBrowser from "../migrations/project-do/0032_lively_arachne.sql?raw";
 import anonymousCredentialRevocation from "../migrations/project-do/0034_anonymous_credential_revocation.sql?raw";
 import anonymousCredentialKind from "../migrations/project-do/0035_anonymous_credential_kind.sql?raw";
-import { migrations } from "../src/infra/durable-object-database.ts";
+import { projectDurableObjectMigrations as migrations } from "../src/generated/project-do-migrations.ts";
 
 test("Given saved active and revoked credentials, When their schema is migrated, Then credential facts and revocation times are preserved", () => {
     using database = new DatabaseSync(":memory:");
@@ -97,7 +97,7 @@ test("Given an untyped credential database, When credential kinds are added, The
 
 test("Given browsers that joined before devices had their own record, When the schema is migrated, Then each browser becomes one device described by its first joining and keeps its credentials", () => {
     using database = new DatabaseSync(":memory:");
-    const position = migrations.findIndex((migration) => migration.tag === "0042_browser_devices");
+    const position = migrations.findIndex((migration) => migration.name === "0042_browser_devices.sql");
     for (const migration of migrations.slice(0, position)) {
         database.exec(migration.sql);
     }

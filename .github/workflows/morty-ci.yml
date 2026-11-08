@@ -1,0 +1,32 @@
+name: Morty CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer push supersedes the checks of the previous one.
+concurrency:
+  group: morty-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pipeline:
+    uses: ./.github/workflows/morty-pipeline.yml
+    permissions:
+      contents: read
+      actions: read
+
+  # The single required check. It fails unless every pipeline job succeeded,
+  # including when the pipeline was cancelled or did not run.
+  ci-ok:
+    needs: pipeline
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require the complete pipeline to pass
+        env:
+          RESULT: ${{ needs.pipeline.result }}
+        run: test "$RESULT" = success

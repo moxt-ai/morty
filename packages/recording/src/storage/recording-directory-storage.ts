@@ -3,13 +3,13 @@ import {
     type SessionRecordingDirectoryV2,
     type SessionRecordingSummaryV2,
 } from "@morty-build/client/protocol";
+import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
 import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 import { recordingDirectoryDurableObjectMigrations } from "../generated/recording-directory-do-migrations.ts";
 import { RecordingSqlMetrics } from "../infra/recording-sql-metrics.ts";
 import * as schema from "../schema/recording-directory-do/index.ts";
 import { recordingSessionSummary } from "../schema/recording-directory-do/index.ts";
-import { applyDurableObjectMigrations } from "./durable-object-migrations.ts";
 
 export class RecordingDirectoryStorage {
     readonly #database;

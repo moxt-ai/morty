@@ -36,21 +36,19 @@ export class SqliteProjectStore implements ProjectStore {
         await this.#pairings.listLinked(channelId, signal);
 
     readonly revokeLinkedDevice: ProjectStore["revokeLinkedDevice"] = async (channelId, credentialId, now, signal) =>
-        (await this.#pairings.revokeLinked(channelId, credentialId, now, signal)).meta.changes === 1 ||
-        (await this.#pairings.readLinked(channelId, credentialId, signal)) !== null;
+        (await this.#pairings.revokeLinked(channelId, credentialId, now, signal)) ||
+        (await this.#pairings.hasLinked(channelId, credentialId, signal));
 
     readonly createAccessGrant: ProjectStore["createAccessGrant"] = async (value, signal) =>
-        (
-            await this.#pairings.createGrant(
-                value.grantId,
-                value.channelId,
-                value.secretHash,
-                value.ownerCredentialId,
-                value.now,
-                value.expiresAt,
-                signal,
-            )
-        ).meta.changes === 1;
+        await this.#pairings.createGrant(
+            value.grantId,
+            value.channelId,
+            value.secretHash,
+            value.ownerCredentialId,
+            value.now,
+            value.expiresAt,
+            signal,
+        );
 
     readonly redeemAccessGrant: ProjectStore["redeemAccessGrant"] = async (value, signal) => {
         const results = await this.#pairings.redeemGrant(
@@ -83,20 +81,18 @@ export class SqliteProjectStore implements ProjectStore {
     };
 
     readonly createBrowserCredential: ProjectStore["createBrowserCredential"] = async (value, signal) =>
-        (
-            await this.#pairings.createBrowser(
-                value.credentialId,
-                this.#projectId,
-                value.tokenHash,
-                value.ownerCredentialId,
-                value.now,
-                value.expiresAt,
-                signal,
-            )
-        ).meta.changes === 1;
+        await this.#pairings.createBrowser(
+            value.credentialId,
+            this.#projectId,
+            value.tokenHash,
+            value.ownerCredentialId,
+            value.now,
+            value.expiresAt,
+            signal,
+        );
 
     readonly revokeBrowserCredential: ProjectStore["revokeBrowserCredential"] = async (credentialId, now, signal) =>
-        (await this.#pairings.revokeBrowser(this.#projectId, credentialId, now, signal)).meta.changes === 1;
+        await this.#pairings.revokeBrowser(this.#projectId, credentialId, now, signal);
 
     readonly readDaemon: ProjectStore["readDaemon"] = async (channelId, tokenHash, signal) =>
         await this.#runtimes.readDaemon(channelId, tokenHash, signal);
