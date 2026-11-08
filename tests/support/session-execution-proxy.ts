@@ -55,6 +55,9 @@ export async function createSessionExecutionProxy(upstream: string) {
         target.protocol = "ws:";
         const remote = new WebSocket(target, {
             ...(incoming.headers.origin === undefined ? {} : { origin: incoming.headers.origin }),
+            ...(incoming.headers.authorization === undefined
+                ? {}
+                : { headers: { authorization: incoming.headers.authorization } }),
         });
         sockets.add(client);
         sockets.add(remote);
