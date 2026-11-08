@@ -317,6 +317,43 @@ test("Given the answer to a new conversation's Session creation is lost, When it
     expect(await listed()).toEqual([expect.objectContaining({ id: owned?.id })]);
 });
 
+test("Given a new conversation whose Session creation never reached the Runtime, When its owner lists conversations, Then none is listed until a retry creates it", async ({
+    cloud,
+}) => {
+    await using fixture = await createChatFixture(cloud);
+    expect(
+        (
+            await fixture.request(`chat/bots/${fixture.botId}/setup`, {
+                runtimeId: fixture.runtime.runtimeId,
+                agentRef: "codex",
+            })
+        ).status,
+    ).toBe(202);
+    if (cloud.network === null) {
+        throw new Error("The scenario requires a real request-loss proxy");
+    }
+    const input = {
+        agentRef: "codex",
+        conversationKey: "dropped-creation",
+        workspaceRef: "default",
+        configurations: [],
+    };
+    cloud.network.dropNextSessionCreation();
+    const failed = await fixture.request(`chat/bots/${fixture.botId}/access`, input);
+    expect(failed.status).toBeGreaterThanOrEqual(500);
+    const listed = async () =>
+        v.parse(
+            v.object({ sessions: v.array(v.object({ id: v.string(), title: v.string() })) }),
+            await (await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {})).json(),
+        ).sessions;
+    expect(await listed()).toEqual([]);
+
+    const retried = await fixture.request(`chat/bots/${fixture.botId}/access`, input);
+    expect(retried.status).toBe(200);
+    const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await retried.json());
+    expect(await listed()).toEqual([expect.objectContaining({ id: sessionId })]);
+});
+
 test("Given an Agent whose model decides its effort levels, When Chat starts a conversation that lists the effort before the model, Then the new Session holds both selections", async ({
     cloud,
 }) => {

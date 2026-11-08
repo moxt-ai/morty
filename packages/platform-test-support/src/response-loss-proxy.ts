@@ -3,8 +3,8 @@ import { WebSocket, WebSocketServer } from "ws";
 import { listen, port } from "./websocket.ts";
 
 /**
- * A real network proxy: forwards requests unchanged, then loses one request's response, one turn admission response,
- * or delays one request.
+ * A real network proxy: forwards requests unchanged, then loses one request before it reaches the service, one request's
+ * response, one turn admission response, or delays one request.
  */
 export async function createResponseLossProxy(upstream: string) {
     // The next response to lose: the service handles the request, but the caller never receives its answer.
@@ -13,7 +13,15 @@ export async function createResponseLossProxy(upstream: string) {
         new Promise<number>((resolve) => {
             lostResponse = { path, lost: resolve };
         });
+    // The next request to lose on its way: the service never receives it.
+    let droppedRequest: RegExp | null = null;
     const server = createServer((incoming, outgoing) => {
+        if (droppedRequest !== null && incoming.method === "POST" && droppedRequest.test(incoming.url ?? "")) {
+            droppedRequest = null;
+            incoming.resume();
+            outgoing.destroy();
+            return;
+        }
         const forwarded = request(
             new URL(incoming.url ?? "/", upstream),
             {
@@ -154,6 +162,10 @@ export async function createResponseLossProxy(upstream: string) {
         origin: `http://127.0.0.1:${port(server)}`,
         submissions,
         interruptNextFork: () => loseNextResponse(/\/native-session-forks\//u),
+        /** Loses the next Session creation before it reaches the service, which therefore creates nothing. */
+        dropNextSessionCreation: () => {
+            droppedRequest = /\/runtimes\/[^/]+\/sessions(?:\?|$)/u;
+        },
         /** Loses the answer to the next Session creation; resolves with the status the service returned. */
         interruptNextSessionCreation: () => loseNextResponse(/\/runtimes\/[^/]+\/sessions(?:\?|$)/u),
         interruptNextTurn: (delivery: "before-acceptance" | "after-acceptance") => {

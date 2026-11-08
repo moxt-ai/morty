@@ -303,23 +303,27 @@ export class ChatService {
             scope.signal,
         );
         const byId = new Map(metadata.map((session) => [session.sessionId, session]));
+        // The Runtime alone says which Sessions exist; an owner record says only whose they are. A record whose Session
+        // the Runtime does not hold, such as a start that never reached it, is not a conversation.
         return {
-            sessions: owned.map((session) => {
+            sessions: owned.flatMap((session) => {
                 const details = byId.get(session.id);
-                const createdAt = new Date(session.createdAt).toISOString();
-                return {
-                    ...session,
-                    createdAt,
-                    additionalDirectoryIds:
-                        details?.additionalDirectories.map((directory) => directory.directoryId) ?? [],
-                    directoryId: details?.directoryId ?? "default",
-                    directoryLabel: details?.directoryLabel ?? "",
-                    // The Runtime titles a Session from its first prompt; until then it lists a placeholder.
-                    prompted: details?.prompted ?? false,
-                    status: details?.status ?? { kind: "idle" },
-                    title: details?.title ?? "New chat",
-                    updatedAt: details?.updatedAt ?? createdAt,
-                };
+                if (details === undefined) {
+                    return [];
+                }
+                return [
+                    {
+                        ...session,
+                        createdAt: new Date(session.createdAt).toISOString(),
+                        additionalDirectoryIds: details.additionalDirectories.map((directory) => directory.directoryId),
+                        directoryId: details.directoryId,
+                        directoryLabel: details.directoryLabel,
+                        prompted: details.prompted,
+                        status: details.status,
+                        title: details.title,
+                        updatedAt: details.updatedAt,
+                    },
+                ];
             }),
         };
     };
