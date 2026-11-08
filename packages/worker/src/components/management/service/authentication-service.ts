@@ -110,10 +110,6 @@ export class AuthenticationService {
         if (stored === null) {
             return { kind: "unknown" };
         }
-        // Missing authority is never inferred from a token's representation.
-        if (stored.kind === null) {
-            return { kind: "unknown" };
-        }
         const kind = stored.kind;
         let credential: Credential;
         switch (kind) {

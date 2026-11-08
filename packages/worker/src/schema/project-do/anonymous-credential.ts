@@ -7,8 +7,7 @@ export const anonymousCredential = sqliteTable(
         id: text("id").primaryKey().notNull(),
         userId: text("user_id").notNull(),
         tokenHash: text("token_hash").notNull().unique(),
-        // Null is an unclassified legacy credential, never an assumption of local authority.
-        kind: text("kind", { enum: ["local", "browser", "recovery"] }),
+        kind: text("kind", { enum: ["local", "browser", "recovery"] }).notNull(),
         createdAt: integer("created_at").notNull(),
         revokedAt: integer("revoked_at"),
         /** The link that issued a browser credential, whose term bounds its access. */
@@ -20,7 +19,12 @@ export const anonymousCredential = sqliteTable(
         index("anonymous_credential_user_idx").on(table.userId, table.revokedAt),
         index("anonymous_credential_remote_transfer_idx").on(table.remoteTransferId, table.revokedAt),
         index("anonymous_credential_device_idx").on(table.deviceId),
-        // Exactly the browser credentials belong to a device; an unclassified legacy credential is not one.
+        check("anonymous_credential_kind", sql`${table.kind} IN ('local', 'browser', 'recovery')`),
+        // Exactly the browser credentials came through a link and belong to a device.
         check("anonymous_credential_device_kind", sql`(${table.kind} = 'browser') = (${table.deviceId} IS NOT NULL)`),
+        check(
+            "anonymous_credential_transfer_kind",
+            sql`(${table.kind} = 'browser') = (${table.remoteTransferId} IS NOT NULL)`,
+        ),
     ],
 );
