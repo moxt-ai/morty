@@ -19,12 +19,12 @@ jobs:
           fetch-depth: 0
       - name: Scan every commit for credentials
         env:
-          GITLEAKS_VERSION: 8.30.1
+          GH_TOKEN: ${{ github.token }}
         run: |
           archive="$RUNNER_TEMP/gitleaks.tar.gz"
-          curl --fail --silent --show-error --location --connect-timeout 15 --max-time 90 --retry 3 --retry-max-time 180 \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
-            --output "$archive"
+          # The immutable Gitleaks 8.30.1 Linux x64 asset, with the same pinned checksum.
+          gh api repos/gitleaks/gitleaks/releases/assets/378332058 \
+            --header 'Accept: application/octet-stream' > "$archive"
           printf '%s  %s\n' '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb' "$archive" | sha256sum --check --strict
           tar -xzf "$archive" -C "$RUNNER_TEMP" gitleaks
           "$RUNNER_TEMP/gitleaks" git --redact=100 --no-banner .
