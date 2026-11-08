@@ -12,7 +12,7 @@ Start with the [README](README.md), [usage guide](docs/GUIDE.md), and
 installation requirements, data handling and known limitations.
 
 For a reproducible bug or a feature request, use this repository's
-[issue tracker](https://github.com/moxt-ai/mobius-morty/issues). Include your
+[issue tracker](https://github.com/moxt-ai/morty/issues). Include your
 operating system, Node version, Morty version, Agent and version, reproduction
 steps, expected behavior and actual result. If you cannot access the tracker,
 email [acmerfight@gmail.com](mailto:acmerfight@gmail.com).

@@ -51,9 +51,9 @@ Traffic passes through a trusted relay; Morty is **not end-to-end encrypted**.
 Sharing gives another device permission to view and control sessions, so protect
 sharing links and revoke access when it is no longer needed.
 
-See the [product guide](https://github.com/moxt-ai/mobius-morty/blob/main/README.md)
+See the [product guide](https://github.com/moxt-ai/morty/blob/main/README.md)
 for full data handling and limitations. For installation help and ordinary bugs,
-use [support](https://github.com/moxt-ai/mobius-morty/blob/main/SUPPORT.md) or email
+use [support](https://github.com/moxt-ai/morty/blob/main/SUPPORT.md) or email
 [acmerfight@gmail.com](mailto:acmerfight@gmail.com) if the source repository is not
 accessible. Report security vulnerabilities privately to that email; never put
 credentials or pairing links in a public issue.
