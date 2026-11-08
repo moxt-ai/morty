@@ -82,8 +82,7 @@ test("Given a Codex turn whose subagent thread reports on the same connection, W
                     additionalDirectoryIds: [],
                     attachments: [],
                     prompt: "Delegate the work to a subagent",
-                    disposition: SessionPromptDisposition.Reject,
-                    targetCommandId: "",
+                    disposition: SessionPromptDisposition.Append,
                     sessionConfigurations: [],
                 }),
             );

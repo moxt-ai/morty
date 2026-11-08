@@ -166,12 +166,11 @@ test("Given an active Agent session holding an exclusive writer lock, When a pub
                         bindingId: peer.bindingId,
                         commandId: promptCommandId,
                         directoryId: "default",
-                        disposition: SessionPromptDisposition.Reject,
+                        disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",
                         prompt: "interleave progress and hold",
                         sessionId,
-                        targetCommandId: "",
                     }),
                 );
                 for (;;) {

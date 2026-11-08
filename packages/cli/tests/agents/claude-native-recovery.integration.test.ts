@@ -34,7 +34,7 @@ test("Given a real claude native Session, When the active prompt is cancelled wi
     try {
         await withRealDaemon(new ClaudeCodeAgentSpecification(), agent.environment, async (peer) => {
             const nativeId = await prepareNewRealSession(peer, "claude");
-            const sendPrompt = (commandId: string, targetCommandId = ""): void =>
+            const sendPrompt = (commandId: string): void =>
                 peer.send(
                     encodeSessionPromptCommand({
                         historyPolicy: "eager",
@@ -47,11 +47,7 @@ test("Given a real claude native Session, When the active prompt is cancelled wi
                         additionalDirectoryIds: [],
                         attachments: [],
                         prompt: "Reply with a short greeting, without using tools",
-                        disposition:
-                            targetCommandId.length > 0
-                                ? SessionPromptDisposition.Queue
-                                : SessionPromptDisposition.Reject,
-                        targetCommandId,
+                        disposition: SessionPromptDisposition.Append,
                     }),
                 );
             const finish = async (commandId: string, reason: string): Promise<string> => {
@@ -100,7 +96,7 @@ test("Given a real claude native Session, When the active prompt is cancelled wi
                 });
             });
             const queued = randomUUID();
-            sendPrompt(queued, active);
+            sendPrompt(queued);
             for (;;) {
                 const message = await peer.nextMessage();
                 if (
@@ -137,12 +133,11 @@ test("Given a completed real Claude Session, When it is forked, Then its history
                     bindingId: peer.bindingId,
                     commandId,
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "Reply with a short greeting, without using tools",
                     sessionId,
-                    targetCommandId: "",
                 }),
             );
         const finish = async (sessionId: string, commandId: string): Promise<string> => {

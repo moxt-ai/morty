@@ -78,10 +78,9 @@ test.each(["codex", "claude"] as const)(
                             kind: "session.prompt",
                             sessionId,
                             commandId: randomUUID(),
-                            disposition: SessionPromptDisposition.Reject,
+                            disposition: SessionPromptDisposition.Append,
                             attachments: [],
                             prompt: text,
-                            targetCommandId: "",
                             ...(selectMode
                                 ? {
                                       sessionConfigurations: [

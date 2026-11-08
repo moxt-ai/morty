@@ -33,8 +33,7 @@ async function promptRealSession(peer: RealDaemonPeer, sessionId: string, text: 
             directoryId: "default",
             additionalDirectoryIds: [],
             prompt: text,
-            disposition: SessionPromptDisposition.Reject,
-            targetCommandId: "",
+            disposition: SessionPromptDisposition.Append,
             attachments: [],
         }),
     );

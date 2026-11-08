@@ -92,8 +92,7 @@ async function promptFromMorty(
             additionalDirectoryIds: [],
             attachments: [],
             prompt,
-            disposition: SessionPromptDisposition.Reject,
-            targetCommandId: "",
+            disposition: SessionPromptDisposition.Append,
         }),
     );
     for (;;) {

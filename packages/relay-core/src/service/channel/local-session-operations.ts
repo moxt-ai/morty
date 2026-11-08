@@ -5,7 +5,7 @@ import type {
     WorkspaceEntriesEvent,
     WorkspaceListCommand,
 } from "@morty-build/client/protocol";
-import { decodeNativeSessionCancel } from "@morty-build/client/protocol";
+import { decodeNativeSessionCancel, SessionPromptDisposition } from "@morty-build/client/protocol";
 import type { DurableObjectContext } from "../../di/create-durable-object-dependencies.ts";
 import type { ProjectScope as Scope } from "../../entity/do/session.ts";
 import { ProjectScope } from "../../entity/do/session.ts";
@@ -126,7 +126,7 @@ export function createLocalSessionOperations(
         const socket = await connect(
             id,
             sessionId,
-            command.kind === "session.prompt" && command.disposition === "queue",
+            command.kind === "session.prompt" && command.disposition === SessionPromptDisposition.Append,
             signal,
         );
         return await requestRuntimeControl(socket, command, signal);

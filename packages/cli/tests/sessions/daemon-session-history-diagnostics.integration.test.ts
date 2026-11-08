@@ -83,12 +83,11 @@ if (process.argv.includes("--version")) {
                         bindingId: peer.bindingId,
                         commandId: "external-image-seed-turn",
                         directoryId: "default",
-                        disposition: SessionPromptDisposition.Reject,
+                        disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",
                         prompt: "Seed native history",
                         sessionId: peer.sessionId,
-                        targetCommandId: "",
                     }),
                 );
                 for (;;) {

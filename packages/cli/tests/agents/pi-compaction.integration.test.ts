@@ -34,12 +34,11 @@ test("Given pi compacts the conversation, When the daemon relays the turn, Then 
                     bindingId: peer.bindingId,
                     commandId: randomUUID(),
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
                     sessionId: peer.sessionId,
-                    targetCommandId: "",
                 }),
             );
         };

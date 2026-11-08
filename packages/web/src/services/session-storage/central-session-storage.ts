@@ -299,14 +299,8 @@ const pendingRequestEntries = {
 };
 const pendingSubmissionSchema = v.strictObject({
     commandId: submissionIdentifier,
-    request: v.variant("disposition", [
-        v.strictObject({ ...pendingRequestEntries, disposition: v.literal("reject"), targetCommandId: v.literal("") }),
-        v.strictObject({
-            ...pendingRequestEntries,
-            disposition: v.literal("queue"),
-            targetCommandId: submissionIdentifier,
-        }),
-    ]),
+    placement: v.picklist(["turn", "queue"]),
+    request: v.strictObject(pendingRequestEntries),
 });
 export type SessionPendingSubmission = v.InferOutput<typeof pendingSubmissionSchema>;
 

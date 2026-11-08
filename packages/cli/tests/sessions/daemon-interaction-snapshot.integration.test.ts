@@ -155,12 +155,11 @@ test("Given an Agent was inspected transiently, When its first Turn materializes
                 bindingId: config.bindingId,
                 commandId: "interaction_turn",
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Reject,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "exercise ACP controls",
                 sessionId,
-                targetCommandId: "",
             }),
         );
         expect(decodeSessionStatusChangedEvent(await messages.nextKind(SESSION_STATUS_CHANGED_KIND))).toEqual({
@@ -332,12 +331,11 @@ test("Given an Agent announced a tool call with its input, When it requests perm
                 bindingId: config.bindingId,
                 commandId: "announced_turn",
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Reject,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "request permission for an announced tool call",
                 sessionId,
-                targetCommandId: "",
             }),
         );
         const permission = decodeSessionPermissionRequestedEvent(
@@ -442,12 +440,11 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
                 bindingId: config.bindingId,
                 commandId: "null_input_turn",
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Reject,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "request permission after a null rawInput update",
                 sessionId,
-                targetCommandId: "",
             }),
         );
         const permission = decodeSessionPermissionRequestedEvent(
@@ -552,12 +549,11 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
                 bindingId: config.bindingId,
                 commandId: "orphan_update_turn",
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Reject,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "request permission for an orphan update announcement",
                 sessionId,
-                targetCommandId: "",
             }),
         );
         const permission = decodeSessionPermissionRequestedEvent(
@@ -752,12 +748,11 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
                     bindingId: config.bindingId,
                     commandId: "initial_turn",
                     directoryId: "default",
-                    disposition: SessionPromptDisposition.Reject,
+                    disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "Persist this Session",
                     sessionId,
-                    targetCommandId: "",
                 }),
             );
             await messages.nextKind("prompt.completed");
@@ -899,12 +894,11 @@ test("Given queued prompts from the running Agent identity and another one, When
                 bindingId: config.bindingId,
                 commandId: "running_turn",
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Reject,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "exercise ACP controls",
                 sessionId,
-                targetCommandId: "",
             }),
         );
         expect(decodeSessionStatusChangedEvent(await messages.nextKind(SESSION_STATUS_CHANGED_KIND))).toMatchObject({
@@ -919,12 +913,11 @@ test("Given queued prompts from the running Agent identity and another one, When
                 bindingId: config.bindingId,
                 commandId: "foreign_queued_turn",
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Queue,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "queued for another agent",
                 sessionId,
-                targetCommandId: "running_turn",
             }),
         );
         // The running identity queues a prompt with a file, which a client needs to restore it for editing.
@@ -944,12 +937,11 @@ test("Given queued prompts from the running Agent identity and another one, When
                 bindingId: config.bindingId,
                 commandId: "own_queued_turn",
                 directoryId: "default",
-                disposition: SessionPromptDisposition.Queue,
+                disposition: SessionPromptDisposition.Append,
                 attachments: [report],
                 kind: "session.prompt",
                 prompt: "summarize the attached report",
                 sessionId,
-                targetCommandId: "running_turn",
             }),
         );
         // The snapshot for the Claude identity must not report the Codex queued prompt.

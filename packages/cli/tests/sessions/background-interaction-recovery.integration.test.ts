@@ -149,11 +149,10 @@ test("Given a completed foreground turn, When its Agent requests background perm
                 historyPolicy: "eager",
                 ...identity,
                 commandId: "foreground",
-                disposition: "reject",
+                disposition: "append",
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "Finish before the background approval",
-                targetCommandId: "",
             }),
         );
         await live("prompt.completed");

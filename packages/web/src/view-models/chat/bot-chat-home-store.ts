@@ -958,7 +958,7 @@ export const createBotChatHomeStore = (
                     commandId,
                     content: queuedMessage.content,
                     attachments: { kind: "local", values: queuedMessage.attachments },
-                    target: { disposition: "reject", targetCommandId: "" },
+                    placement: "turn",
                 });
                 releaseUnsentFirstMessage(commandId);
                 if (session !== null) {

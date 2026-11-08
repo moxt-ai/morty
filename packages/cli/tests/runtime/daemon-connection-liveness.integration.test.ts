@@ -947,12 +947,11 @@ describe("daemon relay connection liveness", () => {
                         bindingId: "workspace",
                         commandId: daemonSockets.length === 1 ? "reconciliation-command" : "fresh-command",
                         directoryId: "default",
-                        disposition: "reject",
+                        disposition: "append",
                         attachments: [],
                         kind: SESSION_PROMPT_KIND,
                         prompt: "broadcast without viewers",
                         sessionId: daemonSockets.length === 1 ? "reconciliation-session" : "fresh-session",
-                        targetCommandId: "",
                     }),
                 );
             }
@@ -1064,12 +1063,11 @@ describe("daemon relay connection liveness", () => {
                         bindingId: "workspace",
                         commandId: `live-command-${turn}`,
                         directoryId: "default",
-                        disposition: "reject",
+                        disposition: "append",
                         attachments: [],
                         kind: SESSION_PROMPT_KIND,
                         prompt: "keep broadcasting",
                         sessionId: "reconciliation-session",
-                        targetCommandId: "",
                     }),
                 );
                 let terminal = false;
