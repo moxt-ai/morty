@@ -163,11 +163,17 @@ test("Given a background reply is running when the Runtime goes offline, When th
     await app.waitForView(() => expect(directoryTitles(app)).toHaveLength(1));
     // Another page starts a reply in the background conversation that is still running when the Runtime goes away.
     const viewer = await app.openViewer();
+    // A conversation opens only once its page is connected, and the draft page's composer is ready before that.
     await viewer.user.click(
-        await viewer.queryElementByTestId(dataTestId.managedConversation, (entry) =>
-            Boolean(entry.textContent?.includes("Background conversation")),
+        await viewer.queryElementByTestId(
+            dataTestId.managedConversation,
+            (entry) =>
+                entry instanceof HTMLButtonElement &&
+                !entry.disabled &&
+                Boolean(entry.textContent?.includes("Background conversation")),
         ),
     );
+    await viewer.waitForView(() => expect(agentAnswered(viewer, "Codex turn 1: Background conversation")).toBe(true));
     await sendPrompt(viewer, await readyComposer(viewer), "hold after first delta");
     await viewer.waitForView(() => {
         expect(agentAnswered(viewer, "Partial reply")).toBe(true);
