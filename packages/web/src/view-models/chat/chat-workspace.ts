@@ -404,7 +404,12 @@ export function createChatWorkspace(options: {
         if (existing !== undefined) {
             return existing;
         }
-        const state = createSessionPageState({ botId, sessionId, lifetime: operationsLifetime.signal });
+        const state = createSessionPageState({
+            botId,
+            sessionId,
+            clock: options.clock,
+            lifetime: operationsLifetime.signal,
+        });
         sessionStates.set(sessionId, state);
         return state;
     };

@@ -1,4 +1,4 @@
-import { type MortyClient, MortyError } from "@morty-build/client";
+import { type MortyClient, MortyError, SESSION_CLOSED_ERROR_CODE } from "@morty-build/client";
 
 // The Session pane owns live-stream recovery; SDK retries are disabled so
 // connection attempts and reconciliation share one bounded retry policy.
@@ -59,18 +59,33 @@ export function connectionFailure(connection: SessionConnection): string | null 
     }
 }
 
-/** Whether the connection reached a state that operations waiting for it can act on. */
-export function isConnectionSettled(connection: SessionConnection): boolean {
+/**
+ * What an operation waiting for the connection can do now: send through the ready client, wait for the connection to
+ * settle, or give up with the reason the connection cannot carry it.
+ */
+export type ConnectionReadiness =
+    | { readonly kind: "ready"; readonly client: MortyClient }
+    | { readonly kind: "waiting" }
+    | { readonly kind: "unavailable"; readonly failure: MortyError };
+
+export function connectionReadiness(connection: SessionConnection): ConnectionReadiness {
     switch (connection.kind) {
         case "ready":
+            return { kind: "ready", client: connection.client };
         case "failed":
+            return { kind: "unavailable", failure: new MortyError("session_not_connected", connection.message) };
         case "closed":
-            return true;
+            return {
+                kind: "unavailable",
+                failure: new MortyError(SESSION_CLOSED_ERROR_CODE, "The session is closed."),
+            };
         case "disconnected":
-            return connection.retry.kind === "exhausted";
+            return connection.retry.kind === "exhausted"
+                ? { kind: "unavailable", failure: new MortyError("session_not_connected", connection.message) }
+                : { kind: "waiting" };
         case "first-loading":
         case "reconnecting":
-            return false;
+            return { kind: "waiting" };
     }
 }
 

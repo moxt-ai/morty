@@ -17,8 +17,9 @@ import type {
 import type { SessionMessage } from "./session-presentation.ts";
 
 // The Session's interaction contract: the requests the Agent made, how each
-// was resolved, and the user's in-flight responses. The pane forwards lifecycle
-// facts here instead of tracking interactions itself.
+// was resolved, and the user's in-flight responses. The pane following the
+// Session forwards lifecycle facts here instead of tracking interactions itself;
+// a response belongs to the Session, so switching panes does not end it.
 
 /** A lifecycle fact that changes the interactions. */
 type SessionInteractionFact = Extract<
@@ -103,7 +104,13 @@ export interface SessionInteractionStore {
     readonly editAnswer: (interactionId: string, fieldName: string, value: ElicitationFieldValue) => void;
     readonly submissions: ReadonlyMap<string, InteractionOperation>;
     readonly coverage: { readonly sessionGenerationId: string; readonly throughPosition: string } | null;
-    readonly apply: (fact: SessionInteractionFact, event: SessionLiveEvent, signal: AbortSignal) => Promise<void>;
+    /** Applies a lifecycle fact; `read` recovers the interactions through the connection the fact arrived on. */
+    readonly apply: (
+        fact: SessionInteractionFact,
+        event: SessionLiveEvent,
+        read: (signal: AbortSignal) => Promise<SessionInteractionRecovery>,
+        signal: AbortSignal,
+    ) => Promise<void>;
     readonly recover: (recovery: SessionInteractionRecovery) => void;
     /** Replaces the interactions with those the Runtime reports for the Session now. */
     readonly restore: (interactions: readonly SessionInteraction[]) => void;
@@ -112,7 +119,6 @@ export interface SessionInteractionStore {
 }
 
 export function createSessionInteractionStore(ports: {
-    readonly read: (signal: AbortSignal) => Promise<SessionInteractionRecovery>;
     readonly permission: (response: PermissionInteractionResponse, signal: AbortSignal) => Promise<void>;
     readonly elicitation: (response: ElicitationInteractionResponse, signal: AbortSignal) => Promise<void>;
     /** The answer drafts the Session kept, and where changes to them are kept. */
@@ -179,11 +185,11 @@ export function createSessionInteractionStore(ports: {
             },
             coverage: null,
             submissions: new Map(),
-            apply: async (fact, event, signal) => {
+            apply: async (fact, event, read, signal) => {
                 signal.throwIfAborted();
                 const previous = get().coverage;
                 if (previous !== null && previous.sessionGenerationId !== event.sessionGenerationId) {
-                    const recovery = await ports.read(signal);
+                    const recovery = await read(signal);
                     signal.throwIfAborted();
                     get().recover(recovery);
                 }
