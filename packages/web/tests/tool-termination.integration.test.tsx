@@ -163,9 +163,9 @@ test("Given another viewer opens a history page beginning with steering already 
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
     const viewer = await app.openViewer();
     await tool(viewer, "Steered verification 32");
-    // Enough visible tools fill the latest history page without the steering request.
-    expect(viewer.elementsByTestId(dataTestId.agentToolCall)).toHaveLength(30);
-    expect(getByLabelText(await tool(viewer, "Steered verification 3"), "Tool running")).toBeDefined();
+    // Enough visible tools fill the latest history page, beside the steering's own lifecycle, without its request.
+    expect(viewer.elementsByTestId(dataTestId.agentToolCall)).toHaveLength(29);
+    expect(getByLabelText(await tool(viewer, "Steered verification 4"), "Tool running")).toBeDefined();
     expect(viewer.elementsByTestId(dataTestId.userMessage).some((message) => message.textContent === instruction)).toBe(
         false,
     );
@@ -180,7 +180,7 @@ test("Given another viewer opens a history page beginning with steering already 
             viewer
                 .elementsByTestId(dataTestId.agentToolCall)
                 .filter((entry) => queryByLabelText(entry, "Tool interrupted") !== null),
-        ).toHaveLength(30),
+        ).toHaveLength(29),
     );
     await viewer.close();
 });

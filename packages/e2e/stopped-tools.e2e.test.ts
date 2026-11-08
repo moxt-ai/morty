@@ -16,7 +16,7 @@ async function expectTools(page: E2EPage, label: string, count: number) {
 
 test.use({ runtimeAgent: { id: "tool-lifecycle-test", name: "Tool Lifecycle Agent" } });
 for (const width of [1440, 390]) {
-    test(`Given a running tool at ${width}px, When I stop and reload the turn, Then unfinished tools are interrupted and later turns preserve that outcome`, async ({
+    test(`Given a running tool at ${width}px, When I stop and reload the turn, Then unfinished tools are interrupted, the stop stays where it ended, and later turns preserve that outcome`, async ({
         runtime,
     }, testInfo) => {
         const { page } = runtime;
@@ -38,13 +38,13 @@ for (const width of [1440, 390]) {
         await expectTools(page, "Tool interrupted", 3);
         await expectTools(page, "Tool succeeded", 1);
         await expectTools(page, "Tool failed", 1);
-        // A turn's stop reason is live-only: reloaded history keeps the interrupted tools, not the notice.
-        await expect(page.getByText("Turn stopped.", { exact: true })).toHaveCount(0);
+        // History holds the turn's ending where it ended, so a reload shows the stop as the live view did.
+        await expect(page.getByText("Turn stopped.", { exact: true })).toHaveCount(1);
         await page.screenshot({ path: testInfo.outputPath(`stopped-tools-${width}.png`), fullPage: true });
         await composer.fill("complete unfinished tools");
         await page.getByRole("button", { name: "Send message" }).click();
         await expectTools(page, "Tool interrupted", 5);
         await expectTools(page, "Tool running", 0);
-        await expect(page.getByText("Turn stopped.", { exact: true })).toHaveCount(0);
+        await expect(page.getByText("Turn stopped.", { exact: true })).toHaveCount(1);
     });
 }
