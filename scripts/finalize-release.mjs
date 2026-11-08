@@ -101,7 +101,20 @@ const verifyPublishedAssets = async (publishedRelease) => {
     if (!publishedRelease.immutable || publishedRelease.draft) {
         throw new Error("The final release must have repository-enforced immutability");
     }
-    for (const name of [basename(release.archive), "cli-release.json", "cloud-release.json", "cloud.tar.gz"]) {
+    const expectedNames = [
+        basename(release.archive),
+        "cli-release.json",
+        "cloud-release.json",
+        "cloud.tar.gz",
+        "deployment-evidence.json",
+    ];
+    if (
+        publishedRelease.assets.length !== expectedNames.length ||
+        publishedRelease.assets.some((asset) => !expectedNames.includes(asset.name) || asset.state !== "uploaded")
+    ) {
+        throw new Error("Final release asset inventory differs from the accepted release");
+    }
+    for (const name of expectedNames.filter((name) => name !== "deployment-evidence.json")) {
         const digest = `sha256:${createHash("sha256")
             .update(await readFile(join(".release/assets", name)))
             .digest("hex")}`;
@@ -133,6 +146,20 @@ if (!existing) {
         "--notes-file",
         ".release/notes.txt",
     );
+}
+if (
+    existing?.assets.some(
+        (asset) =>
+            ![
+                basename(release.archive),
+                "cli-release.json",
+                "cloud-release.json",
+                "cloud.tar.gz",
+                "deployment-evidence.json",
+            ].includes(asset.name),
+    )
+) {
+    throw new Error("Draft contains unexpected assets; inspect it before resuming");
 }
 // Only this workflow's still-private draft may receive resumed asset uploads.
 const assets = (await readdir(".release/assets")).map((name) => join(".release/assets", name));
