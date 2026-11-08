@@ -234,6 +234,12 @@ export async function stopProcessTree(
     if (childExited && processes.length === 0) {
         return;
     }
+    (await import("../../../investigation.ts")).investigate("tree_kill", {
+        root: childProcessId,
+        childExited,
+        command: child.spawnfile,
+        processes: processes.map((identity) => identity.processId),
+    });
     hostPlatform.signalCapturedProcesses(processes, childProcessId, GRACEFUL_STOP_SIGNAL);
     hostPlatform.terminateProcess(child, "SIGTERM");
     const [exitedAfterTermination, descendantsExitedAfterTermination] = await Promise.all([

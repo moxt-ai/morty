@@ -53,15 +53,16 @@ jobs:
         run: |
           prefix="$RUNNER_TEMP/morty-launcher"
           archive="$(node -p "require('path').resolve('.release', require('./.release/release.json').archive)")"
-          npm install --prefix "$prefix" --no-audit --no-fund --ignore-scripts "$archive"
+          npm install --prefix "$prefix" --no-audit --no-fund --ignore-scripts "$archive" "@moxt-ai/mobius@0.0.431"
           failures=0
           for iteration in 1 2 3 4 5; do
             log="$RUNNER_TEMP/evidence/iteration-$iteration"
             mkdir -p "$log"
             if ! MORTY_INVESTIGATION_LOG="$log" MORTY_RELEASE_ARCHIVE="$archive" \
                 MORTY_RELEASE_ENTRY="$prefix/node_modules/@morty-build/cli/dist/cli.js" \
+                MOXT_RELEASE_ENTRY="$prefix/node_modules/@moxt-ai/mobius/dist/cli.js" \
                 NODE_OPTIONS="--trace-exit --trace-uncaught" \
-                node --test packages/cli/tests/release/independent-product.test.mjs > "$log/test-output.txt" 2>&1; then
+                node --test packages/cli/tests/release/independent-product.test.mjs packages/cli/tests/release/coexistence.test.mjs > "$log/test-output.txt" 2>&1; then
               failures=$((failures + 1))
               echo "::error::iteration $iteration failed"
               tail -60 "$log/test-output.txt"
@@ -69,9 +70,11 @@ jobs:
             fi
           done
           echo "failures=$failures"
+          # Evidence of foreign kills is uploaded even when every assertion passed.
+          cp -r "$RUNNER_TEMP/evidence" "$RUNNER_TEMP/all-evidence"
           test "$failures" = 0
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: failure()
+        if: always()
         with:
           name: evidence-${{ matrix.node }}-${{ matrix.runner }}
           path: |
