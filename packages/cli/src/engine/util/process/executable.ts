@@ -1,8 +1,8 @@
-import { spawn } from "node:child_process";
+import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-import type { ProcessLaunch, ProcessTableEntry, ProcessTreeIdentity } from "./platform/contracts.ts";
+import type { ProcessLaunch, ProcessTreeIdentity, SpawnedProcess } from "./platform/contracts.ts";
 import { processPlatformSupportFor } from "./platform/index.ts";
 
 import { ProcessExecutionError } from "./process-error.ts";
@@ -149,35 +149,29 @@ function appendBounded(chunks: Buffer[], chunk: Buffer, currentBytes: number, li
     return nextBytes;
 }
 
-function readProcessTable(): Promise<readonly ProcessTableEntry[]> {
-    return hostPlatform.readProcessTable();
+// Process trees are identified from each child's own lifetime, never from a process ID alone.
+const lifetimes = new WeakMap<ChildProcess, SpawnedProcess>();
+
+/** Spawns a child whose process tree `captureProcessTree` and `stopProcessTree` can identify. */
+export function spawnProcess(command: string, args: readonly string[], options: SpawnOptions): ChildProcess {
+    const spawnedAt = Date.now();
+    const child = spawn(command, [...args], options);
+    const processId = child.pid;
+    if (processId !== undefined) {
+        lifetimes.set(child, { state: "running", processId, spawnedAt });
+        child.once("exit", () => {
+            lifetimes.set(child, { state: "exited", processId, spawnedAt, exitedAt: Date.now() });
+        });
+    }
+    return child;
 }
 
-function selectProcessTree(
-    entries: readonly ProcessTableEntry[],
-    rootProcessId: number,
-): readonly ProcessTreeIdentity[] {
-    const processIds = new Set([rootProcessId]);
-    for (const entry of entries) {
-        if (entry.processGroupId === rootProcessId) {
-            processIds.add(entry.processId);
-        }
+function spawnedProcess(child: ChildProcess): SpawnedProcess {
+    const lifetime = lifetimes.get(child);
+    if (lifetime === undefined) {
+        throw new Error("Only a child started by spawnProcess has an identifiable process tree");
     }
-    let previousSize = 0;
-    while (previousSize !== processIds.size) {
-        previousSize = processIds.size;
-        for (const entry of entries) {
-            if (processIds.has(entry.parentProcessId)) {
-                processIds.add(entry.processId);
-            }
-        }
-    }
-    return entries
-        .filter((entry) => processIds.has(entry.processId))
-        .map((entry) => ({
-            processGroupId: entry.processGroupId,
-            processId: entry.processId,
-        }));
+    return lifetime;
 }
 
 function mergeProcessTrees(
@@ -194,15 +188,11 @@ function mergeProcessTrees(
     return [...processes.values()];
 }
 
-export async function captureProcessTree(child: ReturnType<typeof spawn>): Promise<readonly ProcessTreeIdentity[]> {
+export async function captureProcessTree(child: ChildProcess): Promise<readonly ProcessTreeIdentity[]> {
     if (child.pid === undefined) {
         return [];
     }
-    const entries = hostPlatform.readProcessTableSynchronously();
-    if (entries.length > 0) {
-        return selectProcessTree(entries, child.pid);
-    }
-    return selectProcessTree(await readProcessTable(), child.pid);
+    return await hostPlatform.captureProcessTree(spawnedProcess(child));
 }
 
 async function waitForCapturedProcessesExit(
@@ -216,13 +206,13 @@ async function waitForCapturedProcessesExit(
         if (processIds.every((processId) => !hostPlatform.processExists(processId))) {
             return true;
         }
-        await readProcessTable();
+        await hostPlatform.readProcessTable();
     }
     return processIds.every((processId) => !hostPlatform.processExists(processId));
 }
 
 export async function stopProcessTree(
-    child: ReturnType<typeof spawn>,
+    child: ChildProcess,
     capturedProcesses: readonly ProcessTreeIdentity[] = [],
 ): Promise<void> {
     const childProcessId = child.pid;
@@ -254,7 +244,7 @@ export async function stopProcessTree(
     }
 }
 
-function waitForProcessExit(child: ReturnType<typeof spawn>, timeoutMilliseconds: number): Promise<boolean> {
+function waitForProcessExit(child: ChildProcess, timeoutMilliseconds: number): Promise<boolean> {
     if (child.exitCode !== null || child.signalCode !== null) {
         return Promise.resolve(true);
     }
@@ -282,7 +272,7 @@ export async function runBoundedProcess(options: RunProcessOptions): Promise<Pro
     options.signal.throwIfAborted();
     const outputLimitBytes = options.outputLimitBytes ?? DEFAULT_OUTPUT_LIMIT_BYTES;
     const launch = executableLaunch(options.command, options.arguments);
-    const child = spawn(launch.command, [...launch.arguments], {
+    const child = spawnProcess(launch.command, launch.arguments, {
         cwd: options.cwd,
         ...hostPlatform.spawnOptions,
         env: { ...options.environment },
