@@ -13,14 +13,18 @@ if (
 ) {
     throw new Error("Cloud and CLI release identities differ");
 }
-const evidenceDirectories = (await readdir(".release/evidence")).sort(
-    (a, b) => Number(b.split("-").at(-1)) - Number(a.split("-").at(-1)),
-);
+const evidenceRoot = ".release/evidence";
+const evidenceDirectories = (await readdir(evidenceRoot, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory() && /^deployment-evidence-\d+$/.test(entry.name))
+    .map((entry) => entry.name)
+    .sort((a, b) => Number(b.split("-").at(-1)) - Number(a.split("-").at(-1)))
+    .map((directory) => join(evidenceRoot, directory));
 let evidence;
-for (const directory of evidenceDirectories) {
-    const files = await readdir(join(".release/evidence", directory));
+// A single artifact is extracted directly; multiple artifacts retain their names.
+for (const directory of [evidenceRoot, ...evidenceDirectories]) {
+    const files = await readdir(directory);
     if (files.includes("deployment-evidence.json")) {
-        evidence = JSON.parse(await readFile(join(".release/evidence", directory, "deployment-evidence.json"), "utf8"));
+        evidence = JSON.parse(await readFile(join(directory, "deployment-evidence.json"), "utf8"));
         break;
     }
 }
