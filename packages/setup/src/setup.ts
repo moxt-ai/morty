@@ -541,7 +541,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             replaced_user_token: _replacedToken,
             ...identity
         } = config;
-        const fields = ["identity_creation_key", "user_token", "user_id", "project_id", "pairing_runtime_id"];
+        const fields = [
+            "identity_creation_key",
+            "user_token",
+            "user_id",
+            "project_id",
+            "pairing_request_key",
+            "pairing_runtime_id",
+        ];
         if (typeof base_url !== "string" || Object.keys(identity).some((key) => !fields.includes(key))) {
             fail("INVALID_CONFIGURATION");
         }
@@ -1002,10 +1009,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function createRuntimePairing(context: MachineContext, appId: string): Promise<RuntimeSelection> {
-        const pairing = await request(context, "/management/runtime-pairings", {
-            idempotencyKey: crypto.randomUUID(),
-        });
+    async function createRuntimePairing(
+        context: MachineContext,
+        appId: string,
+        idempotencyKey: string,
+    ): Promise<{ readonly runtime: RuntimeSelection; readonly expiresAt: number }> {
+        const pairing = await request(context, "/management/runtime-pairings", { idempotencyKey });
         const selection: RuntimeSelection = {
             kind: "pairing",
             appId: identifier(pairing["appId"]),
@@ -1019,8 +1028,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (selection.appId !== appId || selection.projectId !== context.config["project_id"]) {
             fail("PROJECT_CONFLICT");
         }
+        const expiresAt = Date.parse(text(pairing["expiresAt"], /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/u));
+        if (Number.isNaN(expiresAt)) {
+            fail("INVALID_RESPONSE");
+        }
         emit({ status: "prepared", botId: context.botId });
-        return selection;
+        return { runtime: selection, expiresAt };
     }
 
     async function replaceProject(context: MachineContext): Promise<MachineContext> {
@@ -1059,6 +1072,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 user_token: credential(replacement["token"]),
                 user_id: identifier(replacement["userId"]),
                 project_id: projectId,
+                pairing_request_key: undefined,
                 pairing_runtime_id: undefined,
             },
         );
@@ -1134,15 +1148,33 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     /**
-     * Pairs a new Runtime for the unbound Machine. The Runtime is recorded before its code is redeemed, so a run that
-     * stops at any later point leaves the next run a Runtime to continue on rather than another one to pair.
+     * Pairs a new Runtime for the unbound Machine. The request's key is saved before it is sent, so a run whose reply
+     * was lost asks for the same pairing again instead of creating another. Once the reply is in hand the Runtime is
+     * recorded in its place, before its code is redeemed, so a run that stops at any later point leaves the next run a
+     * Runtime to continue on. A pairing that expired before the reply arrived cannot be redeemed; a new key replaces it.
      */
     async function pairRuntime(
         context: MachineContext,
         appId: string,
     ): Promise<{ readonly context: MachineContext; readonly runtime: RuntimeSelection }> {
-        const runtime = await createRuntimePairing(context, appId);
-        return { context: await saveConfiguration(context, { pairing_runtime_id: runtime.runtimeId }), runtime };
+        let requesting = context;
+        for (;;) {
+            if (typeof requesting.config["pairing_request_key"] !== "string") {
+                requesting = await saveConfiguration(requesting, { pairing_request_key: crypto.randomUUID() });
+            }
+            const { runtime, expiresAt } = await createRuntimePairing(
+                requesting,
+                appId,
+                identifier(requesting.config["pairing_request_key"]),
+            );
+            const { pairing_request_key: _requested, ...config } = requesting.config;
+            const settled = { ...requesting, config };
+            if (expiresAt <= clock.now().getTime()) {
+                requesting = await saveConfiguration(settled, {});
+                continue;
+            }
+            return { context: await saveConfiguration(settled, { pairing_runtime_id: runtime.runtimeId }), runtime };
+        }
     }
 
     function runtimeCommand(

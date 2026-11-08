@@ -1,5 +1,6 @@
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import type { CloudBindings } from "../../../infra/cloud-bindings.ts";
+import type { BotConfiguration } from "../entity/bot-configuration.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { type PlatformProject, PlatformProjectError } from "../entity/platform-project.ts";
 import type { BootstrapOrigin } from "../entity/project-bootstrap.ts";
@@ -9,6 +10,9 @@ import { randomSecret } from "../storage/identity-storage-common.ts";
 import type { ManagedBotStorage } from "../storage/managed-bot-storage.ts";
 import type { PlatformProjectStorage } from "../storage/platform-project-storage.ts";
 import type { AuthenticationService } from "./authentication-service.ts";
+
+/** The outcome of binding a Machine to a Runtime. */
+export type RuntimeBinding = "bound" | "fixed" | "not-found";
 
 export class ManagementService {
     readonly #authentication: AuthenticationService;
@@ -85,6 +89,50 @@ export class ManagementService {
             instructions: bot.instructions,
             configured: bot.configuration !== null,
         };
+    };
+
+    readonly ownsMachine = async (userId: string, botId: string, signal: AbortSignal): Promise<boolean> =>
+        await this.#managedBots.ownsBot(userId, botId, signal);
+
+    /** The user's Machine with its Runtime binding (`configuration`, null while unbound), or null when it has none. */
+    readonly machine = async (userId: string, botId: string, signal: AbortSignal) =>
+        await this.#managedBots.readBot(userId, botId, signal);
+
+    /**
+     * Binds the Machine to `runtimeId`. A Machine's binding is fixed: an unbound Machine takes the Runtime once `verify`
+     * accepts it, the same Runtime binds again idempotently after `verify`, and any other Runtime is refused before
+     * `verify` runs. Of two concurrent first bindings only one is recorded; the other is answered from the result.
+     */
+    readonly bindRuntime = async (
+        userId: string,
+        botId: string,
+        runtimeId: BotConfiguration["runtimeId"],
+        verify: () => Promise<void>,
+        signal: AbortSignal,
+    ): Promise<RuntimeBinding> => {
+        const decide = (configuration: BotConfiguration | null): RuntimeBinding | "unbound" =>
+            configuration === null ? "unbound" : configuration.runtimeId === runtimeId ? "bound" : "fixed";
+        const current = await this.#managedBots.readBot(userId, botId, signal);
+        if (current === null) {
+            return "not-found";
+        }
+        const decision = decide(current.configuration);
+        if (decision === "fixed") {
+            return decision;
+        }
+        await verify();
+        if (
+            decision === "bound" ||
+            (await this.#managedBots.bindUnbound(userId, botId, { runtimeId }, Date.now(), signal))
+        ) {
+            return "bound";
+        }
+        const settled = await this.#managedBots.readBot(userId, botId, signal);
+        if (settled === null) {
+            return "not-found";
+        }
+        const outcome = decide(settled.configuration);
+        return outcome === "unbound" ? "not-found" : outcome;
     };
 
     readonly readBotRuntimeBinding = async (userId: string, botId: string, signal: AbortSignal) => {

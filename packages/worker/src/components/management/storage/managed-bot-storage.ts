@@ -1,5 +1,5 @@
 import { isIdentifier } from "@morty-build/client/protocol";
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import * as v from "valibot";
 import type { HttpError } from "../../../infra/http-error.ts";
 import { createDatabase, type Database } from "../../../schema/project-do/database.ts";
@@ -23,7 +23,6 @@ const listedBotSchema = v.pipe(
 
 export type ManagedBot = v.InferOutput<typeof managedBotSchema>;
 type ListedManagedBot = v.InferOutput<typeof listedBotSchema>;
-export type ConfigureManagedBotResult = "configured" | "not-found" | "runtime-mismatch";
 
 export class ManagedBotStorage {
     readonly #database: unknown;
@@ -97,41 +96,32 @@ export class ManagedBotStorage {
         };
     };
 
-    readonly configureBot = async (
+    /**
+     * Records the Machine's first Runtime binding. The write applies only while the Machine has none, so of two
+     * concurrent bindings exactly one is recorded; whether a binding is allowed is the management service's decision.
+     */
+    readonly bindUnbound = async (
         userId: string,
         botId: string,
         configuration: BotConfiguration,
         now: number,
         signal: AbortSignal,
-    ): Promise<ConfigureManagedBotResult> => {
+    ): Promise<boolean> => {
         const value = v.parse(botConfigurationSchema, configuration);
         signal.throwIfAborted();
-        const database = this.#requireDatabase();
-        const result = await database
+        const result = await this.#requireDatabase()
             .update(managedBot)
             .set({ runtimeId: value.runtimeId, updatedAt: now })
             .where(
                 and(
                     eq(managedBot.userId, userId),
                     eq(managedBot.botId, v.parse(identifier, botId)),
-                    or(isNull(managedBot.runtimeId), eq(managedBot.runtimeId, value.runtimeId)),
+                    isNull(managedBot.runtimeId),
                 ),
             )
             .run();
         signal.throwIfAborted();
-        if (result.meta.changes === 1) {
-            return "configured";
-        }
-        const current = await database
-            .select({ runtimeId: managedBot.runtimeId })
-            .from(managedBot)
-            .where(and(eq(managedBot.userId, userId), eq(managedBot.botId, v.parse(identifier, botId))))
-            .get();
-        signal.throwIfAborted();
-        if (current === undefined) {
-            return "not-found";
-        }
-        return current.runtimeId !== null && current.runtimeId !== value.runtimeId ? "runtime-mismatch" : "not-found";
+        return result.meta.changes === 1;
     };
 
     readonly saveClaim = async (userId: string, bot: ManagedBot, now: number, signal: AbortSignal): Promise<void> => {

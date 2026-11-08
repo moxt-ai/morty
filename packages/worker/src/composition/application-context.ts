@@ -47,10 +47,11 @@ export function createApplicationDependencies(bindings: CloudBindings): Applicat
     });
     const cx = { ...infrastructure, storages };
     const authentication = new AuthenticationService(cx);
+    const management = new ManagementService({ ...cx, services: { authentication } });
     const services = Object.freeze({
         authentication,
-        chat: new ChatService(cx),
-        management: new ManagementService({ ...cx, services: { authentication } }),
+        chat: new ChatService({ ...cx, services: { management } }),
+        management,
     });
     return Object.freeze({ ...cx, services });
 }

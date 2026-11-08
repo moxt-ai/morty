@@ -10,8 +10,8 @@ import {
 } from "@morty-build/client/protocol";
 import type { PlatformProjectGateway } from "../../../gateway/platform-project-gateway.ts";
 import { PlatformProjectError } from "../../management/entity/platform-project.ts";
+import type { ManagementService } from "../../management/service/management-service.ts";
 import type { IdentityStorage } from "../../management/storage/identity-storage.ts";
-import type { ManagedBotStorage } from "../../management/storage/managed-bot-storage.ts";
 import type { ManagedSessionOperations } from "../infra/managed-session-operations.ts";
 import type { ManagedSessionStorage } from "../storage/managed-session-storage.ts";
 
@@ -138,22 +138,22 @@ class OwnedManagedSession {
 export class ChatService {
     readonly #chatSessions: ManagedSessionStorage;
     readonly #identities: IdentityStorage;
-    readonly #managedBots: ManagedBotStorage;
+    readonly #management: ManagementService;
     readonly #platform: PlatformProjectGateway;
     readonly #sessionOperations: ManagedSessionOperations | undefined;
 
     constructor(cx: {
         readonly sessionOperations: ManagedSessionOperations | undefined;
         readonly gateways: { readonly platformProjects: PlatformProjectGateway };
+        readonly services: { readonly management: ManagementService };
         readonly storages: {
             readonly chatSessions: ManagedSessionStorage;
             readonly identities: IdentityStorage;
-            readonly managedBots: ManagedBotStorage;
         };
     }) {
         this.#chatSessions = cx.storages.chatSessions;
         this.#identities = cx.storages.identities;
-        this.#managedBots = cx.storages.managedBots;
+        this.#management = cx.services.management;
         this.#platform = cx.gateways.platformProjects;
         this.#sessionOperations = cx.sessionOperations;
     }
@@ -167,7 +167,7 @@ export class ChatService {
         const { userId, accessExpiresAt } = requester;
         const [ownsProject, ownsBot] = await Promise.all([
             this.#identities.ownsProject(userId, projectId, signal),
-            this.#managedBots.ownsBot(userId, botId, signal),
+            this.#management.ownsMachine(userId, botId, signal),
         ]);
         if (!ownsProject) {
             throw new PlatformProjectError("NOT_FOUND", "Your Morty data was not found.", 404);
@@ -226,7 +226,7 @@ export class ChatService {
     };
 
     readonly #bot = async (scope: ChatScope) => {
-        const bot = await this.#managedBots.readBot(scope.userId, scope.botId, scope.signal);
+        const bot = await this.#management.machine(scope.userId, scope.botId, scope.signal);
         if (bot === null) {
             throw new PlatformProjectError("NOT_FOUND", "Your Machine was not found.", 404);
         }
@@ -745,37 +745,33 @@ export class ChatService {
     };
 
     readonly configureBot = async (scope: ChatScope, input: ConfigureBotInput) => {
-        const current = await this.#bot(scope);
-        if (current.configuration !== null && current.configuration.runtimeId !== input.runtimeId) {
-            throw new PlatformProjectError(
-                "BOT_RUNTIME_FIXED",
-                "Create a new Machine to pair a different Runtime.",
-                409,
-            );
-        }
-        await this.#requireRuntimeAgent(scope, input.runtimeId, input.agentRef);
-        await this.#platform.discoverChatAgentSettings(
-            scope.projectId,
-            { ...input, workspaceRef: "default" },
-            scope.signal,
-        );
-        const result = await this.#managedBots.configureBot(
+        const binding = await this.#management.bindRuntime(
             scope.userId,
             scope.botId,
-            { runtimeId: decodeIdentifier(input.runtimeId) },
-            Date.now(),
+            decodeIdentifier(input.runtimeId),
+            async () => {
+                await this.#requireRuntimeAgent(scope, input.runtimeId, input.agentRef);
+                await this.#platform.discoverChatAgentSettings(
+                    scope.projectId,
+                    { ...input, workspaceRef: "default" },
+                    scope.signal,
+                );
+            },
             scope.signal,
         );
-        if (result !== "configured") {
-            if (result === "runtime-mismatch") {
+        switch (binding) {
+            case "bound":
+                return { status: "active" };
+            case "fixed":
                 throw new PlatformProjectError(
                     "BOT_RUNTIME_FIXED",
                     "Create a new Machine to pair a different Runtime.",
                     409,
                 );
-            }
-            throw new PlatformProjectError("NOT_FOUND", "Your Machine was not found.", 404);
+            case "not-found":
+                throw new PlatformProjectError("NOT_FOUND", "Your Machine was not found.", 404);
+            default:
+                return binding satisfies never;
         }
-        return { status: "active" };
     };
 }
