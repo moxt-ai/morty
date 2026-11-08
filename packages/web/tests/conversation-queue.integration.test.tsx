@@ -530,6 +530,27 @@ test("Given a follow-up with a file was queued from another browser, When this v
     });
     await viewer.waitForView(() => expect(document.body.textContent).toContain("Files must be between 1 byte"));
     expect(document.body.textContent).toContain("Files attached to this message could not be restored here.");
+
+    // Leaving the Session and returning opens a new pane on it; the edited message and its explanation stay.
+    const edited = viewerComposer.value;
+    await viewer.user.click(await viewer.queryElementByTestId(dataTestId.newConversation));
+    await viewer.waitForView(() =>
+        expect(document.body.textContent).not.toContain("Files attached to this message could not be restored here."),
+    );
+    const conversation = await viewer.waitForView(() => {
+        const entry = viewer
+            .elementsByTestId(dataTestId.managedConversation)
+            .find((element) => element.textContent?.includes("wait for steering"));
+        if (entry === undefined) {
+            throw new Error("Expected the running Session in the directory");
+        }
+        return entry;
+    });
+    await viewer.user.click(conversation);
+    await viewer.waitForView(() => {
+        expect(viewer.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", edited);
+        expect(document.body.textContent).toContain("Files attached to this message could not be restored here.");
+    });
 });
 
 test("Given a viewer is loading running history, When another viewer stops before its execution read, Then the partial reply retains its stopped notice", {
