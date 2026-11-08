@@ -15,7 +15,7 @@ export function createChannelRoutes() {
             const agents = validateAgents(body["agents"]);
             await useCases.updateAgentCatalog(
                 validateIdentifier(context.req.param("channelId"), "channel_id"),
-                context.req.query("token") ?? bearerToken(context.req.raw),
+                bearerToken(context.req.raw),
                 agents,
                 context.req.raw.signal,
             );
@@ -73,7 +73,7 @@ export function createChannelRoutes() {
             return context.json(
                 await useCases.readChannel(
                     validateIdentifier(context.req.param("channelId"), "channel_id"),
-                    context.req.query("token") ?? bearerToken(context.req.raw),
+                    bearerToken(context.req.raw),
                     context.req.raw.signal,
                 ),
             );
@@ -83,7 +83,7 @@ export function createChannelRoutes() {
             const request = context.req.raw;
             const access = await useCases.authorizeHost(
                 validateIdentifier(context.req.param("channelId"), "channel_id"),
-                context.req.query("token") ?? "",
+                bearerToken(request),
                 request.signal,
             );
             return await context.env.gateways.channelGateway.acceptHost(access, request, request.signal);
@@ -93,7 +93,7 @@ export function createChannelRoutes() {
             const request = context.req.raw;
             const access = await useCases.authorizeDaemon(
                 validateIdentifier(context.req.param("channelId"), "channel_id"),
-                context.req.query("token") ?? bearerToken(request),
+                bearerToken(request),
                 request.signal,
             );
             return await context.env.gateways.channelGateway.acceptDaemon(access, request, request.signal);

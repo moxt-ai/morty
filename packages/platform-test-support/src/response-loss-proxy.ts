@@ -52,6 +52,9 @@ export async function createResponseLossProxy(upstream: string) {
         target.protocol = "ws:";
         const remote = new WebSocket(target, {
             ...(incoming.headers.origin === undefined ? {} : { origin: incoming.headers.origin }),
+            ...(incoming.headers.authorization === undefined
+                ? {}
+                : { headers: { authorization: incoming.headers.authorization } }),
         });
         sockets.add(remote);
         let lostRequestId: string | null = null;
