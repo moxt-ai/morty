@@ -8,7 +8,7 @@ import re
 import urllib.error
 import urllib.request
 
-from deploy import ROOT, cloud, read
+from deploy import ROOT, read
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -29,35 +29,31 @@ def request(url, credential, body=None):
         return error.code, json.load(error)
 
 
-def main():
-    target = read(ROOT / 'deployment/targets.json')['environments']['production']
-    app_credential = os.environ['MORTY_SERVICE_SECRET']
-    root_key = os.environ['MORTY_SESSION_SIGNING_SECRET'].encode()
-    projects = cloud('/d1/database/' + target['d1_id'] + '/query', {
-        'sql': "SELECT project_id FROM platform_projects WHERE app_id = ? AND lifecycle = 'active' LIMIT 1",
-        'params': [target['app_id']],
+def fail(operation, status, body):
+    error = body.get('error') if isinstance(body, dict) else None
+    code = error.get('code') if isinstance(error, dict) else None
+    if not isinstance(code, str) or re.fullmatch(r'[a-z][a-z0-9_]{0,63}', code) is None:
+        code = 'unknown'
+    raise ValueError(f'{operation} failed (HTTP {status}, code {code})')
+
+
+def verify(origin, app_id, app_credential, root_key, revision):
+    # Retained historical rows need not satisfy the current routing contract. Provision through the
+    # supported boundary, with a stable identity so retries reuse one dedicated verification Project.
+    status, project = request(origin + '/dashboard/v1/apps/' + app_id + '/projects', app_credential, {
+        'displayName': 'Deployment verification', 'idempotencyKey': 'deployment-verification',
+        'clientReference': 'deployment-verification', 'locationHint': 'wnam',
     })
-    if not all(item.get('success') and item.get('meta', {}).get('rows_written', 0) == 0 for item in projects):
-        raise ValueError('Cannot select the deployment verification Project')
-    project_ids = [row['project_id'] for item in projects for row in item['results']]
-    origin = target['platform_origin'] + '/morty/api'
-    if not project_ids:
-        # A fresh installation has no user Project. Reuse one dedicated, idempotently provisioned probe Project.
-        status, project = request(origin + '/dashboard/v1/apps/' + target['app_id'] + '/projects', app_credential, {
-            'displayName': 'Deployment verification', 'idempotencyKey': 'deployment-verification',
-            'clientReference': 'deployment-verification', 'locationHint': 'wnam',
-        })
-        if status != 201:
-            raise ValueError('Cannot provision the deployment verification Project')
-        project_ids = [project['projectId']]
-    project_id = project_ids[0]
-    session_id = 'deployment-' + os.environ['EXPECTED_REVISION'][:12]
+    if status != 201:
+        fail('Verification Project provisioning', status, project)
+    project_id = project['projectId']
+    session_id = 'deployment-' + revision[:12]
     runtime_id = 'deployment-verification'
     status, access = request(origin + '/v1/projects/' + project_id + '/sessions/' + session_id + '/access-credentials', app_credential, {
         'expiresInSeconds': 60, 'runtimeId': runtime_id,
     })
     if status != 201:
-        raise ValueError('Production Session issuance failed')
+        fail('Production Session issuance', status, access)
     credential = access.get('credential', '')
     match = re.fullmatch(r'msession_([A-Za-z0-9_-]{22})_([A-Za-z0-9_-]+)_([A-Za-z0-9_-]{43})', credential)
     if match is None:
@@ -74,13 +70,21 @@ def main():
     verify_url = origin + '/v1/projects/' + project_id + '/sessions/' + session_id + '/live-event-subscription-target'
     status, selected = request(verify_url, credential)
     if status != 200 or selected.get('projectId') != project_id or selected.get('runtimeId') != runtime_id:
-        raise ValueError('Production Runtime rejected the newly issued Session credential')
+        fail('Production Runtime verification', status, selected)
     stored_digest = hashlib.sha256(app_credential.encode()).hexdigest().encode()
     forged = signed.decode() + '_' + base64.urlsafe_b64encode(hmac.digest(stored_digest, signed, 'sha256')).rstrip(b'=').decode()
     rejected_status, rejected = request(verify_url, forged)
     if rejected_status != 401 or rejected.get('error', {}).get('code') != 'project_credential_invalid':
-        raise ValueError('Production Runtime accepted a database-digest forgery')
-    evidence = {'passed': True, 'revision': os.environ['EXPECTED_REVISION'], 'issuanceStatus': 201, 'runtimeVerificationStatus': 200, 'storedDigestForgeryStatus': 401, 'configuredSigningKeyVerified': True, 'localOperationExecuted': False}
+        fail('Stored-digest forgery rejection', rejected_status, rejected)
+    return {'passed': True, 'revision': revision, 'issuanceStatus': 201, 'runtimeVerificationStatus': 200, 'storedDigestForgeryStatus': 401, 'configuredSigningKeyVerified': True, 'localOperationExecuted': False}
+
+
+def main():
+    target = read(ROOT / 'deployment/targets.json')['environments']['production']
+    evidence = verify(
+        target['platform_origin'] + '/morty/api', target['app_id'], os.environ['MORTY_SERVICE_SECRET'],
+        os.environ['MORTY_SESSION_SIGNING_SECRET'].encode(), os.environ['EXPECTED_REVISION'],
+    )
     (ROOT / 'session-access-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
     print(json.dumps(evidence))
 
