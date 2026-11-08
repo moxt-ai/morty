@@ -849,6 +849,7 @@ function MortySessionPaneBody({
         messageQueue,
         attachmentModel,
         interactionModel,
+        settingsModel,
         executionContext.available,
     );
     // An answer to an Agent's question goes out as the composer's message would, which the Runtime runs or queues.
@@ -1317,7 +1318,7 @@ function MortySessionPaneBody({
                         <ChatMessageQueue
                             messages={presentation.queuedMessages}
                             pendingMessages={presentation.pendingQueueMessages}
-                            steeringSupported={taskControls.steeringSupported}
+                            steeringSupported={pane.steeringSupported}
                             onDelete={(commandId) =>
                                 run(async (signal) => await pane.store.getState().deleteQueued(commandId, signal))
                             }
@@ -1403,11 +1404,11 @@ function MortySessionPaneBody({
                                               },
                                     ),
                                 ]}
-                                {...(model.operation.kind === "configuring"
-                                    ? { loadingControlId: model.operation.configId }
+                                {...(settingsModel.change.kind === "configuring"
+                                    ? { loadingControlId: settingsModel.change.configId }
                                     : {})}
                             />
-                            {model.operation.kind === "configuring" && (
+                            {settingsModel.change.kind === "configuring" && (
                                 <span role="status" className="sr-only">
                                     Updating agent settings…
                                 </span>

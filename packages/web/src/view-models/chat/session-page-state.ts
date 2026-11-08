@@ -1,32 +1,55 @@
+import {
+    type MortyClient,
+    MortyElicitationResponseRequest,
+    type MortyInteractionResponseRequest,
+    MortyPermissionResponseRequest,
+} from "@morty-build/client";
 import type { StoreApi } from "zustand/vanilla";
+import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import {
     centralSessionStorage,
+    elicitationAnswerDraftsEntry,
     SessionStorageWriteError,
     sessionPendingSubmissionEntry,
     sessionUnsentMessageEntry,
 } from "../../services/session-storage/central-session-storage.ts";
+import type { Clock } from "../../services/time/clock.ts";
 import { createSessionComposerStore, type SessionComposerStore } from "./session-composer-store.ts";
 import { createSessionDeliveryStore, type SessionDeliveryStore } from "./session-delivery-store.ts";
+import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
 import { createSessionMessageQueueStore, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
+import { createSessionOperationConnection, type SessionOperationConnection } from "./session-operation-connection.ts";
 import { createSessionRenameStore, type SessionRenameStore } from "./session-rename-store.ts";
+import { createSessionSettingsStore, type SessionSettingsStore } from "./session-settings-store.ts";
+import { createSessionTaskControlsStore, type SessionTaskControlsStore } from "./session-task-controls.ts";
 
 /**
- * What the page holds for one Session, whichever pane shows it: what the user is writing, the messages
- * the page submitted, its requests on the Runtime's queue and a confirmed rename. A pane is replaced on every re-read
- * or reconnection; this state lasts as long as the page, so no replacement resets a Session fact.
+ * What the page holds for one Session, whichever pane shows it: what the user is writing, the messages the page
+ * submitted, and what the user asked the Session to do: its requests on the Runtime's queue, a stop, a settings change,
+ * answers to the Agent and a confirmed rename. A pane is replaced on every re-read or reconnection and only follows the
+ * Session's connection and timeline; this state lasts as long as the page, so no replacement resets a Session fact or
+ * ends a Session operation.
  */
 export interface SessionPageState {
+    /** The Session's operations lifetime on this page; only its end cancels what the user asked the Session to do. */
+    readonly lifetime: AbortSignal;
+    /** The connection the pane following the Session lends to its operations. */
+    readonly connection: SessionOperationConnection;
     readonly composer: StoreApi<SessionComposerStore>;
     readonly delivery: StoreApi<SessionDeliveryStore>;
+    readonly interactions: StoreApi<SessionInteractionStore>;
     readonly queue: StoreApi<SessionMessageQueueStore>;
     readonly rename: StoreApi<SessionRenameStore>;
+    readonly settings: StoreApi<SessionSettingsStore>;
+    readonly tasks: StoreApi<SessionTaskControlsStore>;
 }
 
 /** Opens what the page holds for the Session, recovering what an earlier page persisted for it. */
 export function createSessionPageState(options: {
     readonly botId: string;
     readonly sessionId: string;
-    /** The page's lifetime, on which delivery runs each attempt. */
+    readonly clock: Clock;
+    /** The page's lifetime, on which delivery and the Session's operations run. */
     readonly lifetime: AbortSignal;
 }): SessionPageState {
     const { botId, sessionId } = options;
@@ -35,27 +58,92 @@ export function createSessionPageState(options: {
     // A message an earlier page left unsent returns to the composer; it is never delivered implicitly.
     const unsent = centralSessionStorage.read(unsentEntry);
     centralSessionStorage.remove(unsentEntry);
+    const connection = createSessionOperationConnection();
+    const composer = createSessionComposerStore(sessionId, unsent);
+    const delivery = createSessionDeliveryStore({
+        lifetime: options.lifetime,
+        pendingSubmission: centralSessionStorage.read(pendingEntry),
+        pendingSubmissionChanged: (journal) => {
+            if (journal === null) {
+                centralSessionStorage.remove(pendingEntry);
+            } else if (!centralSessionStorage.write(pendingEntry, journal)) {
+                throw new SessionStorageWriteError();
+            }
+        },
+        unsentMessageChanged: (content) => {
+            if (content === null) {
+                centralSessionStorage.remove(unsentEntry);
+            } else {
+                centralSessionStorage.write(unsentEntry, content);
+            }
+        },
+    });
+    const tasks = createSessionTaskControlsStore({ clock: options.clock, sessionId, connection });
+    const queue = createSessionMessageQueueStore({
+        sessionId,
+        connection,
+        withdrawn: (commandId) => delivery.getState().withdraw(commandId),
+        returned: (message) => {
+            // The queued message was written first, so it goes ahead of a draft the user started since.
+            tasks.getState().dismissFailure();
+            queue.getState().dismissFailure();
+            composer
+                .getState()
+                .returnMessage(
+                    message.prompt,
+                    message.attachments.kind === "unrestorable" && message.attachments.count > 0,
+                );
+            const attachments = composer.getState().attachments;
+            const restored: readonly ComposerAttachment[] =
+                message.attachments.kind === "restorable" ? message.attachments.values : [];
+            attachments.getState().restore([...restored, ...attachments.getState().attachments]);
+        },
+    });
+    /** Answers the Agent through whichever pane follows the Session, within the answer's own budget. */
+    const respond = async (
+        interactionId: string,
+        request: MortyInteractionResponseRequest,
+        signal: AbortSignal,
+    ): Promise<void> => {
+        await connection.send(
+            (client: MortyClient, requestSignal) =>
+                client.interactions.respond(sessionId, interactionId, request, requestSignal),
+            AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
+        );
+    };
+    // Answers typed into the Agent's questions belong to the Session, as its composer draft does.
+    const answerDraftsEntry = elicitationAnswerDraftsEntry(sessionId);
+    const interactions = createSessionInteractionStore({
+        permission: (response, signal) =>
+            respond(
+                response.interactionId,
+                new MortyPermissionResponseRequest("morty-web", response.outcome, response.optionId),
+                signal,
+            ),
+        elicitation: (response, signal) =>
+            respond(
+                response.interactionId,
+                new MortyElicitationResponseRequest("morty-web", response.action, response.content),
+                signal,
+            ),
+        answerDrafts: new Map(Object.entries(centralSessionStorage.read(answerDraftsEntry) ?? {})),
+        answerDraftsChanged: (drafts) => {
+            if (drafts.size === 0) {
+                centralSessionStorage.remove(answerDraftsEntry);
+            } else {
+                centralSessionStorage.write(answerDraftsEntry, Object.fromEntries(drafts));
+            }
+        },
+    });
     return {
-        composer: createSessionComposerStore(sessionId, unsent),
-        delivery: createSessionDeliveryStore({
-            lifetime: options.lifetime,
-            pendingSubmission: centralSessionStorage.read(pendingEntry),
-            pendingSubmissionChanged: (journal) => {
-                if (journal === null) {
-                    centralSessionStorage.remove(pendingEntry);
-                } else if (!centralSessionStorage.write(pendingEntry, journal)) {
-                    throw new SessionStorageWriteError();
-                }
-            },
-            unsentMessageChanged: (content) => {
-                if (content === null) {
-                    centralSessionStorage.remove(unsentEntry);
-                } else {
-                    centralSessionStorage.write(unsentEntry, content);
-                }
-            },
-        }),
-        queue: createSessionMessageQueueStore(),
+        lifetime: options.lifetime,
+        connection,
+        composer,
+        delivery,
+        interactions,
+        queue,
         rename: createSessionRenameStore(),
+        settings: createSessionSettingsStore({ botId, sessionId, connection }),
+        tasks,
     };
 }

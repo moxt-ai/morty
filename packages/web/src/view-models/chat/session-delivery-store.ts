@@ -252,7 +252,8 @@ export function prependToDraft(content: string, draft: string): string {
     return draft.length === 0 ? content : content.length === 0 ? draft : `${content}\n\n${draft}`;
 }
 
-function isAuthoritativeFailure(cause: unknown): boolean {
+/** Whether the service answered with a refusal, so the request certainly took no effect. */
+export function isAuthoritativeFailure(cause: unknown): boolean {
     return (
         (cause instanceof MortyApiError && cause.status >= 400 && cause.status < 500) ||
         (cause instanceof CloudApiError && cause.status !== null && cause.status >= 400 && cause.status < 500)

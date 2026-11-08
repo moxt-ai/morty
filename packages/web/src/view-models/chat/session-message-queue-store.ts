@@ -1,8 +1,10 @@
+import type { MortyClient } from "@morty-build/client";
 import { createStore } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { formatError } from "../format-error.ts";
-import type { SubmittedMessage } from "./session-delivery-store.ts";
+import { isAuthoritativeFailure, type SubmittedMessage } from "./session-delivery-store.ts";
 import type { QueuedCommand } from "./session-execution.ts";
+import type { SessionOperationConnection } from "./session-operation-connection.ts";
 
 type QueuedMessageAttachments =
     | { readonly kind: "restorable"; readonly values: readonly ComposerAttachment[] }
@@ -30,29 +32,36 @@ type QueueFeedback =
           readonly message: string;
       };
 
-type QueueOperation = (turnId: string, signal: AbortSignal) => Promise<void>;
-
 /** A withdrawn message stays hidden until an authoritative queue snapshot no longer lists it. */
 type QueuedMessageRequest = "steering" | "deleting" | "withdrawn";
 
-/** Session-owned requests on the Runtime's queue. Original files remain owned by delivery. */
+/**
+ * How a request on the queue ended: the Runtime did it, refused it, never received it, or may have done it without
+ * confirming.
+ */
+type QueueRequestOutcome =
+    | { readonly kind: "done" }
+    | { readonly kind: "refused"; readonly cause: unknown }
+    | { readonly kind: "unsent"; readonly cause: unknown }
+    | { readonly kind: "unconfirmed"; readonly cause: unknown };
+
+/**
+ * The Session's requests on the Runtime's queue. They run on the Session's operations, so switching panes neither ends
+ * a request nor loses what it returns. Original files remain owned by delivery.
+ */
 export interface SessionMessageQueueStore {
     readonly feedback: QueueFeedback;
     readonly requests: ReadonlyMap<string, QueuedMessageRequest>;
-    readonly deleteMessage: (
-        message: ChatQueuedMessage | null,
-        cancel: QueueOperation,
-        signal: AbortSignal,
-    ) => Promise<ChatQueuedMessage | null>;
+    readonly deleteMessage: (message: ChatQueuedMessage | null, signal: AbortSignal) => Promise<void>;
+    /**
+     * Takes a queued message out of the queue and back into the composer for editing. The text returns whenever the
+     * Runtime may have withdrawn the message, so a withdrawal it did not confirm never loses the text.
+     */
+    readonly editMessage: (message: ChatQueuedMessage | null, signal: AbortSignal) => Promise<void>;
     readonly dismissFailure: () => void;
-    readonly steerMessage: (
-        message: ChatQueuedMessage | null,
-        steer: QueueOperation,
-        signal: AbortSignal,
-    ) => Promise<ChatQueuedMessage | null>;
+    /** Resolves whether the Runtime took the message into the running turn. */
+    readonly steerMessage: (message: ChatQueuedMessage | null, signal: AbortSignal) => Promise<boolean>;
     readonly reconcile: (queuedCommandIds: readonly string[]) => void;
-    /** Ends operations borrowing a pane's connection, retaining completed withdrawals. */
-    readonly interrupted: () => void;
 }
 
 /** The Runtime's queue, enriched from the Session's sole copy of local submitted messages. */
@@ -98,81 +107,146 @@ function withRequest(
     return next;
 }
 
-/** Each operation borrows the selected pane's port; no connection outlives its pane. */
-export const createSessionMessageQueueStore = () =>
+export const createSessionMessageQueueStore = (options: {
+    readonly sessionId: string;
+    readonly connection: SessionOperationConnection;
+    /** The Runtime confirmed it withdrew a message. */
+    readonly withdrawn: (commandId: string) => void;
+    /** A message taken back for editing returns to the Session's composer. */
+    readonly returned: (message: ChatQueuedMessage) => void;
+}) =>
     createStore<SessionMessageQueueStore>()((set, get) => {
-        const withdrawn = (commandId: string): void => {
+        /** Marks `message` with `request` while the Runtime handles it, unless a request on it already runs. */
+        const begin = (
+            message: ChatQueuedMessage | null,
+            request: "steering" | "deleting",
+        ): message is ChatQueuedMessage => {
+            if (message === null || message.kind !== "queued" || get().requests.has(message.commandId)) {
+                return false;
+            }
+            set((state) => ({
+                feedback: { kind: "none" },
+                requests: withRequest(state.requests, message.commandId, request),
+            }));
+            return true;
+        };
+        /** The message left the queue at the user's request; it stays hidden until a snapshot drops it. */
+        const left = (commandId: string): void => {
             set((state) => ({
                 // A snapshot may already have removed the request while its HTTP response was in flight.
                 requests: withRequest(state.requests, commandId, state.requests.has(commandId) ? "withdrawn" : null),
             }));
         };
+        /** Sends a request on the queue within its own budget, through whichever pane follows the Session. */
+        const send = async (
+            request: (client: MortyClient, signal: AbortSignal) => Promise<unknown>,
+            parent: AbortSignal,
+        ): Promise<QueueRequestOutcome> => {
+            const signal = AbortSignal.any([parent, AbortSignal.timeout(15_000)]);
+            let sent = false;
+            try {
+                await options.connection.send(async (client, requestSignal) => {
+                    sent = true;
+                    await request(client, requestSignal);
+                }, signal);
+                signal.throwIfAborted();
+                return { kind: "done" };
+            } catch (cause) {
+                parent.throwIfAborted();
+                if (!sent) {
+                    return { kind: "unsent", cause };
+                }
+                return isAuthoritativeFailure(cause) ? { kind: "refused", cause } : { kind: "unconfirmed", cause };
+            }
+        };
+        const withdraw = async (message: ChatQueuedMessage, signal: AbortSignal): Promise<QueueRequestOutcome> => {
+            const { commandId } = message;
+            const outcome = await send(
+                (client, requestSignal) => client.turns.cancelQueued(options.sessionId, message.turnId, requestSignal),
+                signal,
+            );
+            if (outcome.kind === "done") {
+                left(commandId);
+                options.withdrawn(commandId);
+                return outcome;
+            }
+            // The message shows again for as long as the Runtime's queue lists it.
+            set((state) => ({
+                feedback: {
+                    kind: "failed",
+                    operation: "delete",
+                    commandId,
+                    message: formatError(outcome.cause, "The queued message could not be deleted."),
+                },
+                requests: withRequest(state.requests, commandId, null),
+            }));
+            return outcome;
+        };
         return {
             feedback: { kind: "none" },
             requests: new Map(),
-            deleteMessage: async (message, cancel, parent) => {
-                if (message === null || message.kind !== "queued" || get().requests.has(message.commandId)) {
-                    return null;
+            deleteMessage: async (message, signal) => {
+                if (begin(message, "deleting")) {
+                    await withdraw(message, signal);
                 }
-                const { commandId } = message;
-                set((state) => ({
-                    feedback: { kind: "none" },
-                    requests: withRequest(state.requests, commandId, "deleting"),
-                }));
-                const signal = AbortSignal.any([parent, AbortSignal.timeout(15_000)]);
-                try {
-                    await cancel(message.turnId, signal);
-                    signal.throwIfAborted();
-                    withdrawn(commandId);
-                    return message;
-                } catch (cause) {
-                    parent.throwIfAborted();
-                    set((state) => ({
-                        feedback: {
-                            kind: "failed",
-                            operation: "delete",
-                            commandId,
-                            message: formatError(cause, "The queued message could not be deleted."),
-                        },
-                        requests: withRequest(state.requests, commandId, null),
-                    }));
-                    return null;
+            },
+            editMessage: async (message, signal) => {
+                if (!begin(message, "deleting")) {
+                    return;
+                }
+                const outcome = await withdraw(message, signal);
+                switch (outcome.kind) {
+                    case "done":
+                        options.returned(message);
+                        return;
+                    case "unconfirmed":
+                        options.returned(message);
+                        set({
+                            feedback: {
+                                kind: "failed",
+                                operation: "delete",
+                                commandId: message.commandId,
+                                message:
+                                    "Removing the message from the queue was not confirmed. Its text is back in the composer; delete it from the queue if it is still there.",
+                            },
+                        });
+                        return;
+                    case "refused":
+                    case "unsent":
+                        return;
+                    default:
+                        return outcome satisfies never;
                 }
             },
             dismissFailure: () => set({ feedback: { kind: "none" } }),
-            steerMessage: async (message, steer, parent) => {
-                if (message === null || message.kind !== "queued" || get().requests.has(message.commandId)) {
-                    return null;
+            steerMessage: async (message, signal) => {
+                if (!begin(message, "steering")) {
+                    return false;
                 }
                 const { commandId } = message;
-                set((state) => ({
-                    feedback: { kind: "none" },
-                    requests: withRequest(state.requests, commandId, "steering"),
-                }));
-                const signal = AbortSignal.any([parent, AbortSignal.timeout(15_000)]);
-                try {
-                    await steer(message.turnId, signal);
-                    signal.throwIfAborted();
-                    withdrawn(commandId);
-                    return message;
-                } catch (cause) {
-                    parent.throwIfAborted();
-                    set((state) => ({
-                        // Execution events and queue snapshots may arrive before the HTTP refusal.
-                        ...(state.requests.has(commandId)
-                            ? {
-                                  feedback: {
-                                      kind: "failed",
-                                      operation: "steer",
-                                      commandId,
-                                      message: formatError(cause, "The queued message could not steer the task."),
-                                  },
-                              }
-                            : {}),
-                        requests: withRequest(state.requests, commandId, null),
-                    }));
-                    return null;
+                const outcome = await send(
+                    (client, requestSignal) => client.turns.steer(options.sessionId, message.turnId, requestSignal),
+                    signal,
+                );
+                if (outcome.kind === "done") {
+                    left(commandId);
+                    return true;
                 }
+                set((state) => ({
+                    // Execution events and queue snapshots may arrive before the HTTP refusal.
+                    ...(state.requests.has(commandId)
+                        ? {
+                              feedback: {
+                                  kind: "failed",
+                                  operation: "steer",
+                                  commandId,
+                                  message: formatError(outcome.cause, "The queued message could not steer the task."),
+                              },
+                          }
+                        : {}),
+                    requests: withRequest(state.requests, commandId, null),
+                }));
+                return false;
             },
             reconcile: (commandIds) => {
                 const queued = new Set(commandIds);
@@ -184,11 +258,6 @@ export const createSessionMessageQueueStore = () =>
                         !queued.has(state.feedback.commandId)
                             ? { kind: "none" }
                             : state.feedback,
-                }));
-            },
-            interrupted: () => {
-                set((state) => ({
-                    requests: new Map([...state.requests].filter(([, request]) => request === "withdrawn")),
                 }));
             },
         };

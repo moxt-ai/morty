@@ -1,6 +1,9 @@
-import type { SessionConfigOption } from "@morty-build/client";
+import { MortyApiError, type SessionConfigOption } from "@morty-build/client";
 import { createStore } from "zustand/vanilla";
+import { rememberAgentSettingChoice } from "../../services/chat/last-agent-settings.ts";
 import { recordBrowserError } from "../../services/diagnostics/browser-diagnostics.ts";
+import { formatError, isSessionClosedFailure } from "../format-error.ts";
+import type { SessionOperationConnection } from "./session-operation-connection.ts";
 
 // Runtime snapshots own current settings. Live updates and history reloads request a new
 // snapshot; historical configuration events never become current settings. The revision
@@ -11,12 +14,28 @@ type ConfigurationSnapshot = {
     readonly configurationRevision: string;
 };
 
+/** A change the user asked of the Session's settings. A failed change keeps its failure until the next one. */
+type SettingsChange =
+    | { readonly kind: "idle" }
+    | { readonly kind: "configuring"; readonly configId: string }
+    | { readonly kind: "failed"; readonly message: string };
+
+/** The Session binding a settings change states, as the pane that opened the Session read it. */
+interface SessionBinding {
+    readonly additionalDirectoryIds: readonly string[];
+    readonly agentId: string;
+    readonly directoryId: string;
+}
+
 export interface SessionSettingsStore {
     readonly openedAt: string;
     readonly observedAt: string;
     readonly source: "session-ready" | "session-configuration";
     readonly configurationRevision: string;
     readonly options: readonly SessionConfigOption[];
+    readonly change: SettingsChange;
+    /** Shows the settings a pane opening the Session read with it. */
+    readonly opened: (snapshot: ConfigurationSnapshot) => void;
     /** Shows settings the Runtime reported. */
     readonly adopt: (snapshot: ConfigurationSnapshot) => void;
     /**
@@ -29,9 +48,25 @@ export interface SessionSettingsStore {
         read: (signal: AbortSignal) => Promise<ConfigurationSnapshot>,
         parentSignal: AbortSignal,
     ) => void;
+    /**
+     * Changes one setting through whichever pane follows the Session. The change is the Session's: switching panes
+     * neither ends it nor drops its result.
+     */
+    readonly configure: (
+        binding: SessionBinding,
+        option: SessionConfigOption,
+        value: string,
+        booleanValue: boolean,
+        signal: AbortSignal,
+    ) => Promise<void>;
 }
 
-export function createSessionSettingsStore(options: { readonly initial: ConfigurationSnapshot }) {
+/** The Session's settings on this page and the change the user asked of them, whichever pane shows them. */
+export function createSessionSettingsStore(options: {
+    readonly botId: string;
+    readonly sessionId: string;
+    readonly connection: SessionOperationConnection;
+}) {
     return createStore<SessionSettingsStore>()((set, get) => {
         let pendingRead: AbortController | null = null;
         const openedAt = new Date().toISOString();
@@ -39,8 +74,21 @@ export function createSessionSettingsStore(options: { readonly initial: Configur
             openedAt,
             observedAt: openedAt,
             source: "session-ready",
-            options: options.initial.configOptions,
-            configurationRevision: options.initial.configurationRevision,
+            options: [],
+            configurationRevision: "",
+            change: { kind: "idle" },
+            opened: ({ configOptions, configurationRevision }) => {
+                pendingRead?.abort(new DOMException("The Session was opened again", "AbortError"));
+                pendingRead = null;
+                const now = new Date().toISOString();
+                set({
+                    openedAt: now,
+                    observedAt: now,
+                    source: "session-ready",
+                    options: configOptions,
+                    configurationRevision,
+                });
+            },
             adopt: ({ configOptions, configurationRevision }) => {
                 pendingRead?.abort(new DOMException("Newer settings were adopted", "AbortError"));
                 pendingRead = null;
@@ -74,6 +122,59 @@ export function createSessionSettingsStore(options: { readonly initial: Configur
                             pendingRead = null;
                         }
                     });
+            },
+            configure: async (binding, option, value, booleanValue, signal) => {
+                set({ change: { configId: option.id, kind: "configuring" } });
+                try {
+                    const result = await options.connection.send(
+                        async (client, requestSignal) => {
+                            return await client.sessions.updateConfiguration(
+                                options.sessionId,
+                                {
+                                    ...binding,
+                                    booleanValue,
+                                    configId: option.id,
+                                    expectedConfigurationRevision: get().configurationRevision,
+                                    value,
+                                    valueType: option.type,
+                                },
+                                requestSignal,
+                            );
+                        },
+                        AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
+                    );
+                    signal.throwIfAborted();
+                    rememberAgentSettingChoice(
+                        options.botId,
+                        binding.agentId,
+                        option.type === "boolean"
+                            ? { configId: option.id, kind: "boolean", value: booleanValue }
+                            : { configId: option.id, kind: "select", value },
+                    );
+                    get().adopt(result);
+                    set({ change: { kind: "idle" } });
+                } catch (cause) {
+                    signal.throwIfAborted();
+                    // The closed Session's notice says all there is to say about the change.
+                    if (isSessionClosedFailure(cause)) {
+                        set({ change: { kind: "idle" } });
+                        return;
+                    }
+                    if (cause instanceof MortyApiError && cause.code === "session_configuration_conflict") {
+                        get().readInBackground(
+                            (readSignal) =>
+                                options.connection.send(
+                                    (client, requestSignal) =>
+                                        client.sessions.readConfiguration(options.sessionId, requestSignal),
+                                    readSignal,
+                                ),
+                            signal,
+                        );
+                    }
+                    set({
+                        change: { kind: "failed", message: formatError(cause, "The selection could not be applied.") },
+                    });
+                }
             },
         };
     });

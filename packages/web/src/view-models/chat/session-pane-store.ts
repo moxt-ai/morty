@@ -1,14 +1,10 @@
 import {
-    MortyApiError,
     type MortyClient,
-    MortyElicitationResponseRequest,
     MortyError,
     MortyPageRequest,
-    MortyPermissionResponseRequest,
     type MortySessionEventObserver,
     MortyTimeoutError,
     type PromptAttachment,
-    SESSION_CLOSED_ERROR_CODE,
     type SessionConfigOption,
 } from "@morty-build/client";
 import type { PromptMessageOutcome, SessionEvent, SessionLiveEvent } from "@morty-build/client/protocol";
@@ -17,13 +13,8 @@ import type { ComposerAttachment } from "../../components/chat/composer-attachme
 import { registerMortyDebugSession } from "../../debug-bridge.ts";
 import { isChatBridgeError } from "../../services/api/websocket-api-transport.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
-import { rememberAgentSettingChoice } from "../../services/chat/last-agent-settings.ts";
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import { recordBrowserDiagnostic } from "../../services/diagnostics/browser-diagnostics.ts";
-import {
-    centralSessionStorage,
-    elicitationAnswerDraftsEntry,
-} from "../../services/session-storage/central-session-storage.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError, isRetryableRuntimeConnectionFailure, isSessionClosedFailure } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
@@ -37,9 +28,9 @@ import { type SessionActivityState, workingCommandId } from "./session-activity-
 import type { SessionComposerStore } from "./session-composer-store.ts";
 import {
     connectionFailure,
+    connectionReadiness,
     connectionWaitsForRuntime,
     disconnectedConnection,
-    isConnectionSettled,
     type SessionConnection,
     sessionReconnectAttempt,
     sessionUpdatesEndedError,
@@ -73,9 +64,14 @@ import {
     type SessionExecutionObservation,
     type SessionExecutionSnapshot,
 } from "./session-execution.ts";
-import { createSessionInteractionStore, type SessionInteractionStore } from "./session-interaction-store.ts";
+import type { SessionInteractionStore } from "./session-interaction-store.ts";
 import { type SessionLifecycleFact, sessionInteractionRecovery, sessionLifecycleFact } from "./session-lifecycle.ts";
-import { queuedMessages, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
+import {
+    type ChatQueuedMessage,
+    queuedMessages,
+    type SessionMessageQueueStore,
+} from "./session-message-queue-store.ts";
+import type { SessionConnectionFollower } from "./session-operation-connection.ts";
 import {
     canChangeSettings,
     canRetryFailedMessage,
@@ -86,7 +82,6 @@ import {
     type SessionOperationFacts,
 } from "./session-operation-rules.ts";
 import type { SessionPageState } from "./session-page-state.ts";
-import type { ElicitationInteractionResponse, PermissionInteractionResponse } from "./session-pane-types.ts";
 import {
     createSessionMessageReduction,
     type SessionExecutionMessage,
@@ -106,13 +101,8 @@ import {
     transitionSessionProjection,
 } from "./session-projection.ts";
 import type { SessionRename, SessionRenameStore } from "./session-rename-store.ts";
-import { createSessionSettingsStore } from "./session-settings-store.ts";
-import {
-    createSessionTaskControlsStore,
-    type SessionTaskControlsStore,
-    stopFailure,
-    stopRequested,
-} from "./session-task-controls.ts";
+import type { SessionSettingsStore } from "./session-settings-store.ts";
+import { type SessionTaskControlsStore, stopFailure, stopRequested } from "./session-task-controls.ts";
 import { type SessionTitlesStore, sessionTitle } from "./session-titles-store.ts";
 import { createSessionWelcomeStore } from "./session-welcome-store.ts";
 
@@ -121,12 +111,6 @@ import { createSessionWelcomeStore } from "./session-welcome-store.ts";
  * owner's.
  */
 export type SessionPaneModel = Omit<ReturnType<typeof createSessionPaneModel>, "start" | "stop" | "reconnect">;
-
-/** A change to the Session's settings. */
-type Operation =
-    | { readonly kind: "idle" }
-    | { readonly kind: "configuring"; readonly configId: string }
-    | { readonly kind: "failed"; readonly message: string };
 
 /** Renaming the Session. A failed rename closes the editor and keeps its failure until the next edit. */
 export type TitleEdit =
@@ -168,7 +152,6 @@ export interface SessionPaneStore {
      * steer) so the message surface re-arms following the latest message.
      */
     readonly followRevision: number;
-    readonly operation: Operation;
     /**
      * The current turn as the service reported it: which command runs, its turn id and when it started, or how the
      * last turn ended. The running turn the stop control acts on is derived from it; the activity the pane shows and
@@ -246,17 +229,18 @@ function waitingForInput(interactions: Pick<SessionInteractionStore, "interactio
 
 /** The pane's state as the operation rules read it, for the presentation and the actions alike. */
 function sessionOperationFacts(
-    model: Pick<SessionPaneStore, "connection" | "operation" | "turn">,
+    model: Pick<SessionPaneStore, "connection" | "turn">,
     delivery: Pick<SessionDeliveryStore, "state">,
     tasks: Pick<SessionTaskControlsStore, "stopRequest">,
     interactions: Pick<SessionInteractionStore, "interactions">,
+    settings: Pick<SessionSettingsStore, "change">,
     connectionAvailable: boolean,
 ): SessionOperationFacts {
     return {
         connectionAvailable,
         connection: model.connection.kind,
         stopping: stopRequested(tasks, acceptedTurn(model.turn)),
-        configuring: model.operation.kind === "configuring",
+        configuring: settings.change.kind === "configuring",
         delivery: delivery.state.kind,
         waitingForInput: waitingForInput(interactions),
     };
@@ -271,9 +255,10 @@ export function sessionPanePresentation(
     queue: SessionMessageQueueStore,
     attachments: ComposerAttachmentStore,
     interactions: SessionInteractionStore,
+    settings: Pick<SessionSettingsStore, "change">,
     connectionAvailable: boolean,
 ) {
-    const facts = sessionOperationFacts(model, delivery, tasks, interactions, connectionAvailable);
+    const facts = sessionOperationFacts(model, delivery, tasks, interactions, settings, connectionAvailable);
     const timeline = sessionProjectionTimeline(model.projection);
     const olderHistory = sessionProjectionOlderHistory(model.projection);
     const activity = sessionActivity(model.turn, delivery.state);
@@ -281,10 +266,7 @@ export function sessionPanePresentation(
     const controlRunning = acceptedTurn(model.turn) !== null;
     const stopping = facts.stopping;
     const composerInputDisabled =
-        model.connection.kind === "closed" ||
-        model.operation.kind === "configuring" ||
-        facts.waitingForInput ||
-        stopping;
+        model.connection.kind === "closed" || facts.configuring || facts.waitingForInput || stopping;
     const activeCommandId = workingCommandId(activity);
     const activeMessageId =
         activeCommandId !== null
@@ -336,7 +318,7 @@ export function sessionPanePresentation(
                       activity,
                       sessionTitleEdit(composer.titleDraft, rename.rename),
                       olderHistory,
-                      model.operation,
+                      settings.change,
                       delivery.state.kind === "failed"
                           ? { kind: "failed" as const, message: delivery.state.failure.message }
                           : delivery.state,
@@ -497,14 +479,13 @@ export function createSessionPaneModel(options: {
     readonly onWaitingForRuntime: () => void;
 }) {
     const { session, botId, requests, clock, titles } = options;
-    const { composer, delivery, queue: messageQueue, rename } = options.sessionPage;
+    const { composer, delivery, interactions, queue: messageQueue, rename, settings, tasks } = options.sessionPage;
     const composerAttachments = composer.getState().attachments;
     const sessionId = session.result.ready.sessionId;
     // Working in a conversation makes its harness the reference for the next draft. Its settings carry into New
     // Session only where the user changes them: the others are the Agent's and its directory's, which the draft reads
     // for itself.
     saveLastHarnessPreference(botId, session.agentRef);
-    const settings = createSessionSettingsStore({ initial: session.result.ready });
     const fallbackStartedAt = Date.now();
     const initialTurn: CurrentTurn =
         session.result.action === "conversation" && session.result.activeTurn.kind === "running"
@@ -530,6 +511,8 @@ export function createSessionPaneModel(options: {
     // the pane. React attaching or detaching its view is not part of it.
     const lifetime = new AbortController();
     let phase: "created" | "started" | "stopped" = "created";
+    // This pane's lending of its connection to the Session's operations, from `start` until `stop`.
+    let follower: SessionConnectionFollower | null = null;
     /** Whether a failure says the Session is closed now, not just as it was when the operation began. */
     const closedNow = (cause: unknown, reopeningsAtStart: number): boolean =>
         isSessionClosedFailure(cause) && reopeningsAtStart === reopenings;
@@ -589,34 +572,7 @@ export function createSessionPaneModel(options: {
     /** The messages the timeline shows now. */
     const timelineMessages = (): readonly SessionExecutionMessage[] =>
         sessionProjectionTimeline(store.getState().projection).messages;
-    const tasks = createSessionTaskControlsStore({
-        clock,
-        steeringSupported: session.result.ready.capabilities.steering,
-        port: {
-            cancel: noticingClosure(async (turnId, signal) => {
-                if (client === null) {
-                    throw new Error("The Session is not connected.");
-                }
-                await client.turns.cancel(sessionId, turnId, signal);
-            }),
-        },
-        runningTurn: () => acceptedTurn(store.getState().turn),
-    });
-    const queuePort = {
-        cancel: noticingClosure(async (turnId: string, signal: AbortSignal) => {
-            if (client === null) {
-                throw new Error("The Session is not connected.");
-            }
-            await client.turns.cancelQueued(sessionId, turnId, signal);
-        }),
-        steer: noticingClosure(async (turnId: string, signal: AbortSignal) => {
-            if (client === null) {
-                throw new Error("The Session is not connected.");
-            }
-            await client.turns.steer(sessionId, turnId, signal);
-        }),
-    };
-    const queuedMessage = (commandId: string) =>
+    const queuedMessage = (commandId: string): ChatQueuedMessage | null =>
         queuedMessages(store.getState().queued, messageQueue.getState(), deliveryMessages(delivery.getState())).find(
             (message) => message.commandId === commandId,
         ) ?? null;
@@ -628,75 +584,19 @@ export function createSessionPaneModel(options: {
         agentId: session.agentRef,
         directoryId: session.result.ready.directoryId,
     };
-
-    const respondToPermission = async (response: PermissionInteractionResponse, signal: AbortSignal): Promise<void> => {
-        if (client === null || store.getState().connection.kind !== "ready") {
-            throw new Error("The Session is not connected.");
-        }
-        const reopeningsAtStart = reopenings;
-        try {
-            await client.interactions.respond(
-                sessionId,
-                response.interactionId,
-                new MortyPermissionResponseRequest("morty-web", response.outcome, response.optionId),
-                AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
-            );
-        } catch (cause) {
-            signal.throwIfAborted();
-            if (closedNow(cause, reopeningsAtStart)) {
+    /**
+     * Lends the Session's operations this pane's connection as it is now. A failure an operation meets through it
+     * closes this pane when it says the Session is closed now, not as it was before a reopening since the lending.
+     */
+    const lendConnection = (connection: SessionConnection): void => {
+        const reopeningsAtLending = reopenings;
+        follower?.changed(connectionReadiness(connection), (cause) => {
+            if (closedNow(cause, reopeningsAtLending)) {
                 store.getState().sessionClosed(null);
             }
-            throw cause;
-        }
+        });
     };
-    const respondToElicitation = async (
-        response: ElicitationInteractionResponse,
-        signal: AbortSignal,
-    ): Promise<void> => {
-        if (client === null || store.getState().connection.kind !== "ready") {
-            throw new Error("The Session is not connected.");
-        }
-        const reopeningsAtStart = reopenings;
-        try {
-            await client.interactions.respond(
-                sessionId,
-                response.interactionId,
-                new MortyElicitationResponseRequest("morty-web", response.action, response.content),
-                AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
-            );
-        } catch (cause) {
-            signal.throwIfAborted();
-            if (closedNow(cause, reopeningsAtStart)) {
-                store.getState().sessionClosed(null);
-            }
-            throw cause;
-        }
-    };
-    // Answers typed into the Agent's questions belong to the Session, as its composer draft does.
-    const answerDraftsEntry = elicitationAnswerDraftsEntry(sessionId);
-    const interactions = createSessionInteractionStore({
-        read: async (signal) => {
-            if (client === null) {
-                throw new Error("The Session is not connected");
-            }
-            return sessionInteractionRecovery(
-                await client.sessions.readSessionExecution(sessionId, sessionIdentity, signal),
-            );
-        },
-        permission: respondToPermission,
-        elicitation: respondToElicitation,
-        answerDrafts: new Map(Object.entries(centralSessionStorage.read(answerDraftsEntry) ?? {})),
-        answerDraftsChanged: (drafts) => {
-            if (drafts.size === 0) {
-                centralSessionStorage.remove(answerDraftsEntry);
-            } else {
-                centralSessionStorage.write(answerDraftsEntry, Object.fromEntries(drafts));
-            }
-        },
-    });
 
-    // Connection waiters are woken where the connection settles. No wrapped set, no subscriptions.
-    const connectionWaiters = new Set<() => void>();
     const store = createStore<SessionPaneState>()((set, get) => {
         const operationFacts = (): SessionOperationFacts =>
             sessionOperationFacts(
@@ -704,18 +604,11 @@ export function createSessionPaneModel(options: {
                 delivery.getState(),
                 tasks.getState(),
                 interactions.getState(),
+                settings.getState(),
                 options.connectionAvailable(get().connection),
             );
         let connectionChangedAt = clock.now();
         let recoveryNoticeDeadline: AbortController | null = null;
-        const settleConnectionWaiters = (): void => {
-            if (isConnectionSettled(get().connection)) {
-                for (const wake of connectionWaiters) {
-                    wake();
-                }
-                connectionWaiters.clear();
-            }
-        };
         const setAndSettle = (
             partial:
                 | SessionPaneState
@@ -745,7 +638,7 @@ export function createSessionPaneModel(options: {
                 });
                 connectionChangedAt = now;
             }
-            settleConnectionWaiters();
+            lendConnection(connection);
         };
         /** The stop control follows the running turn: a different one retires what the user asked of the previous. */
         const turnMoved = (previous: CurrentTurn, turn: CurrentTurn): void => {
@@ -1172,7 +1065,21 @@ export function createSessionPaneModel(options: {
                             case "interaction-requested":
                             case "permission-resolved":
                             case "elicitation-resolved":
-                                await interactions.getState().apply(fact, event, signal);
+                                await interactions
+                                    .getState()
+                                    .apply(
+                                        fact,
+                                        event,
+                                        async (readSignal) =>
+                                            sessionInteractionRecovery(
+                                                await connected.sessions.readSessionExecution(
+                                                    sessionId,
+                                                    sessionIdentity,
+                                                    readSignal,
+                                                ),
+                                            ),
+                                        signal,
+                                    );
                                 return;
                             case "queue-changed":
                                 await readExecution(connected, get().turn, signal);
@@ -1582,101 +1489,19 @@ export function createSessionPaneModel(options: {
                 delivery.getState().takeFailedMessage();
             },
             steerQueued: async (commandId, signal) => {
-                const steered = await messageQueue
-                    .getState()
-                    .steerMessage(queuedMessage(commandId), queuePort.steer, signal);
-                signal.throwIfAborted();
-                if (steered !== null) {
+                if (await messageQueue.getState().steerMessage(queuedMessage(commandId), signal)) {
                     set({ followRevision: get().followRevision + 1 });
                 }
             },
-            deleteQueued: async (commandId, signal) => {
-                const removed = await messageQueue
-                    .getState()
-                    .deleteMessage(queuedMessage(commandId), queuePort.cancel, signal);
-                signal.throwIfAborted();
-                if (removed !== null) {
-                    delivery.getState().withdraw(removed.commandId);
-                }
-            },
-            editQueued: async (commandId, signal) => {
-                const removed = await messageQueue
-                    .getState()
-                    .deleteMessage(queuedMessage(commandId), queuePort.cancel, signal);
-                signal.throwIfAborted();
-                if (removed === null) {
-                    return;
-                }
-                delivery.getState().withdraw(removed.commandId);
-                // The queued message was written first, so it goes ahead of a draft the user started since.
-                tasks.getState().dismissFailure();
-                messageQueue.getState().dismissFailure();
-                composer
-                    .getState()
-                    .returnMessage(
-                        removed.prompt,
-                        removed.attachments.kind === "unrestorable" && removed.attachments.count > 0,
-                    );
-                const restored: readonly ComposerAttachment[] =
-                    removed.attachments.kind === "restorable" ? removed.attachments.values : [];
-                composerAttachments.getState().restore([...restored, ...composerAttachments.getState().attachments]);
-            },
+            deleteQueued: async (commandId, signal) =>
+                await messageQueue.getState().deleteMessage(queuedMessage(commandId), signal),
+            editQueued: async (commandId, signal) =>
+                await messageQueue.getState().editMessage(queuedMessage(commandId), signal),
             configure: async (option, value, booleanValue, signal) => {
-                if (client === null || !canChangeSettings(operationFacts())) {
+                if (!canChangeSettings(operationFacts())) {
                     return;
                 }
-                const connected = client;
-                set({ operation: { configId: option.id, kind: "configuring" } });
-                const reopeningsAtStart = reopenings;
-                try {
-                    const result = await client.sessions.updateConfiguration(
-                        sessionId,
-                        {
-                            additionalDirectoryIds: session.entry.additionalDirectories.map(
-                                (directory) => directory.directoryId,
-                            ),
-                            agentId: session.agentRef,
-                            booleanValue,
-                            configId: option.id,
-                            expectedConfigurationRevision: settings.getState().configurationRevision,
-                            directoryId: session.result.ready.directoryId,
-                            value,
-                            valueType: option.type,
-                        },
-                        AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
-                    );
-                    signal.throwIfAborted();
-                    rememberAgentSettingChoice(
-                        botId,
-                        session.agentRef,
-                        option.type === "boolean"
-                            ? { configId: option.id, kind: "boolean", value: booleanValue }
-                            : { configId: option.id, kind: "select", value },
-                    );
-                    settings.getState().adopt(result);
-                    set({ operation: { kind: "idle" } });
-                } catch (cause) {
-                    signal.throwIfAborted();
-                    if (closedNow(cause, reopeningsAtStart)) {
-                        set({ operation: { kind: "idle" } });
-                        get().sessionClosed(null);
-                        return;
-                    }
-                    if (cause instanceof MortyApiError && cause.code === "session_configuration_conflict") {
-                        settings
-                            .getState()
-                            .readInBackground(
-                                (readSignal) => connected.sessions.readConfiguration(sessionId, readSignal),
-                                signal,
-                            );
-                    }
-                    set({
-                        operation: {
-                            kind: "failed",
-                            message: formatError(cause, "The selection could not be applied."),
-                        },
-                    });
-                }
+                await settings.getState().configure(sessionIdentity, option, value, booleanValue, signal);
             },
             openTitleEdit: () => {
                 // A new edit replaces the failure the last rename left.
@@ -1698,9 +1523,10 @@ export function createSessionPaneModel(options: {
                     return;
                 }
                 rename.getState().confirm(trimmed);
-                await sendRename(signal);
+                // This pane sends the rename while it lasts; a pane that stops first leaves it to the next one.
+                await sendRename(AbortSignal.any([signal, lifetime.signal]));
             },
-            stop: async (signal) => await tasks.getState().stop(signal),
+            stop: async (signal) => await tasks.getState().stop(acceptedTurn(get().turn), signal),
         };
     });
     const welcome = createSessionWelcomeStore({
@@ -1716,6 +1542,7 @@ export function createSessionPaneModel(options: {
                 messageQueue.getState(),
                 composerAttachments.getState(),
                 interactions.getState(),
+                settings.getState(),
                 options.connectionAvailable(store.getState().connection),
             );
             if (!presentation.canSuggestProgress) {
@@ -1774,37 +1601,9 @@ export function createSessionPaneModel(options: {
         }
         return renaming;
     };
-    const waitForConnectionReady = async (signal: AbortSignal): Promise<MortyClient> => {
-        while (true) {
-            signal.throwIfAborted();
-            const current = store.getState().connection;
-            if (current.kind === "ready") {
-                return current.client;
-            }
-            if (current.kind === "failed" || (current.kind === "disconnected" && current.retry.kind === "exhausted")) {
-                throw new MortyError("session_not_connected", current.message);
-            }
-            if (current.kind === "closed") {
-                throw new MortyError(SESSION_CLOSED_ERROR_CODE, "The session is closed.");
-            }
-            await new Promise<void>((resolve, reject) => {
-                const wake = (): void => {
-                    cleanup();
-                    resolve();
-                };
-                const abort = (): void => {
-                    cleanup();
-                    reject(signal.reason);
-                };
-                const cleanup = (): void => {
-                    connectionWaiters.delete(wake);
-                    signal.removeEventListener("abort", abort);
-                };
-                connectionWaiters.add(wake);
-                signal.addEventListener("abort", abort, { once: true });
-            });
-        }
-    };
+    /** This pane's connection once ready; the pane lends it to the Session while it runs, so the Session's is this one. */
+    const waitForConnectionReady = (signal: AbortSignal): Promise<MortyClient> =>
+        options.sessionPage.connection.ready(signal);
     const readFile = async (path: string, signal: AbortSignal) => {
         signal.throwIfAborted();
         const current = store.getState().connection;
@@ -1834,6 +1633,13 @@ export function createSessionPaneModel(options: {
             return;
         }
         phase = "started";
+        // This pane now follows the Session for the page: it shows the settings it opened with and the running turn
+        // it knows, and lends the Session's operations its connection. What the user asked the Session stays.
+        settings.getState().opened(session.result.ready);
+        tasks.getState().turnChanged(acceptedTurn(store.getState().turn)?.commandId ?? null);
+        interactions.getState().restore([]);
+        follower = options.sessionPage.connection.follow();
+        lendConnection(store.getState().connection);
         const unregisterDebug = registerMortyDebugSession({
             sessionId,
             blocks: () => sessionDebugBlocks({ messages: timelineMessages() }),
@@ -1858,17 +1664,19 @@ export function createSessionPaneModel(options: {
         }
     };
     /**
-     * Ends the pane: its connection and everything bound to its lifetime. The owner stops a pane it replaces or
-     * removes; a stopped pane is never restarted. Idempotent.
+     * Ends the pane: its connection and everything bound to its lifetime. The Session's operations go on, waiting for
+     * the next pane's connection. The owner stops a pane it replaces or removes; a stopped pane is never restarted.
+     * Idempotent.
      */
     const stop = (): void => {
         if (phase === "stopped") {
             return;
         }
         phase = "stopped";
+        follower?.stopped();
+        follower = null;
         filePreview.getState().close();
         lifetime.abort(new Error("The session pane stopped."));
-        messageQueue.getState().interrupted();
         options.onReleased?.(sessionActivity(store.getState().turn, delivery.getState().state));
     };
     // Views read the pane's state and invoke the user's actions; the connection loop stays with `start`.
@@ -1892,11 +1700,16 @@ export function createSessionPaneModel(options: {
         agentRef: session.agentRef,
         /** The opened session record; scopes the execution context. */
         session,
+        /** Whether the Session's Agent lets a queued message steer the running turn. */
+        steeringSupported: session.result.ready.capabilities.steering,
         start,
         stop,
         reconnect,
-        /** The signal for view-triggered operations: the pane's lifetime. */
-        operationsSignal: () => lifetime.signal,
+        /**
+         * The signal for what the user asks the Session to do: the Session's operations lifetime on this page, which
+         * switching panes does not end.
+         */
+        operationsSignal: () => options.sessionPage.lifetime,
         readResource,
     };
 }

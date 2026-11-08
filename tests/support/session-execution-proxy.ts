@@ -5,7 +5,8 @@ import { WebSocket, WebSocketServer } from "ws";
 /** Forwards real traffic unchanged, with controllable ordering at the Platform transport boundary. */
 export async function createSessionExecutionProxy(upstream: string) {
     let hold: ((release: () => void) => void) | null = null;
-    let holdSteer: ((release: () => Promise<unknown>) => void) | null = null;
+    // Requests held by the end of their path until released, each release returning the Runtime's response.
+    const heldReplies = new Map<string, (release: () => Promise<unknown>) => void>();
     let holdSubmission: ((release: () => void) => void) | null = null;
     let heldEvents: (() => void)[] | null = null;
     let heldRuntimeHosts: (() => void)[] | null = null;
@@ -83,8 +84,7 @@ export async function createSessionExecutionProxy(upstream: string) {
                 }
             };
             const frame: unknown = binary ? null : JSON.parse(data.toString());
-            if (
-                holdSteer !== null &&
+            const heldReply =
                 typeof frame === "object" &&
                 frame !== null &&
                 "kind" in frame &&
@@ -92,12 +92,15 @@ export async function createSessionExecutionProxy(upstream: string) {
                 "path" in frame &&
                 typeof frame.path === "string" &&
                 "requestId" in frame &&
-                typeof frame.requestId === "string" &&
-                new URL(frame.path, upstream).pathname.endsWith("/disposition")
-            ) {
-                const held = holdSteer;
-                holdSteer = null;
-                const requestId = frame.requestId;
+                typeof frame.requestId === "string"
+                    ? { path: new URL(frame.path, upstream).pathname, requestId: frame.requestId }
+                    : null;
+            const heldSuffix =
+                heldReply === null ? undefined : [...heldReplies.keys()].find((end) => heldReply.path.endsWith(end));
+            const held = heldSuffix === undefined ? undefined : heldReplies.get(heldSuffix);
+            if (heldReply !== null && heldSuffix !== undefined && held !== undefined) {
+                heldReplies.delete(heldSuffix);
+                const requestId = heldReply.requestId;
                 const response = new Promise<unknown>((resolve) => responses.set(requestId, resolve));
                 held(async () => {
                     send();
@@ -199,9 +202,15 @@ export async function createSessionExecutionProxy(upstream: string) {
             new Promise<() => void>((resolve) => {
                 holdSubmission = resolve;
             }),
+        /** Holds the next steer before the Runtime receives it; the release forwards it and returns the response. */
         holdNextSteer: () =>
             new Promise<() => Promise<unknown>>((resolve) => {
-                holdSteer = resolve;
+                heldReplies.set("/disposition", resolve);
+            }),
+        /** Holds the next withdrawal of a queued message; the release forwards it and returns the response. */
+        holdNextQueuedCancellation: () =>
+            new Promise<() => Promise<unknown>>((resolve) => {
+                heldReplies.set("/cancel-before-start", resolve);
             }),
         holdSessionEvents: () => {
             const pending: (() => void)[] = [];

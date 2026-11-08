@@ -317,6 +317,56 @@ test("Given a follow-up is queued and the user has started another draft, When t
     expect(document.body.textContent).not.toContain("Files attached to this message");
 });
 
+test("Given I edit a queued follow-up, When I open another Session before the Runtime withdraws it, Then its text is back in that Session's composer when I return", {
+    timeout: dedicatedEnvironmentTimeout,
+}, async () => {
+    const queuedPrompt = "Rewrite the queued follow-up";
+    const environment = await createChatWorkerEnvironment(false, true);
+    onTestFinished(() => environment.close());
+    const app = await createTestApp({ environment, connectAgent: true });
+    const { daemon, executionNetwork } = app;
+    if (daemon === null || executionNetwork === null) {
+        throw new Error("Expected a real Runtime and the execution transport proxy");
+    }
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
+    await app.waitForView(() => expect(document.body.textContent).toContain("Waiting for steering"));
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), queuedPrompt);
+    const queued = await app.queryElementByTestId(
+        dataTestId.queuedMessage,
+        (element) => element.textContent?.includes(queuedPrompt) === true,
+    );
+    const held = executionNetwork.holdNextQueuedCancellation();
+    await app.user.click(getByLabelText(queued, `Edit queued message: ${queuedPrompt}`));
+    const release = await held;
+
+    await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull());
+    // The Runtime withdraws the message only after the user left its Session.
+    expect(await release()).toMatchObject({ kind: "http.response", status: 200 });
+    const running = await app.waitForView(() => {
+        const entry = app
+            .elementsByTestId(dataTestId.managedConversation)
+            .find((element) => element.textContent?.includes("wait for steering"));
+        if (entry === undefined) {
+            throw new Error("Expected the running Session in the directory");
+        }
+        return entry;
+    });
+    await app.user.click(running);
+
+    await app.waitForView(() => {
+        expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", queuedPrompt);
+        expect(app.optionalElementByTestId(dataTestId.queuedMessage)).toBeNull();
+        expect(document.body.textContent).toContain("Waiting for steering");
+    });
+    await daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
+    await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
+    expect(app.elementsByTestId(dataTestId.userMessage).map((element) => element.textContent)).toEqual([
+        "wait for steering",
+    ]);
+    await app.close();
+});
+
 test("Given a reply is running with a queued follow-up, When I edit the follow-up, Then all viewers keep the reply running and only the revised message executes", {
     timeout: 30_000,
 }, async () => {
