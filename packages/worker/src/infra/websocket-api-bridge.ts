@@ -45,6 +45,12 @@ const clientFrame = v.variant("kind", [
 ]);
 const CONNECTION_IDLE_MILLISECONDS = 60_000;
 const REQUEST_TIMEOUT_MILLISECONDS = 120_000;
+/** Requests one connection may have in flight, including uploads still receiving their body. */
+const MAX_BRIDGE_REQUESTS = 64;
+/** Watches and subscriptions one connection may hold open. */
+export const MAX_BRIDGE_SUBSCRIPTIONS = 32;
+/** Bytes one connection's unfinished uploads may declare, as the Relay's transport allows; each buffers its size. */
+export const MAX_BRIDGE_UPLOAD_BYTES = 12 * 1_024 * 1_024;
 
 interface BridgeLogger {
     readonly error: (value: unknown, message: string) => void;
@@ -119,6 +125,15 @@ async function sendResponse(
     });
 }
 
+function capacityError(socket: WebSocket, requestIdValue: string): void {
+    send(socket, {
+        kind: "error",
+        requestId: requestIdValue,
+        code: "BRIDGE_CAPACITY_EXCEEDED",
+        message: "The connection has too many open requests.",
+    });
+}
+
 function protocolError(socket: WebSocket, requestIdValue: string | null): void {
     send(socket, {
         kind: "error",
@@ -146,6 +161,14 @@ export function createWebSocketApiBridge(
     const pending = new Map<string, AbortController>();
     const binaryRequests = new Map<string, BinaryBridgeRequest>();
     const watches = new Map<string, AbortController>();
+    let uploadBytes = 0;
+    const forgetUpload = (requestIdValue: string) => {
+        const upload = binaryRequests.get(requestIdValue);
+        if (upload !== undefined) {
+            binaryRequests.delete(requestIdValue);
+            uploadBytes -= upload.byteLength;
+        }
+    };
     let idleTimer: ReturnType<typeof setTimeout>;
     let lastActivityAt = Date.now();
     const refreshIdleDeadline = () => {
@@ -173,6 +196,7 @@ export function createWebSocketApiBridge(
         }
         pending.clear();
         binaryRequests.clear();
+        uploadBytes = 0;
         for (const controller of watches.values()) {
             controller.abort(new Error("The WebSocket bridge closed."));
         }
@@ -194,7 +218,7 @@ export function createWebSocketApiBridge(
                 }
                 upload.body.set(chunk.bytes, upload.receivedBytes - chunk.bytes.byteLength);
                 if (upload.receivedBytes === upload.byteLength) {
-                    binaryRequests.delete(upload.requestId);
+                    forgetUpload(upload.requestId);
                     const signal = AbortSignal.any([
                         upload.controller.signal,
                         AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
@@ -257,7 +281,7 @@ export function createWebSocketApiBridge(
         if (frame.kind === "cancel") {
             pending.get(frame.requestId)?.abort(new Error("The bridged request was cancelled."));
             pending.delete(frame.requestId);
-            binaryRequests.delete(frame.requestId);
+            forgetUpload(frame.requestId);
             return;
         }
         if (frame.kind === "unwatch") {
@@ -269,6 +293,10 @@ export function createWebSocketApiBridge(
         if (frame.kind === "watch" || frame.kind === "subscribe") {
             if (watches.has(frame.subscriptionId)) {
                 protocolError(server, frame.subscriptionId);
+                return;
+            }
+            if (watches.size >= MAX_BRIDGE_SUBSCRIPTIONS) {
+                capacityError(server, frame.subscriptionId);
                 return;
             }
             const lifetime = new AbortController();
@@ -322,12 +350,21 @@ export function createWebSocketApiBridge(
             protocolError(server, frame.requestId);
             return;
         }
+        if (pending.size >= MAX_BRIDGE_REQUESTS) {
+            capacityError(server, frame.requestId);
+            return;
+        }
         const controller = new AbortController();
         if (frame.bodyByteLength !== undefined) {
             if (frame.body !== null) {
                 protocolError(server, frame.requestId);
                 return;
             }
+            if (uploadBytes + frame.bodyByteLength > MAX_BRIDGE_UPLOAD_BYTES) {
+                capacityError(server, frame.requestId);
+                return;
+            }
+            uploadBytes += frame.bodyByteLength;
             pending.set(frame.requestId, controller);
             binaryRequests.set(frame.requestId, {
                 body: new Uint8Array(frame.bodyByteLength),

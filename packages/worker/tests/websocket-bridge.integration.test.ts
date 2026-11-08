@@ -1,7 +1,9 @@
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
+import * as v from "valibot";
 import { afterAll, beforeAll, expect, test } from "vitest";
+import { MAX_BRIDGE_SUBSCRIPTIONS, MAX_BRIDGE_UPLOAD_BYTES } from "../src/infra/websocket-api-bridge.ts";
 
 let runtime: Miniflare;
 
@@ -118,6 +120,114 @@ test.each([
         expect(response.headers.get("Cache-Control")).toBe("no-store");
     },
 );
+
+/** Collects every frame, so a scenario can await the one it expects regardless of arrival order. */
+function frames(socket: MiniflareWebSocket): (kind: string, id: string) => Promise<unknown> {
+    const received: unknown[] = [];
+    const waiters: { readonly match: (frame: unknown) => boolean; readonly resolve: (frame: unknown) => void }[] = [];
+    const matcher = (kind: string, id: string) => (frame: unknown) =>
+        v.is(v.object({ kind: v.literal(kind) }), frame) &&
+        (v.is(v.object({ subscriptionId: v.literal(id) }), frame) ||
+            v.is(v.object({ requestId: v.literal(id) }), frame));
+    socket.addEventListener("message", (event) => {
+        const frame: unknown = JSON.parse(String(event.data));
+        const waiter = waiters.findIndex((entry) => entry.match(frame));
+        if (waiter === -1) {
+            received.push(frame);
+        } else {
+            waiters.splice(waiter, 1)[0]?.resolve(frame);
+        }
+    });
+    return (kind, id) => {
+        const match = matcher(kind, id);
+        const index = received.findIndex(match);
+        if (index !== -1) {
+            return Promise.resolve(received.splice(index, 1)[0]);
+        }
+        return new Promise((resolve) => waiters.push({ match, resolve }));
+    };
+}
+
+async function openBridge(): Promise<MiniflareWebSocket> {
+    const response = await runtime.dispatchFetch("https://chat.test/morty/ws", {
+        headers: { Origin: "https://chat.test", Upgrade: "websocket" },
+    });
+    const socket = response.webSocket;
+    if (response.status !== 101 || socket === null) {
+        throw new Error("Expected the Chat WebSocket bridge.");
+    }
+    socket.accept();
+    return socket;
+}
+
+test("Given a watch the API refuses, When its first sample is unauthorized, Then the bridge reports the refusal and ends the watch instead of repeating it", async () => {
+    const socket = await openBridge();
+    const next = frames(socket);
+    socket.send(
+        JSON.stringify({
+            kind: "watch",
+            subscriptionId: "unauthorized-watch",
+            method: "GET",
+            path: "/morty/api/identity/devices",
+            headers: [],
+            body: null,
+        }),
+    );
+    await expect(next("watch.ready", "unauthorized-watch")).resolves.toMatchObject({ status: 401 });
+    await expect(next("subscription.end", "unauthorized-watch")).resolves.toEqual({
+        kind: "subscription.end",
+        subscriptionId: "unauthorized-watch",
+    });
+    socket.close(1000, "Test complete");
+});
+
+test("Given a connection holding its subscription and upload capacity, When it opens more, Then each excess is refused and the connection keeps serving", async () => {
+    const socket = await openBridge();
+    const next = frames(socket);
+    const watch = (subscriptionId: string) =>
+        socket.send(
+            JSON.stringify({
+                kind: "watch",
+                subscriptionId,
+                method: "POST",
+                path: "/morty/api/missing/workspace",
+                headers: [],
+                body: null,
+            }),
+        );
+    for (let index = 0; index < MAX_BRIDGE_SUBSCRIPTIONS; index += 1) {
+        watch(`watch-${index}`);
+        await next("watch.ready", `watch-${index}`);
+    }
+    watch("watch-excess");
+    await expect(next("error", "watch-excess")).resolves.toMatchObject({ code: "BRIDGE_CAPACITY_EXCEEDED" });
+
+    const upload = (requestId: string, bodyByteLength: number) =>
+        socket.send(
+            JSON.stringify({
+                kind: "request",
+                requestId,
+                method: "POST",
+                path: "/morty/api/missing/upload",
+                headers: [],
+                body: null,
+                bodyByteLength,
+            }),
+        );
+    const uploadBytes = 3 * 1_024 * 1_024;
+    for (let index = 0; index < MAX_BRIDGE_UPLOAD_BYTES / uploadBytes; index += 1) {
+        upload(`upload-${index}`, uploadBytes);
+    }
+    upload("upload-excess", 1);
+    await expect(next("error", "upload-excess")).resolves.toMatchObject({ code: "BRIDGE_CAPACITY_EXCEEDED" });
+
+    socket.send(JSON.stringify({ kind: "diagnostic.ping", requestId: "still-serving" }));
+    await expect(next("diagnostic.pong", "still-serving")).resolves.toEqual({
+        kind: "diagnostic.pong",
+        requestId: "still-serving",
+    });
+    socket.close(1000, "Test complete");
+});
 
 test("Given browser API requests and watches, When the Chat web application uses the WebSocket bridge, Then responses and watch snapshots preserve JSON errors and document requests are rejected", async () => {
     const response = await runtime.dispatchFetch("https://chat.test/morty/ws", {
