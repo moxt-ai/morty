@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { type ClientConnection, methods, ndJsonStream, type SessionNotification } from "@agentclientprotocol/sdk";
 import { AcpExecutionError } from "../../../src/engine/acp/acp-error.ts";
 import type { AcpEndpointTermination } from "../../../src/engine/acp/agent/in-process-endpoint.ts";
@@ -10,6 +10,7 @@ import {
     captureProcessTree,
     executableLaunch,
     platformSpawnOptions,
+    spawnProcess,
     stopProcessTree,
 } from "../../../src/engine/util/process/executable.ts";
 import { createWritableAcpStream, readableAcpStream } from "./acp-stream.ts";
@@ -43,13 +44,13 @@ function isIdentifiedNotification(notification: SessionNotification): notificati
 export class ControlledAcpConnection implements AgentConnection {
     readonly connection: ClientConnection;
     readonly termination: Promise<AcpEndpointTermination>;
-    readonly #child: ReturnType<typeof spawn>;
+    readonly #child: ChildProcess;
     readonly #consumeStderr: (chunk: Buffer) => void;
     #closePromise: Promise<void> | null = null;
 
     constructor(agent: ControlledAcpLaunch, options: ControlledAcpConnectionOptions) {
         const launch = executableLaunch(agent.adapterPath, agent.arguments);
-        const child = spawn(launch.command, [...launch.arguments], {
+        const child = spawnProcess(launch.command, launch.arguments, {
             cwd: options.cwd,
             ...platformSpawnOptions,
             env: { ...process.env, ...agent.environment },

@@ -9,6 +9,19 @@ export interface ProcessTableEntry extends ProcessTreeIdentity {
     readonly parentProcessId: number;
 }
 
+/**
+ * A child this Runtime spawned. Its PID identifies it only while it runs: the operating system may give the
+ * PID to an unrelated process once the child has exited.
+ */
+export type SpawnedProcess =
+    | { readonly state: "running"; readonly processId: number; readonly spawnedAt: number }
+    | {
+          readonly state: "exited";
+          readonly processId: number;
+          readonly spawnedAt: number;
+          readonly exitedAt: number;
+      };
+
 export interface ProcessLaunch {
     readonly command: string;
     readonly arguments: readonly string[];
@@ -28,6 +41,7 @@ export interface ProcessPlatformSupport {
     ) => void;
     readonly terminateProcess: (child: ChildProcess, signal: NodeJS.Signals) => void;
     readonly readProcessTable: () => Promise<readonly ProcessTableEntry[]>;
-    readonly readProcessTableSynchronously: () => readonly ProcessTableEntry[];
+    /** Identifies the processes that belong to the tree of a spawned child, and no unrelated process. */
+    readonly captureProcessTree: (root: SpawnedProcess) => Promise<readonly ProcessTreeIdentity[]>;
     readonly processExists: (processId: number) => boolean;
 }

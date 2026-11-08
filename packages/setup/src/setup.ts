@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { constants } from "node:fs";
 import { mkdir, open, readFile, realpath, rename, rm } from "node:fs/promises";
@@ -16,6 +16,7 @@ import {
     executableLaunch,
     findExecutableOnPath,
     runBoundedProcess,
+    spawnProcess,
     stopProcessTree,
 } from "../../../packages/cli/src/engine/util/process/executable.ts";
 import runtimeRelease from "../../cli/package.json" with { type: "json" };
@@ -919,7 +920,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     ...args,
                 ]);
             }
-            child = spawn(launch.command, [...launch.arguments], {
+            child = spawnProcess(launch.command, launch.arguments, {
                 cwd,
                 stdio: [input === undefined ? "ignore" : "pipe", log.fd, log.fd],
                 windowsHide: true,
