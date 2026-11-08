@@ -64,7 +64,7 @@ test("Given saved active and revoked credentials, When their schema is migrated,
     ]);
 });
 
-test("Given browsers that joined before devices had their own record, When the schema is migrated, Then each browser becomes one device described by its first joining and keeps its credentials", () => {
+test("Given browsers that joined before devices had their own record, When the schema is migrated, Then each browser becomes one device described by its first joining, keeps its credentials and owns whether its access ended", () => {
     using database = new DatabaseSync(":memory:");
     const position = migrations.findIndex((migration) => migration.name === "0042_browser_devices.sql");
     for (const migration of migrations.slice(0, position)) {
@@ -76,6 +76,7 @@ test("Given browsers that joined before devices had their own record, When the s
     link.run("transfer_legacy", "legacy-code", 1);
     link.run("transfer_first", "first-code", 1);
     link.run("transfer_again", "again-code", 2);
+    link.run("transfer_ended", "ended-code", 1);
     link.run("transfer_unused", "unused-code", null);
     const credential = database.prepare(
         "INSERT INTO anonymous_credential (id, user_id, token_hash, kind, created_at, revoked_at, remote_transfer_id, browser_id, device_label) VALUES (?, 'usr_owner', ?, ?, ?, ?, ?, ?, ?)",
@@ -86,12 +87,25 @@ test("Given browsers that joined before devices had their own record, When the s
     // A browser that joined, then opened another link: its first credential names it.
     credential.run("cred_first", "first-hash", "browser", 1, 2, "transfer_first", null, "iPhone · Safari");
     credential.run("cred_again", "again-hash", "browser", 2, null, "transfer_again", "cred_first", "iPhone · Safari");
+    // A browser whose access was ended: every credential it held was revoked.
+    credential.run("cred_ended", "ended-hash", "browser", 1, 3, "transfer_ended", null, "Pixel · Chrome");
+    credential.run("cred_recovery", "recovery-hash", "recovery", 1, 4, null, null, null);
 
     for (const migration of migrations.slice(position)) {
         database.exec(migration.sql);
     }
 
     expect(database.prepare("SELECT * FROM browser_device ORDER BY id").all()).toEqual([
+        {
+            id: "cred_ended",
+            user_id: "usr_owner",
+            joined_at: 1,
+            label: "Pixel · Chrome",
+            joined_city: null,
+            joined_country: null,
+            joined_through_transfer_id: "transfer_ended",
+            ended_at: 3,
+        },
         {
             id: "cred_first",
             user_id: "usr_owner",
@@ -100,6 +114,7 @@ test("Given browsers that joined before devices had their own record, When the s
             joined_city: null,
             joined_country: null,
             joined_through_transfer_id: "transfer_first",
+            ended_at: null,
         },
         {
             id: "cred_legacy",
@@ -109,24 +124,39 @@ test("Given browsers that joined before devices had their own record, When the s
             joined_city: null,
             joined_country: null,
             joined_through_transfer_id: "transfer_legacy",
+            ended_at: null,
         },
     ]);
     expect(
         database
-            .prepare("SELECT id, kind, revoked_at, remote_transfer_id, device_id FROM anonymous_credential ORDER BY id")
+            .prepare(
+                "SELECT id, kind, revoked_at, replaced_at, remote_transfer_id, device_id FROM anonymous_credential ORDER BY id",
+            )
             .all(),
     ).toEqual([
         {
             id: "cred_again",
             kind: "browser",
             revoked_at: null,
+            replaced_at: null,
             remote_transfer_id: "transfer_again",
             device_id: "cred_first",
+        },
+        // Its access ended with its device.
+        {
+            id: "cred_ended",
+            kind: "browser",
+            revoked_at: null,
+            replaced_at: null,
+            remote_transfer_id: "transfer_ended",
+            device_id: "cred_ended",
         },
         {
             id: "cred_first",
             kind: "browser",
-            revoked_at: 2,
+            // A newer credential of the same device replaced it; its access did not end.
+            revoked_at: null,
+            replaced_at: 2,
             remote_transfer_id: "transfer_first",
             device_id: "cred_first",
         },
@@ -134,12 +164,28 @@ test("Given browsers that joined before devices had their own record, When the s
             id: "cred_legacy",
             kind: "browser",
             revoked_at: null,
+            replaced_at: null,
             remote_transfer_id: "transfer_legacy",
             device_id: "cred_legacy",
         },
-        { id: "cred_local", kind: "local", revoked_at: null, remote_transfer_id: null, device_id: null },
+        {
+            id: "cred_local",
+            kind: "local",
+            revoked_at: null,
+            replaced_at: null,
+            remote_transfer_id: null,
+            device_id: null,
+        },
+        {
+            id: "cred_recovery",
+            kind: "recovery",
+            revoked_at: 4,
+            replaced_at: null,
+            remote_transfer_id: null,
+            device_id: null,
+        },
     ]);
-    expect(database.prepare("SELECT id, access_expires_at FROM identity_transfer ORDER BY id").all()).toHaveLength(4);
+    expect(database.prepare("SELECT id, access_expires_at FROM identity_transfer ORDER BY id").all()).toHaveLength(5);
     expect(() =>
         database
             .prepare(
