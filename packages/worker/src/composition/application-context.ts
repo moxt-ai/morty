@@ -1,4 +1,5 @@
-import pino, { type Logger } from "pino";
+import { logger } from "@morty-build/relay-core/logging";
+import type { Logger } from "pino";
 import { ChatService } from "../components/chat/service/chat-service.ts";
 import { ManagedSessionStorage } from "../components/chat/storage/managed-session-storage.ts";
 import { AuthenticationService } from "../components/management/service/authentication-service.ts";
@@ -9,11 +10,8 @@ import { PlatformProjectStorage } from "../components/management/storage/platfor
 import { PlatformProjectGateway } from "../gateway/platform-project-gateway.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 
-export const logger = pino({
-    base: { service: "morty" },
-    browser: { asObject: true },
-    level: "info",
-});
+// One logger, whose error serializer keeps credentials and request input out of the logs.
+export { logger };
 
 export interface ApplicationContext {
     readonly config: { readonly bindings: CloudBindings };
