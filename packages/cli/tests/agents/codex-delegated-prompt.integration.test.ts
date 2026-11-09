@@ -137,9 +137,8 @@ function sendPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"
         encodeSessionPromptCommand({
             agentId: "codex",
             attachments: [],
-            bindingId: peer.bindingId,
             commandId,
-            directoryId: "default",
+            directory: ".",
             disposition: SessionPromptDisposition.Append,
             kind: "session.prompt",
             prompt,
@@ -191,10 +190,8 @@ async function nextEvent(peer: RealDaemonPeer, matches: (event: SessionLiveEvent
 async function importThread(peer: RealDaemonPeer, threadId: string): Promise<RealDaemonPeer["target"]> {
     const identity = {
         agentId: "codex",
-        bindingId: peer.bindingId,
-        directoryId: "default",
+        directory: ".",
         kind: "native.session.request",
-        discoveryId: crypto.randomUUID(),
     } as const;
     const findId = randomUUID();
     peer.send(encodeNativeSessionCommand({ ...identity, requestId: findId, action: "find", sessionId: threadId }));
@@ -208,7 +205,7 @@ async function importThread(peer: RealDaemonPeer, threadId: string): Promise<Rea
             ...identity,
             requestId: importId,
             action: "import",
-            entryId: found.entry.entryId,
+            sessionId: found.entry.sessionId,
         }),
     );
     const imported = await nativeResult(peer, importId);

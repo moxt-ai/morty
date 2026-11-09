@@ -29,9 +29,8 @@ test("Given a reused real Pi session, When local commands reply consecutively, T
             peer.send(
                 encodeSessionPromptCommand({
                     agentId: "pi",
-                    bindingId: peer.bindingId,
                     commandId,
-                    directoryId: "default",
+                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
@@ -104,9 +103,8 @@ test("Given real Pi transforms user input, When a prompt runs through the daemon
         peer.send(
             encodeSessionPromptCommand({
                 agentId: "pi",
-                bindingId: peer.bindingId,
                 commandId,
-                directoryId: "default",
+                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
@@ -168,9 +166,8 @@ test("Given real Pi has an active SDK turn, When the user steers it, Then Pi con
                 peer.send(
                     encodeSessionPromptCommand({
                         agentId: "pi",
-                        bindingId: peer.bindingId,
                         commandId,
-                        directoryId: "default",
+                        directory: ".",
                         disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",
@@ -274,8 +271,7 @@ test("Given real Pi only supports disabled thinking, When a session is prepared,
         peer.send(
             encodeSessionPrepareCommand({
                 agentId: "pi",
-                bindingId: peer.bindingId,
-                directoryId: "default",
+                directory: ".",
                 kind: "session.prepare",
                 requestId,
                 target: peer.target,
@@ -309,9 +305,8 @@ test("Given real Pi without an external ACP adapter, When Bash executes through 
             peer.send(
                 encodeSessionPromptCommand({
                     agentId: "pi",
-                    bindingId: peer.bindingId,
                     commandId,
-                    directoryId: "default",
+                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",

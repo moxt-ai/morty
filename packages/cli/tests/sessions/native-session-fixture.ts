@@ -140,11 +140,10 @@ export async function fixture(
         new RuntimeAgentDependencies([agent]),
         new RuntimeLocalContext(workspace, process.env),
     );
-    const directories = new WorkspaceDirectoryService("workspace", workspace);
+    const directories = new WorkspaceDirectoryService(workspace);
     const database = openAcpSessionDatabase(join(temporary, "operations.sqlite"));
     const creations = new SessionCreations(new SessionCreationTable(database));
     let service = new NativeSessionService(
-        config.bindingId,
         (agentId) => sessions.resolveAgent(config.catalog.find(agentId)),
         directories,
         sessions.sessions,
@@ -157,11 +156,9 @@ export async function fixture(
     );
     const identity = {
         agentId: agent.id,
-        bindingId: "workspace",
-        directoryId: "default",
+        directory: ".",
         kind: "native.session.request",
         requestId: "native-operation",
-        discoveryId: "browser",
     } satisfies Omit<NativeSessionCommand, "action">;
     const seed = async (title: string, cwd = workspace): Promise<string> => {
         const external = new SessionManager({
@@ -259,7 +256,6 @@ export async function fixture(
                 maxProcesses: null,
             });
             service = new NativeSessionService(
-                config.bindingId,
                 (agentId) => sessions.resolveAgent(config.catalog.find(agentId)),
                 directories,
                 sessions.sessions,

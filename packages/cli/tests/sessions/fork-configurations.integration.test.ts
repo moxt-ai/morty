@@ -48,8 +48,7 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                 async (peer) => {
                     const identity = {
                         agentId: "controlled-acp",
-                        bindingId: peer.bindingId,
-                        directoryId: "default",
+                        directory: ".",
                     };
                     const configureSource = async (
                         sessionConfigurations: NonNullable<
@@ -94,7 +93,6 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                             ...identity,
                             kind: "native.session.request",
                             action: "list",
-                            discoveryId: crypto.randomUUID(),
                             requestId: listId,
                             cursor: null,
                         }),
@@ -110,9 +108,8 @@ test.each(["", "--fork-mode-unavailable", "--fork-omits-mode", "--fork-omits-mod
                             ...identity,
                             kind: "native.session.request",
                             action: "fork",
-                            discoveryId: list.discoveryId,
                             requestId,
-                            entryId: list.entries[0].entryId,
+                            sessionId: list.entries[0].sessionId,
                         }),
                     );
                     const modeAndSpeed = [

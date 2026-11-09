@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DIRECTORY_IDENTIFIER as directoryIdentifier } from "../../shared/directory.ts";
+import { DIRECTORY_PATH as directoryPath } from "../../shared/directory.ts";
 import { identifierStringSchema as identifier } from "../../shared/identifier.ts";
 import { ProtocolMessageError } from "../../shared/message-codec.ts";
 import { decodeKnownNativeSessionEvents, nativeSessionEventsSchema } from "../events/index.ts";
@@ -25,8 +25,7 @@ const sessionPreviewHistoryPageLoadSchema = z
     .object({
         ...pageRequestFields,
         agentId: identifier,
-        bindingId: identifier,
-        directoryId: directoryIdentifier,
+        directory: directoryPath,
         kind: z.literal(SESSION_PREVIEW_HISTORY_PAGE_LOAD_KIND),
     })
     .readonly();

@@ -61,8 +61,7 @@ if (process.argv.includes("--version")) {
                 peer.send(
                     encodeSessionPrepareCommand({
                         agentId: "controlled-acp",
-                        bindingId: peer.bindingId,
-                        directoryId: "default",
+                        directory: ".",
                         kind: "session.prepare",
                         requestId: "prepare-external-image-session",
                         target: peer.target,
@@ -76,9 +75,8 @@ if (process.argv.includes("--version")) {
                 peer.send(
                     encodeSessionPromptCommand({
                         agentId: "controlled-acp",
-                        bindingId: peer.bindingId,
                         commandId: "external-image-seed-turn",
-                        directoryId: "default",
+                        directory: ".",
                         disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",

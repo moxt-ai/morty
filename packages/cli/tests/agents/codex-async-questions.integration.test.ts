@@ -42,8 +42,7 @@ test("Given a real Codex model that asks the user a question while it keeps work
                 commandId,
                 target: peer.target,
                 agentId: "codex",
-                bindingId: peer.bindingId,
-                directoryId: "default",
+                directory: ".",
                 attachments: [],
                 prompt,
                 disposition: SessionPromptDisposition.Append,
@@ -94,14 +93,12 @@ test("Given a real Codex model that asks the user a question while it keeps work
         // Previewing the saved Codex thread replays it from Codex itself.
         const identity = {
             agentId: "codex",
-            bindingId: peer.bindingId,
-            directoryId: "default",
+            directory: ".",
         } as const;
         peer.send(
             encodeNativeSessionCommand({
                 ...identity,
                 kind: "native.session.request",
-                discoveryId: randomUUID(),
                 requestId: "list",
                 action: "list",
                 cursor: null,

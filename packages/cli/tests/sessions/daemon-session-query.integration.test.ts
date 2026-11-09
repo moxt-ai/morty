@@ -44,13 +44,12 @@ async function reply(peer: RealDaemonPeer, kind: string, requestId: string): Pro
     }
 }
 
-async function createSession(peer: RealDaemonPeer, directoryId: string): Promise<RealDaemonPeer["target"]> {
+async function createSession(peer: RealDaemonPeer, directory: string): Promise<RealDaemonPeer["target"]> {
     const requestId = crypto.randomUUID();
     peer.send(
         encodeSessionCreateCommand({
             agentId: NATIVE_AGENT_ID,
-            bindingId: peer.bindingId,
-            directoryId,
+            directory,
             kind: "session.create",
             requestId,
             operationId: crypto.randomUUID(),
@@ -64,7 +63,7 @@ test("Given a Session whose directory was deleted, When a client queries it with
     const root = await realpath(await mkdtemp(join(tmpdir(), "morty-session-query-")));
     const deleted = join(root, "deleted-project");
     await mkdir(deleted);
-    const deletedDirectoryId = `path-${Buffer.from(deleted, "utf8").toString("base64url")}`;
+    const deletedDirectory = deleted;
     const specification = new ControlledAgentSpecification();
     try {
         await withControlledDaemon(
@@ -72,7 +71,7 @@ test("Given a Session whose directory was deleted, When a client queries it with
             { MORTY_TEST_CONTROLLED_QUERY_PATH: process.execPath },
             async (peer) => {
                 const kept = await createSession(peer, "default");
-                const orphaned = await createSession(peer, deletedDirectoryId);
+                const orphaned = await createSession(peer, deletedDirectory);
                 await rm(deleted, { recursive: true, force: true });
 
                 const requestId = crypto.randomUUID();
@@ -80,8 +79,8 @@ test("Given a Session whose directory was deleted, When a client queries it with
                 const { entries } = decodeSessionsQueriedEvent(await reply(peer, "session.queried", requestId));
 
                 expect(entries.map((entry) => entry.target)).toEqual(expect.arrayContaining([kept, orphaned]));
-                expect(entries.find((entry) => entry.target.sessionId === orphaned.sessionId)?.directoryId).toBe(
-                    deletedDirectoryId,
+                expect(entries.find((entry) => entry.target.sessionId === orphaned.sessionId)?.directory).toBe(
+                    deletedDirectory,
                 );
             },
         );

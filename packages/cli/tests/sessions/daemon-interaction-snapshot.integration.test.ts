@@ -142,8 +142,7 @@ test("Given a newly created native Session, When its first Turn resolves interac
         socket.send(
             encodeSessionCreateCommand({
                 agentId: "claude",
-                bindingId: config.bindingId,
-                directoryId: "default",
+                directory: ".",
                 kind: "session.create",
                 requestId: "inspect_request",
                 operationId: crypto.randomUUID(),
@@ -155,9 +154,8 @@ test("Given a newly created native Session, When its first Turn resolves interac
         socket.send(
             encodeSessionPromptCommand({
                 agentId: "claude",
-                bindingId: config.bindingId,
                 commandId: "interaction_turn",
-                directoryId: "default",
+                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
@@ -175,11 +173,9 @@ test("Given a newly created native Session, When its first Turn resolves interac
                 encodeNativeSessionRequest({
                     action: "active-turn",
                     agentId: "claude",
-                    bindingId: config.bindingId,
-                    directoryId: "default",
+                    directory: ".",
                     kind: "native.session.request",
                     requestId,
-                    discoveryId: crypto.randomUUID(),
                     target: sessionTarget,
                 }),
             );
@@ -320,8 +316,7 @@ test("Given an Agent announced a tool call with its input, When it requests perm
         socket.send(
             encodeSessionCreateCommand({
                 agentId: "claude",
-                bindingId: config.bindingId,
-                directoryId: "default",
+                directory: ".",
                 kind: "session.create",
                 requestId: "prepare_request",
                 operationId: crypto.randomUUID(),
@@ -332,9 +327,8 @@ test("Given an Agent announced a tool call with its input, When it requests perm
         socket.send(
             encodeSessionPromptCommand({
                 agentId: "claude",
-                bindingId: config.bindingId,
                 commandId: "announced_turn",
-                directoryId: "default",
+                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
@@ -430,8 +424,7 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
         socket.send(
             encodeSessionCreateCommand({
                 agentId: "claude",
-                bindingId: config.bindingId,
-                directoryId: "default",
+                directory: ".",
                 kind: "session.create",
                 requestId: "prepare_request",
                 operationId: crypto.randomUUID(),
@@ -442,9 +435,8 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
         socket.send(
             encodeSessionPromptCommand({
                 agentId: "claude",
-                bindingId: config.bindingId,
                 commandId: "null_input_turn",
-                directoryId: "default",
+                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
@@ -540,8 +532,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
         socket.send(
             encodeSessionCreateCommand({
                 agentId: "claude",
-                bindingId: config.bindingId,
-                directoryId: "default",
+                directory: ".",
                 kind: "session.create",
                 requestId: "prepare_request",
                 operationId: crypto.randomUUID(),
@@ -552,9 +543,8 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
         socket.send(
             encodeSessionPromptCommand({
                 agentId: "claude",
-                bindingId: config.bindingId,
                 commandId: "orphan_update_turn",
-                directoryId: "default",
+                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
@@ -650,8 +640,7 @@ test("Given a real daemon prepared a Session, When Platform queries its metadata
         socket.send(
             encodeSessionCreateCommand({
                 agentId: "codex",
-                bindingId: config.bindingId,
-                directoryId: "default",
+                directory: ".",
                 kind: "session.create",
                 requestId: "prepare_request",
                 operationId: crypto.randomUUID(),
@@ -745,8 +734,7 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
             initial.socket.send(
                 encodeSessionCreateCommand({
                     agentId: "codex",
-                    bindingId: config.bindingId,
-                    directoryId: "default",
+                    directory: ".",
                     kind: "session.create",
                     requestId: "prepare_request",
                     operationId: crypto.randomUUID(),
@@ -757,9 +745,8 @@ test("Given a real daemon persisted a Session, When Platform restores it by iden
             initial.socket.send(
                 encodeSessionPromptCommand({
                     agentId: "codex",
-                    bindingId: config.bindingId,
                     commandId: "initial_turn",
-                    directoryId: "default",
+                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
@@ -918,8 +905,7 @@ test("Given queued prompts from the running Agent identity and another one, When
                 requestId: crypto.randomUUID(),
                 operationId: crypto.randomUUID(),
                 agentId: "claude",
-                bindingId: config.bindingId,
-                directoryId: "default",
+                directory: ".",
                 configurations: [],
             }),
         );
@@ -927,9 +913,8 @@ test("Given queued prompts from the running Agent identity and another one, When
         socket.send(
             encodeSessionPromptCommand({
                 agentId: "claude",
-                bindingId: config.bindingId,
                 commandId: "running_turn",
-                directoryId: "default",
+                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
@@ -944,9 +929,8 @@ test("Given queued prompts from the running Agent identity and another one, When
         socket.send(
             encodeSessionPromptCommand({
                 agentId: "codex",
-                bindingId: config.bindingId,
                 commandId: "foreign_queued_turn",
-                directoryId: "default",
+                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",
@@ -966,9 +950,8 @@ test("Given queued prompts from the running Agent identity and another one, When
         socket.send(
             encodeSessionPromptCommand({
                 agentId: "claude",
-                bindingId: config.bindingId,
                 commandId: "own_queued_turn",
-                directoryId: "default",
+                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [report],
                 kind: "session.prompt",
@@ -981,11 +964,9 @@ test("Given queued prompts from the running Agent identity and another one, When
             encodeNativeSessionRequest({
                 action: "active-turn",
                 agentId: "claude",
-                bindingId: config.bindingId,
-                directoryId: "default",
+                directory: ".",
                 kind: "native.session.request",
                 requestId: "claude_snapshot",
-                discoveryId: crypto.randomUUID(),
                 target: sessionTarget,
             }),
         );

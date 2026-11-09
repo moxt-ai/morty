@@ -11,7 +11,7 @@ it("describes a selected directory without browsing its children and still rejec
     try {
         await mkdir(join(root, "child"));
         const canonical = await realpath(root);
-        const directoryId = `path-${Buffer.from(canonical).toString("base64url")}`;
+        const directory = canonical;
         await using platform = await startTestPlatform();
         const signal = AbortSignal.timeout(30_000);
         const project = await platform.service.createProject(
@@ -24,7 +24,7 @@ it("describes a selected directory without browsing its children and still rejec
             signal,
         );
         const runtime = await platform.connectAgent(project.computerId);
-        const listing = await runtime.client.runtimes.listWorkspace(directoryId, signal);
+        const listing = await runtime.client.runtimes.listWorkspace(directory, signal);
         expect(listing.entries.map((entry) => entry.name)).toContain("child");
 
         const invalid = await fetch(
@@ -32,7 +32,7 @@ it("describes a selected directory without browsing its children and still rejec
             {
                 method: "POST",
                 headers: { authorization: `Bearer ${platform.appCredential}`, "content-type": "application/json" },
-                body: JSON.stringify({ directoryId, view: "children" }),
+                body: JSON.stringify({ directory, view: "children" }),
                 signal,
             },
         );
@@ -42,11 +42,11 @@ it("describes a selected directory without browsing its children and still rejec
         // Directory lookup/stat remains permitted, while readdir is denied for ordinary users.
         // The returned metadata contract is the same when a privileged test user ignores chmod.
         await chmod(root, 0o111);
-        await expect(runtime.client.runtimes.describeWorkspace(directoryId, signal)).resolves.toStrictEqual({
-            directoryId,
+        await expect(runtime.client.runtimes.describeWorkspace(directory, signal)).resolves.toStrictEqual({
+            directory,
             directoryLabel: listing.directoryLabel,
         });
-        const missing = `path-${Buffer.from(join(canonical, "missing")).toString("base64url")}`;
+        const missing = join(canonical, "missing");
         await expect(runtime.client.runtimes.describeWorkspace(missing, signal)).rejects.toMatchObject({
             code: "local_authorization_failed",
         });

@@ -18,10 +18,9 @@ import { ControlledAcpAgentSpecification } from "../support/agents/controlled-ac
 import { type RealDaemonPeer, withControlledDaemon } from "../support/agents/real-daemon.ts";
 import { writeControlledAcpExecutable } from "../support/controlled-acp-executable.ts";
 
-const identity = (peer: RealDaemonPeer) => ({
+const identity = (_peer: RealDaemonPeer) => ({
     agentId: "controlled-acp",
-    bindingId: peer.bindingId,
-    directoryId: "default",
+    directory: ".",
 });
 
 const submit = (peer: RealDaemonPeer, commandId: string, prompt: string): void =>
@@ -58,7 +57,6 @@ const readExecution = async (peer: RealDaemonPeer, commandId?: string) => {
             ...(commandId === undefined ? {} : { deliveryCommandId: commandId }),
             kind: "native.session.request",
             requestId,
-            discoveryId: crypto.randomUUID(),
             target: peer.target,
         }),
     );

@@ -162,9 +162,8 @@ test("Given an active Agent session holding an exclusive writer lock, When a pub
                 peer.send(
                     encodeSessionPromptCommand({
                         agentId: "controlled-acp",
-                        bindingId: peer.bindingId,
                         commandId: promptCommandId,
-                        directoryId: "default",
+                        directory: ".",
                         disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",

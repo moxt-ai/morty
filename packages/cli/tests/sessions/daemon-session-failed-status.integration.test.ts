@@ -22,9 +22,8 @@ const submit = (peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], c
         encodeSessionPromptCommand({
             agentId: "controlled-acp",
             attachments: [],
-            bindingId: peer.bindingId,
             commandId,
-            directoryId: "default",
+            directory: ".",
             disposition: "append",
             kind: "session.prompt",
             prompt,

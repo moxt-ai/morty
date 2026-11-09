@@ -9,7 +9,6 @@ import { reportOperationFailure, send } from "./transport.ts";
 
 type PendingRequest = Readonly<{
     agentId: string;
-    discoveryId: string;
     controller: AbortController;
     completion: Promise<void>;
 }>;
@@ -28,7 +27,7 @@ export function createNativeSessionRequestHandler(dependencies: NativeRequestDep
 
     const cancel = (command: NativeSessionCancel): void => {
         const request = pending.get(command.requestId);
-        if (request?.discoveryId === command.discoveryId) {
+        if (request !== undefined) {
             request.controller.abort(
                 new SessionError("native_session_cancelled", "Native session operation cancelled"),
             );
@@ -92,7 +91,6 @@ export function createNativeSessionRequestHandler(dependencies: NativeRequestDep
                         action: command.action,
                         agentId: command.agentId,
                         code: operationErrorCode(failure),
-                        discoveryId: command.discoveryId,
                     },
                     failure,
                 );
@@ -109,7 +107,6 @@ export function createNativeSessionRequestHandler(dependencies: NativeRequestDep
         })();
         pending.set(command.requestId, {
             agentId: command.agentId,
-            discoveryId: command.discoveryId,
             controller,
             completion,
         });

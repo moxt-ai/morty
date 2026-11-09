@@ -519,7 +519,6 @@ export async function requestRuntimeControl(
                         encodeServiceToDaemonMessage({
                             kind: "native.session.cancel",
                             requestId: command.requestId,
-                            discoveryId: command.discoveryId,
                         }),
                     );
                 }

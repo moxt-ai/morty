@@ -65,9 +65,8 @@ test.each(["new", "imported"] as const)(
             peer.send(
                 encodeSessionPromptCommand({
                     agentId: "pi",
-                    bindingId: peer.bindingId,
                     commandId,
-                    directoryId: "default",
+                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
@@ -163,8 +162,7 @@ test.each(["new", "imported"] as const)(
 async function importSavedSession(peer: RealDaemonPeer, agent: PiFixture): Promise<RealDaemonPeer["target"]> {
     const seedPrompt = "Save this native conversation for import";
     await agent.seedSession(peer.workspace, seedPrompt, peer.signal);
-    const identity = { agentId: "pi", bindingId: peer.bindingId, directoryId: "default" };
-    const discoveryId = randomUUID();
+    const identity = { agentId: "pi", directory: "." };
     const listId = randomUUID();
     peer.send(
         encodeNativeSessionCommand({
@@ -173,10 +171,9 @@ async function importSavedSession(peer: RealDaemonPeer, agent: PiFixture): Promi
             cursor: null,
             kind: "native.session.request",
             requestId: listId,
-            discoveryId,
         }),
     );
-    let entryId = "";
+    let sessionId = "";
     for (;;) {
         const message = await peer.nextMessage();
         if (decodeMessageKind(message) !== "native.session.result") {
@@ -190,7 +187,7 @@ async function importSavedSession(peer: RealDaemonPeer, agent: PiFixture): Promi
         if (source === undefined) {
             throw new Error("Missing saved Pi session");
         }
-        entryId = source.entryId;
+        sessionId = source.sessionId;
         break;
     }
     const importId = randomUUID();
@@ -198,10 +195,9 @@ async function importSavedSession(peer: RealDaemonPeer, agent: PiFixture): Promi
         encodeNativeSessionCommand({
             ...identity,
             action: "import",
-            entryId,
+            sessionId,
             kind: "native.session.request",
             requestId: importId,
-            discoveryId,
         }),
     );
     for (;;) {
@@ -225,9 +221,8 @@ function sendQuestionPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer[
     peer.send(
         encodeSessionPromptCommand({
             agentId: "pi",
-            bindingId: peer.bindingId,
             commandId,
-            directoryId: "default",
+            directory: ".",
             disposition: SessionPromptDisposition.Append,
             attachments: [],
             kind: "session.prompt",

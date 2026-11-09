@@ -44,8 +44,7 @@ test("Given a real Claude native Session with 6000 saved messages, When its prev
         peer.send(
             encodeSessionPreviewHistoryPageLoad({
                 agentId: "claude",
-                bindingId: peer.bindingId,
-                directoryId: "default",
+                directory: ".",
                 cursor: null,
                 eventLimit: 10000,
                 kind: "session.preview-history.page.load",

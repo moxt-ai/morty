@@ -153,11 +153,11 @@ export function CwdSelector({
                                 revealSurface
                             >
                                 {viewModel.recentCwds.map((recent) => {
-                                    const selected = recent.directoryId === settings.cwd.directoryId;
+                                    const selected = recent.directory === settings.cwd.directory;
                                     return (
                                         <div
                                             className="group/recent relative flex h-9 items-center rounded-md hover:bg-accent focus-within:bg-accent"
-                                            key={recent.directoryId}
+                                            key={recent.directory}
                                         >
                                             <button
                                                 className={cn(
@@ -167,7 +167,7 @@ export function CwdSelector({
                                                 data-testid={dataTestId.recentWorkingDirectory}
                                                 onClick={() => {
                                                     setMenuOpen(false);
-                                                    void viewModel.selectRecentCwd(recent.directoryId, signal);
+                                                    void viewModel.selectRecentCwd(recent.directory, signal);
                                                 }}
                                                 role="menuitem"
                                                 title={recent.directoryLabel}
@@ -190,7 +190,7 @@ export function CwdSelector({
                                                         data-testid={dataTestId.forgetRecentWorkingDirectory}
                                                         onClick={(event) => {
                                                             event.stopPropagation();
-                                                            viewModel.forgetRecentCwd(recent.directoryId);
+                                                            viewModel.forgetRecentCwd(recent.directory);
                                                         }}
                                                         type="button"
                                                     >
@@ -278,16 +278,13 @@ export function CwdSelector({
                                             frameClassName={directoryNavigationDisabled ? "opacity-50" : ""}
                                             className="max-h-64 p-2"
                                         >
-                                            {directory.parentDirectoryId.length > 0 && (
+                                            {directory.parentDirectory.length > 0 && (
                                                 <li>
                                                     <button
                                                         className="flex h-10 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-accent disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                                         disabled={directoryNavigationDisabled}
                                                         onClick={() =>
-                                                            void viewModel.browseCwd(
-                                                                directory.parentDirectoryId,
-                                                                signal,
-                                                            )
+                                                            void viewModel.browseCwd(directory.parentDirectory, signal)
                                                         }
                                                         type="button"
                                                     >
@@ -298,13 +295,13 @@ export function CwdSelector({
                                                 </li>
                                             )}
                                             {directory.entries.map((entry) => (
-                                                <li key={entry.directoryId}>
+                                                <li key={entry.directory}>
                                                     <button
                                                         aria-label={entry.name}
                                                         className="flex h-10 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-accent disabled:cursor-not-allowed disabled:hover:bg-transparent"
                                                         disabled={directoryNavigationDisabled}
                                                         onClick={() =>
-                                                            void viewModel.browseCwd(entry.directoryId, signal)
+                                                            void viewModel.browseCwd(entry.directory, signal)
                                                         }
                                                         type="button"
                                                     >

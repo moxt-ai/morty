@@ -26,9 +26,8 @@ test("Given real pi exhausts its automatic model retries, When the last attempt 
             peer.send(
                 encodeSessionPromptCommand({
                     agentId: "pi",
-                    bindingId: peer.bindingId,
                     commandId,
-                    directoryId: "default",
+                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     attachments: [],
                     kind: "session.prompt",
@@ -125,9 +124,8 @@ test("Given a pi turn's first model call fails retryably, When pi's automatic re
         peer.send(
             encodeSessionPromptCommand({
                 agentId: "pi",
-                bindingId: peer.bindingId,
                 commandId,
-                directoryId: "default",
+                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",

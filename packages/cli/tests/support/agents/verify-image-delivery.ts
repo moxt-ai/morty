@@ -54,9 +54,8 @@ export async function verifyImageDelivery(
         peer.send(
             encodeSessionPromptCommand({
                 agentId: input.agentId,
-                bindingId: peer.bindingId,
                 commandId,
-                directoryId: "default",
+                directory: ".",
                 disposition: SessionPromptDisposition.Append,
                 attachments: [],
                 kind: "session.prompt",

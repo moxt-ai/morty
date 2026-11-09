@@ -29,7 +29,6 @@ import type { NativeSessionService } from "../../../session/native/native-sessio
 import { applyCompleteSessionConfiguration } from "../../../session/prompt/apply-session-configuration.ts";
 import { resolveSessionDirectory } from "../../../session/workspace/resolve-session-directory.ts";
 import type { WorkspaceDirectoryService } from "../../../session/workspace/workspace-directory.ts";
-import type { RuntimeConfig } from "../../config.ts";
 import type { RelayConnectionDiagnostics } from "../../relay/diagnostics.ts";
 import type { CommandContext } from "../context.ts";
 import type { RuntimeCommand } from "../definition.ts";
@@ -39,7 +38,6 @@ async function prepareSession(
     command: SessionPrepareCommand,
     recovery: SessionRecovery,
     closed: ClosedSessionHandling,
-    config: RuntimeConfig,
     resolveAgent: ResolveAgent,
     directories: WorkspaceDirectoryService,
     sessions: SessionManager,
@@ -49,7 +47,7 @@ async function prepareSession(
     return await metrics.measure("prepare-total", async () => {
         const resolved = await metrics.measure(
             "workspace-resolve",
-            async () => await resolveSessionDirectory(directories, config.bindingId, command.directoryId, signal),
+            async () => await resolveSessionDirectory(directories, command.directory, signal),
         );
         const resolvedAgent = await resolveAgent(command.agentId, signal, command.target);
         const preparation = {
@@ -102,7 +100,7 @@ async function prepareSession(
             commands: prepared.commands,
             configOptions: prepared.configOptions,
             configurationRevision: prepared.configurationRevision,
-            directoryId: command.directoryId,
+            directory: command.directory,
             directoryLabel: resolved.directoryLabel,
             kind: "session.ready",
             requestId: command.requestId,
@@ -121,20 +119,19 @@ async function executeWorkspaceList(
     try {
         const listing =
             command.view === "metadata"
-                ? await directories.describe(command.bindingId, command.directoryId, signal).then((directory) => ({
-                      directoryId: command.directoryId,
+                ? await directories.describe(command.directory, signal).then((directory) => ({
+                      directory: command.directory,
                       directoryLabel: directory.label,
                       entries: [],
-                      parentDirectoryId: directory.parentDirectoryId,
+                      parentDirectory: directory.parentDirectory,
                   }))
-                : await directories.list(command.bindingId, command.directoryId, signal);
+                : await directories.list(command.directory, signal);
         send(socket, {
-            bindingId: command.bindingId,
-            directoryId: listing.directoryId,
+            directory: listing.directory,
             directoryLabel: listing.directoryLabel,
             entries: listing.entries,
             kind: "workspace.entries",
-            parentDirectoryId: listing.parentDirectoryId,
+            parentDirectory: listing.parentDirectory,
             requestId: command.requestId,
         });
     } catch (error) {
@@ -145,7 +142,6 @@ async function executeWorkspaceList(
 async function executeSessionPrepare(
     socket: WebSocket,
     command: SessionPrepareCommand,
-    config: RuntimeConfig,
     resolveAgent: ResolveAgent,
     directories: WorkspaceDirectoryService,
     sessions: SessionManager,
@@ -158,7 +154,6 @@ async function executeSessionPrepare(
             command,
             { kind: "interactive-only" },
             "reopen",
-            config,
             resolveAgent,
             directories,
             sessions,
@@ -187,7 +182,6 @@ async function executeSessionPrepare(
 async function executeSessionRestore(
     socket: WebSocket,
     command: SessionRestoreCommand,
-    config: RuntimeConfig,
     resolveAgent: ResolveAgent,
     directories: WorkspaceDirectoryService,
     sessions: SessionManager,
@@ -208,8 +202,7 @@ async function executeSessionRestore(
         const ready = await prepareSession(
             {
                 agentId: entry.agentId,
-                bindingId: config.bindingId,
-                directoryId: entry.directoryId,
+                directory: entry.directory,
                 kind: "session.prepare",
                 requestId: command.requestId,
                 target: entry.target,
@@ -217,7 +210,6 @@ async function executeSessionRestore(
             },
             { kind: "history-required" },
             "reopen",
-            config,
             resolveAgent,
             directories,
             sessions,
@@ -249,7 +241,6 @@ async function executeSessionRestore(
 async function executeSessionRename(
     socket: WebSocket,
     command: SessionRenameCommand,
-    config: RuntimeConfig,
     resolveAgent: ResolveAgent,
     directories: WorkspaceDirectoryService,
     sessions: SessionManager,
@@ -261,7 +252,7 @@ async function executeSessionRename(
         if (entry === undefined) {
             throw new SessionError("session_not_found", "The Session was not found");
         }
-        const resolved = await resolveSessionDirectory(directories, config.bindingId, entry.directoryId, signal);
+        const resolved = await resolveSessionDirectory(directories, entry.directory, signal);
         const renamed = await sessions.renameSession(
             {
                 ...(await resolveAgent(entry.agentId, signal, command.target)),
@@ -289,14 +280,13 @@ async function executeSessionRename(
 async function executeSessionConfigure(
     socket: WebSocket,
     command: SessionConfigureCommand,
-    config: RuntimeConfig,
     resolveAgent: ResolveAgent,
     directories: WorkspaceDirectoryService,
     sessions: SessionManager,
     signal: AbortSignal,
 ): Promise<void> {
     try {
-        const resolved = await resolveSessionDirectory(directories, config.bindingId, command.directoryId, signal);
+        const resolved = await resolveSessionDirectory(directories, command.directory, signal);
         const snapshot = await sessions.configureSession({
             ...(await resolveAgent(command.agentId, signal, command.target)),
             booleanValue: command.booleanValue,
@@ -342,7 +332,6 @@ export const sessionPrepareCommand: RuntimeCommand = {
         void executeSessionPrepare(
             context.socket,
             message,
-            context.config,
             context.resolveAgent,
             context.directories,
             context.sessions,
@@ -360,12 +349,7 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
     );
     const signal = AbortSignal.any([context.signal, timeout.signal]);
     try {
-        const resolved = await resolveSessionDirectory(
-            context.directories,
-            context.config.bindingId,
-            command.directoryId,
-            signal,
-        );
+        const resolved = await resolveSessionDirectory(context.directories, command.directory, signal);
         const agent = await context.resolveAgent(command.agentId, signal);
         const ready = await context.sessionCreations.run(
             command.operationId,
@@ -386,7 +370,6 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
                         { ...command, kind: SESSION_PREPARE_KIND, target },
                         { kind: "interactive-only" },
                         "reopen",
-                        context.config,
                         context.resolveAgent,
                         context.directories,
                         context.sessions,
@@ -476,7 +459,6 @@ export const sessionConfigureCommand: RuntimeCommand = {
         void executeSessionConfigure(
             context.socket,
             message,
-            context.config,
             context.resolveAgent,
             context.directories,
             context.sessions,
@@ -494,7 +476,6 @@ export const sessionRestoreCommand: RuntimeCommand = {
         void executeSessionRestore(
             context.socket,
             message,
-            context.config,
             context.resolveAgent,
             context.directories,
             context.sessions,
@@ -514,7 +495,6 @@ export const sessionRenameCommand: RuntimeCommand = {
         void executeSessionRename(
             context.socket,
             message,
-            context.config,
             context.resolveAgent,
             context.directories,
             context.sessions,
@@ -527,7 +507,6 @@ export const sessionRenameCommand: RuntimeCommand = {
 async function executeSessionConfigRead(
     socket: WebSocket,
     command: SessionConfigReadCommand,
-    config: RuntimeConfig,
     resolveAgent: ResolveAgent,
     directories: WorkspaceDirectoryService,
     sessions: SessionManager,
@@ -547,8 +526,7 @@ async function executeSessionConfigRead(
         const ready = await prepareSession(
             {
                 agentId: entry.agentId,
-                bindingId: config.bindingId,
-                directoryId: entry.directoryId,
+                directory: entry.directory,
                 kind: "session.prepare",
                 requestId: command.requestId,
                 target: command.target,
@@ -560,7 +538,6 @@ async function executeSessionConfigRead(
             { kind: "interactive-only" },
             // Reading settings must not reopen a Session that a client closed.
             "keep-closed",
-            config,
             resolveAgent,
             directories,
             sessions,
@@ -597,7 +574,6 @@ export const sessionConfigReadCommand: RuntimeCommand = {
         void executeSessionConfigRead(
             context.socket,
             message,
-            context.config,
             context.resolveAgent,
             context.directories,
             context.sessions,

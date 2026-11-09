@@ -130,9 +130,8 @@ test("Given Claude's Stop hook outlasts the result watchdog, When I send the nex
                 peer.send(
                     encodeSessionPromptCommand({
                         agentId: "claude",
-                        bindingId: peer.bindingId,
                         commandId,
-                        directoryId: "default",
+                        directory: ".",
                         disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",

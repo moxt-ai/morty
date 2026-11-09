@@ -21,11 +21,6 @@ import { LocalAuthorizationError } from "../workspace/local-authorization-error.
 import type { WorkspaceDirectoryService } from "../workspace/workspace-directory.ts";
 import { nativeSessionQuery } from "./native-query.ts";
 
-interface ListedTarget {
-    readonly scope: string;
-    readonly sessionId: string;
-    readonly cwd: string;
-}
 interface ListedCursor {
     readonly scope: string;
     readonly cursor: string;
@@ -33,7 +28,7 @@ interface ListedCursor {
 interface AuthorizedNativeSession {
     readonly info: NativeSessionInfo;
     readonly cwd: string;
-    readonly directoryId: string;
+    readonly directory: string;
     readonly directoryLabel: string;
 }
 
@@ -64,9 +59,7 @@ function nextForkTitle(sourceTitle: string, sessions: readonly StoredSession[]):
 
 export class NativeSessionService {
     readonly #operations = new RuntimeOperations();
-    readonly #entries = new Map<string, ListedTarget>();
     readonly #cursors = new Map<string, ListedCursor>();
-    readonly #bindingId: string;
     readonly #resolveAgent: ResolveAgent;
     readonly #directories: WorkspaceDirectoryService;
     readonly #sessions: SessionManager;
@@ -82,7 +75,6 @@ export class NativeSessionService {
     >;
 
     constructor(
-        bindingId: string,
         resolveAgent: ResolveAgent,
         directories: WorkspaceDirectoryService,
         sessions: SessionManager,
@@ -97,7 +89,6 @@ export class NativeSessionService {
             >
         >,
     ) {
-        this.#bindingId = bindingId;
         this.#resolveAgent = resolveAgent;
         this.#directories = directories;
         this.#sessions = sessions;
@@ -132,7 +123,7 @@ export class NativeSessionService {
 
     readonly #execute = async (command: NativeSessionCommand, signal: AbortSignal): Promise<NativeSessionResult> => {
         signal.throwIfAborted();
-        const cwd = await this.#directories.resolve(this.#bindingId, command.directoryId, signal);
+        const cwd = await this.#directories.resolve(command.directory, signal);
         signal.throwIfAborted();
         const options: SessionCreationOptions = {
             ...(await this.#resolveAgent(command.agentId, signal)),
@@ -152,7 +143,6 @@ export class NativeSessionService {
                 action: "active-turn",
                 kind: "native.session.result",
                 requestId: command.requestId,
-                discoveryId: command.discoveryId,
                 target: command.target,
                 ...(await this.#activeTurn(command, { ...options, target: command.target })),
                 queuedCancellation: "before-start",
@@ -166,27 +156,16 @@ export class NativeSessionService {
                 "native_session_unsupported",
             );
         }
-        const entryScope = JSON.stringify([command.agentId, command.bindingId, command.discoveryId]);
-        const cursorScope = JSON.stringify([entryScope, cwd]);
+        const cursorScope = JSON.stringify([command.agentId, cwd]);
         const register = async (info: NativeSessionInfo): Promise<NativeSessionEntry | null> => {
-            const authorized = await this.authorizeEntry(command, options, info);
+            const authorized = await this.authorizeEntry(options, info);
             if (authorized === null) {
                 return null;
             }
-            const entryId = decodeIdentifier(randomUUID());
-            if (this.#entries.size >= 5_000) {
-                this.#entries.clear();
-            }
-            this.#entries.set(entryId, {
-                scope: entryScope,
-                sessionId: info.sessionId,
-                cwd: authorized.cwd,
-            });
             return {
-                entryId,
                 sessionId: decodeIdentifier(info.sessionId),
                 title: info.title ?? "Untitled session",
-                directoryId: authorized.directoryId,
+                directory: authorized.directory,
                 directoryLabel: authorized.directoryLabel,
                 updatedAt: info.updatedAt ?? null,
             };
@@ -194,8 +173,7 @@ export class NativeSessionService {
         const envelope = {
             kind: "native.session.result",
             requestId: command.requestId,
-            discoveryId: command.discoveryId,
-        } satisfies Pick<NativeSessionResult, "kind" | "requestId" | "discoveryId">;
+        } satisfies Pick<NativeSessionResult, "kind" | "requestId">;
         if (command.action === "list") {
             let cursor: string | null = null;
             if (command.cursor !== null) {
@@ -258,22 +236,7 @@ export class NativeSessionService {
             }
             throw new AcpExecutionError("The native session was not found", {}, "native_session_not_found");
         }
-        const selected = this.#entries.get(command.entryId);
-        if (selected?.scope !== entryScope) {
-            throw new AcpExecutionError(
-                "Select a session from a fresh native session list",
-                {},
-                "native_session_not_found",
-            );
-        }
-        if (selected.cwd !== cwd) {
-            throw new AcpExecutionError(
-                "The selected session belongs to a different workspace. Refresh the list before continuing.",
-                {},
-                "native_session_target_changed",
-            );
-        }
-        const target = await this.resolveTarget(command, options, selected);
+        const target = await this.resolveTarget(options, command.sessionId);
         const action = command.action;
         if (action === "import" && !capabilities.loadSession && !capabilities.resumeSession) {
             throw new AcpExecutionError("This Agent cannot import native sessions", {}, "native_session_unsupported");
@@ -310,7 +273,7 @@ export class NativeSessionService {
                 commands: opened.prepared.commands,
                 configOptions: opened.prepared.configOptions,
                 configurationRevision: opened.prepared.configurationRevision,
-                directoryId: target.directoryId,
+                directory: target.directory,
                 directoryLabel: target.directoryLabel,
                 kind: "session.ready",
                 requestId: command.requestId,
@@ -358,10 +321,10 @@ export class NativeSessionService {
         const entries: SessionMetadata[] = [];
         for (const session of sessions) {
             // Report the recorded workspace even if it was deleted or unmounted.
-            const directory = this.#directories.identifyRecorded(this.#bindingId, session.cwd);
+            const directory = this.#directories.identifyRecorded(session.cwd);
             entries.push({
                 agentId: session.agentId,
-                directoryId: directory.directoryId,
+                directory: directory.directory,
                 directoryLabel: directory.label,
                 prompted: session.prompted,
                 sessionId: session.sessionId,
@@ -375,16 +338,15 @@ export class NativeSessionService {
     };
 
     private readonly authorizeEntry = async (
-        command: NativeSessionCommand,
         options: SessionCreationOptions,
         info: NativeSessionInfo,
     ): Promise<AuthorizedNativeSession | null> => {
         try {
-            const primary = await this.#directories.identify(command.bindingId, info.cwd, options.signal);
+            const primary = await this.#directories.identify(info.cwd, options.signal);
             return {
                 info,
                 cwd: primary.path,
-                directoryId: primary.directoryId,
+                directory: primary.directory,
                 directoryLabel: primary.label,
             };
         } catch (error) {
@@ -397,14 +359,14 @@ export class NativeSessionService {
     };
 
     private readonly resolveTarget = async (
-        command: NativeSessionCommand,
         options: SessionCreationOptions,
-        selected: ListedTarget,
+        sessionId: string,
     ): Promise<AuthorizedNativeSession> => {
+        sessionIdSchema.parse(sessionId);
         const info = await options.adapter
             .findSession({
                 query: nativeSessionQuery(options),
-                sessionId: selected.sessionId,
+                sessionId,
                 budget: {
                     maximumPages: 100,
                     maximumEntries: null,
@@ -421,11 +383,18 @@ export class NativeSessionService {
                 }
                 throw cause;
             });
-        const target = await this.authorizeEntry(command, options, info);
+        if (info.sessionId !== sessionId) {
+            throw new AcpExecutionError(
+                "The Agent returned a different Session",
+                {},
+                "invalid_native_session_response",
+            );
+        }
+        const target = await this.authorizeEntry(options, info);
         if (target === null) {
             throw new LocalAuthorizationError("The selected native session is not authorized");
         }
-        if (target.cwd !== selected.cwd) {
+        if (target.cwd !== options.cwd) {
             throw new AcpExecutionError(
                 "This session's directory changed. Refresh the list before continuing.",
                 {},

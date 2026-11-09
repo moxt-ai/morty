@@ -1,41 +1,25 @@
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, normalize, relative } from "node:path";
-import {
-    MAX_DIRECTORY_IDENTIFIER_LENGTH,
-    MAX_WORKSPACE_PATH_LENGTH,
-    type WorkspaceEntry,
-} from "@morty-build/client/protocol";
+import { basename, dirname, isAbsolute, join, normalize, relative, resolve } from "node:path";
+import { isDirectoryPath, type WorkspaceEntry } from "@morty-build/client/protocol";
 import { canonicalPath, listDirectory, readPathMetadata } from "../../storage/files/local-files.ts";
 import { LocalAuthorizationError } from "./local-authorization-error.ts";
 
 export class WorkspaceDirectoryListing {
-    readonly directoryId: string;
+    readonly directory: string;
     readonly directoryLabel: string;
     readonly entries: readonly WorkspaceEntry[];
-    readonly parentDirectoryId: string;
+    readonly parentDirectory: string;
     constructor(
-        directoryId: string,
+        directory: string,
         directoryLabel: string,
         entries: readonly WorkspaceEntry[],
-        parentDirectoryId: string,
+        parentDirectory: string,
     ) {
-        this.directoryId = directoryId;
+        this.directory = directory;
         this.directoryLabel = directoryLabel;
         this.entries = entries;
-        this.parentDirectoryId = parentDirectoryId;
+        this.parentDirectory = parentDirectory;
     }
-}
-
-function encodePath(path: string): string {
-    const encoded = Buffer.from(path, "utf8").toString("base64url");
-    if (
-        path.length === 0 ||
-        path.length > MAX_WORKSPACE_PATH_LENGTH ||
-        encoded.length + "path-".length > MAX_DIRECTORY_IDENTIFIER_LENGTH
-    ) {
-        throw new LocalAuthorizationError("The local directory path is too long to select");
-    }
-    return `path-${encoded}`;
 }
 
 function expandCurrentUserHome(path: string): string {
@@ -43,63 +27,25 @@ function expandCurrentUserHome(path: string): string {
     return path.replace(/^~(?=$|\/|\\)/, homedir());
 }
 
-function decodePath(value: string, prefix: string): string {
-    const encoded = value.slice(prefix.length);
-    if (encoded.length === 0 || value.length > MAX_DIRECTORY_IDENTIFIER_LENGTH || !/^[a-zA-Z0-9_-]+$/.test(encoded)) {
-        throw new LocalAuthorizationError("The directory identifier is invalid");
-    }
-    const decoded = Buffer.from(encoded, "base64url").toString("utf8");
-    const normalized =
-        process.platform === "win32" && decoded.startsWith("~/")
-            ? normalize(decoded).replaceAll("\\", "/")
-            : normalize(decoded);
-    if (
-        Buffer.from(decoded, "utf8").toString("base64url") !== encoded ||
-        decoded.length > MAX_WORKSPACE_PATH_LENGTH ||
-        decoded.includes("\0") ||
-        normalized !== decoded
-    ) {
-        throw new LocalAuthorizationError("The directory identifier is invalid");
-    }
-    return decoded;
-}
-
-/** Pairing authorizes the machine. Directory identifiers select a working
+/** Pairing authorizes the machine. Explicit paths select a working
  * directory; they do not grant additional filesystem capabilities. */
 export class WorkspaceDirectoryService {
-    readonly #bindingId: string;
     readonly #defaultWorkspace: string;
 
-    constructor(bindingId: string, defaultWorkspace: string) {
-        this.#bindingId = bindingId;
+    constructor(defaultWorkspace: string) {
         this.#defaultWorkspace = defaultWorkspace;
     }
 
-    private readonly authorizeMachine = (bindingId: string): void => {
-        if (bindingId !== this.#bindingId) {
-            throw new LocalAuthorizationError("The runtime binding is not authorized");
+    private readonly requestedPath = (directory: string): string => {
+        if (!isDirectoryPath(directory)) {
+            throw new LocalAuthorizationError("The directory path is invalid");
         }
-    };
-
-    private readonly requestedPath = (id: string): string => {
-        if (id === "default") {
-            return this.#defaultWorkspace;
-        }
-        if (id === "home") {
-            return homedir();
-        }
-        if (id.startsWith("path-")) {
-            const path = expandCurrentUserHome(decodePath(id, "path-"));
-            if (isAbsolute(path)) {
-                return path;
-            }
-        }
-        throw new LocalAuthorizationError("The directory identifier is invalid");
+        return resolve(this.#defaultWorkspace, expandCurrentUserHome(directory));
     };
 
     private readonly resolvePath = async (requested: string, signal: AbortSignal): Promise<string> => {
         signal.throwIfAborted();
-        if (!isAbsolute(requested) || requested.includes("\0") || normalize(requested) !== requested) {
+        if (!isDirectoryPath(requested) || !isAbsolute(requested) || normalize(requested) !== requested) {
             throw new LocalAuthorizationError("The local directory path is invalid");
         }
         try {
@@ -107,7 +53,12 @@ export class WorkspaceDirectoryService {
             signal.throwIfAborted();
             const metadata = await readPathMetadata(target);
             signal.throwIfAborted();
-            if (!isAbsolute(target) || normalize(target) !== target || metadata.kind !== "directory") {
+            if (
+                !isDirectoryPath(target) ||
+                !isAbsolute(target) ||
+                normalize(target) !== target ||
+                metadata.kind !== "directory"
+            ) {
                 throw new LocalAuthorizationError("The selected location is not a directory");
             }
             return target;
@@ -134,20 +85,18 @@ export class WorkspaceDirectoryService {
     };
 
     readonly identify = async (
-        bindingId: string,
         requestedPath: string,
         signal: AbortSignal,
     ): Promise<{
         readonly path: string;
-        readonly directoryId: string;
+        readonly directory: string;
         readonly name: string;
         readonly label: string;
     }> => {
-        this.authorizeMachine(bindingId);
         const path = await this.resolvePath(requestedPath, signal);
         return {
             path,
-            directoryId: encodePath(path),
+            directory: path,
             name: basename(path) || path,
             label: this.label(path),
         };
@@ -159,34 +108,33 @@ export class WorkspaceDirectoryService {
      * directory again and fails there.
      */
     readonly identifyRecorded = (
-        bindingId: string,
         recordedPath: string,
-    ): { readonly directoryId: string; readonly name: string; readonly label: string } => {
-        this.authorizeMachine(bindingId);
+    ): { readonly directory: string; readonly name: string; readonly label: string } => {
+        if (!isDirectoryPath(recordedPath) || !isAbsolute(recordedPath) || normalize(recordedPath) !== recordedPath) {
+            throw new LocalAuthorizationError("The recorded directory path is invalid");
+        }
         return {
-            directoryId: encodePath(recordedPath),
+            directory: recordedPath,
             name: basename(recordedPath) || recordedPath,
             label: this.label(recordedPath),
         };
     };
 
-    readonly resolve = async (bindingId: string, id: string, signal: AbortSignal): Promise<string> => {
-        this.authorizeMachine(bindingId);
-        return await this.resolvePath(this.requestedPath(id), signal);
+    readonly resolve = async (directory: string, signal: AbortSignal): Promise<string> => {
+        return await this.resolvePath(this.requestedPath(directory), signal);
     };
 
     readonly describe = async (
-        bindingId: string,
-        id: string,
+        directory: string,
         signal: AbortSignal,
-    ): Promise<{ readonly path: string; readonly label: string; readonly parentDirectoryId: string }> => {
-        const path = await this.resolve(bindingId, id, signal);
+    ): Promise<{ readonly path: string; readonly label: string; readonly parentDirectory: string }> => {
+        const path = await this.resolve(directory, signal);
         const parent = dirname(path);
-        return { path, label: this.label(path), parentDirectoryId: parent === path ? "" : encodePath(parent) };
+        return { path, label: this.label(path), parentDirectory: parent === path ? "" : parent };
     };
 
-    readonly list = async (bindingId: string, id: string, signal: AbortSignal): Promise<WorkspaceDirectoryListing> => {
-        const target = await this.resolve(bindingId, id, signal);
+    readonly list = async (directory: string, signal: AbortSignal): Promise<WorkspaceDirectoryListing> => {
+        const target = await this.resolve(directory, signal);
         try {
             const children = await listDirectory(target);
             signal.throwIfAborted();
@@ -205,7 +153,7 @@ export class WorkspaceDirectoryService {
                 }
                 try {
                     const path = await this.resolvePath(join(target, child.name), signal);
-                    entries.push({ directoryId: encodePath(path), name: child.name });
+                    entries.push({ directory: path, name: child.name });
                 } catch (cause) {
                     signal.throwIfAborted();
                     if (!(cause instanceof LocalAuthorizationError)) {
@@ -215,12 +163,7 @@ export class WorkspaceDirectoryService {
             }
             entries.sort((a, b) => a.name.localeCompare(b.name));
             const parent = dirname(target);
-            return new WorkspaceDirectoryListing(
-                id,
-                this.label(target),
-                entries,
-                parent === target ? "" : encodePath(parent),
-            );
+            return new WorkspaceDirectoryListing(target, this.label(target), entries, parent === target ? "" : parent);
         } catch (cause) {
             signal.throwIfAborted();
             if (cause instanceof LocalAuthorizationError) {

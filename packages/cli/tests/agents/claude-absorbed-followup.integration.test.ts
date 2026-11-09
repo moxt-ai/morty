@@ -199,8 +199,7 @@ test("Given Claude is answering a background notification, When it absorbs a new
                         prompt,
                         target: peer.target,
                         agentId: "claude",
-                        bindingId: peer.bindingId,
-                        directoryId: "default",
+                        directory: ".",
                         attachments: [],
                         disposition: "append",
                     }),
@@ -249,10 +248,8 @@ test("Given Claude is answering a background notification, When it absorbs a new
                         action: "active-turn",
                         requestId,
                         target: peer.target,
-                        discoveryId: randomUUID(),
                         agentId: "claude",
-                        bindingId: peer.bindingId,
-                        directoryId: "default",
+                        directory: ".",
                     }),
                 );
                 for (;;) {

@@ -71,7 +71,7 @@ test("Given a browser opening a Session, When its device is revoked before the R
             agentRef: "configuration-test",
             configurations: [],
             conversationKey: "revocation-race",
-            workspaceRef: "default",
+            workspaceRef: ".",
         });
         await creation.promise;
         const revoked = await request(`${project}/identity/v1/devices/${device.id}`, owner.token, undefined, "DELETE");

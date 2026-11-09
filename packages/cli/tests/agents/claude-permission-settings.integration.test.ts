@@ -46,8 +46,7 @@ test.each([
                         requestId,
                         target: peer.target,
                         agentId: "claude",
-                        bindingId: peer.bindingId,
-                        directoryId: "default",
+                        directory: ".",
                     }),
                 );
                 for (;;) {

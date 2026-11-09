@@ -19,7 +19,7 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
             {
                 agentId: "claude",
                 configurations: [],
-                directoryId: "default",
+                directory: ".",
                 computerId: runtime.computerId,
                 operationId: crypto.randomUUID(),
             },
@@ -30,7 +30,7 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
             {
                 agentId: "claude",
                 content: "Remember this conversation",
-                directoryId: "default",
+                directory: ".",
                 idempotencyKey: `turn-${crypto.randomUUID()}`,
                 attachments: [],
             },
@@ -69,8 +69,7 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
                 action: "list",
                 agentId: "claude",
                 cursor: null,
-                directoryId: "default",
-                discoveryId: null,
+                directory: ".",
             },
             cancellation.signal,
         );

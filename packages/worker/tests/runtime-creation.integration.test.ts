@@ -25,7 +25,7 @@ test("Given a creation operation still applying initial settings, When another c
         const operationId = crypto.randomUUID();
         const input = {
             agentId: "configuration-test",
-            directoryId: "default",
+            directory: ".",
             computerId: runtime.computerId,
             operationId,
         };

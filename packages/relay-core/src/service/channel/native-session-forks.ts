@@ -5,7 +5,6 @@ import {
     decodeNativeSessionResult,
     decodeSessionCreationReadCommand,
     decodeSessionQueryCommand,
-    RUNTIME_WORKSPACE_BINDING_ID,
 } from "@morty-build/client/protocol";
 import { type ComputerScope, RuntimeOperationFailedError } from "../../entity/do/session.ts";
 import { hashSecret, PairingDirectoryError } from "../../entity/pairing/pairing.ts";
@@ -77,7 +76,7 @@ export class NativeSessionForks {
         request: SessionRuntimeOperations["requestComputerScopeControl"],
         signal: AbortSignal,
     ) => {
-        const requestHash = await hashSecret(JSON.stringify([input.agentId, input.sessionId, input.directoryId]));
+        const requestHash = await hashSecret(JSON.stringify([input.agentId, input.sessionId, input.directory]));
         signal.throwIfAborted();
         const key = JSON.stringify([scope.computerId, operationId]);
         const prior = this.#storage.read(scope.computerId, operationId);
@@ -120,7 +119,7 @@ export class NativeSessionForks {
                         ready.kind !== "session.ready" ||
                         ready.target.harness !== input.agentId ||
                         ready.target.sessionId === input.sessionId ||
-                        ready.directoryId !== source.entry.directoryId
+                        ready.directory !== source.entry.directory
                     ) {
                         throw unknownOutcome();
                     }
@@ -148,7 +147,6 @@ export class NativeSessionForks {
                             kind: "native.session.result",
                             action: "fork",
                             requestId: operationId,
-                            discoveryId: source.discoveryId,
                             target: ready.target,
                             ready,
                             title: entry.title,
@@ -165,9 +163,7 @@ export class NativeSessionForks {
                             ...input,
                             action: "find",
                             kind: "native.session.request",
-                            bindingId: RUNTIME_WORKSPACE_BINDING_ID,
                             requestId: crypto.randomUUID(),
-                            discoveryId: crypto.randomUUID(),
                         }),
                     ),
                     controller.signal,
@@ -188,11 +184,9 @@ export class NativeSessionForks {
                         kind: "native.session.request",
                         action: "fork",
                         agentId: input.agentId,
-                        bindingId: RUNTIME_WORKSPACE_BINDING_ID,
-                        directoryId: found.entry.directoryId,
+                        directory: found.entry.directory,
                         requestId: operationId,
-                        discoveryId: found.discoveryId,
-                        entryId: found.entry.entryId,
+                        sessionId: found.entry.sessionId,
                     }),
                 );
                 this.#storage.start(scope.computerId, operationId, requestHash, JSON.stringify(found));

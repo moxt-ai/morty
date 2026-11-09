@@ -78,7 +78,6 @@ export type TurnRequest = z.infer<typeof turnRequestSchema>;
 
 const turnIdentitySchema = z.object({
     acceptedAt: timestampSchema,
-    bindingId: identifierSchema,
     idempotencyKey: identifierSchema,
     target: nativeSessionTargetSchema,
     turnId: identifierSchema,

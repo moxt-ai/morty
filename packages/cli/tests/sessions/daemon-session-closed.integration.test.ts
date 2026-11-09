@@ -110,8 +110,7 @@ async function prepare(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["targ
     peer.send(
         encodeSessionPrepareCommand({
             agentId: NATIVE_AGENT_ID,
-            bindingId: peer.bindingId,
-            directoryId: "default",
+            directory: ".",
             kind: "session.prepare",
             requestId,
             target: sessionTarget,
@@ -125,9 +124,8 @@ function sendPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"
     peer.send(
         encodeSessionPromptCommand({
             agentId: NATIVE_AGENT_ID,
-            bindingId: peer.bindingId,
             commandId,
-            directoryId: "default",
+            directory: ".",
             disposition: SessionPromptDisposition.Append,
             attachments: [],
             kind: "session.prompt",

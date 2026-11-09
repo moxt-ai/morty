@@ -217,8 +217,7 @@ test("Given an old Claude transcript contains large attachments and ambiguous co
         peer.send(
             encodeSessionPreviewHistoryPageLoad({
                 agentId: "claude",
-                bindingId: peer.bindingId,
-                directoryId: "default",
+                directory: ".",
                 cursor: null,
                 eventLimit: 50,
                 kind: "session.preview-history.page.load",

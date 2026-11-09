@@ -66,8 +66,7 @@ test.each(["codex", "claude"] as const)(
             async (peer) => {
                 const identity = {
                     agentId,
-                    bindingId: peer.bindingId,
-                    directoryId: "default",
+                    directory: ".",
                 };
                 const prompt = (sessionTarget: RealDaemonPeer["target"], text: string, selectMode = false): void =>
                     peer.send(
@@ -130,10 +129,9 @@ test.each(["codex", "claude"] as const)(
                         encodeNativeSessionCommand({
                             ...identity,
                             kind: "native.session.request",
-                            discoveryId: source.discoveryId,
                             requestId,
                             action: "fork",
-                            entryId: source.entryId,
+                            sessionId: source.sessionId,
                         }),
                     );
                     const fork = await nativeResult(peer, requestId);
@@ -184,10 +182,8 @@ async function nativeSource(peer: RealDaemonPeer, agentId: string, configDirecto
             peer.send(
                 encodeNativeSessionCommand({
                     agentId,
-                    bindingId: peer.bindingId,
-                    directoryId: "default",
+                    directory: ".",
                     kind: "native.session.request",
-                    discoveryId: randomUUID(),
                     requestId,
                     action: "list",
                     cursor: null,
@@ -199,7 +195,7 @@ async function nativeSource(peer: RealDaemonPeer, agentId: string, configDirecto
             }
             const source = listed.entries.find((entry) => entry.sessionId === peer.target.sessionId);
             if (source !== undefined) {
-                return { ...source, discoveryId: listed.discoveryId };
+                return { ...source };
             }
             if (watcher === undefined) {
                 throw new Error("Missing source Session");

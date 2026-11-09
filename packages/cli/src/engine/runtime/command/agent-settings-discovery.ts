@@ -7,13 +7,11 @@ import type { SessionManager } from "../../session/manager/session-manager.ts";
 import { agentSettingsFailureDetails, discoverAgentSettings } from "../../session/settings/discover-agent-settings.ts";
 import type { WorkspaceDirectoryService } from "../../session/workspace/workspace-directory.ts";
 import type { Timer } from "../../util/timer.ts";
-import type { RuntimeConfig } from "../config.ts";
 import type { RelayConnectionDiagnostics } from "../relay/diagnostics.ts";
 import { send } from "./transport.ts";
 
 interface SettingsDiscoveryDependencies {
     readonly resolveAgent: ResolveAgent;
-    readonly config: RuntimeConfig;
     readonly directories: WorkspaceDirectoryService;
     readonly sessions: SessionManager;
     readonly diagnostics: RelayConnectionDiagnostics;
@@ -23,12 +21,12 @@ interface SettingsDiscoveryDependencies {
 }
 
 export function createAgentSettingsDiscoveryHandler(dependencies: SettingsDiscoveryDependencies) {
-    const { config, directories, sessions, diagnostics, socket, signal, timer } = dependencies;
+    const { directories, sessions, diagnostics, socket, signal, timer } = dependencies;
     const agentSettingsDiscoveries = new Map<
         string,
         {
             readonly agentId: string;
-            readonly directoryId: string;
+            readonly directory: string;
             readonly model: string | undefined;
             readonly requestIds: Set<string>;
             readonly controller: AbortController;
@@ -37,11 +35,11 @@ export function createAgentSettingsDiscoveryHandler(dependencies: SettingsDiscov
     >();
     const handle = (command: AgentSettingsDiscoverCommand): void => {
         // Each directory has its own settings, so one discovery runs per Agent and directory.
-        const directoryId = command.directoryId ?? "default";
+        const directory = command.directory ?? ".";
         const existing = [...agentSettingsDiscoveries.values()].find(
             (request) =>
                 request.agentId === command.agentId &&
-                request.directoryId === directoryId &&
+                request.directory === directory &&
                 !request.controller.signal.aborted,
         );
         if ([...agentSettingsDiscoveries.values()].some((request) => request.requestIds.has(command.requestId))) {
@@ -96,7 +94,6 @@ export function createAgentSettingsDiscoveryHandler(dependencies: SettingsDiscov
                 const result = await discoverAgentSettings(
                     command,
                     dependencies.resolveAgent,
-                    config.bindingId,
                     directories,
                     sessions,
                     operationSignal,
@@ -142,7 +139,7 @@ export function createAgentSettingsDiscoveryHandler(dependencies: SettingsDiscov
         })();
         agentSettingsDiscoveries.set(command.requestId, {
             agentId: command.agentId,
-            directoryId,
+            directory,
             model: command.model,
             requestIds,
             completion,

@@ -125,10 +125,10 @@ export interface MortyCredentialProvider {
 
 export interface DiscoverMortyAgentSettingsRequest {
     /**
-     * The directory a new Session would start in; omitted, the Runtime's default directory. The result's `directoryId`
+     * The directory a new Session would start in; omitted, the Runtime's default directory. The result's `directory`
      * names the directory actually inspected.
      */
-    readonly directoryId?: string;
+    readonly directory?: string;
     readonly model?: string;
 }
 
@@ -144,15 +144,15 @@ function setSessionBindingQuery(query: URLSearchParams, binding: MortySessionBin
     if (binding.agentId !== undefined) {
         query.set("agentId", binding.agentId);
     }
-    if (binding.directoryId !== undefined) {
-        query.set("directoryId", binding.directoryId);
+    if (binding.directory !== undefined) {
+        query.set("directory", binding.directory);
     }
 }
 
 export interface ForkMortyNativeSessionRequest {
     readonly agentId: string;
     readonly sessionId: string;
-    readonly directoryId: string;
+    readonly directory: string;
 }
 
 export type MortyExternalContentBlock =
@@ -887,27 +887,27 @@ export class MortyRuntimeResources {
         );
     };
 
-    readonly listWorkspace = async (directoryId: string, signal: AbortSignal): Promise<WorkspaceEntriesEvent> =>
+    readonly listWorkspace = async (directory: string, signal: AbortSignal): Promise<WorkspaceEntriesEvent> =>
         decodeWorkspaceEntriesEvent(
             JSON.stringify(
-                await this.#executor.post(projectPath(this.#computerId, `daemon/workspace`), { directoryId }, signal),
+                await this.#executor.post(projectPath(this.#computerId, `daemon/workspace`), { directory }, signal),
             ),
         );
 
     readonly describeWorkspace = async (
-        directoryId: string,
+        directory: string,
         signal: AbortSignal,
-    ): Promise<Pick<WorkspaceEntriesEvent, "directoryId" | "directoryLabel">> => {
+    ): Promise<Pick<WorkspaceEntriesEvent, "directory" | "directoryLabel">> => {
         const listing = decodeWorkspaceEntriesEvent(
             JSON.stringify(
                 await this.#executor.post(
                     projectPath(this.#computerId, `daemon/workspace`),
-                    { directoryId, view: "metadata" },
+                    { directory, view: "metadata" },
                     signal,
                 ),
             ),
         );
-        return { directoryId: listing.directoryId, directoryLabel: listing.directoryLabel };
+        return { directory: listing.directory, directoryLabel: listing.directoryLabel };
     };
 
     readonly discoverAgentSettings = async (
@@ -927,14 +927,11 @@ export class MortyRuntimeResources {
 
     readonly nativeSessions = async (
         request:
-            | (Omit<
-                  Extract<NativeSessionRequest, { readonly action: "list" }>,
-                  "kind" | "requestId" | "discoveryId" | "bindingId"
-              > & { readonly discoveryId: string | null })
+            | (Omit<Extract<NativeSessionRequest, { readonly action: "list" }>, "kind" | "requestId"> & {})
             | (Omit<
                   Extract<NativeSessionRequest, { readonly action: "import" | "fork" }>,
-                  "kind" | "requestId" | "discoveryId" | "bindingId" | "action"
-              > & { readonly action: "import"; readonly discoveryId: string }),
+                  "kind" | "requestId" | "action"
+              > & { readonly action: "import" }),
         signal: AbortSignal,
     ) =>
         decodeNativeSessionResult(
@@ -990,10 +987,7 @@ export class MortyRuntimeResources {
     };
 
     readonly findNativeSessionBySessionId = async (
-        request: Omit<
-            Extract<NativeSessionRequest, { readonly action: "find" }>,
-            "kind" | "requestId" | "discoveryId" | "bindingId" | "action"
-        >,
+        request: Omit<Extract<NativeSessionRequest, { readonly action: "find" }>, "kind" | "requestId" | "action">,
         signal: AbortSignal,
     ) => {
         const result = decodeNativeSessionResult(
@@ -1131,7 +1125,7 @@ export class MortySessionResources {
         sessionTarget: NativeSessionTarget,
         request: {
             readonly agentId: string;
-            readonly directoryId: string;
+            readonly directory: string;
         },
         signal: AbortSignal,
     ) =>

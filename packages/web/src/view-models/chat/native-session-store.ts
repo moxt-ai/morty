@@ -17,7 +17,7 @@ type NativeSessionDirectory =
     | {
           readonly kind: "ready";
           readonly computerId: string;
-          readonly discoveryId: string;
+
           readonly agentRef: string;
           readonly capabilities: Extract<NativeSessionResult, { readonly action: "list" }>["capabilities"];
           readonly entries: readonly NativeSessionEntry[];
@@ -100,8 +100,7 @@ function chosenAgent(agents: readonly NativeSessionAgent[], selected: string): N
 
 /**
  * The listed entry a relisting should keep previewing: the one the user was reading, recognised across
- * listings by the strongest identity the entries carry. Entry ids are per-listing for some agents, so
- * the native session id and finally the title within its directory stand in for them.
+ * listings by its harness-owned Session ID within the selected Agent.
  */
 function relistMatch(
     entries: readonly NativeSessionEntry[],
@@ -110,11 +109,7 @@ function relistMatch(
     if (previewed === null) {
         return undefined;
     }
-    return (
-        entries.find((entry) => entry.entryId === previewed.entryId) ??
-        entries.find((entry) => entry.sessionId === previewed.sessionId) ??
-        entries.find((entry) => entry.title === previewed.title && entry.directoryId === previewed.directoryId)
-    );
+    return entries.find((entry) => entry.sessionId === previewed.sessionId);
 }
 
 /** What a listing shows for an agent, to tell whether the Runtime configuration still matches it. */
@@ -192,9 +187,8 @@ export const createNativeSessionStore = (
                     {
                         action: "list",
                         agentId: agent.agentRef,
-                        directoryId: "default",
+                        directory: ".",
                         cursor: null,
-                        discoveryId: null,
                     },
                     signal,
                 );
@@ -207,7 +201,6 @@ export const createNativeSessionStore = (
                     directory: {
                         kind: "ready",
                         computerId: agent.computerId,
-                        discoveryId: result.discoveryId,
                         agentRef: agent.agentRef,
                         capabilities: result.capabilities,
                         entries,
@@ -267,7 +260,10 @@ export const createNativeSessionStore = (
             }
             // Selecting the auto-selected entry again must retain its in-flight native read.
             // Cancelling and restarting it races the Runtime's operation ownership.
-            if ((preview.kind === "loading" || preview.kind === "ready") && preview.entry.entryId === entry.entryId) {
+            if (
+                (preview.kind === "loading" || preview.kind === "ready") &&
+                preview.entry.sessionId === entry.sessionId
+            ) {
                 return;
             }
             selection?.abort();
@@ -280,8 +276,7 @@ export const createNativeSessionStore = (
                     directory.computerId,
                     {
                         agentId: directory.agentRef,
-                        directoryId: entry.directoryId,
-                        entryId: entry.entryId,
+                        directory: entry.directory,
                         sessionId: entry.sessionId,
                     },
                     signal,
@@ -319,7 +314,7 @@ export const createNativeSessionStore = (
             try {
                 const input = {
                     agentId: directory.agentRef,
-                    directoryId: preview.entry.directoryId,
+                    directory: preview.entry.directory,
                     sessionId: preview.entry.sessionId,
                 };
                 const retained = get().forkIntent;
@@ -345,10 +340,9 @@ export const createNativeSessionStore = (
                               directory.computerId,
                               {
                                   action,
-                                  discoveryId: directory.discoveryId,
                                   agentId: directory.agentRef,
-                                  directoryId: preview.entry.directoryId,
-                                  entryId: preview.entry.entryId,
+                                  directory: preview.entry.directory,
+                                  sessionId: preview.entry.sessionId,
                               },
                               signal,
                           );
@@ -388,9 +382,8 @@ export const createNativeSessionStore = (
                     {
                         action: "list",
                         agentId: directory.agentRef,
-                        directoryId: "default",
+                        directory: ".",
                         cursor: directory.nextCursor,
-                        discoveryId: directory.discoveryId,
                     },
                     signal,
                 );
@@ -404,7 +397,8 @@ export const createNativeSessionStore = (
                         entries: [
                             ...directory.entries,
                             ...result.entries.filter(
-                                (entry) => !directory.entries.some((existing) => existing.entryId === entry.entryId),
+                                (entry) =>
+                                    !directory.entries.some((existing) => existing.sessionId === entry.sessionId),
                             ),
                         ],
                         nextCursor: result.nextCursor,

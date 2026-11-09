@@ -5,7 +5,6 @@ describe("Morty resource contract", () => {
     it("Given a persisted Turn page, When a caller decodes it, Then every terminal state round-trips", () => {
         const turn = {
             acceptedAt: "2026-09-07T00:00:01.000Z",
-            bindingId: "binding-a",
             idempotencyKey: "submit-a",
             request: { kind: "not_retained" },
             target: { harness: "claude", sessionId: "session-a" },

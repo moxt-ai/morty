@@ -40,16 +40,13 @@ test("Given 501 saved Claude sessions, When a user lists every page through the 
         const listed: string[] = [];
         let cursor: string | null = null;
         const pageSizes: number[] = [];
-        const discoveryId = randomUUID();
         do {
             const requestId = randomUUID();
             peer.send(
                 encodeNativeSessionCommand({
                     agentId: "claude",
-                    bindingId: peer.bindingId,
-                    directoryId: "default",
+                    directory: ".",
                     kind: "native.session.request",
-                    discoveryId,
                     action: "list",
                     cursor,
                     requestId,

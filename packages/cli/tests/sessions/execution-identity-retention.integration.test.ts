@@ -80,9 +80,8 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
                 const original: SessionPromptCommand = {
                     agentId: "controlled-acp",
                     attachments: [],
-                    bindingId: peer.bindingId,
                     commandId: "a-original-execution",
-                    directoryId: "default",
+                    directory: ".",
                     disposition: SessionPromptDisposition.Append,
                     kind: "session.prompt",
                     prompt: "Original operation",
@@ -108,9 +107,9 @@ test("Given an executed command, When its receipt is evicted and the daemon rest
                     { length: 1_026 },
                     (_, index) => `z-rejected-${String(index).padStart(4, "0")}`,
                 );
-                const unavailableDirectory = `path-${Buffer.from(join(peer.workspace, "missing-directory")).toString("base64url")}`;
+                const unavailableDirectory = join(peer.workspace, "missing-directory");
                 for (const commandId of rejected) {
-                    send({ ...original, commandId, directoryId: unavailableDirectory });
+                    send({ ...original, commandId, directory: unavailableDirectory });
                 }
                 const failures = await observe(peer, rejected);
                 for (const outcome of failures.outcomes.values()) {
