@@ -82,9 +82,8 @@ type AuthorizedChatEnvironment = ChatHttpEnvironment & {
 async function authorizeChat(context: Context<AuthorizedChatEnvironment>, timeout = 45000) {
     const signal = AbortSignal.any([context.req.raw.signal, AbortSignal.timeout(timeout)]);
     const computerId = v.parse(platformIdentifier, context.req.param("computerId"));
-    const botId = v.parse(platformIdentifier, context.req.param("botId"));
     const requester = { userId: context.get("session").userId, accessExpiresAt: context.get("accessExpiresAt") };
-    return await context.env.services.chat.authorize(requester, computerId, botId, signal);
+    return await context.env.services.chat.authorize(requester, computerId, signal);
 }
 
 /**
@@ -186,20 +185,20 @@ export function createBotChatRoutes() {
                 },
             }),
         )
-        .post("/bots/:botId/workspace", authenticatedSession, authorizedChat(), async (context) => {
+        .post("/workspace", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(await context.env.services.chat.runtimeConfiguration(context.get("chatScope")));
         })
-        .post("/bots/:botId/daemon-diagnostics", authenticatedSession, authorizedChat(), async (context) => {
+        .post("/daemon-diagnostics", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(await context.env.services.chat.daemonDiagnostics(context.get("chatScope")));
         })
-        .post("/bots/:botId/network-diagnostic", authenticatedSession, authorizedChat(), async (context) => {
+        .post("/network-diagnostic", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(await context.env.services.chat.networkDiagnostic(context.get("chatScope")));
         })
-        .post("/bots/:botId/setup/runtimes", authenticatedSession, authorizedChat(), async (context) => {
+        .post("/setup/runtimes", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(await context.env.services.chat.setupRuntimes(context.get("chatScope")));
         })
         .post(
-            "/bots/:botId/workspace/directory",
+            "/workspace/directory",
             authenticatedSession,
             authorizedChat(120000),
             bodyParser<AuthorizedChatEnvironment, typeof directoryInput>(directoryInput),
@@ -211,12 +210,12 @@ export function createBotChatRoutes() {
                     ),
                 ),
         )
-        .post("/bots/:botId/managed-sessions", authenticatedSession, authorizedChat(), async (context) => {
+        .post("/managed-sessions", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(await context.env.services.chat.managedSessions(context.get("chatScope")));
         })
-        .post("/bots/:botId/managed-session/status-events", authenticatedSession, authorizedChat(), sessionStatusStream)
+        .post("/managed-session/status-events", authenticatedSession, authorizedChat(), sessionStatusStream)
         .post(
-            "/bots/:botId/agent-settings",
+            "/agent-settings",
             authenticatedSession,
             authorizedChat(120000),
             bodyParser<AuthorizedChatEnvironment, typeof agentSettingsInput>(agentSettingsInput),
@@ -229,7 +228,7 @@ export function createBotChatRoutes() {
                 ),
         )
         .post(
-            "/bots/:botId/access",
+            "/access",
             authenticatedSession,
             issuesSessionCredential,
             authorizedChat(),
@@ -241,7 +240,7 @@ export function createBotChatRoutes() {
             },
         )
         .post(
-            "/bots/:botId/session-access",
+            "/session-access",
             authenticatedSession,
             issuesSessionCredential,
             authorizedChat(),
@@ -254,7 +253,7 @@ export function createBotChatRoutes() {
             },
         )
         .post(
-            "/bots/:botId/managed-session",
+            "/managed-session",
             authenticatedSession,
             authorizedChat(),
             bodyParser<AuthorizedChatEnvironment, typeof nativeSessionTargetInput>(nativeSessionTargetInput),
@@ -264,7 +263,7 @@ export function createBotChatRoutes() {
             },
         )
         .post(
-            "/bots/:botId/managed-session/archive",
+            "/managed-session/archive",
             authenticatedSession,
             authorizedChat(),
             bodyParser<AuthorizedChatEnvironment, typeof nativeSessionTargetInput>(nativeSessionTargetInput),
@@ -276,7 +275,7 @@ export function createBotChatRoutes() {
             },
         )
         .post(
-            "/bots/:botId/native-sessions",
+            "/native-sessions",
             authenticatedSession,
             authorizedChat(120000),
             bodyParser<AuthorizedChatEnvironment, typeof nativeListInput>(nativeListInput),
@@ -288,7 +287,7 @@ export function createBotChatRoutes() {
             },
         )
         .post(
-            "/bots/:botId/continue-native-session",
+            "/continue-native-session",
             authenticatedSession,
             authorizedChat(120000),
             bodyParser<AuthorizedChatEnvironment, typeof nativeContinuationInput>(nativeContinuationInput),
@@ -304,7 +303,7 @@ export function createBotChatRoutes() {
             },
         )
         .post(
-            "/bots/:botId/native-session/:id",
+            "/native-session/:id",
             authenticatedSession,
             authorizedChat(120000),
             bodyParser<AuthorizedChatEnvironment, typeof nativePreviewInput>(nativePreviewInput),
@@ -318,7 +317,7 @@ export function createBotChatRoutes() {
             },
         )
         .post(
-            "/bots/:botId/native-session/:id/import",
+            "/native-session/:id/import",
             authenticatedSession,
             authorizedChat(120000),
             bodyParser<AuthorizedChatEnvironment, typeof nativeEntryInput>(nativeEntryInput),
@@ -336,7 +335,7 @@ export function createBotChatRoutes() {
             },
         )
         .post(
-            "/bots/:botId/native-session-forks/:operationId",
+            "/native-session-forks/:operationId",
             authenticatedSession,
             authorizedChat(120000),
             bodyParser<AuthorizedChatEnvironment, typeof nativePreviewInput>(nativePreviewInput),
@@ -353,7 +352,7 @@ export function createBotChatRoutes() {
             },
         )
         .post(
-            "/bots/:botId/setup",
+            "/setup",
             localSession("configureBot"),
             authorizedChat(),
             bodyParser<AuthorizedChatEnvironment, typeof setupInput>(setupInput),

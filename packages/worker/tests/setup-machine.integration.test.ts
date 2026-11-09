@@ -67,7 +67,10 @@ test.each(["current", "another service origin", "retired configuration"] as cons
             if (expectedCode !== 0) {
                 return events.at(-1);
             }
-            return v.parse(v.object({ status: v.literal("ready"), botId: v.string(), url: v.string() }), events.at(-1));
+            return v.parse(
+                v.object({ status: v.literal("ready"), computerId: v.string(), url: v.string() }),
+                events.at(-1),
+            );
         };
         const configurationPath = join(state, "config.json");
         const savedIdentity = v.object({
@@ -75,7 +78,7 @@ test.each(["current", "another service origin", "retired configuration"] as cons
             identity: v.object({ user_id: v.string(), user_token: v.string(), project_id: v.string() }),
         });
 
-        const first = v.parse(v.object({ botId: v.string() }), await run());
+        const first = v.parse(v.object({ computerId: v.string() }), await run());
         const saved = v.parse(savedIdentity, JSON.parse(await readFile(configurationPath, "utf8")));
         const identity = saved.identity;
         if (stateKind === "retired configuration") {
@@ -103,7 +106,7 @@ test.each(["current", "another service origin", "retired configuration"] as cons
             }
         }
 
-        const ready = v.parse(v.object({ botId: v.string(), url: v.string() }), await run());
+        const ready = v.parse(v.object({ computerId: v.string(), url: v.string() }), await run());
         const redeemed = await worker.fetch(
             new Request(`${fixture.origin}/morty/api/identity/transfers/redeem`, {
                 method: "POST",
@@ -113,9 +116,9 @@ test.each(["current", "another service origin", "retired configuration"] as cons
             fixture.environment(fixture.origin),
         );
 
-        expect(ready.botId).toBe(first.botId);
+        expect(ready.computerId).toBe(first.computerId);
         expect(redeemed.status).toBe(200);
-        expect(await redeemed.json()).toMatchObject({ userId: identity.user_id, botId: first.botId });
+        expect(await redeemed.json()).toMatchObject({ userId: identity.user_id, computerId: first.computerId });
         expect(v.parse(savedIdentity, JSON.parse(await readFile(configurationPath, "utf8")))).toMatchObject({
             base_url: fixture.origin,
             identity,
@@ -185,9 +188,12 @@ test("Given the answer to setup's Runtime pairing is lost, When setup runs again
         v.object({ identity: v.object({ user_token: v.string(), project_id: v.string() }) }),
         JSON.parse(await readFile(join(state, "config.json"), "utf8")),
     );
-    const machine = await fetch(`${fixture.origin}/morty/api/computers/${saved.identity.project_id}/management/bot`, {
-        headers: { authorization: `Bearer ${saved.identity.user_token}` },
-    });
+    const machine = await fetch(
+        `${fixture.origin}/morty/api/computers/${saved.identity.project_id}/management/machine`,
+        {
+            headers: { authorization: `Bearer ${saved.identity.user_token}` },
+        },
+    );
     const actual: unknown = await machine.json();
     const original = await fetch(
         `${fixture.origin}/morty/api/computers/${saved.identity.project_id}/management/pairing`,
@@ -248,7 +254,7 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
         expect(code, JSON.stringify(events)).toBe(0);
         return {
             events,
-            ready: v.parse(v.object({ status: v.literal("ready"), botId: v.string() }), events.at(-1)),
+            ready: v.parse(v.object({ status: v.literal("ready"), computerId: v.string() }), events.at(-1)),
         };
     };
     const savedIdentity = v.object({
@@ -257,7 +263,7 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     const machineRuntime = async () => {
         const { identity } = v.parse(savedIdentity, JSON.parse(await readFile(join(state, "config.json"), "utf8")));
         const response = await worker.fetch(
-            new Request(`${fixture.origin}/morty/api/computers/${identity.project_id}/management/bot`, {
+            new Request(`${fixture.origin}/morty/api/computers/${identity.project_id}/management/machine`, {
                 headers: { authorization: `Bearer ${identity.user_token}` },
             }),
             fixture.environment(fixture.origin),
@@ -284,7 +290,7 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     expect(again.events).toContainEqual(
         expect.objectContaining({ status: "runtime_revoked", computerId: before.computerId }),
     );
-    expect(again.ready.botId).toBe(first.ready.botId);
+    expect(again.ready.computerId).toBe(first.ready.computerId);
     expect(after.identity).toEqual(before.identity);
     expect(after.computerId).toBe(before.computerId);
 });

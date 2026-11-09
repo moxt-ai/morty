@@ -47,7 +47,6 @@ export async function createChatWorkerEnvironment(
                 token: v.string(),
                 userId: v.string(),
                 computerId: v.string(),
-                bot: v.object({ botId: v.string() }),
             }),
             await identityResponse.json(),
         );
@@ -60,12 +59,12 @@ export async function createChatWorkerEnvironment(
                 },
                 ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             });
-        const botId = identity.bot.botId;
+        const computerId = identity.computerId;
         const transport = new WebSocketApiTransport(origin, clock);
         transport.open();
         const connect = async (agents: readonly ControlledAgent[], sessionIds?: ReadonlySet<string>) => {
             const runtime = await cloud.connectAgent(identity.computerId, agents, sessionIds);
-            const setup = await request(`chat/computers/${identity.computerId}/bots/${botId}/setup`, {
+            const setup = await request(`chat/computers/${identity.computerId}/setup`, {
                 computerId: runtime.computerId,
                 agentRef: agents[0]?.id ?? "codex",
             });
@@ -160,7 +159,7 @@ export async function createChatWorkerEnvironment(
             };
         };
         return {
-            botId,
+            computerId,
             network: cloud.network,
             sharingNetwork,
             executionNetwork: cloud.executionNetwork,
@@ -184,7 +183,6 @@ export async function createChatWorkerEnvironment(
                 return v.parse(v.object({ url: v.string() }), await response.json()).url;
             },
             identity: {
-                botId,
                 getToken: async (signal: AbortSignal): Promise<string> => {
                     signal.throwIfAborted();
                     return identity.token;

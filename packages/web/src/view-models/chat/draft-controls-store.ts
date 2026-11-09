@@ -142,7 +142,7 @@ function waitForCwdPreview(signal: AbortSignal): Promise<void> {
 }
 
 export const createDraftControlsStore = (
-    botId: string,
+    computerId: string,
     requests: Pick<BotChatApi, "directory" | "agentSettings">,
     /** The Runtime configuration the workspace keeps current. */
     runtimeConfiguration: () => BotRuntimeConfiguration | null,
@@ -180,7 +180,7 @@ export const createDraftControlsStore = (
             if (cached !== undefined) {
                 return cached;
             }
-            const result = await requests.agentSettings(botId, agentRef, cwd.directoryId, operation.signal);
+            const result = await requests.agentSettings(agentRef, cwd.directoryId, operation.signal);
             if (operation.current()) {
                 agentSettings.set(key, result);
             }
@@ -230,8 +230,8 @@ export const createDraftControlsStore = (
             directory: WorkspaceEntriesEvent,
         ): readonly RecentCwdPreference[] => {
             const selected = settings.selectedAgent;
-            saveLastCwdPreference(botId, selected.computerId, selected.agentRef, directory.directoryId);
-            return saveRecentCwdPreference(botId, {
+            saveLastCwdPreference(selected.computerId, selected.agentRef, directory.directoryId);
+            return saveRecentCwdPreference(computerId, {
                 directoryId: directory.directoryId,
                 directoryLabel: directory.directoryLabel,
             });
@@ -252,7 +252,7 @@ export const createDraftControlsStore = (
             result: Awaited<ReturnType<BotChatApi["agentSettings"]>>,
             rememberHarness: boolean,
         ): void => {
-            const restoredSettings = restoreLastAgentSettings(botId, selectedAgent.agentRef, result.options);
+            const restoredSettings = restoreLastAgentSettings(computerId, selectedAgent.agentRef, result.options);
             const ready = {
                 kind: "ready" as const,
                 selectedAgent,
@@ -265,14 +265,14 @@ export const createDraftControlsStore = (
             // are actually applied. A fallback to another connected Agent, or
             // a load that fails, must leave the user's choice in place.
             if (rememberHarness) {
-                saveLastHarnessPreference(botId, selectedAgent.agentRef);
+                saveLastHarnessPreference(computerId, selectedAgent.agentRef);
             }
             // The directory is remembered only where the user chooses one (`rememberDirectory`, a handoff), never
             // from the directory a draft happened to load in.
-            const existingRecentCwds = readRecentCwdPreferences(botId);
+            const existingRecentCwds = readRecentCwdPreferences(computerId);
             const recentCwds =
                 existingRecentCwds === null
-                    ? saveRecentCwdPreference(botId, {
+                    ? saveRecentCwdPreference(computerId, {
                           directoryId: cwd.directoryId,
                           directoryLabel: cwd.directoryLabel,
                       })
@@ -293,7 +293,7 @@ export const createDraftControlsStore = (
             const signal = AbortSignal.any([lifetimeSignal, operation.signal, AbortSignal.timeout(120_000)]);
             set({ cwdBrowser: { kind: "loading", directory: previousDirectory, path: previousPath } });
             try {
-                const directory = await requests.directory(botId, directoryId, signal);
+                const directory = await requests.directory(directoryId, signal);
                 signal.throwIfAborted();
                 set({ cwdBrowser: { kind: "ready", directory, path: directory.directoryLabel } });
             } catch (cause) {
@@ -338,7 +338,7 @@ export const createDraftControlsStore = (
                     });
                     return;
                 }
-                const directory = await requests.directory(botId, pathDirectoryId(requestedPath), signal);
+                const directory = await requests.directory(pathDirectoryId(requestedPath), signal);
                 signal.throwIfAborted();
                 set({ cwdBrowser: { kind: "ready", directory, path: directory.directoryLabel } });
             } catch (cause) {
@@ -371,7 +371,7 @@ export const createDraftControlsStore = (
             }
             try {
                 const switching = currentSettings.kind === "switching";
-                const requestedHarness = switching ? currentSettings.agentRef : readLastHarnessPreference(botId);
+                const requestedHarness = switching ? currentSettings.agentRef : readLastHarnessPreference(computerId);
                 const configuration = runtimeConfiguration();
                 if (configuration?.runtime.online === false) {
                     awaitRuntime();
@@ -387,13 +387,13 @@ export const createDraftControlsStore = (
                     awaitAgent();
                     return;
                 }
-                const defaultCwd = await requests.directory(botId, "default", operation.signal);
+                const defaultCwd = await requests.directory("default", operation.signal);
                 operation.signal.throwIfAborted();
-                const savedDirectoryId = readLastCwdPreference(botId, selected.computerId, selected.agentRef);
+                const savedDirectoryId = readLastCwdPreference(selected.computerId, selected.agentRef);
                 let cwd = defaultCwd;
                 if (savedDirectoryId !== null && savedDirectoryId !== defaultCwd.directoryId) {
                     try {
-                        cwd = await requests.directory(botId, savedDirectoryId, operation.signal);
+                        cwd = await requests.directory(savedDirectoryId, operation.signal);
                         operation.signal.throwIfAborted();
                     } catch {
                         // An unreadable chosen directory gives way to the default for this draft only; the choice
@@ -458,7 +458,7 @@ export const createDraftControlsStore = (
         return {
             cwdBrowser: { kind: "closed" },
             cwdMenuOpen: false,
-            recentCwds: readRecentCwdPreferences(botId) ?? [],
+            recentCwds: readRecentCwdPreferences(computerId) ?? [],
             settings: { kind: "loading" },
             browseCwd,
             closeCwd: () => {
@@ -473,7 +473,7 @@ export const createDraftControlsStore = (
                 if (selected === null || !recentCwds.some((directory) => directory.directoryId === directoryId)) {
                     return;
                 }
-                set({ recentCwds: forgetRecentCwdPreference(botId, directoryId) });
+                set({ recentCwds: forgetRecentCwdPreference(computerId, directoryId) });
             },
             load,
             runtimeChanged: async (configuration, signal) => {
@@ -523,7 +523,7 @@ export const createDraftControlsStore = (
             setCwdMenuOpen: (open) =>
                 set(
                     open
-                        ? { cwdMenuOpen: true, recentCwds: readRecentCwdPreferences(botId) ?? [] }
+                        ? { cwdMenuOpen: true, recentCwds: readRecentCwdPreferences(computerId) ?? [] }
                         : { cwdMenuOpen: false },
                 ),
             refreshAgentSettings: async (signal) => {
@@ -563,7 +563,7 @@ export const createDraftControlsStore = (
                     const loading = { kind: "loading", directory: browser.directory, path: browser.path } as const;
                     set({ cwdBrowser: loading });
                     try {
-                        directory = await requests.directory(botId, pathDirectoryId(requestedPath), operation.signal);
+                        directory = await requests.directory(pathDirectoryId(requestedPath), operation.signal);
                         operation.signal.throwIfAborted();
                     } catch (cause) {
                         if (signal.aborted) {
@@ -601,7 +601,7 @@ export const createDraftControlsStore = (
                 }
                 const operation = beginDirectoryChoice(signal);
                 try {
-                    const directory = await requests.directory(botId, directoryId, operation.signal);
+                    const directory = await requests.directory(directoryId, operation.signal);
                     operation.signal.throwIfAborted();
                     if (operation.current()) {
                         operation.release();
@@ -651,7 +651,7 @@ export const createDraftControlsStore = (
                     ),
                 };
                 if (settings.options.some((option) => option.id === configId && option.type === "select")) {
-                    rememberAgentSettingChoice(botId, settings.selectedAgent.agentRef, {
+                    rememberAgentSettingChoice(computerId, settings.selectedAgent.agentRef, {
                         configId,
                         kind: "select",
                         value,
@@ -675,7 +675,7 @@ export const createDraftControlsStore = (
                 };
                 const toggled = ready.options.find((option) => option.id === configId);
                 if (toggled?.type === "boolean") {
-                    rememberAgentSettingChoice(botId, settings.selectedAgent.agentRef, {
+                    rememberAgentSettingChoice(computerId, settings.selectedAgent.agentRef, {
                         configId,
                         kind: "boolean",
                         value: toggled.booleanValue,

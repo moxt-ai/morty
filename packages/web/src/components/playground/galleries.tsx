@@ -1521,12 +1521,12 @@ function ToastGallery() {
 function CopyButtonGallery() {
     return (
         <Specimen title="Copies and toasts">
-            <code className="font-mono text-12">morty bot approve --bot preview</code>
+            <code className="font-mono text-12">morty --help</code>
             <CopyToClipboardButton
                 failureToast={{ description: "Select the command and copy it manually.", title: "Copy failed" }}
                 label="Copy command"
                 successToast={{ title: "Copied" }}
-                value="morty bot approve --bot preview"
+                value="morty --help"
             />
         </Specimen>
     );
@@ -1697,17 +1697,12 @@ function AttemptFailureGallery() {
         <div className="grid gap-6">
             <Specimen title="Message only">
                 <div className="w-full">
-                    <AttemptFailure
-                        approval={{ kind: "unavailable" }}
-                        code="agent_unavailable"
-                        message="The agent stopped before it could answer."
-                    />
+                    <AttemptFailure code="agent_unavailable" message="The agent stopped before it could answer." />
                 </div>
             </Specimen>
             <Specimen title="Needs approval">
                 <div className="w-full">
                     <AttemptFailure
-                        approval={{ botId: "preview-bot", kind: "bot-approval" }}
                         code="binding_not_approved"
                         message="This browser is not approved to talk to the agent yet."
                     />

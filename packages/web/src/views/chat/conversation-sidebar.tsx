@@ -431,7 +431,7 @@ function ConnectionStatus({
 }
 
 export function ConversationSidebar({
-    botId,
+    computerId,
     connectionStatus,
     workspace,
     onConnectAgent,
@@ -440,7 +440,7 @@ export function ConversationSidebar({
     onOpen,
     onNewConversation,
 }: {
-    readonly botId: string;
+    readonly computerId: string;
     readonly connectionStatus: BotConnectionStatus;
     readonly workspace: ChatWorkspace;
     readonly onConnectAgent: (() => void) | null;
@@ -490,12 +490,12 @@ export function ConversationSidebar({
     const deviceAccess = workspace.deviceAccess;
     const diagnostic = useStore(workspace.sidebar.networkDiagnostic);
     const sessionDiagnostics = {
-        botId,
+        computerId,
         harness: activeTarget?.harness ?? null,
         sessionId: activeTarget?.sessionId ?? null,
         context: () => chatDiagnostics(workspace),
-        read: (signal: AbortSignal) => requests.daemonDiagnostics(botId, signal),
-        readNetwork: (signal: AbortSignal) => requests.networkDiagnostic(botId, signal),
+        read: (signal: AbortSignal) => requests.daemonDiagnostics(signal),
+        readNetwork: (signal: AbortSignal) => requests.networkDiagnostic(signal),
     };
     const measureNetwork = () => {
         void diagnostic.measure(workspace.operationsSignal()).catch(() => undefined);

@@ -20,7 +20,7 @@ test("Given a saved setup handoff, When its Runtime reconnects, Then setup retur
 
     expect(original.events).toContainEqual(expect.objectContaining({ status: "ready", project: "created" }));
     expect(connected.events).toContainEqual(expect.objectContaining({ status: "ready", project: "reused" }));
-    expect(connected.botId).toBe(original.botId);
+    expect(connected.computerId).toBe(original.computerId);
     expect(statuses).not.toContain("prepared");
     expect(statuses).toEqual(
         expect.arrayContaining(["runtime_reused", "runtime_paired", "runtime_online", "binding_activated"]),
@@ -67,7 +67,7 @@ test("Given a saved Machine whose Runtime the manager no longer manages, When th
     expect(connected.events).not.toContainEqual(expect.objectContaining({ status: "runtime_reused" }));
     expect(connected.identity.userId).toBe(original.identity.userId);
     expect(connected.identity.computerId).not.toBe(original.identity.computerId);
-    expect(connected.botId).not.toBe(original.botId);
+    expect(connected.computerId).not.toBe(original.computerId);
     const statuses = connected.events.map((event) => event["status"]);
     expect(statuses).toContain("prepared");
     // The agent reads this to tell the user that links from the replaced Project stopped working.
@@ -118,7 +118,7 @@ test("Given a saved Machine and another same-App connection, When its Runtime re
 
     const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session", 5_000);
 
-    expect(connected.botId).toBe(original.botId);
+    expect(connected.computerId).toBe(original.computerId);
     expect(connected.events).toEqual(
         expect.arrayContaining([
             expect.objectContaining({ status: "runtime_reused" }),
@@ -133,7 +133,7 @@ test("Given a healthy connected Runtime, When setup runs again, Then it reuses t
 }) => {
     const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
-    expect(connected.botId).toBe(original.botId);
+    expect(connected.computerId).toBe(original.computerId);
     expect(connected.events).toContainEqual(expect.objectContaining({ status: "runtime_already_online" }));
     expect(connected.events).not.toContainEqual(expect.objectContaining({ status: "runtime_started" }));
     await runtime.page.goto(connected.url);

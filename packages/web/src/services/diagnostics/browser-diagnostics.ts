@@ -33,7 +33,7 @@ interface BrowserDiagnosticsSnapshot {
 export const browserDiagnosticsSnapshot = (): BrowserDiagnosticsSnapshot => ({ entries: [...entries], discarded });
 
 export interface DaemonDiagnosticsSource extends ServerNetworkOperations {
-    readonly botId: string;
+    readonly computerId: string;
     readonly harness: string | null;
     readonly sessionId: string | null;
     readonly context?: () => ChatDiagnostics;

@@ -8,13 +8,12 @@ import { type BotConfiguration, botConfigurationSchema } from "../entity/bot-con
 
 const identifier = v.custom<string>(isIdentifier);
 const managedBotSchema = v.pipe(
-    v.object({ botId: identifier, displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(80)) }),
+    v.object({ displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(80)) }),
     v.readonly(),
 );
 
 const listedBotSchema = v.pipe(
     v.object({
-        botId: identifier,
         displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(80)),
         computerId: v.nullable(identifier),
     }),
@@ -43,7 +42,7 @@ export class ManagedBotStorage {
     readonly readMachine = async (userId: string, signal: AbortSignal): Promise<ListedManagedBot | null> => {
         signal.throwIfAborted();
         const row = await this.#requireDatabase()
-            .select({ botId: managedBot.botId, displayName: managedBot.displayName, computerId: managedBot.computerId })
+            .select({ displayName: managedBot.displayName, computerId: managedBot.computerId })
             .from(managedBot)
             .where(eq(managedBot.userId, userId))
             .get();
@@ -51,20 +50,8 @@ export class ManagedBotStorage {
         return row === undefined ? null : v.parse(listedBotSchema, row);
     };
 
-    readonly ownsBot = async (userId: string, botId: string, signal: AbortSignal): Promise<boolean> => {
-        signal.throwIfAborted();
-        const result = await this.#requireDatabase()
-            .select({ botId: managedBot.botId })
-            .from(managedBot)
-            .where(and(eq(managedBot.userId, userId), eq(managedBot.botId, v.parse(identifier, botId))))
-            .get();
-        signal.throwIfAborted();
-        return result !== undefined;
-    };
-
     readonly readBot = async (
         userId: string,
-        botId: string,
         signal: AbortSignal,
     ): Promise<
         | (ManagedBot & {
@@ -75,12 +62,11 @@ export class ManagedBotStorage {
         signal.throwIfAborted();
         const row = await this.#requireDatabase()
             .select({
-                botId: managedBot.botId,
                 displayName: managedBot.displayName,
                 computerId: managedBot.computerId,
             })
             .from(managedBot)
-            .where(and(eq(managedBot.userId, userId), eq(managedBot.botId, v.parse(identifier, botId))))
+            .where(eq(managedBot.userId, userId))
             .get();
         signal.throwIfAborted();
         if (row === undefined) {
@@ -97,7 +83,6 @@ export class ManagedBotStorage {
     /** Configures the Agent on the computer that owns this chat. */
     readonly configureBot = async (
         userId: string,
-        botId: string,
         configuration: BotConfiguration,
         now: number,
         signal: AbortSignal,
@@ -111,7 +96,6 @@ export class ManagedBotStorage {
             .where(
                 and(
                     eq(managedBot.userId, userId),
-                    eq(managedBot.botId, v.parse(identifier, botId)),
                     or(isNull(managedBot.computerId), eq(managedBot.computerId, value.computerId)),
                 ),
             )
@@ -123,7 +107,7 @@ export class ManagedBotStorage {
         const current = await database
             .select({ computerId: managedBot.computerId })
             .from(managedBot)
-            .where(and(eq(managedBot.userId, userId), eq(managedBot.botId, v.parse(identifier, botId))))
+            .where(eq(managedBot.userId, userId))
             .get();
         signal.throwIfAborted();
         if (current === undefined) {
@@ -148,7 +132,7 @@ export class ManagedBotStorage {
         signal.throwIfAborted();
         await this.#requireDatabase()
             .insert(managedBot)
-            .values({ userId, botId: value.botId, displayName: value.displayName, createdAt: now, updatedAt: now })
+            .values({ userId, displayName: value.displayName, createdAt: now, updatedAt: now })
             .onConflictDoNothing({ target: managedBot.userId })
             .run();
         const claimed = await this.readMachine(userId, signal);

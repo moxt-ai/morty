@@ -10,11 +10,11 @@ interface SessionWelcomeStore {
 }
 
 export function createSessionWelcomeStore(options: {
-    readonly botId: string;
+    readonly computerId: string;
     readonly sessionTarget: NativeSessionTarget;
     readonly fillEmptyDraft: (text: string) => boolean;
 }) {
-    const entry = sessionWelcomeEntry(options.botId, options.sessionTarget);
+    const entry = sessionWelcomeEntry(options.computerId, options.sessionTarget);
     return createStore<SessionWelcomeStore>()((set, get) => ({
         state: { kind: "hidden" },
         connected: () => {

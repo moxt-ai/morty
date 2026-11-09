@@ -31,8 +31,8 @@ export const cloudRoutes = new Hono<CloudHttpEnvironment>()
 export const publicCloudRoutes = new Hono<{ readonly Bindings: CloudBindings }>()
     .post("/identity/anonymous-users", (context) => cloudRoutes.fetch(context.req.raw, context.env))
     .get("/computers/:computerId/session", (context) => cloudRoutes.fetch(context.req.raw, context.env))
-    .get("/computers/:computerId/management/bot", (context) => cloudRoutes.fetch(context.req.raw, context.env))
-    .get("/computers/:computerId/management/bots/:botId/runtime-binding", (context) =>
+    .get("/computers/:computerId/management/machine", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .get("/computers/:computerId/management/machine/runtime-binding", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
     .get("/computers/:computerId/management/computer", (context) => cloudRoutes.fetch(context.req.raw, context.env))
@@ -64,13 +64,7 @@ export const publicCloudRoutes = new Hono<{ readonly Bindings: CloudBindings }>(
     .delete("/computers/:computerId/identity/v1/local-credential", (context) =>
         cloudRoutes.fetch(context.req.raw, context.env),
     )
-    .post("/chat/computers/:computerId/bots/:botId/setup", (context) => cloudRoutes.fetch(context.req.raw, context.env))
-    .post("/chat/computers/:computerId/bots/:botId/setup/runtimes", (context) =>
-        cloudRoutes.fetch(context.req.raw, context.env),
-    )
-    .post("/chat/computers/:computerId/bots/:botId/workspace", (context) =>
-        cloudRoutes.fetch(context.req.raw, context.env),
-    )
-    .post("/chat/computers/:computerId/bots/:botId/agent-settings", (context) =>
-        cloudRoutes.fetch(context.req.raw, context.env),
-    );
+    .post("/chat/computers/:computerId/setup", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .post("/chat/computers/:computerId/setup/runtimes", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .post("/chat/computers/:computerId/workspace", (context) => cloudRoutes.fetch(context.req.raw, context.env))
+    .post("/chat/computers/:computerId/agent-settings", (context) => cloudRoutes.fetch(context.req.raw, context.env));

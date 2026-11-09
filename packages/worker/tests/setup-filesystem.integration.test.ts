@@ -548,11 +548,7 @@ for (const [failure, scenario] of starterFailures) {
                     expect(response.ok).toBe(true);
                     return await response.json();
                 };
-                const { botId } = v.parse(
-                    v.object({ botId: v.string() }),
-                    await request(`computers/${identity.computerId}/management/bot`),
-                );
-                await request(`chat/computers/${identity.computerId}/bots/${botId}/setup`, {
+                await request(`chat/computers/${identity.computerId}/setup`, {
                     computerId: runtime.computerId,
                     agentRef: "codex",
                 });

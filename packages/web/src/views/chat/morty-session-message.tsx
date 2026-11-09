@@ -267,7 +267,6 @@ export function MortySessionMessage({
     retryUnknownDeliveryDisabled,
     openLocalFile,
     active = false,
-    failureApproval,
     failureAgentRef = "",
     failureMachineName = "",
 }: {
@@ -281,9 +280,6 @@ export function MortySessionMessage({
     readonly retryUnknownDeliveryDisabled: boolean;
     readonly openLocalFile: (path: string) => void;
     readonly active?: boolean;
-    readonly failureApproval:
-        | { readonly kind: "bot-approval"; readonly botId: string }
-        | { readonly kind: "unavailable" };
 }) {
     const createResourceStore: SessionResourceStoreFactory = createSessionResourceStore;
     if (message.role === "user") {
@@ -358,7 +354,7 @@ export function MortySessionMessage({
         if (guidance !== null) {
             return <AuthenticationNotice guidance={guidance} code={presentation.code} message={presentation.message} />;
         }
-        return <AttemptFailure approval={failureApproval} code={presentation.code} message={presentation.message} />;
+        return <AttemptFailure code={presentation.code} message={presentation.message} />;
     }
     if (presentation.kind === "compaction") {
         return (

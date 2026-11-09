@@ -81,7 +81,10 @@ test("Given an existing Project and Machine, When the same Platform moves to ano
         );
         expect(originalProject.status).toBe(200);
         const project = await originalProject.json();
-        const originalBot = await worker.fetch(new Request(`${projectUrl}/bot`, { headers }), fixture.environment());
+        const originalBot = await worker.fetch(
+            new Request(`${projectUrl}/machine`, { headers }),
+            fixture.environment(),
+        );
         expect(originalBot.status).toBe(200);
         const bot = await originalBot.json();
 
@@ -93,7 +96,7 @@ test("Given an existing Project and Machine, When the same Platform moves to ano
             const session = await worker.fetch(accountRequest(identity.token, identity.computerId), environment);
             expect(session.status).toBe(200);
             expect(await session.json()).toMatchObject({ userId: identity.userId });
-            const currentBot = await worker.fetch(new Request(`${projectUrl}/bot`, { headers }), environment);
+            const currentBot = await worker.fetch(new Request(`${projectUrl}/machine`, { headers }), environment);
             expect(currentBot.status).toBe(200);
             expect(await currentBot.json()).toEqual(bot);
             const currentProject = await worker.fetch(new Request(`${projectUrl}/computer`, { headers }), environment);

@@ -4,7 +4,6 @@ import * as v from "valibot";
 const identifier = v.custom<Identifier>(isIdentifier);
 const managedBotDetailSchema = v.pipe(
     v.object({
-        botId: identifier,
         displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(80)),
         configured: v.boolean(),
     }),
@@ -16,18 +15,14 @@ const projectSchema = v.pipe(
     v.readonly(),
 );
 export type ManagedProject = v.InferOutput<typeof projectSchema>;
-const runtimeBindingSchema = v.object({ botId: identifier, computerId: v.nullable(identifier) });
+const runtimeBindingSchema = v.object({ computerId: v.nullable(identifier) });
 
 /** Whether the Worker binds the Machine to a Runtime. The Worker's record is the only source of this fact. */
 export type RuntimeBinding = { readonly kind: "unbound" } | { readonly kind: "bound"; readonly computerId: Identifier };
 
 /** The Machine's Runtime binding resource, read by setup and the page and watched through the Chat bridge. */
-export function runtimeBindingUrl(origin: string, computerId: string, botId: string): URL {
-    return managementUrl(
-        origin,
-        decodeIdentifier(computerId),
-        `/bots/${encodeURIComponent(decodeIdentifier(botId))}/runtime-binding`,
-    );
+export function runtimeBindingUrl(origin: string, computerId: string): URL {
+    return managementUrl(origin, decodeIdentifier(computerId), "/machine/runtime-binding");
 }
 
 function managementUrl(origin: string, computerId: Identifier, path: string): URL {
@@ -63,25 +58,16 @@ export class ManagementApi {
             await this.#request("/computer", "GET", undefined, signal),
         ).computer;
 
-    readonly readBot = async (botId: string, signal: AbortSignal): Promise<ManagedBotDetail> =>
-        v.parse(
-            managedBotDetailSchema,
-            await this.#request(`/bots/${encodeURIComponent(decodeIdentifier(botId))}`, "GET", undefined, signal),
-        );
+    readonly readBot = async (signal: AbortSignal): Promise<ManagedBotDetail> =>
+        v.parse(managedBotDetailSchema, await this.#request("/machine", "GET", undefined, signal));
 
-    readonly readRuntimeBinding = async (botId: string, signal: AbortSignal): Promise<RuntimeBinding> => {
-        const requestedBotId = decodeIdentifier(botId);
+    readonly readRuntimeBinding = async (signal: AbortSignal): Promise<RuntimeBinding> => {
         const binding = v.parse(
             runtimeBindingSchema,
-            await this.#request(
-                `/bots/${encodeURIComponent(requestedBotId)}/runtime-binding`,
-                "GET",
-                undefined,
-                signal,
-            ),
+            await this.#request("/machine/runtime-binding", "GET", undefined, signal),
         );
-        if (binding.botId !== requestedBotId) {
-            throw new CloudApiError("INVALID_RESPONSE", "Chat management returned another Machine.");
+        if (binding.computerId !== null && binding.computerId !== this.#computerId) {
+            throw new CloudApiError("INVALID_RESPONSE", "Chat management returned another computer.");
         }
         return binding.computerId === null ? { kind: "unbound" } : { kind: "bound", computerId: binding.computerId };
     };

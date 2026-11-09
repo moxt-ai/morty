@@ -25,23 +25,43 @@ test("Given a user with a configured bot and a bot created by a consumed pairing
     ticket.run("configured", "bot_configured", 1, 6);
 
     for (const path of ordered.slice(materialization)) {
+        if (path.endsWith("/0059_soft_grandmaster.sql")) {
+            database.exec(
+                "INSERT INTO chat_managed_session (project_id, user_id, bot_id, resource_id, harness, session_id, created_at) VALUES ('prj_owner', 'usr_owner', 'bot_configured', 'kept-conversation', 'codex', 'native-kept', 3)",
+            );
+        }
         database.exec(files[path] ?? "");
     }
 
     expect(
         database
             .prepare(
-                "SELECT user_id, bot_id, display_name, computer_id, created_at, updated_at FROM managed_bot ORDER BY bot_id",
+                "SELECT user_id, display_name, computer_id, created_at, updated_at FROM managed_bot ORDER BY user_id",
             )
             .all(),
     ).toEqual([
         {
             user_id: "usr_owner",
-            bot_id: "bot_configured",
             display_name: "Laptop",
             computer_id: "rt_laptop",
             created_at: 1,
             updated_at: 2,
+        },
+    ]);
+    expect(
+        database
+            .prepare(
+                "SELECT project_id, user_id, resource_id, harness, session_id, created_at FROM chat_managed_session",
+            )
+            .all(),
+    ).toEqual([
+        {
+            project_id: "prj_owner",
+            user_id: "usr_owner",
+            resource_id: "kept-conversation",
+            harness: "codex",
+            session_id: "native-kept",
+            created_at: 3,
         },
     ]);
     expect(database.prepare("SELECT name FROM sqlite_master WHERE name = 'agent_pairing_ticket'").all()).toEqual([]);

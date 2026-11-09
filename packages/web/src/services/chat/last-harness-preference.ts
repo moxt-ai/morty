@@ -1,14 +1,13 @@
 import { centralLocalStorage, lastHarnessEntry } from "@/services/local-storage/central-local-storage";
 
 /**
- * The Agent reference, not the Runtime identifier, identifies the harness a
- * Bot works in: a Bot talks to one Runtime at a time, so the same Agent keeps
- * its identity when the Runtime reconnects or the Bot pairs again.
+ * The Agent reference identifies the computer's preferred harness across
+ * Runtime reconnects and pairing.
  */
-export function readLastHarnessPreference(botId: string): string | null {
-    return centralLocalStorage.read(lastHarnessEntry(botId));
+export function readLastHarnessPreference(computerId: string): string | null {
+    return centralLocalStorage.read(lastHarnessEntry(computerId));
 }
 
-export function saveLastHarnessPreference(botId: string, agentRef: string): void {
-    centralLocalStorage.write(lastHarnessEntry(botId), agentRef);
+export function saveLastHarnessPreference(computerId: string, agentRef: string): void {
+    centralLocalStorage.write(lastHarnessEntry(computerId), agentRef);
 }

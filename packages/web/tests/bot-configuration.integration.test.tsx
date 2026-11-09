@@ -333,7 +333,7 @@ test("Given a Bot has a recent directory from another harness, When its Runtime 
         connectAgent: true,
         prepare: (current) =>
             window.localStorage.setItem(
-                `morty:recent-cwd:${encodeURIComponent(current.botId)}`,
+                `morty:recent-cwd:${encodeURIComponent(current.computerId)}`,
                 JSON.stringify([{ directoryId: "saved-directory", directoryLabel: "/saved-by-another-harness" }]),
             ),
     });
@@ -696,12 +696,12 @@ test("Given a Bot paired with Pi, When the user opens its settings and sends a p
 test("Given another tab saved a recent directory, When this tab reopens its directory menu and forgets a directory, Then the other tab's directory is listed and remains", {
     timeout: 30_000,
 }, async () => {
-    const key = (botId: string) => `morty:recent-cwd:${encodeURIComponent(botId)}`;
+    const key = (computerId: string) => `morty:recent-cwd:${encodeURIComponent(computerId)}`;
     const here = { directoryId: "directory-here", directoryLabel: "/project-here" };
     const there = { directoryId: "directory-there", directoryLabel: "/project-from-another-tab" };
     const app = await createTestApp({
         connectAgent: true,
-        prepare: (current) => window.localStorage.setItem(key(current.botId), JSON.stringify([here])),
+        prepare: (current) => window.localStorage.setItem(key(current.computerId), JSON.stringify([here])),
     });
     const recent = (label: string) =>
         app.elementsByTestId(dataTestId.recentWorkingDirectory).some((item) => item.textContent?.includes(label));
@@ -709,7 +709,7 @@ test("Given another tab saved a recent directory, When this tab reopens its dire
     await app.user.click(await app.queryElementByTestId(dataTestId.workingDirectory));
     await app.waitForView(() => expect(recent("/project-here")).toBe(true));
     // Another tab of the same Bot saves a directory through the same storage.
-    window.localStorage.setItem(key(app.botId), JSON.stringify([there, here]));
+    window.localStorage.setItem(key(app.computerId), JSON.stringify([there, here]));
     // Reopening the menu shows it, with no change made in this tab.
     await app.user.keyboard("{Escape}");
     await app.user.click(await app.queryElementByTestId(dataTestId.workingDirectory));

@@ -120,7 +120,6 @@ export async function createTestApp(
         const destination = new URL("/", current.origin);
         if (page.identity === true) {
             const scope = v.parse(identityScopeSchema, {
-                botId: current.botId,
                 computerId: current.identity.computerId,
                 userId: current.userId,
             });
@@ -138,7 +137,6 @@ export async function createTestApp(
         // scope and storage carries the access a shared-access link saves, so
         // the anonymous session restores it on load.
         const scope = v.parse(identityScopeSchema, {
-            botId: current.botId,
             computerId: current.identity.computerId,
             userId: current.userId,
         });

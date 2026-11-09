@@ -8,16 +8,19 @@ import {
 
 export type { RecentCwdPreference };
 
-export function readRecentCwdPreferences(botId: string): readonly RecentCwdPreference[] | null {
-    return centralLocalStorage.read(recentCwdEntry(botId));
+export function readRecentCwdPreferences(computerId: string): readonly RecentCwdPreference[] | null {
+    return centralLocalStorage.read(recentCwdEntry(computerId));
 }
 
 /**
- * Storage owns the recent directories, which every tab of the Bot shares: a change starts from what storage holds now,
+ * Storage owns the recent directories, which every tab of the computer shares: a change starts from what storage holds now,
  * never from a copy a tab read earlier, so it cannot drop or bring back another tab's change.
  */
-export function saveRecentCwdPreference(botId: string, directory: RecentCwdPreference): readonly RecentCwdPreference[] {
-    const existing = readRecentCwdPreferences(botId) ?? [];
+export function saveRecentCwdPreference(
+    computerId: string,
+    directory: RecentCwdPreference,
+): readonly RecentCwdPreference[] {
+    const existing = readRecentCwdPreferences(computerId) ?? [];
     if (
         !isDirectoryIdentifier(directory.directoryId) ||
         directory.directoryLabel.length === 0 ||
@@ -29,25 +32,25 @@ export function saveRecentCwdPreference(botId: string, directory: RecentCwdPrefe
         directory,
         ...existing.filter((preference) => preference.directoryId !== directory.directoryId),
     ].slice(0, 10);
-    centralLocalStorage.write(recentCwdEntry(botId), recent);
+    centralLocalStorage.write(recentCwdEntry(computerId), recent);
     return recent;
 }
 
-export function forgetRecentCwdPreference(botId: string, directoryId: string): readonly RecentCwdPreference[] {
-    const recent = (readRecentCwdPreferences(botId) ?? []).filter(
+export function forgetRecentCwdPreference(computerId: string, directoryId: string): readonly RecentCwdPreference[] {
+    const recent = (readRecentCwdPreferences(computerId) ?? []).filter(
         (preference) => preference.directoryId !== directoryId,
     );
-    centralLocalStorage.write(recentCwdEntry(botId), recent);
+    centralLocalStorage.write(recentCwdEntry(computerId), recent);
     return recent;
 }
 
-export function readLastCwdPreference(botId: string, computerId: string, agentRef: string): string | null {
-    return centralLocalStorage.read(lastCwdEntry(botId, computerId, agentRef));
+export function readLastCwdPreference(computerId: string, agentRef: string): string | null {
+    return centralLocalStorage.read(lastCwdEntry(computerId, agentRef));
 }
 
-export function saveLastCwdPreference(botId: string, computerId: string, agentRef: string, directoryId: string): void {
+export function saveLastCwdPreference(computerId: string, agentRef: string, directoryId: string): void {
     if (!isDirectoryIdentifier(directoryId)) {
         return;
     }
-    centralLocalStorage.write(lastCwdEntry(botId, computerId, agentRef), directoryId);
+    centralLocalStorage.write(lastCwdEntry(computerId, agentRef), directoryId);
 }

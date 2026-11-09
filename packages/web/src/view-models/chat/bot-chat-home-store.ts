@@ -271,7 +271,7 @@ export const createBotChatHomeStore = (
         | "waitForBridge"
     >,
     options: {
-        readonly botId: string;
+        readonly computerId: string;
         readonly titles: SessionTitlesStore;
         readonly draftConfiguration: () => ChatDraftConfiguration | null;
         /** Whether the connection header reports the New Session page's connection available, network and Machine included. */
@@ -313,7 +313,7 @@ export const createBotChatHomeStore = (
         readonly onSelectionReady: (selection: Extract<ConversationSelectionState, { readonly kind: "ready" }>) => void;
     },
 ) => {
-    const botId = options.botId;
+    const computerId = options.computerId;
     const titles = options.titles;
     const selection = initialSelection(options.url, options.createId);
     let restoredTarget = options.entry === "restore" && selection.kind === "pending" ? selection.target.identity : null;
@@ -345,7 +345,7 @@ export const createBotChatHomeStore = (
         };
         // The draft page's reload recovery of a first message ends once its Session owns it or the draft takes it back.
         const releaseUnsentFirstMessage = (commandId: string): void => {
-            const entry = newConversationUnsentMessageEntry(botId);
+            const entry = newConversationUnsentMessageEntry(computerId);
             if (centralSessionStorage.read(entry)?.commandId === commandId) {
                 centralSessionStorage.remove(entry);
             }
@@ -438,20 +438,20 @@ export const createBotChatHomeStore = (
                     set({ initialization: { kind: "loading" } });
                 }
                 if (starting.initialization.kind === "loading" && starting.selection.kind === "draft") {
-                    const draft = centralSessionStorage.read(newConversationDraftEntry(botId)) ?? "";
+                    const draft = centralSessionStorage.read(newConversationDraftEntry(computerId)) ?? "";
                     // A first message an earlier page could not hand to a Session returns ahead of the draft.
-                    const unsent = centralSessionStorage.read(newConversationUnsentMessageEntry(botId));
+                    const unsent = centralSessionStorage.read(newConversationUnsentMessageEntry(computerId));
                     if (unsent === null) {
                         set({ draft });
                     } else {
                         const restored = prependToDraft(unsent.content, draft);
-                        centralSessionStorage.write(newConversationDraftEntry(botId), restored);
-                        centralSessionStorage.remove(newConversationUnsentMessageEntry(botId));
+                        centralSessionStorage.write(newConversationDraftEntry(computerId), restored);
+                        centralSessionStorage.remove(newConversationUnsentMessageEntry(computerId));
                         set({ draft: restored });
                     }
                 } else if (starting.initialization.kind === "loading") {
                     // A page that opens on another conversation keeps an earlier page's unsent first message for the next draft.
-                    const unsent = centralSessionStorage.read(newConversationUnsentMessageEntry(botId));
+                    const unsent = centralSessionStorage.read(newConversationUnsentMessageEntry(computerId));
                     if (unsent !== null && !returned.some((message) => message.commandId === unsent.commandId)) {
                         returned = [...returned, { ...unsent, attachments: [] }];
                     }
@@ -502,7 +502,7 @@ export const createBotChatHomeStore = (
                     let afterChange = baselineFollowsChange;
                     while (true) {
                         try {
-                            await requests.waitForRuntimeConfigurationChange(botId, signal, (configuration) =>
+                            await requests.waitForRuntimeConfigurationChange(signal, (configuration) =>
                                 applyConfiguration(configuration, afterChange),
                             );
                         } catch (cause) {
@@ -556,14 +556,14 @@ export const createBotChatHomeStore = (
                             if (dropped) {
                                 await requests.waitForBridge(watchSignal);
                                 watchSignal.throwIfAborted();
-                                const binding = await requests.readRuntimeBinding(botId, watchSignal);
+                                const binding = await requests.readRuntimeBinding(watchSignal);
                                 watchSignal.throwIfAborted();
                                 set({ pairing: { kind: binding.kind === "bound" ? "paired" : "unpaired" } });
                                 if (binding.kind === "unbound") {
                                     // An unbound Machine waits for the binding
                                     // it just read to change; the pairing flow
                                     // completes by restarting the load.
-                                    await requests.waitForRuntimeBindingChange(botId, watchSignal);
+                                    await requests.waitForRuntimeBindingChange(watchSignal);
                                     watchSignal.throwIfAborted();
                                     completeSetup();
                                     return;
@@ -611,14 +611,14 @@ export const createBotChatHomeStore = (
                                 kind: "session-load-started",
                             }),
                         });
-                        const session = await requests.managedSession(botId, target.identity, signal);
+                        const session = await requests.managedSession(target.identity, signal);
                         signal.throwIfAborted();
                         acceptLoadedSelection({ kind: "session-loaded", session, target }, startedWith);
                         phase = "watch";
                         await followConfigurationChanges(signal);
                         return;
                     }
-                    const binding = await requests.readRuntimeBinding(botId, signal);
+                    const binding = await requests.readRuntimeBinding(signal);
                     signal.throwIfAborted();
                     set({ pairing: { kind: binding.kind === "bound" ? "paired" : "unpaired" } });
                     if (binding.kind === "unbound") {
@@ -646,7 +646,7 @@ export const createBotChatHomeStore = (
                         await followConfigurationChanges(signal);
                         return;
                     }
-                    const configuration = await requests.runtimeConfiguration(botId, signal);
+                    const configuration = await requests.runtimeConfiguration(signal);
                     signal.throwIfAborted();
                     set((current) => ({
                         initialization: { kind: "ready" },
@@ -667,7 +667,7 @@ export const createBotChatHomeStore = (
                     }
                     const currentTarget = currentSelection.kind === "draft" ? null : currentSelection.target;
                     if (currentTarget?.kind === "session") {
-                        const session = await requests.managedSession(botId, currentTarget.identity, signal);
+                        const session = await requests.managedSession(currentTarget.identity, signal);
                         signal.throwIfAborted();
                         acceptLoadedSelection({ kind: "session-loaded", session, target: currentTarget }, startedWith);
                         phase = "watch";
@@ -755,14 +755,14 @@ export const createBotChatHomeStore = (
                                       })
                                     : current.selection,
                         }));
-                        await requests.waitForRuntimeBindingChange(botId, signal);
+                        await requests.waitForRuntimeBindingChange(signal);
                         signal.throwIfAborted();
                         options.onRuntimeReplaced();
                         return;
                     }
                     if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {
                         failLoad("agent-required", cause.message);
-                        await requests.waitForRuntimeConfigurationChange(botId, signal);
+                        await requests.waitForRuntimeConfigurationChange(signal);
                         signal.throwIfAborted();
                         set((current) => ({
                             selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
@@ -796,7 +796,7 @@ export const createBotChatHomeStore = (
                 const failed = failedDraftMessage(get().creation);
                 get().composerAttachments.getState().clear();
                 const current = get();
-                centralSessionStorage.remove(newConversationDraftEntry(botId));
+                centralSessionStorage.remove(newConversationDraftEntry(computerId));
                 // Leaving a pending selection releases its request, even when entry configuration is already ready.
                 const restart =
                     !homeCanStartConversation(current) ||
@@ -853,7 +853,7 @@ export const createBotChatHomeStore = (
                 onRestart();
             },
             setDraft: (draft) => {
-                const entry = newConversationDraftEntry(botId);
+                const entry = newConversationDraftEntry(computerId);
                 if (draft === "") {
                     centralSessionStorage.remove(entry);
                 } else {
@@ -896,9 +896,12 @@ export const createBotChatHomeStore = (
                 if (current.creation.kind === "draft") {
                     // The submitted snapshot owns its content before any network work begins.
                     get().composerAttachments.getState().clear();
-                    centralSessionStorage.remove(newConversationDraftEntry(botId));
+                    centralSessionStorage.remove(newConversationDraftEntry(computerId));
                     if (content.length > 0) {
-                        centralSessionStorage.write(newConversationUnsentMessageEntry(botId), { commandId, content });
+                        centralSessionStorage.write(newConversationUnsentMessageEntry(computerId), {
+                            commandId,
+                            content,
+                        });
                     }
                 }
                 let access: ChatAccess;
@@ -922,7 +925,7 @@ export const createBotChatHomeStore = (
                         ...(current.creation.kind === "draft" ? { draft: "" } : {}),
                     }));
                     try {
-                        access = await requests.createConversation(botId, commandId, settings, signal);
+                        access = await requests.createConversation(commandId, settings, signal);
                         signal.throwIfAborted();
                         set((state) => ({
                             creation: transitionConversationCreation(state.creation, {
@@ -1007,7 +1010,7 @@ export const createBotChatHomeStore = (
                         draft: "",
                         composerAttachments: createComposerAttachmentStore(),
                     }));
-                    centralSessionStorage.remove(newConversationDraftEntry(botId));
+                    centralSessionStorage.remove(newConversationDraftEntry(computerId));
                     announceSelection();
                 }
                 onDirectoryRefreshed();

@@ -59,7 +59,9 @@ function receive(socket: MiniflareWebSocket): Promise<unknown> {
 test("Given a public HTTP client, When it requests browser-only APIs, Then Chat does not expose the endpoints", async () => {
     const [identityResponse, projectResponse] = await Promise.all([
         runtime.dispatchFetch("https://chat.test/morty/api/identity/transfers"),
-        runtime.dispatchFetch("https://chat.test/morty/api/computers/prj_test/management/bots/bot_test"),
+        runtime.dispatchFetch("https://chat.test/morty/api/chat/computers/prj_test/managed-sessions", {
+            method: "POST",
+        }),
     ]);
 
     for (const response of [identityResponse, projectResponse]) {

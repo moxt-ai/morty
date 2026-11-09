@@ -11,11 +11,11 @@ import {
  * draft's directory reports is read again for each draft, so a later change of that default is picked up.
  */
 export function restoreLastAgentSettings(
-    botId: string,
+    computerId: string,
     agentRef: string,
     options: readonly SessionConfigOption[],
 ): { readonly options: readonly SessionConfigOption[]; readonly restoredIds: ReadonlySet<string> } {
-    const preferences = centralLocalStorage.read(lastAgentSettingsEntry(botId, agentRef)) ?? [];
+    const preferences = centralLocalStorage.read(lastAgentSettingsEntry(computerId, agentRef)) ?? [];
     const restoredIds = new Set<string>();
     const restored = options.map((option) => {
         const preference = preferences.find((candidate) => candidate.configId === option.id);
@@ -37,8 +37,8 @@ export function restoreLastAgentSettings(
 }
 
 /** Remembers one setting the user chose, keeping their other choices for this Agent. */
-export function rememberAgentSettingChoice(botId: string, agentRef: string, choice: AgentSettingPreference): void {
-    const entry = lastAgentSettingsEntry(botId, agentRef);
+export function rememberAgentSettingChoice(computerId: string, agentRef: string, choice: AgentSettingPreference): void {
+    const entry = lastAgentSettingsEntry(computerId, agentRef);
     const others = (centralLocalStorage.read(entry) ?? []).filter(
         (preference) => preference.configId !== choice.configId,
     );

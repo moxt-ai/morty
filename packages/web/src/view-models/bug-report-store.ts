@@ -174,7 +174,7 @@ async function collectBugReport(
     ]);
     signal.throwIfAborted();
     return {
-        schemaVersion: 2,
+        schemaVersion: 3,
         chat,
         id: crypto.randomUUID().replaceAll("-", ""),
         createdAt: new Date().toISOString(),
@@ -183,7 +183,7 @@ async function collectBugReport(
         relatedEventId: lastEventId() ?? null,
         browser: navigator.userAgent.slice(0, 512),
         release: (getClient()?.getOptions().release ?? "development").slice(0, 128),
-        botId: source?.botId ?? null,
+        computerId: source?.computerId ?? null,
         harness: source?.harness ?? null,
         sessionId: source?.sessionId ?? null,
         web: browserDiagnosticsSnapshot(),

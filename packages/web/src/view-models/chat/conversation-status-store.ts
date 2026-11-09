@@ -72,7 +72,11 @@ interface ConversationStatusState {
     readonly statuses: NativeSessionMap<ConversationListStatus>;
     /** A directory load starts; its snapshot will not replace statuses that change after this. */
     readonly directoryLoadStarted: () => void;
-    readonly directoryLoaded: (botId: string, sessions: readonly ManagedChatSession[], signal: AbortSignal) => void;
+    readonly directoryLoaded: (
+        computerId: string,
+        sessions: readonly ManagedChatSession[],
+        signal: AbortSignal,
+    ) => void;
     /** The user opened this Session, so nothing it finished is unread. */
     readonly opened: (sessionTarget: NativeSessionTarget) => void;
     /**
@@ -102,10 +106,10 @@ export function createConversationStatusStore(
     onFollowing: () => void,
 ) {
     let watcher: {
-        readonly botId: string;
+        readonly computerId: string;
         readonly controller: AbortController;
     } | null = null;
-    let activeBotId = "";
+    let activeComputerId = "";
     // The stream and the open pane report changes as they happen, while a directory snapshot describes the moment its
     // request was served. Each change is numbered so that a snapshot keeps the statuses that changed after it started.
     let changes = 0;
@@ -176,40 +180,36 @@ export function createConversationStatusStore(
          * Follows the Sessions' statuses. Each time the stream follows, it reports their current statuses with that
          * notice, before their changes, so a gap before it needs no snapshot of its own.
          */
-        const watch = (botId: string, parent: AbortSignal): void => {
-            if (watcher?.botId === botId || parent.aborted) {
+        const watch = (computerId: string, parent: AbortSignal): void => {
+            if (watcher?.computerId === computerId || parent.aborted) {
                 return;
             }
             closeWatcher();
             const controller = new AbortController();
-            watcher = { botId, controller };
+            watcher = { computerId, controller };
             const signal = AbortSignal.any([parent, controller.signal]);
             void (async () => {
                 let recoveries = 0;
                 try {
                     while (!signal.aborted) {
                         try {
-                            await requests.subscribeManagedSessionStatuses(
-                                botId,
-                                (event) => {
-                                    // Opening the stream shows it works, but only a later Session event shows it keeps
-                                    // working, so only that restores the stream's own retries.
-                                    if (event.kind === "managed-session.statuses.following") {
-                                        applyCurrentStatuses(event.statuses);
-                                        onFollowing();
-                                        return;
-                                    }
-                                    recoveries = 0;
-                                    if (event.kind === "session.close.notice") {
-                                        onSessionClosed(event.target, event.reason);
-                                    } else if (event.status.kind === "idle") {
-                                        markCompleted(event.target, event.status);
-                                    } else {
-                                        replaceStatus(event.target, event.status);
-                                    }
-                                },
-                                signal,
-                            );
+                            await requests.subscribeManagedSessionStatuses((event) => {
+                                // Opening the stream shows it works, but only a later Session event shows it keeps
+                                // working, so only that restores the stream's own retries.
+                                if (event.kind === "managed-session.statuses.following") {
+                                    applyCurrentStatuses(event.statuses);
+                                    onFollowing();
+                                    return;
+                                }
+                                recoveries = 0;
+                                if (event.kind === "session.close.notice") {
+                                    onSessionClosed(event.target, event.reason);
+                                } else if (event.status.kind === "idle") {
+                                    markCompleted(event.target, event.status);
+                                } else {
+                                    replaceStatus(event.target, event.status);
+                                }
+                            }, signal);
                             signal.throwIfAborted();
                             throw new Error("Conversation status stream ended");
                         } catch (cause) {
@@ -240,14 +240,14 @@ export function createConversationStatusStore(
             directoryLoadStarted: () => {
                 directorySnapshotStartedAt = changes;
             },
-            directoryLoaded: (botId, sessions, signal) => {
-                if (activeBotId !== botId) {
+            directoryLoaded: (computerId, sessions, signal) => {
+                if (activeComputerId !== computerId) {
                     closeWatcher();
-                    activeBotId = botId;
+                    activeComputerId = computerId;
                 }
                 replaceDirectory(sessions, directorySnapshotStartedAt);
                 if (sessions.length > 0) {
-                    watch(botId, signal);
+                    watch(computerId, signal);
                 }
             },
             opened: (sessionTarget) => {
@@ -275,7 +275,7 @@ export function createConversationStatusStore(
             unfollowed: () => watcher === null && get().statuses.size > 0,
             follow: (signal) => {
                 if (watcher === null && get().statuses.size > 0) {
-                    watch(activeBotId, signal);
+                    watch(activeComputerId, signal);
                 }
             },
             close: closeWatcher,

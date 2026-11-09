@@ -123,9 +123,9 @@ export const MAX_AGENT_SETTING_PREFERENCES = 100;
  * The settings the user chose for an Agent, one per setting. Version 1 stored every setting a Session ran with,
  * chosen or not; those entries cannot tell a choice from a default, so they are no longer read.
  */
-export const lastAgentSettingsEntry = (botId: string, agentRef: string) =>
+export const lastAgentSettingsEntry = (computerId: string, agentRef: string) =>
     jsonLocalStorageEntry({
-        key: scopedKey("morty:last-agent-settings:v2:", botId, agentRef),
+        key: scopedKey("morty:last-agent-settings:v2:", computerId, agentRef),
         schema: v.pipe(
             v.array(agentSettingPreferenceSchema),
             v.maxLength(MAX_AGENT_SETTING_PREFERENCES),
@@ -143,12 +143,12 @@ export const lastAgentSettingsEntry = (botId: string, agentRef: string) =>
 // ---------------------------------------------------------------------------
 
 /**
- * The harness a Bot last worked in, so a new draft continues there instead of
+ * The harness a computer last worked in, so a new draft continues there instead of
  * falling back to whichever connected Agent happens to be listed first.
  */
-export const lastHarnessEntry = (botId: string): LocalStorageEntry<string> =>
+export const lastHarnessEntry = (computerId: string): LocalStorageEntry<string> =>
     stringLocalStorageEntry({
-        key: scopedKey("morty:last-harness:v1:", botId),
+        key: scopedKey("morty:last-harness:v1:", computerId),
         schema: settingIdentifierSchema,
     });
 
@@ -159,9 +159,9 @@ export const lastHarnessEntry = (botId: string): LocalStorageEntry<string> =>
 const directoryIdSchema = v.custom<string>(isDirectoryIdentifier, "Invalid directory identifier");
 const directoryLabelSchema = v.pipe(v.string(), v.minLength(1), v.maxLength(MAX_WORKSPACE_PATH_LENGTH));
 
-export const lastCwdEntry = (botId: string, computerId: string, agentRef: string): LocalStorageEntry<string> =>
+export const lastCwdEntry = (computerId: string, agentRef: string): LocalStorageEntry<string> =>
     stringLocalStorageEntry({
-        key: scopedKey("morty:last-cwd:", botId, computerId, agentRef),
+        key: scopedKey("morty:last-cwd:", computerId, agentRef),
         schema: directoryIdSchema,
     });
 
@@ -171,9 +171,9 @@ const recentCwdPreferenceSchema = v.pipe(
 );
 export type RecentCwdPreference = v.InferOutput<typeof recentCwdPreferenceSchema>;
 
-export const recentCwdEntry = (botId: string) =>
+export const recentCwdEntry = (computerId: string) =>
     jsonLocalStorageEntry({
-        key: scopedKey("morty:recent-cwd:", botId),
+        key: scopedKey("morty:recent-cwd:", computerId),
         schema: v.pipe(
             v.array(recentCwdPreferenceSchema),
             v.maxLength(10),

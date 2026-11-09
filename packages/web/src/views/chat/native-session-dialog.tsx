@@ -523,7 +523,6 @@ export function NativeSessionDialog({
                                                     {model.preview.content.messages.map((message) => (
                                                         <MortySessionMessage
                                                             deliveryUnknownUserMessageId={null}
-                                                            failureApproval={{ kind: "unavailable" }}
                                                             key={message.firstEvent.eventId}
                                                             message={message}
                                                             onRemoveUnknownDelivery={() => undefined}

@@ -450,7 +450,7 @@ export function createSessionPaneModel(options: {
     /** What the page holds for the Session, which outlives this pane. */
     readonly sessionPage: SessionPageState;
     readonly attachmentSignal: AbortSignal;
-    readonly botId: string;
+    readonly computerId: string;
     readonly requests: Pick<
         BotChatApi,
         | "connectSession"
@@ -474,14 +474,14 @@ export function createSessionPaneModel(options: {
     /** The connection used up its automatic retries and waits for the owner's `reconnect`. */
     readonly onWaitingForRuntime: () => void;
 }) {
-    const { session, botId, requests, clock, titles } = options;
+    const { session, computerId, requests, clock, titles } = options;
     const { composer, delivery, interactions, queue: messageQueue, rename, settings, tasks } = options.sessionPage;
     const composerAttachments = composer.getState().attachments;
     const sessionTarget = session.result.ready.target;
     // Working in a conversation makes its harness the reference for the next draft. Its settings carry into New
     // Session only where the user changes them: the others are the Agent's and its directory's, which the draft reads
     // for itself.
-    saveLastHarnessPreference(botId, session.agentRef);
+    saveLastHarnessPreference(computerId, session.agentRef);
     const fallbackStartedAt = Date.now();
     const initialTurn: CurrentTurn =
         session.result.action === "conversation" && session.result.activeTurn.kind === "running"
@@ -1026,7 +1026,7 @@ export function createSessionPaneModel(options: {
                 const observeSession = async (signal: AbortSignal): Promise<void> => {
                     const access = openedAccess;
                     openedAccess = undefined;
-                    client = await requests.connectSession(botId, sessionTarget, signal, access);
+                    client = await requests.connectSession(sessionTarget, signal, access);
                     const connected = client;
                     const receiveLifecycle = async (
                         fact: SessionLifecycleFact,
@@ -1382,7 +1382,6 @@ export function createSessionPaneModel(options: {
                 setReopen({ kind: "reopening" });
                 try {
                     await requests.managedSession(
-                        botId,
                         {
                             harness: session.result.ready.agentId,
                             sessionId: session.entry.sessionId,
@@ -1524,7 +1523,7 @@ export function createSessionPaneModel(options: {
         };
     });
     const welcome = createSessionWelcomeStore({
-        botId,
+        computerId,
         sessionTarget,
         fillEmptyDraft: (text) => {
             const presentation = sessionPanePresentation(
@@ -1567,7 +1566,7 @@ export function createSessionPaneModel(options: {
                 // guarded directory read as the sidebar, keeping the editor open until its title can take focus.
                 const startedWith = titles.getState().titles;
                 try {
-                    const sessions = await requests.managedSessions(botId, requestSignal);
+                    const sessions = await requests.managedSessions(requestSignal);
                     requestSignal.throwIfAborted();
                     titles.getState().directoryLoaded(sessions, startedWith);
                     rename.getState().settled(pending.title);
@@ -1701,8 +1700,6 @@ export function createSessionPaneModel(options: {
         messageQueue,
         tasks,
         welcome,
-        /** The Bot this pane talks to; scopes failure approvals. */
-        botId,
         /** The agent the session runs on; the harness lock offers it. */
         agentRef: session.agentRef,
         /** The opened session record; scopes the execution context. */

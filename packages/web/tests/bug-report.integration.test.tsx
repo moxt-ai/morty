@@ -403,7 +403,7 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
         const envelope = inbox.envelopes[0] ?? "";
         const report = JSON.parse(envelope.trim().split("\n").at(-1) ?? "null");
         expect(report).toMatchObject({
-            botId: app.botId,
+            computerId: app.computerId,
             sessionId: "native-session",
             daemon: { kind: "unavailable", code: "AGENT_REQUIRED" },
             network: {
@@ -439,7 +439,7 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
         await visibleMessage(document.body, "status", "Report sent");
         const afterUnmount = JSON.parse((inbox.envelopes[1] ?? "").trim().split("\n").at(-1) ?? "null");
         expect(afterUnmount).toMatchObject({
-            botId: null,
+            computerId: null,
             sessionId: null,
             daemon: { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" },
         });
@@ -471,8 +471,8 @@ test("Given two Runtime views are mounted, When a user reports from the first vi
         await first.user.click(getByRole(dialog, "button", { name: "Send report" }));
         await visibleMessage(dialog, "status", "Report sent");
         const report = JSON.parse((inbox.envelopes[0] ?? "").trim().split("\n").at(-1) ?? "null");
-        expect(report.botId).toBe(first.botId);
-        expect(report.botId).not.toBe(second.botId);
+        expect(report.computerId).toBe(first.computerId);
+        expect(report.computerId).not.toBe(second.computerId);
         expect(report.daemon.kind).toBe("available");
         expect(report.network.measurements.relayRuntime.kind).toBe("available");
     } finally {

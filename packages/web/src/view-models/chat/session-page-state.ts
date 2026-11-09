@@ -47,20 +47,20 @@ export interface SessionPageState {
 
 /** Opens what the page holds for the Session, recovering what an earlier page persisted for it. */
 export function createSessionPageState(options: {
-    readonly botId: string;
+    readonly computerId: string;
     readonly sessionTarget: NativeSessionTarget;
     readonly clock: Clock;
     /** The page's lifetime, on which delivery and the Session's operations run. */
     readonly lifetime: AbortSignal;
 }): SessionPageState {
-    const { botId, sessionTarget } = options;
-    const unsentEntry = sessionUnsentMessageEntry(botId, sessionTarget);
-    const pendingEntry = sessionPendingSubmissionEntry(botId, sessionTarget);
+    const { computerId, sessionTarget } = options;
+    const unsentEntry = sessionUnsentMessageEntry(computerId, sessionTarget);
+    const pendingEntry = sessionPendingSubmissionEntry(computerId, sessionTarget);
     // A message an earlier page left unsent returns to the composer; it is never delivered implicitly.
     const unsent = centralSessionStorage.read(unsentEntry);
     centralSessionStorage.remove(unsentEntry);
     const connection = createSessionOperationConnection();
-    const composer = createSessionComposerStore(botId, sessionTarget, unsent);
+    const composer = createSessionComposerStore(computerId, sessionTarget, unsent);
     const delivery = createSessionDeliveryStore({
         lifetime: options.lifetime,
         pendingSubmission: centralSessionStorage.read(pendingEntry),
@@ -113,7 +113,7 @@ export function createSessionPageState(options: {
         );
     };
     // Answers typed into the Agent's questions belong to the Session, as its composer draft does.
-    const answerDraftsEntry = elicitationAnswerDraftsEntry(botId, sessionTarget);
+    const answerDraftsEntry = elicitationAnswerDraftsEntry(computerId, sessionTarget);
     const interactions = createSessionInteractionStore({
         permission: (response, signal) =>
             respond(
@@ -144,7 +144,7 @@ export function createSessionPageState(options: {
         interactions,
         queue,
         rename: createSessionRenameStore(),
-        settings: createSessionSettingsStore({ botId, sessionTarget, connection }),
+        settings: createSessionSettingsStore({ computerId, sessionTarget, connection }),
         tasks,
     };
 }

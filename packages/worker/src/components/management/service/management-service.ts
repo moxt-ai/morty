@@ -43,17 +43,8 @@ export class ManagementService {
     ) => {
         const token = await bootstrapToken(this.#credentialKey, userId, project.computerId, origin, signal);
         const identity = await this.#authentication.createAnonymous(userId, project.computerId, signal, token);
-        const { botId, displayName } = await this.#provisionUserBot(identity.userId, signal);
-        return { ...identity, bot: { botId, displayName } };
-    };
-
-    /** The one Machine Morty serves a user; setup and every browser handoff resolve it here. Reading never creates. */
-    readonly userBot = async (userId: string, signal: AbortSignal) => {
-        const machine = await this.#managedBots.readMachine(userId, signal);
-        if (machine === null) {
-            throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
-        }
-        return machine;
+        const { displayName } = await this.#provisionUserBot(identity.userId, signal);
+        return { ...identity, bot: { displayName } };
     };
 
     /**
@@ -61,31 +52,26 @@ export class ManagementService {
      * both are retried writes, so repeating them returns the same Machine.
      */
     readonly #provisionUserBot = async (userId: string, signal: AbortSignal) =>
-        await this.#managedBots.claimMachine(
-            userId,
-            { botId: `bot_${crypto.randomUUID()}`, displayName: "My Machine" },
-            Date.now(),
-            signal,
-        );
+        await this.#managedBots.claimMachine(userId, { displayName: "My Machine" }, Date.now(), signal);
 
-    readonly readBot = async (userId: string, botId: string, signal: AbortSignal) => {
-        const bot = await this.#managedBots.readBot(userId, botId, signal);
+    readonly readBot = async (userId: string, signal: AbortSignal) => {
+        const bot = await this.#managedBots.readBot(userId, signal);
         if (bot === null) {
             throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
         return {
-            botId: bot.botId,
+            computerId: bot.configuration?.computerId ?? null,
             displayName: bot.displayName,
             configured: bot.configuration !== null,
         };
     };
 
-    readonly readBotRuntimeBinding = async (userId: string, botId: string, signal: AbortSignal) => {
-        const bot = await this.#managedBots.readBot(userId, botId, signal);
+    readonly readBotRuntimeBinding = async (userId: string, signal: AbortSignal) => {
+        const bot = await this.#managedBots.readBot(userId, signal);
         if (bot === null) {
             throw new ManagementError("BOT_NOT_FOUND", "Machine is unavailable.", 404);
         }
-        return { botId: bot.botId, computerId: bot.configuration?.computerId ?? null };
+        return { computerId: bot.configuration?.computerId ?? null };
     };
 
     readonly readProject = async (userId: string, signal: AbortSignal) => {
@@ -147,8 +133,8 @@ export class ManagementService {
         if (identity === null) {
             return null;
         }
-        const { botId } = await this.#provisionUserBot(identity.userId, signal);
-        return { ...identity, botId };
+        await this.#provisionUserBot(identity.userId, signal);
+        return identity;
     };
 
     readonly #requireProject = async (userId: string, signal: AbortSignal) => {
