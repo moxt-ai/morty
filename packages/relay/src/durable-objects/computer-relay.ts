@@ -33,8 +33,8 @@ import {
     createPlatformAccessServices,
     createPlatformWorker,
 } from "../platform-worker.ts";
-import { migrateComputerStorage } from "../storage/migrate-computer-storage.ts";
 import { SqlitePlatformProjectStore } from "../storage/sqlite-platform-project-store.ts";
+import { migrateComputerStorage } from "./migrate-computer-storage.ts";
 import { createPlatformDurableObjectContext } from "./platform-durable-object-context.ts";
 
 const REAUTHORIZATION_INTERVAL_MILLISECONDS = 60_000;
