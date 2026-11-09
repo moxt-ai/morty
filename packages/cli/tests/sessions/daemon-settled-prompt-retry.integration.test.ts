@@ -25,7 +25,7 @@ const submit = (peer: RealDaemonPeer, commandId: string) =>
             disposition: "append",
             kind: "session.prompt",
             prompt: "The request completes",
-            sessionId: peer.sessionId,
+            target: peer.target,
         }),
     );
 

@@ -15,7 +15,7 @@ export const fileReadCommand: RuntimeCommand = {
             (response) => send(socket, response),
             (requestId, sequence, bytes) => sendContentChunk(socket, requestId, sequence, bytes),
             signal,
-            sessions.findSessions([message.sessionId])[0]?.cwd ?? null,
+            sessions.findSessions([message.target])[0]?.cwd ?? null,
             externalContent,
         ).catch((error: unknown) => {
             if (socket.readyState !== WebSocket.OPEN || signal.aborted) {
@@ -26,7 +26,7 @@ export const fileReadCommand: RuntimeCommand = {
                 kind: FILE_FAILED_KIND,
                 message: error instanceof Error ? error.message : "The local file is unavailable",
                 requestId: message.requestId,
-                sessionId: message.sessionId,
+                target: message.target,
             });
         });
     },

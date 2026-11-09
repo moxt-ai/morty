@@ -15,8 +15,8 @@ export interface BugReport {
     readonly browser: string;
     readonly relatedEventId: string | null;
     readonly botId: string | null;
+    readonly harness: string | null;
     readonly sessionId: string | null;
-    readonly nativeSessionId: string | null;
     readonly web: ReturnType<typeof browserDiagnosticsSnapshot>;
     readonly network: NetworkDiagnostics;
     readonly daemon:

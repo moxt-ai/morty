@@ -6,7 +6,7 @@ import { test } from "vitest";
 import { CodexAgentSpecification } from "../../src/engine/agent/specification/vendors/codex-agent.ts";
 import { CodexFixture } from "../support/agents/codex.ts";
 import { imageFixture } from "../support/agents/image-fixture.ts";
-import { withRealDaemon } from "../support/agents/real-daemon.ts";
+import { prepareNewRealSession, withRealDaemonConnection } from "../support/agents/real-daemon.ts";
 import { verifyImageDelivery } from "../support/agents/verify-image-delivery.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 
@@ -21,7 +21,7 @@ for (const tool of ["view_image", "mcp"] as const) {
             ...(tool === "mcp" ? { mcpImage: true } : { readPath: "picture.png" }),
         });
         await using agent = await CodexFixture.create(provider);
-        await withRealDaemon(new CodexAgentSpecification(), agent.environment, async (peer) => {
+        await withRealDaemonConnection(new CodexAgentSpecification(), agent.environment, async (peer) => {
             const image = imageFixture(128);
             const path = join(peer.workspace, "picture.png");
             await writeFile(path, image);
@@ -36,15 +36,19 @@ for (const tool of ["view_image", "mcp"] as const) {
                     `\n[mcp_servers.image_test]\ncommand = ${JSON.stringify(process.execPath)}\nargs = ${JSON.stringify([server, path])}\n`,
                 );
             }
-            await verifyImageDelivery(peer, {
-                agentId: "codex",
-                image,
-                reference:
-                    tool === "mcp"
-                        ? `morty-content:image:${createHash("sha256").update(image).digest("hex")}`
-                        : pathToFileURL(await realpath(path)).href,
-                prompt,
-            });
+            const sessionTarget = await prepareNewRealSession(peer, "codex");
+            await verifyImageDelivery(
+                { ...peer, target: sessionTarget },
+                {
+                    agentId: "codex",
+                    image,
+                    reference:
+                        tool === "mcp"
+                            ? `morty-content:image:${createHash("sha256").update(image).digest("hex")}`
+                            : pathToFileURL(await realpath(path)).href,
+                    prompt,
+                },
+            );
         });
     });
 }

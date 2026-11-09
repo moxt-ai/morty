@@ -1,4 +1,5 @@
 import {
+    type NativeSessionTarget,
     SESSION_ELICITATION_RESOLVED_KIND,
     SESSION_PERMISSION_RESOLVED_KIND,
     type SessionPromptCommand,
@@ -39,12 +40,12 @@ const waitForTurnCompletion = (turn: ActiveRuntimeTurn, waitSignal: AbortSignal)
  * that decides whether the Session is busy; whether a turn started is read from its execution receipt.
  */
 export class SessionExecutionState {
-    readonly #sessionId: string;
+    readonly #sessionTarget: NativeSessionTarget;
     readonly #turnsByCommandId = new Map<string, ActiveRuntimeTurn>();
     readonly #operations: ExecutionReceipts;
 
-    constructor(sessionId: string, operations: ExecutionReceipts) {
-        this.#sessionId = sessionId;
+    constructor(sessionTarget: NativeSessionTarget, operations: ExecutionReceipts) {
+        this.#sessionTarget = sessionTarget;
         this.#operations = operations;
     }
 
@@ -54,8 +55,8 @@ export class SessionExecutionState {
         const turn = new ActiveRuntimeTurn(
             command,
             attemptId,
-            () => this.#operations.hasStarted(command.commandId, this.#sessionId),
-            () => this.#operations.startedAt(command.commandId, this.#sessionId),
+            () => this.#operations.hasStarted(command.commandId, this.#sessionTarget),
+            () => this.#operations.startedAt(command.commandId, this.#sessionTarget),
         );
         this.#turnsByCommandId.set(command.commandId, turn);
         return turn;
@@ -77,7 +78,7 @@ export class SessionExecutionState {
         }
         if (event.kind === SESSION_PERMISSION_RESOLVED_KIND || event.kind === SESSION_ELICITATION_RESOLVED_KIND) {
             for (const turn of this.#turnsByCommandId.values()) {
-                if (turn.matchesInteraction(event.interactionId, this.#sessionId)) {
+                if (turn.matchesInteraction(event.interactionId, this.#sessionTarget)) {
                     return turn.recordEvent(event);
                 }
             }

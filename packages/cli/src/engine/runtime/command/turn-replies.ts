@@ -1,4 +1,4 @@
-import { type DaemonToServiceMessage, promptCompletion } from "@morty-build/client/protocol";
+import { type DaemonToServiceMessage, type NativeSessionTarget, promptCompletion } from "@morty-build/client/protocol";
 import { WebSocket } from "undici";
 import type { ExecutionReceipts } from "../../session/turn/execution-receipts.ts";
 import { send } from "./transport.ts";
@@ -43,28 +43,34 @@ export function reply(socket: WebSocket, message: DaemonToServiceMessage): void 
 export function replyFailure(
     socket: WebSocket,
     requestId: string,
-    sessionId: string,
+    target: NativeSessionTarget | undefined,
     code: string,
     message: string,
 ): void {
-    reply(socket, { code, kind: "session.operation.failed", message, requestId, sessionId });
+    reply(socket, {
+        code,
+        kind: "session.operation.failed",
+        message,
+        requestId,
+        ...(target === undefined ? {} : { target }),
+    });
 }
 
 /** Answers a request with a settled command's failure, or with the loss of its outcome. */
 export function replySettledFailure(
     socket: WebSocket,
     requestId: string,
-    sessionId: string,
+    target: NativeSessionTarget,
     settled: Exclude<SettledCommand, { readonly kind: "completed" }>,
 ): void {
     if (settled.kind === "failed") {
-        replyFailure(socket, requestId, sessionId, settled.code, settled.message);
+        replyFailure(socket, requestId, target, settled.code, settled.message);
         return;
     }
     replyFailure(
         socket,
         requestId,
-        sessionId,
+        target,
         "command_result_expired",
         "The command ended, but its result is no longer available.",
     );

@@ -28,11 +28,7 @@ import { InProcessAcpAgentSpecification } from "../../src/engine/agent/specifica
 import { ControlledAcpSpecification } from "../support/agents/controlled-acp-specification.ts";
 import { ControlledSessionAgent } from "../support/agents/controlled-session-agent.ts";
 import { waitForAgentFile } from "../support/agents/observed-process.ts";
-import {
-    prepareNewRealSession,
-    type RealDaemonPeer,
-    withControlledDaemon as withRealDaemon,
-} from "../support/agents/real-daemon.ts";
+import { type RealDaemonPeer, withControlledDaemon as withRealDaemon } from "../support/agents/real-daemon.ts";
 import { IdleTimeoutTimer } from "../support/idle-timeout-timer.ts";
 
 class IdleAgentSpecification extends ControlledAcpSpecification {
@@ -118,7 +114,7 @@ async function expire(native: string, pid: string, timer: IdleTimeoutTimer): Pro
     await exit;
 }
 
-function sendPrompt(peer: RealDaemonPeer, sessionId: string, prompt: string): void {
+function sendPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], prompt: string): void {
     peer.send(
         encodeSessionPromptCommand({
             additionalDirectoryIds: [],
@@ -130,7 +126,7 @@ function sendPrompt(peer: RealDaemonPeer, sessionId: string, prompt: string): vo
             attachments: [],
             kind: "session.prompt",
             prompt,
-            sessionId,
+            target: sessionTarget,
         }),
     );
 }
@@ -156,8 +152,8 @@ async function readTurn(peer: RealDaemonPeer): Promise<string> {
     }
 }
 
-async function prompt(peer: RealDaemonPeer, sessionId: string, text: string): Promise<string> {
-    sendPrompt(peer, sessionId, text);
+async function prompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], text: string): Promise<string> {
+    sendPrompt(peer, sessionTarget, text);
     return await readTurn(peer);
 }
 
@@ -179,20 +175,20 @@ test.each(["resume", "load"] as const)(
     "Given a retained %s conversation below capacity, When it is idle for two hours, Then its process exits and the same native conversation continues",
     async (recovery) => {
         await withIdleDaemon(recovery, async (peer, native, timer) => {
-            const sessionId = await prepareNewRealSession(peer, "claude");
-            expect(await prompt(peer, sessionId, "Remember the first turn")).toContain("turn 1:");
+            const sessionTarget = peer.target;
+            expect(await prompt(peer, sessionTarget, "Remember the first turn")).toContain("turn 1:");
             const original = await processId(native);
             timer.advance(twoHours - 1);
             expect(await processId(native)).toBe(original);
             await expire(native, original, timer);
             expect((await readdir(native)).filter((file) => file.endsWith(".writer"))).toEqual([]);
-            expect(await prompt(peer, sessionId, "Continue after idle reclamation")).toContain("turn 2:");
+            expect(await prompt(peer, sessionTarget, "Continue after idle reclamation")).toContain("turn 2:");
             expect(await processId(native)).not.toBe(original);
             peer.send(
                 encodeSessionHistoryPageLoad({
                     kind: "session.live-history.v2.page.load",
                     requestId: crypto.randomUUID(),
-                    sessionId,
+                    target: sessionTarget,
                     cursor: null,
                     eventLimit: 200,
                 }),
@@ -208,18 +204,18 @@ test.each(["resume", "load"] as const)(
     "Given a reclaimed %s conversation, When an existing client renames it, Then both directories retain the new title after continuing",
     async (recovery) => {
         await withIdleDaemon(recovery, async (peer, native, timer) => {
-            const sessionId = await prepareNewRealSession(peer, "claude");
-            await prompt(peer, sessionId, "Original native title");
+            const sessionTarget = peer.target;
+            await prompt(peer, sessionTarget, "Original native title");
             const original = await processId(native);
             timer.advance(twoHours - 1);
             await expire(native, original, timer);
 
-            // Keep the deployed request shape independent of the current encoder.
+            // Exercise the native-pair request independently of the current encoder.
             peer.send(
                 JSON.stringify({
                     kind: "session.rename",
                     requestId: crypto.randomUUID(),
-                    sessionId,
+                    target: sessionTarget,
                     title: "Renamed after reclamation",
                 }),
             );
@@ -230,18 +226,18 @@ test.each(["resume", "load"] as const)(
                     encodeSessionQueryCommand({
                         kind: "session.query",
                         requestId: crypto.randomUUID(),
-                        sessionIds: [sessionId],
+                        targets: [sessionTarget],
                     }),
                 );
                 expect(decodeSessionsQueriedEvent(await nextResponse(peer, "session.queried")).entries).toEqual([
-                    expect.objectContaining({ sessionId, title: "Renamed after reclamation" }),
+                    expect.objectContaining({ target: sessionTarget, title: "Renamed after reclamation" }),
                 ]);
                 peer.send(
                     encodeNativeSessionCommand({
                         kind: "native.session.request",
                         action: "list",
                         requestId: crypto.randomUUID(),
-                        sessionId: crypto.randomUUID(),
+                        discoveryId: crypto.randomUUID(),
                         agentId: "claude",
                         bindingId: peer.bindingId,
                         directoryId: "default",
@@ -253,13 +249,13 @@ test.each(["resume", "load"] as const)(
                 if (directory.action !== "list") {
                     throw new Error("Expected the native directory");
                 }
-                expect(directory.entries.find((entry) => entry.mortySessionIds.includes(sessionId))?.title).toBe(
+                expect(directory.entries.find((entry) => entry.sessionId === sessionTarget.sessionId)?.title).toBe(
                     "Renamed after reclamation",
                 );
             };
 
             await expectTitles();
-            expect(await prompt(peer, sessionId, "Continue the renamed conversation")).toContain("turn 2:");
+            expect(await prompt(peer, sessionTarget, "Continue the renamed conversation")).toContain("turn 2:");
             await expectTitles();
         });
     },
@@ -267,10 +263,12 @@ test.each(["resume", "load"] as const)(
 
 test("Given a client read a conversation's settings before its idle process exited, When it changes a setting with the revision it read, Then the change applies", async () => {
     await withIdleDaemon("resume", async (peer, native, timer) => {
-        const sessionId = await prepareNewRealSession(peer, "claude");
-        expect(await prompt(peer, sessionId, "Remember the first turn")).toContain("turn 1:");
+        const sessionTarget = peer.target;
+        expect(await prompt(peer, sessionTarget, "Remember the first turn")).toContain("turn 1:");
         const readId = crypto.randomUUID();
-        peer.send(encodeSessionConfigReadCommand({ kind: "session.config.read", requestId: readId, sessionId }));
+        peer.send(
+            encodeSessionConfigReadCommand({ kind: "session.config.read", requestId: readId, target: sessionTarget }),
+        );
         const read = decodeSessionConfigReadResult(await nextResponse(peer, "session.config.read.result"));
         expect(read.requestId).toBe(readId);
         const model = read.configOptions.find((option) => option.id === "model");
@@ -294,7 +292,7 @@ test("Given a client read a conversation's settings before its idle process exit
                 expectedConfigurationRevision: read.configurationRevision,
                 kind: "session.configure",
                 requestId: configureId,
-                sessionId,
+                target: sessionTarget,
                 value: other,
                 valueType: "select",
             }),
@@ -313,11 +311,11 @@ test("Given a client read a conversation's settings before its idle process exit
 
 test("Given a retained conversation is used again, When its original idle deadline passes, Then it stays alive until two hours after the latest turn", async () => {
     await withIdleDaemon("resume", async (peer, native, timer) => {
-        const sessionId = await prepareNewRealSession(peer, "claude");
-        await prompt(peer, sessionId, "First turn");
+        const sessionTarget = peer.target;
+        await prompt(peer, sessionTarget, "First turn");
         const original = await processId(native);
         timer.advance(twoHours / 2);
-        await prompt(peer, sessionId, "Refresh the idle deadline");
+        await prompt(peer, sessionTarget, "Refresh the idle deadline");
         timer.advance(twoHours - 1);
         expect(await processId(native)).toBe(original);
         await expire(native, original, timer);
@@ -326,11 +324,11 @@ test("Given a retained conversation is used again, When its original idle deadli
 
 test("Given a turn lasts longer than the idle timeout, When three hours pass, Then it completes in the same process and receives a full idle window afterwards", async () => {
     await withIdleDaemon("resume", async (peer, native, timer) => {
-        const sessionId = await prepareNewRealSession(peer, "claude");
+        const sessionTarget = peer.target;
         const original = await processId(native);
         timer.advance(twoHours / 2);
         const paused = waitForAgentFile(join(native, "prompt-paused"), true);
-        sendPrompt(peer, sessionId, "release before first delta");
+        sendPrompt(peer, sessionTarget, "release before first delta");
         await paused;
         timer.advance(3 * 60 * 60 * 1_000);
         expect(await processId(native)).toBe(original);
@@ -344,15 +342,15 @@ test("Given a turn lasts longer than the idle timeout, When three hours pass, Th
 
 test("Given a retained native session browser, When two idle hours pass, Then its process exits and browsing can start again", async () => {
     await withIdleDaemon("resume", async (peer, native, timer) => {
-        const sessionId = await prepareNewRealSession(peer, "claude");
-        await prompt(peer, sessionId, "Persist a listed conversation");
+        const sessionTarget = peer.target;
+        await prompt(peer, sessionTarget, "Persist a listed conversation");
         const execution = await processId(native);
         const browse = async (): Promise<string> => {
             peer.send(
                 encodeNativeSessionCommand({
                     kind: "native.session.request",
                     requestId: crypto.randomUUID(),
-                    sessionId: "native-browser",
+                    discoveryId: "native-browser",
                     agentId: "claude",
                     bindingId: peer.bindingId,
                     directoryId: "default",
@@ -363,7 +361,7 @@ test("Given a retained native session browser, When two idle hours pass, Then it
             );
             return await nextResponse(peer, "native.session.result");
         };
-        expect(await browse()).toContain(sessionId);
+        expect(await browse()).toContain(sessionTarget.sessionId);
         const processes = (await readdir(native)).filter((file) => file.endsWith(".process"));
         expect(processes).toHaveLength(2);
         timer.advance(twoHours - 1);
@@ -371,16 +369,18 @@ test("Given a retained native session browser, When two idle hours pass, Then it
         timer.advance(1);
         await Promise.all(exits);
         expect(existsSync(join(native, `${execution}.process`))).toBe(false);
-        expect(await browse()).toContain(sessionId);
+        expect(await browse()).toContain(sessionTarget.sessionId);
     });
 });
 
 test("Given an old retained process was closed and the daemon restarted, When its deadline passes, Then a newly prepared process gets its own full idle window", async () => {
     await withIdleDaemon("resume", async (peer, native, timer) => {
-        const sessionId = await prepareNewRealSession(peer, "claude");
-        await prompt(peer, sessionId, "Before close");
+        const sessionTarget = peer.target;
+        await prompt(peer, sessionTarget, "Before close");
         timer.advance(twoHours / 2);
-        peer.send(encodeSessionCloseCommand({ kind: "session.close", requestId: crypto.randomUUID(), sessionId }));
+        peer.send(
+            encodeSessionCloseCommand({ kind: "session.close", requestId: crypto.randomUUID(), target: sessionTarget }),
+        );
         for (;;) {
             if (decodeMessageKind(await peer.nextMessage()) === "session.closed") {
                 break;
@@ -391,14 +391,14 @@ test("Given an old retained process was closed and the daemon restarted, When it
             encodeSessionPrepareCommand({
                 kind: "session.prepare",
                 requestId: crypto.randomUUID(),
-                sessionId,
+                target: sessionTarget,
                 agentId: "claude",
                 bindingId: peer.bindingId,
                 directoryId: "default",
                 additionalDirectoryIds: [],
             }),
         );
-        expect(decodeSessionReadyEvent(await nextResponse(peer, "session.ready")).sessionId).toBe(sessionId);
+        expect(decodeSessionReadyEvent(await nextResponse(peer, "session.ready")).target).toEqual(sessionTarget);
         const replacement = await processId(native);
         timer.advance(twoHours - 1);
         expect(await processId(native)).toBe(replacement);
@@ -408,9 +408,11 @@ test("Given an old retained process was closed and the daemon restarted, When it
 
 test("Given native history is loading in a retained process, When three hours pass, Then the load completes and a new idle window starts", async () => {
     await withIdleDaemon("resume", async (peer, native, timer) => {
-        const sessionId = await prepareNewRealSession(peer, "claude");
-        await prompt(peer, sessionId, "History before a long load");
-        peer.send(encodeSessionCloseCommand({ kind: "session.close", requestId: crypto.randomUUID(), sessionId }));
+        const sessionTarget = peer.target;
+        await prompt(peer, sessionTarget, "History before a long load");
+        peer.send(
+            encodeSessionCloseCommand({ kind: "session.close", requestId: crypto.randomUUID(), target: sessionTarget }),
+        );
         for (;;) {
             if (decodeMessageKind(await peer.nextMessage()) === "session.closed") {
                 break;
@@ -420,7 +422,7 @@ test("Given native history is loading in a retained process, When three hours pa
             encodeSessionPrepareCommand({
                 kind: "session.prepare",
                 requestId: crypto.randomUUID(),
-                sessionId,
+                target: sessionTarget,
                 agentId: "claude",
                 bindingId: peer.bindingId,
                 directoryId: "default",
@@ -429,9 +431,26 @@ test("Given native history is loading in a retained process, When three hours pa
         );
         await nextResponse(peer, "session.ready");
         const original = await processId(native);
+        peer.send(
+            encodeSessionQueryCommand({
+                kind: "session.query",
+                requestId: crypto.randomUUID(),
+                targets: [sessionTarget],
+            }),
+        );
+        const [entry] = decodeSessionsQueriedEvent(await nextResponse(peer, "session.queried")).entries;
+        if (entry === undefined) {
+            throw new Error("Missing persisted native identity");
+        }
         await writeFile(join(native, "pause-load"), "*");
         const paused = waitForAgentFile(join(native, "load-paused"), true);
-        peer.send(encodeSessionRestoreCommand({ kind: "session.restore", requestId: crypto.randomUUID(), sessionId }));
+        peer.send(
+            encodeSessionRestoreCommand({
+                kind: "session.restore",
+                requestId: crypto.randomUUID(),
+                target: { harness: entry.agentId, sessionId: entry.sessionId },
+            }),
+        );
         const restored = nextResponse(peer, "session.restored");
         await Promise.race([
             paused,
@@ -451,38 +470,13 @@ test("Given native history is loading in a retained process, When three hours pa
 
 test("Given a canonical native Session is idle, When its process is reclaimed, Then it stays queryable before any process is restarted", async () => {
     await withIdleDaemon("resume", async (peer, native, timer) => {
-        const sessionId = crypto.randomUUID();
-        await writeFile(
-            join(native, `${sessionId}.json`),
-            JSON.stringify({
-                turnCount: 1,
-                model: "test-small",
-                reasoningEffort: "medium",
-                fastMode: false,
-                mode: "code",
-                cwd: peer.workspace,
-                additionalDirectories: [],
-                title: "Native title before idle",
-                history: [],
-            }),
-        );
-        peer.send(
-            encodeSessionPrepareCommand({
-                kind: "session.prepare",
-                requestId: crypto.randomUUID(),
-                sessionId,
-                agentId: "claude",
-                bindingId: peer.bindingId,
-                directoryId: "default",
-                additionalDirectoryIds: [],
-            }),
-        );
-        await nextResponse(peer, "session.ready");
+        const sessionTarget = peer.target;
+        await prompt(peer, sessionTarget, "Native title before idle");
         peer.send(
             encodeSessionRenameCommand({
                 kind: "session.rename",
                 requestId: crypto.randomUUID(),
-                sessionId,
+                target: sessionTarget,
                 title: "Native title before idle",
             }),
         );
@@ -494,14 +488,14 @@ test("Given a canonical native Session is idle, When its process is reclaimed, T
             encodeSessionQueryCommand({
                 kind: "session.query",
                 requestId: crypto.randomUUID(),
-                sessionIds: [sessionId],
+                targets: [sessionTarget],
             }),
         );
         expect(decodeSessionsQueriedEvent(await nextResponse(peer, "session.queried")).entries).toEqual([
-            expect.objectContaining({ sessionId, title: "Native title before idle", prompted: true }),
+            expect.objectContaining({ target: sessionTarget, title: "Native title before idle", prompted: true }),
         ]);
         expect((await readdir(native)).filter((file) => file.endsWith(".process"))).toEqual([]);
-        expect(await prompt(peer, sessionId, "Continue the canonical Session")).toContain("turn 2:");
+        expect(await prompt(peer, sessionTarget, "Continue the canonical Session")).toContain("turn 2:");
     });
 });
 
@@ -528,18 +522,18 @@ test("Given idle process teardown is still releasing the native writer, When a n
         { MORTY_TEST_RETIRING_IDLE_PATH: process.execPath },
         async (peer) => {
             try {
-                const sessionId = await prepareNewRealSession(peer, "claude");
-                await prompt(peer, sessionId, "Before idle retirement");
+                const sessionTarget = peer.target;
+                await prompt(peer, sessionTarget, "Before idle retirement");
                 const endpointsBeforeRetirement = specification.sessions.endpointCount();
                 const held = specification.sessions.closes.hold();
                 timer.advance(twoHours);
                 await held.entered;
-                sendPrompt(peer, sessionId, "After idle retirement");
+                sendPrompt(peer, sessionTarget, "After idle retirement");
                 peer.send(
                     encodeSessionQueryCommand({
                         kind: "session.query",
                         requestId: crypto.randomUUID(),
-                        sessionIds: [sessionId],
+                        targets: [sessionTarget],
                     }),
                 );
                 await nextResponse(peer, "session.queried");

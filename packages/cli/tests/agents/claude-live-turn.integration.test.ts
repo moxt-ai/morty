@@ -60,7 +60,7 @@ test("Given native Claude is installed outside PATH, When two prompts execute th
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
             let text = "";
@@ -76,7 +76,7 @@ test("Given native Claude is installed outside PATH, When two prompts execute th
                         encodeSessionPermissionRespondCommand({
                             kind: "session.permission.respond",
                             requestId: crypto.randomUUID(),
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                             interactionId: event.payload.event.interactionId,
                             optionId: option.optionId,
                             outcome: "selected",
@@ -135,7 +135,7 @@ test.skipIf(process.platform !== "darwin")(
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "Recover after a transient overload",
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
             let text = "";

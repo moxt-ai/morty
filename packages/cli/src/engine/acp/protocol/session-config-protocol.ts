@@ -26,7 +26,7 @@ export interface SessionConfigProtocol {
     readonly configure: (
         current: readonly SessionConfigOption[],
         change: SessionConfigChange,
-        nativeSessionId: string,
+        sessionId: string,
         transport: SessionConfigTransport,
     ) => Promise<readonly SessionConfigOption[]>;
     readonly normalizeLifecycle: (response: unknown) => readonly SessionConfigOption[];
@@ -246,7 +246,7 @@ class StandardSessionConfigProtocol implements SessionConfigProtocol {
     readonly configure = async (
         current: readonly SessionConfigOption[],
         change: SessionConfigChange,
-        nativeSessionId: string,
+        sessionId: string,
         transport: SessionConfigTransport,
     ): Promise<readonly SessionConfigOption[]> => {
         const existing = current.find((option) => option.id === change.configId);
@@ -256,7 +256,7 @@ class StandardSessionConfigProtocol implements SessionConfigProtocol {
         if (existing.type === "select" && existing.category === "mode") {
             await transport.request(
                 methods.agent.session.setMode,
-                { modeId: change.value, sessionId: nativeSessionId },
+                { modeId: change.value, sessionId: sessionId },
                 "ACP agent exited while setting the session mode",
                 change.signal,
             );
@@ -266,13 +266,13 @@ class StandardSessionConfigProtocol implements SessionConfigProtocol {
             existing.type === "boolean"
                 ? {
                       configId: existing.id,
-                      sessionId: nativeSessionId,
+                      sessionId: sessionId,
                       type: "boolean",
                       value: change.booleanValue,
                   }
                 : {
                       configId: existing.id,
-                      sessionId: nativeSessionId,
+                      sessionId: sessionId,
                       value: change.value,
                   };
         const response = await transport.request(

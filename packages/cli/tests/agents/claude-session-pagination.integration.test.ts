@@ -5,13 +5,13 @@ import { decodeMessageKind, decodeNativeSessionResult, encodeNativeSessionComman
 import { expect, test } from "vitest";
 import { ClaudeCodeAgentSpecification } from "../../src/engine/agent/specification/vendors/claude-code-agent.ts";
 import { ClaudeFixture } from "../support/agents/claude.ts";
-import { withRealDaemon } from "../support/agents/real-daemon.ts";
+import { withRealDaemonConnection } from "../support/agents/real-daemon.ts";
 import { FakeAnthropicProvider } from "../support/llm/anthropic.ts";
 
 test("Given 501 saved Claude sessions, When a user lists every page through the daemon, Then all sessions appear once in pages of at most 500", async () => {
     await using provider = await FakeAnthropicProvider.start("claude-sonnet-4-6", "UNUSED_LIST_PROVIDER");
     await using agent = await ClaudeFixture.create(provider);
-    await withRealDaemon(new ClaudeCodeAgentSpecification(), agent.environment, async (peer) => {
+    await withRealDaemonConnection(new ClaudeCodeAgentSpecification(), agent.environment, async (peer) => {
         const home = agent.environment["CLAUDE_CONFIG_DIR"];
         if (home === undefined) {
             throw new Error("The Claude fixture requires an isolated configuration directory");
@@ -40,6 +40,7 @@ test("Given 501 saved Claude sessions, When a user lists every page through the 
         const listed: string[] = [];
         let cursor: string | null = null;
         const pageSizes: number[] = [];
+        const discoveryId = randomUUID();
         do {
             const requestId = randomUUID();
             peer.send(
@@ -49,7 +50,7 @@ test("Given 501 saved Claude sessions, When a user lists every page through the 
                     bindingId: peer.bindingId,
                     directoryId: "default",
                     kind: "native.session.request",
-                    sessionId: peer.sessionId,
+                    discoveryId,
                     action: "list",
                     cursor,
                     requestId,
@@ -71,7 +72,7 @@ test("Given 501 saved Claude sessions, When a user lists every page through the 
                 if (result.action !== "list") {
                     throw new Error("Expected a native session list");
                 }
-                listed.push(...result.entries.map((entry) => entry.nativeSessionId));
+                listed.push(...result.entries.map((entry) => entry.sessionId));
                 pageSizes.push(result.entries.length);
                 cursor = result.nextCursor;
                 break;

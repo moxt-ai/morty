@@ -119,6 +119,7 @@ export function rememberComputerName(scope: IdentityScope, name: string): void {
 export function computerAddress(scope: IdentityScope, destination: ComputerDestination): string {
     const query = new URLSearchParams({ identity: encodeIdentityScope(scope) });
     if (destination.kind === "session") {
+        query.set("harness", destination.harness);
         query.set("sessionId", destination.sessionId);
     }
     return `/chat?${query}`;

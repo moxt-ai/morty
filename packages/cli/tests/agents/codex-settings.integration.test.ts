@@ -122,7 +122,7 @@ test("Given Codex publishes complete model settings and defaults to Full access,
                 encodeSessionPromptCommand({
                     kind: "session.prompt",
                     commandId: randomUUID(),
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                     agentId: "codex",
                     bindingId: peer.bindingId,
                     directoryId: "default",

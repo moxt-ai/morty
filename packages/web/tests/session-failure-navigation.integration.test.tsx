@@ -16,7 +16,7 @@ test("Given a saved-session link, When the bridge drops during entry initializat
         const app = await createTestApp({
             connectAgent: true,
             clock,
-            page: { kind: "managed-session", sessionId: "chat_unavailable_session" },
+            page: { kind: "managed-session", harness: "claude", sessionId: "chat_unavailable_session" },
             prepare: (application) => {
                 const observer = new MutationObserver(() => {
                     if (!dropped && queryByRole(document.body, "region", { name: "Conversation" }) !== null) {
@@ -58,7 +58,7 @@ test("Given an unavailable saved session, When opening it fails, Then navigation
 }, async () => {
     const app = await createTestApp({
         connectAgent: true,
-        page: { kind: "managed-session", sessionId: "chat_unavailable_session" },
+        page: { kind: "managed-session", harness: "claude", sessionId: "chat_unavailable_session" },
     });
     await app.waitForView(() => getByRole(document.body, "button", { name: "Reconnect" }));
     expect(getByRole(document.body, "button", { name: "Open Session" })).toBeDefined();

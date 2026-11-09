@@ -161,8 +161,8 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
             set({
                 diagnostics: {
                     botId: identity.botId,
-                    sessionId: null,
-                    nativeSessionId: handoff.sessionId,
+                    harness: handoff.harness,
+                    sessionId: handoff.sessionId,
                     read: (parent) => chat.daemonDiagnostics(identity.botId, parent),
                     readNetwork: (parent) => chat.networkDiagnostic(identity.botId, parent),
                 },
@@ -195,12 +195,13 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                 );
                 if (!visited) {
                     centralSessionStorage.write(
-                        sessionWelcomeEntry(identity.botId, session.result.ready.sessionId),
+                        sessionWelcomeEntry(identity.botId, session.result.ready.target),
                         "pending",
                     );
                 }
                 const destination = identityDestination("/chat", identity);
-                destination.searchParams.set("sessionId", session.result.ready.sessionId);
+                destination.searchParams.set("harness", session.result.ready.agentId);
+                destination.searchParams.set("sessionId", session.entry.sessionId);
                 window.location.replace(destination);
             } catch (cause) {
                 if (signal.aborted) {

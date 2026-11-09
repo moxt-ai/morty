@@ -1,3 +1,4 @@
+import { NativeSessionMap } from "@morty-build/client/native-session";
 import { encodeSessionWireEnvelope, type SessionWireEnvelope } from "@morty-build/client/protocol";
 import type { SessionStatusNotifications } from "../../infra/session-status-notifications.ts";
 import type { ChannelPeers } from "./channel-actor.ts";
@@ -14,14 +15,14 @@ export class SessionLiveEventRelay {
     }
 
     readonly receive = (envelope: SessionWireEnvelope): void => {
-        const eventsBySession = new Map<string, (typeof envelope.events)[number][]>();
+        const eventsBySession = new NativeSessionMap<(typeof envelope.events)[number][]>();
         for (const event of envelope.events) {
-            const events = eventsBySession.get(event.sessionId) ?? [];
+            const events = eventsBySession.get(event.target) ?? [];
             events.push(event);
-            eventsBySession.set(event.sessionId, events);
+            eventsBySession.set(event.target, events);
         }
         let runtimeMessage: string | undefined;
-        const sessionMessages = new Map<string, string>();
+        const sessionMessages = new NativeSessionMap<string>();
         for (const host of this.#peers.hosts()) {
             const sessionFilter = host.sessionFilter;
             let message: string;
@@ -49,7 +50,7 @@ export class SessionLiveEventRelay {
                 viewer.socket.close(1000, "Session access expired");
                 continue;
             }
-            const events = eventsBySession.get(viewer.sessionId);
+            const events = eventsBySession.get(viewer.target);
             if (events === undefined) {
                 continue;
             }

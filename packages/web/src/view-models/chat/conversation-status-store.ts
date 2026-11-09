@@ -1,3 +1,5 @@
+import { NativeSessionMap, sameNativeSession } from "@morty-build/client/native-session";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import type { SessionActivityState } from "./session-activity-machine.ts";
@@ -42,39 +44,41 @@ function settleIdle(
  * activity. Every other Session shows what this store retained, or the status its directory entry was listed with.
  */
 export function conversationListStatus(
-    session: Pick<ManagedChatSession, "id" | "status">,
-    statuses: ReadonlyMap<string, ConversationListStatus>,
+    session: Pick<ManagedChatSession, "target" | "status">,
+    statuses: Pick<NativeSessionMap<ConversationListStatus>, "get">,
     open: {
-        readonly sessionId: string;
+        readonly sessionTarget: NativeSessionTarget;
         readonly pane: Pick<SessionPaneStore, "connection" | "turn">;
         readonly delivery: DeliveryState;
     } | null,
 ): ConversationListStatus {
-    return open?.sessionId === session.id && open.pane.connection.kind !== "first-loading"
+    return open !== null &&
+        sameNativeSession(open.sessionTarget, session.target) &&
+        open.pane.connection.kind !== "first-loading"
         ? sessionActivity(open.pane.turn, open.delivery)
-        : (statuses.get(session.id) ?? session.status);
+        : (statuses.get(session.target) ?? session.status);
 }
 
 /** Whether any listed Session holds a reply the user has not seen, as the collapsed mobile header must say. */
 export function hasUnreadConversation(
-    sessions: readonly Pick<ManagedChatSession, "id" | "status">[] | null,
-    statuses: ReadonlyMap<string, ConversationListStatus>,
+    sessions: readonly Pick<ManagedChatSession, "target" | "status">[] | null,
+    statuses: Pick<NativeSessionMap<ConversationListStatus>, "get">,
     open: Parameters<typeof conversationListStatus>[2],
 ): boolean {
     return (sessions ?? []).some((session) => conversationListStatus(session, statuses, open).kind === "unread");
 }
 
 interface ConversationStatusState {
-    readonly statuses: ReadonlyMap<string, ConversationListStatus>;
+    readonly statuses: NativeSessionMap<ConversationListStatus>;
     /** A directory load starts; its snapshot will not replace statuses that change after this. */
     readonly directoryLoadStarted: () => void;
     readonly directoryLoaded: (botId: string, sessions: readonly ManagedChatSession[], signal: AbortSignal) => void;
     /** The user opened this Session, so nothing it finished is unread. */
-    readonly opened: (sessionId: string) => void;
+    readonly opened: (sessionTarget: NativeSessionTarget) => void;
     /**
      * The open pane stopped with `activity` as its last account. Retain it until the Runtime reports current status.
      */
-    readonly paneReleased: (sessionId: string, activity: SessionActivityState) => void;
+    readonly paneReleased: (sessionTarget: NativeSessionTarget, activity: SessionActivityState) => void;
     /**
      * Whether Sessions have statuses but no stream follows them: the last one gave up, as when the Runtime went away.
      */
@@ -89,9 +93,9 @@ type ConversationStatusRequests = Pick<BotChatApi, "managedSessions" | "subscrib
 export function createConversationStatusStore(
     requests: ConversationStatusRequests,
     /** The Session the user has open, read from the selection itself. */
-    selectedSessionId: () => string | null,
+    selectedSessionId: () => NativeSessionTarget | null,
     /** Announced when the Runtime closes a Session, with the reason it gives. */
-    onSessionClosed: (sessionId: string, reason: string) => void,
+    onSessionClosed: (sessionTarget: NativeSessionTarget, reason: string) => void,
     /** Announced when the stream following the Sessions gives up, as when the Runtime went away. */
     onUnfollowed: () => void,
     /** Announced when the stream reaches the Runtime and follows the Sessions again. */
@@ -105,37 +109,41 @@ export function createConversationStatusStore(
     // The stream and the open pane report changes as they happen, while a directory snapshot describes the moment its
     // request was served. Each change is numbered so that a snapshot keeps the statuses that changed after it started.
     let changes = 0;
-    const changedAt = new Map<string, number>();
+    const changedAt = new NativeSessionMap<number>();
+    const selected = (target: NativeSessionTarget): boolean => {
+        const current = selectedSessionId();
+        return current !== null && sameNativeSession(current, target);
+    };
     let directorySnapshotStartedAt = 0;
 
     const store = createStore<ConversationStatusState>((set, get) => {
-        const replaceStatus = (sessionId: string, status: ConversationListStatus): void => {
+        const replaceStatus = (sessionTarget: NativeSessionTarget, status: ConversationListStatus): void => {
             changes += 1;
-            changedAt.set(sessionId, changes);
-            set((state) => ({ statuses: new Map(state.statuses).set(sessionId, status) }));
+            changedAt.set(sessionTarget, changes);
+            set((state) => ({ statuses: new NativeSessionMap(state.statuses).set(sessionTarget, status) }));
         };
-        const markCompleted = (sessionId: string, status: IdleStatus): void => {
+        const markCompleted = (sessionTarget: NativeSessionTarget, status: IdleStatus): void => {
             replaceStatus(
-                sessionId,
-                settleIdle(get().statuses.get(sessionId), sessionId === selectedSessionId(), status),
+                sessionTarget,
+                settleIdle(get().statuses.get(sessionTarget), selected(sessionTarget), status),
             );
         };
 
         const replaceDirectory = (sessions: readonly ManagedChatSession[], snapshotStartedAt: number): void => {
             set((state) => {
-                const entries = sessions.map((session): readonly [string, ConversationListStatus] => {
-                    const current = state.statuses.get(session.id);
-                    if (current !== undefined && (changedAt.get(session.id) ?? 0) > snapshotStartedAt) {
-                        return [session.id, current];
+                const entries = sessions.map((session): readonly [NativeSessionTarget, ConversationListStatus] => {
+                    const current = state.statuses.get(session.target);
+                    if (current !== undefined && (changedAt.get(session.target) ?? 0) > snapshotStartedAt) {
+                        return [session.target, current];
                     }
                     return [
-                        session.id,
+                        session.target,
                         session.status.kind === "idle"
-                            ? settleIdle(current, session.id === selectedSessionId(), session.status)
+                            ? settleIdle(current, selected(session.target), session.status)
                             : session.status,
                     ];
                 });
-                return { statuses: new Map(entries) };
+                return { statuses: new NativeSessionMap(entries) };
             });
         };
 
@@ -145,13 +153,16 @@ export function createConversationStatusStore(
          * capturing a counter when this long-lived subscription starts would reject future reconnect snapshots.
          */
         const applyCurrentStatuses = (
-            statuses: readonly { readonly sessionId: string; readonly status: ManagedChatSession["status"] }[],
+            statuses: readonly {
+                readonly target: NativeSessionTarget;
+                readonly status: ManagedChatSession["status"];
+            }[],
         ): void => {
-            for (const { sessionId, status } of statuses) {
+            for (const { target: sessionTarget, status } of statuses) {
                 if (status.kind === "idle") {
-                    markCompleted(sessionId, status);
+                    markCompleted(sessionTarget, status);
                 } else {
-                    replaceStatus(sessionId, status);
+                    replaceStatus(sessionTarget, status);
                 }
             }
         };
@@ -190,11 +201,11 @@ export function createConversationStatusStore(
                                     }
                                     recoveries = 0;
                                     if (event.kind === "session.close.notice") {
-                                        onSessionClosed(event.sessionId, event.reason);
+                                        onSessionClosed(event.target, event.reason);
                                     } else if (event.status.kind === "idle") {
-                                        markCompleted(event.sessionId, event.status);
+                                        markCompleted(event.target, event.status);
                                     } else {
-                                        replaceStatus(event.sessionId, event.status);
+                                        replaceStatus(event.target, event.status);
                                     }
                                 },
                                 signal,
@@ -225,7 +236,7 @@ export function createConversationStatusStore(
         };
 
         return {
-            statuses: new Map(),
+            statuses: new NativeSessionMap(),
             directoryLoadStarted: () => {
                 directorySnapshotStartedAt = changes;
             },
@@ -239,20 +250,20 @@ export function createConversationStatusStore(
                     watch(botId, signal);
                 }
             },
-            opened: (sessionId) => {
-                if (get().statuses.get(sessionId)?.kind === "unread") {
-                    replaceStatus(sessionId, { kind: "idle" });
+            opened: (sessionTarget) => {
+                if (get().statuses.get(sessionTarget)?.kind === "unread") {
+                    replaceStatus(sessionTarget, { kind: "idle" });
                 }
             },
-            paneReleased: (sessionId, activity) => {
+            paneReleased: (sessionTarget, activity) => {
                 switch (activity.kind) {
                     case "failed":
-                        replaceStatus(sessionId, activity);
+                        replaceStatus(sessionTarget, activity);
                         return;
                     case "idle":
                         // The pane saw the failure it had marked resolved.
-                        if (get().statuses.get(sessionId)?.kind === "failed") {
-                            replaceStatus(sessionId, { kind: "idle" });
+                        if (get().statuses.get(sessionTarget)?.kind === "failed") {
+                            replaceStatus(sessionTarget, { kind: "idle" });
                         }
                         return;
                     case "working":

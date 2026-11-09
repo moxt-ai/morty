@@ -182,7 +182,7 @@ it.each([
             headers.set("Authorization", authorization);
         }
         const response = await SELF.fetch(
-            "https://platform.test/morty/api/v1/computers/prj_wn_01_ABCDEFGHIJKLMNOPQRSTUVWX/sessions/session-unauthorized/events-v2",
+            "https://platform.test/morty/api/v1/computers/prj_wn_01_ABCDEFGHIJKLMNOPQRSTUVWX/harnesses/claude/sessions/session-unauthorized/events-v2",
             { headers },
         );
         expect(response.status).toBe(401);
@@ -237,7 +237,7 @@ it("Given two quiet subscriptions, When multiple heartbeat intervals pass, Then 
                 JSON.stringify({
                     kind: "session.events.subscribe",
                     subscriptionId,
-                    path: "/morty/api/v1/computers/project/sessions/session/events-v2",
+                    path: "/morty/api/v1/computers/project/harnesses/claude/sessions/session/events-v2",
                     headers: [],
                 }),
             );
@@ -598,7 +598,7 @@ it("Given an established event subscription, When the browser transport closes, 
         JSON.stringify({
             headers: [],
             kind: "session.events.subscribe",
-            path: "/morty/api/v1/computers/project/sessions/session/events-v2",
+            path: "/morty/api/v1/computers/project/harnesses/claude/sessions/session/events-v2",
             subscriptionId: "subscription-1",
         }),
     );
@@ -641,7 +641,7 @@ it("Given two live subscriptions, When each receives event batches, Then deliver
             JSON.stringify({
                 headers: [],
                 kind: "session.events.subscribe",
-                path: `/morty/api/v1/computers/project/sessions/${subscriptionId}/events-v2`,
+                path: `/morty/api/v1/computers/project/harnesses/claude/sessions/${subscriptionId}/events-v2`,
                 subscriptionId,
             }),
         );
@@ -705,7 +705,7 @@ it("Given an established event subscription is quiet, When the transport idle de
             JSON.stringify({
                 headers: [],
                 kind: "session.events.subscribe",
-                path: "/morty/api/v1/computers/project/sessions/session/events-v2",
+                path: "/morty/api/v1/computers/project/harnesses/claude/sessions/session/events-v2",
                 subscriptionId: "subscription-1",
             }),
         );

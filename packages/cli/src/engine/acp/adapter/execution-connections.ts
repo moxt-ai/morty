@@ -13,7 +13,7 @@ import type {
     AdapterSessionScope,
     AdapterSessionTarget,
 } from "../native-history/preview-contract.ts";
-import { nativeSessionIdSchema } from "../protocol/native-session.ts";
+import { sessionIdSchema } from "../protocol/native-session.ts";
 import { SessionConfigProtocolError, sessionConfigProtocolForAgent } from "../protocol/session-config-protocol.ts";
 import { AdapterSessionConnection } from "./session-events.ts";
 
@@ -27,7 +27,7 @@ const absolutePathSchema = z.string().min(1).refine(isAbsolute);
 const nativeHistoryRevisionSchema = z.object({ latestEntryId: z.string().max(256) });
 const isMethodNotFound = (cause: unknown): boolean => cause instanceof RequestError && cause.code === -32_601;
 const targetSchema = z.object({
-    nativeSessionId: nativeSessionIdSchema,
+    sessionId: sessionIdSchema,
     cwd: absolutePathSchema,
     additionalDirectories: z.array(absolutePathSchema),
 });
@@ -117,16 +117,16 @@ export class AcpExecutionConnections {
         }
     };
 
-    readonly bind = (session: AcpExecutionConnection, nativeSessionId: string): void => {
+    readonly bind = (session: AcpExecutionConnection, sessionId: string): void => {
         const existing = this.#find({
-            nativeSessionId,
+            sessionId,
             cwd: session.scope.cwd,
             additionalDirectories: session.scope.additionalDirectories,
         });
         if (existing !== undefined && existing !== session) {
             throw new AcpExecutionError("Another writer is using this native session", {}, "session_busy");
         }
-        session.connection.events.select(nativeSessionId);
+        session.connection.events.select(sessionId);
     };
 
     readonly #find = (target: AdapterSessionTarget): AcpExecutionConnection | undefined => {
@@ -140,7 +140,7 @@ export class AcpExecutionConnections {
         }
         const matches = [...this.#sessions].filter(
             ({ connection, scope }) =>
-                connection.events.sessionId() === decoded.data.nativeSessionId &&
+                connection.events.sessionId() === decoded.data.sessionId &&
                 scope.cwd === decoded.data.cwd &&
                 scope.cwd === resolve(decoded.data.cwd) &&
                 arraysEqual(scope.additionalDirectories, decoded.data.additionalDirectories) &&
@@ -227,7 +227,7 @@ export class AcpExecutionConnections {
             .race(
                 connection.connection.agent.request(
                     methods.agent.session.prompt,
-                    { prompt, sessionId: target.nativeSessionId },
+                    { prompt, sessionId: target.sessionId },
                     { cancellationSignal: signal },
                 ),
                 "ACP agent exited during a prompt",
@@ -271,7 +271,7 @@ export class AcpExecutionConnections {
                 {
                     _meta: { steering: { idleBehavior: "promptRequired" } },
                     prompt: buildPromptContent(content, connection.snapshot().capabilities),
-                    sessionId: target.nativeSessionId,
+                    sessionId: target.sessionId,
                 },
                 { cancellationSignal: signal },
             ),
@@ -319,7 +319,7 @@ export class AcpExecutionConnections {
             await connection.race(
                 connection.connection.agent.request(
                     "_session/rename",
-                    { sessionId: target.nativeSessionId, title: normalized },
+                    { sessionId: target.sessionId, title: normalized },
                     { cancellationSignal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]) },
                 ),
                 "ACP agent exited while renaming the Session",
@@ -348,7 +348,7 @@ export class AcpExecutionConnections {
             response = await connection.race(
                 connection.connection.agent.request(
                     "_session/revision",
-                    { sessionId: target.nativeSessionId },
+                    { sessionId: target.sessionId },
                     { cancellationSignal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]) },
                 ),
                 "ACP agent exited while reading native history",
@@ -414,7 +414,7 @@ export class AcpExecutionConnections {
                     signal,
                     value: selection.type === "select" ? selection.value : "",
                 },
-                target.nativeSessionId,
+                target.sessionId,
                 {
                     request: async (method, params, failureMessage, signal) =>
                         await connection.race(

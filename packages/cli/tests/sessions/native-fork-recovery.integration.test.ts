@@ -34,7 +34,7 @@ test.each(["request", "result"] as const)(
             computerId: project.computerId,
             server: platform.app,
             signal,
-            nativeSessionIds: new Set(["native-fork-source"]),
+            sessionIds: new Set(["native-fork-source"]),
             runtimeOptions: {
                 onConnectionStatus: (status) => {
                     if (status === "reconnecting") {
@@ -67,11 +67,11 @@ test.each(["request", "result"] as const)(
             agentId: "claude",
             directoryId: "default",
             additionalDirectoryIds: [],
-            nativeSessionId: "native-fork-source",
+            sessionId: "native-fork-source",
         };
         const fork = () => runtime.client.runtimes.forkNativeSession(operationId, input, signal);
         await expect(fork()).rejects.toMatchObject({ code: "native_fork_outcome_unknown" });
-        const targetSessionId = await proxy.lost;
+        const target = await proxy.lost;
         await disconnected.promise;
         await vi.advanceTimersByTimeAsync(500);
         await reconnected.promise;
@@ -82,13 +82,13 @@ test.each(["request", "result"] as const)(
         } else {
             const [first, concurrent] = await Promise.all([fork(), fork()]);
             expect(concurrent).toEqual(first);
-            expect(first.result.targetSessionId).toBe(targetSessionId);
-            expect(first.result.ready).toMatchObject({ sessionId: targetSessionId, agentId: "claude", restored: true });
-            expect(first.entry.nativeSessionId).toBe(input.nativeSessionId);
+            expect(first.result.target).toEqual(target);
+            expect(first.result.ready).toMatchObject({ target, agentId: "claude", restored: true });
+            expect(first.entry.sessionId).toBe(input.sessionId);
             expect(await fork()).toEqual(first);
             const sessions = await runtime.client.runtimes.listSessions(100, signal);
             expect(sessions).toHaveLength(1);
-            expect(sessions[0]?.sessionId).toBe(targetSessionId);
+            expect(sessions[0]?.target).toEqual(target);
         }
     },
 );
@@ -123,7 +123,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
         additionalDirectoryIds: [],
         agentId: "claude",
         directoryId: "default",
-        nativeSessionId: directory.entries[0].nativeSessionId,
+        sessionId: directory.entries[0].sessionId,
     });
     let loseNextResponse = true;
     let lostStatus: number | undefined;
@@ -182,7 +182,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
                 additionalDirectoryIds: [],
                 agentId: "claude",
                 directoryId: "default",
-                nativeSessionId: "another-source",
+                sessionId: "another-source",
             }),
             signal,
         });

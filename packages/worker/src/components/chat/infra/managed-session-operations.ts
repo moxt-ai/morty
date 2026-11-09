@@ -3,16 +3,16 @@ export class ManagedSessionOperations {
     readonly #pending = new Map<string, Promise<void>>();
 
     readonly run = async <Result>(
-        sessionId: string,
+        sessionKey: string,
         signal: AbortSignal,
         operation: () => Promise<Result>,
     ): Promise<Result> => {
         signal.throwIfAborted();
-        const previous = this.#pending.get(sessionId) ?? Promise.resolve();
+        const previous = this.#pending.get(sessionKey) ?? Promise.resolve();
         const finished = Promise.withResolvers<void>();
         // A cancelled waiter must not let its successor overtake the operation ahead of it.
         const pending = previous.then(() => finished.promise);
-        this.#pending.set(sessionId, pending);
+        this.#pending.set(sessionKey, pending);
         const cancelled = Promise.withResolvers<never>();
         const abort = (): void => cancelled.reject(signal.reason);
         signal.addEventListener("abort", abort, { once: true });
@@ -24,8 +24,8 @@ export class ManagedSessionOperations {
             signal.removeEventListener("abort", abort);
             finished.resolve();
             void pending.then(() => {
-                if (this.#pending.get(sessionId) === pending) {
-                    this.#pending.delete(sessionId);
+                if (this.#pending.get(sessionKey) === pending) {
+                    this.#pending.delete(sessionKey);
                 }
             });
         }

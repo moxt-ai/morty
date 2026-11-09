@@ -1,3 +1,4 @@
+import { RequestError } from "@agentclientprotocol/sdk";
 import { getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
 import { expect, onTestFinished, test } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
@@ -68,55 +69,70 @@ test("Given a slow Session creation, When I send text and an attachment and writ
     expect(app.elementsByTestId(dataTestId.userMessage)[0]?.textContent).not.toContain("next.json");
 });
 
-test("Given Session creation fails after I write another draft, When I retry the failed message, Then only the original snapshot is sent and the next draft is preserved", {
-    timeout: 30_000,
-}, async () => {
-    const gate = Promise.withResolvers<void>();
-    void gate.promise.catch(() => undefined);
-    let holding = false;
-    onTestFinished(() => gate.resolve());
-    const app = await createTestApp({
-        connectAgent: true,
-        agent: {
-            id: "settings-test",
-            label: "Settings Agent",
-            beforeSessionCreated: async () => {
-                if (holding) {
-                    holding = false;
-                    await gate.promise;
-                }
+test.each(["refused", "unknown"] as const)(
+    "Given Session creation is %s after I write another draft, When I retry, Then only a definite refusal can send the original snapshot and the next draft is preserved",
+    {
+        timeout: 30_000,
+    },
+    async (outcome) => {
+        const gate = Promise.withResolvers<void>();
+        void gate.promise.catch(() => undefined);
+        let holding = false;
+        onTestFinished(() => gate.resolve());
+        const app = await createTestApp({
+            connectAgent: true,
+            agent: {
+                id: "settings-test",
+                label: "Settings Agent",
+                beforeSessionCreated: async () => {
+                    if (holding) {
+                        holding = false;
+                        await gate.promise;
+                    }
+                },
             },
-        },
-    });
-    const composer = await app.queryElementByTestId(
-        dataTestId.messageComposer,
-        (element) => element instanceof HTMLTextAreaElement && !element.disabled,
-    );
-    await app.user.click(composer);
-    await app.user.paste("Retry this original message");
-    const send = await app.waitForView(() => {
-        const button = getByRole(document.body, "button", { name: "Send message" });
-        expect(button).toHaveProperty("disabled", false);
-        return button;
-    });
-    holding = true;
-    await app.user.click(send);
-    await app.user.paste("Keep my new draft");
-    gate.reject(new Error("The controlled Agent could not create a Session"));
-    const retry = await app.waitForView(() => getByRole(document.body, "button", { name: "Retry message" }));
-    expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "Keep my new draft");
-    expect(app.elementsByTestId(dataTestId.userMessage)).toHaveLength(1);
-    await app.user.click(retry);
-    await app.waitForView(() =>
-        expect(
-            app
-                .elementsByTestId(dataTestId.agentResponse)
-                .some((element) => element.textContent?.includes("Retry this original message")),
-        ).toBe(true),
-    );
-    expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "Keep my new draft");
-    expect(app.elementsByTestId(dataTestId.userMessage)).toHaveLength(1);
-});
+        });
+        const composer = await app.queryElementByTestId(
+            dataTestId.messageComposer,
+            (element) => element instanceof HTMLTextAreaElement && !element.disabled,
+        );
+        await app.user.click(composer);
+        await app.user.paste("Retry this original message");
+        const send = await app.waitForView(() => {
+            const button = getByRole(document.body, "button", { name: "Send message" });
+            expect(button).toHaveProperty("disabled", false);
+            return button;
+        });
+        holding = true;
+        await app.user.click(send);
+        await app.user.paste("Keep my new draft");
+        gate.reject(
+            outcome === "refused"
+                ? RequestError.invalidParams("The controlled Agent refused Session creation before admission")
+                : new Error("The Agent failed without establishing whether creation completed"),
+        );
+        const retry = await app.waitForView(() => getByRole(document.body, "button", { name: "Retry message" }));
+        expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "Keep my new draft");
+        expect(app.elementsByTestId(dataTestId.userMessage)).toHaveLength(1);
+        await app.user.click(retry);
+        if (outcome === "unknown") {
+            await app.waitForView(() => getByRole(document.body, "button", { name: "Retry message" }));
+            expect(app.elementsByTestId(dataTestId.agentResponse)).toHaveLength(0);
+            expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "Keep my new draft");
+            expect(app.elementsByTestId(dataTestId.userMessage)).toHaveLength(1);
+            return;
+        }
+        await app.waitForView(() =>
+            expect(
+                app
+                    .elementsByTestId(dataTestId.agentResponse)
+                    .some((element) => element.textContent?.includes("Retry this original message")),
+            ).toBe(true),
+        );
+        expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("value", "Keep my new draft");
+        expect(app.elementsByTestId(dataTestId.userMessage)).toHaveLength(1);
+    },
+);
 
 test("Given an existing Session and a held submission, When I send a message and attach a file to my next draft before acknowledgement, Then the message appears once and its completion never clears the new text or file", {
     timeout: dedicatedEnvironmentTimeout,

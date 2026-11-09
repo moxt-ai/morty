@@ -13,7 +13,7 @@ describe("Session close notice contracts", () => {
         const notice = {
             kind: SESSION_CLOSE_NOTICE_KIND,
             reason: "This Session was closed on request.",
-            sessionId: "session-1",
+            target: { harness: "claude", sessionId: "session-1" },
         } as const;
 
         expect(decodeDaemonToServiceMessage(encodeDaemonToServiceMessage(notice))).toEqual(notice);
@@ -21,12 +21,16 @@ describe("Session close notice contracts", () => {
 
     it("Given a reason worded by a newer Runtime, When a receiver decodes the notice, Then any reason of up to 500 characters arrives as sent", () => {
         for (const reason of ["This Session was closed after 24 hours without activity.", "r".repeat(500)]) {
-            const encoded = JSON.stringify({ kind: SESSION_CLOSE_NOTICE_KIND, reason, sessionId: "session-1" });
+            const encoded = JSON.stringify({
+                kind: SESSION_CLOSE_NOTICE_KIND,
+                reason,
+                target: { harness: "claude", sessionId: "session-1" },
+            });
 
             expect(decodeSessionCloseNoticeEvent(encoded)).toEqual({
                 kind: SESSION_CLOSE_NOTICE_KIND,
                 reason,
-                sessionId: "session-1",
+                target: { harness: "claude", sessionId: "session-1" },
             });
         }
     });
@@ -36,13 +40,13 @@ describe("Session close notice contracts", () => {
             closedAt: "2026-10-22T00:00:00.000Z",
             kind: SESSION_CLOSE_NOTICE_KIND,
             reason: "This Session was closed on request.",
-            sessionId: "session-1",
+            target: { harness: "claude", sessionId: "session-1" },
         });
 
         expect(decodeSessionCloseNoticeEvent(encoded)).toEqual({
             kind: SESSION_CLOSE_NOTICE_KIND,
             reason: "This Session was closed on request.",
-            sessionId: "session-1",
+            target: { harness: "claude", sessionId: "session-1" },
         });
     });
 
@@ -61,8 +65,12 @@ describe("Session close notice contracts", () => {
         }
     });
 
-    it("Given an older Runtime that only answers a close request, When its reply crosses the boundary, Then the previous representation is still accepted", () => {
-        const reply = { kind: "session.closed", requestId: "request-1", sessionId: "session-1" } as const;
+    it("Given a Runtime answers a close request, When its reply crosses the boundary, Then the native pair is retained", () => {
+        const reply = {
+            kind: "session.closed",
+            requestId: "request-1",
+            target: { harness: "claude", sessionId: "session-1" },
+        } as const;
 
         expect(decodeSessionClosedEvent(encodeSessionClosedEvent(reply))).toEqual(reply);
         expect(decodeDaemonToServiceMessage(encodeSessionClosedEvent(reply))).toEqual(reply);

@@ -1,7 +1,9 @@
+import { NativeSessionMap } from "@morty-build/client/native-session";
 import {
     type DaemonToServiceMessage,
     encodeDaemonToServiceMessage,
     isPromptTerminal,
+    type NativeSessionTarget,
     SESSION_EVENT_BATCH_MAX_SIZE,
     SESSION_EVENT_KIND,
     type SessionCloseNoticeEvent,
@@ -30,7 +32,7 @@ type PublisherConnection =
 interface PendingBatch {
     readonly events: SessionLiveEvent[];
     readonly firstAnswers: {
-        readonly sessionId: string;
+        readonly target: NativeSessionTarget;
         readonly commandId: string;
         readonly eventId: string;
         readonly observedAt: number;
@@ -42,7 +44,10 @@ interface PendingBatch {
 /** Keeps unsent output in bounded memory across reconnects. Sent events are never replayed. */
 export class RuntimeSessionEventPublisher implements SessionEventSink {
     readonly #pending: PendingBatch[] = [];
-    readonly #awaitingFirstAnswer = new Map<string, { readonly commandId: string; readonly generationId: string }>();
+    readonly #awaitingFirstAnswer = new NativeSessionMap<{
+        readonly commandId: string;
+        readonly generationId: string;
+    }>();
     #pendingBytes = 0;
     #overflowReported = false;
     #pendingTask: ScheduledTask | null = null;
@@ -86,7 +91,7 @@ export class RuntimeSessionEventPublisher implements SessionEventSink {
     readonly publishStatus = (event: SessionStatusChangedEvent): void => this.#send(event);
     readonly publishInfo = (event: SessionInfoUpdatedEvent): void => this.#send(event);
     readonly publishClosed = (event: SessionCloseNoticeEvent): void => {
-        this.#awaitingFirstAnswer.delete(event.sessionId);
+        this.#awaitingFirstAnswer.delete(event.target);
         this.#send(event);
     };
 
@@ -116,7 +121,7 @@ export class RuntimeSessionEventPublisher implements SessionEventSink {
         if (bytes + EMPTY_ENVELOPE_BYTES > MAX_FRAME_BYTES) {
             console.warn("Live Session event exceeds the Relay frame limit", {
                 code: "live_event_too_large",
-                sessionId: event.sessionId,
+                target: event.target,
                 eventId: event.eventId,
                 bytes,
             });
@@ -133,7 +138,7 @@ export class RuntimeSessionEventPublisher implements SessionEventSink {
                 this.#overflowReported = true;
                 console.warn("Live Session output exceeded the pending buffer limit", {
                     code: "live_event_buffer_full",
-                    sessionId: event.sessionId,
+                    target: event.target,
                     eventId: event.eventId,
                     maximumBytes: MAX_PENDING_BYTES,
                 });
@@ -147,11 +152,11 @@ export class RuntimeSessionEventPublisher implements SessionEventSink {
         batch.events.push(event);
         batch.bytes += bytes;
         this.#pendingBytes += additionalBytes;
-        const awaiting = this.#awaitingFirstAnswer.get(event.sessionId);
+        const awaiting = this.#awaitingFirstAnswer.get(event.target);
         const firstAnswer = this.#consumeFirstAnswer(event);
         if (firstAnswer && awaiting !== undefined) {
             batch.firstAnswers.push({
-                sessionId: event.sessionId,
+                target: event.target,
                 commandId: awaiting.commandId,
                 eventId: event.eventId,
                 observedAt: Date.now(),
@@ -182,16 +187,16 @@ export class RuntimeSessionEventPublisher implements SessionEventSink {
         if (event.type === "lifecycle-metadata") {
             const payload = event.payload;
             if (payload.kind === "prompt.started") {
-                this.#awaitingFirstAnswer.set(event.sessionId, {
+                this.#awaitingFirstAnswer.set(event.target, {
                     commandId: payload.commandId,
                     generationId: event.sessionGenerationId,
                 });
             } else if (
                 isPromptTerminal(payload) &&
-                this.#awaitingFirstAnswer.get(event.sessionId)?.commandId === payload.commandId &&
-                this.#awaitingFirstAnswer.get(event.sessionId)?.generationId === event.sessionGenerationId
+                this.#awaitingFirstAnswer.get(event.target)?.commandId === payload.commandId &&
+                this.#awaitingFirstAnswer.get(event.target)?.generationId === event.sessionGenerationId
             ) {
-                this.#awaitingFirstAnswer.delete(event.sessionId);
+                this.#awaitingFirstAnswer.delete(event.target);
             }
             return false;
         }
@@ -200,11 +205,11 @@ export class RuntimeSessionEventPublisher implements SessionEventSink {
             event.payload.sessionUpdate !== "agent_message_chunk" ||
             event.payload.content.type !== "text" ||
             event.payload.content.text.length === 0 ||
-            this.#awaitingFirstAnswer.get(event.sessionId)?.generationId !== event.sessionGenerationId
+            this.#awaitingFirstAnswer.get(event.target)?.generationId !== event.sessionGenerationId
         ) {
             return false;
         }
-        this.#awaitingFirstAnswer.delete(event.sessionId);
+        this.#awaitingFirstAnswer.delete(event.target);
         return true;
     };
 
@@ -235,7 +240,7 @@ export class RuntimeSessionEventPublisher implements SessionEventSink {
                     console.info(
                         JSON.stringify({
                             event: "runtime-first-answer-handoff-timing",
-                            sessionId: answer.sessionId,
+                            target: answer.target,
                             commandId: answer.commandId,
                             eventId: answer.eventId,
                             observedAt: answer.observedAt,

@@ -9,7 +9,8 @@
         "./channel": "./src/channel.ts",
         "./platform": "./src/platform.ts",
         "./server": "./src/server.ts",
-        "./protocol": "./src/protocol/index.ts"
+        "./protocol": "./src/protocol/index.ts",
+        "./native-session": "./src/native-session.ts"
     },
     "engines": {
         "node": ">=20.19.0"

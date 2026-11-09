@@ -31,7 +31,7 @@ test("Given running and queued prompts, When the daemon restarts, Then it report
                     directoryId: "default",
                     attachments: [],
                     kind: "session.prompt" as const,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 };
                 const running = randomUUID();
                 const queued = randomUUID();

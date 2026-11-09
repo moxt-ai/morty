@@ -1,4 +1,4 @@
-import type { SessionCapabilities, SessionConfigOption } from "@morty-build/client/protocol";
+import type { NativeSessionTarget, SessionCapabilities, SessionConfigOption } from "@morty-build/client/protocol";
 import type { AdapterSessionOpened } from "../../acp/native-history/preview-contract.ts";
 import type { OperationMetrics } from "../../infra/operation-metrics.ts";
 import type { SessionStore, StoredSession } from "../record/session-store.ts";
@@ -14,13 +14,13 @@ export interface AgentSessionRestore {
     readonly cwd: string;
     readonly metrics: OperationMetrics;
     readonly restored: boolean;
-    readonly sessionId: string;
+    readonly target: NativeSessionTarget;
     readonly store: SessionStore;
     readonly createSession: (signal: AbortSignal) => Promise<AdapterSessionOpened>;
     readonly forkSession: (sourceSessionId: string, signal: AbortSignal) => Promise<AdapterSessionOpened>;
     readonly openSession: (signal: AbortSignal) => Promise<AdapterSessionOpened>;
     readonly openSessionWithReplay: (signal: AbortSignal) => Promise<AdapterSessionOpened>;
-    nativeSessionId(): string;
+    sessionId(): string;
     readonly restoreStoredConfigurations: (
         session: StoredSession,
         signal: AbortSignal,

@@ -2,6 +2,7 @@ import type {
     AgentModelEffort,
     AgentPromptResponse,
     ContentBlock,
+    NativeSessionTarget,
     PromptExecutionContext,
     SessionCapabilities,
     SessionCloseNoticeEvent,
@@ -24,17 +25,21 @@ import type { AcpContentExternalizer } from "../../acp/content/content-externali
 import type { Adapter } from "../../acp/native-history/preview-contract.ts";
 import type { NativeSessionOrigin } from "../../acp/protocol/native-session.ts";
 
-export interface SessionPrepareOptions {
+/** A new harness Session has no conversation identity until the harness opens it. */
+export interface SessionCreationOptions {
     readonly adapter: Adapter;
     readonly additionalDirectories: readonly string[];
     readonly agent: AcpAgentDefinition;
     readonly cwd: string;
-    readonly sessionId: string;
     readonly signal: AbortSignal;
+    readonly externalizeSessionUpdate?: AcpContentExternalizer["update"];
+}
+
+export interface SessionPrepareOptions extends SessionCreationOptions {
+    readonly target: NativeSessionTarget;
     readonly origin?: NativeSessionOrigin;
     /** The prompt's native-history behavior when this preparation starts a Session. */
     readonly recovery?: SessionRecovery;
-    readonly externalizeSessionUpdate?: AcpContentExternalizer["update"];
 }
 
 export type SessionRecovery = { readonly kind: "history-required" } | { readonly kind: "interactive-only" };
@@ -90,14 +95,14 @@ export interface PermissionResponseOptions {
     readonly interactionId: string;
     readonly optionId: string;
     readonly outcome: SessionPermissionResolvedEvent["outcome"];
-    readonly sessionId: string;
+    readonly target: NativeSessionTarget;
 }
 
 export interface ElicitationResponseOptions {
     readonly action: SessionElicitationResolvedEvent["action"];
     readonly content: string;
     readonly interactionId: string;
-    readonly sessionId: string;
+    readonly target: NativeSessionTarget;
 }
 
 export type PromptResult = AgentPromptResponse;
@@ -191,7 +196,7 @@ export class AgentSettingsSnapshot {
 export type ResolveAgent = (
     agentId: string,
     signal: AbortSignal,
-    sessionId?: string,
+    target?: NativeSessionTarget,
 ) => Promise<{
     readonly agent: AcpAgentDefinition;
     readonly adapter: Adapter;

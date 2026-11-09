@@ -1,6 +1,6 @@
 import { setImmediate as yieldToRuntime } from "node:timers/promises";
 import { AcpExecutionError } from "../acp-error.ts";
-import { nativeSessionIdSchema } from "../protocol/native-session.ts";
+import { sessionIdSchema } from "../protocol/native-session.ts";
 import type { IdentifiedSessionNotification as SessionNotification } from "./session-notification.ts";
 
 const MAX_PENDING_UPDATES = 100;
@@ -103,7 +103,7 @@ export class AgentUpdateStream {
     };
 
     readonly select = (sessionId: string): void => {
-        const selected = nativeSessionIdSchema.parse(sessionId);
+        const selected = sessionIdSchema.parse(sessionId);
         const selection = this.#selection;
         switch (selection.kind) {
             case "selected":

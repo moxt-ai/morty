@@ -1,5 +1,6 @@
 import {
     type AcpSessionUpdate,
+    type NativeSessionTarget,
     promptCompletion,
     type SessionEventPayload,
     type SessionLiveEvent,
@@ -91,27 +92,31 @@ class ReplayedTurns {
 /** Captures ACP updates into the V2 session event log. */
 export class HistoryReplayCapture {
     readonly #events: SessionEventStore;
-    readonly #sessionId: string;
+    readonly #sessionTarget: NativeSessionTarget;
     readonly #replayed: ReplayedTurns;
 
-    constructor(events: SessionEventStore, sessionId: string, settledTurns: readonly SettledTurn[] = []) {
+    constructor(
+        events: SessionEventStore,
+        sessionTarget: NativeSessionTarget,
+        settledTurns: readonly SettledTurn[] = [],
+    ) {
         this.#events = events;
-        this.#sessionId = sessionId;
+        this.#sessionTarget = sessionTarget;
         this.#replayed = new ReplayedTurns(settledTurns);
     }
 
     /** Records an update the Agent replays from its own history, with the lifecycle of the turn it belongs to. */
     readonly replay = (rawUpdate: AcpSessionUpdate): void => {
         for (const { event, recordedAt } of this.#replayed.before(rawUpdate)) {
-            this.#events.append(this.#sessionId, event, recordedAt);
+            this.#events.append(this.#sessionTarget, event, recordedAt);
         }
-        this.#events.append(this.#sessionId, { payload: rawUpdate, type: "acp" });
+        this.#events.append(this.#sessionTarget, { payload: rawUpdate, type: "acp" });
     };
 
     /** Ends the replay: the last replayed turn ends where the Agent's history does. */
     readonly finishReplay = (): void => {
         for (const { event, recordedAt } of this.#replayed.end()) {
-            this.#events.append(this.#sessionId, event, recordedAt);
+            this.#events.append(this.#sessionTarget, event, recordedAt);
         }
     };
 
@@ -119,7 +124,7 @@ export class HistoryReplayCapture {
         rawUpdate: AcpSessionUpdate,
         onRecorded: (event: SessionLiveEvent) => Promise<void> = () => Promise.resolve(),
     ): Promise<void> => {
-        const event = this.#events.append(this.#sessionId, { payload: rawUpdate, type: "acp" });
+        const event = this.#events.append(this.#sessionTarget, { payload: rawUpdate, type: "acp" });
         await onRecorded(event);
     };
 
@@ -127,9 +132,9 @@ export class HistoryReplayCapture {
         if (event.type !== "lifecycle-metadata") {
             throw new Error("Lifecycle history only accepts lifecycle metadata");
         }
-        return this.#events.append(this.#sessionId, event);
+        return this.#events.append(this.#sessionTarget, event);
     };
 
     readonly eventPage = (eventLimit: number, cursor: string | null): SessionEventPage =>
-        this.#events.page(this.#sessionId, eventLimit, cursor);
+        this.#events.page(this.#sessionTarget, eventLimit, cursor);
 }

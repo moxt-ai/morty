@@ -1,11 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
-import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts";
-import { MemorySessionStore } from "../../src/engine/session/record/session-store.ts";
-import { systemTimer } from "../../src/engine/util/timer.ts";
-import { acpAdapters } from "../support/acp-adapters.ts";
-import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
-import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 
 import { fixture } from "./native-session-fixture.ts";
 
@@ -24,7 +17,6 @@ describe("native session identity", () => {
                     ...f.identity,
                     action: "import",
                     entryId: entry.entryId,
-                    targetSessionId: "first-import-target",
                 },
                 signal,
             );
@@ -36,7 +28,7 @@ describe("native session identity", () => {
                     additionalDirectories: [],
                     agent: f.agent,
                     cwd: f.workspace,
-                    sessionId: first.ready.sessionId,
+                    target: first.ready.target,
                     signal,
                 },
                 10_000,
@@ -49,14 +41,13 @@ describe("native session identity", () => {
                     action: "import",
                     entryId: entry.entryId,
                     requestId: "repeated-v2-import",
-                    targetSessionId: "discarded-second-target",
                 },
                 signal,
             );
 
             expect(repeated).toMatchObject({
                 action: "import",
-                ready: { sessionId: first.ready.sessionId },
+                ready: { target: first.ready.target },
             });
             await expect(
                 f.sessions.loadSessionEvents(
@@ -64,7 +55,7 @@ describe("native session identity", () => {
                         additionalDirectories: [],
                         agent: f.agent,
                         cwd: f.workspace,
-                        sessionId: first.ready.sessionId,
+                        target: first.ready.target,
                         signal,
                     },
                     10_000,
@@ -92,32 +83,30 @@ describe("native session identity", () => {
                         additionalDirectories: [],
                         agent: f.agent,
                         cwd: f.workspace,
-                        sessionId: "source-preview",
                         signal,
                     },
-                    entry.nativeSessionId,
+                    entry.sessionId,
                     10_000,
                     null,
                 );
-                const targetSessionId = `target-${action.endsWith("fork") ? "fork" : "import"}`;
 
-                const result = await f.service.execute(
-                    { ...f.identity, action, entryId: entry.entryId, targetSessionId },
-                    signal,
-                );
+                const result = await f.service.execute({ ...f.identity, action, entryId: entry.entryId }, signal);
+                if (result.action !== action) {
+                    throw new Error("Expected a native open result");
+                }
                 const replayed = await f.sessions.loadSessionEvents(
                     {
                         additionalDirectories: [],
                         agent: f.agent,
                         cwd: f.workspace,
-                        sessionId: targetSessionId,
+                        target: result.target,
                         signal,
                     },
                     10_000,
                     null,
                 );
 
-                expect(result).toMatchObject({ action, ready: { sessionId: targetSessionId }, targetSessionId });
+                expect(result.ready.target).toEqual(result.target);
                 expect(replayed.events.map(({ payload }) => payload)).toEqual(
                     source.events.map(({ payload }) => payload),
                 );
@@ -128,7 +117,7 @@ describe("native session identity", () => {
     );
 
     it("Given an imported native conversation that the Runtime closed, When it is imported again, Then the same Session reopens", async () => {
-        const f = await fixture("Claude Code", "supported", "native");
+        const f = await fixture("Claude Code", "supported");
         const signal = new AbortController().signal;
         try {
             await f.seed("Reopen by importing");
@@ -136,14 +125,11 @@ describe("native session identity", () => {
             if (entry === undefined) {
                 throw new Error("Missing native conversation");
             }
-            const first = await f.service.execute(
-                { ...f.identity, action: "import", entryId: entry.entryId, targetSessionId: crypto.randomUUID() },
-                signal,
-            );
+            const first = await f.service.execute({ ...f.identity, action: "import", entryId: entry.entryId }, signal);
             if (first.action !== "import") {
                 throw new Error("Expected a native import");
             }
-            await f.sessions.closeSession(first.ready.sessionId, signal);
+            await f.sessions.closeSession(first.ready.target, signal);
 
             const repeated = await f.service.execute(
                 {
@@ -151,19 +137,18 @@ describe("native session identity", () => {
                     action: "import",
                     entryId: entry.entryId,
                     requestId: "import-after-close",
-                    targetSessionId: crypto.randomUUID(),
                 },
                 signal,
             );
 
-            expect(repeated).toMatchObject({ action: "import", ready: { sessionId: first.ready.sessionId } });
+            expect(repeated).toMatchObject({ action: "import", ready: { target: first.ready.target } });
         } finally {
             await f.close();
         }
     });
 
     it("Given an imported native conversation is running a turn, When another device imports it again, Then the running Session is returned and its turn continues", async () => {
-        const f = await fixture("Claude Code", "supported", "native");
+        const f = await fixture("Claude Code", "supported");
         const signal = new AbortController().signal;
         try {
             await f.seed("Join while it works");
@@ -171,10 +156,7 @@ describe("native session identity", () => {
             if (entry === undefined) {
                 throw new Error("Missing native conversation");
             }
-            const first = await f.service.execute(
-                { ...f.identity, action: "import", entryId: entry.entryId, targetSessionId: crypto.randomUUID() },
-                signal,
-            );
+            const first = await f.service.execute({ ...f.identity, action: "import", entryId: entry.entryId }, signal);
             if (first.action !== "import") {
                 throw new Error("Expected a native import");
             }
@@ -183,7 +165,7 @@ describe("native session identity", () => {
                 agent: f.agent,
                 cwd: f.workspace,
                 additionalDirectories: [],
-                sessionId: first.ready.sessionId,
+                target: first.ready.target,
                 commandId: crypto.randomUUID(),
                 prompt: "interleave progress and hold",
                 images: [],
@@ -212,12 +194,11 @@ describe("native session identity", () => {
                     action: "import",
                     entryId: entry.entryId,
                     requestId: "import-while-running",
-                    targetSessionId: crypto.randomUUID(),
                 },
                 signal,
             );
 
-            expect(joined).toMatchObject({ action: "import", ready: { sessionId: first.ready.sessionId } });
+            expect(joined).toMatchObject({ action: "import", ready: { target: first.ready.target } });
             expect(turnSettled).toBe(false);
             turnCancellation.abort();
             await expect(turn).rejects.toBeDefined();
@@ -227,29 +208,31 @@ describe("native session identity", () => {
     });
 
     it.each(["import", "fork"] satisfies readonly ("import" | "fork")[])(
-        "Given a %s assigned a UUID distinct from its native identity, When the Runtime restarts, Then that conversation remains discoverable and can continue",
+        "Given a %s returns its harness-owned native pair, When the Runtime restarts, Then that conversation remains discoverable and can continue",
         async (action) => {
-            const f = await fixture("Claude Code", "supported", "native");
+            const f = await fixture("Claude Code", "supported");
             try {
                 await f.seed("Original context");
                 const entry = (await f.list()).entries[0];
                 if (entry === undefined) {
                     throw new Error("Missing native session");
                 }
-                const targetSessionId = crypto.randomUUID();
-                await f.service.execute(
-                    { ...f.identity, action, entryId: entry.entryId, targetSessionId },
+                const opened = await f.service.execute(
+                    { ...f.identity, action, entryId: entry.entryId },
                     new AbortController().signal,
                 );
+                if (opened.action !== action) {
+                    throw new Error("Expected a native open result");
+                }
                 await f.restart();
-                expect(await f.service.querySessions([targetSessionId], new AbortController().signal)).toMatchObject([
-                    { sessionId: targetSessionId },
+                expect(await f.service.querySessions([opened.target], new AbortController().signal)).toMatchObject([
+                    { target: opened.target },
                 ]);
                 const reply = await f.sessions.runPrompt({
                     agent: f.agent,
                     cwd: f.workspace,
                     additionalDirectories: [],
-                    sessionId: targetSessionId,
+                    target: opened.target,
                     commandId: crypto.randomUUID(),
                     prompt: "Continue original context",
                     images: [],
@@ -267,41 +250,23 @@ describe("native session identity", () => {
     it.each(["Claude Code", "Pi"] as const)(
         "Given a new %s chat, When the Runtime restarts, Then its native ID resumes the saved thread and history",
         async (agentName) => {
-            const f = await fixture(agentName, "supported", "native");
+            const f = await fixture(agentName, "supported");
             const signal = new AbortController().signal;
-            const nativeSessionId = await f.sessions.createNativeSession({
+            const target = await f.sessions.createNativeSession({
                 agent: f.agent,
                 cwd: f.workspace,
                 additionalDirectories: [],
-                sessionId: f.identity.sessionId,
                 signal,
             });
-            const restarted = new SessionManager({
-                observer: new NullSessionObserver(),
-                store: new MemorySessionStore(),
-                adapters: acpAdapters,
-                sessionIdentity: "native",
-                onSessionStatusChanged: () => undefined,
-                contentExternalizer: new AcpContentExternalizer((sessionId, content, signal) =>
-                    new UnretainedExternalContentStore().put({
-                        bytes: content.bytes,
-                        kind: content.kind,
-                        mediaType: content.mediaType,
-                        name: content.name,
-                        sessionId,
-                        signal,
-                    }),
-                ),
-                timer: systemTimer,
-                maxProcesses: null,
-            });
+            await f.restart();
+            const restarted = f.sessions;
             try {
                 await restarted.runPrompt({
                     agent: f.agent,
                     additionalDirectories: [],
                     cwd: f.workspace,
                     signal,
-                    sessionId: nativeSessionId,
+                    target,
                     commandId: crypto.randomUUID(),
                     prompt: "Continue this chat",
                     lifecycle: {
@@ -318,7 +283,7 @@ describe("native session identity", () => {
                         additionalDirectories: [],
                         cwd: f.workspace,
                         signal,
-                        sessionId: nativeSessionId,
+                        target,
                     },
                     50,
                     null,
@@ -339,7 +304,7 @@ describe("native session identity", () => {
         },
     );
 
-    it("Given Chat forks a native conversation into an assigned Session, When a post-fork turn completes and Chat reloads, Then Runtime history contains that turn", async () => {
+    it("Given Chat forks a native conversation, When a post-fork turn completes and Chat reloads, Then Runtime history contains that turn", async () => {
         const f = await fixture("Claude Code");
         const signal = new AbortController().signal;
         try {
@@ -348,22 +313,23 @@ describe("native session identity", () => {
             if (entry === undefined) {
                 throw new Error("Missing native conversation");
             }
-            const targetSessionId = "forked-history";
-            await f.service.execute(
+            const opened = await f.service.execute(
                 {
                     ...f.identity,
                     action: "fork",
                     entryId: entry.entryId,
-                    targetSessionId,
                 },
                 signal,
             );
+            if (opened.action !== "fork") {
+                throw new Error("Expected a native fork");
+            }
             await f.sessions.runPrompt({
                 agent: f.agent,
                 additionalDirectories: [],
                 cwd: f.workspace,
                 signal,
-                sessionId: targetSessionId,
+                target: opened.target,
                 commandId: crypto.randomUUID(),
                 prompt: "Post-fork turn",
                 lifecycle: {
@@ -381,7 +347,7 @@ describe("native session identity", () => {
                     additionalDirectories: [],
                     cwd: f.workspace,
                     signal,
-                    sessionId: targetSessionId,
+                    target: opened.target,
                 },
                 50,
                 null,
@@ -415,7 +381,6 @@ describe("native session identity", () => {
                         ...f.identity,
                         action: "fork",
                         entryId: entry.entryId,
-                        targetSessionId: "invalid-fork",
                     },
                     new AbortController().signal,
                 ),

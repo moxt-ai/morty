@@ -11,7 +11,8 @@ const sessionClaims = btoa(
         expiresAtEpochMilliseconds: 900000,
         purpose: "session-access",
         computerId: "project-1",
-        sessionId: "session-1",
+        runtimeId: "runtime-1",
+        target: { harness: "claude", sessionId: "session-1" },
     }),
 )
     .replaceAll("+", "-")
@@ -162,7 +163,9 @@ it("Given a browser bound to one computer, When it opens another Session or addr
     try {
         await transport.fetch(runtimeRequest("https://relay.example.test/first"));
         const events = await transport.openSessionLiveEvents(
-            runtimeRequest("https://relay.example.test/morty/api/v1/computers/project-1/sessions/session-2/events-v2"),
+            runtimeRequest(
+                "https://relay.example.test/morty/api/v1/computers/project-1/harnesses/claude/sessions/session-2/events-v2",
+            ),
         );
         expect(connector.sockets).toHaveLength(1);
         expect(connector.sockets[0]?.url).toBe("wss://relay.example.test/morty/api/v1/computers/project-1/transport");
@@ -243,11 +246,14 @@ it("Given a Unicode JSON request and response, When the browser uses the WebSock
     const requestBody = JSON.stringify({ prompt: "show café ☕" });
 
     const response = await transport.fetch(
-        runtimeRequest("https://relay.example.test/morty/api/v1/computers/project/sessions/session-1/turns", {
-            body: requestBody,
-            headers: { "content-type": "application/json" },
-            method: "POST",
-        }),
+        runtimeRequest(
+            "https://relay.example.test/morty/api/v1/computers/project/harnesses/claude/sessions/session-1/turns",
+            {
+                body: requestBody,
+                headers: { "content-type": "application/json" },
+                method: "POST",
+            },
+        ),
     );
 
     expect(connector.sockets[0]?.requestBodies).toEqual([requestBody]);
@@ -290,7 +296,9 @@ it("Given a replacement WebSocket carries a live subscription, When the old sock
         throw new Error("Expected the replacement WebSocket connection");
     }
     const events = await transport.openSessionLiveEvents(
-        runtimeRequest("https://relay.example.test/morty/api/v1/computers/project/sessions/session/events-v2"),
+        runtimeRequest(
+            "https://relay.example.test/morty/api/v1/computers/project/harnesses/claude/sessions/session/events-v2",
+        ),
     );
     const subscriptionId = second.subscriptionIds[0];
     if (subscriptionId === undefined) {
@@ -333,7 +341,7 @@ it("Given an idle Session stream and a brief network interruption, When connecti
     const reconciliations: string[] = [];
     const controller = new AbortController();
     const subscription = await client.events.subscribeLive(
-        "session-1",
+        { harness: "claude", sessionId: "session-1" },
         {
             receive: async () => true,
             reconcile: async (connection) => {
@@ -371,7 +379,7 @@ it("Given a live Session stream cannot reconnect, When its retry budget expires,
     });
     const controller = new AbortController();
     const subscription = await client.events.subscribeLive(
-        "session-1",
+        { harness: "claude", sessionId: "session-1" },
         { receive: async () => true, reconcile: async () => undefined },
         controller.signal,
     );
@@ -399,7 +407,7 @@ it("Given caller-owned Session recovery, When its live stream disconnects, Then 
     });
     try {
         const subscription = await client.events.subscribeLive(
-            "session-1",
+            { harness: "claude", sessionId: "session-1" },
             { receive: async () => true, reconcile: async () => undefined },
             new AbortController().signal,
         );
@@ -432,7 +440,7 @@ it("Given caller-owned Session recovery, When its live stream receives nothing p
     });
     try {
         const subscription = await client.events.subscribeLive(
-            "session-1",
+            { harness: "claude", sessionId: "session-1" },
             { receive: async () => true, reconcile: async () => undefined },
             new AbortController().signal,
         );

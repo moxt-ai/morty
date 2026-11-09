@@ -5,10 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
-
 import {
     decodeMessageKind,
     decodeSessionEventEnvelope,
+    decodeSessionReadyEvent,
+    encodeSessionCreateCommand,
     encodeSessionPromptCommand,
     MORTY_API_PREFIX,
     SESSION_EVENT_KIND,
@@ -175,6 +176,26 @@ describe("daemon narration delivery", () => {
         try {
             const socket = await socketReady.promise;
             const frames = new ClientFrames(socket);
+            sendText(
+                socket,
+                encodeSessionCreateCommand({
+                    kind: "session.create",
+                    requestId: crypto.randomUUID(),
+                    operationId: crypto.randomUUID(),
+                    agentId: agent.id,
+                    bindingId: config.bindingId,
+                    directoryId: "default",
+                    additionalDirectoryIds: [],
+                    configurations: [],
+                }),
+            );
+            let created = await frames.next();
+            while (decodeMessageKind(created) !== "session.ready") {
+                if (decodeMessageKind(created) === "session.operation.failed") {
+                    throw new Error(created);
+                }
+                created = await frames.next();
+            }
             const prompt: SessionPromptCommand = {
                 additionalDirectoryIds: [],
                 agentId: agent.id,
@@ -185,7 +206,7 @@ describe("daemon narration delivery", () => {
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "stream verbose activity",
-                sessionId: "narration_conversation",
+                target: decodeSessionReadyEvent(created).target,
             };
             sendText(socket, encodeSessionPromptCommand(prompt));
 

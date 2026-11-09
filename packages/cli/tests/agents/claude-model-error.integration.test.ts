@@ -48,7 +48,7 @@ test("Given Claude receives a model-not-found response, When I send a prompt, Th
                     attachments: [],
                     kind: "session.prompt",
                     prompt: "Answer this request",
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
             for (;;) {

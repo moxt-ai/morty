@@ -178,7 +178,7 @@ test("Given a draft attachment, When Chat remounts, Then the attachment remains 
 test("Given an existing Session draft, When Chat remounts during an attachment read, Then its text and attachments remain until removed", {
     timeout: 30_000,
 }, async () => {
-    const app = await createTestApp({ connectAgent: true, nativeSessionIds: new Set(["draft-lifetime"]) });
+    const app = await createTestApp({ connectAgent: true, sessionIds: new Set(["draft-lifetime"]) });
     await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: "Open Session" })));
     const dialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
     // The first entry is previewed automatically; reselecting it can overlap that Runtime operation.

@@ -9,7 +9,7 @@ import { reportOperationFailure, send } from "./transport.ts";
 
 type PendingRequest = Readonly<{
     agentId: string;
-    sessionId: string;
+    discoveryId: string;
     controller: AbortController;
     completion: Promise<void>;
 }>;
@@ -28,7 +28,7 @@ export function createNativeSessionRequestHandler(dependencies: NativeRequestDep
 
     const cancel = (command: NativeSessionCancel): void => {
         const request = pending.get(command.requestId);
-        if (request?.sessionId === command.sessionId) {
+        if (request?.discoveryId === command.discoveryId) {
             request.controller.abort(
                 new SessionError("native_session_cancelled", "Native session operation cancelled"),
             );
@@ -42,7 +42,7 @@ export function createNativeSessionRequestHandler(dependencies: NativeRequestDep
             reportOperationFailure(
                 socket,
                 command.requestId,
-                command.sessionId,
+                command.action === "active-turn" ? command.target : undefined,
                 new SessionError("native_session_busy", "Another native session operation is running"),
             );
             return;
@@ -92,11 +92,16 @@ export function createNativeSessionRequestHandler(dependencies: NativeRequestDep
                         action: command.action,
                         agentId: command.agentId,
                         code: operationErrorCode(failure),
-                        sessionId: command.sessionId,
+                        discoveryId: command.discoveryId,
                     },
                     failure,
                 );
-                reportOperationFailure(socket, command.requestId, command.sessionId, failure);
+                reportOperationFailure(
+                    socket,
+                    command.requestId,
+                    command.action === "active-turn" ? command.target : undefined,
+                    failure,
+                );
             } finally {
                 timeout.cancel();
                 pending.delete(command.requestId);
@@ -104,7 +109,7 @@ export function createNativeSessionRequestHandler(dependencies: NativeRequestDep
         })();
         pending.set(command.requestId, {
             agentId: command.agentId,
-            sessionId: command.sessionId,
+            discoveryId: command.discoveryId,
             controller,
             completion,
         });

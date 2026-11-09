@@ -37,7 +37,7 @@ test("Given a reused real Pi session, When local commands reply consecutively, T
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
             const messageIds = new Set<string>();
@@ -113,7 +113,7 @@ test("Given real Pi transforms user input, When a prompt runs through the daemon
                 attachments: [],
                 kind: "session.prompt",
                 prompt: "Original request before native transformation",
-                sessionId: peer.sessionId,
+                target: peer.target,
             }),
         );
         const userContent: unknown[] = [];
@@ -178,7 +178,7 @@ test("Given real Pi has an active SDK turn, When the user steers it, Then Pi con
                         attachments: [],
                         kind: "session.prompt",
                         prompt,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
 
@@ -204,7 +204,7 @@ test("Given real Pi has an active SDK turn, When the user steers it, Then Pi con
                     disposition: SessionPromptDisposition.Steer,
                     kind: "session.prompt.disposition",
                     requestId: crypto.randomUUID(),
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
 
@@ -282,7 +282,7 @@ test("Given real Pi only supports disabled thinking, When a session is prepared,
                 directoryId: "default",
                 kind: "session.prepare",
                 requestId,
-                sessionId: peer.sessionId,
+                target: peer.target,
             }),
         );
 
@@ -321,7 +321,7 @@ test("Given real Pi without an external ACP adapter, When Bash executes through 
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                 }),
             );
             let text = "";
@@ -340,7 +340,7 @@ test("Given real Pi without an external ACP adapter, When Bash executes through 
                         encodeSessionPermissionRespondCommand({
                             kind: "session.permission.respond",
                             requestId: crypto.randomUUID(),
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                             interactionId: event.payload.event.interactionId,
                             optionId: option.optionId,
                             outcome: "selected",

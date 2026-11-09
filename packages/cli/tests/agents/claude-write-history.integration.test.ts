@@ -101,7 +101,7 @@ test("Given Claude history contains an interrupted Write and completed Writes, W
                 eventLimit: 200,
                 kind: "session.preview-history.page.load",
                 requestId: "saved-write-preview",
-                sessionId: nativeId,
+                target: { harness: "claude", sessionId: nativeId },
             }),
         );
         for (;;) {

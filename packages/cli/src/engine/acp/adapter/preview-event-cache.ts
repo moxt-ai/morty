@@ -1,3 +1,4 @@
+import { NativeSessionMap } from "@morty-build/client/native-session";
 import { CachedSessionEventStore } from "../../session/history/session-event-store.ts";
 import { openTemporarySessionEventCache } from "../../storage/session/temporary-session-event-cache.ts";
 
@@ -9,12 +10,12 @@ export interface PreviewEventCache {
 /** A disposable, adapter-private spill tier, never shared with live Session events. */
 export function openPreviewEventCache(): PreviewEventCache {
     const cache = openTemporarySessionEventCache();
-    const positions = new Map<string, number>();
+    const positions = new NativeSessionMap<number>();
     try {
         const events = new CachedSessionEventStore(cache.table, {
-            allocate: (sessionId) => {
-                const next = (positions.get(sessionId) ?? 0) + 1;
-                positions.set(sessionId, next);
+            allocate: (sessionTarget) => {
+                const next = (positions.get(sessionTarget) ?? 0) + 1;
+                positions.set(sessionTarget, next);
                 return next;
             },
         });

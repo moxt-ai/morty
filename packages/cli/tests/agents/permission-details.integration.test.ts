@@ -47,7 +47,7 @@ test.each(["allow_once", "reject_once"] as const)(
                     attachments: [],
                     kind: "session.prompt",
                     prompt,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                     sessionConfigurations: [
                         { configId: "mode", valueType: "select", value: "read-only", booleanValue: false },
                     ],
@@ -84,8 +84,8 @@ test.each(["allow_once", "reject_once"] as const)(
                             directoryId: "default",
                             kind: "native.session.request",
                             requestId,
-                            sessionId: peer.sessionId,
-                            targetSessionId: peer.sessionId,
+                            target: peer.target,
+                            discoveryId: randomUUID(),
                         }),
                     );
                     for (;;) {
@@ -108,7 +108,7 @@ test.each(["allow_once", "reject_once"] as const)(
                         encodeSessionPermissionRespondCommand({
                             kind: "session.permission.respond",
                             requestId: crypto.randomUUID(),
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                             interactionId: permission.interactionId,
                             optionId: option.optionId,
                             outcome: "selected",
@@ -170,7 +170,7 @@ test.each(["allow_once", "reject_once"] as const)(
                         attachments: [],
                         kind: "session.prompt",
                         prompt,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                         sessionConfigurations: [
                             { configId: "mode", valueType: "select", value: "default", booleanValue: false },
                         ],
@@ -201,8 +201,8 @@ test.each(["allow_once", "reject_once"] as const)(
                                 directoryId: "default",
                                 kind: "native.session.request",
                                 requestId,
-                                sessionId: peer.sessionId,
-                                targetSessionId: peer.sessionId,
+                                target: peer.target,
+                                discoveryId: randomUUID(),
                             }),
                         );
                         for (;;) {
@@ -228,7 +228,7 @@ test.each(["allow_once", "reject_once"] as const)(
                             encodeSessionPermissionRespondCommand({
                                 kind: "session.permission.respond",
                                 requestId: crypto.randomUUID(),
-                                sessionId: peer.sessionId,
+                                target: peer.target,
                                 interactionId: permission.interactionId,
                                 optionId: option.optionId,
                                 outcome: "selected",

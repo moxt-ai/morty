@@ -40,7 +40,7 @@ test("Given an Agent rejects a turn, When the turn fails, Then the failure event
                         ...identity,
                         kind: "session.prepare",
                         requestId: prepareId,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 for (;;) {
@@ -62,7 +62,7 @@ test("Given an Agent rejects a turn, When the turn fails, Then the failure event
                         attachments: [],
                         kind: "session.prompt",
                         prompt,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 let failureMessage: string | undefined;
@@ -87,7 +87,7 @@ test("Given an Agent rejects a turn, When the turn fails, Then the failure event
                 const local = await peer.readDiagnostics();
                 expect(local).toContain('"event":"session_prompt_failed"');
                 expect(local).toContain(`"commandId":"${commandId}"`);
-                expect(local).toContain(`"sessionId":"${peer.sessionId}"`);
+                expect(local).toContain(`"sessionId":"${peer.target.sessionId}"`);
                 expect(local).toContain('"code":"acp_agent_error"');
                 // Local diagnostics must not contain prompt text: the quoted prompt
                 // and the Agent's free text both stay out of the persisted log.
@@ -107,7 +107,7 @@ test("Given an Agent rejects a turn, When the turn fails, Then the failure event
                             code: "acp_agent_error",
                             commandId,
                             event: "session_prompt_failed",
-                            sessionId: peer.sessionId,
+                            agentId: peer.target.harness,
                         }),
                     );
                     // The exported report carries correlation identifiers and codes,

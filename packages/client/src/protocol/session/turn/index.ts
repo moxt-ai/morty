@@ -1,7 +1,7 @@
 import { z } from "zod";
-
 import { identifierSchema } from "../../shared/identifier.ts";
 import { sessionConfigurationSelectionsSchema } from "../configuration/index.ts";
+import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
 const timestampSchema = z.string().datetime({ offset: true });
 
@@ -80,7 +80,7 @@ const turnIdentitySchema = z.object({
     acceptedAt: timestampSchema,
     bindingId: identifierSchema,
     idempotencyKey: identifierSchema,
-    sessionId: identifierSchema,
+    target: nativeSessionTargetSchema,
     turnId: identifierSchema,
 });
 const turnSchema = z.union([

@@ -4,6 +4,7 @@ import type { ExternalContentStore } from "../../session/content/external-conten
 import type { SessionManager } from "../../session/manager/session-manager.ts";
 import type { NativeSessionService } from "../../session/native/native-session-browser.ts";
 import type { PromptLifecycle } from "../../session/prompt/prompt-lifecycle.ts";
+import type { SessionCreations } from "../../session/record/session-creations.ts";
 import type { ExecutionReceipts } from "../../session/turn/execution-receipts.ts";
 import type { SessionTurns } from "../../session/turn/session-turns.ts";
 import type { WorkspaceDirectoryService } from "../../session/workspace/workspace-directory.ts";
@@ -12,6 +13,7 @@ import type { RuntimeConfig } from "../config.ts";
 import type { RelayConnectionDiagnostics } from "../relay/diagnostics.ts";
 
 export interface CommandContext {
+    readonly sessionCreations: SessionCreations;
     readonly resolveAgent: ResolveAgent;
     readonly config: RuntimeConfig;
     readonly directories: WorkspaceDirectoryService;

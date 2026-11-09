@@ -24,7 +24,7 @@ const prompt = (peer: RealDaemonPeer, commandId: string, text: string) =>
         disposition: "append",
         kind: "session.prompt",
         prompt: text,
-        sessionId: peer.sessionId,
+        target: peer.target,
     });
 
 const append = (peer: RealDaemonPeer, commandId: string, text: string) => peer.send(prompt(peer, commandId, text));
@@ -107,7 +107,7 @@ test("Given a running prompt, When clients append messages and steer a turn that
                         disposition: "steer",
                         kind: "session.prompt",
                         prompt: "Use this in the same turn",
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                         targetCommandId: first,
                     }),
                 );
@@ -138,7 +138,7 @@ test("Given a running prompt, When clients append messages and steer a turn that
                 expect(accepted.kind === "message" && accepted.message).toEqual({
                     kind: "session.prompt.accepted",
                     requestId: running,
-                    sessionId: peer.sessionId,
+                    target: peer.target,
                     state: "running",
                 });
 
@@ -147,7 +147,7 @@ test("Given a running prompt, When clients append messages and steer a turn that
                         kind: "session.cancel",
                         requestId: crypto.randomUUID(),
                         commandId: running,
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 const order: string[] = [];

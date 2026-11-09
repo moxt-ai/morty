@@ -1,4 +1,5 @@
 import type { NativeSessionEntry, NativeSessionResult, SessionReadyEvent } from "@morty-build/client/channel";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import type { ChatAccess, ConversationActiveTurn } from "../../services/chat/bot-chat-api.ts";
 
 export interface OpenMortySession {
@@ -9,20 +10,20 @@ export interface OpenMortySession {
               readonly action: "conversation";
               readonly access: ChatAccess;
               readonly ready: SessionReadyEvent;
-              readonly targetSessionId: string;
+              readonly target: NativeSessionTarget;
               readonly activeTurn: ConversationActiveTurn;
           }
         | {
               readonly action: "managed";
-              readonly targetSessionId: string;
+              readonly target: NativeSessionTarget;
               readonly ready: SessionReadyEvent;
           };
-    readonly entry: NativeSessionEntry;
+    readonly entry: Omit<NativeSessionEntry, "entryId">;
 }
 
 /** The selected Session retains its connection metadata; its display title belongs to the title store. */
 export type SelectedMortySession = Omit<OpenMortySession, "entry"> & {
-    readonly entry: Omit<NativeSessionEntry, "title">;
+    readonly entry: Omit<NativeSessionEntry, "entryId" | "title">;
 };
 
 export function selectedSession(session: OpenMortySession): SelectedMortySession {

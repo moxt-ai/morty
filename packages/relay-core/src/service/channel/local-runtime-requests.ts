@@ -1,3 +1,4 @@
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { logger } from "../../infra/logger.ts";
 import type { RuntimeReplyConnection } from "../pairing/runtime-control-request.ts";
 import type { ChannelPeers, ChannelSocket, HistoryRequestKind } from "./channel-actor.ts";
@@ -83,11 +84,11 @@ export class LocalRuntimeRequests {
     readonly routes = () => [...this.#routes];
     readonly open = (
         requestId: string,
-        sessionId: string,
+        target: NativeSessionTarget | undefined,
         dispatch: (socket: ChannelSocket, message: unknown) => Promise<void>,
     ) => {
         const connection = new LocalRuntimeRequest(dispatch, () => this.#routes.delete(route));
-        const route = { socket: connection.server, requestId, sessionId };
+        const route = { socket: connection.server, requestId, target };
         this.#routes.add(route);
         return connection;
     };

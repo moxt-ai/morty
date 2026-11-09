@@ -51,7 +51,7 @@ test("Given a real Claude native Session with 6000 saved messages, When its prev
                 eventLimit: 10000,
                 kind: "session.preview-history.page.load",
                 requestId: "real-claude-large-preview",
-                sessionId: nativeId,
+                target: { harness: "claude", sessionId: nativeId },
             }),
         );
         for (;;) {

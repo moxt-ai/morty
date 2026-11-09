@@ -404,8 +404,7 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
         const report = JSON.parse(envelope.trim().split("\n").at(-1) ?? "null");
         expect(report).toMatchObject({
             botId: app.botId,
-            sessionId: null,
-            nativeSessionId: "native-session",
+            sessionId: "native-session",
             daemon: { kind: "unavailable", code: "AGENT_REQUIRED" },
             network: {
                 measurements: {

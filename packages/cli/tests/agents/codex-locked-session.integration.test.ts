@@ -71,7 +71,7 @@ test("Given desktop Codex owns the Session, When Morty imports it and receives s
                 bindingId: peer.bindingId,
                 directoryId: "default",
                 additionalDirectoryIds: [],
-                sessionId: id,
+                discoveryId: randomUUID(),
             } as const;
             peer.send(encodeNativeSessionCommand({ ...base, action: "list", requestId: "list", cursor: null }));
             let entryId = "";
@@ -92,7 +92,6 @@ test("Given desktop Codex owns the Session, When Morty imports it and receives s
                     action: "import",
                     requestId: "open",
                     entryId,
-                    targetSessionId: id,
                 }),
             );
             for (;;) {
@@ -102,7 +101,10 @@ test("Given desktop Codex owns the Session, When Morty imports it and receives s
                     if (result.requestId === "open") {
                         expect(result).toMatchObject({
                             action: "import",
-                            ready: { sessionId: id, capabilities: { steering: false } },
+                            ready: {
+                                target: { harness: "codex", sessionId: id },
+                                capabilities: { steering: false },
+                            },
                         });
                         break;
                     }
@@ -122,6 +124,7 @@ test("Given desktop Codex owns the Session, When Morty imports it and receives s
                 encodeSessionPromptCommand({
                     ...base,
                     kind: "session.prompt",
+                    target: { harness: "codex", sessionId: id },
                     commandId,
                     prompt: "Queued from Morty",
                     attachments: [],
@@ -141,6 +144,7 @@ test("Given desktop Codex owns the Session, When Morty imports it and receives s
                         encodeSessionPromptCommand({
                             ...base,
                             kind: "session.prompt",
+                            target: { harness: "codex", sessionId: id },
                             commandId: steeringCommandId,
                             prompt: "A stale client attempts steering",
                             attachments: [],

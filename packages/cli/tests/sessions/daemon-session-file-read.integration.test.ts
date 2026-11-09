@@ -34,7 +34,7 @@ class PromptMediaAgent extends ControlledAcpSpecification {
     }
 }
 
-test("Given a persisted conversation with different product and native IDs, When a client prompts after restart without preparing first, Then its generated image is readable under the product Session ID", async () => {
+test("Given a persisted native conversation, When a client prompts after restart without preparing first, Then its generated image is readable under the same native pair", async () => {
     vi.useFakeTimers({ now: new Date("2026-10-29T00:00:00Z"), toFake: ["Date"] });
     const directory = await mkdtemp(join(tmpdir(), "morty-prompt-media-"));
     try {
@@ -54,7 +54,7 @@ test("Given a persisted conversation with different product and native IDs, When
                             agentId: "controlled-acp",
                             bindingId: peer.bindingId,
                             directoryId: "default",
-                            sessionId: peer.sessionId,
+                            target: peer.target,
                             commandId,
                             disposition: SessionPromptDisposition.Append,
                             attachments: [],
@@ -91,7 +91,7 @@ test("Given a persisted conversation with different product and native IDs, When
                 await peer.restart();
                 const imageKey = await prompt("generate inline image");
                 expect(imageKey).toMatch(/^[a-f0-9]{64}$/u);
-                const image = await readSessionFile(peer, peer.sessionId, `morty-content:image:${imageKey}`);
+                const image = await readSessionFile(peer, peer.target, `morty-content:image:${imageKey}`);
                 expect(image.kind).toBe("streamed");
                 expect(image.bytes).toEqual(
                     Buffer.from(
@@ -121,7 +121,7 @@ interface FileReadResult {
 /** Reads one file through the daemon's public file.read protocol boundary. */
 async function readSessionFile(
     peer: Parameters<Parameters<typeof withRealDaemon>[2]>[0],
-    sessionId: string,
+    sessionTarget: Parameters<Parameters<typeof withRealDaemon>[2]>[0]["target"],
     path: string,
 ): Promise<FileReadResult> {
     peer.send(
@@ -130,7 +130,7 @@ async function readSessionFile(
             maxBytes: 65_536,
             path,
             requestId: `read-${path.replaceAll(/[^a-zA-Z0-9]/gu, "-")}`,
-            sessionId,
+            target: sessionTarget,
         }),
     );
     const chunks: Buffer[] = [];
@@ -150,7 +150,7 @@ async function readSessionFile(
             };
         }
         if (kind === "file.begin") {
-            expect(decodeFileBeginEvent(message).sessionId).toBe(sessionId);
+            expect(decodeFileBeginEvent(message).target).toEqual(sessionTarget);
         } else if (kind === "file.end") {
             return { bytes: Buffer.concat(chunks), kind: "streamed", mediaType: "", message: "" };
         }
@@ -207,7 +207,7 @@ if (process.argv.includes("--version")) {
                         directoryId: "default",
                         kind: "session.prepare",
                         requestId: "prepare-file-read-session",
-                        sessionId: peer.sessionId,
+                        target: peer.target,
                     }),
                 );
                 for (;;) {
@@ -218,38 +218,38 @@ if (process.argv.includes("--version")) {
 
                 // Root-relative agent references resolve against the session
                 // working directory, not the machine root.
-                const rootRelative = await readSessionFile(peer, peer.sessionId, "/index.html");
+                const rootRelative = await readSessionFile(peer, peer.target, "/index.html");
                 expect(rootRelative.kind).toBe("streamed");
                 expect(rootRelative.bytes.toString("utf8")).toContain("<title>Todo</title>");
 
                 // Absolute machine paths keep working.
-                const absolute = await readSessionFile(peer, peer.sessionId, join(workspace, "index.html"));
+                const absolute = await readSessionFile(peer, peer.target, join(workspace, "index.html"));
                 expect(absolute.kind).toBe("streamed");
                 expect(absolute.bytes.toString("utf8")).toContain("<title>Todo</title>");
 
                 // Bare-relative references and non-ASCII or nested targets keep resolving.
-                const bareRelative = await readSessionFile(peer, peer.sessionId, "index.html");
+                const bareRelative = await readSessionFile(peer, peer.target, "index.html");
                 expect(bareRelative.kind).toBe("streamed");
                 expect(bareRelative.bytes.toString("utf8")).toContain("<title>Todo</title>");
-                const nested = await readSessionFile(peer, peer.sessionId, "/assets/каталог résumé/app.js");
+                const nested = await readSessionFile(peer, peer.target, "/assets/каталог résumé/app.js");
                 expect(nested.kind).toBe("streamed");
                 expect(nested.bytes.toString("utf8")).toContain("export const todo = true;");
 
                 // Missing references fail without inventing a target.
-                const missing = await readSessionFile(peer, peer.sessionId, "/missing-file.html");
+                const missing = await readSessionFile(peer, peer.target, "/missing-file.html");
                 expect(missing.kind).toBe("failed");
 
                 // Explicit file URLs always mean their machine-absolute target,
                 // even when a working-directory-first interpretation would
                 // select a different existing file.
-                const urlRead = await readSessionFile(peer, peer.sessionId, pathToFileURL(outsideTarget).href);
+                const urlRead = await readSessionFile(peer, peer.target, pathToFileURL(outsideTarget).href);
                 expect(urlRead.kind).toBe("streamed");
                 expect(urlRead.bytes.toString("utf8")).toContain("<title>Outside</title>");
                 expect(urlRead.bytes.toString("utf8")).not.toContain("Workspace decoy");
 
                 // An explicit file URL to a missing target fails; the decoy at
                 // the working-directory interpretation is not a substitute.
-                const absentUrlRead = await readSessionFile(peer, peer.sessionId, pathToFileURL(absentTarget).href);
+                const absentUrlRead = await readSessionFile(peer, peer.target, pathToFileURL(absentTarget).href);
                 expect(absentUrlRead.kind).toBe("failed");
             },
             "embedded",

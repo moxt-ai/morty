@@ -36,12 +36,12 @@ export async function startTestPlatform(options: { readonly allowedOrigins?: Rea
             connectAgent: async (
                 computerId: string,
                 harnesses?: readonly FakeAgentHarnessDefinition[],
-                nativeSessionIds?: ReadonlySet<string>,
+                sessionIds?: ReadonlySet<string>,
             ) => {
                 const runtime = await createFakeAgentHarnessRuntime({
                     credential,
                     ...(harnesses === undefined ? {} : { harnesses }),
-                    ...(nativeSessionIds === undefined ? {} : { nativeSessionIds }),
+                    ...(sessionIds === undefined ? {} : { sessionIds }),
                     origin: bindings.origin,
                     computerId,
                     server: app,

@@ -18,7 +18,7 @@ import {
 import { expect, test } from "vitest";
 import { PiAgentSpecification } from "../../src/engine/agent/specification/vendors/pi-agent.ts";
 import { PiFixture } from "../support/agents/pi.ts";
-import { prepareNewRealSession, withRealDaemon } from "../support/agents/real-daemon.ts";
+import { prepareNewRealSession, type RealDaemonPeer, withRealDaemon } from "../support/agents/real-daemon.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 
 test("Given a real pi native Session, When the active prompt is cancelled with a follow-up queued, Then the queued prompt restores that Session and completes", async () => {
@@ -42,7 +42,7 @@ test("Given a real pi native Session, When the active prompt is cancelled with a
                     encodeSessionPromptCommand({
                         kind: "session.prompt",
                         commandId,
-                        sessionId: nativeId,
+                        target: nativeId,
                         agentId: "pi",
                         bindingId: peer.bindingId,
                         directoryId: "default",
@@ -76,7 +76,7 @@ test("Given a real pi native Session, When the active prompt is cancelled with a
                         event.payload.commandId === commandId
                     ) {
                         expect(event.payload.commandId).toBe(commandId);
-                        expect(event.sessionId).toBe(nativeId);
+                        expect(event.target).toEqual(nativeId);
                         expect(event.payload.stopReason).toBe(reason);
                         return text;
                     }
@@ -116,7 +116,7 @@ test("Given a real pi native Session, When the active prompt is cancelled with a
                     kind: "session.cancel",
                     requestId: crypto.randomUUID(),
                     commandId: active,
-                    sessionId: nativeId,
+                    target: nativeId,
                 }),
             );
             await finish(active, "cancelled");
@@ -139,7 +139,7 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
             encodeSessionPromptCommand({
                 kind: "session.prompt",
                 commandId,
-                sessionId: sourceSessionId,
+                target: sourceSessionId,
                 agentId: "pi",
                 bindingId: peer.bindingId,
                 directoryId: "default",
@@ -182,7 +182,7 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
                 cursor: null,
                 kind: "native.session.request",
                 requestId: listRequestId,
-                sessionId: discoveryId,
+                discoveryId,
             }),
         );
         let entry: Extract<
@@ -198,7 +198,7 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
             if (result.requestId !== listRequestId || result.action !== "list") {
                 continue;
             }
-            const source = result.entries.find((candidate) => candidate.mortySessionIds.includes(sourceSessionId));
+            const source = result.entries.find((candidate) => candidate.sessionId === sourceSessionId.sessionId);
             if (source === undefined) {
                 throw new Error("Missing source native Session");
             }
@@ -214,7 +214,7 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
                 eventLimit: 200,
                 kind: "session.preview-history.page.load",
                 requestId: previewRequestId,
-                sessionId: entry.nativeSessionId,
+                target: { harness: "pi", sessionId: entry.sessionId },
             }),
         );
         for (;;) {
@@ -229,7 +229,6 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
             }
         }
 
-        const importedSessionId = randomUUID();
         const importRequestId = randomUUID();
         peer.send(
             encodeNativeSessionCommand({
@@ -238,8 +237,7 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
                 entryId: entry.entryId,
                 kind: "native.session.request",
                 requestId: importRequestId,
-                sessionId: discoveryId,
-                targetSessionId: importedSessionId,
+                discoveryId,
             }),
         );
         for (;;) {
@@ -251,7 +249,7 @@ test("Given a real Pi native Session was previewed, When the user imports it, Th
             if (result.requestId !== importRequestId || result.action !== "import") {
                 continue;
             }
-            expect(result.targetSessionId).toBe(importedSessionId);
+            expect(result.target).toEqual(sourceSessionId);
             expect(result.ready.restored).toBe(true);
             break;
         }
@@ -268,7 +266,7 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
             encodeSessionPromptCommand({
                 kind: "session.prompt",
                 commandId: sourceCommandId,
-                sessionId: sourceSessionId,
+                target: sourceSessionId,
                 agentId: "pi",
                 bindingId: peer.bindingId,
                 directoryId: "default",
@@ -304,7 +302,7 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
                 cursor: null,
                 kind: "native.session.request",
                 requestId: listRequestId,
-                sessionId: discoveryId,
+                discoveryId,
             }),
         );
         let entry: Extract<
@@ -321,7 +319,7 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
                 continue;
             }
             expect(result.capabilities.unstableForkSession).toBe(true);
-            const source = result.entries.find((candidate) => candidate.mortySessionIds.includes(sourceSessionId));
+            const source = result.entries.find((candidate) => candidate.sessionId === sourceSessionId.sessionId);
             if (source === undefined) {
                 throw new Error("Missing source native Session");
             }
@@ -329,7 +327,6 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
             break;
         }
 
-        const forkedSessionId = randomUUID();
         const forkRequestId = randomUUID();
         peer.send(
             encodeNativeSessionCommand({
@@ -338,10 +335,10 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
                 entryId: entry.entryId,
                 kind: "native.session.request",
                 requestId: forkRequestId,
-                sessionId: discoveryId,
-                targetSessionId: forkedSessionId,
+                discoveryId,
             }),
         );
+        let forkedSessionTarget: RealDaemonPeer["target"];
         for (;;) {
             const message = await peer.nextMessage();
             const kind = decodeMessageKind(message);
@@ -355,8 +352,9 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
             if (result.requestId !== forkRequestId || result.action !== "fork") {
                 continue;
             }
-            expect(result.targetSessionId).toBe(forkedSessionId);
-            expect(result.ready.sessionId).toBe(forkedSessionId);
+            forkedSessionTarget = result.target;
+            expect(result.ready.target).toEqual(forkedSessionTarget);
+            expect(forkedSessionTarget.sessionId).not.toBe(sourceSessionId.sessionId);
             expect(result.ready.restored).toBe(true);
             break;
         }
@@ -368,7 +366,7 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
                 eventLimit: 50,
                 kind: "session.live-history.v2.page.load",
                 requestId: historyRequestId,
-                sessionId: forkedSessionId,
+                target: forkedSessionTarget,
             }),
         );
         for (;;) {
@@ -401,7 +399,7 @@ test("Given a saved real Pi native Session, When the user forks it, Then its his
             encodeSessionPromptCommand({
                 kind: "session.prompt",
                 commandId: forkedCommandId,
-                sessionId: forkedSessionId,
+                target: forkedSessionTarget,
                 agentId: "pi",
                 bindingId: peer.bindingId,
                 directoryId: "default",

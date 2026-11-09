@@ -45,7 +45,7 @@ test("Given a native session handoff, When the page loads, Then it shows the sha
     const app = await createTestApp({
         agent: { id: "pi", label: "Pi" },
         connectAgent: true,
-        nativeSessionIds: new Set([sessionId]),
+        sessionIds: new Set([sessionId]),
         page: { harness: "pi", kind: "continue", sessionId },
     });
 
@@ -69,7 +69,7 @@ test("Given a native session handoff, When the page loads, Then the loading surf
     const app = await createTestApp({
         agent: { id: "pi", label: "Pi" },
         connectAgent: true,
-        nativeSessionIds: new Set([sessionId]),
+        sessionIds: new Set([sessionId]),
         page: { harness: "pi", kind: "continue", sessionId },
     });
 
@@ -575,7 +575,7 @@ test("Given a handoff requests a missing directory, When it opens, Then the Runt
     const app = await createTestApp({
         connectAgent: true,
         agent: { id: "codex", label: "Codex" },
-        nativeSessionIds: new Set(["native-directory-session"]),
+        sessionIds: new Set(["native-directory-session"]),
         page: {
             kind: "continue",
             harness: "codex",

@@ -4,6 +4,7 @@ import {
     type MortyInteractionResponseRequest,
     MortyPermissionResponseRequest,
 } from "@morty-build/client";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import type { StoreApi } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import {
@@ -47,19 +48,19 @@ export interface SessionPageState {
 /** Opens what the page holds for the Session, recovering what an earlier page persisted for it. */
 export function createSessionPageState(options: {
     readonly botId: string;
-    readonly sessionId: string;
+    readonly sessionTarget: NativeSessionTarget;
     readonly clock: Clock;
     /** The page's lifetime, on which delivery and the Session's operations run. */
     readonly lifetime: AbortSignal;
 }): SessionPageState {
-    const { botId, sessionId } = options;
-    const unsentEntry = sessionUnsentMessageEntry(sessionId);
-    const pendingEntry = sessionPendingSubmissionEntry(botId, sessionId);
+    const { botId, sessionTarget } = options;
+    const unsentEntry = sessionUnsentMessageEntry(botId, sessionTarget);
+    const pendingEntry = sessionPendingSubmissionEntry(botId, sessionTarget);
     // A message an earlier page left unsent returns to the composer; it is never delivered implicitly.
     const unsent = centralSessionStorage.read(unsentEntry);
     centralSessionStorage.remove(unsentEntry);
     const connection = createSessionOperationConnection();
-    const composer = createSessionComposerStore(sessionId, unsent);
+    const composer = createSessionComposerStore(botId, sessionTarget, unsent);
     const delivery = createSessionDeliveryStore({
         lifetime: options.lifetime,
         pendingSubmission: centralSessionStorage.read(pendingEntry),
@@ -78,9 +79,9 @@ export function createSessionPageState(options: {
             }
         },
     });
-    const tasks = createSessionTaskControlsStore({ clock: options.clock, sessionId, connection });
+    const tasks = createSessionTaskControlsStore({ clock: options.clock, sessionTarget, connection });
     const queue = createSessionMessageQueueStore({
-        sessionId,
+        sessionTarget,
         connection,
         withdrawn: (commandId) => delivery.getState().withdraw(commandId),
         returned: (message) => {
@@ -107,12 +108,12 @@ export function createSessionPageState(options: {
     ): Promise<void> => {
         await connection.send(
             (client: MortyClient, requestSignal) =>
-                client.interactions.respond(sessionId, interactionId, request, requestSignal),
+                client.interactions.respond(sessionTarget, interactionId, request, requestSignal),
             AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
         );
     };
     // Answers typed into the Agent's questions belong to the Session, as its composer draft does.
-    const answerDraftsEntry = elicitationAnswerDraftsEntry(sessionId);
+    const answerDraftsEntry = elicitationAnswerDraftsEntry(botId, sessionTarget);
     const interactions = createSessionInteractionStore({
         permission: (response, signal) =>
             respond(
@@ -143,7 +144,7 @@ export function createSessionPageState(options: {
         interactions,
         queue,
         rename: createSessionRenameStore(),
-        settings: createSessionSettingsStore({ botId, sessionId, connection }),
+        settings: createSessionSettingsStore({ botId, sessionTarget, connection }),
         tasks,
     };
 }

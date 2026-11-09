@@ -7,10 +7,12 @@ export async function authorizeSessionContentUpload(request: Request, sessions: 
     const path = new URL(request.url).pathname;
     const prefix = `${MORTY_API_PREFIX}/v1/computers/`;
     const parts = path.startsWith(prefix) ? path.slice(prefix.length).split("/") : [];
-    const [computerId, resource, sessionId, operation, contentKey] = parts;
+    const [computerId, harnessResource, harness, resource, sessionId, operation, contentKey] = parts;
     if (
         request.method !== "PUT" ||
-        parts.length !== 5 ||
+        parts.length !== 7 ||
+        harnessResource !== "harnesses" ||
+        harness === undefined ||
         resource !== "sessions" ||
         operation !== "content" ||
         computerId === undefined ||
@@ -31,17 +33,21 @@ export async function authorizeSessionContentUpload(request: Request, sessions: 
         );
     }
     try {
+        const target = {
+            harness: validateIdentifier(decodeURIComponent(harness), "harness"),
+            sessionId: validateIdentifier(decodeURIComponent(sessionId), "session_id"),
+        };
         const access = await sessions.authorizeSession(
             {
                 kind: "session",
                 computerId: validateIdentifier(computerId, "project_id"),
-                sessionId: validateIdentifier(sessionId, "session_id"),
+                target,
             },
             credential,
             ProjectPermission.SessionWrite,
             request.signal,
         );
-        return { access, sessionId, contentKey };
+        return { access, target, contentKey };
     } catch (cause) {
         request.signal.throwIfAborted();
         const error = toHttpError(cause);

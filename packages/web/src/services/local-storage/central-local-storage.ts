@@ -218,7 +218,11 @@ export function readableCredential(userId: string, token: unknown): string | nul
 const computerDestinationSchema = v.pipe(
     v.variant("kind", [
         v.object({ kind: v.literal("home") }),
-        v.object({ kind: v.literal("session"), sessionId: v.custom<string>(isIdentifier) }),
+        v.object({
+            kind: v.literal("session"),
+            harness: v.custom<string>(isIdentifier),
+            sessionId: v.custom<string>(isIdentifier),
+        }),
     ]),
     v.readonly(),
 );

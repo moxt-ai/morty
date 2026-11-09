@@ -1,7 +1,9 @@
+import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     type decodeSessionHistoryPageLoad,
     type decodeSessionPreviewHistoryPageLoad,
     type NativeSessionEvents,
+    type NativeSessionTarget,
     type QueuedPromptRequestEventLog,
     SESSION_HISTORY_PAGE_LOAD_KIND,
     SESSION_HISTORY_PAGE_LOADED_KIND,
@@ -30,7 +32,7 @@ interface OrderedHistoryEvent {
 }
 
 async function loadHistoryPage(
-    sessionId: string,
+    target: NativeSessionTarget,
     eventLimit: number,
     initialCursor: string | null,
     queuedPromptRequests: readonly QueuedPromptRequestEventLog[],
@@ -50,7 +52,9 @@ async function loadHistoryPage(
         }
         if (
             replay.events.some(
-                (event) => event.sessionId !== sessionId || event.sessionGenerationId !== replay.sessionGenerationId,
+                (event) =>
+                    !sameNativeSession(event.target, target) ||
+                    event.sessionGenerationId !== replay.sessionGenerationId,
             )
         ) {
             throw new SessionError(
@@ -104,7 +108,7 @@ async function executeSessionHistoryPageLoad(
 ): Promise<void> {
     let agentId: string | undefined;
     try {
-        const [entry] = await nativeSessions.querySessions([command.sessionId], signal);
+        const [entry] = await nativeSessions.querySessions([command.target], signal);
         if (entry === undefined) {
             throw new SessionError("session_not_found", "The Session was not found");
         }
@@ -118,14 +122,14 @@ async function executeSessionHistoryPageLoad(
         );
         const loadOptions = {
             additionalDirectories: resolved.additionalDirectories,
-            ...(await resolveAgent(entry.agentId, signal, command.sessionId)),
+            ...(await resolveAgent(entry.agentId, signal, command.target)),
             cwd: resolved.cwd,
-            sessionId: command.sessionId,
+            target: command.target,
             signal,
         };
-        const recovery = eventProjection.promptRequestRecovery(command.sessionId);
+        const recovery = eventProjection.promptRequestRecovery(command.target);
         const events = await loadHistoryPage(
-            command.sessionId,
+            command.target,
             command.eventLimit,
             command.cursor,
             recovery.queuedPromptRequests,
@@ -136,7 +140,7 @@ async function executeSessionHistoryPageLoad(
             events,
             kind: SESSION_HISTORY_PAGE_LOADED_KIND,
             requestId: command.requestId,
-            sessionId: command.sessionId,
+            target: command.target,
         });
     } catch (error) {
         if (!signal.aborted) {
@@ -146,11 +150,11 @@ async function executeSessionHistoryPageLoad(
                 {
                     ...(agentId === undefined ? {} : { agentId }),
                     code: operationErrorCode(error),
-                    sessionId: command.sessionId,
+                    sessionId: command.target.sessionId,
                 },
                 error,
             );
-            reportOperationFailure(socket, command.requestId, command.sessionId, error);
+            reportOperationFailure(socket, command.requestId, command.target, error);
         }
     }
 }
@@ -175,25 +179,25 @@ async function executeSessionPreviewHistoryPageLoad(
         );
         const loadOptions = {
             additionalDirectories: resolved.additionalDirectories,
-            ...(await resolveAgent(command.agentId, signal, command.sessionId)),
+            ...(await resolveAgent(command.agentId, signal, command.target)),
             cwd: resolved.cwd,
-            sessionId: command.sessionId,
+            target: command.target,
             signal,
         };
         const events = await loadHistoryPage(
-            command.sessionId,
+            command.target,
             command.eventLimit,
             command.cursor,
             [],
             async (eventLimit, cursor) =>
-                await nativeSessions.readSessionHistory(loadOptions, command.sessionId, eventLimit, cursor),
+                await nativeSessions.readSessionHistory(loadOptions, command.target.sessionId, eventLimit, cursor),
         );
         signal.throwIfAborted();
         send(socket, {
             events,
             kind: SESSION_PREVIEW_HISTORY_PAGE_LOADED_KIND,
             requestId: command.requestId,
-            sessionId: command.sessionId,
+            target: command.target,
         });
     } catch (error) {
         if (!signal.aborted) {
@@ -203,11 +207,11 @@ async function executeSessionPreviewHistoryPageLoad(
                 {
                     agentId: command.agentId,
                     code: operationErrorCode(error),
-                    sessionId: command.sessionId,
+                    sessionId: command.target.sessionId,
                 },
                 error,
             );
-            reportOperationFailure(socket, command.requestId, command.sessionId, error);
+            reportOperationFailure(socket, command.requestId, command.target, error);
         }
     }
 }
