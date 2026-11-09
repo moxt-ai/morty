@@ -960,3 +960,37 @@ test("Given a browser connecting from a city, When it opens a link through the b
     );
     expect(listed.devices).toEqual([{ label: "iPhone · Safari", location: { city: "Shanghai", country: "CN" } }]);
 });
+
+test("Given an existing owned conversation, When a repeated start is refused, Then ownership remains", async ({
+    cloud,
+}) => {
+    await using fixture = await createChatFixture(cloud, [{ id: "configuration-test", label: "Settings Agent" }]);
+    expect(
+        (
+            await fixture.request(`chat/bots/${fixture.botId}/setup`, {
+                runtimeId: fixture.runtime.runtimeId,
+                agentRef: "configuration-test",
+            })
+        ).status,
+    ).toBe(202);
+    const input = { agentRef: "configuration-test", conversationKey: "audit-retry", workspaceRef: "default" };
+    const started = await fixture.request(`chat/bots/${fixture.botId}/access`, { ...input, configurations: [] });
+    expect(started.status).toBe(200);
+    const { sessionId } = v.parse(v.object({ sessionId: v.string() }), await started.json());
+    expect(await (await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {})).json()).toMatchObject({
+        sessions: [{ id: sessionId }],
+    });
+    const repeated = await fixture.request(`chat/bots/${fixture.botId}/access`, { ...input, configurations: [] });
+    expect(repeated.status).toBe(200);
+    expect(await repeated.json()).toMatchObject({ sessionId });
+    const refused = await fixture.request(`chat/bots/${fixture.botId}/access`, {
+        ...input,
+        configurations: [{ configId: "removed-setting", valueType: "select", value: "default", booleanValue: false }],
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({ error: { code: "session_configuration_conflict" } });
+    const access = await fixture.request(`chat/bots/${fixture.botId}/session-access`, { sessionId });
+    const listed = await (await fixture.request(`chat/bots/${fixture.botId}/managed-sessions`, {})).json();
+    expect(access.status).toBe(200);
+    expect(listed).toMatchObject({ sessions: [{ id: sessionId }] });
+});

@@ -89,10 +89,15 @@ interface CreatingIdentity {
     readonly creationKey: string;
 }
 
+type PairingIntent =
+    | { readonly kind: "none" }
+    | { readonly kind: "requesting"; readonly requestKey: string }
+    | { readonly kind: "paired"; readonly runtimeId: string };
+
 interface ReadyIdentity extends IssuedIdentity {
     readonly kind: "ready";
-    /** A Runtime an earlier run paired for the still unbound Machine. The Worker's binding supersedes it. */
-    readonly unboundRuntimeId: string | null;
+    /** Setup owns the unfinished pairing intent; the Worker owns the final Machine binding. */
+    readonly pairing: PairingIntent;
     readonly replacement: ReplacementState;
 }
 
@@ -109,18 +114,18 @@ interface SavedState {
 }
 
 /** Version of the saved state's representation; any other representation is refused, never converted. */
-const SAVED_STATE_VERSION = 1;
+const SAVED_STATE_VERSION = 2;
 
 function createdIdentity(issued: IssuedIdentity): ReadyIdentity {
-    return { kind: "ready", ...issued, unboundRuntimeId: null, replacement: { kind: "unchanged" } };
+    return { kind: "ready", ...issued, pairing: { kind: "none" }, replacement: { kind: "unchanged" } };
 }
 
-function withUnboundRuntime(identity: ReadyIdentity, runtimeId: string): ReadyIdentity {
-    return { ...identity, unboundRuntimeId: runtimeId };
+function withPairedRuntime(identity: ReadyIdentity, runtimeId: string): ReadyIdentity {
+    return { ...identity, pairing: { kind: "paired", runtimeId } };
 }
 
-function withBoundMachine(identity: ReadyIdentity): ReadyIdentity {
-    return { ...identity, unboundRuntimeId: null };
+function withoutPairingIntent(identity: ReadyIdentity): ReadyIdentity {
+    return { ...identity, pairing: { kind: "none" } };
 }
 
 /** Saved before the replacement request: a lost reply cannot prove that access was not revoked. */
@@ -133,7 +138,7 @@ function replacedIdentity(previous: ReadyIdentity, successor: IssuedIdentity): R
     return {
         kind: "ready",
         ...successor,
-        unboundRuntimeId: null,
+        pairing: { kind: "none" },
         replacement: {
             kind: "revoked",
             previous: { kind: "pending", projectId: previous.projectId, token: previous.userToken },
@@ -195,7 +200,7 @@ function encodeSavedState(state: SavedState) {
                     user_id: identity.userId,
                     user_token: identity.userToken,
                     project_id: identity.projectId,
-                    unbound_runtime_id: identity.unboundRuntimeId,
+                    pairing: identity.pairing,
                     replacement: encodeReplacement(identity.replacement),
                 },
             };
@@ -743,6 +748,23 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     return invalid();
             }
         };
+        const pairingIntent = (value: unknown): PairingIntent => {
+            switch (fieldsOf(value)["kind"]) {
+                case "none":
+                    exactly(value, ["kind"]);
+                    return { kind: "none" };
+                case "requesting": {
+                    const fields = exactly(value, ["kind", "requestKey"]);
+                    return { kind: "requesting", requestKey: savedIdentifier(fields["requestKey"]) };
+                }
+                case "paired": {
+                    const fields = exactly(value, ["kind", "runtimeId"]);
+                    return { kind: "paired", runtimeId: savedIdentifier(fields["runtimeId"]) };
+                }
+                default:
+                    return invalid();
+            }
+        };
         const saved = exactly(value, ["version", "base_url", "identity"]);
         if (saved["version"] !== SAVED_STATE_VERSION) {
             invalid();
@@ -763,7 +785,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     "user_id",
                     "user_token",
                     "project_id",
-                    "unbound_runtime_id",
+                    "pairing",
                     "replacement",
                 ]);
                 return {
@@ -773,8 +795,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                         userId: savedIdentifier(ready["user_id"]),
                         userToken: savedCredential(ready["user_token"]),
                         projectId: savedIdentifier(ready["project_id"]),
-                        unboundRuntimeId:
-                            ready["unbound_runtime_id"] === null ? null : savedIdentifier(ready["unbound_runtime_id"]),
+                        pairing: pairingIntent(ready["pairing"]),
                         replacement: replacement(ready["replacement"]),
                     },
                 };
@@ -1186,10 +1207,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function createRuntimePairing(context: MachineContext): Promise<RuntimeSelection> {
-        const pairing = await request(context, "/management/runtime-pairings", {
-            idempotencyKey: crypto.randomUUID(),
-        });
+    async function createRuntimePairing(
+        context: MachineContext,
+        requestKey: string,
+    ): Promise<{ readonly runtime: RuntimeSelection; readonly expiresAt: number }> {
+        const pairing = await request(context, "/management/runtime-pairings", { idempotencyKey: requestKey });
         const selection: RuntimeSelection = {
             kind: "pairing",
             channelId: identifier(pairing["channelId"]),
@@ -1202,8 +1224,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         if (selection.projectId !== context.identity.projectId) {
             fail("PROJECT_CONFLICT");
         }
+        const expiresAt = Date.parse(text(pairing["expiresAt"], /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/u));
+        if (!Number.isFinite(expiresAt)) {
+            fail("INVALID_RESPONSE");
+        }
         emit({ status: "prepared", botId: context.botId });
-        return selection;
+        return { runtime: selection, expiresAt };
     }
 
     async function replaceProject(context: MachineContext): Promise<MachineContext> {
@@ -1289,9 +1315,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         // The Machine is unbound. A Runtime an earlier run paired for it still holds one of the Project's Runtime
         // slots, so continue on it while this machine still manages its connection.
-        const pairing = context.identity.unboundRuntimeId;
-        if (pairing !== null) {
-            const { existing } = await reusable(pairing);
+        const pairing = context.identity.pairing;
+        if (pairing.kind === "paired") {
+            const { existing } = await reusable(pairing.runtimeId);
             if (existing !== undefined) {
                 return { context, runtime: { kind: "existing", ...existing, bound: false } };
             }
@@ -1300,14 +1326,34 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     /**
-     * Pairs a new Runtime for the unbound Machine. The Runtime is recorded before its code is redeemed, so a run that
-     * stops at any later point leaves the next run a Runtime to continue on rather than another one to pair.
+     * Saves the operation identity before sending it. A lost reply resumes the same pairing; a confirmed expired
+     * reservation permits one fresh request. Once answered, the Runtime replaces the request in the saved intent.
      */
     async function pairRuntime(
         context: MachineContext,
     ): Promise<{ readonly context: MachineContext; readonly runtime: RuntimeSelection }> {
-        const runtime = await createRuntimePairing(context);
-        return { context: await commit(context, withUnboundRuntime(context.identity, runtime.runtimeId)), runtime };
+        let requesting = context;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+            signal.throwIfAborted();
+            const requestKey =
+                requesting.identity.pairing.kind === "requesting"
+                    ? requesting.identity.pairing.requestKey
+                    : crypto.randomUUID();
+            requesting = await commit(requesting, {
+                ...requesting.identity,
+                pairing: { kind: "requesting", requestKey },
+            });
+            const { runtime, expiresAt } = await createRuntimePairing(requesting, requestKey);
+            if (expiresAt <= clock.now().getTime()) {
+                requesting = await commit(requesting, withoutPairingIntent(requesting.identity));
+                continue;
+            }
+            return {
+                context: await commit(requesting, withPairedRuntime(requesting.identity, runtime.runtimeId)),
+                runtime,
+            };
+        }
+        return fail("RUNTIME_PAIRING_UNAVAILABLE");
     }
 
     function runtimeCommand(
@@ -1564,7 +1610,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             throw cause;
         }
         // The Machine now owns its Runtime, so the pairing record is no longer needed.
-        const saved = await commit(context, withBoundMachine(context.identity));
+        const saved = await commit(context, withoutPairingIntent(context.identity));
         emit({ status: "binding_activated", botId: context.botId, harness });
         return saved;
     }

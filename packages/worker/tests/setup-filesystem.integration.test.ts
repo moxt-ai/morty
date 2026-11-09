@@ -88,14 +88,14 @@ function savedSetupState(
     replacement: SavedReplacement = { kind: "unchanged" },
 ) {
     return JSON.stringify({
-        version: 1,
+        version: 2,
         base_url: origin,
         identity: {
             kind: "ready",
             user_id: identity.userId,
             user_token: identity.token,
             project_id: identity.projectId,
-            unbound_runtime_id: null,
+            pairing: { kind: "none" },
             replacement,
         },
     });
@@ -1198,7 +1198,7 @@ test("Given a Machine bound by setup, When the user runs setup again, Then setup
             v.object({ identity: v.record(v.string(), v.unknown()) }),
             JSON.parse(await readFile(join(paths.state, "config.json"), "utf8")),
         );
-        expect(saved.identity).toMatchObject({ unbound_runtime_id: null });
+        expect(saved.identity).toMatchObject({ pairing: { kind: "none" } });
         expect(saved.identity).not.toHaveProperty("agent_ref");
 
         const rerun = await setupMachine(runtime, paths);

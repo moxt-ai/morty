@@ -28,7 +28,7 @@ test("Given a saved setup handoff, When its Runtime reconnects, Then setup retur
     expect(statuses.indexOf("runtime_reused")).toBeLessThan(statuses.indexOf("runtime_paired"));
     expect(statuses.indexOf("runtime_paired")).toBeLessThan(statuses.indexOf("runtime_online"));
     expect(statuses.indexOf("runtime_online")).toBeLessThan(statuses.indexOf("binding_activated"));
-    expect(connected.configuration).not.toHaveProperty("pairing");
+    expect(connected.configuration).toHaveProperty("pairing", { kind: "none" });
     expect(connected.configuration).not.toHaveProperty("pairing_key");
     expect(connected.configuration).not.toHaveProperty("expected_runtime_id");
     expect(connected.configuration).not.toHaveProperty("runtime_process");

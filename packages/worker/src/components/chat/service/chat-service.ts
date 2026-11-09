@@ -485,8 +485,9 @@ export class ChatService {
 
     /**
      * Starts a conversation. Its owner record is written first, so a Session the Runtime creates always has an owner;
-     * the conversation key names the Session, so a retried start converges on the same record and Session. A Runtime
-     * refusal (4xx) created nothing and removes the record; any other failure keeps it, because the Session may exist.
+     * the conversation key names the Session, so a retried start converges on the same record and Session. A failed
+     * attempt cannot revoke that ownership: an earlier attempt may already have created the Session. The directory
+     * lists only Sessions the Runtime reports, so a retained owner never invents a Session.
      */
     readonly #openNewChat = async (scope: ChatScope, runtimeId: string, input: NewChatInput) => {
         await this.#requireRuntimeAgent(scope, runtimeId, input.agentRef);
@@ -496,8 +497,7 @@ export class ChatService {
             agentRef: input.agentRef,
             workspaceRef: input.workspaceRef,
         };
-        // Starting the same conversation twice runs in turn, so one start's refusal cannot remove the owner of a
-        // Session the other created.
+        // Serialize creation and initial configuration for the same Session.
         const ready = await this.#runSessionOperation(session.sessionId, scope.signal, async () => {
             await this.#chatSessions.save(
                 scope.projectId,
@@ -506,24 +506,11 @@ export class ChatService {
                 { id: session.sessionId },
                 scope.signal,
             );
-            try {
-                return await this.#platform.createChatSession(
-                    scope.projectId,
-                    { ...session, configurations: input.configurations },
-                    scope.signal,
-                );
-            } catch (cause) {
-                if (cause instanceof PlatformProjectError && cause.status < 500) {
-                    await this.#chatSessions.archive(
-                        scope.projectId,
-                        scope.userId,
-                        scope.botId,
-                        session.sessionId,
-                        scope.signal,
-                    );
-                }
-                throw cause;
-            }
+            return await this.#platform.createChatSession(
+                scope.projectId,
+                { ...session, configurations: input.configurations },
+                scope.signal,
+            );
         });
         return await this.#platform.createdChatSessionAccess(
             scope.projectId,

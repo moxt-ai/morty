@@ -1,6 +1,22 @@
 import { createServer, request } from "node:http";
+import { brotliDecompressSync, gunzipSync, inflateSync } from "node:zlib";
 import { WebSocket, WebSocketServer } from "ws";
 import { listen, port } from "./websocket.ts";
+
+/** The text of a response body as the service encoded it on the wire. */
+function decoded(encoding: string | undefined, chunks: readonly Buffer[]): string {
+    const body = Buffer.concat(chunks);
+    switch (encoding) {
+        case "gzip":
+            return gunzipSync(body).toString("utf8");
+        case "br":
+            return brotliDecompressSync(body).toString("utf8");
+        case "deflate":
+            return inflateSync(body).toString("utf8");
+        default:
+            return body.toString("utf8");
+    }
+}
 
 /**
  * A real network proxy: forwards requests unchanged, then loses one request before it reaches the service, one request's
@@ -8,11 +24,15 @@ import { listen, port } from "./websocket.ts";
  */
 export async function createResponseLossProxy(upstream: string) {
     // The next response to lose: the service handles the request, but the caller never receives its answer.
-    let lostResponse: { readonly path: RegExp; readonly lost: (status: number) => void } | null = null;
-    const loseNextResponse = (path: RegExp) =>
-        new Promise<number>((resolve) => {
+    let lostResponse: {
+        readonly path: RegExp;
+        readonly lost: (response: { readonly status: number; readonly body: string }) => void;
+    } | null = null;
+    const loseNextResponseWithBody = (path: RegExp) =>
+        new Promise<{ readonly status: number; readonly body: string }>((resolve) => {
             lostResponse = { path, lost: resolve };
         });
+    const loseNextResponse = async (path: RegExp) => (await loseNextResponseWithBody(path)).status;
     // The next request to lose on its way: the service never receives it.
     let droppedRequest: RegExp | null = null;
     const server = createServer((incoming, outgoing) => {
@@ -32,9 +52,13 @@ export async function createResponseLossProxy(upstream: string) {
                 if (lostResponse !== null && incoming.method === "POST" && lostResponse.path.test(incoming.url ?? "")) {
                     const { lost } = lostResponse;
                     lostResponse = null;
-                    response.resume();
+                    const chunks: Buffer[] = [];
+                    response.on("data", (chunk: Buffer) => chunks.push(chunk));
                     response.on("end", () => {
-                        lost(response.statusCode ?? 502);
+                        lost({
+                            status: response.statusCode ?? 502,
+                            body: decoded(response.headers["content-encoding"], chunks),
+                        });
                         outgoing.destroy();
                     });
                     return;
@@ -161,6 +185,8 @@ export async function createResponseLossProxy(upstream: string) {
     return {
         origin: `http://127.0.0.1:${port(server)}`,
         submissions,
+        /** Loses a pairing response after the real service commits it. */
+        interruptNextRuntimePairing: () => loseNextResponseWithBody(/\/management\/runtime-pairings(?:\?|$)/u),
         interruptNextFork: () => loseNextResponse(/\/native-session-forks\//u),
         /** Loses the next Session creation before it reaches the service, which therefore creates nothing. */
         dropNextSessionCreation: () => {
