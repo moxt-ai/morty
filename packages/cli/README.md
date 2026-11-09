@@ -46,7 +46,7 @@ conversation before continuing it in Morty to avoid competing writers.
 
 ## Data and support
 
-Conversation history is read from the connected computer. Cloud Recording is off.
+Conversation history is read from the connected computer; Morty keeps no cloud copy of it.
 Traffic passes through a trusted relay; Morty is **not end-to-end encrypted**.
 Sharing gives another device permission to view and control sessions, so protect
 sharing links and revoke access when it is no longer needed.

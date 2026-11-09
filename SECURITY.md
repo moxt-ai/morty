@@ -55,8 +55,8 @@ In scope:
 - pairing, sharing links, access revocation, and session authorization
 - the setup path served at `morty.build/setup.md` and `morty.build/setup.mjs`
 
-The internal client library, relay, recording service and local Runtime are part
-of this product and use the same reporting channel.
+The internal client library, relay and local Runtime are part of this product and
+use the same reporting channel.
 
 Generally out of scope:
 

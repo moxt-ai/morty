@@ -25,8 +25,10 @@ The local execution boundary is the only authority allowed to approve local side
 
 ## Independent product cutover
 
-Morty is one product. Cloud Relay and Recording are internal Morty services, not
-a public developer platform. Retire the separate platform dashboard, app
+Morty is one product. The cloud Relay is an internal Morty service, not a public
+developer platform. Morty keeps no cloud copy of conversation history: history is
+read from the connected Machine and the Agent's own storage. Retire the separate
+platform dashboard, app
 registration, Clerk login, organization/invite management, and Clerk proxy.
 Preserve Morty device, recovery, pairing and service authorization, production
 business records, and immutable migration history. Production and isolated local
