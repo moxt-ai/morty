@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { errorMiddleware, rethrowHttpError } from "../../../middleware/error-middleware.ts";
+import { errorHandler } from "../../../middleware/error-middleware.ts";
 import { requestHeaders } from "../../../middleware/request-headers.ts";
 import { ManagementError } from "../entity/management-error.ts";
 import { createAuthenticationRoutes } from "./authentication-routes.ts";
@@ -11,11 +11,7 @@ import { createRuntimePairingRoutes } from "./runtime-pairing-routes.ts";
 export function createManagementApplication(basePath = "/morty/api") {
     return new Hono<ManagementHttpEnvironment>()
         .basePath(basePath)
-        .onError(rethrowHttpError)
-        .use(
-            "*",
-            errorMiddleware<ManagementHttpEnvironment>((context) => context.env.logger),
-        )
+        .onError(errorHandler<ManagementHttpEnvironment>((context) => context.env.logger))
         .use("*", requestHeaders)
         .notFound(() => {
             throw new ManagementError("NOT_FOUND", "Not found.", 404);

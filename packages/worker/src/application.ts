@@ -14,7 +14,7 @@ import { setupArtifact } from "./gateway/setup-artifact.ts";
 import { notFoundPage, webPages } from "./gateway/web-pages.ts";
 import { type CloudBindings, webSocketNamespaceBindingSchema } from "./infra/cloud-bindings.ts";
 import { RequestError } from "./infra/request-error.ts";
-import { errorMiddleware, rethrowHttpError } from "./middleware/error-middleware.ts";
+import { errorHandler } from "./middleware/error-middleware.ts";
 
 const MAXIMUM_REQUEST_BODY_BYTES = 3 * 1_024 * 1_024;
 
@@ -51,10 +51,8 @@ async function bootstrapProject(request: Request, bindings: CloudBindings): Prom
 }
 
 const application: Hono<{ readonly Bindings: CloudBindings }> = new Hono<{ readonly Bindings: CloudBindings }>()
-    .onError(rethrowHttpError)
-    .use(
-        "*",
-        errorMiddleware<{ readonly Bindings: CloudBindings }>(
+    .onError(
+        errorHandler<{ readonly Bindings: CloudBindings }>(
             (context) => createApplicationDependencies(context.env).logger,
         ),
     )
@@ -79,10 +77,8 @@ const application: Hono<{ readonly Bindings: CloudBindings }> = new Hono<{ reado
     .notFound(notFound);
 
 const publicApplication = new Hono<{ readonly Bindings: CloudBindings }>()
-    .onError(rethrowHttpError)
-    .use(
-        "*",
-        errorMiddleware<{ readonly Bindings: CloudBindings }>(
+    .onError(
+        errorHandler<{ readonly Bindings: CloudBindings }>(
             (context) => createApplicationDependencies(context.env).logger,
         ),
     )
